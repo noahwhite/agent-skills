@@ -1,0 +1,46 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - name: Repository tests
+        run: uv run --locked pytest -q
+      # Fork PRs get no secrets, so their scan covers public patterns only and says
+      # INCOMPLETE; a maintainer runs the full scan locally before merging one.
+      - name: Leak scan (public and private patterns)
+        env:
+          LEAK_DENYLIST: ${{ secrets.LEAK_DENYLIST }}
+          FORK_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+        run: |
+          if [ "$FORK_PR" = true ]; then
+            uv run --locked python scripts/leak_scan.py
+          else
+            uv run --locked python scripts/leak_scan.py --require-private
+          fi
+      - name: Validate skills against the Agent Skills spec
+        run: |
+          ref='git+https://github.com/agentskills/agentskills@69ef37e9424c0a7ea9dd2293b559e43ec8176379#subdirectory=skills-ref'
+          for d in skills/*/; do
+            uvx --from "$ref" skills-ref validate "$d"
+          done
+
+  discovery:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - name: opencode discovers every skill
+        run: bash scripts/smoke-opencode.sh

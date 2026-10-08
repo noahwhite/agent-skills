@@ -1,0 +1,71 @@
+{
+  "skills": {
+    "adversarial-review-pipeline": [
+      "code-review",
+      "secrets",
+      "engineering-practice"
+    ],
+    "engineering-workflow": [
+      "github",
+      "linear",
+      "code-review",
+      "secrets",
+      "engineering-practice",
+      "todo-tracking"
+    ],
+    "linear-bug": [
+      "linear",
+      "code-review"
+    ],
+    "linear-epic": [
+      "linear"
+    ],
+    "linear-investigation": [
+      "linear"
+    ],
+    "linear-spike": [
+      "linear"
+    ],
+    "linear-user-story": [
+      "linear",
+      "code-review"
+    ],
+    "persona-platform-sre": [
+      "todo-tracking",
+      "infra-deploy",
+      "github",
+      "secrets",
+      "engineering-practice",
+      "linear"
+    ],
+    "persona-product-owner": [
+      "todo-tracking",
+      "linear"
+    ],
+    "persona-staff-devops": [
+      "todo-tracking",
+      "infra-deploy",
+      "linear",
+      "code-review",
+      "secrets",
+      "engineering-practice",
+      "github"
+    ],
+    "persona-staff-engineer": [
+      "todo-tracking",
+      "linear",
+      "code-review",
+      "engineering-practice",
+      "github",
+      "secrets"
+    ],
+    "qa-verification": [
+      "todo-tracking",
+      "linear",
+      "secrets",
+      "code-review",
+      "github",
+      "engineering-practice"
+    ]
+  }
+}

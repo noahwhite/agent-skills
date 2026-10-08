@@ -1,0 +1,92 @@
+# Example consumer profile. Copy to .agent-skills/profile.yaml in your project
+# (or ~/.config/agent-skills/profile.yaml) and replace every value.
+version: 1
+project:
+  name: Example App
+  repos:
+    - example-org/example-app
+  test_command: make test
+tracker:
+  kind: linear
+  team_key: EXA
+  team_name: Example
+  assignee: self
+  assignee_email: bot@example.com
+  agent_stamp: true
+  states:
+    triage: Triage
+    backlog: Backlog
+    ready: Ready To Work
+    in_progress: In Progress
+    blocked: Blocked
+    in_review: In PR Review
+    in_deployment_review: In Deployment Review
+    done: Done
+    canceled: Canceled
+    duplicate: Duplicate
+  labels:
+    user_story: User Story
+    spike: Spike
+    bug: Bug
+    investigation: Investigation
+    feature: Feature
+    improvement: Improvement
+    rtb: RTB
+  epic:
+    name_prefix: "[EPIC]"
+    icon: Cube
+    label: Epic
+    lead: "@me"
+    size_labels:
+      small: T-Shirt Size Small
+      medium: T-Shirt Size Medium
+      large: T-Shirt Size Large
+      extra_large: T-Shirt Size Extra Large
+  estimate_scale: fibonacci
+  cycle_weeks: 2
+git:
+  host: github
+  pr_assignee: example-user
+  integration_branch: develop
+  release_branch: main
+  promotion: whole-branch
+  merge_method: squash
+  signed_commits: true
+  ai_attribution: forbid
+  branch_prefixes:
+    feature: feat/
+    fix: fix/
+    docs: docs/
+review:
+  reviewer:
+    name: Codex
+    runtime: codex
+    model: gpt-5
+  adjudicator:
+    name: Claude adjudicator
+    runtime: claude-code
+    model: opus
+  shadow_adjudicators:
+    - name: Claude shadow adjudicator
+      runtime: claude-code
+      model: sonnet
+  merge_owner: human
+environments:
+  - name: dev
+    branch: develop
+    deploy: automatic on push to develop
+    verify: GET https://dev.example.com/version returns the merged commit
+    url: https://dev.example.com
+    preauthorized: true
+  - name: prod
+    branch: main
+    deploy: release workflow dispatch
+    verify: GET https://example.com/version returns the release tag
+    url: https://example.com
+    production: true
+qa:
+  evidence_dir: docs/qa
+workspace:
+  scratch_dir: /tmp/agent-skills
+overlays:
+  engineering-workflow: overlays/engineering-workflow.md
