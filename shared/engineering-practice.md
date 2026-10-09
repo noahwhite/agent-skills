@@ -28,7 +28,7 @@ Read this when diagnosing, implementing, testing, or fixing code.
 - ⛔ Before a stale-record, reclaim, or reuse fix, enumerate every uniqueness and idempotency constraint and every record keyed by the entity, across every service and the whole lifecycle.
   Search the schema for every unique key, idempotency key, and foreign key first.
 - When fixing a missing template variable, audit every template in the same directory for the same defect before committing.
-- When mirroring a proven handler, copy its wiring (dependency-injection qualifiers, transaction boundaries, which client or credential is injected, where external calls sit relative to the transaction), not only its branch logic.
+- When mirroring a proven handler, reuse or extract its branch logic (see DRY below) and match its wiring (dependency-injection qualifiers, transaction boundaries, which client or credential is injected, where external calls sit relative to the transaction) exactly, not only its logic.
   Mocked unit tests pass on a wrong qualifier or transaction placement.
 
 ## Test-driven development
