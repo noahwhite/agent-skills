@@ -21,18 +21,20 @@ LINK_RE = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
 # real terminator is captured, so a malformed key (`a..b`, `a/x`, `a[0]`, a typo suffix)
 # fails schema resolution instead of matching a valid prefix. profile.md and the other file
 # names are not keys; profile.<path> is a placeholder.
+# A trailing `.*` names a whole section and is kept on the reference, so it resolves only
+# when that key is an object.
 # In prose a single trailing `.` is sentence punctuation, and a `]` or `*` run that closes a
 # Markdown link or emphasis ends the key; a `*` followed by a word character stays in it.
 PROSE_REF_RE = re.compile(
     r"(?<![\w./-])profile\.(?!(?:md|yaml|json)\b)(?!<)"
-    r"([^\s`'\"(),;:!?<>]+?)(?=\.?(?:$|[\s`'\"(),;:!?<>]|\*+(?=$|[\s`'\"(),;:!?<>\[\]]|\.(?!\w))"
+    r"([^\s`'\"(),;:!?<>]+?)(\.\*)?(?=\.?(?:$|[\s`'\"(),;:!?<>]|\*+(?=$|[\s`'\"(),;:!?<>\[\]]|\.(?!\w))"
     r"|(?<!\[)\](?=$|[\s(\[`'\"),;:!?.*])))",
     re.M,
 )
-# Inside an inline code span Markdown is literal: the key runs to a terminator, and only a
-# trailing `.*` (a whole section) is dropped.
+# Inside a code span Markdown is literal: the key runs to a terminator. A span opens and
+# closes with backtick runs of the same length, as in CommonMark.
 CODE_REF_RE = re.compile(r"(?<![\w./-])profile\.(?!(?:md|yaml|json)\b)(?!<)([^\s`'\"(),;:!?<>]+)")
-CODE_SPAN_RE = re.compile(r"(?<!`)`([^`\n]+)`(?!`)")
+CODE_SPAN_RE = re.compile(r"(?<!`)(`+)(?!`)(.+?)(?<!`)\1(?!`)")
 FENCE_RE = re.compile(r"^\s*(```|~~~)")
 
 
@@ -43,10 +45,10 @@ def profile_refs(text: str) -> list[str]:
             continue
         pos = 0
         for span in CODE_SPAN_RE.finditer(line):
-            refs += PROSE_REF_RE.findall(line[pos:span.start()])
-            refs += [r.removesuffix(".*") for r in CODE_REF_RE.findall(span.group(1))]
+            refs += ["".join(m) for m in PROSE_REF_RE.findall(line[pos:span.start()])]
+            refs += CODE_REF_RE.findall(span.group(2))
             pos = span.end()
-        refs += PROSE_REF_RE.findall(line[pos:])
+        refs += ["".join(m) for m in PROSE_REF_RE.findall(line[pos:])]
     return refs
 
 
@@ -116,7 +118,7 @@ def test_no_runtime_specific_terms():
     assert not offenders, "\n".join(offenders)
 
 
-def resolve_schema_path(path: str) -> bool:
+def schema_node(path: str) -> dict | None:
     node = SCHEMA
     for part in path.split("."):
         is_array = part.endswith("[]")
@@ -129,14 +131,23 @@ def resolve_schema_path(path: str) -> bool:
         elif isinstance(node.get("additionalProperties"), dict):
             node = node["additionalProperties"]
         else:
-            return False
+            return None
         if is_array:
             if node.get("type") != "array":
-                return False
+                return None
             node = node["items"]
         if "$ref" in node:
             node = SCHEMA["$defs"][node["$ref"].split("/")[-1]]
-    return True
+    return node
+
+
+def resolve_schema_path(path: str) -> bool:
+    if path.endswith(".*"):
+        node = schema_node(path.removesuffix(".*"))
+        return node is not None and (
+            "properties" in node or isinstance(node.get("additionalProperties"), dict)
+        )
+    return schema_node(path) is not None
 
 
 def test_profile_ref_regex_captures_whole_token():
@@ -157,7 +168,11 @@ def test_profile_ref_regex_captures_whole_token():
         "profile.git.integration_branch/x": "git.integration_branch/x",
         "profile.git.integration_branch\u00e9": "git.integration_branch\u00e9",
         "`profile.environments[].preauthorized`": "environments[].preauthorized",
-        "each `profile.review.*` role": "review",
+        "each `profile.review.*` role": "review.*",
+        "each profile.review.* role": "review.*",
+        "``profile.git.integration_branch*``": "git.integration_branch*",
+        "`` `profile.git.integration_branch*` ``": "git.integration_branch*",
+        "`profile.git.integration_branch.*`": "git.integration_branch.*",
         "`profile.git.integration_branch*Typo`": "git.integration_branch*Typo",
         "`profile.git.integration_branch*`": "git.integration_branch*",
         "`profile.git.integration_branch.`": "git.integration_branch.",
@@ -171,9 +186,10 @@ def test_profile_ref_regex_captures_whole_token():
     for bad in ["git.integration_branchTypo", "git.integration_branch-x", "git.integration_branch..bad",
                 "git..integration_branch", "environments[0", "git.x]y", "git.integration_branch/x",
                 "git.integration_branch\u00e9", "git.integration_branch*Typo",
-                "git.integration_branch*", "git.integration_branch."]:
+                "git.integration_branch*", "git.integration_branch.", "git.integration_branch.*"]:
         assert not resolve_schema_path(bad), bad
     assert resolve_schema_path("environments[].preauthorized")
+    assert resolve_schema_path("review.*")
 
 
 def test_profile_references_exist_in_schema():
