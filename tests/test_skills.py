@@ -122,9 +122,9 @@ def test_no_runtime_specific_terms():
 # An agent that judges work is clean and neutral together (shared/code-review.md), so a
 # paragraph or list that makes an agent clean must also make it neutral, and the reverse.
 CLEAN_RE = re.compile(
-    r"(?i)\bclean[- ]context|\bown (?:clean )?context|\bclean (?:\w+ )?(?:agent|subagent)\b"
+    r"(?i)\bclean[- ]context|\bown (?:clean )?context|\bclean (?:\w+ )?(?:agent|subagent|verifier|reviewer|adjudicator)\b"
     r"|\bfresh (?:\w+ ){0,2}?(?:agent|subagent|verifier|reviewer|adjudicator|context)\b"
-    r"|\bbrief (?:a|the) fresh\b|\bclean, neutral|\bclean and neutral|\*\*clean:\*\*"
+    r"|\bbrief (?:a|the) fresh\b|\bto (?:a|the) fresh one\b|\bclean, neutral|\bclean and neutral|\*\*clean:\*\*"
 )
 NEUTRAL_RE = re.compile(r"(?i)(?<!runtime-)\bneutral")
 
@@ -145,7 +145,8 @@ def schema_descriptions(node) -> list[str]:
 def test_clean_neutral_pairing_check():
     for block in ["then a separate clean-context adjudicator.", "A fresh verifier tries to refute each finding.",
                   "else brief a fresh one with the PR state", "Spawn a clean subagent in its own context.",
-                  "The brief is neutral: facts only."]:
+                  "The brief is neutral: facts only.", "A clean verifier checks the findings.",
+                  "A clean reviewer reads it.", "Hand the task to a fresh one."]:
         assert pairing_broken(block), block
     for block in ["then a separate clean, neutral adjudicator.", "Create a fresh one from the base.",
                   "The skills are runtime-neutral.", "The gate is clean on the head."]:
