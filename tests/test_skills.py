@@ -121,7 +121,8 @@ def test_no_runtime_specific_terms():
 
 # An agent that judges work is clean and neutral together (shared/code-review.md), so a
 # paragraph or list that makes an agent clean must also make it neutral, and the reverse.
-# The check is per paragraph, so it cannot tell which agent each word applies to.
+# The check is per paragraph, so it cannot tell which agent each word applies to, and it
+# reads a prohibition such as "reject a non-neutral prompt" as a missing neutral requirement.
 CLEAN_RE = re.compile(
     r"(?i)\bclean[- ]context|\bown (?:clean )?context|\bclean,? (?:[\w-]+,? ){0,2}?(?:agent|subagent|verifier|reviewer|adjudicator|engineer)\b"
     r"|\bfresh (?:\w+ ){0,2}?(?:agent|subagent|verifier|reviewer|adjudicator|context)\b"
@@ -129,8 +130,8 @@ CLEAN_RE = re.compile(
 )
 NEUTRAL_RE = re.compile(r"(?i)(?<!runtime-)\bneutral")
 NEGATED_NEUTRAL_RE = re.compile(
-    r"(?i)\b(?:no|not|never|without|isn't|non)\b[\s-]+(?:(?:a|an|the|its|their|get|gets|be|is|need|needs)\s+){0,3}?neutral\b"
-    r"|\bneutral\b(?:\s+\w+){0,2}?\s+(?:is|are)\s+(?:not required|optional|unnecessary)\b"
+    r"(?i)\b(?:no|not|never|without|isn't|non|skip|omit|drop)\b[\s-]+(?:(?:a|an|the|its|their|get|gets|be|is|need|needs)\s+){0,3}?neutral\b"
+    r"|\bneutral\w*\b(?:\s+\w+){0,2}?\s+(?:is|are)\s+(?:not (?:required|needed|mandatory|necessary)|optional|unnecessary)\b"
 )
 
 
@@ -157,7 +158,9 @@ def test_clean_neutral_pairing_check():
                   "A clean reviewer does not get a neutral prompt.", "A clean reviewer gets no neutral prompt.",
                   "A clean reviewer; the prompt need not be neutral.", "Delegate the story to a fresh one.",
                   "Spawn a clean independent QA agent.", "A clean, independent reviewer.",
-                  "A clean reviewer; a neutral prompt is not required."]:
+                  "A clean reviewer; a neutral prompt is not required.",
+                  "A clean reviewer; a neutral prompt is not needed.", "A clean reviewer; a neutral prompt is not mandatory.",
+                  "A clean reviewer; neutrality is optional.", "A clean reviewer; skip the neutral prompt."]:
         assert pairing_broken(block), block
     for block in ["then a separate clean, neutral adjudicator.", "Create a fresh one from the base.",
                   "The skills are runtime-neutral.", "The gate is clean on the head.",
