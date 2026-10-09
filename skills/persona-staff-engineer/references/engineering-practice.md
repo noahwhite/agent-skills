@@ -52,7 +52,9 @@ Read this when diagnosing, implementing, testing, or fixing code.
 
 ## Reuse and study existing code
 
-- Before writing code for an operation (API call, CLI invocation, auth flow, secret operation), search the codebase for a working implementation and follow that pattern exactly.
+- Before writing code for an operation (API call, CLI invocation, auth flow, secret operation), search the codebase for a working implementation; reuse it directly where you can, and otherwise follow its pattern exactly.
+- Apply DRY (Don't Repeat Yourself): when the logic you need already exists, call it, or extract it into a shared function, module, or script that every caller uses, rather than copying it.
+  Each copy is another place a later fix must reach; look for these opportunities in every change, including duplicates your own diff introduces.
 - Read the repo's decision records (ADRs or equivalent) before design work in an area they cover, and cite the ones that apply; the design is often already decided.
 - When porting logic to a new context (script to workflow, inline to module), treat the original as authoritative: read it line by line and account for every variable, dependency, ordering constraint, and edge case.
 
