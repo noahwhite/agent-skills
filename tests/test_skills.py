@@ -131,6 +131,7 @@ STRAY_RE = re.compile(
     r"|(?<!runtime-)\bneutral"
 )
 DEFINITION_RE = re.compile(r"^\s*- \*\*(?:Clean|Neutral):\*\*")
+DEFINITIONS = [line for line in (ROOT / "shared" / "code-review.md").read_text().splitlines() if DEFINITION_RE.match(line)]
 
 
 def stray_terms(text: str) -> list[str]:
@@ -166,10 +167,11 @@ def test_stray_clean_neutral_terms_check():
 
 
 def test_clean_and_neutral_use_the_canonical_phrase():
+    assert len(DEFINITIONS) == 2, DEFINITIONS
     offenders = []
     for md in md_files():
         for n, line in enumerate(md.read_text().splitlines(), 1):
-            if md.name == "code-review.md" and DEFINITION_RE.match(line):
+            if md.name == "code-review.md" and line in DEFINITIONS:
                 continue
             if stray_terms(line):
                 offenders.append(f"{md.relative_to(ROOT)}:{n}: {line.strip()}")
