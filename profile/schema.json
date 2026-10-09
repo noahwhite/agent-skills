@@ -1,0 +1,450 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/noahwhite/agent-skills/profile/schema.json",
+  "title": "agent-skills consumer profile",
+  "description": "Project-specific values the base skills read. Skills cite keys as `profile.<path>`; a skill that needs an unset key stops and asks instead of guessing.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "project"
+  ],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Human name of the product or codebase."
+        },
+        "repos": {
+          "type": "array",
+          "description": "Repositories the skills may operate on, as owner/name.",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+          }
+        },
+        "test_command": {
+          "type": "string",
+          "description": "Command that runs the repository's test suite from the repository root; the pre-PR preflight runs it in a detached worktree at HEAD."
+        }
+      }
+    },
+    "tracker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "linear"
+          ]
+        },
+        "team_key": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9]{0,6}$",
+          "description": "Team key the CLI resolves (e.g. ABC), not the team name."
+        },
+        "team_name": {
+          "type": "string",
+          "description": "Team display name, for tools that take the name."
+        },
+        "assignee": {
+          "type": "string",
+          "description": "Value passed as the CLI assignee for every new issue (e.g. self)."
+        },
+        "assignee_email": {
+          "type": "string",
+          "description": "Account that `assignee` resolves to; filter by this, never by display name."
+        },
+        "agent_stamp": {
+          "type": "boolean",
+          "description": "Comment `Worked by agent <session label> at <UTC time>` on each issue picked up."
+        },
+        "states": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Workflow state names, in lifecycle order.",
+          "properties": {
+            "triage": {
+              "type": "string"
+            },
+            "backlog": {
+              "type": "string"
+            },
+            "ready": {
+              "type": "string"
+            },
+            "in_progress": {
+              "type": "string"
+            },
+            "blocked": {
+              "type": "string"
+            },
+            "in_review": {
+              "type": "string"
+            },
+            "in_deployment_review": {
+              "type": "string"
+            },
+            "done": {
+              "type": "string"
+            },
+            "canceled": {
+              "type": "string"
+            },
+            "duplicate": {
+              "type": "string"
+            }
+          }
+        },
+        "labels": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Issue label names.",
+          "properties": {
+            "user_story": {
+              "type": "string"
+            },
+            "spike": {
+              "type": "string"
+            },
+            "bug": {
+              "type": "string"
+            },
+            "investigation": {
+              "type": "string"
+            },
+            "feature": {
+              "type": "string"
+            },
+            "improvement": {
+              "type": "string"
+            },
+            "rtb": {
+              "type": "string",
+              "description": "Run-the-business: maintenance of existing systems."
+            }
+          }
+        },
+        "epic": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name_prefix": {
+              "type": "string"
+            },
+            "icon": {
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            },
+            "lead": {
+              "type": "string"
+            },
+            "size_labels": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "small": {
+                  "type": "string"
+                },
+                "medium": {
+                  "type": "string"
+                },
+                "large": {
+                  "type": "string"
+                },
+                "extra_large": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "estimate_scale": {
+          "enum": [
+            "fibonacci",
+            "linear",
+            "exponential",
+            "tshirt"
+          ]
+        },
+        "cycle_weeks": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8
+        },
+        "title_prefixes": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Issue title prefix per issue type.",
+          "properties": {
+            "user_story": {
+              "type": "string",
+              "default": "[User Story]"
+            },
+            "bug": {
+              "type": "string",
+              "default": "[Bug]"
+            },
+            "spike": {
+              "type": "string",
+              "default": "[Spike]"
+            },
+            "investigation": {
+              "type": "string",
+              "default": "[Investigation]"
+            }
+          }
+        }
+      }
+    },
+    "git": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "host": {
+          "enum": [
+            "github"
+          ]
+        },
+        "integration_branch": {
+          "type": "string",
+          "description": "Branch feature PRs target (e.g. develop, or main for trunk-based)."
+        },
+        "release_branch": {
+          "type": "string",
+          "description": "Branch production deploys from; equal to integration_branch for trunk-based."
+        },
+        "promotion": {
+          "enum": [
+            "none",
+            "whole-branch",
+            "per-story"
+          ],
+          "description": "How integration_branch reaches release_branch."
+        },
+        "merge_method": {
+          "enum": [
+            "squash",
+            "merge",
+            "rebase"
+          ]
+        },
+        "signed_commits": {
+          "type": "boolean"
+        },
+        "ai_attribution": {
+          "enum": [
+            "forbid",
+            "allow"
+          ],
+          "description": "Whether commits and PRs may carry AI co-author or generated-by lines."
+        },
+        "branch_prefixes": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Branch prefix per work type, e.g. feature: feat/."
+        },
+        "pr_assignee": {
+          "type": "string",
+          "description": "GitHub login assigned to every new PR. Unset means no assignee."
+        }
+      }
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The review of record: an independent reviewer, then a separate clean, neutral adjudicator.",
+      "properties": {
+        "reviewer": {
+          "$ref": "#/$defs/agent"
+        },
+        "adjudicator": {
+          "$ref": "#/$defs/agent"
+        },
+        "shadow_adjudicators": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/agent"
+          },
+          "description": "Extra adjudicators run for comparison; never the decision of record."
+        },
+        "optional_reviewers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/agent"
+          },
+          "description": "Non-blocking extra reviewers: one attempt, record a skip on failure."
+        },
+        "merge_owner": {
+          "enum": [
+            "human",
+            "agent"
+          ],
+          "description": "Who performs the merge once the gate is clean on head."
+        },
+        "pre_pr": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Agents of the pre-PR adversarial gate (adversarial-review-pipeline) and its escalation loop. Never the review of record.",
+          "properties": {
+            "sweeper": {
+              "$ref": "#/$defs/agent",
+              "description": "Cheap long-context model for the whole-diff first-pass sweep. Optional: unset skips the sweep."
+            },
+            "hunter": {
+              "$ref": "#/$defs/agent",
+              "description": "Empirical verify-and-hunt reviewer that mutates and runs code in a throwaway worktree; also the correctness lens of the escalation loop."
+            },
+            "arbiter": {
+              "$ref": "#/$defs/agent",
+              "description": "Strong reviewer for the one bounded arbitration pass; also the verifier of the escalation loop."
+            },
+            "simplicity_reviewer": {
+              "$ref": "#/$defs/agent",
+              "description": "Simplicity/scope lens of the escalation loop."
+            },
+            "fixer": {
+              "$ref": "#/$defs/agent",
+              "description": "Scope-capped fixer of the escalation loop."
+            }
+          }
+        }
+      }
+    },
+    "environments": {
+      "type": "array",
+      "description": "Deploy targets in promotion order.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string",
+            "description": "Branch that deploys here."
+          },
+          "deploy": {
+            "type": "string",
+            "description": "How a build reaches this environment (workflow name, command, or automatic)."
+          },
+          "verify": {
+            "type": "string",
+            "description": "How to confirm the deployed build is the expected one."
+          },
+          "url": {
+            "type": "string"
+          },
+          "production": {
+            "type": "boolean"
+          },
+          "preauthorized": {
+            "type": "boolean",
+            "default": false,
+            "description": "Agents may deploy here without asking first. Never set on a production environment."
+          }
+        },
+        "not": {
+          "required": [
+            "production",
+            "preauthorized"
+          ],
+          "properties": {
+            "production": {
+              "const": true
+            },
+            "preauthorized": {
+              "const": true
+            }
+          }
+        }
+      }
+    },
+    "qa": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "evidence_dir": {
+          "type": "string",
+          "description": "Repository directory for committed QA evidence, one subdirectory per story. Unset means the project keeps no in-repo QA evidence."
+        }
+      }
+    },
+    "workspace": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "scratch_dir": {
+          "type": "string",
+          "description": "Directory for temporary files and subagent checklists when the runtime gives none."
+        }
+      }
+    },
+    "overlays": {
+      "type": "object",
+      "description": "Consumer overlay file per skill name or shared capability name, relative to the profile file.",
+      "propertyNames": {
+        "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+      },
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "extra": {
+      "type": "object",
+      "description": "Free-form values for the consumer's own overlays. Base skills never read this."
+    }
+  },
+  "$defs": {
+    "agent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Label used in review comments."
+        },
+        "runtime": {
+          "enum": [
+            "claude-code",
+            "opencode",
+            "codex",
+            "command"
+          ],
+          "description": "How the agent is launched: as a subagent of that runtime, or as a shell command."
+        },
+        "model": {
+          "type": "string",
+          "description": "Model id in the launching runtime's syntax."
+        },
+        "command": {
+          "type": "string",
+          "description": "For runtime=command: the command line, with {prompt_file}, {output_file} and, where a skill says so, {checkout} placeholders."
+        }
+      }
+    }
+  }
+}

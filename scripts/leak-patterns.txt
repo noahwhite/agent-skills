@@ -1,0 +1,20 @@
+# Generic shapes that must never appear in this repository.
+# Format: <regex><TAB><synthetic sample that must match>. Lines starting with # are comments.
+# tests/test_leak_scan.py proves each pattern still fires on its sample.
+#
+# Names of consumers, their estates, vendors and issue keys are NOT listed here: a public list
+# of them would publish exactly what it is meant to keep out. They live in the private
+# LEAK_DENYLIST (CI secret, or a file named by LEAK_DENYLIST_FILE), one regex per line.
+#
+# Personal data and identifiers.
+[A-Za-z0-9._%+-]+@(?!example\.(com|org|net)\b)(?!github\.com\b)(?!users\.noreply\.github\.com\b)[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}	mail ops@corp.test
+(?i)\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b	id 00000000-1111-2222-3333-444444444444
+\b(?!(?:127|0|10|192\.0\.2|198\.51\.100|203\.0\.113)\.)(?:\d{1,3}\.){3}\d{1,3}\b	ssh 172.16.254.1
+(?i)\b[a-z0-9-]+\.ts\.net\b	host.tail0000.ts.net
+# Credential shapes.
+\bgh[pousr]_[A-Za-z0-9]{20,}\b	token ghp_abcdefghijklmnopqrstuvwxyz
+\bgithub_pat_[A-Za-z0-9_]{20,}\b	github_pat_11AAAAAAAAAAAAAAAAAAAAAA
+\bsk-[A-Za-z0-9_-]{20,}\b	key sk-abcdefghijklmnopqrstuvwx
+\bAKIA[0-9A-Z]{16}\b	AKIAABCDEFGHIJKLMNOP
+\blin_api_[A-Za-z0-9]{20,}\b	lin_api_abcdefghijklmnopqrstuvwxyz
+-----BEGIN [A-Z ]*PRIVATE KEY-----	-----BEGIN OPENSSH PRIVATE KEY-----
