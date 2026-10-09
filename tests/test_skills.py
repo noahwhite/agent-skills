@@ -30,20 +30,24 @@ PROFILE_REF_RE = re.compile(
 CODE_SPAN_RE = re.compile(r"(?<!`)(`+)(?!`)(.+?)(?<!`)\1(?!`)")
 FENCE_RE = re.compile(r"^\s*(```|~~~)")
 LINK_TEXT_RE = re.compile(r"\[[^\[\]]*\]$")
+LINK_TARGET_RE = re.compile(r"\([^()\s]*\)")
 EMPHASIS_RE = re.compile(r"(?<![.*])\*+$")
 
 
-def prose_ref(token: str, next_char: str) -> str:
-    """Peel Markdown that closes around a prose reference: one sentence-final `.`, link text
-    before a link's `(`, a `]` closing a link, and a `*` run closing emphasis."""
-    if next_char == "(":
+def prose_ref(token: str, before: str, after: str) -> str:
+    """Peel Markdown that closes around a prose reference, only where the text before the
+    reference opened it: one sentence-final `.`, link text followed by a complete link
+    target, a `]` closing an open `[`, and a `*` run matching an opening run."""
+    if LINK_TARGET_RE.match(after):
         token = LINK_TEXT_RE.sub("", token)
-    dot_peeled = False
+    open_brackets = before.count("[") - before.count("]")
+    dot_peeled = emphasis_peeled = False
     while True:
-        if token.endswith("]") and token.count("]") > token.count("["):
-            token = token[:-1]
-        elif EMPHASIS_RE.search(token):
-            token = EMPHASIS_RE.sub("", token)
+        emphasis = EMPHASIS_RE.search(token)
+        if token.endswith("]") and open_brackets > 0 and token.count("]") > token.count("["):
+            token, open_brackets = token[:-1], open_brackets - 1
+        elif emphasis and not emphasis_peeled and emphasis.group() in before:
+            token, emphasis_peeled = token[:emphasis.start()], True
         elif token.endswith(".") and not dot_peeled:
             token, dot_peeled = token[:-1], True
         else:
@@ -66,7 +70,7 @@ def profile_refs(text: str) -> list[str]:
                 if is_code:
                     refs.append(m.group(1))
                 else:
-                    refs.append(prose_ref(m.group(1), segment[m.end():m.end() + 1]))
+                    refs.append(prose_ref(m.group(1), segment[:m.start()], segment[m.end():]))
     return refs
 
 
@@ -198,6 +202,9 @@ def test_profile_ref_regex_captures_whole_token():
         "*profile.git.integration_branch*.": "git.integration_branch",
         "[*profile.git.integration_branch*](guide.md)": "git.integration_branch",
         "profile.git.integration_branch..": "git.integration_branch.",
+        "profile.git.integration_branch]]": "git.integration_branch]]",
+        "profile.git.integration_branch[0](": "git.integration_branch[0]",
+        "profile.git.integration_branch*": "git.integration_branch*",
         "`profile.git.integration_branch*Typo`": "git.integration_branch*Typo",
         "`profile.git.integration_branch*`": "git.integration_branch*",
         "`profile.git.integration_branch.`": "git.integration_branch.",
@@ -212,7 +219,8 @@ def test_profile_ref_regex_captures_whole_token():
                 "git..integration_branch", "environments[0].url", "git.x]y", "git.integration_branch/x",
                 "git.integration_branch\u00e9", "git.integration_branch*Typo",
                 "git.integration_branch*", "git.integration_branch.", "git.integration_branch.*",
-                "review.*[0].name"]:
+                "review.*[0].name", "git.integration_branch]]", "git.integration_branch[0]",
+                "git.integration_branch*"]:
         assert not resolve_schema_path(bad), bad
     assert resolve_schema_path("environments[].preauthorized")
     assert resolve_schema_path("review.*")
