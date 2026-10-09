@@ -58,7 +58,7 @@ This written plan is the hand-off; do not leave it implicit.
 
 ## 3. Delegate implementation to a senior engineer
 
-Spawn a fresh subagent with its own clean context (not a fork of yours; on opencode, check the nesting rule in `references/runtimes.md` first, since this subagent spawns reviewers of its own) and brief it as a senior engineer working this story.
+Spawn a clean, neutral subagent (a fresh context, not a fork of yours; on opencode, check the nesting rule in `references/runtimes.md` first, since this subagent spawns reviewers of its own) and brief it as a senior engineer working this story.
 The brief is neutral: facts, plan, and constraints, not your expectations about the outcome.
 It must include:
 
@@ -73,11 +73,11 @@ Do not pre-empt its implementation choices beyond the plan and constraints, and 
 
 ## 4. Own the review gate and the shadow adjudication
 
-`engineering-workflow` runs the review of record: `profile.review.reviewer`, then a separate clean-context `profile.review.adjudicator`, as `references/code-review.md` defines.
+`engineering-workflow` runs the review of record: `profile.review.reviewer`, then a separate clean, neutral `profile.review.adjudicator`, as `references/code-review.md` defines.
 
 1. Confirm the senior engineer's PR has a completed reviewer pass and adjudication at its current head.
 2. If `profile.review.shadow_adjudicators` is set, run each one on every gate this persona drives, without waiting to be asked.
-   Spawn each as a fresh subagent on its configured model, with clean context, given exactly the diff reference and reviewer findings the adjudicator of record got.
+   Spawn each as a clean, neutral subagent on its configured model, given exactly the diff reference and reviewer findings the adjudicator of record got.
    Never give it the adjudicator's verdicts, your triage, or your plan.
    If the runtime cannot run a configured model, say so and skip that shadow; never substitute a model.
 3. The adjudicator of record alone decides what gets fixed and what gates the merge.

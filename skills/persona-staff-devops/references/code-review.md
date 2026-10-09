@@ -21,7 +21,12 @@ Reviewer and adjudicator models, launchers, and the merge owner come from `profi
 
 ## Review of record
 
-The review of record is an independent reviewer, then a separate clean-context adjudicator, at the current head.
+The review of record is an independent reviewer, then a separate clean, neutral adjudicator, at the current head.
+
+Every agent that judges work (reviewer, adjudicator, shadow adjudicator, verifier, QA agent) is clean and neutral; the two always go together:
+
+- **Clean:** a fresh agent in its own context, never a fork of the current conversation.
+- **Neutral:** its prompt carries only the facts the task needs (repo, head SHA, diff reference, the findings or AC to verify), never the author's intent or rationale, QA verdicts, prior review conclusions, or any steer on what to find or dismiss.
 
 1. **Reviewer: `profile.review.reviewer`.**
    Run it against a throwaway detached worktree of the PR head (`git worktree add --detach <scratch>/pr-review <head-sha>`), so it cannot touch the working branch, and remove the worktree afterwards.
@@ -29,11 +34,11 @@ The review of record is an independent reviewer, then a separate clean-context a
    It is read-only: no edits, commits, or PR posts.
    Its findings go to an output file the adjudicator receives.
 2. **Adjudicator: `profile.review.adjudicator`.**
-   When the reviewer finishes, launch a fresh agent in a clean context, never a fork of the current conversation.
+   When the reviewer finishes, launch it as a clean, neutral agent.
    Give it the diff reference and the reviewer's findings, and ask it to verify each finding against the real code and rule it valid or invalid, with severity and whether it blocks merge.
    It is read-only.
-3. **Neutral means neutral.**
-   Never give the reviewer or adjudicator the author's intent or rationale, QA verdicts, prior review conclusions, or any steer on what to find or dismiss.
+3. **Clean and neutral.**
+   Run the reviewer and the adjudicator clean and neutral, as defined above.
    Every prompt tells the agent never to write secrets to files or argv.
 4. **Act on the adjudication.**
    Fix every finding ruled valid in the same PR.
@@ -62,7 +67,7 @@ If the runtime cannot run a configured model, stop and say so; never substitute 
 
 When `profile.review.shadow_adjudicators` lists agents, run each after the adjudicator, for comparison only:
 
-- Give it exactly the adjudicator's prompt, diff reference, and findings, in a fresh clean context, and never the adjudicator's verdicts.
+- Run it as a clean, neutral agent, given exactly the adjudicator's prompt, diff reference, and findings, and never the adjudicator's verdicts.
 - The adjudicator alone decides what is fixed and what gates the merge; a shadow never changes a disposition.
 - Record each shadow's verdicts beside the adjudicator's in the review-of-record comment, under an "Adjudicator comparison" heading, with an agreement summary.
 - Never hold the merge on a shadow; if it fails or times out, record it as skipped and continue.

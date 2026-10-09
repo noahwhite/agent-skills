@@ -119,6 +119,24 @@ def test_no_runtime_specific_terms():
     assert not offenders, "\n".join(offenders)
 
 
+# An agent that judges work is clean and neutral together (shared/code-review.md), so a
+# paragraph or list that makes an agent clean must also make it neutral, and the reverse.
+CLEAN_RE = re.compile(
+    r"(?i)\bclean[- ]context|\bfresh (?:clean )?context|\bclean, neutral|\bclean and neutral|\*\*clean:\*\*"
+)
+NEUTRAL_RE = re.compile(r"(?i)(?<!runtime-)\bneutral")
+
+
+def test_clean_and_neutral_go_together():
+    offenders = []
+    for md in md_files():
+        for block in re.split(r"\n\s*\n", md.read_text()):
+            if bool(CLEAN_RE.search(block)) != bool(NEUTRAL_RE.search(block)):
+                first = block.strip().splitlines()[0]
+                offenders.append(f"{md.relative_to(ROOT)}: {first}")
+    assert not offenders, "\n".join(offenders)
+
+
 def schema_node(path: str) -> dict | None:
     node = SCHEMA
     for part in path.split("."):

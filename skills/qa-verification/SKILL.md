@@ -94,7 +94,7 @@ If `profile.qa.evidence_dir` is unset, the project does not keep in-repo evidenc
   No probe scripts, scratch files, or bulk captures.
 - Ship it through the normal branch and PR flow in `references/github.md`, signed when `profile.git.signed_commits` is true, and verify the signature after pushing.
 - **Never merge the evidence PR before its review of record is complete at the current head.**
-  The review of record is `profile.review.reviewer`, then a separate clean-context `profile.review.adjudicator`, run with neutral instructions as `references/code-review.md` defines.
+  The review of record is `profile.review.reviewer`, then a separate clean, neutral `profile.review.adjudicator`, as `references/code-review.md` defines.
   Never hand the reviewer or the adjudicator your QA verdicts.
   A docs-only diff, green checks, a long wait, or user frustration do not waive the gate; if you cannot get a review, hold and say so.
 - Fix what the adjudicator rules valid, and post the review-of-record comment on the PR before the merge, never after.

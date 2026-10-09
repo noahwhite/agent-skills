@@ -89,7 +89,7 @@ report without an observation is a hypothesis.]
 > On "verified against the original failing case": re-running the fixed code proves it works now, not that it fixes *the thing that broke*.
 > Where the original trigger is gone, say so explicitly rather than substituting a similar-looking case.
 
-> **Review Policy** (referenced by the DoD): "Independently reviewed" means the review of record in [references/code-review.md](references/code-review.md) - an independent reviewer (`profile.review.reviewer`), then a separate clean-context adjudicator (`profile.review.adjudicator`) - is clean on the PR head, every finding is adjudicated, and operationally risky changes are verified at runtime.
+> **Review Policy** (referenced by the DoD): "Independently reviewed" means the review of record in [references/code-review.md](references/code-review.md) - an independent reviewer (`profile.review.reviewer`), then a separate clean, neutral adjudicator (`profile.review.adjudicator`) - is clean on the PR head, every finding is adjudicated, and operationally risky changes are verified at runtime.
 > A lighter path may lower who signs off, never what gets checked.
 
 ## Create it (linear CLI)

@@ -99,7 +99,7 @@ As a [role], I want [feature/capability], so that [business value].
 - [ ] No critical bugs/regressions
 ```
 
-> **Review Policy** (referenced by the DoD): "Independently reviewed" means the review of record in [references/code-review.md](references/code-review.md) - an independent reviewer (`profile.review.reviewer`), then a separate clean-context adjudicator (`profile.review.adjudicator`) - is clean on the PR head, every finding is adjudicated, and operationally risky changes are verified at runtime.
+> **Review Policy** (referenced by the DoD): "Independently reviewed" means the review of record in [references/code-review.md](references/code-review.md) - an independent reviewer (`profile.review.reviewer`), then a separate clean, neutral adjudicator (`profile.review.adjudicator`) - is clean on the PR head, every finding is adjudicated, and operationally risky changes are verified at runtime.
 > A lighter path may lower who signs off, never what gets checked.
 
 ## Create it (linear CLI)

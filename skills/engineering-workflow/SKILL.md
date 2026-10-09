@@ -4,7 +4,7 @@ description: >-
   Drive a tracker story from triage to deployment through a gated, slice-based, test-driven
   process: triage into progress, TDD per slice, the pre-PR adversarial gate (with a capped two-lens
   loop as escalation), a PR to the integration branch, optional extra reviewers, the review of
-  record (independent reviewer, then a separate clean-context adjudicator), remediation, merge,
+  record (independent reviewer, then a separate clean, neutral adjudicator), remediation, merge,
   deploy, and the move to deployment review. Use when asked to implement, complete, prepare, review,
   merge or deploy a story. Backlog-only triage or refinement without code belongs to a product-owner
   skill.
@@ -115,7 +115,7 @@ One round has three stages:
 Exits: converged (nothing blocking after review, or nothing survived a complete verification); no progress (the verified count did not shrink after a fix: stop and review by hand); escalated scope (take it to the owner); a blind lens, an incomplete verification, a fix with failing tests, the round cap, all rejected, or no commit (unresolved: resolve by hand rather than skip the gate).
 
 [scripts/adversarial-review-loop.workflow.js](scripts/adversarial-review-loop.workflow.js) is an **optional, runtime-specific accelerator** for runtimes that execute workflow scripts; its header lists its arguments, all taken from the profile.
-Everywhere else, drive the rounds by hand as above: spawn the two reviewers in parallel, then a fresh verifier subagent, then fix (or spawn the fixer) and repeat only while new verified blocking findings appear.
+Everywhere else, drive the rounds by hand as above: spawn the two reviewers in parallel, then a clean, neutral verifier subagent, then fix (or spawn the fixer) and repeat only while new verified blocking findings appear.
 
 ### Review the fixer's commits
 
@@ -158,8 +158,8 @@ The batch prompt reaches the agent on stdin (for codex, end the command with `-`
 
 ## 7. Review of record (required)
 
-Run the gate in `references/code-review.md` once the PR is open: `profile.review.reviewer` reviews the head in a throwaway worktree, then `profile.review.adjudicator`, a fresh clean-context agent, verifies each finding against the code.
-Both agents are neutral and independent of the author; one agent reviewing and adjudicating its own findings does not pass.
+Run the gate in `references/code-review.md` once the PR is open: `profile.review.reviewer` reviews the head in a throwaway worktree, then `profile.review.adjudicator`, a clean, neutral agent, verifies each finding against the code.
+Both agents are clean, neutral, and independent of the author; one agent reviewing and adjudicating its own findings does not pass.
 If `profile.review.shadow_adjudicators` is set, run each one as `references/code-review.md` describes; it records agreement only and never gates the merge.
 
 Monitor the PR for required checks, other protection checks, and human review threads.

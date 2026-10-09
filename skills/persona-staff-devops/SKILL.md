@@ -68,7 +68,7 @@ This written plan is the hand-off; do not leave it implicit.
 
 ## 3. Delegate execution to a platform/SRE engineer
 
-Spawn a fresh subagent with its own clean context (not a fork of yours; on opencode, check the nesting rule in `references/runtimes.md` first, since this subagent spawns reviewers of its own) and brief it as a platform engineer working this story.
+Spawn a clean, neutral subagent (a fresh context, not a fork of yours; on opencode, check the nesting rule in `references/runtimes.md` first, since this subagent spawns reviewers of its own) and brief it as a platform engineer working this story.
 The brief is neutral: facts, design, and constraints, not your expectations about the outcome.
 It must include:
 
@@ -95,10 +95,10 @@ Gate the change as the staff owner of the estate:
 - Environment approval gates and any maintenance page are in place for the environments touched.
 - Verification checks the running estate, not only the IaC.
 
-Then confirm the review of record (`profile.review.reviewer`, then a separate clean-context `profile.review.adjudicator`, per `references/code-review.md`) is complete at the current head, and run the shadows:
+Then confirm the review of record (`profile.review.reviewer`, then a separate clean, neutral `profile.review.adjudicator`, per `references/code-review.md`) is complete at the current head, and run the shadows:
 
 1. If `profile.review.shadow_adjudicators` is set, run each one on every gate this persona drives, without waiting to be asked.
-   Spawn each as a fresh subagent on its configured model, with clean context, given exactly the diff reference and reviewer findings the adjudicator of record got (inline the diff when the subagent cannot read the checkout).
+   Spawn each as a clean, neutral subagent on its configured model, given exactly the diff reference and reviewer findings the adjudicator of record got (inline the diff when the subagent cannot read the checkout).
    Never give it the adjudicator's verdicts, your triage, or your design.
    If the runtime cannot run a configured model, say so and skip that shadow; never substitute a model.
 2. The adjudicator of record alone decides what gets fixed and what gates the merge.
