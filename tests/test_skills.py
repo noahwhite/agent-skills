@@ -130,7 +130,7 @@ STRAY_RE = re.compile(
     r"|\bbrief (?:a|the) fresh\b|\b(?:hand|delegate|pass)\w* (?:\w+ ){0,3}?to (?:a|the) fresh one\b"
     r"|(?<!runtime-)\bneutral"
 )
-DEFINITION_RE = re.compile(r"^\s*- \*\*(?:Clean|Neutral):\*\*")
+DEFINITION_RE = re.compile(r"^\s*- \*\*(Clean|Neutral):\*\*")
 DEFINITIONS = [line for line in (ROOT / "shared" / "code-review.md").read_text().splitlines() if DEFINITION_RE.match(line)]
 
 
@@ -167,7 +167,7 @@ def test_stray_clean_neutral_terms_check():
 
 
 def test_clean_and_neutral_use_the_canonical_phrase():
-    assert len(DEFINITIONS) == 2, DEFINITIONS
+    assert [DEFINITION_RE.match(line).group(1) for line in DEFINITIONS] == ["Clean", "Neutral"], DEFINITIONS
     offenders = []
     for md in md_files():
         for n, line in enumerate(md.read_text().splitlines(), 1):
