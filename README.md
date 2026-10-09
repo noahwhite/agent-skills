@@ -1,3 +1,8 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="marketing/icon/agent-skills-128-dark.png">
+  <img src="marketing/icon/agent-skills-128.png" width="128" height="128" alt="agent-skills card file icon">
+</picture>
+
 # agent-skills
 
 Base skills for coding agents: an engineering process (story lifecycle, TDD, review of record, deploy verification) packaged as [Agent Skills](https://agentskills.io/specification).
