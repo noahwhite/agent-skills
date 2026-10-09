@@ -38,11 +38,16 @@ def profile_refs(text: str) -> list[str]:
         for ref in PROFILE_REF_RE.findall(literal):
             refs.append(ref if is_code else ref.removesuffix("."))
 
+    def walk(tokens: list) -> None:
+        for tok in tokens:
+            if tok.children:
+                walk(tok.children)  # inline content, and an image's alt text
+            elif tok.type in ("text", "code_inline", "html_inline"):
+                scan(tok.content, tok.type == "code_inline")
+
     for block in MARKDOWN.parse(text):
         if block.type == "inline":
-            for tok in block.children:
-                if tok.type in ("text", "code_inline", "html_inline"):
-                    scan(tok.content, tok.type == "code_inline")
+            walk(block.children)
         elif block.content:
             scan(block.content, False)
     return refs
@@ -183,6 +188,8 @@ def test_profile_ref_regex_captures_whole_token():
         "**bold** profile.git.integration_branch**": "git.integration_branch**",
         "profile.git.integration_branch[docs](guide(v2).md)": "git.integration_branch",
         "[profile.git.integration_branch](guide.md \"Guide\")": "git.integration_branch",
+        "![profile.git.integration_branchTypo](icon.svg)": "git.integration_branchTypo",
+        "![`profile.git.integration_branch.`](icon.svg)": "git.integration_branch.",
         "`profile.git.integration_branch*Typo`": "git.integration_branch*Typo",
         "`profile.git.integration_branch*`": "git.integration_branch*",
         "`profile.git.integration_branch.`": "git.integration_branch.",
