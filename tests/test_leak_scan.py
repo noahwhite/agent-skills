@@ -87,8 +87,9 @@ def test_non_utf8_files_are_still_scanned(tmp_path, monkeypatch):
     addr = "ops" + "@" + "corp.test"
     (tmp_path / "latin1.md").write_bytes(f"caf\xe9 {addr}\n".encode("latin-1"))
     (tmp_path / "bin.png").write_bytes(b"\x89PNG\0" + addr.encode())
-    hits = leak_scan.scan(["latin1.md", "bin.png"], PUBLIC, [])
-    assert [h.split(":", 1)[0] for h in hits] == ["latin1.md"]
+    (tmp_path / "utf16.txt").write_bytes(f"note {addr}\n".encode("utf-16"))
+    hits = leak_scan.scan(["latin1.md", "bin.png", "utf16.txt"], PUBLIC, [])
+    assert [h.split(":", 1)[0] for h in hits] == ["latin1.md", "utf16.txt"]
 
 
 def test_repository_is_clean():

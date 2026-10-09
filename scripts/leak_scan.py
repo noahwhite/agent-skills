@@ -55,10 +55,14 @@ def scan(paths: list[str], public, private) -> list[str]:
     hits = []
     for rel in paths:
         data = (ROOT / rel).read_bytes()
-        if b"\0" in data:
+        if data.startswith((b"\xff\xfe", b"\xfe\xff")):
+            # UTF-16 with a byte-order mark (PowerShell's `>` writes this): text despite its NULs.
+            text = data.decode("utf-16", errors="replace")
+        elif b"\0" in data:
             continue  # binary (images and the like)
-        # Decode leniently: a file in another encoding is still scanned, not skipped.
-        text = data.decode("utf-8", errors="replace")
+        else:
+            # Decode leniently: a file in another encoding is still scanned, not skipped.
+            text = data.decode("utf-8", errors="replace")
         for n, line in enumerate(text.splitlines(), 1):
             for rx, _ in public:
                 # Report the pattern, never the matched text: it may be a live credential.

@@ -61,10 +61,14 @@ The script reviews the repository of the current directory, or the one `--repo <
 
 Every phase belongs to one run, keyed by the base and head commit SHAs, under `git rev-parse --git-path adversarial-pipeline` (worktree-safe); `paths --base "$BASE"` prints the run's artifact paths.
 
-- Each phase deletes its previous artifact before it launches, and accepts only a non-empty report written after that launch, which it then stamps for the run.
-- Each phase refuses to start (exit 13) unless its predecessors are accepted for the same run: the sweep needs a PASS preflight, the hunt needs the sweep, and arbitration needs the sweep and the hunt.
-  With no sweeper configured, pass `--no-sweep` to the hunt and to arbitration.
+- Each phase deletes its previous artifact before it launches, and accepts only a non-empty report written after that launch whose first line is `REVIEW-RAN: yes`.
+  It then stamps the report with the sha256 of the report, of the spec, and of every predecessor artifact its dossier was built from.
+- Each phase refuses to start (exit 13) unless its predecessors are accepted for the same run and the same spec: the sweep needs a PASS preflight, the hunt needs the sweep, and arbitration needs the sweep and the hunt.
+  With no sweeper configured, pass `--no-sweep` to the hunt and to arbitration alike.
+- Re-running a phase, or the preflight, discards the acceptance of every later phase, so arbitration never pairs a new sweep with an old hunt.
 - A new commit is a new run: every phase starts again from the preflight.
+- Every model phase runs in its own throwaway detached worktree at HEAD, which is also the command's working directory; no agent runs in the primary checkout.
+  If the primary checkout's HEAD, status or diff changes while an agent runs, the phase fails (exit 18).
 
 Common inputs:
 
@@ -79,22 +83,32 @@ Common inputs:
 Launching a phase depends on the profile agent's `runtime`:
 
 - `command`, `codex` or `opencode`: build a command template from the agent definition and pass it as `--agent-cmd` to `run <phase>`.
-  Placeholders: `{prompt_file}` (the dossier), `{output_file}` (the artifact), `{checkout}` (the throwaway worktree, hunt only).
+  Placeholders: `{prompt_file}` (the dossier), `{output_file}` (the artifact), `{checkout}` (the phase's throwaway worktree).
   The command's stdin is the dossier.
   For `runtime: command`, the agent's `command` already is the template.
-  For `runtime: codex`, read the prompt from stdin with `-`: `codex exec -m <model> -s read-only -o {output_file} -` for the sweep and arbitration; the hunter writes in its checkout, so it uses `codex exec -m <model> -s workspace-write --cd {checkout} -o {output_file} -`.
+  For `runtime: codex`, read the prompt from stdin with `-`: `codex exec -m <model> -s read-only --cd {checkout} -o {output_file} -` for the sweep and arbitration; the hunter writes in its checkout, so it uses `codex exec -m <model> -s workspace-write --cd {checkout} -o {output_file} -`.
+  Never default to `-s danger-full-access`; see the hunt phase for when it is allowed.
   For `runtime: opencode`, run it non-interactively with the agent's model and a short instruction to read `{prompt_file}` with its file tools and output only the report.
 - A subagent runtime (`claude-code`, or the runtime you are in): run `dossier <phase>` to write the dossier and print its path.
-  For the hunt, also run `checkout --base "$BASE"` for a throwaway worktree.
+  Also run `checkout --base "$BASE"` for a throwaway worktree, for every phase.
   Spawn a fresh subagent with the agent's model, tell it to read the dossier and work only in that checkout, and save its final report to the phase's artifact path (`paths` prints them).
-  Then run `record <phase>` with the same options: it accepts the report only if it is non-empty, newer than the dossier, and free of sandbox errors.
+  Then run `record <phase>` with the same options: it accepts the report only if it is non-empty, newer than the dossier, starts with `REVIEW-RAN: yes`, and the primary checkout is unchanged since the dossier was written.
   Remove the checkout with `cleanup <path>`; it removes only a checkout the script created and registered, and refuses any other path.
 
 Never put the dossier's contents in argv: argv is visible to other processes, and one argument is capped at 128 KiB, which a real diff exceeds.
 Give it to the agent on stdin or as a path it reads.
+Every dossier asks for a first line of `REVIEW-RAN: yes`, or `REVIEW-RAN: no - <reason>` when the agent could not read or run what it needed; keep that instruction in any prompt you write yourself.
 Every prompt the script writes tells the agent never to write secrets to files or command arguments; keep that line in any prompt you write yourself.
 
 ## Phase 0: preflight (deterministic)
+
+Set these once, in the consumer repository, before Phase 0:
+
+```bash
+PIPELINE="<skill dir>/scripts/run-adversarial-pipeline.sh"   # absolute path the runtime loaded this skill from
+BASE="origin/<profile.git.integration_branch>"              # after: git fetch origin <profile.git.integration_branch>
+SPEC="<scratch dir>/spec.md"                                # the story text and acceptance criteria, written first
+```
 
 ```bash
 "$PIPELINE" preflight --base "$BASE" --test-cmd "<profile.project.test_command>"
@@ -135,8 +149,11 @@ Its dossier asks for both jobs and demands execution rather than reasoning:
    Mutate to prove each.
 
 - A hunter whose sandbox could not start reads nothing yet may exit 0.
-  Treat a sandbox or permission error in its output as a failed phase, never a clean one (the script exits 17).
-  If the sandbox cannot start on this host, the consumer overlay says how to run the hunter; the throwaway worktree is then the isolation.
+  A sandbox or permission error on the agent's stderr, or a report whose first line is not `REVIEW-RAN: yes`, is a failed phase, never a clean one (the script exits 17).
+  The report itself may quote such error text; only stderr is searched for it.
+- If the reviewer's own sandbox cannot start on this host (for Codex, its bwrap sandbox), that reviewer is unavailable: stop and say so.
+  The one exception is an operator who confirms an outer sandbox, such as a disposable container or VM; only then may it run with `-s danger-full-access`.
+  The throwaway worktree is not a sandbox and never justifies that flag.
 - Keep at most one invocation of a given CLI reviewer in flight per session, including across the pre-PR gate and the PR review; shared auth and daemons contend.
   When other sessions on the host use the same CLI, give each invocation its own config home seeded with a copy of the login, per `references/code-review.md`.
 

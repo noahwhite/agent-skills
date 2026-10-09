@@ -20,7 +20,7 @@ LINK_RE = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
 # Any profile.<path>, quoted or not (code blocks cite keys bare); profile.md and the
 # other file names are not keys.
 PROFILE_REF_RE = re.compile(
-    r"(?<![\w./-])profile\.(?!(?:md|yaml|json)\b)([a-z0-9_]+(?:\[\])?(?:\.[a-z0-9_]+(?:\[\])?)*)"
+    r"(?<![\w./-])profile\.(?!(?:md|yaml|json)\b)([A-Za-z0-9_-]+(?:\[\])?(?:\.[A-Za-z0-9_-]+(?:\[\])?)*)"
 )
 # Tool and path names of one runtime. Skill text names capabilities; shared/runtimes.md maps them.
 RUNTIME_TERMS = re.compile(
@@ -109,6 +109,20 @@ def resolve_schema_path(path: str) -> bool:
         if "$ref" in node:
             node = SCHEMA["$defs"][node["$ref"].split("/")[-1]]
     return True
+
+
+def test_profile_ref_regex_captures_whole_token():
+    cases = {
+        "`profile.git.integration_branchTypo`": "git.integration_branchTypo",
+        "use profile.git.integration_branch-x here": "git.integration_branch-x",
+        "Target profile.git.integration_branch.": "git.integration_branch",
+        "see profile.md and profile.yaml": None,
+    }
+    for text, want in cases.items():
+        got = PROFILE_REF_RE.findall(text)
+        assert got == ([want] if want else []), (text, got)
+    assert not resolve_schema_path("git.integration_branchTypo")
+    assert not resolve_schema_path("git.integration_branch-x")
 
 
 def test_profile_references_exist_in_schema():
