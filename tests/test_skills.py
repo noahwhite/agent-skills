@@ -20,11 +20,12 @@ LINK_RE = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
 # Any profile.<path>, quoted or not (code blocks cite keys bare). The whole token up to a
 # real terminator is captured, so a malformed key (`a..b`, `a/x`, `a[0]`, a typo suffix)
 # fails schema resolution instead of matching a valid prefix. A single trailing `.` is
-# sentence punctuation. profile.md and the other file names are not keys; profile.<path>
+# sentence punctuation, and a `]` or `*` that closes a Markdown link or emphasis ends the
+# key. profile.md and the other file names are not keys; profile.<path>
 # is a placeholder.
 PROFILE_REF_RE = re.compile(
     r"(?<![\w./-])profile\.(?!(?:md|yaml|json)\b)(?!<)"
-    r"([^\s`'\"(),;:!?<>]+?)(?=\.?(?:$|[\s`'\"(),;:!?<>]))",
+    r"([^\s`'\"(),;:!?<>*]+?)(?=\.?(?:$|[\s`'\"(),;:!?<>*]|(?<!\[)\](?=$|[\s(\[`'\"),;:!?.*])))",
     re.M,
 )
 
@@ -126,17 +127,22 @@ def test_profile_ref_regex_captures_whole_token():
         "cite profile.<path> here": None,
         "profile.git.integration_branch..bad": "git.integration_branch..bad",
         "profile.git..integration_branch": "git..integration_branch",
-        "profile.environments[0].url": "environments[0].url",
+        "profile.environments[0].url": "environments[0",
+        "[profile.git.integration_branch](guide.md)": "git.integration_branch",
+        "*profile.git.integration_branch*": "git.integration_branch",
+        "**profile.git.integration_branch**": "git.integration_branch",
+        "[profile.environments[].preauthorized](x)": "environments[].preauthorized",
+        "profile.git.x]y": "git.x]y",
         "profile.git.integration_branch/x": "git.integration_branch/x",
         "profile.git.integration_branch\u00e9": "git.integration_branch\u00e9",
         "`profile.environments[].preauthorized`": "environments[].preauthorized",
-        "each `profile.review.*` role": "review.*",
+        "each `profile.review.*` role": "review",
     }
     for text, want in cases.items():
         got = PROFILE_REF_RE.findall(text)
         assert got == ([want] if want else []), (text, got)
     for bad in ["git.integration_branchTypo", "git.integration_branch-x", "git.integration_branch..bad",
-                "git..integration_branch", "environments[0].url", "git.integration_branch/x",
+                "git..integration_branch", "environments[0", "git.x]y", "git.integration_branch/x",
                 "git.integration_branch\u00e9"]:
         assert not resolve_schema_path(bad), bad
     assert resolve_schema_path("environments[].preauthorized")
@@ -148,7 +154,7 @@ def test_profile_references_exist_in_schema():
         for ref in PROFILE_REF_RE.findall(md.read_text()):
             if ref.startswith("extra"):
                 missing.append(f"{md.relative_to(ROOT)}: base text must not read profile.extra")
-            elif not resolve_schema_path(ref.removesuffix(".*")):  # `.*` names a whole section
+            elif not resolve_schema_path(ref):
                 missing.append(f"{md.relative_to(ROOT)}: profile.{ref}")
     assert not missing, "\n".join(missing)
 

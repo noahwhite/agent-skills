@@ -69,7 +69,7 @@ Every phase belongs to one run, keyed by the base and head commit SHAs, under `g
 - Re-running a phase, or the preflight, discards every later phase, including a report still in flight (its `record` then exits 15), so arbitration never pairs a new sweep with an old hunt.
 - A new commit is a new run: every phase starts again from the preflight.
 - Every model phase runs in its own throwaway detached worktree at HEAD, which is also the command's working directory; no agent runs in the primary checkout.
-  A tripwire compares the primary checkout before and after each agent: HEAD, tracked and untracked status, the diff, the shared git config and the hooks directory; any change fails the phase (exit 18).
+  A tripwire compares the primary checkout before and after each agent: HEAD, tracked and untracked status, the diff, the shared git config, and the hooks directory (the default one and any `core.hooksPath`); any change fails the phase (exit 18).
   It does not see ignored files or edits to files that were already untracked, so it is a tripwire, not a boundary: the agent's sandbox is the boundary (see `references/runtimes.md`).
 
 Common inputs:

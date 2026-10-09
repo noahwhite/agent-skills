@@ -86,7 +86,7 @@ def test_non_utf8_files_are_still_scanned(tmp_path, monkeypatch):
     monkeypatch.setattr(leak_scan, "ROOT", tmp_path)
     addr = "ops" + "@" + "corp.test"
     (tmp_path / "latin1.md").write_bytes(f"caf\xe9 {addr}\n".encode("latin-1"))
-    (tmp_path / "bin.png").write_bytes(b"\x89PNG\0" + addr.encode())
+    (tmp_path / "bin.png").write_bytes(b"\x89PNG\0\x01\x02\xff")
     texts = ["latin1.md"]
     line = f"note {addr}\n"
     # With and without a byte-order mark; "utf-16" and "utf-32" write a little-endian mark.
@@ -96,6 +96,9 @@ def test_non_utf8_files_are_still_scanned(tmp_path, monkeypatch):
         "utf-16-be": line.encode("utf-16-be"),
         "utf-32": line.encode("utf-32"),
         "utf-32-be-bom": b"\0\0\xfe\xff" + line.encode("utf-32-be"),
+        # Mostly non-ASCII text without a mark.
+        "utf-16-le-cyrillic": ("\u0437\u0430\u043c\u0435\u0442\u043a\u0430 " * 20 + line).encode("utf-16-le"),
+        "utf-16-be-cjk": ("\u8bb0\u5f55" * 40 + " " + line).encode("utf-16-be"),
     }
     for enc, data in encoded.items():
         name = f"{enc}.txt"

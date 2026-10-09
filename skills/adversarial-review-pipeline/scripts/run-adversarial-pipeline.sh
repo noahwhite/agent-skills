@@ -257,7 +257,7 @@ bind_phase() {  # $1 = phase: record the inputs its dossier was built from and t
 }
 
 # A tripwire fingerprint of the primary checkout: HEAD, status (untracked included), the content diff,
-# and the shared git dir's config and hooks (a worktree writes both). Not ignored files.
+# the shared git dir's config, and the default and effective (core.hooksPath) hooks dirs. Not ignored files.
 COMMON_DIR="$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir)"
 primary_state() {
   git -C "$ROOT" rev-parse HEAD
@@ -267,11 +267,16 @@ primary_state() {
   for f in config config.worktree; do
     if [ -f "$COMMON_DIR/$f" ]; then printf '%s %s\n' "$f" "$(sha_of "$COMMON_DIR/$f")"; else echo "$f absent"; fi
   done
-  if [ -d "$COMMON_DIR/hooks" ]; then
-    (cd "$COMMON_DIR/hooks" && find . -printf '%y %m %p\n' | LC_ALL=C sort && find . -type f -exec sha256sum {} + | LC_ALL=C sort) | sha256sum
-  else
-    echo "hooks absent"
-  fi
+  # The default hooks dir and the effective one (core.hooksPath may point anywhere).
+  local d
+  for d in "$COMMON_DIR/hooks" "$(git -C "$ROOT" rev-parse --path-format=absolute --git-path hooks)"; do
+    if [ -d "$d" ]; then
+      printf '%s ' "$d"
+      (cd "$d" && find . -printf '%y %m %p\n' | LC_ALL=C sort && find . -type f -exec sha256sum {} + | LC_ALL=C sort) | sha256sum
+    else
+      echo "$d absent"
+    fi
+  done
 }
 
 accept_phase() {  # $1 = phase, $2 = stderr log or "": validate a freshly written artifact, then stamp it

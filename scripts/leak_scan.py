@@ -51,41 +51,36 @@ def files() -> list[str]:
     return [f for f in res.stdout.splitlines() if f not in EXEMPT and (ROOT / f).is_file()]
 
 
-def decode(data: bytes) -> str | None:
-    """Text of a file in any common encoding, or None when it looks binary."""
+def decodings(data: bytes) -> list[str]:
+    """Every plausible text reading of a file, so no encoding hides a match."""
     # UTF-32 marks first: the UTF-32LE mark starts with the UTF-16LE one.
     for bom, enc in ((b"\xff\xfe\0\0", "utf-32"), (b"\0\0\xfe\xff", "utf-32"),
                      (b"\xff\xfe", "utf-16"), (b"\xfe\xff", "utf-16")):
         if data.startswith(bom):
-            return data.decode(enc, errors="replace")  # PowerShell's `>` writes UTF-16
-    if b"\0" not in data:
-        # Decode leniently: a file in another encoding is still scanned, not skipped.
-        return data.decode("utf-8", errors="replace")
-    # UTF-16 without a mark: mostly-ASCII text puts its NULs on one byte parity.
-    odd = data[1::2].count(0)
-    even = data[0::2].count(0)
-    half = len(data) // 2
-    if half and odd > 0.8 * half and even < 0.1 * half:
-        return data.decode("utf-16-le", errors="replace")
-    if half and even > 0.8 * half and odd < 0.1 * half:
-        return data.decode("utf-16-be", errors="replace")
-    return None
+            return [data.decode(enc, errors="replace")]  # PowerShell's `>` writes UTF-16
+    # Decode leniently: a file in another encoding is still scanned, not skipped.
+    texts = [data.decode("utf-8", errors="replace")]
+    if b"\0" in data:
+        # NULs without a mark: UTF-16 of either byte order, or binary. Scan both readings;
+        # the patterns are specific shapes, so binary noise does not produce false hits.
+        texts += [data.decode("utf-16-le", errors="replace"), data.decode("utf-16-be", errors="replace")]
+    return texts
 
 
 def scan(paths: list[str], public, private) -> list[str]:
     hits = []
     for rel in paths:
-        text = decode((ROOT / rel).read_bytes())
-        if text is None:
-            continue  # binary (images and the like)
-        for n, line in enumerate(text.splitlines(), 1):
-            for rx, _ in public:
-                # Report the pattern, never the matched text: it may be a live credential.
-                if rx.search(line):
-                    hits.append(f"{rel}:{n}: matches {rx.pattern!r}")
-            for i, rx in enumerate(private, 1):
-                if rx.search(line):
-                    hits.append(f"{rel}:{n}: matches private pattern #{i}")
+        found: list[str] = []
+        for text in decodings((ROOT / rel).read_bytes()):
+            for n, line in enumerate(text.splitlines(), 1):
+                for rx, _ in public:
+                    # Report the pattern, never the matched text: it may be a live credential.
+                    if rx.search(line):
+                        found.append(f"{rel}:{n}: matches {rx.pattern!r}")
+                for i, rx in enumerate(private, 1):
+                    if rx.search(line):
+                        found.append(f"{rel}:{n}: matches private pattern #{i}")
+        hits += dict.fromkeys(found)  # one report per hit, however many readings found it
     return hits
 
 
