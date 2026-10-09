@@ -119,24 +119,22 @@ def test_no_runtime_specific_terms():
     assert not offenders, "\n".join(offenders)
 
 
-# An agent that judges work is clean and neutral together (shared/code-review.md), so a
-# paragraph or list that makes an agent clean must also make it neutral, and the reverse.
-# The check is per paragraph, so it cannot tell which agent each word applies to, and it
-# reads a prohibition such as "reject a non-neutral prompt" as a missing neutral requirement.
-CLEAN_RE = re.compile(
+# An agent that judges work is clean and neutral together (shared/code-review.md). Prose
+# says so with one canonical phrase, "clean, neutral" or "clean and neutral"; any other
+# wording that makes an agent clean, and any other "neutral", is a stray term. Only the two
+# definition bullets in code-review.md spell the properties out separately.
+CANONICAL_RE = re.compile(r"(?i)\bclean(?:,| and) neutral\b")
+STRAY_RE = re.compile(
     r"(?i)\bclean[- ]context|\bown (?:clean )?context|\bclean,? (?:[\w-]+,? ){0,2}?(?:agent|subagent|verifier|reviewer|adjudicator|engineer)\b"
     r"|\bfresh (?:\w+ ){0,2}?(?:agent|subagent|verifier|reviewer|adjudicator|context)\b"
-    r"|\bbrief (?:a|the) fresh\b|\b(?:hand|delegate|pass)\w* (?:\w+ ){0,3}?to (?:a|the) fresh one\b|\bclean, neutral|\bclean and neutral|\*\*clean:\*\*"
+    r"|\bbrief (?:a|the) fresh\b|\b(?:hand|delegate|pass)\w* (?:\w+ ){0,3}?to (?:a|the) fresh one\b"
+    r"|(?<!runtime-)\bneutral"
 )
-NEUTRAL_RE = re.compile(r"(?i)(?<!runtime-)\bneutral")
-NEGATED_NEUTRAL_RE = re.compile(
-    r"(?i)\b(?:no|not|never|without|isn't|non|skip|omit|drop)\b[\s-]+(?:(?:a|an|the|its|their|get|gets|be|is|need|needs)\s+){0,3}?neutral\b"
-    r"|\bneutral\w*\b(?:\s+\w+){0,2}?\s+(?:is|are)\s+(?:not (?:required|needed|mandatory|necessary)|optional|unnecessary)\b"
-)
+DEFINITION_RE = re.compile(r"^\s*- \*\*(?:Clean|Neutral):\*\*")
 
 
-def pairing_broken(block: str) -> bool:
-    return bool(CLEAN_RE.search(block)) != bool(NEUTRAL_RE.search(NEGATED_NEUTRAL_RE.sub("", block)))
+def stray_terms(text: str) -> list[str]:
+    return STRAY_RE.findall(CANONICAL_RE.sub("", text))
 
 
 def schema_descriptions(node) -> list[str]:
@@ -148,35 +146,35 @@ def schema_descriptions(node) -> list[str]:
     return []
 
 
-def test_clean_neutral_pairing_check():
-    for block in ["then a separate clean-context adjudicator.", "A fresh verifier tries to refute each finding.",
-                  "else brief a fresh one with the PR state", "Spawn a clean subagent in its own context.",
-                  "The brief is neutral: facts only.", "A clean verifier checks the findings.",
-                  "A clean reviewer reads it.", "Hand the task to a fresh one.",
-                  "Spawn a clean delegated engineer to implement this story.",
-                  "A clean reviewer with a non-neutral prompt.", "A clean reviewer whose prompt is not neutral.",
-                  "A clean reviewer does not get a neutral prompt.", "A clean reviewer gets no neutral prompt.",
-                  "A clean reviewer; the prompt need not be neutral.", "Delegate the story to a fresh one.",
-                  "Spawn a clean independent QA agent.", "A clean, independent reviewer.",
-                  "A clean reviewer; a neutral prompt is not required.",
-                  "A clean reviewer; a neutral prompt is not needed.", "A clean reviewer; a neutral prompt is not mandatory.",
-                  "A clean reviewer; neutrality is optional.", "A clean reviewer; skip the neutral prompt."]:
-        assert pairing_broken(block), block
-    for block in ["then a separate clean, neutral adjudicator.", "Create a fresh one from the base.",
-                  "The skills are runtime-neutral.", "The gate is clean on the head.",
-                  "Switch to a fresh one after the branch is deleted.",
-                  "A clean reviewer; never bias the neutral prompt.", "A clean reviewer; do not bias its neutral prompt."]:
-        assert not pairing_broken(block), block
+def test_stray_clean_neutral_terms_check():
+    for text in ["then a separate clean-context adjudicator.", "A fresh verifier tries to refute each finding.",
+                 "else brief a fresh one with the PR state", "Spawn a clean subagent in its own context.",
+                 "The brief is neutral: facts only.", "A clean verifier checks the findings.",
+                 "Hand the task to a fresh one.", "Delegate the story to a fresh one.",
+                 "Spawn a clean delegated engineer to implement this story.",
+                 "Spawn a clean independent QA agent.", "A clean, independent reviewer.",
+                 "Use a clean reviewer and a neutral adjudicator.",
+                 "A clean, neutral reviewer does not get a neutral prompt.",
+                 "A clean, neutral reviewer; neutrality is optional.",
+                 "A clean, neutral reviewer and a clean adjudicator."]:
+        assert stray_terms(text), text
+    for text in ["then a separate clean, neutral adjudicator.", "Every agent that judges work is clean and neutral.",
+                 "Both agents are clean, neutral, and independent of the author.", "3. **Clean and neutral.**",
+                 "Create a fresh one from the base.", "Switch to a fresh one after the branch is deleted.",
+                 "The skills are runtime-neutral.", "The gate is clean on the head."]:
+        assert not stray_terms(text), text
 
 
-def test_clean_and_neutral_go_together():
+def test_clean_and_neutral_use_the_canonical_phrase():
     offenders = []
     for md in md_files():
-        for block in re.split(r"\n\s*\n", md.read_text()):
-            if pairing_broken(block):
-                offenders.append(f"{md.relative_to(ROOT)}: {block.strip().splitlines()[0]}")
+        for n, line in enumerate(md.read_text().splitlines(), 1):
+            if md.name == "code-review.md" and DEFINITION_RE.match(line):
+                continue
+            if stray_terms(line):
+                offenders.append(f"{md.relative_to(ROOT)}:{n}: {line.strip()}")
     for description in schema_descriptions(SCHEMA):
-        if pairing_broken(description):
+        if stray_terms(description):
             offenders.append(f"profile/schema.json: {description}")
     assert not offenders, "\n".join(offenders)
 

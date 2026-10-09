@@ -58,8 +58,8 @@ This written plan is the hand-off; do not leave it implicit.
 
 ## 3. Delegate implementation to a senior engineer
 
-Spawn a clean, neutral subagent (a fresh context, not a fork of yours; on opencode, check the nesting rule in `references/runtimes.md` first, since this subagent spawns reviewers of its own) and brief it as a senior engineer working this story.
-The brief is neutral: facts, plan, and constraints, not your expectations about the outcome.
+Spawn a clean, neutral subagent (not a fork of yours; on opencode, check the nesting rule in `references/runtimes.md` first, since this subagent spawns reviewers of its own) and brief it as a senior engineer working this story.
+The brief carries facts, plan, and constraints, not your expectations about the outcome.
 It must include:
 
 - The story identifier, a summary of the triage findings, and the AC.
