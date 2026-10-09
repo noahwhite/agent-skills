@@ -27,8 +27,9 @@ LINK_RE = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
 # Markdown link or emphasis ends the key; a `*` followed by a word character stays in it.
 PROSE_REF_RE = re.compile(
     r"(?<![\w./-])profile\.(?!(?:md|yaml|json)\b)(?!<)"
-    r"([^\s`'\"(),;:!?<>]+?)(\.\*)?(?=\.?(?:$|[\s`'\"(),;:!?<>]|\*+(?=$|[\s`'\"(),;:!?<>\[\]]|\.(?!\w))"
-    r"|(?<!\[)\](?=$|[\s(\[`'\"),;:!?.*])))",
+    r"([^\s`'\"(),;:!?<>]+?)(\.\*)?"
+    r"(?=\.?(?:$|[\s`'\"(),;:!?<>]|(?<!\[)\](?=$|[\s(\[`'\"),;:!?.*]))"
+    r"|\*+(?=$|[\s`'\"(),;:!?<>\[\]]|\.(?!\w))|(?<=\.\*)\[)",
     re.M,
 )
 # Inside a code span Markdown is literal: the key runs to a terminator. A span opens and
@@ -173,6 +174,9 @@ def test_profile_ref_regex_captures_whole_token():
         "``profile.git.integration_branch*``": "git.integration_branch*",
         "`` `profile.git.integration_branch*` ``": "git.integration_branch*",
         "`profile.git.integration_branch.*`": "git.integration_branch.*",
+        "profile.git.integration_branch.*[docs](guide.md)": "git.integration_branch.*",
+        "profile.review.*[docs](guide.md)": "review.*",
+        "see profile.review.*.": "review.*",
         "`profile.git.integration_branch*Typo`": "git.integration_branch*Typo",
         "`profile.git.integration_branch*`": "git.integration_branch*",
         "`profile.git.integration_branch.`": "git.integration_branch.",
