@@ -122,18 +122,45 @@ def test_no_runtime_specific_terms():
 # An agent that judges work is clean and neutral together (shared/code-review.md), so a
 # paragraph or list that makes an agent clean must also make it neutral, and the reverse.
 CLEAN_RE = re.compile(
-    r"(?i)\bclean[- ]context|\bfresh (?:clean )?context|\bclean, neutral|\bclean and neutral|\*\*clean:\*\*"
+    r"(?i)\bclean[- ]context|\bown (?:clean )?context|\bclean (?:\w+ )?(?:agent|subagent)\b"
+    r"|\bfresh (?:\w+ ){0,2}?(?:agent|subagent|verifier|reviewer|adjudicator|context)\b"
+    r"|\bbrief (?:a|the) fresh\b|\bclean, neutral|\bclean and neutral|\*\*clean:\*\*"
 )
 NEUTRAL_RE = re.compile(r"(?i)(?<!runtime-)\bneutral")
+
+
+def pairing_broken(block: str) -> bool:
+    return bool(CLEAN_RE.search(block)) != bool(NEUTRAL_RE.search(block))
+
+
+def schema_descriptions(node) -> list[str]:
+    if isinstance(node, dict):
+        found = [node["description"]] if isinstance(node.get("description"), str) else []
+        return found + [d for v in node.values() for d in schema_descriptions(v)]
+    if isinstance(node, list):
+        return [d for v in node for d in schema_descriptions(v)]
+    return []
+
+
+def test_clean_neutral_pairing_check():
+    for block in ["then a separate clean-context adjudicator.", "A fresh verifier tries to refute each finding.",
+                  "else brief a fresh one with the PR state", "Spawn a clean subagent in its own context.",
+                  "The brief is neutral: facts only."]:
+        assert pairing_broken(block), block
+    for block in ["then a separate clean, neutral adjudicator.", "Create a fresh one from the base.",
+                  "The skills are runtime-neutral.", "The gate is clean on the head."]:
+        assert not pairing_broken(block), block
 
 
 def test_clean_and_neutral_go_together():
     offenders = []
     for md in md_files():
         for block in re.split(r"\n\s*\n", md.read_text()):
-            if bool(CLEAN_RE.search(block)) != bool(NEUTRAL_RE.search(block)):
-                first = block.strip().splitlines()[0]
-                offenders.append(f"{md.relative_to(ROOT)}: {first}")
+            if pairing_broken(block):
+                offenders.append(f"{md.relative_to(ROOT)}: {block.strip().splitlines()[0]}")
+    for description in schema_descriptions(SCHEMA):
+        if pairing_broken(description):
+            offenders.append(f"profile/schema.json: {description}")
     assert not offenders, "\n".join(offenders)
 
 

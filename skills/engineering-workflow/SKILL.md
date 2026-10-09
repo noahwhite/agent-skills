@@ -106,7 +106,7 @@ One round has three stages:
    Pass the story and acceptance criteria as the scope reference.
    Only critical or high findings with a concrete failure scenario block; the rest are logged, never fixed, and never block convergence.
    A reviewer output showing a sandbox or permission error, or a lens that cannot show it read the diff and the changed files, is a failed review, never a clean one.
-2. **Verify.** A fresh verifier tries to refute each blocking finding against the code and drops the unconfirmed.
+2. **Verify.** A clean, neutral verifier tries to refute each blocking finding against the code and drops the unconfirmed.
    It must return exactly one verdict per candidate; a missing or partial verification leaves the gate unresolved, never clean.
 3. **Fix.** The fixer fixes the verified findings it agrees with, rejects the rest with a reason, runs the focused tests and commits.
    A fix whose tests did not pass is not a fix: the gate is unresolved.

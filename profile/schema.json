@@ -269,7 +269,7 @@
     "review": {
       "type": "object",
       "additionalProperties": false,
-      "description": "The review of record: an independent reviewer, then a separate clean-context adjudicator.",
+      "description": "The review of record: an independent reviewer, then a separate clean, neutral adjudicator.",
       "properties": {
         "reviewer": {
           "$ref": "#/$defs/agent"

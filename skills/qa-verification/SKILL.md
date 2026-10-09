@@ -13,6 +13,7 @@ compatibility: Requires git, gh, and the linear CLI (schpet/linear-cli); browser
 This is the post-deploy counterpart to `engineering-workflow`, which ends at merge, deploy, and `profile.tracker.states.in_deployment_review`.
 This workflow starts there: it validates a deployed story's acceptance criteria (AC) and Definition of Done (DoD) against the live environment, with reproducible evidence, then decides the story's next state.
 It verifies deployed behavior; it never builds or reviews code changes.
+When this workflow runs as a delegated QA agent, that agent is clean and neutral as `references/code-review.md` defines: briefed with the story identifier, the environment, and the AC and DoD only, never the implementer's view or expected verdicts.
 
 ## Read first
 

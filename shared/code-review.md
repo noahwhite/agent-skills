@@ -24,7 +24,7 @@ The review of record is an independent reviewer, then a separate clean, neutral 
 Every agent that judges work (reviewer, adjudicator, shadow adjudicator, verifier, QA agent) is clean and neutral; the two always go together:
 
 - **Clean:** a fresh agent in its own context, never a fork of the current conversation.
-- **Neutral:** its prompt carries only the facts the task needs (repo, head SHA, diff reference, the findings or AC to verify), never the author's intent or rationale, QA verdicts, prior review conclusions, or any steer on what to find or dismiss.
+- **Neutral:** its prompt carries only the facts the task needs (repo, head SHA, diff reference, the findings, evidence, or AC to verify) and the gate's own review criteria, never the author's intent or rationale, QA verdicts, conclusions from earlier rounds or other gates, or any steer toward an outcome on a particular finding.
 
 1. **Reviewer: `profile.review.reviewer`.**
    Run it against a throwaway detached worktree of the PR head (`git worktree add --detach <scratch>/pr-review <head-sha>`), so it cannot touch the working branch, and remove the worktree afterwards.

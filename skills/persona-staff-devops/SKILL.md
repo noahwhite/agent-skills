@@ -118,7 +118,7 @@ Post it with the `linear` CLI, or the Linear MCP server's save_comment tool if t
 
 ## 6. Authorize merge, deploy, and close out
 
-Once the gate in step 4 passes, hand the outcome to the platform engineer (resume the same subagent if the runtime can, else brief a fresh one with the PR state) to remediate the valid findings, merge per `profile.review.merge_owner` once the gate is clean on the final head, deploy the base branch as `profile.environments[].deploy` says, and move the story to `profile.tracker.states.in_deployment_review`.
+Once the gate in step 4 passes, hand the outcome to the platform engineer (resume the same subagent if the runtime can, else brief a clean, neutral one with the PR state and the valid findings, not your expectations) to remediate the valid findings, merge per `profile.review.merge_owner` once the gate is clean on the final head, deploy the base branch as `profile.environments[].deploy` says, and move the story to `profile.tracker.states.in_deployment_review`.
 Then confirm with each environment's `profile.environments[].verify` value that the deployed estate matches the design you approved, confirm the story state, and finish your todo list.
 Report the story identifier, the PR link, the shadow agreement summary, and the final Linear state.
 
