@@ -18,25 +18,36 @@ EM_DASH = chr(0x2014)
 NAME_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 LINK_RE = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
 # Any profile.<path>, quoted or not (code blocks cite keys bare). The whole token up to a
-# real terminator is captured, so a malformed key (`a..b`, `a/x`, `a[0]`, a typo suffix)
-# fails schema resolution instead of matching a valid prefix. profile.md and the other file
-# names are not keys; profile.<path> is a placeholder.
-# A trailing `.*` names a whole section and is kept on the reference, so it resolves only
-# when that key is an object.
-# In prose a single trailing `.` is sentence punctuation, and a `]` or `*` run that closes a
-# Markdown link or emphasis ends the key; a `*` followed by a word character stays in it.
-PROSE_REF_RE = re.compile(
-    r"(?<![\w./-])profile\.(?!(?:md|yaml|json)\b)(?!<)"
-    r"([^\s`'\"(),;:!?<>]+?)(\.\*)?"
-    r"(?=\.?(?:$|[\s`'\"(),;:!?<>]|(?<!\[)\](?=$|[\s(\[`'\"),;:!?.*]))"
-    r"|\*+(?=$|[\s`'\"(),;:!?<>\[\]]|\.(?!\w))|(?<=\.\*)\[)",
-    re.M,
+# real terminator is the reference, so a malformed key (`a..b`, `a/x`, `a[0]`, a typo
+# suffix) fails schema resolution instead of matching a valid prefix. profile.md and the
+# other file names are not keys; profile.<path> is a placeholder. A trailing `.*` names a
+# whole section and resolves only when that key is an object.
+PROFILE_REF_RE = re.compile(
+    r"(?<![\w./-])profile\.(?!(?:md|yaml|json)\b)(?!<)([^\s`'\"(),;:!?<>]+)"
 )
-# Inside a code span Markdown is literal: the key runs to a terminator. A span opens and
-# closes with backtick runs of the same length, as in CommonMark.
-CODE_REF_RE = re.compile(r"(?<![\w./-])profile\.(?!(?:md|yaml|json)\b)(?!<)([^\s`'\"(),;:!?<>]+)")
+# Inside a code span Markdown is literal. A span opens and closes with backtick runs of the
+# same length, as in CommonMark.
 CODE_SPAN_RE = re.compile(r"(?<!`)(`+)(?!`)(.+?)(?<!`)\1(?!`)")
 FENCE_RE = re.compile(r"^\s*(```|~~~)")
+LINK_TEXT_RE = re.compile(r"\[[^\[\]]*\]$")
+EMPHASIS_RE = re.compile(r"(?<![.*])\*+$")
+
+
+def prose_ref(token: str, next_char: str) -> str:
+    """Peel Markdown that closes around a prose reference: one sentence-final `.`, link text
+    before a link's `(`, a `]` closing a link, and a `*` run closing emphasis."""
+    if next_char == "(":
+        token = LINK_TEXT_RE.sub("", token)
+    dot_peeled = False
+    while True:
+        if token.endswith("]") and token.count("]") > token.count("["):
+            token = token[:-1]
+        elif EMPHASIS_RE.search(token):
+            token = EMPHASIS_RE.sub("", token)
+        elif token.endswith(".") and not dot_peeled:
+            token, dot_peeled = token[:-1], True
+        else:
+            return token
 
 
 def profile_refs(text: str) -> list[str]:
@@ -45,11 +56,17 @@ def profile_refs(text: str) -> list[str]:
         if FENCE_RE.match(line):
             continue
         pos = 0
+        segments = []
         for span in CODE_SPAN_RE.finditer(line):
-            refs += ["".join(m) for m in PROSE_REF_RE.findall(line[pos:span.start()])]
-            refs += CODE_REF_RE.findall(span.group(2))
+            segments += [(line[pos:span.start()], False), (span.group(2), True)]
             pos = span.end()
-        refs += ["".join(m) for m in PROSE_REF_RE.findall(line[pos:])]
+        segments.append((line[pos:], False))
+        for segment, is_code in segments:
+            for m in PROFILE_REF_RE.finditer(segment):
+                if is_code:
+                    refs.append(m.group(1))
+                else:
+                    refs.append(prose_ref(m.group(1), segment[m.end():m.end() + 1]))
     return refs
 
 
@@ -160,7 +177,7 @@ def test_profile_ref_regex_captures_whole_token():
         "cite profile.<path> here": None,
         "profile.git.integration_branch..bad": "git.integration_branch..bad",
         "profile.git..integration_branch": "git..integration_branch",
-        "profile.environments[0].url": "environments[0",
+        "profile.environments[0].url": "environments[0].url",
         "[profile.git.integration_branch](guide.md)": "git.integration_branch",
         "*profile.git.integration_branch*": "git.integration_branch",
         "**profile.git.integration_branch**": "git.integration_branch",
@@ -177,6 +194,10 @@ def test_profile_ref_regex_captures_whole_token():
         "profile.git.integration_branch.*[docs](guide.md)": "git.integration_branch.*",
         "profile.review.*[docs](guide.md)": "review.*",
         "see profile.review.*.": "review.*",
+        "profile.review.*[0].name": "review.*[0].name",
+        "*profile.git.integration_branch*.": "git.integration_branch",
+        "[*profile.git.integration_branch*](guide.md)": "git.integration_branch",
+        "profile.git.integration_branch..": "git.integration_branch.",
         "`profile.git.integration_branch*Typo`": "git.integration_branch*Typo",
         "`profile.git.integration_branch*`": "git.integration_branch*",
         "`profile.git.integration_branch.`": "git.integration_branch.",
@@ -188,9 +209,10 @@ def test_profile_ref_regex_captures_whole_token():
         got = profile_refs(text)
         assert got == ([want] if want else []), (text, got)
     for bad in ["git.integration_branchTypo", "git.integration_branch-x", "git.integration_branch..bad",
-                "git..integration_branch", "environments[0", "git.x]y", "git.integration_branch/x",
+                "git..integration_branch", "environments[0].url", "git.x]y", "git.integration_branch/x",
                 "git.integration_branch\u00e9", "git.integration_branch*Typo",
-                "git.integration_branch*", "git.integration_branch.", "git.integration_branch.*"]:
+                "git.integration_branch*", "git.integration_branch.", "git.integration_branch.*",
+                "review.*[0].name"]:
         assert not resolve_schema_path(bad), bad
     assert resolve_schema_path("environments[].preauthorized")
     assert resolve_schema_path("review.*")
