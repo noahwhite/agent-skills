@@ -87,9 +87,22 @@ def test_non_utf8_files_are_still_scanned(tmp_path, monkeypatch):
     addr = "ops" + "@" + "corp.test"
     (tmp_path / "latin1.md").write_bytes(f"caf\xe9 {addr}\n".encode("latin-1"))
     (tmp_path / "bin.png").write_bytes(b"\x89PNG\0" + addr.encode())
-    (tmp_path / "utf16.txt").write_bytes(f"note {addr}\n".encode("utf-16"))
-    hits = leak_scan.scan(["latin1.md", "bin.png", "utf16.txt"], PUBLIC, [])
-    assert [h.split(":", 1)[0] for h in hits] == ["latin1.md", "utf16.txt"]
+    texts = ["latin1.md"]
+    line = f"note {addr}\n"
+    # With and without a byte-order mark; "utf-16" and "utf-32" write a little-endian mark.
+    encoded = {
+        "utf-16": line.encode("utf-16"),
+        "utf-16-le": line.encode("utf-16-le"),
+        "utf-16-be": line.encode("utf-16-be"),
+        "utf-32": line.encode("utf-32"),
+        "utf-32-be-bom": b"\0\0\xfe\xff" + line.encode("utf-32-be"),
+    }
+    for enc, data in encoded.items():
+        name = f"{enc}.txt"
+        (tmp_path / name).write_bytes(data)
+        texts.append(name)
+    hits = leak_scan.scan(["latin1.md", "bin.png", *texts[1:]], PUBLIC, [])
+    assert [h.split(":", 1)[0] for h in hits] == texts
 
 
 def test_repository_is_clean():

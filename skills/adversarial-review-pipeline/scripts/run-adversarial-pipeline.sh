@@ -12,7 +12,7 @@
 #   run-adversarial-pipeline.sh run <sweep|hunt|arbitrate> --base REF --agent-cmd TEMPLATE
 #                               [--spec FILE] [--no-sweep] [--scratch DIR] [--timeout SECONDS]
 #   run-adversarial-pipeline.sh dossier <sweep|hunt|arbitrate> --base REF [--spec FILE] [--no-sweep] [--scratch DIR]
-#   run-adversarial-pipeline.sh record <sweep|hunt|arbitrate> --base REF [--no-sweep]  # accept a subagent's report
+#   run-adversarial-pipeline.sh record <sweep|hunt|arbitrate> --base REF [--spec FILE] [--no-sweep]  # accept a subagent's report
 #   run-adversarial-pipeline.sh checkout --base REF [--scratch DIR]   # throwaway detached worktree at HEAD (subagent flow)
 #   run-adversarial-pipeline.sh cleanup <checkout-path>               # removes a checkout this script made
 #   run-adversarial-pipeline.sh paths --base REF                      # prints this run's artifact paths
@@ -26,11 +26,18 @@
 # Each phase refuses to start unless its predecessors are accepted for the same run (exit 13):
 # sweep needs a PASS preflight; hunt needs the sweep; arbitrate needs the sweep and the hunt.
 # --no-sweep (no sweeper configured) drops the sweep from both requirements; pass it consistently.
-# Re-running a phase (or the preflight) discards every later phase's acceptance.
+# The inputs (spec, --no-sweep, predecessor artifacts) are bound when the dossier is written; `record`
+# and `run` refuse a report whose inputs changed since then (exit 13), so pass `record` the same
+# --spec and --no-sweep as `dossier`.
+# Re-running a phase (or the preflight) discards every later phase: its acceptance, its launch and
+# binding, and any report in flight (a later `record` then exits 15).
 #
 # Isolation: every model phase runs in its own throwaway detached worktree at HEAD ({checkout},
-# also the command's working directory), never in the primary checkout. If the primary checkout's
-# HEAD, status or diff changed while the agent ran, the phase fails (exit 18).
+# also the command's working directory), never in the primary checkout. A tripwire, not a boundary,
+# compares the primary checkout before and after the agent: HEAD, tracked and untracked status, the
+# diff, the shared git config and the hooks directory. Any change fails the phase (exit 18). It does
+# not see ignored files or edits to files that were already untracked; the agent's sandbox is the
+# real boundary (see references/runtimes.md).
 #
 # Env equivalents: ADVERSARIAL_REPO, ADVERSARIAL_TEST_CMD, ADVERSARIAL_TEST_DIR, ADVERSARIAL_BASE,
 # ADVERSARIAL_SPEC_FILE, ADVERSARIAL_SCRATCH, ADVERSARIAL_AGENT_CMD, ADVERSARIAL_TIMEOUT (900).
@@ -191,16 +198,22 @@ downstream_of() {  # $1 = phase -> every later phase whose acceptance depends on
   esac
 }
 
-# The stamp binds the run, the artifact's content, the spec it was reviewed against (model phases)
-# and the exact content of every predecessor artifact its dossier was built from.
-stamp_text() {  # $1 = phase
-  local art p dep; art="$(artifact_for "$1")"
-  printf 'run=%s\nphase=%s\nsha256=%s\n' "$RUN_ID" "$1" "$(sha_of "$art")"
-  if [ "$1" != "preflight" ]; then printf 'spec=%s\n' "$SPEC_SHA"; fi
+# The binding names what a phase's dossier was built from: the run, the spec (model phases), the
+# --no-sweep choice and the exact content of every predecessor artifact.
+binding_text() {  # $1 = phase
+  local p dep
+  printf 'run=%s\nphase=%s\n' "$RUN_ID" "$1"
+  if [ "$1" != "preflight" ]; then printf 'spec=%s\nno_sweep=%s\n' "$SPEC_SHA" "$NO_SWEEP"; fi
   for p in $(deps_of "$1"); do
     dep="$(artifact_for "$p")"
     if [ -f "$dep" ]; then printf 'dep.%s=%s\n' "$p" "$(sha_of "$dep")"; else printf 'dep.%s=missing\n' "$p"; fi
   done
+}
+
+# The stamp is the binding plus the artifact's own content.
+stamp_text() {  # $1 = phase
+  printf 'sha256=%s\n' "$(sha_of "$(artifact_for "$1")")"
+  binding_text "$1"
 }
 
 stamp() {  # $1 = phase: record that this run produced and accepted the phase's artifact
@@ -223,28 +236,51 @@ require_predecessors() {  # $1 = phase
   done
 }
 
-invalidate_downstream() {  # $1 = phase: a re-run discards every later phase's acceptance
+invalidate_downstream() {  # $1 = phase: a re-run discards every later phase, including one in flight
   local p a
-  for p in $(downstream_of "$1"); do a="$(artifact_for "$p")"; rm -f -- "$a.stamp"; done
+  for p in $(downstream_of "$1"); do
+    a="$(artifact_for "$p")"
+    rm -f -- "$a" "$a.stamp" "$RUN_DIR/$p.launch" "$RUN_DIR/$p.binding" "$RUN_DIR/$p.primary"
+  done
 }
 
-begin_phase() {  # $1 = phase: drop any stale artifact and later acceptances, and mark the launch time
+begin_phase() {  # $1 = phase: drop stale output and later phases, bind the inputs, mark the launch time
   local art; art="$(artifact_for "$1")"
   rm -f -- "$art" "$art.stamp"
   invalidate_downstream "$1"
   : > "$RUN_DIR/$1.launch"
 }
 
-# A fingerprint of the primary checkout: HEAD, status (untracked included) and the content diff.
+bind_phase() {  # $1 = phase: record the inputs its dossier was built from and the primary checkout
+  binding_text "$1" > "$RUN_DIR/$1.binding"
+  primary_state > "$RUN_DIR/$1.primary"
+}
+
+# A tripwire fingerprint of the primary checkout: HEAD, status (untracked included), the content diff,
+# and the shared git dir's config and hooks (a worktree writes both). Not ignored files.
+COMMON_DIR="$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir)"
 primary_state() {
   git -C "$ROOT" rev-parse HEAD
   git -C "$ROOT" status --porcelain --untracked-files=all
   git -C "$ROOT" diff --no-ext-diff --binary HEAD | sha256sum
+  local f
+  for f in config config.worktree; do
+    if [ -f "$COMMON_DIR/$f" ]; then printf '%s %s\n' "$f" "$(sha_of "$COMMON_DIR/$f")"; else echo "$f absent"; fi
+  done
+  if [ -d "$COMMON_DIR/hooks" ]; then
+    (cd "$COMMON_DIR/hooks" && find . -printf '%y %m %p\n' | LC_ALL=C sort && find . -type f -exec sha256sum {} + | LC_ALL=C sort) | sha256sum
+  else
+    echo "hooks absent"
+  fi
 }
 
 accept_phase() {  # $1 = phase, $2 = stderr log or "": validate a freshly written artifact, then stamp it
   local art; art="$(artifact_for "$1")"
-  [ -f "$RUN_DIR/$1.launch" ] || die 15 "no launch marker for $1 in this run; write its dossier with 'dossier $1' first."
+  [ -f "$RUN_DIR/$1.launch" ] && [ -f "$RUN_DIR/$1.binding" ] && [ -f "$RUN_DIR/$1.primary" ] \
+    || die 15 "no launch for $1 in this run (never started, or discarded by a later re-run of an earlier phase); write its dossier with 'dossier $1' first."
+  if [ "$(cat -- "$RUN_DIR/$1.binding")" != "$(binding_text "$1")" ]; then
+    die 13 "the $1 inputs changed since its dossier was written (spec, --no-sweep or a predecessor artifact); start the $1 phase again."
+  fi
   [ -s "$art" ] || die 15 "the $1 agent produced no report ($art is missing or empty)."
   if [ "$RUN_DIR/$1.launch" -nt "$art" ]; then
     die 15 "$art is older than this $1 launch; it was not written by this run."
@@ -260,7 +296,7 @@ accept_phase() {  # $1 = phase, $2 = stderr log or "": validate a freshly writte
     die 17 "the $1 report does not start with 'REVIEW-RAN: yes' (first line: '${first:0:120}'); treat this phase as failed, not clean."
   fi
   # The agent must not have touched the primary checkout.
-  if [ -f "$RUN_DIR/$1.primary" ] && [ "$(primary_state)" != "$(cat -- "$RUN_DIR/$1.primary")" ]; then
+  if [ "$(primary_state)" != "$(cat -- "$RUN_DIR/$1.primary")" ]; then
     die 18 "the primary checkout ($ROOT) changed while the $1 agent ran; this phase is not accepted. Inspect 'git status' there."
   fi
   stamp "$1"
@@ -489,9 +525,9 @@ case "$cmd" in
     begin_phase "$phase"
     dossier="$(scratch_dir)/${phase}-dossier.md"
     write_dossier "$phase" "$dossier"
-    primary_state > "$RUN_DIR/$phase.primary"
+    bind_phase "$phase"
     echo "Work in a throwaway checkout from 'checkout' (never the primary checkout)." >&2
-    echo "Save the $phase report to $(artifact_for "$phase"), then run 'record $phase' with the same --base." >&2
+    echo "Save the $phase report to $(artifact_for "$phase"), then run 'record $phase' with the same --base, --spec and --no-sweep." >&2
     printf '%s\n' "$dossier"
     ;;
 
@@ -517,7 +553,7 @@ case "$cmd" in
     line="${line//\{checkout\}/$q_checkout}"
     errlog="$RUN_DIR/${phase}-agent.err"
     begin_phase "$phase"
-    primary_state > "$RUN_DIR/$phase.primary"
+    bind_phase "$phase"
     rc=0
     if [[ "$AGENT_CMD" == *"{output_file}"* ]]; then
       line="${line//\{output_file\}/$q_out}"

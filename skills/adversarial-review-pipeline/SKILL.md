@@ -65,10 +65,12 @@ Every phase belongs to one run, keyed by the base and head commit SHAs, under `g
   It then stamps the report with the sha256 of the report, of the spec, and of every predecessor artifact its dossier was built from.
 - Each phase refuses to start (exit 13) unless its predecessors are accepted for the same run and the same spec: the sweep needs a PASS preflight, the hunt needs the sweep, and arbitration needs the sweep and the hunt.
   With no sweeper configured, pass `--no-sweep` to the hunt and to arbitration alike.
-- Re-running a phase, or the preflight, discards the acceptance of every later phase, so arbitration never pairs a new sweep with an old hunt.
+- A phase's inputs (the spec, `--no-sweep`, and each predecessor artifact) are bound when its dossier is written; a report whose inputs changed since then is refused (exit 13).
+- Re-running a phase, or the preflight, discards every later phase, including a report still in flight (its `record` then exits 15), so arbitration never pairs a new sweep with an old hunt.
 - A new commit is a new run: every phase starts again from the preflight.
 - Every model phase runs in its own throwaway detached worktree at HEAD, which is also the command's working directory; no agent runs in the primary checkout.
-  If the primary checkout's HEAD, status or diff changes while an agent runs, the phase fails (exit 18).
+  A tripwire compares the primary checkout before and after each agent: HEAD, tracked and untracked status, the diff, the shared git config and the hooks directory; any change fails the phase (exit 18).
+  It does not see ignored files or edits to files that were already untracked, so it is a tripwire, not a boundary: the agent's sandbox is the boundary (see `references/runtimes.md`).
 
 Common inputs:
 
@@ -92,7 +94,8 @@ Launching a phase depends on the profile agent's `runtime`:
 - A subagent runtime (`claude-code`, or the runtime you are in): run `dossier <phase>` to write the dossier and print its path.
   Also run `checkout --base "$BASE"` for a throwaway worktree, for every phase.
   Spawn a fresh subagent with the agent's model, tell it to read the dossier and work only in that checkout, and save its final report to the phase's artifact path (`paths` prints them).
-  Then run `record <phase>` with the same options: it accepts the report only if it is non-empty, newer than the dossier, starts with `REVIEW-RAN: yes`, and the primary checkout is unchanged since the dossier was written.
+  Then run `record <phase>` with the same `--base`, `--spec` and `--no-sweep` as the dossier.
+  It accepts the report only if it is non-empty, newer than the dossier, starts with `REVIEW-RAN: yes`, its inputs still match the dossier's, and the tripwire saw no change to the primary checkout since the dossier was written.
   Remove the checkout with `cleanup <path>`; it removes only a checkout the script created and registered, and refuses any other path.
 
 Never put the dossier's contents in argv: argv is visible to other processes, and one argument is capped at 128 KiB, which a real diff exceeds.

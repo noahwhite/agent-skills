@@ -17,11 +17,17 @@ SPEC_KEYS = {"name", "description", "license", "compatibility", "metadata", "all
 EM_DASH = chr(0x2014)
 NAME_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 LINK_RE = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
-# Any profile.<path>, quoted or not (code blocks cite keys bare); profile.md and the
-# other file names are not keys.
+# Any profile.<path>, quoted or not (code blocks cite keys bare). The whole token up to a
+# real terminator is captured, so a malformed key (`a..b`, `a/x`, `a[0]`, a typo suffix)
+# fails schema resolution instead of matching a valid prefix. A single trailing `.` is
+# sentence punctuation. profile.md and the other file names are not keys; profile.<path>
+# is a placeholder.
 PROFILE_REF_RE = re.compile(
-    r"(?<![\w./-])profile\.(?!(?:md|yaml|json)\b)([A-Za-z0-9_-]+(?:\[\])?(?:\.[A-Za-z0-9_-]+(?:\[\])?)*)"
+    r"(?<![\w./-])profile\.(?!(?:md|yaml|json)\b)(?!<)"
+    r"([^\s`'\"(),;:!?<>]+?)(?=\.?(?:$|[\s`'\"(),;:!?<>]))",
+    re.M,
 )
+
 # Tool and path names of one runtime. Skill text names capabilities; shared/runtimes.md maps them.
 RUNTIME_TERMS = re.compile(
     r"\b(TaskCreate|TaskUpdate|TodoWrite|todowrite|AskUserQuestion|subagent_type|CLAUDE_JOB_DIR)\b"
@@ -117,12 +123,23 @@ def test_profile_ref_regex_captures_whole_token():
         "use profile.git.integration_branch-x here": "git.integration_branch-x",
         "Target profile.git.integration_branch.": "git.integration_branch",
         "see profile.md and profile.yaml": None,
+        "cite profile.<path> here": None,
+        "profile.git.integration_branch..bad": "git.integration_branch..bad",
+        "profile.git..integration_branch": "git..integration_branch",
+        "profile.environments[0].url": "environments[0].url",
+        "profile.git.integration_branch/x": "git.integration_branch/x",
+        "profile.git.integration_branch\u00e9": "git.integration_branch\u00e9",
+        "`profile.environments[].preauthorized`": "environments[].preauthorized",
+        "each `profile.review.*` role": "review.*",
     }
     for text, want in cases.items():
         got = PROFILE_REF_RE.findall(text)
         assert got == ([want] if want else []), (text, got)
-    assert not resolve_schema_path("git.integration_branchTypo")
-    assert not resolve_schema_path("git.integration_branch-x")
+    for bad in ["git.integration_branchTypo", "git.integration_branch-x", "git.integration_branch..bad",
+                "git..integration_branch", "environments[0].url", "git.integration_branch/x",
+                "git.integration_branch\u00e9"]:
+        assert not resolve_schema_path(bad), bad
+    assert resolve_schema_path("environments[].preauthorized")
 
 
 def test_profile_references_exist_in_schema():
@@ -131,7 +148,7 @@ def test_profile_references_exist_in_schema():
         for ref in PROFILE_REF_RE.findall(md.read_text()):
             if ref.startswith("extra"):
                 missing.append(f"{md.relative_to(ROOT)}: base text must not read profile.extra")
-            elif not resolve_schema_path(ref):
+            elif not resolve_schema_path(ref.removesuffix(".*")):  # `.*` names a whole section
                 missing.append(f"{md.relative_to(ROOT)}: profile.{ref}")
     assert not missing, "\n".join(missing)
 
