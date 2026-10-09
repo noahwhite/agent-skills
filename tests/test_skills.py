@@ -19,16 +19,36 @@ NAME_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 LINK_RE = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
 # Any profile.<path>, quoted or not (code blocks cite keys bare). The whole token up to a
 # real terminator is captured, so a malformed key (`a..b`, `a/x`, `a[0]`, a typo suffix)
-# fails schema resolution instead of matching a valid prefix. A single trailing `.` is
-# sentence punctuation, and a `]` or `*` run that closes a Markdown link or emphasis ends the
-# key; a `*` followed by a word character stays in the token. profile.md and the other file
+# fails schema resolution instead of matching a valid prefix. profile.md and the other file
 # names are not keys; profile.<path> is a placeholder.
-PROFILE_REF_RE = re.compile(
+# In prose a single trailing `.` is sentence punctuation, and a `]` or `*` run that closes a
+# Markdown link or emphasis ends the key; a `*` followed by a word character stays in it.
+PROSE_REF_RE = re.compile(
     r"(?<![\w./-])profile\.(?!(?:md|yaml|json)\b)(?!<)"
-    r"([^\s`'\"(),;:!?<>]+?)(?=\.?(?:$|[\s`'\"(),;:!?<>]|\*+(?=$|[\s`'\"(),;:!?<>\]]|\.(?!\w))"
+    r"([^\s`'\"(),;:!?<>]+?)(?=\.?(?:$|[\s`'\"(),;:!?<>]|\*+(?=$|[\s`'\"(),;:!?<>\[\]]|\.(?!\w))"
     r"|(?<!\[)\](?=$|[\s(\[`'\"),;:!?.*])))",
     re.M,
 )
+# Inside an inline code span Markdown is literal: the key runs to a terminator, and only a
+# trailing `.*` (a whole section) is dropped.
+CODE_REF_RE = re.compile(r"(?<![\w./-])profile\.(?!(?:md|yaml|json)\b)(?!<)([^\s`'\"(),;:!?<>]+)")
+CODE_SPAN_RE = re.compile(r"(?<!`)`([^`\n]+)`(?!`)")
+FENCE_RE = re.compile(r"^\s*(```|~~~)")
+
+
+def profile_refs(text: str) -> list[str]:
+    refs = []
+    for line in text.splitlines():
+        if FENCE_RE.match(line):
+            continue
+        pos = 0
+        for span in CODE_SPAN_RE.finditer(line):
+            refs += PROSE_REF_RE.findall(line[pos:span.start()])
+            refs += [r.removesuffix(".*") for r in CODE_REF_RE.findall(span.group(1))]
+            pos = span.end()
+        refs += PROSE_REF_RE.findall(line[pos:])
+    return refs
+
 
 # Tool and path names of one runtime. Skill text names capabilities; shared/runtimes.md maps them.
 RUNTIME_TERMS = re.compile(
@@ -139,13 +159,19 @@ def test_profile_ref_regex_captures_whole_token():
         "`profile.environments[].preauthorized`": "environments[].preauthorized",
         "each `profile.review.*` role": "review",
         "`profile.git.integration_branch*Typo`": "git.integration_branch*Typo",
+        "`profile.git.integration_branch*`": "git.integration_branch*",
+        "`profile.git.integration_branch.`": "git.integration_branch.",
+        "**profile.git.integration_branch**[docs](guide.md)": "git.integration_branch",
+        "profile.git.integration_branch*Typo": "git.integration_branch*Typo",
+        "```bash profile.git.integration_branch": None,
     }
     for text, want in cases.items():
-        got = PROFILE_REF_RE.findall(text)
+        got = profile_refs(text)
         assert got == ([want] if want else []), (text, got)
     for bad in ["git.integration_branchTypo", "git.integration_branch-x", "git.integration_branch..bad",
                 "git..integration_branch", "environments[0", "git.x]y", "git.integration_branch/x",
-                "git.integration_branch\u00e9", "git.integration_branch*Typo"]:
+                "git.integration_branch\u00e9", "git.integration_branch*Typo",
+                "git.integration_branch*", "git.integration_branch."]:
         assert not resolve_schema_path(bad), bad
     assert resolve_schema_path("environments[].preauthorized")
 
@@ -153,7 +179,7 @@ def test_profile_ref_regex_captures_whole_token():
 def test_profile_references_exist_in_schema():
     missing = []
     for md in md_files():
-        for ref in PROFILE_REF_RE.findall(md.read_text()):
+        for ref in profile_refs(md.read_text()):
             if ref.startswith("extra"):
                 missing.append(f"{md.relative_to(ROOT)}: base text must not read profile.extra")
             elif not resolve_schema_path(ref):
