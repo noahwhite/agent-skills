@@ -9,6 +9,7 @@ from pathlib import Path
 import jsonschema
 import pytest
 import yaml
+from markdown_it import MarkdownIt
 
 ROOT = Path(__file__).resolve().parent.parent
 SKILLS = sorted(p.parent for p in (ROOT / "skills").glob("*/SKILL.md"))
@@ -17,60 +18,33 @@ SPEC_KEYS = {"name", "description", "license", "compatibility", "metadata", "all
 EM_DASH = chr(0x2014)
 NAME_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 LINK_RE = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
-# Any profile.<path>, quoted or not (code blocks cite keys bare). The whole token up to a
-# real terminator is the reference, so a malformed key (`a..b`, `a/x`, `a[0]`, a typo
-# suffix) fails schema resolution instead of matching a valid prefix. profile.md and the
-# other file names are not keys; profile.<path> is a placeholder. A trailing `.*` names a
-# whole section and resolves only when that key is an object.
+# Any profile.<path>, quoted or not (code blocks cite keys bare). A CommonMark parser strips
+# emphasis, links and escapes, and the whole literal token up to a real terminator is the
+# reference, so a malformed key (`a..b`, `a/x`, `a[0]`, a typo or stray `*` or `]` suffix)
+# fails schema resolution instead of matching a valid prefix. Outside inline code one
+# sentence-final `.` is punctuation. profile.md and the other file names are not keys;
+# profile.<path> is a placeholder. A trailing `.*` names a whole section and resolves only
+# when that key is an object.
 PROFILE_REF_RE = re.compile(
     r"(?<![\w./-])profile\.(?!(?:md|yaml|json)\b)(?!<)([^\s`'\"(),;:!?<>]+)"
 )
-# Inside a code span Markdown is literal. A span opens and closes with backtick runs of the
-# same length, as in CommonMark.
-CODE_SPAN_RE = re.compile(r"(?<!`)(`+)(?!`)(.+?)(?<!`)\1(?!`)")
-FENCE_RE = re.compile(r"^\s*(```|~~~)")
-LINK_TEXT_RE = re.compile(r"\[[^\[\]]*\]$")
-LINK_TARGET_RE = re.compile(r"\([^()\s]*\)")
-EMPHASIS_RE = re.compile(r"(?<![.*])\*+$")
-
-
-def prose_ref(token: str, before: str, after: str) -> str:
-    """Peel Markdown that closes around a prose reference, only where the text before the
-    reference opened it: one sentence-final `.`, link text followed by a complete link
-    target, a `]` closing an open `[`, and a `*` run matching an opening run."""
-    if LINK_TARGET_RE.match(after):
-        token = LINK_TEXT_RE.sub("", token)
-    open_brackets = before.count("[") - before.count("]")
-    dot_peeled = emphasis_peeled = False
-    while True:
-        emphasis = EMPHASIS_RE.search(token)
-        if token.endswith("]") and open_brackets > 0 and token.count("]") > token.count("["):
-            token, open_brackets = token[:-1], open_brackets - 1
-        elif emphasis and not emphasis_peeled and emphasis.group() in before:
-            token, emphasis_peeled = token[:emphasis.start()], True
-        elif token.endswith(".") and not dot_peeled:
-            token, dot_peeled = token[:-1], True
-        else:
-            return token
+MARKDOWN = MarkdownIt("commonmark")
 
 
 def profile_refs(text: str) -> list[str]:
     refs = []
-    for line in text.splitlines():
-        if FENCE_RE.match(line):
-            continue
-        pos = 0
-        segments = []
-        for span in CODE_SPAN_RE.finditer(line):
-            segments += [(line[pos:span.start()], False), (span.group(2), True)]
-            pos = span.end()
-        segments.append((line[pos:], False))
-        for segment, is_code in segments:
-            for m in PROFILE_REF_RE.finditer(segment):
-                if is_code:
-                    refs.append(m.group(1))
-                else:
-                    refs.append(prose_ref(m.group(1), segment[:m.start()], segment[m.end():]))
+
+    def scan(literal: str, is_code: bool) -> None:
+        for ref in PROFILE_REF_RE.findall(literal):
+            refs.append(ref if is_code else ref.removesuffix("."))
+
+    for block in MARKDOWN.parse(text):
+        if block.type == "inline":
+            for tok in block.children:
+                if tok.type in ("text", "code_inline", "html_inline"):
+                    scan(tok.content, tok.type == "code_inline")
+        elif block.content:
+            scan(block.content, False)
     return refs
 
 
@@ -205,6 +179,10 @@ def test_profile_ref_regex_captures_whole_token():
         "profile.git.integration_branch]]": "git.integration_branch]]",
         "profile.git.integration_branch[0](": "git.integration_branch[0]",
         "profile.git.integration_branch*": "git.integration_branch*",
+        "\\[[profile.git.integration_branch]]": "git.integration_branch]]",
+        "**bold** profile.git.integration_branch**": "git.integration_branch**",
+        "profile.git.integration_branch[docs](guide(v2).md)": "git.integration_branch",
+        "[profile.git.integration_branch](guide.md \"Guide\")": "git.integration_branch",
         "`profile.git.integration_branch*Typo`": "git.integration_branch*Typo",
         "`profile.git.integration_branch*`": "git.integration_branch*",
         "`profile.git.integration_branch.`": "git.integration_branch.",
