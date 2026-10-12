@@ -86,7 +86,7 @@ When a finding needs a code fix, hand it to `engineering-workflow` (and its [ref
    An evidence page with screenshots scaled to cards is incomplete.
    The hosted-page link is for the user's review only; it never goes into the tracker (step 4).
 4. Attach the evidence to the story itself, then post the QA evidence comment that cites it.
-   Upload the key screenshots and the sanitized raw assertion output for each item with no visual surface (as a text file, or inside the evidence page) as tracker attachments.
+   Upload the key screenshots and the sanitized raw assertion output for each item with no visual surface (as a text file) as tracker attachments.
    Also attach the evidence page as a local file when step 3 built one and it is self-contained (screenshots inlined); otherwise skip it, since the attached screenshots and assertion output are the record.
    Post a concise QA evidence comment on the story: build SHA, environment, fixtures used, per-item verdict, and any gaps.
    The comment cites the attachment behind each verdict.
