@@ -81,13 +81,16 @@ When a finding needs a code fix, hand it to `engineering-workflow` (and its [ref
    If an earlier QA pass left a gap as unit-only or not reproducible live, and a later PR claims to close it, read the merged diff and confirm the new test drives the guarded code path through a realistic caller and asserts the specific failure the gap described.
    This is a diff read, not a rebuild: rerunning or mutating the suite is `engineering-workflow`'s job, and a green local run says nothing about what runs in the environment under test.
    If the diff does not hold up, the gap stays open.
-3. Post a concise QA evidence comment on the story: build SHA, environment, fixtures used, per-item verdict, and any gaps.
-   Attach the evidence to the story itself: upload the key screenshots and the evidence page as tracker attachments, and cite them and the in-repo evidence path in the comment.
-   Never put a hosted-page link in the tracker: a hosted page can be private to its owner or deleted, which leaves a dead link on the story.
-4. If the runtime can publish a hosted page, publish an evidence page with the screenshots and per-item verdicts and give the user the link; also deliver the raw screenshots to the user directly.
+3. If the runtime can publish a hosted page, publish an evidence page with the screenshots and per-item verdicts and give the user the link; also deliver the raw screenshots to the user directly.
    Every screenshot on the page must be zoomable: click opens it full screen at natural resolution, Esc or a click outside closes it.
    An evidence page with screenshots scaled to cards is incomplete.
-   The hosted-page link is for the user's review only; it never goes into the tracker (step 3).
+   The hosted-page link is for the user's review only; it never goes into the tracker (step 4).
+4. Attach the evidence to the story itself, then post the QA evidence comment that cites it.
+   Upload the key screenshots, plus the evidence page as a local file when step 3 built one, as tracker attachments.
+   Post a concise QA evidence comment on the story: build SHA, environment, fixtures used, per-item verdict, and any gaps.
+   The comment cites the attachments.
+   When `profile.qa.evidence_dir` is set, edit the comment to cite the in-repo evidence path once the evidence PR merges (section 5), never before; otherwise the comment says the tracker attachments are the record.
+   Never put a hosted-page link in the tracker: a hosted page can be private to its owner or deleted, which leaves a dead link on the story.
 
 ## 5. Check the evidence into the repository
 
@@ -127,4 +130,4 @@ If `profile.qa.evidence_dir` is unset, the project does not keep in-repo evidenc
 
 ## Completion summary
 
-Report: the story and its final state; each AC and DoD verdict with its evidence; the fixtures and build SHA used; the evidence attached to the story; the evidence page link (for the user, not the tracker) and evidence PR; and any item left outstanding with its owning story.
+Report: the story and its final state; each AC and DoD verdict with its evidence; the fixtures and build SHA used; the evidence attached to the story; the evidence page link if one was published (for the user, not the tracker); the evidence PR; and any item left outstanding with its owning story.
