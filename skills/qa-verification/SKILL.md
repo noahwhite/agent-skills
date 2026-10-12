@@ -86,9 +86,10 @@ When a finding needs a code fix, hand it to `engineering-workflow` (and its [ref
    An evidence page with screenshots scaled to cards is incomplete.
    The hosted-page link is for the user's review only; it never goes into the tracker (step 4).
 4. Attach the evidence to the story itself, then post the QA evidence comment that cites it.
-   Upload the key screenshots, plus the evidence page as a local file when step 3 built one, as tracker attachments.
+   Upload the key screenshots and the sanitized raw assertion output for each item with no visual surface (as a text file, or inside the evidence page) as tracker attachments.
+   Also attach the evidence page as a local file when step 3 built one and it is self-contained (screenshots inlined); otherwise skip it, since the attached screenshots and assertion output are the record.
    Post a concise QA evidence comment on the story: build SHA, environment, fixtures used, per-item verdict, and any gaps.
-   The comment cites the attachments.
+   The comment cites the attachment behind each verdict.
    When `profile.qa.evidence_dir` is set, edit the comment to cite the in-repo evidence path once the evidence PR merges (section 5), never before; otherwise the comment says the tracker attachments are the record.
    Never put a hosted-page link in the tracker: a hosted page can be private to its owner or deleted, which leaves a dead link on the story.
 
