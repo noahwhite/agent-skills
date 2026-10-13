@@ -29,6 +29,10 @@ Where the project's secrets live and how they reach their consumers is consumer 
   Keep them in environment variables or pipe them straight into the consumer.
   The sanctioned exception is delivery to the final consuming location (a remote host file via `ssh ... 'sudo tee /path'`, a CI environment file, a secrets-manager action), and even then pipe it there directly.
 - When you brief a subagent, tell it never to write secrets to files or argv.
+- ⛔ The argv rule covers every script, probe, and wrapper you write, not only the commands you type, because others copy a helper's pattern.
+  Any user on the host can read a process's command line through `ps` or `/proc/<pid>/cmdline`, while its environment is readable only by the same user and root.
+  Never pass a credential as a CLI flag (`--token=`, `--client-secret=`, `--password=`), a `jq --arg` value, a `curl -H`, `-u`, or `-d` value, or inside a URL (`https://user:token@host/`, which a git remote also persists to `.git/config`).
+  Pass it in the environment variable the tool reads, on stdin (`curl --config -`, `--data @-`), or through a file descriptor from a shell builtin (`curl -H @<(printf 'Authorization: Bearer %s\n' "$TOK")`), and unset it once used.
 - ⛔ Never embed secrets in cloud-init user data, Butane, or Ignition templates; they land in the cloud provider API, in IaC state, and on disk in plaintext.
   Deliver secrets after the machine is reachable, or fetch them at runtime from a secrets manager.
   The only exception is the one bootstrap credential the machine needs to join its private network.
