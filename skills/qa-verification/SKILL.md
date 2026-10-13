@@ -61,7 +61,7 @@ When a finding needs a code fix, hand it to `engineering-workflow` (and its [ref
 
 1. Write a probe (browser automation or a lane CLI) and run it under the QA identity on the QA runner or workstation the overlay names.
    Keep probes in the scratch directory or on the runner, never in the repository.
-   A probe or wrapper reads each credential from the environment or stdin, never from a CLI flag, `jq --arg`, an inline `curl -H` header, or a URL, since the next probe copies its pattern (see `references/secrets.md`).
+   A probe or wrapper reads each credential from the environment, stdin, or a file descriptor, never from a CLI flag, `jq --arg`, an inline `curl -H` value, or a URL, since the next probe copies its pattern (see `references/secrets.md`).
 2. Capture structured assertions for every item (text or selectors present, counts, status codes, command output).
    For an item a user sees, add a screenshot: assertions make pass or fail legible, and the screenshot lets a human check the pixels.
    For an item with no visual surface (an API, a job, a CLI), the assertions and their raw output are the evidence; do not invent a screenshot.
