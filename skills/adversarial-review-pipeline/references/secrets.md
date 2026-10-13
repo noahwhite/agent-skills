@@ -18,7 +18,7 @@ Where the project's secrets live and how they reach their consumers is consumer 
   - Test for presence only: `grep -q PATTERN file && echo present`.
   - Need the value? Capture it in a variable and use it; check `${#VAR}` for length, never echo it.
   - Showing context is the last resort: if it is unavoidable, redact the whole stream with a greedy catch-all, assume it may still miss, and show the minimum.
-- Pipe, do not print: move secrets machine to machine (`<secrets-cli> get ... | ssh host 'sudo tee /path >/dev/null'`, `-e VAR` passthrough, and for HTTP, a header fed to curl on stdin so the token never reaches argv: `printf 'header = "Authorization: Bearer %s"\n' "$TOK" | curl --config - https://api.example.com/`).
+- Pipe, do not print: move secrets machine to machine (`<secrets-cli> get ... | ssh host 'sudo tee /path >/dev/null'`, `-e VAR` passthrough, and for HTTP, a header fed to curl on stdin so the token never reaches argv: `[[ $TOK != *[$'\r\n']* ]] || exit 1; printf 'Authorization: Bearer %s\n' "$TOK" | curl -H @- https://api.example.com/`).
 - Shell default expansions such as `${VAR:-x}` can print a secret.
   Assume `set -x`, error output, and provider debug output all leak; redirect and filter before showing anything.
 - Terraform and OpenTofu state store sensitive attributes in plaintext; treat state files, and any credential that reads the state backend, as secrets.
@@ -31,6 +31,13 @@ Where the project's secrets live and how they reach their consumers is consumer 
   Keep them in environment variables or pipe them straight into the consumer.
   The sanctioned exception is delivery to the final consuming location (a remote host file via `ssh ... 'sudo tee /path'`, a CI environment file, a secrets-manager action), and even then pipe it there directly.
 - When you brief a subagent, tell it never to write secrets to files or argv.
+- ⛔ The argv rule covers every script, probe, and wrapper you write, not only the commands you type, because others copy a helper's pattern.
+  Any user on the host can read a process's command line through `ps` or `/proc/<pid>/cmdline`, while its environment is readable only by the same user and root.
+  Never pass a credential as a CLI flag (`--token=`, `--client-secret=`, `--password=`), a `jq --arg` value, a `curl -H`, `-u`, or `-d` value, or inside a URL (`https://user:token@host/`, which a git remote also persists to `.git/config`).
+  Pass it in the environment variable the tool reads, on stdin (`curl -H @-`, `curl --data-binary @-`), or through a bash process substitution written by the `printf` builtin (`curl -H @<(printf 'Authorization: Bearer %s\n' "$TOK")`), and unset it once used.
+  A command has one stdin: when both a header and a body carry secrets, feed one on stdin and the other through `@<(printf ...)`.
+  Abort before writing a value as a header line if it contains a CR or LF (`[[ $TOK != *[$'\r\n']* ]] || exit 1`), since each line becomes a separate header.
+  Do not hand a secret to `curl --config`: inside its quoted values an unescaped `"` silently ends the value and `\` starts an escape, so the value sent differs from the secret.
 - ⛔ Never embed secrets in cloud-init user data, Butane, or Ignition templates; they land in the cloud provider API, in IaC state, and on disk in plaintext.
   Deliver secrets after the machine is reachable, or fetch them at runtime from a secrets manager.
   The only exception is the one bootstrap credential the machine needs to join its private network.
