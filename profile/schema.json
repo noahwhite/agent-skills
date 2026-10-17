@@ -186,6 +186,18 @@
           "minimum": 1,
           "maximum": 8
         },
+        "velocity_window_cycles": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 3,
+          "description": "Number of completed cycles used as the velocity baseline in sprint planning."
+        },
+        "standup_aging_days": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 3,
+          "description": "Days an issue may stay in a non-terminal state before the standup reports it as aging."
+        },
         "title_prefixes": {
           "type": "object",
           "additionalProperties": false,

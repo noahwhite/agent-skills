@@ -42,6 +42,11 @@
       "todo-tracking",
       "linear"
     ],
+    "persona-scrum-master": [
+      "linear",
+      "todo-tracking",
+      "github"
+    ],
     "persona-staff-devops": [
       "todo-tracking",
       "infra-deploy",

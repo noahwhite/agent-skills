@@ -92,6 +92,8 @@ The `linear` CLI (schpet/linear-cli) is the primary tool; the Linear MCP server 
 
 - Setting a cycle on a backlog issue may make Linear advance its state automatically (for example to the ready state), and reverting the state can drop the cycle.
 - Set cycles deliberately during sprint planning, never as a side effect of triage, and read the state back after setting one.
+- Assign an issue to a cycle with the tracker's issue update (`cycle` on the Linear MCP `save_issue`; the CLI equivalent is the issue update's cycle field), then read the issue's state and cycle back.
+- Read completed-cycle points from the tracker's cycle and issue history (the Linear MCP cycle listing or the CLI equivalent); when the runtime cannot read it, report the velocity baseline as unavailable instead of inventing one.
 
 ## Filing issues
 
@@ -112,4 +114,5 @@ The `linear` CLI (schpet/linear-cli) is the primary tool; the Linear MCP server 
 - The status field of save_issue is `state` (for example `state: "Done"`), not `status` or `stateId`; wrong names silently do nothing.
 - Tools take `team` as the team name (`profile.tracker.team_name`); the CLI takes `--team` with `profile.tracker.team_key`.
 - Use `project:` and `assignee:` (not `projectId:` or `assigneeId:`); `labels:` takes names.
-  Create with team, title, and description only, then update by id to set project, assignee, labels, state, priority, and estimate.
+  Create with team, title, and description only, then update by id to set project, assignee, labels, state, priority, estimate, and cycle.
+- `cycle:` sets an issue's cycle; use the cycle id or name the tracker accepts, then read the issue back.
