@@ -44,6 +44,8 @@ tracker:
       extra_large: T-Shirt Size Extra Large
   estimate_scale: fibonacci
   cycle_weeks: 2
+  velocity_window_cycles: 3
+  standup_aging_days: 3
 git:
   host: github
   pr_assignee: example-user
