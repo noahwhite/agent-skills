@@ -42,6 +42,7 @@ Where this file and a capability file disagree, the capability file is authorita
    Include an issue only when every DoR box is ticked, it has an estimate where its type takes one, and it has no open blocker.
 3. Set the cycle per the Cycles section of `references/linear.md`, then read every affected issue's state back.
    Setting a cycle can make Linear advance a state on its own.
+   If the runtime cannot set a cycle, stop and report the cycle as blocked; do not move issues by hand.
 4. If Linear advanced a state during planning, report it to `persona-product-owner` and change no state yourself.
 5. Report commitment as points plus a separate unpointed count.
    Compare the planned points with the mean completed points over the previous `profile.tracker.velocity_window_cycles` completed cycles (default 3), and say when fewer completed cycles exist.
@@ -60,8 +61,9 @@ Make no state changes while preparing or posting the report.
 
 ## DoR and DoD gate
 
-- Check a story against `linear-user-story`, and an epic against `linear-epic`.
-- Report every unmet DoR or DoD box, with the issue identifier and the exact box text.
+- At sprint planning, check each candidate story against `linear-user-story`; for an epic, use `linear-epic`.
+- At close, check the story against the DoD in the same template.
+- Report every unmet box, with the issue identifier and the exact box text.
 - Never tick a box, transition an issue, or close an issue; the gate produces findings for `persona-product-owner`.
 
 ## Hand-offs
