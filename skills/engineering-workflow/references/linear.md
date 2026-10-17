@@ -114,4 +114,5 @@ The `linear` CLI (schpet/linear-cli) is the primary tool; the Linear MCP server 
 - The status field of save_issue is `state` (for example `state: "Done"`), not `status` or `stateId`; wrong names silently do nothing.
 - Tools take `team` as the team name (`profile.tracker.team_name`); the CLI takes `--team` with `profile.tracker.team_key`.
 - Use `project:` and `assignee:` (not `projectId:` or `assigneeId:`); `labels:` takes names.
-  Create with team, title, and description only, then update by id to set project, assignee, labels, state, priority, and estimate.
+  Create with team, title, and description only, then update by id to set project, assignee, labels, state, priority, estimate, and cycle.
+- `cycle:` sets an issue's cycle; use the cycle id or name the tracker accepts, then read the issue back.

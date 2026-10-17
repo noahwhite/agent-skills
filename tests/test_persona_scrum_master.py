@@ -95,6 +95,7 @@ def test_gate_covers_both_checklists_at_both_checkpoints() -> None:
     text = SKILL.read_text()
     assert "At sprint planning" in text
     assert "At close" in text
+    assert "each story or epic" in text
     assert text.count("both the DoR and the DoD") >= 2
 
 

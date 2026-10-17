@@ -53,7 +53,7 @@ Post the standup report as a comment on the project (the epic) or on a named tra
 The report covers:
 
 - Work in progress (WIP), grouped by state.
-- Issues in a non-terminal state longer than `profile.tracker.standup_aging_days` (default 3), measured from state history or from the last update; say which source you used. The Linear MCP `get_issue` returns `stateHistory`; the CLI or GraphQL equivalent is the issue's history.
+- Issues in a non-terminal state longer than `profile.tracker.standup_aging_days` (default 3), measured from state history when available, otherwise from the last update; say which source you used. The Linear MCP `get_issue` returns `stateHistory`; the CLI or GraphQL equivalent is the issue's history.
 - Every blocker: issues in `profile.tracker.states.blocked` plus issues with an open `blocks` relation.
   Name the assignee and a next action for each blocker, and report a missing assignee or next action as an exception.
 
