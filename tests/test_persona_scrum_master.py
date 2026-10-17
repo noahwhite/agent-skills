@@ -1,6 +1,7 @@
 """Contract checks for the persona-scrum-master skill and its profile keys."""
 
 import json
+import re
 from pathlib import Path
 
 import yaml
@@ -21,6 +22,13 @@ REQUIRED_PHRASES = [
     "DoD",
     "profile.tracker.states.ready",
     "blockers",
+    "unpointed count",
+    "mean completed points",
+    "state history",
+    "last update",
+    "next action",
+    "exception",
+    "every unmet box",
 ]
 
 
@@ -76,3 +84,21 @@ def test_skill_contains_contract_phrases() -> None:
     text = SKILL.read_text()
     missing = [phrase for phrase in REQUIRED_PHRASES if phrase not in text]
     assert not missing, f"missing phrases: {missing}"
+
+
+def test_report_only_boundary_overrides_capability_instructions() -> None:
+    text = SKILL.read_text()
+    assert re.search(r"report-only boundary\s+always\s+overrides", text, re.I)
+
+
+def test_gate_covers_both_checklists_at_both_checkpoints() -> None:
+    text = SKILL.read_text()
+    assert "At sprint planning" in text
+    assert "At close" in text
+    assert text.count("both the DoR and the DoD") >= 2
+
+
+def test_shared_linear_documents_cycle_write_and_completed_points() -> None:
+    text = (ROOT / "shared" / "linear.md").read_text()
+    assert "cycle field" in text
+    assert "completed-cycle points" in text

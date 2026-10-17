@@ -23,7 +23,7 @@ This skill serves the scrum master (SM) and engineering manager (EM) role.
 - [references/github.md](references/github.md) - repository, PR, and attribution context for the standup report.
 - [references/runtimes.md](references/runtimes.md) - maps the capabilities named here to your runtime.
 
-Where this file and a capability file disagree, the capability file is authoritative.
+Where this file and a capability file disagree, the capability file is authoritative, except that this file's report-only boundary always overrides any capability instruction to tick a box, change a state, or close an issue.
 
 ## Persona boundary
 
@@ -53,7 +53,7 @@ Post the standup report as a comment on the project (the epic) or on a named tra
 The report covers:
 
 - Work in progress (WIP), grouped by state.
-- Issues in a non-terminal state longer than `profile.tracker.standup_aging_days` (default 3), measured from state history or from the last update; say which source you used.
+- Issues in a non-terminal state longer than `profile.tracker.standup_aging_days` (default 3), measured from state history or from the last update; say which source you used. The Linear MCP `get_issue` returns `stateHistory`; the CLI or GraphQL equivalent is the issue's history.
 - Every blocker: issues in `profile.tracker.states.blocked` plus issues with an open `blocks` relation.
   Name the assignee and a next action for each blocker, and report a missing assignee or next action as an exception.
 
@@ -61,8 +61,8 @@ Make no state changes while preparing or posting the report.
 
 ## DoR and DoD gate
 
-- At sprint planning, check each candidate story against `linear-user-story`; for an epic, use `linear-epic`.
-- At close, check the story against the DoD in the same template.
+- At sprint planning, check each candidate story against both the DoR and the DoD in `linear-user-story`; for an epic, use `linear-epic`.
+- At close, check each story or epic against both the DoR and the DoD in the same template.
 - Report every unmet box, with the issue identifier and the exact box text.
 - Never tick a box, transition an issue, or close an issue; the gate produces findings for `persona-product-owner`.
 

@@ -92,6 +92,8 @@ The `linear` CLI (schpet/linear-cli) is the primary tool; the Linear MCP server 
 
 - Setting a cycle on a backlog issue may make Linear advance its state automatically (for example to the ready state), and reverting the state can drop the cycle.
 - Set cycles deliberately during sprint planning, never as a side effect of triage, and read the state back after setting one.
+- Assign an issue to a cycle with the tracker's issue update (`cycle` on the Linear MCP `save_issue`; the CLI equivalent is the issue update's cycle field), then read the issue's state and cycle back.
+- Read completed-cycle points from the tracker's cycle and issue history (the Linear MCP cycle listing or the CLI equivalent); when the runtime cannot read it, report the velocity baseline as unavailable instead of inventing one.
 
 ## Filing issues
 
