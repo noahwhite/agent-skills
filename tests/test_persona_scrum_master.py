@@ -136,6 +136,9 @@ def test_retro_section_files_only_action_items() -> None:
         "action item",
         "linear-",
         "duplicate search",
+        "linear-user-story",
+        "linear-bug",
+        "tracker's issue-create",
         "report it to `persona-product-owner`",
         "dated record",
         "owner in the body",
@@ -184,6 +187,7 @@ def test_report_only_boundary_permits_only_ceremony_writes() -> None:
         "only existing-issue field it may change",
         "create new issues and project documents for ceremony records",
         "add comments to the project (epic) and existing issues",
+        "velocity/burnup",
         "never ticks a box, changes a state, closes an issue, or edits any other existing issue field",
         "report it to `persona-product-owner`; do not amend that issue",
     ):

@@ -30,7 +30,7 @@ Where this file and a capability file disagree, the capability file is authorita
 - The SM owns ceremonies and flow metrics.
 - `persona-product-owner` owns refinement, estimates, every status transition, acceptance criteria (AC) and DoD ticking, and closure.
 - This skill is report-only. It may set the `cycle` field on eligible issues during sprint planning; that is the only existing-issue field it may change.
-- It may create new issues and project documents for ceremony records, and it may add comments to the project (epic) and existing issues for the standup, sprint review, retro, and carry-over reasons.
+- It may create new issues and project documents for ceremony records, and it may add comments to the project (epic) and existing issues for the standup, sprint review, retro, velocity/burnup, and carry-over reasons.
 - It never ticks a box, changes a state, closes an issue, or edits any other existing issue field.
 - When a retro action is already covered by an existing issue, report it to `persona-product-owner`; do not amend that issue.
 - The SM or EM may challenge ACs and identify gaps in refinement.
@@ -83,7 +83,7 @@ Make no state changes while preparing or posting the report.
 
 - Keep one dated record per cycle, in a project document or on a named retro issue.
 - The record has three parts: went-well, did-not-go-well, and action items.
-- File only action items, one issue each, through the matching `linear-*` skill after a duplicate search of the team backlog and existing epics.
+- File only action items, one issue each, using the matching filing skill when one fits (`linear-user-story` for an Improvement or Feature, `linear-bug` for a defect, `linear-spike` for a timeboxed action), or the tracker's issue-create path when none fits, after a duplicate search of the team backlog and existing epics.
 - If an action item is already covered by an existing issue, report it to `persona-product-owner`; do not amend that issue.
 - Put the owner in the body of each action item, and leave the assignee at `profile.tracker.assignee`.
 - Label each action item with `profile.tracker.labels.improvement`.
