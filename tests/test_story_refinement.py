@@ -174,6 +174,7 @@ def test_example_sets_refinement_values() -> None:
     assert len(reviewers) == 2
     families = [role.get("family") for role in reviewers]
     models = [role["model"] for role in reviewers]
+    assert all(families) or not any(families), "reviewer family settings must be all-set or all-unset"
     if all(families):
         assert len(set(families)) == 2, "reviewer families must differ"
     else:
