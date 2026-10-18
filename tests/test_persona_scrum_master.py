@@ -151,6 +151,8 @@ def test_velocity_and_burnup_section_covers_flow_metrics() -> None:
         "velocity",
         "burnup",
         "profile.tracker.velocity_window_cycles",
+        "sum of the estimates",
+        "done user-story and rtb",
         "unpointed",
         "missing an estimate",
         "scope history",

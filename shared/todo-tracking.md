@@ -40,5 +40,5 @@ Starting points only; split further as the task demands.
 - **persona-platform-sre:** read primary-source running state, one item per IaC change and per test, plan and apply per stack, each dispatch, each wait on a run, verification of running state, cleanup of any debris.
 - **persona-product-owner:** read the issue and its relations, one item per DoR box, estimate, slice or split, each status move, each AC and DoD tick after observation, epic update.
 - **qa-verification:** read AC and DoD, one item per acceptance criterion and per DoD box (verify, capture evidence), each environment setup, evidence PR, the closing status decision.
-- **persona-scrum-master:** read the cycle and its issues, one item per sprint-planning check, the cycle-description update, each state read-back, the standup report sections (WIP, aging, blockers), each DoR and DoD box checked, each hand-off.
+- **persona-scrum-master:** read the cycle and its issues, one item per sprint-planning check, the cycle-description update, the issue-to-cycle write and each state read-back, the standup report sections (WIP, aging, blockers), the sprint-review evidence rollup, each retro section and action item, the velocity/burnup values and carry-over reason, each DoR and DoD box checked, each hand-off.
 - **persona-staff-engineer and persona-staff-devops:** see each skill's step 0.

@@ -55,6 +55,7 @@ Always:
   If a prerequisite PR must land first, wait, rebase, then open.
 - Before starting story work, check for an existing PR or branch: `gh pr list --state open --search "<issue key>"`, `git ls-remote --heads origin '*<issue key>*'`, `git worktree list`.
   Extend an existing one rather than opening a rival.
+- For merged evidence, use `gh pr list --state merged --search "<issue key>"`, or the PR links on the issue.
 - Feature PRs target `profile.git.integration_branch`; always pass `--base` explicitly.
   Exceptions: promotion PRs and release-only changes (see Merging and promotion).
 - Open PRs ready for review, not draft, unless the user asks for a draft.
