@@ -23,14 +23,15 @@ This skill serves the scrum master (SM) and engineering manager (EM) role.
 - [references/github.md](references/github.md) - repository, PR, and attribution context for the standup and sprint review.
 - [references/runtimes.md](references/runtimes.md) - maps the capabilities named here to your runtime.
 
-Where this file and a capability file disagree, the capability file is authoritative, except that this file's report-only boundary always overrides any capability instruction to tick a box, change a state, close an issue, or edit an existing issue's fields.
+Where this file and a capability file disagree, the capability file is authoritative, except that this file's report-only boundary always overrides any capability instruction to tick a box, change a state, close an issue, or edit an existing issue field other than the planning `cycle` write.
 
 ## Persona boundary
 
 - The SM owns ceremonies and flow metrics.
 - `persona-product-owner` owns refinement, estimates, every status transition, acceptance criteria (AC) and DoD ticking, and closure.
-- This skill is report-only: never tick a box, change a state, close an issue, or edit an existing issue's fields.
+- This skill is report-only. It may set the `cycle` field on eligible issues during sprint planning; that is the only existing-issue field it may change.
 - It may create new issues and project documents for ceremony records, and it may add comments to existing issues for the standup, sprint review, retro, and carry-over reasons.
+- It never ticks a box, changes a state, closes an issue, or edits any other existing issue field.
 - When a retro action is already covered by an existing issue, report it to `persona-product-owner`; do not amend that issue.
 - The SM or EM may challenge ACs and identify gaps in refinement.
 - The SM or EM may provide factual sizing context only after independent estimates are recorded, and only without stating a preferred value, a direction, or a comparison of individual votes.
@@ -92,7 +93,7 @@ Make no state changes while preparing or posting the report.
 - Velocity is the sum of the estimates of done user-story and RTB issues per cycle.
 - Count every issue without an estimate as unpointed, never as zero; report unestimated issue types and normally pointed issues missing an estimate separately.
 - Report over the previous `profile.tracker.velocity_window_cycles` completed cycles (default 3), and say when fewer completed cycles exist.
-- Read cycle issue and scope history from the tracker's cycle listing.
+- Read cycle issue and scope history from the tracker's cycle listing (`scopeHistory` and `completedScopeHistory` when the API exposes them).
 - Draw a burnup from that history when the runtime exposes scope history.
 - When the runtime does not expose scope history, label the chart a burn-down of committed scope and say why.
 - Record carry-over before the cycle closes, as one dated reason comment on each unfinished issue.
