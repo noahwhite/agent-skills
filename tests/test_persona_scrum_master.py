@@ -103,3 +103,53 @@ def test_shared_linear_documents_cycle_write_and_completed_points() -> None:
     text = (ROOT / "shared" / "linear.md").read_text()
     assert "cycle field" in text
     assert "completed-cycle points" in text
+
+
+def section(text: str, heading: str) -> str:
+    match = re.search(rf"^## {re.escape(heading)}\s*$", text, re.MULTILINE)
+    assert match, f"missing section: {heading}"
+    rest = text[match.end():]
+    following = re.search(r"^## ", rest, re.MULTILINE)
+    return rest[: following.start()] if following else rest
+
+
+def test_sprint_review_section_covers_done_issues_and_evidence() -> None:
+    body = section(SKILL.read_text(), "Sprint review").lower()
+    for phrase in (
+        "profile.tracker.states.done",
+        "merged pr",
+        "profile.qa.evidence_dir",
+        "not as shipped",
+    ):
+        assert phrase in body, f"sprint review missing: {phrase}"
+
+
+def test_retro_section_files_only_action_items() -> None:
+    body = section(SKILL.read_text(), "Retro").lower()
+    for phrase in (
+        "went-well",
+        "did-not-go-well",
+        "action item",
+        "linear-",
+        "profile.tracker.assignee",
+        "profile.tracker.labels.improvement",
+    ):
+        assert phrase in body, f"retro missing: {phrase}"
+
+
+def test_velocity_and_burnup_section_covers_flow_metrics() -> None:
+    body = section(SKILL.read_text(), "Velocity and burnup").lower()
+    for phrase in (
+        "velocity",
+        "burnup",
+        "profile.tracker.velocity_window_cycles",
+        "unpointed",
+        "carry-over",
+        "burn-down",
+    ):
+        assert phrase in body, f"velocity and burnup missing: {phrase}"
+
+
+def test_not_in_this_slice_section_is_gone() -> None:
+    text = SKILL.read_text()
+    assert not re.search(r"^## Not in this slice\s*$", text, re.MULTILINE)

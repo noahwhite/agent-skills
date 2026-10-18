@@ -1,8 +1,8 @@
 ---
 name: persona-scrum-master
 description: >-
-  Act as the scrum master or engineering manager - run sprint planning, the async daily standup, and the Definition of Ready and Definition of Done gate while staying report-only.
-  Use when asked to set a sprint goal, plan a cycle, post a standup report, review work in progress and blockers, find aging issues, check a story or epic against its DoR or DoD, or report commitment against recent velocity.
+  Act as the scrum master or engineering manager - run sprint planning, the async daily standup, the sprint review, the retrospective, and the Definition of Ready and Definition of Done gate, and report velocity and burnup while staying report-only.
+  Use when asked to set a sprint goal, plan a cycle, post a standup report, review work in progress and blockers, find aging issues, review completed work for shipped evidence, run a retrospective, file retrospective action items, report velocity or burnup, check a story or epic against its DoR or DoD, or report commitment against recent velocity.
   The scrum master owns ceremonies and flow metrics; the product owner owns refinement, estimates, every state transition, checkbox ticking, and closure; implementation goes to engineering-workflow and deployed verification goes to qa-verification.
   Not for writing code, owning the backlog, or verifying a deployed story.
 license: Apache-2.0
@@ -29,7 +29,8 @@ Where this file and a capability file disagree, the capability file is authorita
 
 - The SM owns ceremonies and flow metrics.
 - `persona-product-owner` owns refinement, estimates, every status transition, acceptance criteria (AC) and DoD ticking, and closure.
-- This skill is report-only: never tick a box, change a state, or close an issue.
+- This skill is report-only: never tick a box, change a state, or close an existing issue.
+- The one write it performs is filing retrospective action items as new issues.
 - The SM or EM may challenge ACs and identify gaps in refinement.
 - The SM or EM may provide factual sizing context only after independent estimates are recorded, and only without stating a preferred value, a direction, or a comparison of individual votes.
 - The SM or EM never submits a point value.
@@ -66,13 +67,36 @@ Make no state changes while preparing or posting the report.
 - Report every unmet box, with the issue identifier and the exact box text.
 - Never tick a box, transition an issue, or close an issue; the gate produces findings for `persona-product-owner`.
 
+## Sprint review
+
+- Review every issue in the current cycle whose state is `profile.tracker.states.done`.
+- Require each one to have a merged PR linked by issue key, or QA evidence under `profile.qa.evidence_dir`/<issue>.
+- When `profile.qa.evidence_dir` is unset, accept evidence attached to the issue instead, use tracker and PR evidence only, and say so in the report.
+- Report a done issue with neither as a finding, not as shipped.
+- Cite [references/github.md](references/github.md) for the PR checks and attribution rules.
+- Change no state while preparing the review.
+
+## Retro
+
+- Keep one dated record per cycle, in a project document or on a named retro issue.
+- The record has three parts: went-well, did-not-go-well, and action items.
+- File only action items, one issue each, through the matching `linear-*` skill after a duplicate search of the team backlog and existing epics.
+- Put the owner in the body of each action item, and leave the assignee at `profile.tracker.assignee`.
+- Label each action item with `profile.tracker.labels.improvement`.
+- File no issue for a went-well or a did-not-go-well entry.
+
+## Velocity and burnup
+
+- Velocity is the sum of the estimates of done user-story and RTB issues per cycle.
+- Count unestimated issue types separately and report them as unpointed, never as zero.
+- Report over the previous `profile.tracker.velocity_window_cycles` completed cycles (default 3), and say when fewer completed cycles exist.
+- Draw a burnup from cycle issue and scope history when the runtime exposes it.
+- When the runtime does not expose it, label the chart a burn-down of committed scope and say why.
+- Record carry-over before the cycle closes, as one dated reason comment on each unfinished issue.
+- See the Cycles section of [references/linear.md](references/linear.md) for reading cycle and issue history.
+
 ## Hand-offs
 
 - Implementation and delivery: `engineering-workflow`.
 - Deployed acceptance verification: `qa-verification`.
 - Refinement, estimates, state moves, checkbox ticks, and closure: `persona-product-owner`.
-
-## Not in this slice
-
-Sprint review, the retrospective, and velocity or burnup reporting are a later slice and are not part of this skill yet.
-Do not run those ceremonies from this skill.
