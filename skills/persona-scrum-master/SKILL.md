@@ -84,7 +84,7 @@ Make no state changes while preparing or posting the report.
 
 - Keep one dated record per cycle, in a project document or on a named retro issue.
 - The record has three parts: went-well, did-not-go-well, and action items.
-- File only action items, one issue each, using the matching filing skill when one fits (`linear-user-story` for an Improvement or Feature, `linear-bug` for a defect, `linear-spike` for a timeboxed action), or the tracker's issue-create path when none fits, after a duplicate search of the team backlog and existing epics.
+- File only action items, one issue each, using the matching filing skill when one fits (`linear-user-story` for an Improvement or Feature, `linear-bug` for a defect, `linear-spike` for a timeboxed action, `linear-investigation` for an investigation), or the tracker's issue-create path when none fits, after a duplicate search of the team backlog and existing epics.
 - If an action item is already covered by an existing issue, report it to `persona-product-owner`; do not amend that issue.
 - Put the owner in the body of each action item, and leave the assignee at `profile.tracker.assignee`.
 - Label each action item with `profile.tracker.labels.improvement`.

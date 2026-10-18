@@ -141,6 +141,7 @@ def test_retro_section_files_only_action_items() -> None:
         "linear-user-story",
         "linear-bug",
         "linear-spike",
+        "linear-investigation",
         "tracker's issue-create",
         "report it to `persona-product-owner`",
         "dated record",
