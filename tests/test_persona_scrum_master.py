@@ -103,3 +103,98 @@ def test_shared_linear_documents_cycle_write_and_completed_points() -> None:
     text = (ROOT / "shared" / "linear.md").read_text()
     assert "cycle field" in text
     assert "completed-cycle points" in text
+
+
+def section(text: str, heading: str) -> str:
+    match = re.search(rf"^## {re.escape(heading)}\s*$", text, re.MULTILINE)
+    assert match, f"missing section: {heading}"
+    rest = text[match.end():]
+    following = re.search(r"^## ", rest, re.MULTILINE)
+    return rest[: following.start()] if following else rest
+
+
+def test_sprint_review_section_covers_done_issues_and_evidence() -> None:
+    body = section(SKILL.read_text(), "Sprint review").lower()
+    for phrase in (
+        "profile.tracker.states.done",
+        "cycle under review",
+        "cycle listing",
+        "merged pr",
+        "profile.qa.evidence_dir",
+        "accept evidence attached",
+        "linked by issue key",
+        "post the review report",
+        "say so",
+        "not as shipped",
+    ):
+        assert phrase in body, f"sprint review missing: {phrase}"
+
+
+def test_retro_section_files_only_action_items() -> None:
+    body = section(SKILL.read_text(), "Retro").lower()
+    for phrase in (
+        "went-well",
+        "did-not-go-well",
+        "action item",
+        "linear-",
+        "duplicate search",
+        "linear-user-story",
+        "linear-bug",
+        "linear-spike",
+        "linear-investigation",
+        "tracker's issue-create",
+        "report it to `persona-product-owner`",
+        "dated record",
+        "owner in the body",
+        "profile.tracker.assignee",
+        "profile.tracker.labels.improvement",
+        "no issue for a went-well or a did-not-go-well",
+    ):
+        assert phrase in body, f"retro missing: {phrase}"
+
+
+def test_velocity_and_burnup_section_covers_flow_metrics() -> None:
+    body = section(SKILL.read_text(), "Velocity and burnup").lower()
+    for phrase in (
+        "velocity",
+        "burnup",
+        "profile.tracker.velocity_window_cycles",
+        "post the velocity and burnup report",
+        "sum of the estimates",
+        "done user-story and rtb",
+        "unpointed",
+        "missing an estimate",
+        "scope history",
+        "issuecounthistory",
+        "completedissuecounthistory",
+        "scopehistory",
+        "completedscopehistory",
+        "usable non-zero history",
+        "all zeros",
+        "say when fewer completed cycles exist",
+        "dated reason comment",
+        "carry-over",
+        "burn-down",
+    ):
+        assert phrase in body, f"velocity and burnup missing: {phrase}"
+
+
+def test_not_in_this_slice_section_is_gone() -> None:
+    text = SKILL.read_text()
+    assert not re.search(r"^## Not in this slice\s*$", text, re.MULTILINE)
+
+
+def test_report_only_boundary_permits_only_ceremony_writes() -> None:
+    text = SKILL.read_text()
+    for phrase in (
+        "set the `cycle` field on eligible issues during sprint planning",
+        "only field it may change on an issue that existed before the ceremony",
+        "create new issues and project documents for ceremony records",
+        "add comments to the project (epic) and existing issues",
+        "velocity/burnup",
+        "complete the initialization of an issue it created during the ceremony",
+        "closing or canceling a test issue this ceremony created",
+        "never ticks a box, changes a state, closes an issue, or edits any other field on an issue that existed before the ceremony",
+        "report it to `persona-product-owner`; do not amend that issue",
+    ):
+        assert phrase in text, f"boundary missing: {phrase}"
