@@ -121,6 +121,7 @@ def test_sprint_review_section_covers_done_issues_and_evidence() -> None:
         "profile.qa.evidence_dir",
         "accept evidence attached",
         "linked by issue key",
+        "post the review report",
         "say so",
         "not as shipped",
     ):

@@ -75,6 +75,7 @@ Make no state changes while preparing or posting the report.
 - Require each one to have a merged PR linked by issue key, or QA evidence under `profile.qa.evidence_dir`/<issue>.
 - When `profile.qa.evidence_dir` is unset, accept evidence attached to the issue instead, use tracker and PR evidence only, and say so in the report.
 - Report a done issue with neither as a finding, not as shipped.
+- Post the review report as a comment on the project (epic) or a named tracking issue, as the standup does.
 - Cite [references/github.md](references/github.md) for the PR checks and attribution rules.
 - Change no state while preparing the review.
 
