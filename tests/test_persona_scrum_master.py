@@ -152,6 +152,7 @@ def test_velocity_and_burnup_section_covers_flow_metrics() -> None:
         "velocity",
         "burnup",
         "profile.tracker.velocity_window_cycles",
+        "post the velocity and burnup report",
         "sum of the estimates",
         "done user-story and rtb",
         "unpointed",
@@ -182,7 +183,7 @@ def test_report_only_boundary_permits_only_ceremony_writes() -> None:
         "set the `cycle` field on eligible issues during sprint planning",
         "only existing-issue field it may change",
         "create new issues and project documents for ceremony records",
-        "add comments to existing issues",
+        "add comments to the project (epic) and existing issues",
         "never ticks a box, changes a state, closes an issue, or edits any other existing issue field",
         "report it to `persona-product-owner`; do not amend that issue",
     ):

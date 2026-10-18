@@ -30,7 +30,7 @@ Where this file and a capability file disagree, the capability file is authorita
 - The SM owns ceremonies and flow metrics.
 - `persona-product-owner` owns refinement, estimates, every status transition, acceptance criteria (AC) and DoD ticking, and closure.
 - This skill is report-only. It may set the `cycle` field on eligible issues during sprint planning; that is the only existing-issue field it may change.
-- It may create new issues and project documents for ceremony records, and it may add comments to existing issues for the standup, sprint review, retro, and carry-over reasons.
+- It may create new issues and project documents for ceremony records, and it may add comments to the project (epic) and existing issues for the standup, sprint review, retro, and carry-over reasons.
 - It never ticks a box, changes a state, closes an issue, or edits any other existing issue field.
 - When a retro action is already covered by an existing issue, report it to `persona-product-owner`; do not amend that issue.
 - The SM or EM may challenge ACs and identify gaps in refinement.
@@ -91,6 +91,7 @@ Make no state changes while preparing or posting the report.
 
 ## Velocity and burnup
 
+- Post the velocity and burnup report as a comment on the project (epic) or a named tracking issue, as the standup does.
 - Velocity is the sum of the estimates of done user-story and RTB issues per cycle.
 - Count every issue without an estimate as unpointed, never as zero; report unestimated issue types and normally pointed issues missing an estimate separately.
 - Report over the previous `profile.tracker.velocity_window_cycles` completed cycles (default 3), and say when fewer completed cycles exist.
