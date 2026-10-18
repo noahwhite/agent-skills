@@ -56,6 +56,7 @@ If a filing skill is not installed, follow the template rules in `references/lin
 
 ## Hand-offs
 
+- Refinement and pointing ceremony: `story-refinement` (the SM/EM facilitates; the PO and two engineers vote).
 - Code changes: `engineering-workflow` (or `persona-staff-engineer` to triage, plan, and delegate them).
 - Infrastructure, CI/CD, deploy, and estate operations: `persona-platform-sre` (or `persona-staff-devops` to delegate them).
 - Verifying a deployed story's AC and DoD: `qa-verification`.
