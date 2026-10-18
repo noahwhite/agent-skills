@@ -118,6 +118,7 @@ def test_sprint_review_section_covers_done_issues_and_evidence() -> None:
     for phrase in (
         "profile.tracker.states.done",
         "cycle under review",
+        "cycle listing",
         "merged pr",
         "profile.qa.evidence_dir",
         "accept evidence attached",
@@ -191,6 +192,7 @@ def test_report_only_boundary_permits_only_ceremony_writes() -> None:
         "add comments to the project (epic) and existing issues",
         "velocity/burnup",
         "complete the initialization of an issue it created during the ceremony",
+        "closing or canceling a test issue this ceremony created",
         "never ticks a box, changes a state, closes an issue, or edits any other field on an issue that existed before the ceremony",
         "report it to `persona-product-owner`; do not amend that issue",
     ):

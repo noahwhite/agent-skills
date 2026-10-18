@@ -23,7 +23,7 @@ This skill serves the scrum master (SM) and engineering manager (EM) role.
 - [references/github.md](references/github.md) - repository, PR, and attribution context for the standup and sprint review.
 - [references/runtimes.md](references/runtimes.md) - maps the capabilities named here to your runtime.
 
-Where this file and a capability file disagree, the capability file is authoritative, except that this file's report-only boundary always overrides any capability instruction to tick a box, change a state, close an issue, or edit an existing issue field other than the planning `cycle` write and completing the initialization of an issue this ceremony created.
+Where this file and a capability file disagree, the capability file is authoritative, except that this file's report-only boundary always overrides any capability instruction to tick a box, change a state, close an issue, or edit an existing issue field other than the planning `cycle` write, completing the initialization of an issue this ceremony created, and closing or canceling a test issue this ceremony created.
 
 ## Persona boundary
 
@@ -72,7 +72,7 @@ Make no state changes while preparing or posting the report.
 
 ## Sprint review
 
-- Review every issue in the cycle under review whose state is `profile.tracker.states.done`; when the review runs at cycle end, target the completing cycle, not the tracker's `current` cycle after it rolls.
+- Review every issue in the cycle under review whose state is `profile.tracker.states.done`; when the review runs at cycle end, target the completing cycle, not the tracker's `current` cycle after it rolls. Use the tracker's cycle listing to identify the cycle that just ended; the Cycles section of `references/linear.md` documents the read.
 - Require each one to have a merged PR linked by issue key, or QA evidence under `profile.qa.evidence_dir`/<issue>.
 - When `profile.qa.evidence_dir` is unset, accept evidence attached to the issue instead, use tracker and PR evidence only, and say so in the report.
 - Report a done issue with neither as a finding, not as shipped.
