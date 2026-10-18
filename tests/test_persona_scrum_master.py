@@ -117,6 +117,7 @@ def test_sprint_review_section_covers_done_issues_and_evidence() -> None:
     body = section(SKILL.read_text(), "Sprint review").lower()
     for phrase in (
         "profile.tracker.states.done",
+        "cycle under review",
         "merged pr",
         "profile.qa.evidence_dir",
         "accept evidence attached",
@@ -138,6 +139,7 @@ def test_retro_section_files_only_action_items() -> None:
         "duplicate search",
         "linear-user-story",
         "linear-bug",
+        "linear-spike",
         "tracker's issue-create",
         "report it to `persona-product-owner`",
         "dated record",
@@ -184,11 +186,12 @@ def test_report_only_boundary_permits_only_ceremony_writes() -> None:
     text = SKILL.read_text()
     for phrase in (
         "set the `cycle` field on eligible issues during sprint planning",
-        "only existing-issue field it may change",
+        "only field it may change on an issue that existed before the ceremony",
         "create new issues and project documents for ceremony records",
         "add comments to the project (epic) and existing issues",
         "velocity/burnup",
-        "never ticks a box, changes a state, closes an issue, or edits any other existing issue field",
+        "complete the initialization of an issue it created during the ceremony",
+        "never ticks a box, changes a state, closes an issue, or edits any other field on an issue that existed before the ceremony",
         "report it to `persona-product-owner`; do not amend that issue",
     ):
         assert phrase in text, f"boundary missing: {phrase}"
