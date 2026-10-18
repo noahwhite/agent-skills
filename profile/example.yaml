@@ -88,6 +88,25 @@ environments:
     production: true
 qa:
   evidence_dir: docs/qa
+refinement:
+  facilitator:
+    name: Scrum master
+    runtime: opencode
+    model: example/strong
+  product_owner:
+    name: Product owner
+    runtime: opencode
+    model: example/strong
+  reviewers:
+    - name: Engineer one
+      runtime: opencode
+      model: example/family-a
+      family: family-a
+    - name: Engineer two
+      runtime: opencode
+      model: example/family-b
+      family: family-b
+  point_cap: 5
 workspace:
   scratch_dir: /tmp/agent-skills
 overlays:

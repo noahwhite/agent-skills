@@ -402,6 +402,37 @@
         }
       }
     },
+    "refinement": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Refinement and pointing roles. The product owner and two engineers vote; the facilitator does not vote.",
+      "properties": {
+        "facilitator": {
+          "$ref": "#/$defs/refinement_role",
+          "description": "The scrum master or engineering manager who orchestrates the ceremony and does not vote."
+        },
+        "product_owner": {
+          "$ref": "#/$defs/refinement_role",
+          "description": "The product owner voter and the only role that writes to the tracker."
+        },
+        "reviewers": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "description": "Exactly two engineer voters on different model families, recorded by family values or distinct model ids.",
+          "items": {
+            "$ref": "#/$defs/refinement_role"
+          }
+        },
+        "point_cap": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8,
+          "default": 5,
+          "description": "Numeric point cap for one story; maximum 8. A story is split when the consensus is above this value or is 8 or more."
+        }
+      }
+    },
     "workspace": {
       "type": "object",
       "additionalProperties": false,
@@ -457,6 +488,65 @@
           "description": "For runtime=command: the command line, with {prompt_file}, {output_file} and, where a skill says so, {checkout} placeholders."
         }
       }
+    },
+    "refinement_role": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "runtime",
+        "model"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Label used in the refinement record."
+        },
+        "runtime": {
+          "enum": [
+            "opencode",
+            "command",
+            "codex",
+            "claude-code"
+          ],
+          "description": "How the role is launched: as a subagent of that runtime, or as a shell command."
+        },
+        "model": {
+          "type": "string",
+          "description": "Model id in the launching runtime's syntax."
+        },
+        "agent": {
+          "type": "string",
+          "description": "Optional agent file or named subagent the role loads."
+        },
+        "command": {
+          "type": "string",
+          "description": "Required when runtime is command: the command line, with {prompt_file} and {output_file} placeholders."
+        },
+        "family": {
+          "type": "string",
+          "description": "Optional model family label. The two reviewers must use different families or distinct model ids."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "runtime": {
+                "const": "command"
+              }
+            },
+            "required": [
+              "runtime"
+            ]
+          },
+          "then": {
+            "required": [
+              "command"
+            ]
+          }
+        }
+      ]
     }
   }
 }

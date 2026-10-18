@@ -104,6 +104,7 @@ Make no state changes while preparing or posting the report.
 
 ## Hand-offs
 
+- Refinement and pointing ceremony: `story-refinement` (this persona facilitates and does not vote).
 - Implementation and delivery: `engineering-workflow`.
 - Deployed acceptance verification: `qa-verification`.
 - Refinement, estimates, state moves, checkbox ticks, and closure: `persona-product-owner`.

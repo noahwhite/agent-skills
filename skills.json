@@ -71,6 +71,11 @@
       "code-review",
       "github",
       "engineering-practice"
+    ],
+    "story-refinement": [
+      "linear",
+      "todo-tracking",
+      "engineering-practice"
     ]
   }
 }
