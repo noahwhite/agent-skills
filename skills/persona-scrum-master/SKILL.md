@@ -93,9 +93,9 @@ Make no state changes while preparing or posting the report.
 - Velocity is the sum of the estimates of done user-story and RTB issues per cycle.
 - Count every issue without an estimate as unpointed, never as zero; report unestimated issue types and normally pointed issues missing an estimate separately.
 - Report over the previous `profile.tracker.velocity_window_cycles` completed cycles (default 3), and say when fewer completed cycles exist.
-- Read cycle issue and scope history from the tracker's cycle listing (`scopeHistory` and `completedScopeHistory` when the API exposes them).
-- Draw a burnup from that history when the runtime exposes scope history.
-- When the runtime does not expose scope history, label the chart a burn-down of committed scope and say why.
+- Read cycle issue and scope history from the tracker's cycle listing (`issueCountHistory`, `completedIssueCountHistory`, `scopeHistory`, and `completedScopeHistory` when the API exposes them).
+- Draw a burnup from that history when the runtime exposes usable non-zero history.
+- When the runtime exposes no scope history, or the history is present but all zeros, label the chart a burn-down of committed scope and say why.
 - Record carry-over before the cycle closes, as one dated reason comment on each unfinished issue.
 - See the Cycles section of [references/linear.md](references/linear.md) for reading cycle and issue history.
 

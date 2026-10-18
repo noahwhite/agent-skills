@@ -120,6 +120,8 @@ def test_sprint_review_section_covers_done_issues_and_evidence() -> None:
         "merged pr",
         "profile.qa.evidence_dir",
         "accept evidence attached",
+        "linked by issue key",
+        "say so",
         "not as shipped",
     ):
         assert phrase in body, f"sprint review missing: {phrase}"
@@ -134,6 +136,8 @@ def test_retro_section_files_only_action_items() -> None:
         "linear-",
         "duplicate search",
         "report it to `persona-product-owner`",
+        "dated record",
+        "owner in the body",
         "profile.tracker.assignee",
         "profile.tracker.labels.improvement",
         "no issue for a went-well or a did-not-go-well",
@@ -150,9 +154,14 @@ def test_velocity_and_burnup_section_covers_flow_metrics() -> None:
         "unpointed",
         "missing an estimate",
         "scope history",
+        "issuecounthistory",
+        "completedissuecounthistory",
         "scopehistory",
         "completedscopehistory",
+        "usable non-zero history",
+        "all zeros",
         "say when fewer completed cycles exist",
+        "dated reason comment",
         "carry-over",
         "burn-down",
     ):
