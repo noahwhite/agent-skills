@@ -14,6 +14,7 @@ Its comment id is the refined story identifier for both stages.
 
 - Story: <issue key> at <description version or commit>
 - Refined story identifier: <this comment id>
+- Refined story snapshot: <the complete refined story and ACs, or an immutable link/commit>
 - Refined story identifier after blocking amendments: <the new comment id, or none>
 - Voter inputs, each recorded in its own separate context:
   - Product owner: <scratch path>
@@ -48,7 +49,7 @@ The three values are recorded before any SM/EM sizing comment or discussion.
 - Consensus: <highest value in the intersection, or none>
 - Effective maximum: <profile.refinement.point_cap; the 8-point rule still triggers at 8 or more>
 - Split: <none, or the slice mapping and sibling issue keys>
-- Anchoring events: <none, or the verbatim comment and the recovery>
+- Anchoring events: <none, or the verbatim comment and the recovery, including the newly created voter contexts>
 ```
 
 ## Permitted and forbidden phrasing

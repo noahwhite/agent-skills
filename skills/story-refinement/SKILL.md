@@ -42,7 +42,7 @@ Where this file and a capability file disagree, the capability file is authorita
 - `profile.refinement.product_owner` is the product owner (PO) voter and the only tracker mutator.
   The PO posts the refinement comment, applies every tracker write, and reads each write back.
 - `profile.refinement.reviewers` is exactly two engineer voters on different model families, recorded as optional `family` values or distinct model ids.
-  If both reviewers set `family` and the values match, or neither sets `family` and their `model` ids match, stop and ask for a different reviewer; never run two voters from the same model family.
+  Both reviewers must set `family` or both must omit it. If exactly one sets `family`, stop and ask for a different reviewer. If both set `family`, the values must differ; if both omit `family`, the `model` ids must differ. Never run two voters from the same model family.
   The PO and the two engineers are the voters in both the refinement agreement and the pointing round.
 - A `profile.refinement.facilitator`, `profile.refinement.product_owner`, or `profile.refinement.reviewers` that is unset stops the ceremony.
   Ask for the value; never substitute one.
@@ -81,7 +81,7 @@ The PO and the two engineers decide whether an SM/EM concern is a blocking amend
 - **Process:**
   1. The facilitator reconciles the inputs into one refined story: story text, refined acceptance criteria, scope and split, Definition of Ready changes, and open risks.
   2. The PO posts the refinement comment and applies the refined description as the only tracker mutator.
-     The refinement comment id identifies the refined story for every later step.
+     The refinement comment includes the complete refined story and ACs, or an immutable snapshot reference; its id identifies the refined version for every later step.
   3. Run the accept round on that exact refinement comment id.
      Each of the three voters returns `ACCEPT` or `OBJECT` against the same refined version.
   4. An `OBJECT` blocks and lists only blocking amendments.
@@ -127,7 +127,7 @@ Only the PO and the two engineers count toward the agreement.
      If the intersection is empty, record no consensus and leave the story unpointed.
   4. Never average and never take a value silently.
   5. The facilitator records the consensus; it does not declare it.
-  6. If the consensus exceeds the effective cap, apply the split rule.
+  6. If the split trigger is met (consensus above `profile.refinement.point_cap` or 8 or more), apply the split rule.
 - **Outputs:** a consensus value with the split decision, or a recorded unpointed result.
 - **Stop:** no value all three accept; an anchoring event voids the round.
 
@@ -144,7 +144,7 @@ The prohibited behaviours are:
 - asking for a revote after stating a view;
 - comparing individual votes.
 
-On anchoring: stop the round, record the comment verbatim, void the consensus and any vote recorded after the anchor, re-run the independent vote in separate contexts on the same refined version, and record the recovery.
+On anchoring: stop the round, record the comment verbatim, void the consensus and any vote recorded after the anchor, and re-run the independent vote with newly created voter contexts that exclude the tainted discussion and sizing comment. Never reuse the sessions that saw the anchor. Record the recovery.
 Do not resume the tainted discussion.
 
 ## Split rule
