@@ -35,6 +35,12 @@ REQUIRED_PHRASES = [
     "refinement comment id",
     "high and the low",
     "different model families",
+    "never run two voters from the same model family",
+    "uses its new comment id as the refined version",
+    "records the set of values it accepts",
+    "highest value in the intersection",
+    "is 8 or more",
+    "schema maximum of 8",
     "persona-scrum-master",
     "references/refinement-record.md",
 ]
@@ -131,6 +137,7 @@ def test_schema_has_refinement_object() -> None:
     point_cap = props["point_cap"]
     assert point_cap["type"] == "integer"
     assert point_cap["minimum"] == 1
+    assert point_cap["maximum"] == 8
     assert point_cap["default"] == 5
 
 
@@ -163,7 +170,10 @@ def test_example_sets_refinement_values() -> None:
     assert len(reviewers) == 2
     families = [role.get("family") for role in reviewers]
     models = [role["model"] for role in reviewers]
-    assert all(families) or len(set(models)) == 2
+    if all(families):
+        assert len(set(families)) == 2, "reviewer families must differ"
+    else:
+        assert len(set(models)) == 2, "reviewer models must differ"
     assert refinement["point_cap"] == 5
 
 

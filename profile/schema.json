@@ -427,8 +427,9 @@
         "point_cap": {
           "type": "integer",
           "minimum": 1,
+          "maximum": 8,
           "default": 5,
-          "description": "Numeric point cap for one story. The effective cap is the lower of this value and the 8-point rule in references/linear.md."
+          "description": "Numeric point cap for one story; maximum 8. A story is split when the consensus is above this value or is 8 or more."
         }
       }
     },

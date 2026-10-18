@@ -14,6 +14,7 @@ Its comment id is the refined story identifier for both stages.
 
 - Story: <issue key> at <description version or commit>
 - Refined story identifier: <this comment id>
+- Refined story identifier after blocking amendments: <the new comment id, or none>
 - Voter inputs, each recorded in its own separate context:
   - Product owner: <scratch path>
   - Engineer one (<family or model>): <scratch path>
@@ -35,7 +36,7 @@ The three values are recorded before any SM/EM sizing comment or discussion.
 ```markdown
 ## Pointing record
 
-- Refined story identifier: <refinement comment id>
+- Refined story identifier: <latest refinement comment id after any amendment>
 - Estimate scale: <profile.tracker.estimate_scale>
 - Values, recorded before the discussion:
   - Product owner: <value> - <short rationale>
@@ -43,9 +44,9 @@ The three values are recorded before any SM/EM sizing comment or discussion.
   - Engineer two: <value> - <short rationale>
 - SM/EM sizing context, after all three values: <scratch path or verbatim>
 - Discussion: high <value>, low <value>
-- Re-vote: <value each voter accepts>
-- Consensus: <value, or none>
-- Effective cap: <lower of profile.refinement.point_cap and 8>
+- Re-vote: <accepted set per voter>
+- Consensus: <highest value in the intersection, or none>
+- Effective maximum: <profile.refinement.point_cap; the 8-point rule still triggers at 8 or more>
 - Split: <none, or the slice mapping and sibling issue keys>
 - Anchoring events: <none, or the verbatim comment and the recovery>
 ```

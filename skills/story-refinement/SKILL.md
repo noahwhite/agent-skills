@@ -42,6 +42,7 @@ Where this file and a capability file disagree, the capability file is authorita
 - `profile.refinement.product_owner` is the product owner (PO) voter and the only tracker mutator.
   The PO posts the refinement comment, applies every tracker write, and reads each write back.
 - `profile.refinement.reviewers` is exactly two engineer voters on different model families, recorded as optional `family` values or distinct model ids.
+  If both reviewers set `family` and the values match, or neither sets `family` and their `model` ids match, stop and ask for a different reviewer; never run two voters from the same model family.
   The PO and the two engineers are the voters in both the refinement agreement and the pointing round.
 - A `profile.refinement.facilitator`, `profile.refinement.product_owner`, or `profile.refinement.reviewers` that is unset stops the ceremony.
   Ask for the value; never substitute one.
@@ -85,7 +86,8 @@ The PO and the two engineers decide whether an SM/EM concern is a blocking amend
      Each of the three voters returns `ACCEPT` or `OBJECT` against the same refined version.
   4. An `OBJECT` blocks and lists only blocking amendments.
      Notes that are not blocking amendments do not block.
-  5. After any blocking amendments, the PO applies them and re-runs the accept round.
+  5. After any blocking amendments, the PO applies them, posts an updated refinement comment, and uses its new comment id as the refined version.
+     Re-run the accept round against that new id.
      The accept round is capped at two rounds.
   6. If all three voters have not returned `ACCEPT` after two rounds, the PO records the story as unpointed and the ceremony stops.
 - **Outputs:** an accepted refined story identified by the refinement comment id, or a recorded unpointed result.
@@ -120,15 +122,14 @@ Only the PO and the two engineers count toward the agreement.
   1. Hold one discussion round that names only the high and the low.
      Do not compare the other values or single out a voter.
   2. Run one re-vote.
-     Each voter independently confirms an acceptable value or records no consensus.
-  3. Consensus is one value all three accept.
-     Otherwise the highest value all three accept governs.
-     Otherwise record no consensus and leave the story unpointed.
+     Each voter records the set of values it accepts for this story (one or more) or records no consensus.
+  3. Consensus is the highest value in the intersection of the three accepted sets.
+     If the intersection is empty, record no consensus and leave the story unpointed.
   4. Never average and never take a value silently.
   5. The facilitator records the consensus; it does not declare it.
   6. If the consensus exceeds the effective cap, apply the split rule.
 - **Outputs:** a consensus value with the split decision, or a recorded unpointed result.
-- **Stop:** no value all three accept above the effective cap; an anchoring event voids the round.
+- **Stop:** no value all three accept; an anchoring event voids the round.
 
 ## Anchoring guardrail
 
@@ -148,17 +149,17 @@ Do not resume the tainted discussion.
 
 ## Split rule
 
-The effective cap is the lower of `profile.refinement.point_cap` (default 5) and the 8-point rule in [references/linear.md](references/linear.md).
-`profile.refinement.point_cap` is numeric only and never raises the effective cap above 8.
+The effective accepted maximum is `profile.refinement.point_cap` (default 5), with a schema maximum of 8.
+A story is split when its consensus is above `profile.refinement.point_cap` or is 8 or more; the lower trigger applies, and the 8-point rule in [references/linear.md](references/linear.md) is never relaxed.
 
-If the consensus exceeds the effective cap, split the story.
+If the split trigger is met, split the story.
 
 - The original issue stays the core slice.
 - Siblings are created from the `linear-user-story` template.
 - The original issue blocks each sibling.
 - Every acceptance criterion is mapped to a slice in the split comment.
 - Each slice gets its own three-voter estimate in the same blind round.
-- A slice still above the effective cap is split again or escalated.
+- A slice still at or above the split trigger is split again or escalated.
 
 Cite [references/linear.md](references/linear.md) for the split mechanics; do not restate them here.
 
