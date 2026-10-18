@@ -119,6 +119,7 @@ def test_sprint_review_section_covers_done_issues_and_evidence() -> None:
         "profile.tracker.states.done",
         "merged pr",
         "profile.qa.evidence_dir",
+        "accept evidence attached",
         "not as shipped",
     ):
         assert phrase in body, f"sprint review missing: {phrase}"
@@ -131,8 +132,11 @@ def test_retro_section_files_only_action_items() -> None:
         "did-not-go-well",
         "action item",
         "linear-",
+        "duplicate search",
+        "report it to `persona-product-owner`",
         "profile.tracker.assignee",
         "profile.tracker.labels.improvement",
+        "no issue for a went-well or a did-not-go-well",
     ):
         assert phrase in body, f"retro missing: {phrase}"
 
@@ -144,6 +148,9 @@ def test_velocity_and_burnup_section_covers_flow_metrics() -> None:
         "burnup",
         "profile.tracker.velocity_window_cycles",
         "unpointed",
+        "missing an estimate",
+        "scope history",
+        "say when fewer completed cycles exist",
         "carry-over",
         "burn-down",
     ):
@@ -153,3 +160,14 @@ def test_velocity_and_burnup_section_covers_flow_metrics() -> None:
 def test_not_in_this_slice_section_is_gone() -> None:
     text = SKILL.read_text()
     assert not re.search(r"^## Not in this slice\s*$", text, re.MULTILINE)
+
+
+def test_report_only_boundary_permits_only_ceremony_writes() -> None:
+    text = SKILL.read_text()
+    for phrase in (
+        "never tick a box, change a state, close an issue, or edit an existing issue's fields",
+        "create new issues and project documents for ceremony records",
+        "add comments to existing issues",
+        "report it to `persona-product-owner`; do not amend that issue",
+    ):
+        assert phrase in text, f"boundary missing: {phrase}"

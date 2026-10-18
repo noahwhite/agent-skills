@@ -20,17 +20,18 @@ This skill serves the scrum master (SM) and engineering manager (EM) role.
 - [references/profile.md](references/profile.md) - find the profile and this skill's overlay before anything else.
 - [references/todo-tracking.md](references/todo-tracking.md) - required: create the fine-grained todo list before the first read or report, with one item per ceremony, report, gate check, and hand-off.
 - [references/linear.md](references/linear.md) - the rule set for states, cycles, DoR, AC, DoD, relations, and tooling gotchas.
-- [references/github.md](references/github.md) - repository, PR, and attribution context for the standup report.
+- [references/github.md](references/github.md) - repository, PR, and attribution context for the standup and sprint review.
 - [references/runtimes.md](references/runtimes.md) - maps the capabilities named here to your runtime.
 
-Where this file and a capability file disagree, the capability file is authoritative, except that this file's report-only boundary always overrides any capability instruction to tick a box, change a state, or close an issue.
+Where this file and a capability file disagree, the capability file is authoritative, except that this file's report-only boundary always overrides any capability instruction to tick a box, change a state, close an issue, or edit an existing issue's fields.
 
 ## Persona boundary
 
 - The SM owns ceremonies and flow metrics.
 - `persona-product-owner` owns refinement, estimates, every status transition, acceptance criteria (AC) and DoD ticking, and closure.
-- This skill is report-only: never tick a box, change a state, or close an existing issue.
-- The one write it performs is filing retrospective action items as new issues.
+- This skill is report-only: never tick a box, change a state, close an issue, or edit an existing issue's fields.
+- It may create new issues and project documents for ceremony records, and it may add comments to existing issues for the standup, sprint review, retro, and carry-over reasons.
+- When a retro action is already covered by an existing issue, report it to `persona-product-owner`; do not amend that issue.
 - The SM or EM may challenge ACs and identify gaps in refinement.
 - The SM or EM may provide factual sizing context only after independent estimates are recorded, and only without stating a preferred value, a direction, or a comparison of individual votes.
 - The SM or EM never submits a point value.
@@ -81,6 +82,7 @@ Make no state changes while preparing or posting the report.
 - Keep one dated record per cycle, in a project document or on a named retro issue.
 - The record has three parts: went-well, did-not-go-well, and action items.
 - File only action items, one issue each, through the matching `linear-*` skill after a duplicate search of the team backlog and existing epics.
+- If an action item is already covered by an existing issue, report it to `persona-product-owner`; do not amend that issue.
 - Put the owner in the body of each action item, and leave the assignee at `profile.tracker.assignee`.
 - Label each action item with `profile.tracker.labels.improvement`.
 - File no issue for a went-well or a did-not-go-well entry.
@@ -88,10 +90,11 @@ Make no state changes while preparing or posting the report.
 ## Velocity and burnup
 
 - Velocity is the sum of the estimates of done user-story and RTB issues per cycle.
-- Count unestimated issue types separately and report them as unpointed, never as zero.
+- Count every issue without an estimate as unpointed, never as zero; report unestimated issue types and normally pointed issues missing an estimate separately.
 - Report over the previous `profile.tracker.velocity_window_cycles` completed cycles (default 3), and say when fewer completed cycles exist.
-- Draw a burnup from cycle issue and scope history when the runtime exposes it.
-- When the runtime does not expose it, label the chart a burn-down of committed scope and say why.
+- Read cycle issue and scope history from the tracker's cycle listing.
+- Draw a burnup from that history when the runtime exposes scope history.
+- When the runtime does not expose scope history, label the chart a burn-down of committed scope and say why.
 - Record carry-over before the cycle closes, as one dated reason comment on each unfinished issue.
 - See the Cycles section of [references/linear.md](references/linear.md) for reading cycle and issue history.
 
