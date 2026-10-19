@@ -119,7 +119,8 @@ def test_promotion_section_cites_and_does_not_redefine() -> None:
     ):
         assert phrase in body, f"promotion missing: {phrase}"
     whole = SKILL.read_text().lower()
-    for forbidden in ("batch all pending stories", "batch the promotion", "batch stories into"):
+    for forbidden in ("batch all pending stories", "batch the promotion", "batch stories into",
+                      "include every pending story", "every pending story in one promotion"):
         assert forbidden not in whole, f"promotion contradicts no-batching: {forbidden}"
 
 
