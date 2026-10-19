@@ -80,7 +80,7 @@ def test_readiness_section_covers_each_promotion_mode() -> None:
     for phrase in (
         "profile.git.promotion",
         "enumerates the issues included in the promotion",
-        "pre-production verification evidence",
+        "passing pre-production verification evidence",
         "last environment in `profile.environments` whose `production` is not true",
         "integration branch is the release branch",
         "each story's own deploy verification",
@@ -151,7 +151,8 @@ def test_production_verification_section_covers_evidence_and_failure() -> None:
         "references/linear.md",
         "no existing",
         "criterion covers the failure",
-        "epic",
+        "record on the epic whether rollback is indicated",
+        "with the evidence behind that judgment",
         "rollback",
         "persona-platform-sre",
         "each production environment it reaches",
