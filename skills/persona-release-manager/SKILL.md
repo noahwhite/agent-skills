@@ -47,6 +47,7 @@ A step that needs a value the profile does not set stops and asks for it.
   Bind the evidence to the promotion head: record the build SHA or commit it was taken against, and re-check that it matches the head the promotion will carry.
   Evidence for an earlier build, or for a head that a later merge or review fix changed, is stale and stops the promotion.
   A promotion whose tree is identical to the verified build satisfies this check even when its commit SHA differs.
+  Evidence-only commits under `profile.qa.evidence_dir` do not invalidate readiness; compare the code tree, not the evidence directory.
   Missing evidence stops the promotion and names the issue.
 - `none`: the integration branch is the release branch, so readiness is each story's own deploy verification in the environment that branch deploys to.
   There is no promotion set and no promotion PR.
@@ -59,6 +60,7 @@ Never promote a subset of the enumerated issues under `whole-branch`; re-run rea
 - Promotion follows `profile.git.promotion` exactly as [references/github.md](references/github.md) Promotion defines it; this skill does not redefine `none`, `whole-branch`, or `per-story`.
 - `whole-branch`: open one promotion PR from `profile.git.integration_branch` to `profile.git.release_branch`, with the merge method and merge owner in `references/github.md`.
 - `per-story`: promote only the single story's change, using the mechanism the Promotion section defines; never open a promotion PR that carries another story.
+  When the Promotion section does not define a story-scoped mechanism, stop and ask for it; do not invent one or fall back to a whole-branch PR.
 - Inspect the promotion with a fresh three-dot diff, per the Promotion section.
 - Never update-branch a promotion PR and never merge the release branch into the integration branch; no back-merges.
 - Resolve promotion conflicts on a separate branch, per the Promotion section.

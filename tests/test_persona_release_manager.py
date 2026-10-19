@@ -90,6 +90,8 @@ def test_readiness_section_covers_each_promotion_mode() -> None:
         "stale",
         "there is no promotion set and no promotion pr",
         "tree is identical to the verified build",
+        "evidence-only commits",
+        "compare the code tree",
         "evidence for an earlier build, or for a head that a later merge or review fix changed, is stale and stops the promotion",
     ):
         assert phrase in body, f"readiness missing: {phrase}"
@@ -110,10 +112,15 @@ def test_promotion_section_cites_and_does_not_redefine() -> None:
         "per-story",
         "single story's change",
         "never open a promotion pr that carries another story",
+        "story-scoped mechanism",
+        "stop and ask for it",
         "three-dot diff",
         "no back-merges",
     ):
         assert phrase in body, f"promotion missing: {phrase}"
+    whole = SKILL.read_text().lower()
+    for forbidden in ("batch all pending stories", "batch the promotion", "batch stories into"):
+        assert forbidden not in whole, f"promotion contradicts no-batching: {forbidden}"
 
 
 def test_review_section_covers_the_cumulative_diff_and_ownership() -> None:
