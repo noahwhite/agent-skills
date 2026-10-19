@@ -44,17 +44,20 @@ A step that needs a value the profile does not set stops and asks for it.
   Derive the set from merged feature PRs on the integration branch that are not on the release branch, mapped to their issue keys, and reconcile it with the issues awaiting promotion in the tracker.
   For each issue, confirm passing pre-production verification evidence from the last environment in `profile.environments` whose `production` is not true.
   That evidence is produced per `qa-verification`; a build check alone is not verification evidence.
+  Bind the evidence to the promotion head: record the build SHA or commit it was taken against, and re-check that it matches the head the promotion will carry.
+  Evidence for an earlier build, or for a head that a later merge or review fix changed, is stale and stops the promotion.
   Missing evidence stops the promotion and names the issue.
 - `none`: the integration branch is the release branch, so readiness is each story's own deploy verification in the environment that branch deploys to.
   There is no promotion set and no promotion PR.
 
-For `per-story`, run the same check for the single story being promoted.
-Never promote a subset of the enumerated issues under `whole-branch`.
+For `per-story`, run the same check for the single story being promoted, and promote only that story's change; never open a promotion PR that carries another story.
+Never promote a subset of the enumerated issues under `whole-branch`; re-run readiness when a merge or review fix changes the promotion head.
 
 ## Promotion
 
 - Promotion follows `profile.git.promotion` exactly as [references/github.md](references/github.md) Promotion defines it; this skill does not redefine `none`, `whole-branch`, or `per-story`.
-- Open the promotion PR from `profile.git.integration_branch` to `profile.git.release_branch`, with the merge method and merge owner in `references/github.md`.
+- `whole-branch`: open one promotion PR from `profile.git.integration_branch` to `profile.git.release_branch`, with the merge method and merge owner in `references/github.md`.
+- `per-story`: promote only the single story's change, using the mechanism the Promotion section defines; never open a promotion PR that carries another story.
 - Inspect the promotion with a fresh three-dot diff, per the Promotion section.
 - Never update-branch a promotion PR and never merge the release branch into the integration branch; no back-merges.
 - Resolve promotion conflicts on a separate branch, per the Promotion section.
@@ -66,19 +69,22 @@ Never promote a subset of the enumerated issues under `whole-branch`.
 - Launch the configured reviewer and then the separate clean, neutral adjudicator; never reuse the author's context or supply either one a verdict.
   If the runtime cannot launch a configured role, stop and say the review is unavailable.
 - Triage each finding by owning story: name the issue whose change introduced it, using the diff and the promotion's issue map.
-- Route every valid fix through the integration branch on a new feature branch, then let the promotion PR carry it.
+- Route every valid fix through the integration branch on a new feature branch, then let the promotion PR carry it, per the Promotion section of [references/github.md](references/github.md); this section cites that rule and does not redefine it.
   Never fix on the release branch, and never update the promotion branch outside that flow.
 - Re-run the review at the new head after any change, then post the review-of-record comment on the PR before the merge.
+- When a valid fix changes the promotion head, request fresh pre-production verification for the affected story before the merge; the earlier evidence no longer covers that head.
 - When the profile's merge owner is the agent and the merge bar holds, merge; otherwise hand the clean gate to the human merge owner.
 
 ## Production verification
 
-- After `persona-platform-sre` reports that the release is deployed to an environment whose `production` is true, request post-deploy evidence for each promoted issue.
+- After `persona-platform-sre` reports that the release is deployed to each production environment it reaches, request post-deploy evidence for each promoted issue.
 - Each promoted issue gets post-deploy evidence recorded against it, produced per `qa-verification`.
-  Do not run the lanes yourself; give `qa-verification` the issue, the environment, and the acceptance criteria to verify.
-- A passed check ends that issue's release work and hands its status to `persona-product-owner`.
+  Under `none`, apply this to every story awaiting closure; the story's own deploy verification is the release record.
+  Do not run the lanes yourself; give `qa-verification` the issue, the environment, the deployed build, and the acceptance criteria to verify.
+- A passed check ends that issue's release work and hands its evidence and status to `persona-product-owner`.
 - A failed check reopens the owning story per [references/linear.md](references/linear.md): hand the evidence to `persona-product-owner` to move it back to in progress and amend the criteria, then hand the fix to `engineering-workflow`.
   File a bug only when no existing criterion covers the failure.
+  When the cause is deploy or infrastructure rather than code, hand the remediation to `persona-platform-sre` instead.
 - Record on the epic whether rollback is indicated, with the evidence behind that judgment.
 - Rollback execution is delegated to `persona-platform-sre`; this persona does not execute rollback.
 - When the failure does not indicate rollback, say so on the epic as well.
@@ -86,8 +92,8 @@ Never promote a subset of the enumerated issues under `whole-branch`.
 ## Hand-offs
 
 - Readiness, the promotion set, and the promotion PR: this skill.
-- Deploy and rollback mechanics: `persona-platform-sre`.
+- Deploy and rollback mechanics: `persona-platform-sre`; this skill hands off deploy and rollback and never executes either.
 - Post-deploy evidence: `qa-verification`.
 - A failed production check or a code fix: `engineering-workflow`, after `persona-product-owner` reopens the owning story.
 - Status transitions, acceptance-criteria and Definition-of-Done ticks, and closure: `persona-product-owner`.
-- Report the release outcome to the user: the readiness verdict per issue, the promotion PR, the review result, the post-deploy verdict per issue, and each rollback recommendation.
+- Report the release outcome to the user: the readiness verdict per issue, the promotion PR and its merge result, the review result, the post-deploy verdict per issue, and each rollback recommendation and deploy or rollback execution result.

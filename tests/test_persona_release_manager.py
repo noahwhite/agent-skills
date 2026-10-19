@@ -28,18 +28,19 @@ def test_manifest_registers_skill() -> None:
 
 def test_todo_tracking_has_seed_entry() -> None:
     text = (ROOT / "shared" / "todo-tracking.md").read_text()
-    assert "persona-release-manager:" in text
+    assert "- **persona-release-manager:**" in text
 
 
-def test_readme_lists_skill() -> None:
+def test_readme_lists_skill_in_table() -> None:
     text = (ROOT / "README.md").read_text()
-    assert "skills/persona-release-manager/SKILL.md" in text
+    row = "| [`persona-release-manager`](skills/persona-release-manager/SKILL.md) |"
+    assert row in text
 
 
 def test_skill_links_to_required_references() -> None:
     text = SKILL.read_text()
     for name in ("profile", "todo-tracking", "github", "linear", "code-review", "runtimes"):
-        assert f"references/{name}.md" in text, name
+        assert f"](references/{name}.md)" in text, name
 
 
 def test_persona_boundary_declares_each_owner() -> None:
@@ -73,6 +74,9 @@ def test_readiness_section_covers_each_promotion_mode() -> None:
         "integration branch is the release branch",
         "each story's own deploy verification",
         "missing evidence stops the promotion and names the issue",
+        "promotion head",
+        "re-check",
+        "stale",
     ):
         assert phrase in body, f"readiness missing: {phrase}"
 
@@ -87,6 +91,8 @@ def test_promotion_section_cites_and_does_not_redefine() -> None:
         "none",
         "whole-branch",
         "per-story",
+        "single story's change",
+        "never open a promotion pr that carries another story",
         "three-dot diff",
         "no back-merges",
     ):
@@ -102,6 +108,9 @@ def test_review_section_covers_the_cumulative_diff_and_ownership() -> None:
         "references/code-review.md",
         "owning story",
         "integration branch",
+        "references/github.md",
+        "promotion",
+        "fresh pre-production verification",
         "review-of-record comment",
     ):
         assert phrase in body, f"review missing: {phrase}"
@@ -120,6 +129,9 @@ def test_production_verification_section_covers_evidence_and_failure() -> None:
         "epic",
         "rollback",
         "persona-platform-sre",
+        "each production environment it reaches",
+        "every story awaiting closure",
+        "evidence and status",
     ):
         assert phrase in body, f"production verification missing: {phrase}"
 
@@ -135,5 +147,8 @@ def test_handoffs_name_every_owning_skill() -> None:
         "rollback",
         "post-deploy evidence",
         "status",
+        "never executes either",
+        "merge result",
+        "deploy or rollback execution result",
     ):
         assert phrase in body, f"hand-offs missing: {phrase}"
