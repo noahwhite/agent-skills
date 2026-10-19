@@ -95,3 +95,47 @@ def test_dry_run_covers_request_approve_bounce_and_changed_head() -> None:
     assert "REQUEST" in kinds and "APPROVE" in kinds and "BOUNCE" in kinds
     heads = {line.split(" | ")[3] for line in lines if line.startswith("REQUEST |")}
     assert len(heads) == 2, heads
+
+
+def test_engineering_workflow_step_10_requires_the_handshake() -> None:
+    body = (SKILLS / "engineering-workflow" / "SKILL.md").read_text()
+    section = body.split("## 10. Merge", 1)[1].split("## 11.", 1)[0]
+    for phrase in (
+        "If the brief assigns merge approval to a manager, follow [references/merge-approval.md](references/merge-approval.md) before any merge.",
+        "stop and report the engagement blocked on the missing metadata; do not fall through to autonomous merge",
+        "Record a `REQUEST`",
+        "do not merge until an `APPROVE` for that request ID and the current full head SHA is recorded",
+        "expected-head condition",
+        "when it is `human`, tell the user the PR is approved and merge-ready and wait for that human to merge",
+    ):
+        assert phrase in section, phrase
+
+
+def test_staff_engineer_brief_and_watcher_require_the_handshake() -> None:
+    body = (SKILLS / "persona-staff-engineer" / "SKILL.md").read_text()
+    brief = body.split("## 3. Delegate implementation", 1)[1].split("## 4.", 1)[0]
+    watcher = body.split("### Merge-approval watcher", 1)[1].split("## 5.", 1)[0]
+    for phrase in (
+        "The merge-approval handshake: name `references/merge-approval.md`, name yourself as the manager, give the engagement's approvals-file path and the wake address the runtime needs",
+        "record a `REQUEST` and deliver it through the wake capability before merging",
+        "hand back blocked with the request ID, the PR, and the head SHA",
+    ):
+        assert phrase in brief, phrase
+    for phrase in (
+        "otherwise keep the engagement active and poll the file at least every five minutes until delegation ends",
+        "The watcher stays active after a blocked handback as well",
+        "Verify the live PR head SHA, the required CI state, and the review of record for that head.",
+        "Append `APPROVE` or `BOUNCE` in the format in `references/merge-approval.md`, idempotently on request ID plus head SHA.",
+    ):
+        assert phrase in watcher, phrase
+
+
+def test_shared_merge_rules_carry_the_delegated_carve_out() -> None:
+    github = (ROOT / "shared" / "github.md").read_text()
+    merging = github.split("## Merging", 1)[1].split("## Promotion", 1)[0]
+    assert "does not merge until the matching `APPROVE` is recorded for the current head SHA" in merging
+    assert "`profile.review.merge_owner` still decides who performs the merge" in merging
+    code_review = (ROOT / "shared" / "code-review.md").read_text()
+    owner = code_review.split("## Merge owner", 1)[1].split("## Handling findings", 1)[0]
+    assert "does not merge on `agent` alone" in owner
+    assert "When `profile.review.merge_owner` is `human`, the human still performs the merge" in owner
