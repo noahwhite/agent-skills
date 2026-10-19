@@ -42,6 +42,12 @@
       "todo-tracking",
       "linear"
     ],
+    "persona-release-manager": [
+      "github",
+      "linear",
+      "code-review",
+      "todo-tracking"
+    ],
     "persona-scrum-master": [
       "linear",
       "todo-tracking",
