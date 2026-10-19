@@ -40,8 +40,7 @@ Where this file and a capability file disagree, the capability file is authorita
 
 ## Before deciding
 
-Read the applicable existing records in `profile.decisions.dir` before design work, and cite the ones that apply in the new record.
-This is the decision-record rule in [references/engineering-practice.md](references/engineering-practice.md); apply it rather than restating it here.
+Before deciding, apply the decision-record rule in [references/engineering-practice.md](references/engineering-practice.md), and cite the applicable existing records in the new record.
 
 When `profile.decisions.dir` is unset, stop and ask for it.
 Never substitute a directory from an example or from another project.
