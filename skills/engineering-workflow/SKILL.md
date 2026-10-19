@@ -207,7 +207,7 @@ If the brief does not give the approvals-file path or the wake address the runti
 1. Record a `REQUEST` in the approvals file, naming the request ID, the PR, the full head SHA, the review-of-record link, and the CI state.
 2. Deliver the same request through the wake capability in `references/runtimes.md`.
 3. Poll the approvals file and do not merge until an `APPROVE` for that request ID and the current full head SHA is recorded.
-4. Re-read the live PR and confirm the head SHA still matches the approval, the required checks are green, and the PR is mergeable; merge with the approved full head SHA as an expected-head condition where the merge command supports one, and stop on any change.
+4. Re-read the live PR and confirm the head SHA still matches the approval, the required checks are green, and the PR is mergeable; merge with the approved full head SHA as an expected-head condition, and if the merge command cannot carry one, stop and report the merge blocked instead of merging unguarded.
 5. If the head changes for any reason, including a base-only update, record a new request with a new request ID and the new full head SHA.
 
 If you must stop while waiting, the handback states that the work is blocked on merge approval and names the request ID, the PR, and the head SHA.

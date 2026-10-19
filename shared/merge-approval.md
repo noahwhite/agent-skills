@@ -78,7 +78,8 @@ Write timestamps in UTC as `YYYY-MM-DDTHH:MM:SSZ`.
 - The engineer polls the approvals file at least every 60 seconds until a decision for its request ID and current head SHA appears.
 - While it waits it does not merge, and it does not end its turn silently.
 - A matching `APPROVE` authorizes the merge only after the engineer re-reads the live PR and confirms the head SHA still equals the approved head SHA, the required checks are green, and the PR is mergeable.
-- The merge itself must carry the approved full head SHA as an expected-head condition where the merge operation supports one, so a push that lands after the re-read cannot merge an unapproved head; if the operation has no such condition, re-read the head immediately before the merge and stop on any change.
+- The merge itself must carry the approved full head SHA as an expected-head condition; on GitHub, use `gh pr merge --match-head-commit <full-SHA>`.
+  A push that lands after the re-read then cannot merge an unapproved head; if the merge operation cannot carry the condition, stop and report the merge blocked instead of merging unguarded.
 - A matching `BOUNCE` stops the merge; the engineer addresses the reason or hands back.
 - A decision for any other request ID or head SHA is ignored.
 - If the head changes while the engineer waits, it stops waiting and follows the re-request rule.

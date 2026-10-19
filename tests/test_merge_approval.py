@@ -40,7 +40,8 @@ def test_handshake_preserves_human_merge_ownership() -> None:
 def test_handshake_requires_expected_head_binding() -> None:
     text = handshake()
     assert "approved full head SHA as an expected-head condition" in text
-    assert "re-read the head immediately before the merge" in text
+    assert "gh pr merge --match-head-commit" in text
+    assert "stop and report the merge blocked instead of merging unguarded" in text
 
 
 def test_base_only_update_only_requires_a_new_request_when_the_head_changes() -> None:
