@@ -33,7 +33,7 @@ Where this file and a capability file disagree, the capability file is authorita
 - `engineering-workflow` owns implementation; the architect does not write or review code in this skill.
 - `persona-product-owner` owns estimates, every state transition, checkbox ticks, and closure.
 - `linear-spike` files spikes and is unchanged; the architect owns only the spike-close hand-off.
-- `linear-epic` owns the umbrella-container rule; the architect cites it and does not restate it.
+- `linear-epic` owns the umbrella-container rule; the Epic boundary section applies it to this persona.
 - `qa-verification` verifies a deployed story; the architect does not verify deployments.
 - The architect may challenge a design, ask for missing options or consequences, and require a record before a decision is treated as made.
 - The architect never creates a story, epic, or project that uses a decision record as an umbrella container.
@@ -63,11 +63,11 @@ A record with no decision, or with an empty options or consequences section, is 
 ## Superseding
 
 1. Name a predecessor only when it exists in `profile.decisions.dir`; verify the predecessor exists before writing the new record.
-2. The new record carries a `supersedes` field naming the record it replaces, in the form `supersedes: <predecessor filename>`.
-3. Update the predecessor's status to `superseded by <new record filename>`.
+2. The new record's `Supersedes` field names the record it replaces, in the form `- **Supersedes:** <predecessor filename>`.
+3. Update the predecessor's `Status` to `superseded by <new record filename>` and its `Superseded by` field to `<new record filename>`.
    Leave its body and history intact.
 4. Retain both files; never delete a record.
-5. Leave both links in place: the new record points back through `supersedes`, and the predecessor points forward through its status line.
+5. Leave both links in place: the new record points back through its `Supersedes` field, and the predecessor points forward through its `Status` line and its `Superseded by` field.
 6. Commit both edits in the same PR and require the same review of record at the current head.
 
 A supersede edit that cannot name an existing predecessor, or that would remove either file, stops and asks instead of guessing.

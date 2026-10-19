@@ -72,7 +72,7 @@ REQUIRED_PHRASES = [
     "consequences",
     "accepted",
     "superseded",
-    "supersedes",
+    "Supersedes",
     "superseded by <new record filename>",
     "predecessor",
     "both files",
@@ -148,8 +148,10 @@ def test_superseding_section_keeps_both_records_and_links() -> None:
     for phrase in (
         "exists in `profile.decisions.dir`",
         "verify the predecessor exists before writing the new record",
-        "carries a `supersedes` field naming the record it replaces",
-        "update the predecessor's status to `superseded by <new record filename>`",
+        "the new record's `supersedes` field names the record it replaces",
+        "in the form `- **supersedes:** <predecessor filename>`",
+        "update the predecessor's `status` to `superseded by <new record filename>` and its `superseded by` field to `<new record filename>`",
+        "points forward through its `status` line and its `superseded by` field",
         "retain both files",
         "never delete",
         "both links in place",
@@ -185,7 +187,7 @@ def test_records_ship_through_a_pr_with_the_review_of_record() -> None:
         assert phrase in body, f"pr rule missing: {phrase}"
 
 
-def test_epic_boundary_is_cited_not_restated() -> None:
+def test_epic_boundary_applies_the_linear_epic_rule() -> None:
     body = section(SKILL.read_text(), "Epic boundary").lower()
     for phrase in ("umbrella container", "linear-epic", "deliverable of its story or spike"):
         assert phrase in body, f"epic boundary missing: {phrase}"
