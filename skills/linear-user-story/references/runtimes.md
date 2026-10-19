@@ -14,6 +14,7 @@ If your runtime is not listed, map each capability to its closest equivalent and
 | Define a reusable subagent | `.claude/agents/<name>.md` | `.opencode/agents/<name>.md`, `mode: subagent` |
 | Choose a subagent's model | `model` parameter, or the agent file's `model:` | the agent file's `model: <provider>/<model>` |
 | Ask the user a question | `AskUserQuestion` | `question` |
+| Wake the manager (merge approval) | `SendMessage` | no push capability; the approvals file plus the manager's watcher is the delivery path |
 | Run a shell command | `Bash` | `bash` |
 | Fetch a URL | `WebFetch` | `webfetch` |
 | Scratch directory | `$CLAUDE_JOB_DIR/tmp` in background jobs, else `profile.workspace.scratch_dir` | `profile.workspace.scratch_dir` |
@@ -21,6 +22,10 @@ If your runtime is not listed, map each capability to its closest equivalent and
 
 ## Rules that follow from the map
 
+- **Merge-approval wake.** The delegated engineer records the request in the approvals file before it wakes the manager.
+  The wake is a prompt to read the file, never the record itself.
+  Where the runtime has no push capability, the approvals file plus the manager's watcher is the delivery path.
+  The handshake is defined once in the merge-approval capability.
 - **Scratch files.** When neither the runtime nor `profile.workspace.scratch_dir` gives a directory, create one with `mktemp -d` and use it for the whole task.
   Never write to a fixed path under `/tmp`; parallel sessions collide there.
 - **Nested subagents.** A delegated agent that runs a review gate spawns subagents of its own.

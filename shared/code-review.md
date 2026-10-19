@@ -85,6 +85,8 @@ Agents in `profile.review.optional_reviewers` are non-blocking:
 
 - `profile.review.merge_owner` is `agent`: once the gate is clean on head and the merge bar in `references/github.md` holds, merge without asking.
 - `profile.review.merge_owner` is `human`: report the clean gate with the PR URL and wait.
+- Carve-out for a delegated manager approval: an engineer working under the merge-approval handshake does not merge on `agent` alone; it waits for the matching `APPROVE` for the current head SHA.
+  Every other case keeps the autonomous merge above.
 
 ## Handling findings
 
