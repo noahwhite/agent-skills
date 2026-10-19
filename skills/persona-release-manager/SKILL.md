@@ -46,6 +46,7 @@ A step that needs a value the profile does not set stops and asks for it.
   That evidence is produced per `qa-verification`; a build check alone is not verification evidence.
   Bind the evidence to the promotion head: record the build SHA or commit it was taken against, and re-check that it matches the head the promotion will carry.
   Evidence for an earlier build, or for a head that a later merge or review fix changed, is stale and stops the promotion.
+  A promotion whose tree is identical to the verified build satisfies this check even when its commit SHA differs.
   Missing evidence stops the promotion and names the issue.
 - `none`: the integration branch is the release branch, so readiness is each story's own deploy verification in the environment that branch deploys to.
   There is no promotion set and no promotion PR.
@@ -93,6 +94,7 @@ Never promote a subset of the enumerated issues under `whole-branch`; re-run rea
 
 - Readiness, the promotion set, and the promotion PR: this skill.
 - Deploy and rollback mechanics: `persona-platform-sre`; this skill hands off deploy and rollback and never executes either.
+  The release manager does not execute deploy or rollback mechanics.
 - Post-deploy evidence: `qa-verification`.
 - A failed production check or a code fix: `engineering-workflow`, after `persona-product-owner` reopens the owning story.
 - Status transitions, acceptance-criteria and Definition-of-Done ticks, and closure: `persona-product-owner`.

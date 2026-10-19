@@ -32,9 +32,20 @@ def test_todo_tracking_has_seed_entry() -> None:
 
 
 def test_readme_lists_skill_in_table() -> None:
-    text = (ROOT / "README.md").read_text()
     row = "| [`persona-release-manager`](skills/persona-release-manager/SKILL.md) |"
-    assert row in text
+    in_fence = False
+    in_skills = False
+    found = False
+    for line in (ROOT / "README.md").read_text().splitlines():
+        if line.startswith("```"):
+            in_fence = not in_fence
+            continue
+        if line.startswith("## "):
+            in_skills = line.strip() == "## Skills"
+            continue
+        if in_skills and not in_fence and line.startswith(row):
+            found = True
+    assert found, "missing persona-release-manager row from the README Skills table"
 
 
 def test_skill_links_to_required_references() -> None:
@@ -77,8 +88,14 @@ def test_readiness_section_covers_each_promotion_mode() -> None:
         "promotion head",
         "re-check",
         "stale",
+        "there is no promotion set and no promotion pr",
+        "tree is identical to the verified build",
+        "evidence for an earlier build, or for a head that a later merge or review fix changed, is stale and stops the promotion",
     ):
         assert phrase in body, f"readiness missing: {phrase}"
+    whole = SKILL.read_text().lower()
+    for forbidden in ("promotion set under `none`", "promotion set for `none`", "stale evidence is accepted", "accept stale evidence"):
+        assert forbidden not in whole, f"readiness contradicts itself: {forbidden}"
 
 
 def test_promotion_section_cites_and_does_not_redefine() -> None:
@@ -150,5 +167,9 @@ def test_handoffs_name_every_owning_skill() -> None:
         "never executes either",
         "merge result",
         "deploy or rollback execution result",
+        "does not execute deploy or rollback mechanics",
     ):
         assert phrase in body, f"hand-offs missing: {phrase}"
+    whole = SKILL.read_text().lower()
+    for forbidden in ("may execute deploy", "release manager executes", "skill executes deploy"):
+        assert forbidden not in whole, f"boundary breach allowed: {forbidden}"
