@@ -201,15 +201,18 @@ Any change to the head after the review of record, including the fixes for its f
 
 Only once step 9 holds.
 
-If the brief names a manager who owns merge approval and gives the engagement's approvals file, follow [references/merge-approval.md](references/merge-approval.md) before any merge:
+If the brief assigns merge approval to a manager, follow [references/merge-approval.md](references/merge-approval.md) before any merge.
+If the brief does not give the approvals-file path or the wake address the runtime needs, stop and report the engagement blocked on the missing metadata; do not fall through to autonomous merge.
 
 1. Record a `REQUEST` in the approvals file, naming the request ID, the PR, the full head SHA, the review-of-record link, and the CI state.
 2. Deliver the same request through the wake capability in `references/runtimes.md`.
 3. Poll the approvals file and do not merge until an `APPROVE` for that request ID and the current full head SHA is recorded.
-4. Re-read the live PR and confirm the head SHA still matches the approval, the required checks are green, and the PR is mergeable; then merge.
+4. Re-read the live PR and confirm the head SHA still matches the approval, the required checks are green, and the PR is mergeable; merge with the approved full head SHA as an expected-head condition where the merge command supports one, and stop on any change.
 5. If the head changes for any reason, including a base-only update, record a new request with a new request ID and the new full head SHA.
 
 If you must stop while waiting, the handback states that the work is blocked on merge approval and names the request ID, the PR, and the head SHA.
+The handshake supplies the approval; `profile.review.merge_owner` still decides who merges.
+Merge yourself only when it is `agent`; when it is `human`, tell the user the PR is approved and merge-ready and wait for that human to merge.
 The handshake takes precedence over the autonomous merge in `references/github.md` and `references/code-review.md`.
 
 Otherwise:

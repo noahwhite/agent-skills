@@ -67,7 +67,7 @@ It must include:
 - The story identifier, a summary of the triage findings, and the AC.
 - Your slice plan and the risks and constraints you identified.
 - An instruction to load and follow `engineering-workflow` for the story: slice-based TDD, the pre-PR gate, the PR to `profile.git.integration_branch`, the review of record, remediation, merge only after a matching approval, deploy, and the move to `profile.tracker.states.in_deployment_review`.
-- The merge-approval handshake: name `references/merge-approval.md`, name yourself as the manager, give the engagement's approvals-file path, and require the senior engineer to record a `REQUEST` and deliver it through the wake capability before merging, to wait for an `APPROVE` bound to the request ID and the current full head SHA, and to hand back blocked with the request ID, the PR, and the head SHA if it must stop.
+- The merge-approval handshake: name `references/merge-approval.md`, name yourself as the manager, give the engagement's approvals-file path and the wake address the runtime needs, and require the senior engineer to record a `REQUEST` and deliver it through the wake capability before merging, to wait for an `APPROVE` bound to the request ID and the current full head SHA, and to hand back blocked with the request ID, the PR, and the head SHA if it must stop.
 - The secrets rule (never write secrets to files or argv) and the attribution rule from `profile.git.ai_attribution`.
 - A "Track your work" paragraph: before starting, write a fine-grained checklist file in the scratch directory (for example `<scratch>/senior-engineer-todo.md`, `- [ ]` and `- [x]` items, one per slice step, test, gate round, review round, remediation, deploy, verification, and wait, the current step marked `(in progress)`) and update it at every step.
 
@@ -90,6 +90,7 @@ Do not pre-empt its implementation choices beyond the plan and constraints, and 
 ### Merge-approval watcher
 
 Start the watcher on the engagement's approvals file before the senior engineer starts, and keep it for the whole engagement: a background task where the runtime supports one, otherwise keep the engagement active and poll the file at least every five minutes until delegation ends.
+The watcher stays active after a blocked handback as well, until the story merges or the engagement closes.
 Handle each `REQUEST` as soon as it arrives:
 
 1. Verify the live PR head SHA, the required CI state, and the review of record for that head.

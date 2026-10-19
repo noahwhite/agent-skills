@@ -73,12 +73,13 @@ Always:
 - Who merges is `profile.review.merge_owner`.
   `agent`: merge once the bar is met, without re-asking.
   `human`: report that the gate is clean on head, with the PR URL, and wait.
-- Carve-out for a delegated manager approval: an engineer whose brief names a manager who owns merge approval follows the merge-approval handshake and does not merge until the matching `APPROVE` is recorded for the current head SHA, even when `profile.review.merge_owner` is `agent`.
+- Carve-out for a delegated manager approval: an engineer whose brief assigns merge approval to a manager follows [merge-approval.md](merge-approval.md) (the `references/merge-approval.md` copy) and does not merge until the matching `APPROVE` is recorded for the current head SHA, even when `profile.review.merge_owner` is `agent`.
+  The handshake adds approval; `profile.review.merge_owner` still decides who performs the merge.
+  A delegated engineer merges as soon as the matching approval is recorded and the merge bar still holds, and not before.
   Every other case keeps the rule above.
 - Feature PRs merge with `profile.git.merge_method`.
   Promotion PRs merge with the method the release branch's protection requires (the consumer overlay supplies it).
 - When the base requires branches to be up to date, merge whichever PR is green immediately; never hold a green PR behind a sibling.
-  A delegated engineer under the merge-approval handshake merges as soon as the matching approval is recorded, and not before.
   After any merge, update the remaining PRs and re-arm their watches.
 - For trivial PRs keep the posted review write-up terse; reserve long write-ups for risky changes.
 - ⛔ Never force-push (`--force`, `--force-with-lease`), even on your own new branch.
