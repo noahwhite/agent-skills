@@ -11,7 +11,8 @@
       "code-review",
       "secrets",
       "engineering-practice",
-      "todo-tracking"
+      "todo-tracking",
+      "merge-approval"
     ],
     "linear-bug": [
       "linear",
@@ -75,7 +76,8 @@
       "code-review",
       "engineering-practice",
       "github",
-      "secrets"
+      "secrets",
+      "merge-approval"
     ],
     "qa-verification": [
       "todo-tracking",

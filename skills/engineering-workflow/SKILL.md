@@ -42,6 +42,7 @@ The steps below are the workflow spine; the capability files hold the rules and 
 - [references/engineering-practice.md](references/engineering-practice.md): diagnosis, TDD, durable fixes, test quality (steps 2, 3, 6, 8).
 - [references/github.md](references/github.md): branches, worktrees, commits, signing, PRs, merge, promotion, attribution (steps 2, 5, 10).
 - [references/code-review.md](references/code-review.md): the review of record, optional reviewers, finding handling, watching the PR (steps 6 to 10).
+- [references/merge-approval.md](references/merge-approval.md): the delegated merge-approval handshake: request, wake, wait, approve or bounce, and re-request when the head changes (step 10).
 - [references/secrets.md](references/secrets.md): whenever the change touches credentials.
 
 Run every script in `scripts/` by its installed absolute path (`<skill dir>/scripts/<name>`, where `<skill dir>` is the absolute directory your runtime loaded this skill from) with the current directory in the consumer repository; the consumer repository does not contain them.
@@ -198,7 +199,23 @@ Any change to the head after the review of record, including the fixes for its f
 
 ## 10. Merge
 
-Only once step 9 holds:
+Only once step 9 holds.
+
+If the brief assigns merge approval to a manager, follow [references/merge-approval.md](references/merge-approval.md) before any merge.
+If the brief does not give the approvals-file path or the wake address the runtime needs, stop and report the engagement blocked on the missing metadata; do not fall through to autonomous merge.
+
+1. Record a `REQUEST` in the approvals file, naming the request ID, the PR, the full head SHA, the review-of-record link, and the CI state.
+2. Deliver the same request through the wake capability in `references/runtimes.md`.
+3. Poll the approvals file and do not merge until an `APPROVE` for that request ID and the current full head SHA is recorded.
+4. Re-read the live PR and confirm the head SHA still matches the approval, the required checks are green, and the PR is mergeable; merge with the approved full head SHA as an expected-head condition, and if the merge command cannot carry one, stop and report the merge blocked instead of merging unguarded.
+5. If the head changes for any reason, including a base-only update, record a new request with a new request ID and the new full head SHA.
+
+If you must stop while waiting, the handback states that the work is blocked on merge approval and names the request ID, the PR, and the head SHA.
+The handshake supplies the approval; `profile.review.merge_owner` still decides who merges.
+Merge yourself only when it is `agent`; when it is `human`, tell the user the PR is approved and merge-ready and wait for that human to merge.
+The handshake takes precedence over the autonomous merge in `references/github.md` and `references/code-review.md`.
+
+Otherwise:
 
 - If `profile.review.merge_owner` is `agent`: merge with `profile.git.merge_method` per `references/github.md`, then confirm the PR is actually merged.
 - If it is `human`: tell the user the PR is merge-ready (link, head SHA, review-of-record comment) and wait; resume at step 11 once it is merged.

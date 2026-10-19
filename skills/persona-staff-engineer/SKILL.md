@@ -27,6 +27,7 @@ Read each of these at the step that needs it:
 - [references/todo-tracking.md](references/todo-tracking.md) - step 0, and every subagent brief.
 - [references/linear.md](references/linear.md) - steps 1, 5, and 6: status lifecycle, triage, Definition of Ready, AC and DoD.
 - [references/code-review.md](references/code-review.md) - step 4: the review of record, shadow adjudication, and finding handling.
+- [references/merge-approval.md](references/merge-approval.md) - steps 3 and 4: the merge-approval watcher, handling a request, and the record formats.
 - [references/engineering-practice.md](references/engineering-practice.md) and [references/github.md](references/github.md) - the senior engineer applies these through `engineering-workflow`; you use them to check what comes back.
 - [references/secrets.md](references/secrets.md) - its rules go into every brief.
 
@@ -35,7 +36,7 @@ Where this file and a capability file disagree, the capability file is authorita
 ## 0. Track everything on a todo list
 
 Before anything else, create a fine-grained todo list per `references/todo-tracking.md`: one item per concrete step, not per phase.
-Seed it with at least: each triage check (description, AC, comments, relation graph, DoR), each slice of the plan, the delegation, each check on the delegated work until the PR opens, each gate step (review of record, each shadow adjudication, comparison), each remediation round, posting the adjudications to the story, and confirming the final story state.
+Seed it with at least: each triage check (description, AC, comments, relation graph, DoR), each slice of the plan, the delegation, the merge-approval watcher, each merge request handled, each check on the delegated work until the PR opens, each gate step (review of record, each shadow adjudication, comparison), each remediation round, posting the adjudications to the story, and confirming the final story state.
 Add items as work appears and mark each done the moment it is.
 Subagents have no todo tool, so every brief requires a checklist file in the scratch directory; mirror that file into your list whenever you check on the subagent.
 
@@ -59,12 +60,14 @@ This written plan is the hand-off; do not leave it implicit.
 ## 3. Delegate implementation to a senior engineer
 
 Spawn a clean, neutral subagent (not a fork of yours; on opencode, check the nesting rule in `references/runtimes.md` first, since this subagent spawns reviewers of its own) and brief it as a senior engineer working this story.
+Start the merge-approval watcher described in step 4 before you spawn it, so a request cannot arrive before the manager is watching.
 The brief carries facts, plan, and constraints, not your expectations about the outcome.
 It must include:
 
 - The story identifier, a summary of the triage findings, and the AC.
 - Your slice plan and the risks and constraints you identified.
-- An instruction to load and follow `engineering-workflow` for the story: slice-based TDD, the pre-PR gate, the PR to `profile.git.integration_branch`, the review of record, remediation, merge, deploy, and the move to `profile.tracker.states.in_deployment_review`.
+- An instruction to load and follow `engineering-workflow` for the story: slice-based TDD, the pre-PR gate, the PR to `profile.git.integration_branch`, the review of record, remediation, merge only after a matching approval, deploy, and the move to `profile.tracker.states.in_deployment_review`.
+- The merge-approval handshake: name `references/merge-approval.md`, name yourself as the manager, give the engagement's approvals-file path and the wake address the runtime needs, and require the senior engineer to record a `REQUEST` and deliver it through the wake capability before merging, to wait for an `APPROVE` bound to the request ID and the current full head SHA, and to hand back blocked with the request ID, the PR, and the head SHA if it must stop.
 - The secrets rule (never write secrets to files or argv) and the attribution rule from `profile.git.ai_attribution`.
 - A "Track your work" paragraph: before starting, write a fine-grained checklist file in the scratch directory (for example `<scratch>/senior-engineer-todo.md`, `- [ ]` and `- [x]` items, one per slice step, test, gate round, review round, remediation, deploy, verification, and wait, the current step marked `(in progress)`) and update it at every step.
 
@@ -83,6 +86,18 @@ Do not pre-empt its implementation choices beyond the plan and constraints, and 
 3. The adjudicator of record alone decides what gets fixed and what gates the merge.
    A shadow run is signal collection: never hold the merge on it, never let it change a finding's disposition, and skip it silently if it fails.
 4. If the PR head changes after this (fixes pushed, base updated), re-run the review of record and every shadow at the new head before treating any verdict as current.
+
+### Merge-approval watcher
+
+Start the watcher on the engagement's approvals file before the senior engineer starts, and keep it for the whole engagement: a background task where the runtime supports one, otherwise keep the engagement active and poll the file at least every five minutes until delegation ends.
+The watcher stays active after a blocked handback as well, until the story merges or the engagement closes.
+Handle each `REQUEST` as soon as it arrives:
+
+1. Verify the live PR head SHA, the required CI state, and the review of record for that head.
+2. Append `APPROVE` or `BOUNCE` in the format in `references/merge-approval.md`, idempotently on request ID plus head SHA.
+3. Never approve a head you did not verify, and never approve a missing or stale review of record.
+
+A `BOUNCE` names the reason, and the engineer re-requests after it fixes the cause or after the head changes.
 
 ## 5. Post the adjudications to the story
 
