@@ -30,6 +30,13 @@
       "linear",
       "code-review"
     ],
+    "persona-architect": [
+      "linear",
+      "todo-tracking",
+      "github",
+      "code-review",
+      "engineering-practice"
+    ],
     "persona-platform-sre": [
       "todo-tracking",
       "infra-deploy",
