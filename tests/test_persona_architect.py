@@ -50,9 +50,10 @@ def test_template_file_exists() -> None:
 
 def test_template_has_required_fields() -> None:
     text = TEMPLATE.read_text()
-    for heading in ("## Context", "## Options considered", "## Decision", "## Consequences"):
-        assert heading in text, f"template missing section: {heading}"
-    assert "- **Status:** accepted" in text
+    for heading in ("Context", "Options considered", "Decision", "Consequences"):
+        assert re.search(rf"^## {re.escape(heading)}\s*$", text, re.MULTILINE), f"template missing section: {heading}"
+    status = next(line for line in text.splitlines() if line.startswith("- **Status:**"))
+    assert status == "- **Status:** accepted"
     assert "- **Supersedes:**" in text
     assert "- **Superseded by:**" in text
     assert "superseded by <new record filename>" in text
@@ -213,4 +214,5 @@ def test_todo_tracking_has_seed_entry() -> None:
 
 def test_readme_lists_skill() -> None:
     text = (ROOT / "README.md").read_text()
-    assert "| [`persona-architect`](skills/persona-architect/SKILL.md) |" in text
+    skills_table = text.split("## Skills", 1)[1].split("\n## ", 1)[0]
+    assert "| [`persona-architect`](skills/persona-architect/SKILL.md) |" in skills_table
