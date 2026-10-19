@@ -402,6 +402,20 @@
         }
       }
     },
+    "decisions": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Decision records the architect writes for this project.",
+      "required": [
+        "dir"
+      ],
+      "properties": {
+        "dir": {
+          "type": "string",
+          "description": "Repository-relative directory that holds decision records."
+        }
+      }
+    },
     "refinement": {
       "type": "object",
       "additionalProperties": false,

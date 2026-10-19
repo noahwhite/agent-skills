@@ -88,6 +88,8 @@ environments:
     production: true
 qa:
   evidence_dir: docs/qa
+decisions:
+  dir: docs/decisions
 refinement:
   facilitator:
     name: Scrum master
