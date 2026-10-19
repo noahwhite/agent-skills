@@ -48,8 +48,12 @@ def test_template_file_exists() -> None:
     assert TEMPLATE.is_file(), f"missing {TEMPLATE.relative_to(ROOT)}"
 
 
+def without_comments(text: str) -> str:
+    return re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)
+
+
 def test_template_has_required_fields() -> None:
-    text = TEMPLATE.read_text()
+    text = without_comments(TEMPLATE.read_text())
     for heading in ("Context", "Options considered", "Decision", "Consequences"):
         assert re.search(rf"^## {re.escape(heading)}\s*$", text, re.MULTILINE), f"template missing section: {heading}"
     status = next(line for line in text.splitlines() if line.startswith("- **Status:**"))
@@ -116,6 +120,7 @@ def test_skill_contains_contract_phrases() -> None:
 
 
 def section(text: str, heading: str) -> str:
+    text = without_comments(text)
     match = re.search(rf"^## {re.escape(heading)}\s*$", text, re.MULTILINE)
     assert match, f"missing section: {heading}"
     rest = text[match.end():]
@@ -214,5 +219,11 @@ def test_todo_tracking_has_seed_entry() -> None:
 
 def test_readme_lists_skill() -> None:
     text = (ROOT / "README.md").read_text()
-    skills_table = text.split("## Skills", 1)[1].split("\n## ", 1)[0]
-    assert "| [`persona-architect`](skills/persona-architect/SKILL.md) |" in skills_table
+    skills_section = text.split("## Skills", 1)[1].split("\n## ", 1)[0].splitlines()
+    start = next(i for i, line in enumerate(skills_section) if line.startswith("| Skill |"))
+    table = []
+    for line in skills_section[start:]:
+        if not line.startswith("|"):
+            break
+        table.append(line)
+    assert "| [`persona-architect`](skills/persona-architect/SKILL.md) |" in "\n".join(table)
