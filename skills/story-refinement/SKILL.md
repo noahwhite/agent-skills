@@ -141,12 +141,27 @@ Only the PO and the two engineers count toward the agreement.
   2. Run one re-vote.
      Each voter records the set of values it accepts for this story (one or more) or records no consensus.
   3. Consensus is the highest value in the intersection of the three accepted sets.
-     If the intersection is empty, record no consensus and leave the story unpointed.
+     If the intersection is empty, record no consensus and run the no-consensus decision (item 7).
   4. Never average and never take a value silently.
   5. The facilitator records the consensus; it does not declare it.
   6. If the split trigger is met (consensus above `profile.refinement.point_cap` or 8 or more), apply the split rule.
-- **Outputs:** a consensus value with the split decision, or a recorded unpointed result.
-- **Stop:** no value all three accept; an anchoring event voids the round.
+  7. No-consensus decision: the facilitator presents only the empty intersection and the three paths: split, re-refine, or leave unpointed.
+     The facilitator does not recommend a path.
+     Each voter (the PO and both engineers) records the set of paths it accepts; a voter that accepts re-refine also lists the amendments it needs.
+     The chosen path is in the intersection of the three accepted path sets.
+     When that intersection holds more than one path, the PO chooses among them and records why.
+     When that intersection is empty, the story is left unpointed.
+     The facilitator records the decision; it does not choose it.
+  8. Split applies the split rule as a group-decided split.
+  9. Re-refine returns to Step 2.
+     The PO authors the amendments and an updated refinement comment and applies both; under the denied tracker writes fallback the facilitator applies them verbatim.
+     One accept round runs on the new comment id.
+     If all three voters do not return `ACCEPT`, the PO records the story as unpointed.
+     On acceptance, Step 3 re-runs blind with newly created voter contexts, then this step runs again.
+     Re-refine is offered at most once per ceremony; a second empty intersection offers only split or leave unpointed.
+- **Outputs:** a consensus value with the split decision, or the no-consensus decision (split, re-refine, or leave unpointed) with each voter's accepted paths and the decision rationale.
+  Leave unpointed is the default when no path is in all three sets, and re-refine runs at most once per ceremony.
+- **Stop:** the no-consensus decision is leave unpointed, which is the default when no path is in all three sets; the re-refine accept round ends without three `ACCEPT`; a second empty intersection without a chosen split, because re-refine runs only once per ceremony; an anchoring event voids the round.
 
 ## Anchoring guardrail
 
@@ -168,14 +183,16 @@ Do not resume the tainted discussion.
 
 The effective accepted maximum is `profile.refinement.point_cap` (default 5), with a schema maximum of 8.
 A story is split when its consensus is above `profile.refinement.point_cap` or is 8 or more; the lower trigger applies, and the 8-point rule in [references/linear.md](references/linear.md) is never relaxed.
+A story is also split when the Step 4 no-consensus decision chooses split (a group-decided split); this trigger adds to the consensus thresholds and does not change them.
 
-If the split trigger is met, split the story.
+If either split trigger is met, split the story.
 
 - The original issue stays the core slice.
 - Siblings are created from the `linear-user-story` template.
 - The original issue blocks each sibling.
 - Every acceptance criterion is mapped to a slice in the split comment.
 - Each slice gets its own three-voter estimate in the same blind round.
+  After a group-decided split, the core slice has no consensus value of its own, so the core slice and each sibling get their own blind three-voter estimate in one round, with newly created voter contexts.
 - A slice still at or above the split trigger is split again or escalated.
 
 Cite [references/linear.md](references/linear.md) for the split mechanics; do not restate them here.
@@ -195,7 +212,7 @@ The SM/EM posts only its own comments, and applies the PO's writes only under th
 
 Use [references/refinement-record.md](references/refinement-record.md) for the refinement-comment template, the pointing-record template, and the permitted and forbidden phrasing table.
 Keep the raw voter files in `profile.workspace.scratch_dir` and cite their paths in the record.
-Record the refinement comment id, every accept round, all three point values, the SM/EM sizing context, the discussion result, the consensus, and any split.
+Record the refinement comment id, every accept round, all three point values, the SM/EM sizing context, the discussion result, the consensus, any no-consensus decision with each voter's accepted paths and the decision rationale, and any split.
 
 ## Runtime portability
 

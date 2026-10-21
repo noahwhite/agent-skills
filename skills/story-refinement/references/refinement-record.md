@@ -27,6 +27,7 @@ Its comment id is the refined story identifier for both stages.
 - Non-blocking notes: <summary or none>
 - Accept round 1: <ACCEPT or OBJECT per voter>
 - Accept round 2 (only after a blocking amendment): <ACCEPT or OBJECT per voter>
+- Re-refine accept round (only after a Step 4 re-refine; one round): <ACCEPT or OBJECT per voter, or n/a>
 - Result: <accepted or unpointed>
 - Tracker writes: product owner
 ```
@@ -56,6 +57,9 @@ The three values are recorded before any SM/EM sizing comment or discussion.
 - Discussion: high <value>, low <value>
 - Re-vote: <accepted set per voter>
 - Consensus: <highest value in the intersection, or none>
+- No-consensus decision: <split, re-refine, or leave unpointed; n/a when there is a consensus>
+- Paths accepted: <set per voter, or n/a>
+- Decision rationale: <one line, or n/a>
 - Effective maximum: <profile.refinement.point_cap; the 8-point rule still triggers at 8 or more>
 - Split: <none, or the slice mapping and sibling issue keys>
 - Anchoring events: <none, or the verbatim comment and the recovery, including the newly created voter contexts>

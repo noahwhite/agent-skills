@@ -62,12 +62,25 @@ RUNTIME_TERMS = re.compile(
 )
 
 
-def section(text: str, heading: str) -> str:
-    match = re.search(rf"^## {re.escape(heading)}\s*$", text, re.MULTILINE)
+def section(text: str, heading: str, level: int = 2) -> str:
+    match = re.search(rf"^{'#' * level} {re.escape(heading)}\s*$", text, re.MULTILINE)
     assert match, f"missing section: {heading}"
     rest = text[match.end():]
-    following = re.search(r"^## ", rest, re.MULTILINE)
+    following = re.search(rf"^#{{1,{level}}} ", rest, re.MULTILINE)
     return rest[: following.start()] if following else rest
+
+
+def flat(text: str) -> str:
+    return " ".join(text.lower().split())
+
+
+def bullet(body: str, label: str) -> str:
+    match = re.search(rf"^- \*\*{re.escape(label)}:\*\*(.*?)(?=^- \*\*|\Z)", body, re.MULTILINE | re.DOTALL)
+    assert match, f"missing {label} line"
+    return flat(match.group(1))
+
+
+STEP_FOUR = "Step 4: High/low discussion and consensus"
 
 
 def test_skill_file_exists() -> None:
@@ -205,6 +218,120 @@ def test_record_reference_has_templates_and_phrasing_table() -> None:
         "comparing individual votes",
     ):
         assert phrase.lower() in text.lower(), phrase
+
+
+def test_step_four_presents_three_paths_without_a_recommendation() -> None:
+    body = flat(section(SKILL.read_text(), STEP_FOUR, level=3))
+    assert "if the intersection is empty, record no consensus and run the no-consensus decision" in body
+    assert (
+        "the facilitator presents only the empty intersection and the three paths: "
+        "split, re-refine, or leave unpointed" in body
+    )
+    assert "the facilitator does not recommend a path" in body
+    assert "record no consensus and leave the story unpointed" not in body, "the bare stop is the original defect"
+
+
+def test_step_four_path_decision_is_the_intersection_with_a_po_tie_break() -> None:
+    body = flat(section(SKILL.read_text(), STEP_FOUR, level=3))
+    assert "each voter (the po and both engineers) records the set of paths it accepts" in body
+    assert "the chosen path is in the intersection of the three accepted path sets" in body
+    assert "when that intersection holds more than one path, the po chooses among them and records why" in body
+    assert "the facilitator records the decision; it does not choose it" in body
+
+
+def test_step_four_empty_path_intersection_leaves_the_story_unpointed() -> None:
+    body = flat(section(SKILL.read_text(), STEP_FOUR, level=3))
+    assert "when that intersection is empty, the story is left unpointed" in body
+
+
+def test_step_four_re_refine_returns_to_step_two_with_one_accept_round() -> None:
+    body = flat(section(SKILL.read_text(), STEP_FOUR, level=3))
+    assert "re-refine returns to step 2" in body
+    assert "the po authors the amendments and an updated refinement comment and applies both" in body
+    assert "under the denied tracker writes fallback the facilitator applies them verbatim" in body
+    assert "one accept round runs on the new comment id" in body
+    assert "if all three voters do not return `accept`, the po records the story as unpointed" in body
+    assert "on acceptance, step 3 re-runs blind with newly created voter contexts" in body
+
+
+def test_step_four_re_refine_is_offered_once() -> None:
+    body = flat(section(SKILL.read_text(), STEP_FOUR, level=3))
+    assert "re-refine is offered at most once per ceremony" in body
+    assert "a second empty intersection offers only split or leave unpointed" in body
+
+
+def test_step_four_outputs_and_stop_name_the_decision() -> None:
+    body = section(SKILL.read_text(), STEP_FOUR, level=3)
+    outputs = bullet(body, "Outputs")
+    stop = bullet(body, "Stop")
+    for line in (outputs, stop):
+        assert "no-consensus decision" in line
+        assert "leave unpointed" in line and "is the default when no path is in all three sets" in line
+        assert re.search(r"re-refine runs (at most|only) once per ceremony", line)
+
+
+def test_split_rule_adds_the_group_decided_trigger() -> None:
+    body = flat(section(SKILL.read_text(), "Split rule"))
+    assert "a story is also split when the step 4 no-consensus decision chooses split (a group-decided split)" in body
+    assert "this trigger adds to the consensus thresholds and does not change them" in body
+    assert (
+        "a story is split when its consensus is above `profile.refinement.point_cap` or is 8 or more; "
+        "the lower trigger applies, and the 8-point rule in [references/linear.md](references/linear.md) is never relaxed" in body
+    )
+
+
+def test_split_rule_keeps_the_split_mechanics() -> None:
+    body = flat(section(SKILL.read_text(), "Split rule"))
+    for rule in (
+        "the original issue stays the core slice",
+        "siblings are created from the `linear-user-story` template",
+        "the original issue blocks each sibling",
+        "every acceptance criterion is mapped to a slice in the split comment",
+    ):
+        assert rule in body, rule
+
+
+def test_split_rule_re_points_the_core_slice_after_a_group_decided_split() -> None:
+    body = flat(section(SKILL.read_text(), "Split rule"))
+    assert (
+        "after a group-decided split, the core slice has no consensus value of its own, so the core slice and each sibling "
+        "get their own blind three-voter estimate in one round, with newly created voter contexts" in body
+    )
+
+
+def pointing_template() -> list[str]:
+    body, inside, fenced = [], False, False
+    for line in RECORD.read_text().splitlines():
+        if line.startswith("```"):
+            fenced = not fenced
+        elif not fenced and line.startswith("## "):
+            inside = line == "## Pointing record"
+            continue
+        if inside:
+            body.append(line)
+    templates = re.findall(r"^```markdown\n(## Pointing record\n.*?)^```", "\n".join(body) + "\n", re.MULTILINE | re.DOTALL)
+    assert len(templates) == 1, f"expected one pointing-record template, found {len(templates)}"
+    return templates[0].splitlines()
+
+
+def test_refinement_template_records_the_re_refine_accept_round() -> None:
+    line = "- Re-refine accept round (only after a Step 4 re-refine; one round): <ACCEPT or OBJECT per voter, or n/a>"
+    assert line in template("Refinement comment").splitlines()
+
+
+def test_pointing_template_records_the_no_consensus_decision() -> None:
+    lines = pointing_template()
+    for line in (
+        "- No-consensus decision: <split, re-refine, or leave unpointed; n/a when there is a consensus>",
+        "- Paths accepted: <set per voter, or n/a>",
+        "- Decision rationale: <one line, or n/a>",
+    ):
+        assert line in lines, line
+
+
+def test_records_names_the_no_consensus_decision() -> None:
+    body = flat(section(SKILL.read_text(), "Records"))
+    assert "any no-consensus decision with each voter's accepted paths and the decision rationale" in body
 
 
 def test_skill_links_every_required_reference() -> None:
