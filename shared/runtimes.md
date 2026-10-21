@@ -47,7 +47,8 @@ If your runtime is not listed, map each capability to its closest equivalent and
   If the runtime cannot run that model, stop and say so; do not silently substitute another model for a review of record.
   The same holds for a reasoning effort a skill asks for: if the runtime or model does not offer that level, stop and say so; never substitute another level.
   On Claude Code, `CLAUDE_CODE_EFFORT_LEVEL` overrides every subagent's effort and removes the `effort` parameter; if it differs from the effort a skill asks for, stop and say so.
-  `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` is an on/off flag: when it is on, the `model` parameter is removed and every subagent runs on `CLAUDE_CODE_SUBAGENT_MODEL`, or on the main session's model when that is unset or `inherit`; if that model differs from the one a skill asks for, stop and say so.
+  `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` is an on/off flag: when it is on, the `model` parameter is removed and a subagent runs on `CLAUDE_CODE_SUBAGENT_MODEL`, or on the main session's model when that is unset or `inherit`; if that model differs from the one a skill asks for, stop and say so.
+  Under the flag, a fork and a skill that runs in a subagent with `model: inherit` still run on the main session's model, and the built-in Explore subagent runs on its own listed model when only the flag is set; never use one of these for a model-pinned role.
 - **Shell-launched agents.** An agent with `runtime: command` or `runtime: codex` in the profile runs as a separate process.
   Give it its prompt as a file and read its result from its output file.
   Never leave its stdin on the terminal (a CLI agent run in the background otherwise waits on stdin until it times out): redirect stdin from the prompt file when the CLI reads its prompt on stdin, as Codex does with `-`, and from `/dev/null` otherwise.
