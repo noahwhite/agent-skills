@@ -40,7 +40,7 @@ If your runtime is not listed, map each capability to its closest equivalent and
   Approval relayed by the facilitator was not accepted.
   An agent's edit of the auto-mode allow list was denied as self-modification, so only the owner can grant the permission.
   The remedy is an owner action: state the authorization in the session before the ceremony, or add the permission themselves.
-  The preflight probe in Step 1 of `story-refinement` is the deciding check; an allow rule alone is neither sufficient nor needed.
+  The preflight probe in Step 1 of `story-refinement` is the deciding check; an allow rule alone was not sufficient.
   On opencode, the permission is the agent file's `permission.bash` setting.
   The names used here are the opencode 1.x names; SKL-23 settles the names for later versions.
 - **Subagents have no todo tool.** A subagent keeps its checklist in a file in the scratch directory (see `todo-tracking.md`).

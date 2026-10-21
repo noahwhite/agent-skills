@@ -381,10 +381,25 @@ def test_roles_make_the_po_the_only_author_of_tracker_writes() -> None:
 
 def test_step_two_stop_and_triage_defer_to_the_fallback() -> None:
     text = SKILL.read_text()
-    assert "the po cannot write to the tracker and the owner has not authorized the denied-write fallback" in squash(
+    assert "the po cannot write to the tracker and the owner has not authorized the denied tracker writes fallback" in squash(
         step(text, "Step 2: Reconciliation and the accept round")
     )
     assert "applies the po's writes only under the denied tracker writes fallback" in squash(section(text, "Triage"))
+
+
+def test_probe_denial_has_a_resume_path_under_the_fallback() -> None:
+    body = squash(step(SKILL.read_text(), "Step 1: Independent refinement"))
+    assert "later write kinds fall under the denied tracker writes fallback" in body
+    assert "after the owner acts, run the probe again" in body
+    assert "the facilitator applies the po-authored probe, records its comment id, and the voters launch" in body
+
+
+def test_record_allows_facilitator_posting_under_the_fallback() -> None:
+    assert "posted by the product owner or, under the denied tracker writes fallback, by the facilitator verbatim" in squash(RECORD.read_text())
+
+
+def test_runtimes_rule_does_not_claim_an_unobserved_fact() -> None:
+    assert "nor needed" not in tracker_rule()
 
 
 def test_roles_limit_the_facilitator_to_applying_under_the_fallback() -> None:
@@ -435,4 +450,4 @@ def test_template_carries_the_product_owner_writes_line(heading: str) -> None:
 def test_template_carries_the_facilitator_writes_alternative(heading: str) -> None:
     alternative = fallback_alternative(heading)
     assert WRITES_FACILITATOR_LINE in alternative.splitlines()
-    assert "Under the denied-write fallback in `SKILL.md`, replace the tracker-writes line with:" in alternative.splitlines()
+    assert "Under the denied tracker writes fallback in `SKILL.md`, replace the tracker-writes line with:" in alternative.splitlines()

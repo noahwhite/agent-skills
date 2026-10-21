@@ -40,7 +40,7 @@ Where this file and a capability file disagree, the capability file is authorita
   It is the top-level session, loads `persona-scrum-master`, and runs the ceremony.
   It is non-voting: it submits no point value, does not count toward the agreement, and does not declare consensus.
 - `profile.refinement.product_owner` is the product owner (PO) voter and the only author of tracker writes.
-  The PO posts the refinement comment, applies every tracker write, and reads each write back.
+  The PO posts the refinement comment, authors every tracker write, applies it except under the denied tracker writes fallback, and reads each write back.
   The facilitator applies tracker writes only under the denied tracker writes fallback.
 - `profile.refinement.reviewers` is exactly two engineer voters on different model families, recorded as optional `family` values or distinct model ids.
   Both reviewers must set `family` or both must omit it. If exactly one sets `family`, stop and ask for a different reviewer. If both set `family`, the values must differ; if both omit `family`, the `model` ids must differ. Never run two voters from the same model family.
@@ -73,7 +73,8 @@ Never retry a denied write through a different tool or server.
      The PO, in a separate context, posts one comment on the story under refinement that marks itself as the tracker-write preflight, and reads it back.
      On success the facilitator records the comment id for the refinement record.
      If the write is denied, no voter launches, and the facilitator reports `needs input` to the owner naming the denied write and pointing to the "Tracker writes from a subagent" rule in `references/runtimes.md`.
-     The probe exercises comment add only; later write kinds fall under the denied-write fallback in Roles, and the Step 2 stop stays as the backstop.
+     The probe exercises comment add only; later write kinds fall under the denied tracker writes fallback, and the Step 2 stop stays as the backstop.
+     After the owner acts, run the probe again; under the denied tracker writes fallback the facilitator applies the PO-authored probe, records its comment id, and the voters launch.
   3. Launch the PO and both engineers in separate contexts with the same story surface.
      Give each voter only its own profile entry and the story; never give it another voter's file or a summary of another input.
   4. Each voter writes only its own input file in `profile.workspace.scratch_dir`, under a per-story directory and a role-specific name.
@@ -95,7 +96,7 @@ The PO and the two engineers decide whether an SM/EM concern is a blocking amend
 - **Inputs:** the three voter refinement inputs and the separate SM/EM contribution.
 - **Process:**
   1. The facilitator reconciles the inputs into one refined story: story text, refined acceptance criteria, scope and split, Definition of Ready changes, and open risks.
-  2. The PO posts the refinement comment and applies the refined description as the only author of tracker writes.
+  2. The PO posts the refinement comment and applies the refined description as the only author of tracker writes; under the denied tracker writes fallback the facilitator applies them verbatim.
      The refinement comment includes the complete refined story and ACs, or an immutable snapshot reference; its id identifies the refined version for every later step.
   3. Run the accept round on that exact refinement comment id.
      Each of the three voters returns `ACCEPT` or `OBJECT` against the same refined version.
@@ -106,7 +107,7 @@ The PO and the two engineers decide whether an SM/EM concern is a blocking amend
      The accept round is capped at two rounds.
   6. If all three voters have not returned `ACCEPT` after two rounds, the PO records the story as unpointed and the ceremony stops.
 - **Outputs:** an accepted refined story identified by the refinement comment id, or a recorded unpointed result.
-- **Stop:** two accept rounds without all three `ACCEPT`; a voter is missing; the PO cannot write to the tracker and the owner has not authorized the denied-write fallback.
+- **Stop:** two accept rounds without all three `ACCEPT`; a voter is missing; the PO cannot write to the tracker and the owner has not authorized the denied tracker writes fallback.
 
 The SM/EM's refinement comments never substitute for a voter's `ACCEPT` or `OBJECT`.
 Only the PO and the two engineers count toward the agreement.
@@ -180,7 +181,7 @@ Cite [references/linear.md](references/linear.md) for the split mechanics; do no
 
 ## Triage
 
-The PO performs every tracker write (priority, assignee, estimate, Definition of Ready ticks, and state) and reads each write back.
+The PO authors every tracker write (priority, assignee, estimate, Definition of Ready ticks, and state) and applies and reads each one back, except under the denied tracker writes fallback.
 The SM/EM posts only its own comments, and applies the PO's writes only under the denied tracker writes fallback.
 
 - The PO ticks a Definition of Ready box only after verifying the condition and records the evidence for every ticked box.

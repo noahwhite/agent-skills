@@ -6,7 +6,7 @@ Replace every placeholder and keep the raw voter files under `profile.workspace.
 
 ## Refinement comment
 
-Post this as a tracker comment by the product owner, the only author of tracker writes.
+Post this as a tracker comment authored by the product owner, the only author of tracker writes, and posted by the product owner or, under the denied tracker writes fallback, by the facilitator verbatim.
 Its comment id is the refined story identifier for both stages.
 
 ```markdown
@@ -31,7 +31,7 @@ Its comment id is the refined story identifier for both stages.
 - Tracker writes: product owner
 ```
 
-Under the denied-write fallback in `SKILL.md`, replace the tracker-writes line with:
+Under the denied tracker writes fallback in `SKILL.md`, replace the tracker-writes line with:
 
 ```markdown
 - Tracker writes: facilitator on the product owner's behalf (owner's direct authorization: "<verbatim quote>", <date>)
@@ -62,7 +62,7 @@ The three values are recorded before any SM/EM sizing comment or discussion.
 - Tracker writes: product owner
 ```
 
-Under the denied-write fallback in `SKILL.md`, replace the tracker-writes line with:
+Under the denied tracker writes fallback in `SKILL.md`, replace the tracker-writes line with:
 
 ```markdown
 - Tracker writes: facilitator on the product owner's behalf (owner's direct authorization: "<verbatim quote>", <date>)
