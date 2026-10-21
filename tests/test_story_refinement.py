@@ -382,6 +382,7 @@ def test_step_one_probe_precedes_voter_launch() -> None:
     assert probe != -1, "missing tracker-write preflight"
     assert launch != -1, "missing voter launch"
     assert probe < launch, "the probe must precede the voter launch"
+    assert "run the tracker-write preflight before any voter launches" in body
 
 
 def test_step_one_probe_is_a_comment_the_po_posts_and_reads_back() -> None:
@@ -405,6 +406,7 @@ def test_step_one_no_comment_rule_has_the_probe_as_only_exception() -> None:
         "except the tracker-write preflight, which is the only exception" in body
     )
     assert "probe exercises comment add only" in body
+    assert "the step 2 stop stays as the backstop" in body
 
 
 RUNTIMES = ROOT / "shared" / "runtimes.md"
@@ -518,7 +520,7 @@ def test_probe_denial_has_a_resume_path_under_the_fallback() -> None:
     body = squash(step(SKILL.read_text(), "Step 1: Independent refinement"))
     assert "later write kinds fall under the denied tracker writes fallback" in body
     assert "after the owner acts, run the probe again" in body
-    assert "the facilitator applies the po-authored probe, records its comment id, and the voters launch" in body
+    assert "if the owner directly authorizes the facilitator under the denied tracker writes fallback, the facilitator applies the po-authored probe verbatim, records its comment id, and the voters launch" in body
 
 
 def test_record_allows_facilitator_posting_under_the_fallback() -> None:
@@ -587,12 +589,12 @@ def test_roles_po_authors_and_applies_except_under_the_fallback() -> None:
 
 def test_step_two_refined_description_applied_verbatim_under_the_fallback() -> None:
     body = squash(step(SKILL.read_text(), "Step 2: Reconciliation and the accept round"))
-    assert "as the only author of tracker writes and applies them; under the denied tracker writes fallback the facilitator applies them verbatim." in body
+    assert "the po authors the refinement comment and the refined description and applies both; otherwise, under the denied tracker writes fallback, the facilitator applies both verbatim." in body
 
 
 def test_step_two_amendments_follow_the_same_apply_rule() -> None:
     body = squash(step(SKILL.read_text(), "Step 2: Reconciliation and the accept round"))
-    assert "the po authors them and an updated refinement comment and applies both; under the denied tracker writes fallback the facilitator applies them verbatim" in body
+    assert "the po authors the amendments and an updated refinement comment and applies both; otherwise, under the denied tracker writes fallback, the facilitator applies the amendments and the updated refinement comment verbatim." in body
 
 
 def test_triage_applies_and_reads_back_except_under_the_fallback() -> None:
@@ -606,3 +608,20 @@ def test_runtimes_rule_says_an_allow_rule_alone_was_not_sufficient() -> None:
 
 def test_skill_never_says_the_po_posts_the_refinement_comment_unconditionally() -> None:
     assert "the po posts the refinement comment" not in squash(SKILL.read_text())
+
+
+def test_step_two_unpointed_record_follows_the_apply_rule() -> None:
+    body = squash(step(SKILL.read_text(), "Step 2: Reconciliation and the accept round"))
+    assert "under the denied tracker writes fallback the facilitator applies it verbatim, and the ceremony stops" in body
+
+
+def test_step_one_stop_covers_a_denied_preflight() -> None:
+    body = squash(step(SKILL.read_text(), "Step 1: Independent refinement"))
+    assert "or the tracker-write preflight is denied and the owner has not authorized the denied tracker writes fallback" in body
+
+
+def test_fallback_reports_needs_input_and_resumes_at_the_denied_write() -> None:
+    assert (
+        "on a denied write the facilitator reports `needs input` to the owner naming the denied write, "
+        "and resumes at that write once the owner authorizes the fallback"
+    ) in denied_writes()
