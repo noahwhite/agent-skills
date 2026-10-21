@@ -460,12 +460,12 @@ def test_roles_po_authors_and_applies_except_under_the_fallback() -> None:
 
 def test_step_two_refined_description_applied_verbatim_under_the_fallback() -> None:
     body = squash(step(SKILL.read_text(), "Step 2: Reconciliation and the accept round"))
-    assert "as the only author of tracker writes; under the denied tracker writes fallback the facilitator applies them verbatim." in body
+    assert "as the only author of tracker writes and applies them; under the denied tracker writes fallback the facilitator applies them verbatim." in body
 
 
 def test_step_two_amendments_follow_the_same_apply_rule() -> None:
     body = squash(step(SKILL.read_text(), "Step 2: Reconciliation and the accept round"))
-    assert "the po authors and applies them and the updated refinement comment, except that under the denied tracker writes fallback the facilitator applies them verbatim" in body
+    assert "the po authors them and an updated refinement comment and applies both; under the denied tracker writes fallback the facilitator applies them verbatim" in body
 
 
 def test_triage_applies_and_reads_back_except_under_the_fallback() -> None:
@@ -475,3 +475,7 @@ def test_triage_applies_and_reads_back_except_under_the_fallback() -> None:
 
 def test_runtimes_rule_says_an_allow_rule_alone_was_not_sufficient() -> None:
     assert "an allow rule alone was not sufficient" in tracker_rule()
+
+
+def test_skill_never_says_the_po_posts_the_refinement_comment_unconditionally() -> None:
+    assert "the po posts the refinement comment" not in squash(SKILL.read_text())
