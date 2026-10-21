@@ -179,9 +179,28 @@ def test_disputes_and_incidentals_are_not_ruled_in_the_loop() -> None:
 
 def test_orchestrator_never_sets_the_story_state() -> None:
     text = SKILL.read_text()
-    for heading in ("4. Act on the QA outcome", "5. Close out"):
+    phrases = (
+        "move the story",
+        "move it to",
+        "set the story",
+        "mark the story",
+        "mark it done",
+        "transition the story",
+        "update the story",
+        "update the issue",
+        "update the status",
+        "status to",
+    )
+    for heading in (
+        "0. Track everything on a todo list",
+        "1. Read the story and pick the starting point",
+        "2. Senior engineer: implement to deployment review",
+        "3. QA agent: verify the deployed story",
+        "4. Act on the QA outcome",
+        "5. Close out",
+    ):
         body = section(text, heading).lower()
-        for phrase in ("move the story", "set the story", "mark the story", "mark it done", "transition the story"):
+        for phrase in phrases:
             assert phrase not in body, f"{heading} tells the orchestrator to set the state: {phrase}"
 
 
@@ -197,7 +216,8 @@ def test_runtimes_maps_reasoning_effort() -> None:
     assert "the agent file's `variant:`" in text
     assert "never substitute another level" in text
     assert "`CLAUDE_CODE_EFFORT_LEVEL` overrides every subagent's effort" in text
-    assert "`CLAUDE_CODE_SUBAGENT_MODEL_FORCE` does the same for `model`" in text
+    assert "`CLAUDE_CODE_SUBAGENT_MODEL_FORCE` is an on/off flag" in text
+    assert "every subagent runs on `CLAUDE_CODE_SUBAGENT_MODEL`, or on the main session's model" in text
 
 
 def test_resumed_story_names_the_qa_environment() -> None:
