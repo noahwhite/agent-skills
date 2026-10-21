@@ -640,3 +640,12 @@ def test_step_four_unpointed_record_follows_the_apply_rule() -> None:
         "the po records the story as unpointed, or under the denied tracker writes fallback "
         "the facilitator applies the po-authored unpointed record verbatim"
     ) in body
+
+
+def test_fallback_applies_only_writes_the_po_has_not_applied() -> None:
+    assert "where a step says the facilitator applies a set of writes, it applies only those the po has not applied" in denied_writes()
+
+
+def test_step_four_amendments_use_the_otherwise_apply_rule() -> None:
+    body = flat(section(SKILL.read_text(), STEP_FOUR, level=3))
+    assert "applies both; otherwise, under the denied tracker writes fallback the facilitator applies them verbatim" in body
