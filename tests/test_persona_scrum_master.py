@@ -198,3 +198,24 @@ def test_report_only_boundary_permits_only_ceremony_writes() -> None:
         "report it to `persona-product-owner`; do not amend that issue",
     ):
         assert phrase in text, f"boundary missing: {phrase}"
+
+
+def test_boundary_allows_applying_po_authored_writes_under_the_story_refinement_fallback() -> None:
+    text = " ".join(SKILL.read_text().split())
+    assert "and applying product-owner-authored writes under the denied tracker writes fallback in `story-refinement`" in text
+    assert (
+        "- Under the denied tracker writes fallback in `story-refinement`, it applies tracker writes the product owner "
+        "authored, verbatim, and reads each back; it authors none of them."
+    ) in text
+
+
+def test_boundary_exceptions_are_cross_referenced() -> None:
+    text = " ".join(SKILL.read_text().split())
+    assert "that is the only field it may change on an issue that existed before the ceremony, except under the denied tracker writes fallback below." in text
+    assert "on an issue that existed before the ceremony, except as the next bullet allows." in text
+
+
+def test_boundary_exception_list_is_well_formed() -> None:
+    text = " ".join(SKILL.read_text().split())
+    assert "closing or canceling a test issue this ceremony created, and applying product-owner-authored writes" in text
+    assert "created, and closing or canceling" not in text
