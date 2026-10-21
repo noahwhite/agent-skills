@@ -56,6 +56,9 @@ The three values are recorded before any SM/EM sizing comment or discussion.
 - Discussion: high <value>, low <value>
 - Re-vote: <accepted set per voter>
 - Consensus: <highest value in the intersection, or none>
+- No-consensus decision: <split, re-refine, or leave unpointed; n/a when there is a consensus>
+- Paths accepted: <set per voter, or n/a>
+- Decision rationale: <one line, or n/a>
 - Effective maximum: <profile.refinement.point_cap; the 8-point rule still triggers at 8 or more>
 - Split: <none, or the slice mapping and sibling issue keys>
 - Anchoring events: <none, or the verbatim comment and the recovery, including the newly created voter contexts>
