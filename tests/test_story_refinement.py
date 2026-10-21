@@ -248,7 +248,7 @@ def test_step_four_re_refine_returns_to_step_two_with_one_accept_round() -> None
     body = flat(section(SKILL.read_text(), STEP_FOUR, level=3))
     assert "re-refine returns to step 2" in body
     assert "the po authors the amendments and an updated refinement comment and applies both" in body
-    assert "under the denied tracker writes fallback the facilitator applies them verbatim" in body
+    assert "under the denied tracker writes fallback, the facilitator applies the amendments and the updated refinement comment verbatim" in body
     assert "one accept round runs on the new comment id" in body
     assert "if all three voters do not return `accept`, the po records the story as unpointed" in body
     assert "on acceptance, step 3 re-runs blind with newly created voter contexts" in body
@@ -628,10 +628,9 @@ def test_fallback_reports_needs_input_and_resumes_at_the_denied_write() -> None:
 
 
 def test_fallback_never_reapplies_a_write_the_po_already_applied() -> None:
-    assert (
-        "a write the po already applied is never applied again; "
-        "the facilitator applies only the denied write and the writes after it"
-    ) in denied_writes()
+    body = denied_writes()
+    assert "never applied again, including where a step says the facilitator applies a set of writes" in body
+    assert "the facilitator applies only the denied write and the writes after it" in body
 
 
 def test_step_four_unpointed_record_follows_the_apply_rule() -> None:
@@ -642,10 +641,6 @@ def test_step_four_unpointed_record_follows_the_apply_rule() -> None:
     ) in body
 
 
-def test_fallback_applies_only_writes_the_po_has_not_applied() -> None:
-    assert "where a step says the facilitator applies a set of writes, it applies only those the po has not applied" in denied_writes()
-
-
 def test_step_four_amendments_use_the_otherwise_apply_rule() -> None:
     body = flat(section(SKILL.read_text(), STEP_FOUR, level=3))
-    assert "applies both; otherwise, under the denied tracker writes fallback the facilitator applies them verbatim" in body
+    assert "applies both; otherwise, under the denied tracker writes fallback, the facilitator applies the amendments and the updated refinement comment verbatim" in body
