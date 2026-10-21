@@ -236,6 +236,7 @@ def test_step_four_path_decision_is_the_intersection_with_a_po_tie_break() -> No
     assert "each voter (the po and both engineers) records the set of paths it accepts" in body
     assert "the chosen path is in the intersection of the three accepted path sets" in body
     assert "when that intersection holds more than one path, the po chooses among them and records why" in body
+    assert "the facilitator records the decision; it does not choose it" in body
 
 
 def test_step_four_empty_path_intersection_leaves_the_story_unpointed() -> None:
@@ -277,6 +278,17 @@ def test_split_rule_adds_the_group_decided_trigger() -> None:
     )
 
 
+def test_split_rule_keeps_the_split_mechanics() -> None:
+    body = flat(section(SKILL.read_text(), "Split rule"))
+    for rule in (
+        "the original issue stays the core slice",
+        "siblings are created from the `linear-user-story` template",
+        "the original issue blocks each sibling",
+        "every acceptance criterion is mapped to a slice in the split comment",
+    ):
+        assert rule in body, rule
+
+
 def test_split_rule_re_points_the_core_slice_after_a_group_decided_split() -> None:
     body = flat(section(SKILL.read_text(), "Split rule"))
     assert (
@@ -286,11 +298,18 @@ def test_split_rule_re_points_the_core_slice_after_a_group_decided_split() -> No
 
 
 def pointing_template() -> list[str]:
-    match = re.search(
-        r"^## Pointing record\s*$.*?^```markdown\n(.*?)^```", RECORD.read_text(), re.MULTILINE | re.DOTALL
-    )
-    assert match, "missing pointing-record template"
-    return match.group(1).splitlines()
+    body, inside, fenced = [], False, False
+    for line in RECORD.read_text().splitlines():
+        if line.startswith("```"):
+            fenced = not fenced
+        elif not fenced and line.startswith("## "):
+            inside = line == "## Pointing record"
+            continue
+        if inside:
+            body.append(line)
+    templates = re.findall(r"^```markdown\n(## Pointing record\n.*?)^```", "\n".join(body) + "\n", re.MULTILINE | re.DOTALL)
+    assert len(templates) == 1, f"expected one pointing-record template, found {len(templates)}"
+    return templates[0].splitlines()
 
 
 def test_pointing_template_records_the_no_consensus_decision() -> None:
