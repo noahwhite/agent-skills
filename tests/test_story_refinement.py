@@ -314,6 +314,11 @@ def pointing_template() -> list[str]:
     return templates[0].splitlines()
 
 
+def test_refinement_template_records_the_re_refine_accept_round() -> None:
+    line = "- Re-refine accept round (only after a Step 4 re-refine; one round): <ACCEPT or OBJECT per voter, or n/a>"
+    assert line in template("Refinement comment").splitlines()
+
+
 def test_pointing_template_records_the_no_consensus_decision() -> None:
     lines = pointing_template()
     for line in (

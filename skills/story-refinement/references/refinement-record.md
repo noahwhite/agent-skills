@@ -27,6 +27,7 @@ Its comment id is the refined story identifier for both stages.
 - Non-blocking notes: <summary or none>
 - Accept round 1: <ACCEPT or OBJECT per voter>
 - Accept round 2 (only after a blocking amendment): <ACCEPT or OBJECT per voter>
+- Re-refine accept round (only after a Step 4 re-refine; one round): <ACCEPT or OBJECT per voter, or n/a>
 - Result: <accepted or unpointed>
 - Tracker writes: product owner
 ```
