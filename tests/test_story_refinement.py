@@ -259,7 +259,7 @@ def test_step_one_probe_precedes_voter_launch() -> None:
 
 def test_step_one_probe_is_a_comment_the_po_posts_and_reads_back() -> None:
     body = squash(step(SKILL.read_text(), "Step 1: Independent refinement"))
-    assert "posts one comment on the story under refinement that marks itself as the tracker-write preflight" in body
+    assert "the po, in a separate context, posts one comment on the story under refinement that marks itself as the tracker-write preflight" in body
     assert "reads it back" in body
     assert "records the comment id for the refinement record" in body
 
@@ -379,6 +379,14 @@ def test_roles_make_the_po_the_only_author_of_tracker_writes() -> None:
     assert "only tracker mutator" not in roles
 
 
+def test_step_two_stop_and_triage_defer_to_the_fallback() -> None:
+    text = SKILL.read_text()
+    assert "the po cannot write to the tracker and the owner has not authorized the denied-write fallback" in squash(
+        step(text, "Step 2: Reconciliation and the accept round")
+    )
+    assert "applies the po's writes only under the denied tracker writes fallback" in squash(section(text, "Triage"))
+
+
 def test_roles_limit_the_facilitator_to_applying_under_the_fallback() -> None:
     roles = squash(section(SKILL.read_text(), "Roles"))
     assert "the facilitator applies tracker writes only under the denied tracker writes fallback" in roles
@@ -425,4 +433,6 @@ def test_template_carries_the_product_owner_writes_line(heading: str) -> None:
 
 @pytest.mark.parametrize("heading", ["Refinement comment", "Pointing record"])
 def test_template_carries_the_facilitator_writes_alternative(heading: str) -> None:
-    assert WRITES_FACILITATOR_LINE in fallback_alternative(heading).splitlines()
+    alternative = fallback_alternative(heading)
+    assert WRITES_FACILITATOR_LINE in alternative.splitlines()
+    assert "Under the denied-write fallback in `SKILL.md`, replace the tracker-writes line with:" in alternative.splitlines()

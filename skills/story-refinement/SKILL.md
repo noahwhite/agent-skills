@@ -106,7 +106,7 @@ The PO and the two engineers decide whether an SM/EM concern is a blocking amend
      The accept round is capped at two rounds.
   6. If all three voters have not returned `ACCEPT` after two rounds, the PO records the story as unpointed and the ceremony stops.
 - **Outputs:** an accepted refined story identified by the refinement comment id, or a recorded unpointed result.
-- **Stop:** two accept rounds without all three `ACCEPT`; a voter is missing; the PO cannot write to the tracker.
+- **Stop:** two accept rounds without all three `ACCEPT`; a voter is missing; the PO cannot write to the tracker and the owner has not authorized the denied-write fallback.
 
 The SM/EM's refinement comments never substitute for a voter's `ACCEPT` or `OBJECT`.
 Only the PO and the two engineers count toward the agreement.
@@ -181,7 +181,7 @@ Cite [references/linear.md](references/linear.md) for the split mechanics; do no
 ## Triage
 
 The PO performs every tracker write (priority, assignee, estimate, Definition of Ready ticks, and state) and reads each write back.
-The SM/EM posts only its own comments.
+The SM/EM posts only its own comments, and applies the PO's writes only under the denied tracker writes fallback.
 
 - The PO ticks a Definition of Ready box only after verifying the condition and records the evidence for every ticked box.
   An unverified box stays unticked.
