@@ -625,3 +625,18 @@ def test_fallback_reports_needs_input_and_resumes_at_the_denied_write() -> None:
         "on a denied write the facilitator reports `needs input` to the owner naming the denied write, "
         "and resumes at that write once the owner authorizes the fallback"
     ) in denied_writes()
+
+
+def test_fallback_never_reapplies_a_write_the_po_already_applied() -> None:
+    assert (
+        "a write the po already applied is never applied again; "
+        "the facilitator applies only the denied write and the writes after it"
+    ) in denied_writes()
+
+
+def test_step_four_unpointed_record_follows_the_apply_rule() -> None:
+    body = flat(section(SKILL.read_text(), STEP_FOUR, level=3))
+    assert (
+        "the po records the story as unpointed, or under the denied tracker writes fallback "
+        "the facilitator applies the po-authored unpointed record verbatim"
+    ) in body
