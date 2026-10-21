@@ -40,7 +40,7 @@ Where this file and a capability file disagree, the capability file is authorita
   It is the top-level session, loads `persona-scrum-master`, and runs the ceremony.
   It is non-voting: it submits no point value, does not count toward the agreement, and does not declare consensus.
 - `profile.refinement.product_owner` is the product owner (PO) voter and the only author of tracker writes.
-  The PO posts the refinement comment, authors every tracker write, applies it except under the denied tracker writes fallback, and reads each write back.
+  The PO authors the refinement comment and every other tracker write, applies each except under the denied tracker writes fallback, and reads each write back.
   The facilitator applies tracker writes only under the denied tracker writes fallback.
 - `profile.refinement.reviewers` is exactly two engineer voters on different model families, recorded as optional `family` values or distinct model ids.
   Both reviewers must set `family` or both must omit it. If exactly one sets `family`, stop and ask for a different reviewer. If both set `family`, the values must differ; if both omit `family`, the `model` ids must differ. Never run two voters from the same model family.
@@ -102,7 +102,7 @@ The PO and the two engineers decide whether an SM/EM concern is a blocking amend
      Each of the three voters returns `ACCEPT` or `OBJECT` against the same refined version.
   4. An `OBJECT` blocks and lists only blocking amendments.
      Notes that are not blocking amendments do not block.
-  5. After any blocking amendments, the PO applies them, posts an updated refinement comment, and uses its new comment id as the refined version.
+  5. After any blocking amendments, the PO authors and applies them and the updated refinement comment, except that under the denied tracker writes fallback the facilitator applies them verbatim, and uses its new comment id as the refined version.
      Re-run the accept round against that new id.
      The accept round is capped at two rounds.
   6. If all three voters have not returned `ACCEPT` after two rounds, the PO records the story as unpointed and the ceremony stops.

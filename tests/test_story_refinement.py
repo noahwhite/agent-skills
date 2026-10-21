@@ -451,3 +451,27 @@ def test_template_carries_the_facilitator_writes_alternative(heading: str) -> No
     alternative = fallback_alternative(heading)
     assert WRITES_FACILITATOR_LINE in alternative.splitlines()
     assert "Under the denied tracker writes fallback in `SKILL.md`, replace the tracker-writes line with:" in alternative.splitlines()
+
+
+def test_roles_po_authors_and_applies_except_under_the_fallback() -> None:
+    roles = squash(section(SKILL.read_text(), "Roles"))
+    assert "authors the refinement comment and every other tracker write, applies each except under the denied tracker writes fallback" in roles
+
+
+def test_step_two_refined_description_applied_verbatim_under_the_fallback() -> None:
+    body = squash(step(SKILL.read_text(), "Step 2: Reconciliation and the accept round"))
+    assert "as the only author of tracker writes; under the denied tracker writes fallback the facilitator applies them verbatim." in body
+
+
+def test_step_two_amendments_follow_the_same_apply_rule() -> None:
+    body = squash(step(SKILL.read_text(), "Step 2: Reconciliation and the accept round"))
+    assert "the po authors and applies them and the updated refinement comment, except that under the denied tracker writes fallback the facilitator applies them verbatim" in body
+
+
+def test_triage_applies_and_reads_back_except_under_the_fallback() -> None:
+    triage = squash(section(SKILL.read_text(), "Triage"))
+    assert "applies and reads each one back, except under the denied tracker writes fallback" in triage
+
+
+def test_runtimes_rule_says_an_allow_rule_alone_was_not_sufficient() -> None:
+    assert "an allow rule alone was not sufficient" in tracker_rule()
