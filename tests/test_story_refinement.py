@@ -234,3 +234,47 @@ def test_cross_skill_prose_names_story_refinement() -> None:
         text = (ROOT / "skills" / name / "SKILL.md").read_text()
         assert "`story-refinement`" in text, name
         assert not re.search(r"\]\([^)]*story-refinement", text), f"{name} uses a relative link"
+
+
+def squash(text: str) -> str:
+    return re.sub(r"\s+", " ", text).lower()
+
+
+def step(text: str, heading: str) -> str:
+    match = re.search(rf"^### {re.escape(heading)}\s*$", text, re.MULTILINE)
+    assert match, heading
+    rest = text[match.end():]
+    following = re.search(r"^###? ", rest, re.MULTILINE)
+    return rest[: following.start()] if following else rest
+
+
+def test_step_one_probe_precedes_voter_launch() -> None:
+    body = squash(step(SKILL.read_text(), "Step 1: Independent refinement"))
+    probe = body.find("tracker-write preflight")
+    launch = body.find("launch the po and both engineers")
+    assert probe != -1, "missing tracker-write preflight"
+    assert launch != -1, "missing voter launch"
+    assert probe < launch, "the probe must precede the voter launch"
+
+
+def test_step_one_probe_is_a_comment_the_po_posts_and_reads_back() -> None:
+    body = squash(step(SKILL.read_text(), "Step 1: Independent refinement"))
+    assert "posts one comment on the story under refinement that marks itself as the tracker-write preflight" in body
+    assert "reads it back" in body
+    assert "records the comment id for the refinement record" in body
+
+
+def test_step_one_probe_denial_stops_before_any_voter() -> None:
+    body = squash(step(SKILL.read_text(), "Step 1: Independent refinement"))
+    assert "if the write is denied, no voter launches" in body
+    assert "reports `needs input` to the owner naming the denied write" in body
+    assert 'the "tracker writes from a subagent" rule in `references/runtimes.md`' in body
+
+
+def test_step_one_no_comment_rule_has_the_probe_as_only_exception() -> None:
+    body = squash(step(SKILL.read_text(), "Step 1: Independent refinement"))
+    assert (
+        "no tracker comment is posted until all three voter inputs are recorded, "
+        "except the tracker-write preflight, which is the only exception" in body
+    )
+    assert "probe exercises comment add only" in body

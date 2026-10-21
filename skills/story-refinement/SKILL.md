@@ -59,14 +59,19 @@ A `command` runtime gets its prompt in a file and writes its result to an output
 - **Inputs:** the story description, acceptance criteria, comments, and formal relations; the profile; the capability references; the Definition of Ready and Definition of Done template from the matching filing skill.
 - **Process:**
   1. Create the todo list and read the story completely, including `linear issue relation list <ID>` for every blocker.
-  2. Launch the PO and both engineers in separate contexts with the same story surface.
+  2. Run the tracker-write preflight before any voter launches.
+     The PO, in a separate context, posts one comment on the story under refinement that marks itself as the tracker-write preflight, and reads it back.
+     On success the facilitator records the comment id for the refinement record.
+     If the write is denied, no voter launches, and the facilitator reports `needs input` to the owner naming the denied write and pointing to the "Tracker writes from a subagent" rule in `references/runtimes.md`.
+     The probe exercises comment add only; later write kinds fall under the denied-write fallback in Roles, and the Step 2 stop stays as the backstop.
+  3. Launch the PO and both engineers in separate contexts with the same story surface.
      Give each voter only its own profile entry and the story; never give it another voter's file or a summary of another input.
-  3. Each voter writes only its own input file in `profile.workspace.scratch_dir`, under a per-story directory and a role-specific name.
+  4. Each voter writes only its own input file in `profile.workspace.scratch_dir`, under a per-story directory and a role-specific name.
      A voter may read its own file back but must not write another role's file.
-  4. The facilitator records its own SM/EM refinement contribution in a separate file.
+  5. The facilitator records its own SM/EM refinement contribution in a separate file.
      That contribution may challenge acceptance criteria, propose refinements, and identify gaps: missing ACs, gaps within an AC, and unobservable criteria.
-  5. No voter sees another voter's refinement input or value before its own input is recorded.
-     No tracker comment is posted until all three voter inputs are recorded.
+  6. No voter sees another voter's refinement input or value before its own input is recorded.
+     No tracker comment is posted until all three voter inputs are recorded, except the tracker-write preflight, which is the only exception.
 - **Reviewer output contract:** a refinement input includes a Definition of Ready verdict, per-AC gaps with exact proposed wording, scope and split, risks, refined AC deltas, and an `ACCEPT` or `OBJECT` position.
 - **Outputs:** three voter input files and one separate SM/EM contribution file in `profile.workspace.scratch_dir`.
 - **Stop:** a profile key is unset, a voter cannot run on its configured runtime and model, or a voter file is missing.
