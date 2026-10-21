@@ -19,6 +19,7 @@ If your runtime is not listed, map each capability to its closest equivalent and
 | Fetch a URL | `WebFetch` | `webfetch` |
 | Scratch directory | `$CLAUDE_JOB_DIR/tmp` in background jobs, else `profile.workspace.scratch_dir` | `profile.workspace.scratch_dir` |
 | Session label (for agent stamps) | the session or job name if set, else the session id | the session title if set, else the session id |
+| Tracker writes from a subagent | a subagent's write can be denied by the auto-mode permission check; only the owner grants it | the agent file's `permission.bash` setting decides |
 
 ## Rules that follow from the map
 
@@ -33,6 +34,15 @@ If your runtime is not listed, map each capability to its closest equivalent and
   opencode stops it by default: its `subagent_depth` setting defaults to 1, and a child session gets no `task` tool unless its agent file grants `permission: { task: allow }`.
   On opencode either raise `subagent_depth` to 2 and grant `task` to the delegated agent, or have the primary session run the review roles itself after the delegated agent hands back the PR.
   The delegated agent also needs the `skill` tool to load the skill its brief names; opencode allows it by default, so check that the agent file neither denies it under `permission.skill` nor sets `tools.skill: false`.
+- **Tracker writes from a subagent.** State only what was observed.
+  On Claude Code, on 2026-10-21 a subagent's tracker write was denied by the auto-mode permission check, although a matching `permissions.allow` rule existed.
+  The same write passed in a later session after the owner's own message in that session asked for PO tracker writes.
+  Approval relayed by the facilitator was not accepted.
+  An agent's edit of the auto-mode allow list was denied as self-modification, so only the owner can grant the permission.
+  The remedy is an owner action: state the authorization in the session before the ceremony, or add the permission themselves.
+  The preflight probe in Step 1 of `story-refinement` is the deciding check; an allow rule alone is neither sufficient nor needed.
+  On opencode, the permission is the agent file's `permission.bash` setting.
+  The names used here are the opencode 1.x names; SKL-23 settles the names for later versions.
 - **Subagents have no todo tool.** A subagent keeps its checklist in a file in the scratch directory (see `todo-tracking.md`).
 - **Models.** A skill that asks for a specific model role (reviewer, adjudicator) takes the model from the profile.
   If the runtime cannot run that model, stop and say so; do not silently substitute another model for a review of record.

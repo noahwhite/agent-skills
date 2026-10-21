@@ -278,3 +278,60 @@ def test_step_one_no_comment_rule_has_the_probe_as_only_exception() -> None:
         "except the tracker-write preflight, which is the only exception" in body
     )
     assert "probe exercises comment add only" in body
+
+
+RUNTIMES = ROOT / "shared" / "runtimes.md"
+
+
+def tracker_rule() -> str:
+    text = RUNTIMES.read_text()
+    match = re.search(r"^- \*\*Tracker writes from a subagent\.\*\*", text, re.MULTILINE)
+    assert match, "missing the Tracker writes from a subagent rule"
+    rest = text[match.end():]
+    following = re.search(r"^(?:- \*\*|## )", rest, re.MULTILINE)
+    return squash(rest[: following.start()] if following else rest)
+
+
+def test_runtimes_table_has_tracker_writes_row() -> None:
+    rows = [line for line in RUNTIMES.read_text().splitlines() if line.startswith("| Tracker writes from a subagent |")]
+    assert len(rows) == 1, rows
+    assert rows[0].count("|") == 4, "the row needs a Claude Code cell and an opencode cell"
+
+
+def test_runtimes_rule_states_the_claude_code_observations() -> None:
+    rule = tracker_rule()
+    assert "on 2026-10-21 a subagent's tracker write was denied by the auto-mode permission check" in rule
+    assert "although a matching `permissions.allow` rule existed" in rule
+
+
+def test_runtimes_rule_states_the_write_that_later_passed() -> None:
+    rule = tracker_rule()
+    assert "passed in a later session after the owner's own message in that session asked for po tracker writes" in rule
+
+
+def test_runtimes_rule_states_relayed_approval_was_not_accepted() -> None:
+    assert "approval relayed by the facilitator was not accepted" in tracker_rule()
+
+
+def test_runtimes_rule_states_only_the_owner_can_grant_the_permission() -> None:
+    rule = tracker_rule()
+    assert "an agent's edit of the auto-mode allow list was denied as self-modification" in rule
+    assert "only the owner can grant the permission" in rule
+
+
+def test_runtimes_rule_names_an_owner_action_decided_by_the_probe() -> None:
+    rule = tracker_rule()
+    assert "state the authorization in the session before the ceremony, or add the permission themselves" in rule
+    assert "the preflight probe in step 1 of `story-refinement` is the deciding check" in rule
+
+
+def test_runtimes_rule_maps_opencode_to_the_agent_file_bash_permission() -> None:
+    rule = tracker_rule()
+    assert "agent file's `permission.bash`" in rule
+    assert "opencode 1.x names" in rule
+    assert "skl-23" in rule
+
+
+def test_vendored_runtimes_copies_carry_the_rule() -> None:
+    copy = ROOT / "skills" / "story-refinement" / "references" / "runtimes.md"
+    assert copy.read_text().endswith(RUNTIMES.read_text())
