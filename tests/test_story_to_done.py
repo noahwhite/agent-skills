@@ -220,7 +220,12 @@ def test_runtimes_maps_reasoning_effort() -> None:
     assert "a subagent runs on `CLAUDE_CODE_SUBAGENT_MODEL`, or on the main session's model" in text
     assert "if it differs from the effort a skill asks for, stop and say so" in text
     assert "if that model differs from the one a skill asks for, stop and say so" in text
-    assert "never use one of these for a model-pinned role" in text
+    assert in_order(
+        text,
+        "a fork and a skill that runs in a subagent with `model: inherit` still run on the main session's model",
+        "the built-in Explore subagent runs on its own listed model when only the flag is set",
+        "never use one of these for a model-pinned role",
+    )
 
 
 def test_resumed_story_names_the_qa_environment() -> None:
