@@ -63,6 +63,7 @@ RUNTIME_TERMS = re.compile(
 
 
 def section(text: str, heading: str, level: int = 2) -> str:
+    text = re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)  # commented-out text is not operative
     match = re.search(rf"^{'#' * level} {re.escape(heading)}\s*$", text, re.MULTILINE)
     assert match, f"missing section: {heading}"
     rest = text[match.end():]
@@ -234,6 +235,7 @@ def test_step_four_presents_three_paths_without_a_recommendation() -> None:
 def test_step_four_path_decision_is_the_intersection_with_a_po_tie_break() -> None:
     body = flat(section(SKILL.read_text(), STEP_FOUR, level=3))
     assert "each voter (the po and both engineers) records the set of paths it accepts" in body
+    assert "a voter that accepts re-refine also lists the amendments it needs" in body
     assert "the chosen path is in the intersection of the three accepted path sets" in body
     assert "when that intersection holds more than one path, the po chooses among them and records why" in body
     assert "the facilitator records the decision; it does not choose it" in body
@@ -244,6 +246,11 @@ def test_step_four_empty_path_intersection_leaves_the_story_unpointed() -> None:
     assert "when that intersection is empty, the story is left unpointed" in body
 
 
+def test_step_four_split_path_applies_the_split_rule() -> None:
+    body = flat(section(SKILL.read_text(), STEP_FOUR, level=3))
+    assert "split applies the split rule as a group-decided split" in body
+
+
 def test_step_four_re_refine_returns_to_step_two_with_one_accept_round() -> None:
     body = flat(section(SKILL.read_text(), STEP_FOUR, level=3))
     assert "re-refine returns to step 2" in body
@@ -251,7 +258,7 @@ def test_step_four_re_refine_returns_to_step_two_with_one_accept_round() -> None
     assert "under the denied tracker writes fallback the facilitator applies them verbatim" in body
     assert "one accept round runs on the new comment id" in body
     assert "if all three voters do not return `accept`, the po records the story as unpointed" in body
-    assert "on acceptance, step 3 re-runs blind with newly created voter contexts" in body
+    assert "on acceptance, step 3 re-runs blind with newly created voter contexts, then this step runs again" in body
 
 
 def test_step_four_re_refine_is_offered_once() -> None:
@@ -268,12 +275,14 @@ def test_step_four_outputs_and_stop_name_the_decision() -> None:
         assert "no-consensus decision" in line
         assert "leave unpointed" in line and "is the default when no path is in all three sets" in line
         assert re.search(r"re-refine runs (at most|only) once per ceremony", line)
+    assert "the re-refine accept round ends without three `accept`" in stop
 
 
 def test_split_rule_adds_the_group_decided_trigger() -> None:
     body = flat(section(SKILL.read_text(), "Split rule"))
     assert "a story is also split when the step 4 no-consensus decision chooses split (a group-decided split)" in body
     assert "this trigger adds to the consensus thresholds and does not change them" in body
+    assert "if either split trigger is met, split the story" in body
     assert (
         "a story is split when its consensus is above `profile.refinement.point_cap` or is 8 or more; "
         "the lower trigger applies, and the 8-point rule in [references/linear.md](references/linear.md) is never relaxed" in body
