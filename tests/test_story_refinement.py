@@ -63,6 +63,7 @@ RUNTIME_TERMS = re.compile(
 
 
 def section(text: str, heading: str, level: int = 2) -> str:
+    text = re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)  # commented-out text is not operative
     match = re.search(rf"^{'#' * level} {re.escape(heading)}\s*$", text, re.MULTILINE)
     assert match, f"missing section: {heading}"
     rest = text[match.end():]
