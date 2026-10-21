@@ -47,3 +47,4 @@ Starting points only; split further as the task demands.
 - **persona-architect:** read the story or spike and the records already in `profile.decisions.dir`, one item per record written, supersede edit, issue link, review round, and hand-off.
 - **story-refinement:** read the story and its relations, one item per voter input, the reconciliation and each accept round, each point value, the SM/EM sizing context, the high/low discussion and re-vote, each split and slice estimate, each PO tracker write and read-back, the anchoring check, the refinement and pointing records.
 - **persona-staff-engineer and persona-staff-devops:** see each skill's step 0.
+- **story-to-done:** see the skill's step 0.
