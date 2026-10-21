@@ -628,9 +628,11 @@ def test_fallback_reports_needs_input_and_resumes_at_the_denied_write() -> None:
 
 
 def test_fallback_never_reapplies_a_write_the_po_already_applied() -> None:
-    body = denied_writes()
-    assert "never applied again, including where a step says the facilitator applies a set of writes" in body
-    assert "the facilitator applies only the denied write and the writes after it" in body
+    assert (
+        "a write the po already applied is never applied again, "
+        "including where a step says the facilitator applies a set of writes; "
+        "the facilitator applies only the denied write and the writes after it"
+    ) in denied_writes()
 
 
 def test_step_four_unpointed_record_follows_the_apply_rule() -> None:
