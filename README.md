@@ -26,6 +26,7 @@ The skills are runtime-neutral; CI checks that opencode discovers every one, and
 | [`persona-platform-sre`](skills/persona-platform-sre/SKILL.md) | Infrastructure as code, CI/CD, deploys, host operations, and incident diagnosis. |
 | [`persona-staff-engineer`](skills/persona-staff-engineer/SKILL.md) | Own a story's design and premises, delegate implementation, and run its review gates. |
 | [`persona-staff-devops`](skills/persona-staff-devops/SKILL.md) | Own an infrastructure story's design and blast radius, delegate the work, and run its review gates. |
+| [`story-to-done`](skills/story-to-done/SKILL.md) | Implement a story to deployment review with a senior engineer, QA it, and loop fixes until Done. |
 | [`linear-user-story`](skills/linear-user-story/SKILL.md) | File a Linear user story from the standard template. |
 | [`linear-bug`](skills/linear-bug/SKILL.md) | File a Linear bug with observed, expected, and fix sections. |
 | [`linear-spike`](skills/linear-spike/SKILL.md) | File a timeboxed Linear spike. |

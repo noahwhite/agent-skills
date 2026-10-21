@@ -91,6 +91,12 @@
       "linear",
       "todo-tracking",
       "engineering-practice"
+    ],
+    "story-to-done": [
+      "todo-tracking",
+      "linear",
+      "code-review",
+      "secrets"
     ]
   }
 }

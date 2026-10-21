@@ -1,0 +1,133 @@
+---
+name: story-to-done
+description: >-
+  Drive one Linear story from implementation to Done: a senior-engineer subagent implements it through engineering-workflow and takes it to deployment review, then a QA subagent verifies it through qa-verification, and every item QA rules not met goes back to the senior engineer until nothing keeps the story from Done.
+  Takes the story identifier plus optional model and reasoning effort for each role (defaults: senior engineer Sonnet 5.5 at high, QA Opus 5.5 at high).
+  Use when asked to implement a story and see it through QA to Done (for example "story to done ABC-123" or "implement ABC-123, QA it, and fix until done, QA on Opus 5.5 at max").
+  Not for implementing without QA (use engineering-workflow), verifying a story without fixing it (use qa-verification), or staff-level triage, planning, and shadow adjudication (use persona-staff-engineer).
+license: Apache-2.0
+compatibility: Requires a runtime that can spawn subagents and set each one's model and reasoning effort, plus the linear CLI (schpet/linear-cli) or the Linear MCP server.
+---
+
+# Story to Done: implement, QA, fix until Done
+
+You run the loop; you do not write the code or run the QA yourself.
+A senior engineer implements the story through `engineering-workflow` and takes it to deployment review.
+A QA agent verifies it through `qa-verification`.
+Every item QA rules not met goes back to the senior engineer, and the loop repeats until the story is Done.
+
+## Arguments
+
+`STORY_ID` is required: a Linear story identifier (for example `ABC-123`, with the team key `profile.tracker.team_key`).
+If none was given, ask the user for one before doing anything else; never guess a story number.
+
+Four arguments are optional, given as `key=value` or in plain words ("QA on Opus 5.5 at max" sets `qa-model` and `qa-effort`):
+
+| Argument | Sets | Default |
+|---|---|---|
+| `engineer-model` | the senior engineer's model | Sonnet 5.5 (`claude-sonnet-5-5`) |
+| `engineer-effort` | the senior engineer's reasoning effort | `high` |
+| `qa-model` | the QA agent's model | Opus 5.5 (`claude-opus-5-5`) |
+| `qa-effort` | the QA agent's reasoning effort | `high` |
+
+- An argument left out takes its default.
+- Effort is one of `low`, `medium`, `high`, `xhigh`, or `max`.
+- If a value is ambiguous (an unknown model name, an effort outside that list), ask the user; never guess.
+- Map each model and effort to your runtime with `references/runtimes.md`.
+  If the runtime cannot run that exact model or effort level, stop and say so; never substitute another model or level.
+- Each role keeps the same model and effort in every round.
+- Write the four resolved values at the top of your todo list and in the final report.
+
+## Read first
+
+- [references/profile.md](references/profile.md) - find the profile and this skill's overlay before anything else.
+- [references/runtimes.md](references/runtimes.md) - maps todo list, spawn a subagent, choose a subagent's model and reasoning effort, scratch directory, and ask the user to your runtime; read its nesting rule before step 2.
+
+Read each of these at the step that needs it:
+
+- [references/todo-tracking.md](references/todo-tracking.md) - step 0, and every subagent brief.
+- [references/linear.md](references/linear.md) - steps 1, 4, and 5: the status lifecycle and never done on merge alone.
+- [references/code-review.md](references/code-review.md) - steps 2 and 3: what a clean, neutral delegated engineer and QA agent may and may not be told.
+- [references/secrets.md](references/secrets.md) - its rules go into every brief.
+
+Where this file and a capability file disagree, the capability file is authoritative.
+
+## 0. Track everything on a todo list
+
+Before anything else, create a fine-grained todo list per `references/todo-tracking.md`.
+Seed it with at least: resolve the arguments, read the story state, spawn the senior engineer, each check on its checklist until it hands back, read back the deployment-review state, each QA round, each read-back of QA's resulting state, each failed item handed back, each fix round, and the final state read-back.
+Add an item for every new round the moment it starts, and mark each item done the moment its outcome is observed.
+Subagents have no todo tool, so every brief requires a checklist file in the scratch directory; mirror that file into your list whenever you check on the subagent.
+
+## 1. Read the story and pick the starting point
+
+Read the story and its current state with the `linear` CLI, or the Linear MCP server if the CLI fails.
+
+- `profile.tracker.states.in_deployment_review`: implementation already reached deployment review; go to step 3.
+- `profile.tracker.states.done`: report that there is nothing to do and stop.
+- `profile.tracker.states.blocked`, `profile.tracker.states.canceled`, or `profile.tracker.states.duplicate`: report the state and stop.
+- Any other state: go to step 2.
+
+Do not triage the story yourself: `engineering-workflow` triages it and checks the Definition of Ready.
+
+## 2. Senior engineer: implement to deployment review
+
+Spawn a clean, neutral subagent (not a fork of yours; on opencode, check the nesting rule in `references/runtimes.md` first, since this subagent spawns reviewers of its own) on `engineer-model` at `engineer-effort`, and brief it as a senior engineer working this story.
+The brief carries facts and constraints, never your expectations about the outcome.
+It must include:
+
+- The story identifier.
+- An instruction to load and follow `engineering-workflow` for the whole story: triage, slice-based TDD, the pre-PR gate, the PR to `profile.git.integration_branch`, the review of record, remediation, the merge per `profile.review.merge_owner`, the deploy, and the move to `profile.tracker.states.in_deployment_review`.
+- What to hand back: the story state, each PR link, the merged commit, and the environment and deployed build it verified; or, if it stops, that it is blocked and why.
+- The secrets rule (never write secrets to files or argv) and the attribution rule from `profile.git.ai_attribution`.
+- A "Track your work" paragraph: before starting, write a fine-grained checklist file in the scratch directory (for example `<scratch>/senior-engineer-todo.md`, `- [ ]` and `- [x]` items, one per slice step, test, gate round, review round, remediation, deploy, verification, and wait, the current step marked `(in progress)`) and update it at every step.
+
+This skill assigns merge approval to no manager, so `engineering-workflow`'s own merge rules apply.
+Let the senior engineer do the engineering; do not pre-empt its choices.
+
+When it hands back, read the story yourself and confirm it is in `profile.tracker.states.in_deployment_review`; a handback is a claim, the tracker is the record.
+If it handed back blocked, or the story is not in deployment review, stop and report why.
+
+## 3. QA agent: verify the deployed story
+
+Spawn a new clean, neutral subagent on `qa-model` at `qa-effort` for every QA round; never resume an earlier QA agent, since it carries that round's conclusions.
+Brief it as a QA agent, with only:
+
+- The story identifier and the environment under test: the environment the senior engineer deployed to.
+- An instruction to load and follow `qa-verification` for the story, including its evidence and its closing status decision.
+- What to hand back: the story's final state, the verdict and evidence for each AC and DoD item, any item left outstanding with its owner, and any incidental defect it noted.
+- The secrets rule and a "Track your work" paragraph (checklist file `<scratch>/qa-agent-round-<n>-todo.md`).
+
+Never give it the senior engineer's handback beyond the environment, the PR's rationale, the fixes made, an earlier round's verdicts, or the verdict you expect.
+
+When it hands back, read the story's state yourself.
+
+## 4. Act on the QA outcome
+
+- **`profile.tracker.states.done`:** go to step 5.
+- **`profile.tracker.states.in_progress`:** QA ruled at least one AC or DoD item not met and reopened the story.
+  Those failed items are the issues to fix.
+  Hand them back to the senior engineer: resume the same subagent if the runtime can, else spawn a new clean, neutral one on the same model and effort with the step 2 brief.
+  Either way, add each failed item as QA recorded it on the story (the item, its verdict, and the evidence it cites), and instruct the engineer to fix them through `engineering-workflow` on this story and take it back to `profile.tracker.states.in_deployment_review`.
+  Confirm that state as step 2 does, then run step 3 again with a new QA agent.
+- **`profile.tracker.states.in_deployment_review`:** QA is not finished (a pending owner action, missing access, a live trigger still to run).
+  Report exactly what remains and who owns it, and stop; resume at step 3 once it is cleared.
+- **`profile.tracker.states.blocked`:** report the blocking story and stop.
+
+If the senior engineer disputes a failed verdict (for example as correct by design or out of scope), do not relay its argument to a QA agent and do not rule on it yourself.
+Stop and put the item, QA's evidence, and the engineer's evidence to the user, since what an AC means is the product owner's decision.
+
+Incidental defects QA noted that do not keep the story from Done are not fixed in this loop; report them to the user.
+
+After each round, tell the user the round number, the items that failed, and the outcome.
+
+## 5. Close out
+
+Read the story back and confirm it is in `profile.tracker.states.done`, then finish your todo list.
+Report the story identifier, its final state, the four resolved model and effort values, each PR, the number of QA rounds with the items fixed in each, where QA recorded its evidence, and any incidental defects left open.
+
+## Boundaries
+
+- You resolve the arguments, spawn the two roles, relay QA's failed items, and confirm every state; the senior engineer implements and the QA agent verifies, each through its own skill.
+- Only a QA agent's closing decision moves the story to Done; never mark it done yourself, and never on merge alone.
+- The review of record and QA's own gates run in full inside each role's skill; this loop never shortens them.
