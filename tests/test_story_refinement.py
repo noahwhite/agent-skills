@@ -382,3 +382,47 @@ def test_roles_make_the_po_the_only_author_of_tracker_writes() -> None:
 def test_roles_limit_the_facilitator_to_applying_under_the_fallback() -> None:
     roles = squash(section(SKILL.read_text(), "Roles"))
     assert "the facilitator applies tracker writes only under the denied tracker writes fallback" in roles
+
+
+PREFLIGHT_LINE = "- Tracker-write preflight: comment <id>"
+WRITES_PO_LINE = "- Tracker writes: product owner"
+WRITES_FACILITATOR_LINE = (
+    "- Tracker writes: facilitator on the product owner's behalf "
+    '(owner\'s direct authorization: "<verbatim quote>", <date>)'
+)
+
+
+def template_block(heading: str) -> tuple[str, str]:
+    """The first fenced block under the heading, and the text from the heading to the next template."""
+    text = RECORD.read_text()
+    start = re.search(rf"^## {re.escape(heading)}\s*$", text, re.MULTILINE)
+    assert start, heading
+    rest = text[start.end():]
+    block = re.search(r"```markdown\n(.*?)```", rest, re.DOTALL)
+    assert block, f"no template block under {heading}"
+    after = rest[block.end():]
+    nxt = re.search(r"^## ", after, re.MULTILINE)
+    return block.group(1), after[: nxt.start()] if nxt else after
+
+
+def template(heading: str) -> str:
+    return template_block(heading)[0]
+
+
+def fallback_alternative(heading: str) -> str:
+    return template_block(heading)[1]
+
+
+@pytest.mark.parametrize("heading", ["Refinement comment", "Pointing record"])
+def test_template_carries_the_preflight_line(heading: str) -> None:
+    assert PREFLIGHT_LINE in template(heading).splitlines()
+
+
+@pytest.mark.parametrize("heading", ["Refinement comment", "Pointing record"])
+def test_template_carries_the_product_owner_writes_line(heading: str) -> None:
+    assert WRITES_PO_LINE in template(heading).splitlines()
+
+
+@pytest.mark.parametrize("heading", ["Refinement comment", "Pointing record"])
+def test_template_carries_the_facilitator_writes_alternative(heading: str) -> None:
+    assert WRITES_FACILITATOR_LINE in fallback_alternative(heading).splitlines()

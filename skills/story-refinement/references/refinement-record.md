@@ -6,13 +6,14 @@ Replace every placeholder and keep the raw voter files under `profile.workspace.
 
 ## Refinement comment
 
-Post this as a tracker comment by the product owner, the only tracker mutator.
+Post this as a tracker comment by the product owner, the only author of tracker writes.
 Its comment id is the refined story identifier for both stages.
 
 ```markdown
 ## Refinement record
 
 - Story: <issue key> at <description version or commit>
+- Tracker-write preflight: comment <id>
 - Refined story identifier: <this comment id>
 - Refined story snapshot: <the complete refined story and ACs, or an immutable link/commit>
 - Refined story identifier after blocking amendments: <the new comment id, or none>
@@ -27,6 +28,13 @@ Its comment id is the refined story identifier for both stages.
 - Accept round 1: <ACCEPT or OBJECT per voter>
 - Accept round 2 (only after a blocking amendment): <ACCEPT or OBJECT per voter>
 - Result: <accepted or unpointed>
+- Tracker writes: product owner
+```
+
+Under the denied-write fallback in `SKILL.md`, replace the tracker-writes line with:
+
+```markdown
+- Tracker writes: facilitator on the product owner's behalf (owner's direct authorization: "<verbatim quote>", <date>)
 ```
 
 ## Pointing record
@@ -37,6 +45,7 @@ The three values are recorded before any SM/EM sizing comment or discussion.
 ```markdown
 ## Pointing record
 
+- Tracker-write preflight: comment <id>
 - Refined story identifier: <latest refinement comment id after any amendment>
 - Estimate scale: <profile.tracker.estimate_scale>
 - Values, recorded before the discussion:
@@ -50,6 +59,13 @@ The three values are recorded before any SM/EM sizing comment or discussion.
 - Effective maximum: <profile.refinement.point_cap; the 8-point rule still triggers at 8 or more>
 - Split: <none, or the slice mapping and sibling issue keys>
 - Anchoring events: <none, or the verbatim comment and the recovery, including the newly created voter contexts>
+- Tracker writes: product owner
+```
+
+Under the denied-write fallback in `SKILL.md`, replace the tracker-writes line with:
+
+```markdown
+- Tracker writes: facilitator on the product owner's behalf (owner's direct authorization: "<verbatim quote>", <date>)
 ```
 
 ## Permitted and forbidden phrasing
