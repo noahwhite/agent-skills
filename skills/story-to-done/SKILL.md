@@ -40,7 +40,7 @@ Four arguments are optional, given as `key=value` or in plain words ("QA on Opus
 
 ## Read first
 
-- [references/profile.md](references/profile.md) - find the profile and this skill's overlay before anything else.
+- [references/profile.md](references/profile.md) - find the profile and this skill's overlay as soon as the story ID is known.
 - [references/runtimes.md](references/runtimes.md) - maps todo list, spawn a subagent, choose a subagent's model and reasoning effort, scratch directory, and ask the user to your runtime; read its nesting rule before step 2.
 
 Read each of these at the step that needs it:
@@ -54,7 +54,7 @@ Where this file and a capability file disagree, the capability file is authorita
 
 ## 0. Track everything on a todo list
 
-Before anything else, create a fine-grained todo list per `references/todo-tracking.md`.
+Once the story ID is known and the profile is read, before step 1, create a fine-grained todo list per `references/todo-tracking.md`.
 Seed it with at least: resolve the arguments, read the story state, spawn the senior engineer, each check on its checklist until it hands back, read back the deployment-review state, each QA round, each read-back of QA's resulting state, each failed item handed back, each fix round, and the final state read-back.
 Add an item for every new round the moment it starts, and mark each item done the moment its outcome is observed.
 Subagents have no todo tool, so every brief requires a checklist file in the scratch directory; mirror that file into your list whenever you check on the subagent.
@@ -72,7 +72,11 @@ Do not triage the story yourself: `engineering-workflow` triages it and checks t
 
 ## 2. Senior engineer: implement to deployment review
 
-Spawn a clean, neutral subagent (not a fork of yours; on opencode, check the nesting rule in `references/runtimes.md` first, since this subagent spawns reviewers of its own) on `engineer-model` at `engineer-effort`, and brief it as a senior engineer working this story.
+Spawn a clean, neutral subagent (not a fork of yours) on `engineer-model` at `engineer-effort`, and brief it as a senior engineer working this story.
+It spawns reviewers of its own, and so does the QA agent in step 3, so check the nesting rule in `references/runtimes.md` before spawning either.
+On opencode, give both delegated agents nesting (raise `subagent_depth` to 2 and grant `task`), or launch their review roles as shell commands (`runtime: codex` or `runtime: command`).
+The nesting rule's other option, where the primary session runs the review roles after the PR handback, does not fit this skill, since each role finishes its own gates before it hands back.
+If neither works, stop and say so.
 The brief carries facts and constraints, never your expectations about the outcome.
 It must include:
 
@@ -94,6 +98,7 @@ Spawn a new clean, neutral subagent on `qa-model` at `qa-effort` for every QA ro
 Brief it as a QA agent, with only:
 
 - The story identifier and the environment under test: the environment the senior engineer deployed to.
+  When step 2 did not run in this engagement (the story was already in deployment review), use the environment the user named; if they named none, leave it out so `qa-verification` picks its default.
 - An instruction to load and follow `qa-verification` for the story, including its evidence and its closing status decision.
 - What to hand back: the story's final state, the verdict and evidence for each AC and DoD item, any item left outstanding with its owner, and any incidental defect it noted.
 - The secrets rule and a "Track your work" paragraph (checklist file `<scratch>/qa-agent-round-<n>-todo.md`).
@@ -104,7 +109,9 @@ When it hands back, read the story's state yourself.
 
 ## 4. Act on the QA outcome
 
-- **`profile.tracker.states.done`:** go to step 5.
+- **`profile.tracker.states.done`:** confirm the completion record before you accept it.
+  On read-back every AC and DoD box is ticked, QA's handback rules every item verified, and, when `profile.qa.evidence_dir` is set, the evidence PR is merged.
+  If all three hold, go to step 5; if any does not, report the mismatch and stop.
 - **`profile.tracker.states.in_progress`:** QA ruled at least one AC or DoD item not met and reopened the story.
   Those failed items are the issues to fix.
   Hand them back to the senior engineer: resume the same subagent if the runtime can, else spawn a new clean, neutral one on the same model and effort with the step 2 brief.
@@ -113,6 +120,7 @@ When it hands back, read the story's state yourself.
 - **`profile.tracker.states.in_deployment_review`:** QA is not finished (a pending owner action, missing access, a live trigger still to run).
   Report exactly what remains and who owns it, and stop; resume at step 3 once it is cleared.
 - **`profile.tracker.states.blocked`:** report the blocking story and stop.
+- **Any other state:** report it and stop.
 
 If the senior engineer disputes a failed verdict (for example as correct by design or out of scope), do not relay its argument to a QA agent and do not rule on it yourself.
 Stop and put the item, QA's evidence, and the engineer's evidence to the user, since what an AC means is the product owner's decision.
@@ -123,7 +131,7 @@ After each round, tell the user the round number, the items that failed, and the
 
 ## 5. Close out
 
-Read the story back and confirm it is in `profile.tracker.states.done`, then finish your todo list.
+Read the story back and confirm it is in `profile.tracker.states.done` with the completion record step 4 checks, then finish your todo list.
 Report the story identifier, its final state, the four resolved model and effort values, each PR, the number of QA rounds with the items fixed in each, where QA recorded its evidence, and any incidental defects left open.
 
 ## Boundaries
