@@ -154,7 +154,8 @@ Only the PO and the two engineers count toward the agreement.
      The facilitator records the decision; it does not choose it.
   8. Split applies the split rule as a group-decided split.
   9. Re-refine returns to Step 2.
-     The PO applies the amendments, posts an updated refinement comment, and one accept round runs on its new comment id.
+     The PO authors the amendments and an updated refinement comment and applies both; under the denied tracker writes fallback the facilitator applies them verbatim.
+     One accept round runs on the new comment id.
      If all three voters do not return `ACCEPT`, the PO records the story as unpointed.
      On acceptance, Step 3 re-runs blind with newly created voter contexts, then this step runs again.
      Re-refine is offered at most once per ceremony; a second empty intersection offers only split or leave unpointed.

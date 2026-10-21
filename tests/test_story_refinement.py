@@ -247,7 +247,9 @@ def test_step_four_empty_path_intersection_leaves_the_story_unpointed() -> None:
 def test_step_four_re_refine_returns_to_step_two_with_one_accept_round() -> None:
     body = flat(section(SKILL.read_text(), STEP_FOUR, level=3))
     assert "re-refine returns to step 2" in body
-    assert "the po applies the amendments, posts an updated refinement comment, and one accept round runs on its new comment id" in body
+    assert "the po authors the amendments and an updated refinement comment and applies both" in body
+    assert "under the denied tracker writes fallback the facilitator applies them verbatim" in body
+    assert "one accept round runs on the new comment id" in body
     assert "if all three voters do not return `accept`, the po records the story as unpointed" in body
     assert "on acceptance, step 3 re-runs blind with newly created voter contexts" in body
 
