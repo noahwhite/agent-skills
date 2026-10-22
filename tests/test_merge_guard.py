@@ -267,9 +267,8 @@ def test_story_to_done_reads_back_the_reviewed_head() -> None:
     ):
         body = section(text, heading)
         assert READ_BACK_QUERY + "\n" + READ_BACK in body, f"{heading} missing the reviewed-head read-back"
-        block = body[body.index(READ_BACK_QUERY) : body.index(READ_BACK) + len(READ_BACK)]
-        assert "comments" not in block, f"{heading} read-back still reads issue comments"
-        assert "/issues/" not in block, f"{heading} read-back still reads the issues endpoint"
+    assert "comments" not in text, "story-to-done reads issue comments somewhere"
+    assert "/issues/" not in text, "story-to-done reads the issues endpoint somewhere"
     done = section(text, "4. Act on the QA outcome")
     assert "the evidence PR is merged on the head its review of record covered" in done
 
@@ -336,8 +335,11 @@ COMMENT_NAMES = (
 COMMENT_NAMES_RE = re.compile(COMMENT_NAMES, re.IGNORECASE)
 # "never as an issue comment", "do not post it as a PR comment", "not a PR comment URL": a negation word, at most
 # eight plain words, then the name. A comma ends the span, so "not the QA report, as one PR comment" stays flagged.
+# A word that turns the negation back into an instruction ("do not skip posting ... as a PR comment") breaks the span.
 NEGATED_NAME_RE = re.compile(
-    r"\b(?:never|not|no)\b(?:\s+[\w'`-]+){0,8}?\s+" + COMMENT_NAMES, re.IGNORECASE
+    r"\b(?:never|not|no)\b(?:\s+(?!(?:skip|skipping|omit|omitting|forget|forgetting|fail|failing|neglect|avoid|avoiding"
+    r"|stop|stopping|without)\b)[\w'`-]+){0,8}?\s+" + COMMENT_NAMES,
+    re.IGNORECASE,
 )
 UNRELATED_COMMENT_RE = re.compile(r"linear issue comment", re.IGNORECASE)
 ABOUT_RECORD = re.compile(r"review[- ]of[- ]record", re.IGNORECASE)
@@ -374,6 +376,15 @@ def comment_naming_sentences(text: str) -> list[str]:
         if COMMENT_NAMES_RE.search(cleaned):
             hits.append(unit)
     return hits
+
+
+def test_wording_scan_covers_the_shared_and_skill_files() -> None:
+    names = {str(path.relative_to(ROOT)) for path in scanned_files()}
+    assert "shared/code-review.md" in names
+    assert "skills/engineering-workflow/SKILL.md" in names
+    assert "skills/story-to-done/SKILL.md" in names
+    assert "skills/linear-bug/references/code-review.md" in names
+    assert len(names) >= 20
 
 
 def test_no_sentence_calls_the_review_of_record_a_comment() -> None:
@@ -421,6 +432,8 @@ def test_wording_scan_flags_wrapped_follow_on_and_variant_names() -> None:
         "- Post the review of record as a PR-comment.",
         "Post the review of record, not the QA report, as one PR comment.",
         "Do not skip it. Post the review of record as an issue comment.",
+        "Do not skip posting the review of record as a PR comment.",
+        "Never fail to post the review of record as an issue comment.",
     )
     for mutant in mutants:
         assert comment_naming_sentences(mutant), f"scan missed: {mutant!r}"

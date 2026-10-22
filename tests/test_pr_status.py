@@ -197,7 +197,15 @@ def test_pr_url_with_a_trailing_slash_resolves_the_same_endpoint(run) -> None:
 
 @pytest.mark.parametrize(
     "meta",
-    ["", "7", "7 not-a-url", "x https://github.com/acme/widgets/pull/7", "7 https://github.com/acme/widgets/issues/7"],
+    [
+        "",
+        "7",
+        "7 not-a-url",
+        "x https://github.com/acme/widgets/pull/7",
+        "7 https://github.com/acme/widgets/issues/7",
+        "7 https://github.com/acme/widgets/pull/8",
+        "x https://github.com/acme/widgets/pull/x",
+    ],
 )
 def test_unparseable_pr_metadata_fails_closed(run, meta) -> None:
     done, log = run(meta=meta)

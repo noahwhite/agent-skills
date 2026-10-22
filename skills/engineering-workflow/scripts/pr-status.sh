@@ -48,7 +48,7 @@ META="$(gh pr view --json number,url --jq '"\(.number) \(.url)"' 2>/dev/null)" |
   echo "ERROR: Could not read the current PR's number and URL." >&2
   exit 12
 }
-if [[ ! "$META" =~ ^([0-9]+)\ https?://[^/]+/([^/]+/[^/]+)/pull/[0-9]+/?$ ]]; then
+if [[ ! "$META" =~ ^([0-9]+)\ https?://[^/]+/([^/]+/[^/]+)/pull/([0-9]+)/?$ || "${BASH_REMATCH[1]}" != "${BASH_REMATCH[3]}" ]]; then
   echo "ERROR: Could not derive owner/repo and number from the PR URL ($META)." >&2
   exit 12
 fi
