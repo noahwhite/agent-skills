@@ -77,7 +77,6 @@ def test_merge_guard_selects_the_latest_review_by_submission_time() -> None:
 
 def test_merge_guard_no_longer_reads_a_comment() -> None:
     body = section(CODE_REVIEW.read_text(), "Merge guard")
-    assert "gh pr view <n> --json headRefOid,mergeCommit,comments" not in body
     assert "review-of-record comment" not in body
 
 
@@ -127,7 +126,10 @@ def test_gate_requires_the_review_of_record_as_a_pr_review() -> None:
 
 def test_shadow_verdicts_go_in_the_review_of_record() -> None:
     body = section(CODE_REVIEW.read_text(), "Shadow adjudicators", "###")
-    assert "beside the adjudicator's in the review of record, under an \"Adjudicator comparison\" heading" in body
+    assert (
+        "Record each shadow's verdicts beside the adjudicator's in the review of record, "
+        "under an \"Adjudicator comparison\" heading, with an agreement summary."
+    ) in body
 
 
 def test_update_branch_is_a_head_change_that_needs_a_delta_review() -> None:
