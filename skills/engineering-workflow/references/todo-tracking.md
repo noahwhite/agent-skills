@@ -26,13 +26,22 @@ The list is the visible record of the run: how many steps there are and where yo
 
 ## Subagents
 
-Subagents have no todo list.
+Subagents use checklist files whether or not a runtime exposes a todo tool to them.
 Every brief you hand a subagent includes a "Track your work" paragraph requiring a checklist file at `<scratch directory>/<agent-label>-todo.md`:
 
 - `- [ ]` and `- [x]` items, one per concrete step, with the current step marked `(in progress)`.
 - Written before any work starts and updated at every step, including items added as work appears.
 
 Mirror that file into your own todo list whenever you check the subagent's status, so the list shows its real steps.
+
+## Missing todo tools, including primary sessions
+
+OpenCode V2 todos are off by default; `experimental.todo: true` opts in to the experimental tool, but a harness may still not expose it.
+Consult `references/runtimes.md` for the version-specific mapping; do not assume a tool exists from configuration alone.
+When the primary session has no todo tool, create a checklist file at `<scratch directory>/<session-label>-todo.md` before starting, using the same item granularity and `(in progress)` marker as a subagent.
+Tell the user its path and update it at every step; this file is the visible plan and the place to mirror delegated checklists.
+Do not block or ask for a runtime reconfiguration merely because the todo tool is unavailable.
+Tracking remains mandatory; only the storage mechanism changes.
 
 ## Seed lists
 

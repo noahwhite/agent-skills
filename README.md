@@ -9,7 +9,9 @@ Base skills for coding agents: an engineering process (story lifecycle, TDD, rev
 They carry process only.
 Each project supplies its own values through a profile and its own operational detail through overlays.
 
-The skills are runtime-neutral; CI checks that opencode discovers every one, and they load the same way in Claude Code.
+The skills are runtime-neutral; CI checks that OpenCode V2 2.1.2 discovers every one, and they load the same way in Claude Code.
+OpenCode V2 guidance targets 2.1.2 from the `@opencode/cli` npm package; OpenCode V1 guidance is legacy, untested.
+The discovery check does not claim end-to-end verification of delegated workflows, configured review models, or deployment tooling.
 
 ## Workflow
 
@@ -66,6 +68,15 @@ Install each skill in one place only, so a runtime does not see it twice.
 
 Each skill is self-contained: the files it references live in its own `references/` directory, so copying a single skill directory also works.
 
+### OpenCode V2 setup
+
+Install the pinned CLI with `npm install -g @opencode/cli@2.1.2`, allowing that package's install script under your npm policy.
+Use the V2 configuration and invocation examples in [`shared/runtimes.md`](shared/runtimes.md), not V1 tool names or root-TUI flags.
+Visible todos are off by default in V2; enable `experimental.todo` or use the checklist-file fallback.
+Delegated agents that launch reviewers need `experimental.subagent_depth: 2` and a custom child agent whose `permissions` allow the required `subagent` roles.
+Use `opencode run --agent <id> --model <provider>/<model>#<variant>` for automation.
+The root interactive TUI does not accept those agent/model flags; configure fresh-session defaults or command frontmatter instead, and verify the effective model on resumed sessions.
+
 ## Profile
 
 A profile is a YAML file with the values that differ between projects: tracker team and state names, branches, review models, environments.
@@ -111,7 +122,12 @@ Review roles run as subagents or as shell-launched CLIs (for example `codex exec
 - `scripts/leak_scan.py` rejects personal data, internal addresses and credential shapes; the public patterns are generic.
   Names to keep out (consumers, their hosts, vendors, issue keys) are private patterns, one regex per line, from the `LEAK_DENYLIST` repository secret or a file named by `LEAK_DENYLIST_FILE`; matches are reported by pattern number only.
   CI fails when private patterns are missing, except on pull requests from forks, which get no secrets; a maintainer runs `LEAK_DENYLIST_FILE=<file> python3 scripts/leak_scan.py --require-private` before merging one.
-- `scripts/smoke-opencode.sh` installs the skills into a scratch project and checks that opencode discovers every one.
+- `scripts/smoke-opencode.sh` checks every skill declared in `skills.json` with OpenCode V2 2.1.2 (override with `OPENCODE_VERSION`), installing `@opencode/cli` when needed; `OPENCODE_FORCE_INSTALL=1` also exercises installation.
+  It checks project and global `.agents`, `.opencode`, and `.claude` layouts in isolated homes without model credentials or requests.
+  The V2 `GET /api/skill` response is an envelope with `data` entries identified by `id` and `path`, not the V1 `name`/`location` array.
+  Registration is asynchronous, so each fixture keeps its own service alive and waits up to 30 seconds for every expected ID/path before reporting missing skills and failing.
+  The request explicitly selects the fixture directory because the managed service starts in its home directory.
+  Every service is stopped on success or failure; only npm/registry access is needed for installation.
 - Markdown puts one sentence per line.
 
 ## License

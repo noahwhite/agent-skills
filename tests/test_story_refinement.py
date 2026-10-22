@@ -463,11 +463,10 @@ def test_runtimes_rule_names_an_owner_action_decided_by_the_probe() -> None:
     assert "the preflight probe in step 1 of `story-refinement` is the deciding check" in rule
 
 
-def test_runtimes_rule_maps_opencode_to_the_agent_file_bash_permission() -> None:
+def test_runtimes_rule_version_qualifies_opencode_shell_permissions() -> None:
     rule = tracker_rule()
-    assert "agent file's `permission.bash`" in rule
-    assert "opencode 1.x names" in rule
-    assert "skl-23" in rule
+    assert "v2" in rule and "`shell`" in rule and "`permissions`" in rule
+    assert "v1" in rule and "`permission.bash`" in rule
 
 
 def test_vendored_runtimes_copies_carry_the_rule() -> None:

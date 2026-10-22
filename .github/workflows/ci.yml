@@ -43,4 +43,7 @@ jobs:
         with:
           node-version: 22
       - name: opencode discovers every skill
+        env:
+          OPENCODE_VERSION: 2.1.2
+          OPENCODE_FORCE_INSTALL: "1"
         run: bash scripts/smoke-opencode.sh
