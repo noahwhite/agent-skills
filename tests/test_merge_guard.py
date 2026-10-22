@@ -63,6 +63,11 @@ def test_merge_guard_binds_a_user_waiver_to_its_head() -> None:
         "there is no review-of-record comment: step 2 reads the head SHA the PR had when the user gave that instruction, "
         "and step 4 carries that full SHA."
     ) in body
+    assert (
+        "Record that full SHA (`gh pr view <n> --json headRefOid`) as soon as the user gives the instruction, "
+        "unless the user named it; if a push could have landed between the instruction and that read, "
+        "confirm the SHA with the user before relying on it."
+    ) in body
     assert "The waiver covers only that head; if the head has changed since, do not merge, and ask the user again." in body
 
 

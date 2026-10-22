@@ -103,6 +103,7 @@ That covers the autonomous merge, a merge the agent performs for a human owner, 
    If the merge command cannot carry an expected-head condition, stop and report the merge blocked instead of merging unguarded.
 
 When the user gave the explicit per-PR instruction to skip the review (The gate), there is no review-of-record comment: step 2 reads the head SHA the PR had when the user gave that instruction, and step 4 carries that full SHA.
+Record that full SHA (`gh pr view <n> --json headRefOid`) as soon as the user gives the instruction, unless the user named it; if a push could have landed between the instruction and that read, confirm the SHA with the user before relying on it.
 The waiver covers only that head; if the head has changed since, do not merge, and ask the user again.
 
 An update-branch that changes the head SHA creates a new head that needs a delta review before the PR merges, even when CI is green and the base changes touch none of the PR's files.
