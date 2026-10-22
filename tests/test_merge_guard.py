@@ -337,7 +337,7 @@ COMMENT_NAMES_RE = re.compile(COMMENT_NAMES, re.IGNORECASE)
 # words from a closed list of plain fillers, then the name. Any other word ("delay", "skip", a comma) ends the span, so
 # a reversal such as "do not delay posting ... as a PR comment" is still flagged.
 NEGATION_FILLERS = (
-    r"(?:as|an?|the|one|it|this|that|its|on|to|post(?:ed|ing)?|use|treat|call|send|submit|write|name"
+    r"(?:as|an?|the|one|it|this|that|its|on|to|fall|back|post(?:ed|ing)?|use|treat|call|send|submit|write|name"
     r"|review-of-record|review|of|record|PR|pull|request)"
 )
 NEGATED_NAME_RE = re.compile(
@@ -368,27 +368,21 @@ def text_units(text: str) -> list[str]:
     return [" ".join(unit) for unit in units if unit]
 
 
-SENTENCE_END = re.compile(r"(?<=[.!?])\s+(?=[A-Z`\"(*-])")
-FOLLOW_ON = re.compile(r"(?:It|This|That|These|Those|They)\b")
-
-
 def comment_naming_sentences(text: str) -> list[str]:
-    """Sentences about the review of record that call it a comment, minus unrelated and negated uses.
+    """Units about the review of record that call it a comment, minus unrelated and negated uses.
 
-    Lines of one paragraph, list item or blockquote are joined first, so a sentence wrapped over two lines is one
-    sentence; a sentence that starts with a pronoun right after one about the review of record is about it too.
+    The unit is a whole paragraph, list item or blockquote (hard-wrapped lines joined), so a follow-on such as
+    "Post it as an issue comment." keeps its context. The scan fails closed: an unrelated issue comment in the same
+    paragraph as a review-of-record sentence is flagged, and goes in its own paragraph or list item instead.
     """
     hits = []
     for unit in text_units(text):
-        about = False
-        for sentence in SENTENCE_END.split(unit):
-            about = bool(ABOUT_RECORD.search(sentence)) or (about and bool(FOLLOW_ON.match(sentence)))
-            if not about:
-                continue
-            cleaned = UNRELATED_COMMENT_RE.sub("", sentence)
-            cleaned = NEGATED_NAME_RE.sub("", cleaned)
-            if COMMENT_NAMES_RE.search(cleaned):
-                hits.append(sentence)
+        if not ABOUT_RECORD.search(unit):
+            continue
+        cleaned = UNRELATED_COMMENT_RE.sub("", unit)
+        cleaned = NEGATED_NAME_RE.sub("", cleaned)
+        if COMMENT_NAMES_RE.search(cleaned):
+            hits.append(unit)
     return hits
 
 
@@ -451,6 +445,15 @@ def test_wording_scan_flags_wrapped_follow_on_and_variant_names() -> None:
         "Do not delay posting the review of record as a PR comment.",
         "Do not wait; post the review of record as a PR comment.",
         "Do not post it, post the review of record as a PR comment.",
+        "Do not fall back, post the review of record as an issue comment.",
+        "The review of record is a PR review. Post it as an issue comment.",
+        "Post the review of record before the merge. Then post it as a PR comment.",
+        "Post the review of record before the merge. Its format is one PR comment.",
+        "The review of record is posted on the PR. Post one PR comment with the verdicts.",
+        "Post the review of record e.g. Codex output. As a PR comment.",
+        "Post the review of record (head SHA etc.). Use one PR comment for it.",
+        "Post the review of record before the merge. **It** is posted as a PR comment.",
+        "The review of record is a PR review. The QA evidence is posted as an issue comment.",
         "The review of record: do not post it, post it as a PR comment.",
         "Post the review of record. It is not a PR review but a PR comment.",
     )
@@ -462,6 +465,7 @@ def test_wording_scan_accepts_varied_negations() -> None:
     clean = (
         "Post the review of record as a PR review, never as an issue comment.",
         "Do not post the review of record as an issue comment.",
+        "If the host denies the review of record, do not fall back to an issue comment: report the exact command and the denial.",
         "The review of record is not a PR comment.",
         "Never post the review of record as a pull request comment.",
         "The review-of-record URL is the review's `html_url`, not a PR comment URL.",
@@ -479,9 +483,8 @@ def test_wording_scan_keeps_separate_list_items_and_commands_apart() -> None:
         "1. Post the review of record as a PR review.\n2. Post the QA evidence as a PR comment.",
         "- Post the review of record as a PR review\n- Post the QA evidence as an issue comment",
         'Post the review of record as a PR review, then run `linear issue comment add <ID> --body "done"`.',
-        "The review of record is a PR review. The QA evidence is posted as an issue comment.",
-        "The review of record is a PR review.\nThe QA evidence is posted as an issue comment.",
-        "Post the review of record as a PR review. Then post the QA report as a PR comment.",
+        "The review of record is a PR review.\n\nThe QA evidence is posted as an issue comment.",
+        "Post the review of record as a PR review.\n\nThen post the QA report as a PR comment.",
     )
     for text in clean:
         assert comment_naming_sentences(text) == [], f"scan flagged: {text!r}"
