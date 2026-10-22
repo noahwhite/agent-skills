@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Prints the current branch's PR state, checks and comments.
+# Prints the current branch's PR state, checks, PR reviews (where the --comment review of record is read) and issue comments.
 #
 # Run it by its installed path with the current directory inside the repository under review:
 #   cd <consumer repo> && <skill dir>/scripts/pr-status.sh [--repo DIR]
@@ -44,10 +44,30 @@ PR="$(gh pr view --json number,url,state,baseRefName,headRefName,isDraft,mergeab
 
 printf '%s\n' "$PR"
 
+META="$(gh pr view --json number,url --jq '"\(.number) \(.url)"' 2>/dev/null)" || {
+  echo "ERROR: Could not read the current PR's number and URL." >&2
+  exit 12
+}
+if [[ ! "$META" =~ ^([0-9]+)\ https?://([^/]+)/([^/]+/[^/]+)/pull/([0-9]+)/?$ || "${BASH_REMATCH[1]}" != "${BASH_REMATCH[4]}" ]]; then
+  echo "ERROR: Could not derive owner/repo and number from the PR URL ($META)." >&2
+  exit 12
+fi
+NUMBER="${BASH_REMATCH[1]}"
+HOST="${BASH_REMATCH[2]}"
+SLUG="${BASH_REMATCH[3]}"
+
 echo
-echo "=== PR comments (review of record is posted as an issue comment) ==="
+echo "=== PR reviews ==="
+# The review of record is a COMMENTED review; a PR with no reviews is expected, any gh failure propagates.
+gh api --paginate --hostname "$HOST" "repos/${SLUG}/pulls/${NUMBER}/reviews" --jq '
+  .[]
+  | {author: .user.login, state: .state, commit_id: .commit_id, submitted_at: .submitted_at, html_url: .html_url, body: .body}
+'
+
+echo
+echo "=== PR issue comments ==="
 # A PR with no comments is expected; any other gh failure propagates.
-gh pr view --comments --json comments --jq '
+gh pr view --json comments --jq '
   .comments[]
   | {author: .author.login, body: .body, createdAt: .createdAt, url: .url}
 '
