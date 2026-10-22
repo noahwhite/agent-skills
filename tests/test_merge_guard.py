@@ -6,6 +6,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 CODE_REVIEW = ROOT / "shared" / "code-review.md"
 GITHUB = ROOT / "shared" / "github.md"
+MERGE_APPROVAL = ROOT / "shared" / "merge-approval.md"
+TODO_TRACKING = ROOT / "shared" / "todo-tracking.md"
+SHARED = ROOT / "shared"
 SKILLS = ROOT / "skills"
 
 GUARD = "run the merge guard in `references/code-review.md`"
@@ -39,14 +42,25 @@ def skill(name: str) -> str:
     return (SKILLS / name / "SKILL.md").read_text()
 
 
+REVIEWS_READ = (
+    "2. Read the PR's reviews with `gh api --paginate repos/<owner>/<repo>/pulls/<n>/reviews`, "
+    "select the latest submitted review in state `COMMENTED` whose body begins with `Review of record`, "
+    "and take both its `commit_id` and the full head SHA on its first line."
+)
+FAIL_CLOSED = (
+    "3. Except under the explicit per-PR review waiver in The gate, "
+    "if no such review exists, either SHA is missing, or either differs from the live head, do not merge: "
+    "review the delta since the reviewed head (Rounds), post that review of record, and start again at step 1."
+)
+
+
 def test_code_review_defines_the_merge_guard_in_order() -> None:
     body = section(CODE_REVIEW.read_text(), "Merge guard")
     steps = (
         "Every merge, by any role, runs this guard immediately before the merge command.",
         "1. Read the live PR head SHA (`gh pr view <n> --json headRefOid`).",
-        "2. Read the head SHA named in the latest review-of-record comment on the PR.",
-        "3. If they differ, do not merge: review the delta since the reviewed head (Rounds), "
-        "post that review of record, and start again at step 1.",
+        REVIEWS_READ,
+        FAIL_CLOSED,
         "4. Merge with " + EXPECTED_HEAD,
         MATCH_HEAD,
         "If the merge command cannot carry an expected-head condition, " + UNGUARDED_STOP + " instead of merging unguarded.",
@@ -56,11 +70,22 @@ def test_code_review_defines_the_merge_guard_in_order() -> None:
     assert positions == sorted(positions), "merge guard steps out of order"
 
 
+def test_merge_guard_selects_the_latest_review_by_submission_time() -> None:
+    body = section(CODE_REVIEW.read_text(), "Merge guard")
+    assert "The latest review is the one with the greatest `submitted_at`, not the last in the list." in body
+
+
+def test_merge_guard_no_longer_reads_a_comment() -> None:
+    body = section(CODE_REVIEW.read_text(), "Merge guard")
+    assert "gh pr view <n> --json headRefOid,mergeCommit,comments" not in body
+    assert "review-of-record comment" not in body
+
+
 def test_merge_guard_binds_a_user_waiver_to_its_head() -> None:
     body = section(CODE_REVIEW.read_text(), "Merge guard")
     assert (
         "When the user gave the explicit per-PR instruction to skip the review (The gate), "
-        "there is no review-of-record comment: step 2 reads the head SHA the PR had when the user gave that instruction, "
+        "there is no review of record on the PR: step 2 reads the head SHA the PR had when the user gave that instruction, "
         "and step 4 carries that full SHA."
     ) in body
     assert (
@@ -69,11 +94,40 @@ def test_merge_guard_binds_a_user_waiver_to_its_head() -> None:
         "confirm the SHA with the user before relying on it."
     ) in body
     assert "The waiver covers only that head; if the head has changed since, do not merge, and ask the user again." in body
+    assert (
+        "Under that waiver, use the head SHA recorded when the user gave the instruction, "
+        "as the paragraph below specifies."
+    ) in body
 
 
-def test_review_of_record_names_the_full_head_sha() -> None:
+def test_review_of_record_is_posted_as_a_comment_pr_review() -> None:
     body = section(CODE_REVIEW.read_text(), "Review of record")
-    assert "Post the review of record as one PR comment: the full 40-character head SHA reviewed," in body
+    lines = (
+        "Post the review of record as one PR review with the comment event, at the reviewed head, never as an issue comment: "
+        "on GitHub, `gh pr review <n> --comment --body-file <file>`, with the body file in the scratch directory, never in the checkout.",
+        "The body's first line is `Review of record <full 40-character head SHA>`, followed by the reviewer and adjudicator names and models, "
+        "the reviewer's findings, the verdict per finding, and the fix commit for each valid one.",
+        "Each delta round posts a new review; never edit an earlier one.",
+        "If the host denies the post, do not fall back to an issue comment: report the exact command and the denial, and stop.",
+        "Post it, confirm it landed, and only then move to merging.",
+    )
+    positions = [body.find(line) for line in lines]
+    assert -1 not in positions, f"review of record step 4 missing: {lines[positions.index(-1)]}"
+    assert positions == sorted(positions), "review of record step 4 out of order"
+    assert "Post the review of record as one PR comment" not in body
+
+
+def test_gate_requires_the_review_of_record_as_a_pr_review() -> None:
+    body = section(CODE_REVIEW.read_text(), "The gate")
+    assert (
+        "Never attempt a merge until the review of record is posted on the PR as a PR review, "
+        "except under the explicit per-PR review waiver in The gate."
+    ) in body
+
+
+def test_shadow_verdicts_go_in_the_review_of_record() -> None:
+    body = section(CODE_REVIEW.read_text(), "Shadow adjudicators", "###")
+    assert "beside the adjudicator's in the review of record, under an \"Adjudicator comparison\" heading" in body
 
 
 def test_update_branch_is_a_head_change_that_needs_a_delta_review() -> None:
@@ -102,6 +156,40 @@ def test_github_never_merges_green_alone() -> None:
         "After any merge, update the remaining PRs except promotion PRs (Promotion) and re-arm their watches; "
         "each update that changes the head SHA needs a delta review before that PR merges."
     ) in body
+
+
+def test_github_merge_bar_requires_the_comment_review_with_a_waiver_exception() -> None:
+    body = section(GITHUB.read_text(), "Merging")
+    for sentence in (
+        "Except under the explicit per-PR review waiver in The gate, the merge bar requires a completed review of record at the current head.",
+        "Post it as a `--comment` PR review and confirm its state is `COMMENTED` and its `commit_id` matches that head before any merge attempt.",
+        "Under the waiver, use the head SHA recorded when the user gave the instruction and run the merge guard.",
+    ):
+        assert sentence in body, f"github.md Merging missing: {sentence}"
+    assert "review-of-record comment" not in body
+
+
+def test_merge_approval_url_is_the_review_html_url() -> None:
+    text = MERGE_APPROVAL.read_text()
+    assert (
+        "The review-of-record URL is the review's `html_url` from the reviews API (`#pullrequestreview-<id>`), "
+        "not a PR comment URL and not the PR URL alone."
+    ) in text
+    assert "#issuecomment-" not in text
+    assert "#pullrequestreview-1 |" in text
+
+
+def test_todo_tracking_names_the_review_of_record() -> None:
+    text = TODO_TRACKING.read_text()
+    assert "each review round and finding, the review of record, the merge," in text
+    assert "review-of-record comment" not in text
+
+
+def test_shared_files_no_longer_call_the_review_of_record_a_comment() -> None:
+    for path in sorted(SHARED.glob("*.md")):
+        text = path.read_text()
+        assert "review-of-record comment" not in text, path.name
+        assert "as one PR comment" not in text, path.name
 
 
 def test_engineering_workflow_merge_uses_the_guard() -> None:

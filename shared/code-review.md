@@ -12,7 +12,7 @@ Reviewer and adjudicator models, launchers, and the merge owner come from `profi
   Without it, hold and say so.
 - ⛔ Never merge before every finding is resolved in that same PR.
   Fold fixes into the PR's branch; never merge first and file follow-up PRs for findings.
-- ⛔ Never attempt a merge until the review-of-record comment is posted on the PR.
+- ⛔ Never attempt a merge until the review of record is posted on the PR as a PR review, except under the explicit per-PR review waiver in The gate.
   Posting is a step you take and confirm, before the merge call; once posted, it is sufficient evidence to proceed, with no further confirmation layer.
 - Promotion PRs get the same gate over their whole cumulative diff; never skip them as already-reviewed commits.
   Triage each finding by ownership; fixes go on a new feature branch to the integration branch (`references/github.md`, Promotion).
@@ -42,7 +42,10 @@ Every agent that judges work or takes delegated work (reviewer, adjudicator, sha
    Every prompt tells the agent never to write secrets to files or argv.
 4. **Act on the adjudication.**
    Fix every finding ruled valid in the same PR.
-   Post the review of record as one PR comment: the full 40-character head SHA reviewed, reviewer and adjudicator names and models, the reviewer's findings, the verdict per finding, and the fix commit for each valid one.
+   Post the review of record as one PR review with the comment event, at the reviewed head, never as an issue comment: on GitHub, `gh pr review <n> --comment --body-file <file>`, with the body file in the scratch directory, never in the checkout.
+   The body's first line is `Review of record <full 40-character head SHA>`, followed by the reviewer and adjudicator names and models, the reviewer's findings, the verdict per finding, and the fix commit for each valid one.
+   Each delta round posts a new review; never edit an earlier one.
+   If the host denies the post, do not fall back to an issue comment: report the exact command and the denial, and stop.
    Post it, confirm it landed, and only then move to merging.
 5. **Head-bound.**
    The review covers the head it reviewed.
@@ -69,7 +72,7 @@ When `profile.review.shadow_adjudicators` lists agents, run each after the adjud
 
 - Run it as a clean, neutral agent, given exactly the adjudicator's prompt, diff reference, and findings, and never the adjudicator's verdicts.
 - The adjudicator alone decides what is fixed and what gates the merge; a shadow never changes a disposition.
-- Record each shadow's verdicts beside the adjudicator's in the review-of-record comment, under an "Adjudicator comparison" heading, with an agreement summary.
+- Record each shadow's verdicts beside the adjudicator's in the review of record, under an "Adjudicator comparison" heading, with an agreement summary.
 - Never hold the merge on a shadow; if it fails or times out, record it as skipped and continue.
 
 ### Optional reviewers
@@ -95,12 +98,14 @@ Every merge, by any role, runs this guard immediately before the merge command.
 That covers the autonomous merge, a merge the agent performs for a human owner, and a manager-approved merge alike.
 
 1. Read the live PR head SHA (`gh pr view <n> --json headRefOid`).
-2. Read the head SHA named in the latest review-of-record comment on the PR.
-3. If they differ, do not merge: review the delta since the reviewed head (Rounds), post that review of record, and start again at step 1.
+2. Read the PR's reviews with `gh api --paginate repos/<owner>/<repo>/pulls/<n>/reviews`, select the latest submitted review in state `COMMENTED` whose body begins with `Review of record`, and take both its `commit_id` and the full head SHA on its first line.
+   The latest review is the one with the greatest `submitted_at`, not the last in the list.
+3. Except under the explicit per-PR review waiver in The gate, if no such review exists, either SHA is missing, or either differs from the live head, do not merge: review the delta since the reviewed head (Rounds), post that review of record, and start again at step 1.
+   Under that waiver, use the head SHA recorded when the user gave the instruction, as the paragraph below specifies.
 4. Merge with the reviewed full head SHA as the expected-head condition, so the host refuses the merge if the head moved after step 1: on GitHub, `gh pr merge <n> --match-head-commit <full reviewed SHA>`.
    If the merge command cannot carry an expected-head condition, stop and report the merge blocked instead of merging unguarded.
 
-When the user gave the explicit per-PR instruction to skip the review (The gate), there is no review-of-record comment: step 2 reads the head SHA the PR had when the user gave that instruction, and step 4 carries that full SHA.
+When the user gave the explicit per-PR instruction to skip the review (The gate), there is no review of record on the PR: step 2 reads the head SHA the PR had when the user gave that instruction, and step 4 carries that full SHA.
 Record that full SHA (`gh pr view <n> --json headRefOid`) as soon as the user gives the instruction, unless the user named it; if a push could have landed between the instruction and that read, confirm the SHA with the user before relying on it.
 The waiver covers only that head; if the head has changed since, do not merge, and ask the user again.
 
