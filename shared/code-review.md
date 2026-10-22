@@ -83,11 +83,25 @@ Agents in `profile.review.optional_reviewers` are non-blocking:
 
 ## Merge owner
 
-- `profile.review.merge_owner` is `agent`: once the gate is clean on head and the merge bar in `references/github.md` holds, merge without asking.
+- `profile.review.merge_owner` is `agent`: once the gate is clean on head and the merge bar in `references/github.md` holds, merge without asking, through the merge guard below.
 - `profile.review.merge_owner` is `human`: report the clean gate with the PR URL and wait.
 - Carve-out for a delegated manager approval: an engineer working under [merge-approval.md](merge-approval.md) (the `references/merge-approval.md` copy) does not merge on `agent` alone; it waits for the matching `APPROVE` for the current head SHA.
   When `profile.review.merge_owner` is `human`, the human still performs the merge after the approval is recorded.
   Every other case keeps the autonomous merge above.
+
+## Merge guard
+
+Every merge, by any role, runs this guard immediately before the merge command.
+That covers the autonomous merge, a merge the agent performs for a human owner, and a manager-approved merge alike.
+
+1. Read the live PR head SHA (`gh pr view <n> --json headRefOid`).
+2. Read the head SHA named in the latest review-of-record comment on the PR.
+3. If they differ, do not merge: review the delta since the reviewed head (Rounds), post that review of record, and start again at step 1.
+4. Merge with the reviewed full head SHA as the expected-head condition, so the host refuses the merge if the head moved after step 1: on GitHub, `gh pr merge <n> --match-head-commit <full reviewed SHA>`.
+   If the merge command cannot carry an expected-head condition, stop and report the merge blocked instead of merging unguarded.
+
+An update-branch creates a new head that needs a delta review before the PR merges, even when CI is green and the base changes touch none of the PR's files.
+Green CI, a docs-only diff, a base-only merge commit, or a sibling waiting to merge never stands in for that review.
 
 ## Handling findings
 
@@ -104,6 +118,7 @@ Agents in `profile.review.optional_reviewers` are non-blocking:
 - On every watch tick read `mergeable_state`, not just CI: `behind` -> update the branch; `unstable` -> checks still running; `dirty` -> conflict to resolve.
   Never update-branch a promotion PR (`references/github.md`, Promotion).
 - Updating the branch merges base into head; afterwards fast-forward the local worktree with `git fetch origin && git merge --ff-only origin/<branch>`.
+  After updating the branch, the review of record is stale until a delta review covers the new head (Merge guard).
 - Watch the PR, not one SHA: a required up-to-date base makes every sibling merge put the PR behind, and update-branch creates a new head.
 - When polling Actions runs for a PR, filter by `head_branch` only; push-triggered workflows can be required checks too.
 
