@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Prints the current branch's PR state, checks and comments.
+# Prints the current branch's PR state, checks, PR reviews (where the --comment review of record is read) and issue comments.
 #
 # Run it by its installed path with the current directory inside the repository under review:
 #   cd <consumer repo> && <skill dir>/scripts/pr-status.sh [--repo DIR]
@@ -44,8 +44,19 @@ PR="$(gh pr view --json number,url,state,baseRefName,headRefName,isDraft,mergeab
 
 printf '%s\n' "$PR"
 
+NUMBER="$(gh pr view --json number --jq '.number')"
+SLUG="$(gh pr view --json url --jq '.url | sub("^https?://[^/]+/"; "") | sub("/pull/[0-9]+$"; "")')"
+
 echo
-echo "=== PR comments (review of record is posted as an issue comment) ==="
+echo "=== PR reviews ==="
+# The review of record is a COMMENTED review; a PR with no reviews is expected, any gh failure propagates.
+gh api --paginate "repos/${SLUG}/pulls/${NUMBER}/reviews" --jq '
+  .[]
+  | {author: .user.login, state: .state, commit_id: .commit_id, submitted_at: .submitted_at, html_url: .html_url, body: .body}
+'
+
+echo
+echo "=== PR issue comments ==="
 # A PR with no comments is expected; any other gh failure propagates.
 gh pr view --comments --json comments --jq '
   .comments[]
