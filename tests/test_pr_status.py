@@ -53,7 +53,7 @@ fi
 
 REVIEWS = [
     {
-        "user": {"login": "noahwhite"},
+        "user": {"login": "record-author"},
         "state": "COMMENTED",
         "commit_id": HEAD,
         "submitted_at": "2026-10-22T18:00:00Z",
@@ -72,7 +72,7 @@ REVIEWS = [
 COMMENTS = {
     "comments": [
         {
-            "author": {"login": "noahwhite"},
+            "author": {"login": "record-author"},
             "body": "CI note, not a review",
             "createdAt": "2026-10-22T17:00:00Z",
             "url": "https://github.com/acme/widgets/pull/7#issuecomment-5",
@@ -148,7 +148,7 @@ def test_prints_pr_reviews_before_issue_comments(run) -> None:
 def test_reviews_section_lists_author_state_commit_time_and_body(run) -> None:
     done, _ = run()
     rows = [json.loads(l) for l in split_sections(done.stdout)[REVIEWS_HEADER] if l.strip()]
-    assert [r["author"] for r in rows] == ["noahwhite", "other"]
+    assert [r["author"] for r in rows] == ["record-author", "other"]
     record = rows[0]
     assert record["state"] == "COMMENTED"
     assert record["commit_id"] == HEAD
@@ -186,7 +186,7 @@ def test_reviews_across_pages_are_all_listed(run) -> None:
     done, _ = run(reviews=[REVIEWS, [second]])
     assert done.returncode == 0, done.stderr
     rows = [json.loads(l) for l in split_sections(done.stdout)[REVIEWS_HEADER] if l.strip()]
-    assert [r["author"] for r in rows] == ["noahwhite", "other", "third"]
+    assert [r["author"] for r in rows] == ["record-author", "other", "third"]
 
 
 def test_pr_url_with_a_trailing_slash_resolves_the_same_endpoint(run) -> None:
