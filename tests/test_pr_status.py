@@ -34,7 +34,8 @@ if [ "$1" = "api" ]; then
   exit 0
 elif [ "$1 $2" = "pr view" ]; then
   case "$*" in
-    *--comments*) src="$FIXTURES/comments.json" ;;
+    *--comments*--json*|*--json*--comments*) echo "specify only one of --comments or --json" >&2; exit 1 ;;
+    *"--json comments"*) src="$FIXTURES/comments.json" ;;
     *"number,url --jq"*)
       [ -z "${FAIL_META:-}" ] || { echo "gh: no pull request found" >&2; exit 1; }
       echo "$META_LINE"
@@ -226,6 +227,13 @@ def test_reviews_are_read_from_the_host_of_the_pr_url(run) -> None:
     done, log = run(meta="7 https://ghe.example.com/acme/widgets/pull/7")
     assert done.returncode == 0, done.stderr
     assert "api --paginate --hostname ghe.example.com repos/acme/widgets/pulls/7/reviews" in " | ".join(log)
+
+
+def test_issue_comments_are_read_with_json_only_like_real_gh(run) -> None:
+    _, log = run()
+    views = [l for l in log if l.startswith("pr view") and "comments" in l]
+    assert views == ["pr view --json comments --jq " + views[0].split("--jq ", 1)[1]]
+    assert not any("--comments" in l for l in log)
 
 
 def test_zero_issue_comments_still_prints_the_section(run) -> None:

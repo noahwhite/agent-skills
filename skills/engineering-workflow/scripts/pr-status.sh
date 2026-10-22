@@ -67,7 +67,7 @@ gh api --paginate --hostname "$HOST" "repos/${SLUG}/pulls/${NUMBER}/reviews" --j
 echo
 echo "=== PR issue comments ==="
 # A PR with no comments is expected; any other gh failure propagates.
-gh pr view --comments --json comments --jq '
+gh pr view --json comments --jq '
   .comments[]
   | {author: .author.login, body: .body, createdAt: .createdAt, url: .url}
 '
