@@ -45,7 +45,7 @@ Write timestamps in UTC as `YYYY-MM-DDTHH:MM:SSZ`.
 
 - The request names the request ID, the PR, the full head SHA, the review-of-record link, and the CI state.
 - The CI state is `green` only when every required check passes; the engineer only asks when the merge bar holds, so a request with `pending` or `failing` is invalid.
-- The review-of-record URL is the PR comment that records the review at that head, not the PR URL alone.
+- The review-of-record URL is the review's `html_url` from the reviews API (`#pullrequestreview-<id>`), not a PR comment URL and not the PR URL alone.
 - The manager identity is the manager's session label.
 - Write each record as one complete line in a single append; a reader that sees a trailing partial line ignores it and re-reads on the next poll.
 
@@ -103,11 +103,11 @@ Write timestamps in UTC as `YYYY-MM-DDTHH:MM:SSZ`.
 ## Dry-run walkthrough
 
 ```
-REQUEST | REQ-SKL-4-PR12-1 | https://github.com/org/repo/pull/12 | 0123456789abcdef0123456789abcdef01234567 | https://github.com/org/repo/pull/12#issuecomment-1 | green | 2026-10-19T04:20:00Z
+REQUEST | REQ-SKL-4-PR12-1 | https://github.com/org/repo/pull/12 | 0123456789abcdef0123456789abcdef01234567 | https://github.com/org/repo/pull/12#pullrequestreview-1 | green | 2026-10-19T04:20:00Z
 BOUNCE | REQ-SKL-4-PR12-1 | 0123456789abcdef0123456789abcdef01234567 | staff-engineer | review of record predates the current head | 2026-10-19T04:20:30Z
-REQUEST | REQ-SKL-4-PR12-2 | https://github.com/org/repo/pull/12 | 0123456789abcdef0123456789abcdef01234567 | https://github.com/org/repo/pull/12#issuecomment-2 | green | 2026-10-19T04:24:00Z
+REQUEST | REQ-SKL-4-PR12-2 | https://github.com/org/repo/pull/12 | 0123456789abcdef0123456789abcdef01234567 | https://github.com/org/repo/pull/12#pullrequestreview-2 | green | 2026-10-19T04:24:00Z
 APPROVE | REQ-SKL-4-PR12-2 | 0123456789abcdef0123456789abcdef01234567 | staff-engineer | 2026-10-19T04:25:00Z
-REQUEST | REQ-SKL-4-PR12-3 | https://github.com/org/repo/pull/12 | 89abcdef0123456789abcdef0123456789abcdef | https://github.com/org/repo/pull/12#issuecomment-3 | green | 2026-10-19T04:40:00Z
+REQUEST | REQ-SKL-4-PR12-3 | https://github.com/org/repo/pull/12 | 89abcdef0123456789abcdef0123456789abcdef | https://github.com/org/repo/pull/12#pullrequestreview-3 | green | 2026-10-19T04:40:00Z
 APPROVE | REQ-SKL-4-PR12-3 | 89abcdef0123456789abcdef0123456789abcdef | staff-engineer | 2026-10-19T04:41:00Z
 ```
 

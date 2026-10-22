@@ -67,7 +67,9 @@ Always:
 ## Merging
 
 - The merge bar: CI green, the review of record complete and clean at the current head (`references/code-review.md`), every finding resolved, `mergeable_state` clean (or unstable only while every required check is green), and the merge guard in `references/code-review.md` passes.
-- Post the review-of-record comment on the PR as its own step and confirm it landed before any merge attempt.
+- Except under the explicit per-PR review waiver in The gate, the merge bar requires a completed review of record at the current head.
+  Post it as a `--comment` PR review and confirm its state is `COMMENTED` and its `commit_id` matches that head before any merge attempt.
+  Under the waiver, use the head SHA recorded when the user gave the instruction and run the merge guard.
 - Who merges is `profile.review.merge_owner`.
   `agent`: merge once the bar is met, without re-asking.
   `human`: report that the gate is clean on head, with the PR URL, and wait.
