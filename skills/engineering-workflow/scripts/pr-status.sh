@@ -44,8 +44,16 @@ PR="$(gh pr view --json number,url,state,baseRefName,headRefName,isDraft,mergeab
 
 printf '%s\n' "$PR"
 
-NUMBER="$(gh pr view --json number --jq '.number')"
-SLUG="$(gh pr view --json url --jq '.url | sub("^https?://[^/]+/"; "") | sub("/pull/[0-9]+$"; "")')"
+META="$(gh pr view --json number,url --jq '"\(.number) \(.url)"' 2>/dev/null)" || {
+  echo "ERROR: Could not read the current PR's number and URL." >&2
+  exit 12
+}
+if [[ ! "$META" =~ ^([0-9]+)\ https?://[^/]+/([^/]+/[^/]+)/pull/[0-9]+/?$ ]]; then
+  echo "ERROR: Could not derive owner/repo and number from the PR URL ($META)." >&2
+  exit 12
+fi
+NUMBER="${BASH_REMATCH[1]}"
+SLUG="${BASH_REMATCH[2]}"
 
 echo
 echo "=== PR reviews ==="

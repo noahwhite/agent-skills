@@ -15,8 +15,8 @@ REVIEWS_HEADER = "=== PR reviews ==="
 COMMENTS_HEADER = "=== PR issue comments ==="
 HEAD = "0123456789abcdef0123456789abcdef01234567"
 
-# A stand-in for gh: it serves canned JSON per endpoint, applies --jq with the real jq, logs argv,
-# and fails on any endpoint the script should not call.
+# A stand-in for gh: it serves canned JSON per endpoint, applies --jq with the real jq (per page for
+# --paginate, like gh), logs argv, and fails on any endpoint the script should not call.
 FAKE_GH = """#!/usr/bin/env bash
 set -euo pipefail
 printf '%s\\n' "$*" >> "$GH_LOG"
@@ -28,10 +28,17 @@ done
 if [ "$1" = "api" ]; then
   [ -z "${FAIL_API:-}" ] || { echo "gh: HTTP 500" >&2; exit 1; }
   [ "$2" = "--paginate" ] && [ "$3" = "repos/acme/widgets/pulls/7/reviews" ] || { echo "unexpected api call: $*" >&2; exit 3; }
-  src="$FIXTURES/reviews.json"
+  for ((p = 0; p < $(jq length "$FIXTURES/reviews.json"); p++)); do
+    jq ".[$p]" "$FIXTURES/reviews.json" | jq -r "($filter) | if type == \\"string\\" then . else tojson end"
+  done
+  exit 0
 elif [ "$1 $2" = "pr view" ]; then
   case "$*" in
     *--comments*) src="$FIXTURES/comments.json" ;;
+    *"number,url --jq"*)
+      [ -z "${FAIL_META:-}" ] || { echo "gh: no pull request found" >&2; exit 1; }
+      echo "$META_LINE"
+      exit 0 ;;
     *) src="$FIXTURES/pr.json" ;;
   esac
 else
@@ -73,11 +80,14 @@ COMMENTS = {
     ]
 }
 PR = {"number": 7, "url": "https://github.com/acme/widgets/pull/7", "state": "OPEN"}
+META = "7 https://github.com/acme/widgets/pull/7"
 
 
 @pytest.fixture
 def run(tmp_path):
     if shutil.which("jq") is None:
+        if os.environ.get("CI"):
+            pytest.fail("jq is required to apply the --jq filters and must be installed in CI")
         pytest.skip("jq is required to apply the --jq filters")
     fixtures = tmp_path / "fixtures"
     fixtures.mkdir()
@@ -91,9 +101,10 @@ def run(tmp_path):
     subprocess.run(["git", "init", "-q", str(consumer)], check=True)
     log = tmp_path / "gh.log"
 
-    def go(reviews=REVIEWS, fail_api=False):
-        (fixtures / "reviews.json").write_text(json.dumps(reviews))
-        (fixtures / "comments.json").write_text(json.dumps(COMMENTS))
+    def go(reviews=REVIEWS, fail_api=False, fail_meta=False, meta=META, comments=COMMENTS):
+        pages = reviews if reviews and isinstance(reviews[0], list) else [reviews]
+        (fixtures / "reviews.json").write_text(json.dumps(pages))
+        (fixtures / "comments.json").write_text(json.dumps(comments))
         (fixtures / "pr.json").write_text(json.dumps(PR))
         log.write_text("")
         env = {
@@ -101,11 +112,14 @@ def run(tmp_path):
             "PATH": f"{bindir}:{os.environ['PATH']}",
             "FIXTURES": str(fixtures),
             "GH_LOG": str(log),
+            "META_LINE": meta,
         }
         if fail_api:
             env["FAIL_API"] = "1"
+        if fail_meta:
+            env["FAIL_META"] = "1"
         done = subprocess.run(
-            ["bash", str(SCRIPT)], cwd=consumer, env=env, capture_output=True, text=True
+            ["bash", str(SCRIPT)], cwd=consumer, env=env, capture_output=True, text=True, timeout=30
         )
         return done, log.read_text().splitlines()
 
@@ -165,6 +179,46 @@ def test_reviews_api_failure_fails_the_script(run) -> None:
     done, _ = run(fail_api=True)
     assert done.returncode != 0
     assert COMMENTS_HEADER not in done.stdout
+
+
+def test_reviews_across_pages_are_all_listed(run) -> None:
+    second = {**REVIEWS[1], "user": {"login": "third"}, "html_url": "https://github.com/acme/widgets/pull/7#pullrequestreview-13"}
+    done, _ = run(reviews=[REVIEWS, [second]])
+    assert done.returncode == 0, done.stderr
+    rows = [json.loads(l) for l in split_sections(done.stdout)[REVIEWS_HEADER] if l.strip()]
+    assert [r["author"] for r in rows] == ["noahwhite", "other", "third"]
+
+
+def test_pr_url_with_a_trailing_slash_resolves_the_same_endpoint(run) -> None:
+    done, log = run(meta="7 https://github.com/acme/widgets/pull/7/")
+    assert done.returncode == 0, done.stderr
+    assert "api --paginate repos/acme/widgets/pulls/7/reviews" in " | ".join(log)
+
+
+@pytest.mark.parametrize(
+    "meta",
+    ["", "7", "7 not-a-url", "x https://github.com/acme/widgets/pull/7", "7 https://github.com/acme/widgets/issues/7"],
+)
+def test_unparseable_pr_metadata_fails_closed(run, meta) -> None:
+    done, log = run(meta=meta)
+    assert done.returncode == 12
+    assert "Could not derive owner/repo and number" in done.stderr
+    assert not any(l.startswith("api ") for l in log)
+    assert REVIEWS_HEADER not in done.stdout
+
+
+def test_failing_pr_metadata_call_fails_closed(run) -> None:
+    done, log = run(fail_meta=True)
+    assert done.returncode == 12
+    assert "Could not read the current PR's number and URL" in done.stderr
+    assert not any(l.startswith("api ") for l in log)
+
+
+def test_zero_issue_comments_still_prints_the_section(run) -> None:
+    done, _ = run(comments={"comments": []})
+    assert done.returncode == 0, done.stderr
+    assert COMMENTS_HEADER in done.stdout
+    assert [l for l in split_sections(done.stdout)[COMMENTS_HEADER] if l.strip()] == []
 
 
 def test_script_no_longer_says_the_review_of_record_is_an_issue_comment() -> None:
