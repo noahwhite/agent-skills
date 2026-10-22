@@ -27,7 +27,7 @@ for ((i = 0; i < ${#args[@]}; i++)); do
 done
 if [ "$1" = "api" ]; then
   [ -z "${FAIL_API:-}" ] || { echo "gh: HTTP 500" >&2; exit 1; }
-  [ "$2" = "--paginate" ] && [ "$3" = "repos/acme/widgets/pulls/7/reviews" ] || { echo "unexpected api call: $*" >&2; exit 3; }
+  [ "$2" = "--paginate" ] && [ "$3" = "--hostname" ] && [ "$5" = "repos/acme/widgets/pulls/7/reviews" ] || { echo "unexpected api call: $*" >&2; exit 3; }
   for ((p = 0; p < $(jq length "$FIXTURES/reviews.json"); p++)); do
     jq ".[$p]" "$FIXTURES/reviews.json" | jq -r "($filter) | if type == \\"string\\" then . else tojson end"
   done
@@ -159,7 +159,7 @@ def test_reviews_section_lists_author_state_commit_time_and_body(run) -> None:
 
 def test_reviews_come_from_the_paginated_reviews_endpoint(run) -> None:
     _, log = run()
-    assert "api --paginate repos/acme/widgets/pulls/7/reviews" in " | ".join(log)
+    assert "api --paginate --hostname github.com repos/acme/widgets/pulls/7/reviews" in " | ".join(log)
 
 
 def test_issue_comments_keep_their_own_section_without_the_reviews(run) -> None:
@@ -192,7 +192,7 @@ def test_reviews_across_pages_are_all_listed(run) -> None:
 def test_pr_url_with_a_trailing_slash_resolves_the_same_endpoint(run) -> None:
     done, log = run(meta="7 https://github.com/acme/widgets/pull/7/")
     assert done.returncode == 0, done.stderr
-    assert "api --paginate repos/acme/widgets/pulls/7/reviews" in " | ".join(log)
+    assert "api --paginate --hostname github.com repos/acme/widgets/pulls/7/reviews" in " | ".join(log)
 
 
 @pytest.mark.parametrize(
@@ -220,6 +220,12 @@ def test_failing_pr_metadata_call_fails_closed(run) -> None:
     assert done.returncode == 12
     assert "Could not read the current PR's number and URL" in done.stderr
     assert not any(l.startswith("api ") for l in log)
+
+
+def test_reviews_are_read_from_the_host_of_the_pr_url(run) -> None:
+    done, log = run(meta="7 https://ghe.example.com/acme/widgets/pull/7")
+    assert done.returncode == 0, done.stderr
+    assert "api --paginate --hostname ghe.example.com repos/acme/widgets/pulls/7/reviews" in " | ".join(log)
 
 
 def test_zero_issue_comments_still_prints_the_section(run) -> None:

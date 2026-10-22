@@ -48,17 +48,18 @@ META="$(gh pr view --json number,url --jq '"\(.number) \(.url)"' 2>/dev/null)" |
   echo "ERROR: Could not read the current PR's number and URL." >&2
   exit 12
 }
-if [[ ! "$META" =~ ^([0-9]+)\ https?://[^/]+/([^/]+/[^/]+)/pull/([0-9]+)/?$ || "${BASH_REMATCH[1]}" != "${BASH_REMATCH[3]}" ]]; then
+if [[ ! "$META" =~ ^([0-9]+)\ https?://([^/]+)/([^/]+/[^/]+)/pull/([0-9]+)/?$ || "${BASH_REMATCH[1]}" != "${BASH_REMATCH[4]}" ]]; then
   echo "ERROR: Could not derive owner/repo and number from the PR URL ($META)." >&2
   exit 12
 fi
 NUMBER="${BASH_REMATCH[1]}"
-SLUG="${BASH_REMATCH[2]}"
+HOST="${BASH_REMATCH[2]}"
+SLUG="${BASH_REMATCH[3]}"
 
 echo
 echo "=== PR reviews ==="
 # The review of record is a COMMENTED review; a PR with no reviews is expected, any gh failure propagates.
-gh api --paginate "repos/${SLUG}/pulls/${NUMBER}/reviews" --jq '
+gh api --paginate --hostname "$HOST" "repos/${SLUG}/pulls/${NUMBER}/reviews" --jq '
   .[]
   | {author: .user.login, state: .state, commit_id: .commit_id, submitted_at: .submitted_at, html_url: .html_url, body: .body}
 '

@@ -333,12 +333,15 @@ COMMENT_NAMES = (
     r"|\breview[- ]of[- ]record comment\b|\bas (?:one|a) comment\b)"
 )
 COMMENT_NAMES_RE = re.compile(COMMENT_NAMES, re.IGNORECASE)
-# "never as an issue comment", "do not post it as a PR comment", "not a PR comment URL": a negation word, at most
-# eight plain words, then the name. A comma ends the span, so "not the QA report, as one PR comment" stays flagged.
-# A word that turns the negation back into an instruction ("do not skip posting ... as a PR comment") breaks the span.
+# "never as an issue comment", "do not post it as a PR comment", "not a PR comment URL": a negation word, then only
+# words from a closed list of plain fillers, then the name. Any other word ("delay", "skip", a comma) ends the span, so
+# a reversal such as "do not delay posting ... as a PR comment" is still flagged.
+NEGATION_FILLERS = (
+    r"(?:as|an?|the|one|it|this|that|its|on|to|post(?:ed|ing)?|use|treat|call|send|submit|write|name"
+    r"|review-of-record|review|of|record|PR|pull|request)"
+)
 NEGATED_NAME_RE = re.compile(
-    r"\b(?:never|not|no)\b(?:\s+(?!(?:skip|skipping|omit|omitting|forget|forgetting|fail|failing|neglect|avoid|avoiding"
-    r"|stop|stopping|without)\b)[\w'`-]+){0,8}?\s+" + COMMENT_NAMES,
+    r"\b(?:never|not|no)\b(?:\s+" + NEGATION_FILLERS + r"\b){0,8}?\s+" + COMMENT_NAMES,
     re.IGNORECASE,
 )
 UNRELATED_COMMENT_RE = re.compile(r"linear issue comment", re.IGNORECASE)
@@ -365,16 +368,27 @@ def text_units(text: str) -> list[str]:
     return [" ".join(unit) for unit in units if unit]
 
 
+SENTENCE_END = re.compile(r"(?<=[.!?])\s+(?=[A-Z`\"(*-])")
+FOLLOW_ON = re.compile(r"(?:It|This|That|These|Those|They)\b")
+
+
 def comment_naming_sentences(text: str) -> list[str]:
-    """Units about the review of record that call it a comment, minus unrelated and negated uses."""
+    """Sentences about the review of record that call it a comment, minus unrelated and negated uses.
+
+    Lines of one paragraph, list item or blockquote are joined first, so a sentence wrapped over two lines is one
+    sentence; a sentence that starts with a pronoun right after one about the review of record is about it too.
+    """
     hits = []
     for unit in text_units(text):
-        if not ABOUT_RECORD.search(unit):
-            continue
-        cleaned = UNRELATED_COMMENT_RE.sub("", unit)
-        cleaned = NEGATED_NAME_RE.sub("", cleaned)
-        if COMMENT_NAMES_RE.search(cleaned):
-            hits.append(unit)
+        about = False
+        for sentence in SENTENCE_END.split(unit):
+            about = bool(ABOUT_RECORD.search(sentence)) or (about and bool(FOLLOW_ON.match(sentence)))
+            if not about:
+                continue
+            cleaned = UNRELATED_COMMENT_RE.sub("", sentence)
+            cleaned = NEGATED_NAME_RE.sub("", cleaned)
+            if COMMENT_NAMES_RE.search(cleaned):
+                hits.append(sentence)
     return hits
 
 
@@ -434,6 +448,11 @@ def test_wording_scan_flags_wrapped_follow_on_and_variant_names() -> None:
         "Do not skip it. Post the review of record as an issue comment.",
         "Do not skip posting the review of record as a PR comment.",
         "Never fail to post the review of record as an issue comment.",
+        "Do not delay posting the review of record as a PR comment.",
+        "Do not wait; post the review of record as a PR comment.",
+        "Do not post it, post the review of record as a PR comment.",
+        "The review of record: do not post it, post it as a PR comment.",
+        "Post the review of record. It is not a PR review but a PR comment.",
     )
     for mutant in mutants:
         assert comment_naming_sentences(mutant), f"scan missed: {mutant!r}"
@@ -458,7 +477,11 @@ def test_wording_scan_keeps_separate_list_items_and_commands_apart() -> None:
     clean = (
         "- Post the review of record as a PR review.\n- Post the QA evidence as an issue comment.",
         "1. Post the review of record as a PR review.\n2. Post the QA evidence as a PR comment.",
+        "- Post the review of record as a PR review\n- Post the QA evidence as an issue comment",
         'Post the review of record as a PR review, then run `linear issue comment add <ID> --body "done"`.',
+        "The review of record is a PR review. The QA evidence is posted as an issue comment.",
+        "The review of record is a PR review.\nThe QA evidence is posted as an issue comment.",
+        "Post the review of record as a PR review. Then post the QA report as a PR comment.",
     )
     for text in clean:
         assert comment_naming_sentences(text) == [], f"scan flagged: {text!r}"
