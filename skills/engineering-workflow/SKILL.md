@@ -207,7 +207,7 @@ If the brief does not give the approvals-file path or the wake address the runti
 1. Record a `REQUEST` in the approvals file, naming the request ID, the PR, the full head SHA, the review-of-record link, and the CI state.
 2. Deliver the same request through the wake capability in `references/runtimes.md`.
 3. Poll the approvals file and do not merge until an `APPROVE` for that request ID and the current full head SHA is recorded.
-4. Re-read the live PR and confirm the head SHA still matches the approval, the required checks are green, and the PR is mergeable; merge with the approved full head SHA as an expected-head condition, and if the merge command cannot carry one, stop and report the merge blocked instead of merging unguarded.
+4. Re-read the live PR, run the merge guard in `references/code-review.md`, and confirm the head SHA still matches the approval, the required checks are green, and the PR is mergeable; merge with the approved full head SHA as an expected-head condition, and if the merge command cannot carry one, stop and report the merge blocked instead of merging unguarded.
 5. If the head changes for any reason, including a base-only update, record a new request with a new request ID and the new full head SHA.
 
 If you must stop while waiting, the handback states that the work is blocked on merge approval and names the request ID, the PR, and the head SHA.
@@ -217,10 +217,11 @@ The handshake takes precedence over the autonomous merge in `references/github.m
 
 Otherwise:
 
-- If `profile.review.merge_owner` is `agent`: merge with `profile.git.merge_method` per `references/github.md`, then confirm the PR is actually merged.
+- If `profile.review.merge_owner` is `agent`: run the merge guard in `references/code-review.md`, then merge with `profile.git.merge_method` and the reviewed full head SHA as the expected-head condition (on GitHub, `gh pr merge <n> --match-head-commit <full reviewed SHA>` plus the merge-method flag), per `references/github.md`, and confirm the PR is actually merged.
 - If it is `human`: tell the user the PR is merge-ready (link, head SHA, review-of-record comment) and wait; resume at step 11 once it is merged.
 
 Never merge with failing required checks or before the review of record is clean on head.
+An update-branch after the review, even one that brings in only base changes, is a new head: review the delta before merging.
 
 ## 11. Deploy and verify
 

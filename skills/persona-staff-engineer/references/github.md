@@ -68,7 +68,7 @@ Always:
 
 ## Merging
 
-- The merge bar: CI green, the review of record complete and clean at the current head (`references/code-review.md`), every finding resolved, and `mergeable_state` clean (or unstable only while every required check is green).
+- The merge bar: CI green, the review of record complete and clean at the current head (`references/code-review.md`), every finding resolved, `mergeable_state` clean (or unstable only while every required check is green), and the merge guard in `references/code-review.md` passes.
 - Post the review-of-record comment on the PR as its own step and confirm it landed before any merge attempt.
 - Who merges is `profile.review.merge_owner`.
   `agent`: merge once the bar is met, without re-asking.
@@ -79,8 +79,8 @@ Always:
   Every other case keeps the rule above.
 - Feature PRs merge with `profile.git.merge_method`.
   Promotion PRs merge with the method the release branch's protection requires (the consumer overlay supplies it).
-- When the base requires branches to be up to date, merge whichever PR is green immediately; never hold a green PR behind a sibling.
-  After any merge, update the remaining PRs and re-arm their watches.
+- When the base requires branches to be up to date, merge a PR as soon as it is green and its review of record covers its current head; never hold such a PR behind a sibling.
+  After any merge, update the remaining PRs except promotion PRs (Promotion) and re-arm their watches; each update that changes the head SHA needs a delta review before that PR merges.
 - For trivial PRs keep the posted review write-up terse; reserve long write-ups for risky changes.
 - ⛔ Never force-push (`--force`, `--force-with-lease`), even on your own new branch.
   Correct a bad branch by cutting a new one from the right base and re-applying the changes.
