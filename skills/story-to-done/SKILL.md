@@ -83,7 +83,7 @@ It must include:
 - The story identifier.
 - An instruction to load and follow `engineering-workflow` for the whole story: triage, slice-based TDD, the pre-PR gate, the PR to `profile.git.integration_branch`, the review of record, remediation, the merge per `profile.review.merge_owner`, the deploy, and the move to `profile.tracker.states.in_deployment_review`.
 - What to hand back: the story state, each PR link, the head SHA each PR's review of record covered, the merged commit, and the environment and deployed build it verified; or, if it stops, that it is blocked and why.
-- The merge rules: a review of record binds only to the exact head it reviewed, so any change to the head, including an update-branch, needs a delta review posted before merging; every merge must run the merge guard in `references/code-review.md` and carry the reviewed full head SHA as the expected-head condition.
+- The merge rules: a review of record binds only to the exact head it reviewed, so any change to the head, including an update-branch, needs a delta review posted before merging; every merge must run the merge guard in `references/code-review.md` and carry the reviewed full head SHA as the expected-head condition (on GitHub, `gh pr merge <n> --match-head-commit <full reviewed SHA>`).
 - The secrets rule (never write secrets to files or argv) and the attribution rule from `profile.git.ai_attribution`.
 - A "Track your work" paragraph: before starting, write a fine-grained checklist file in the scratch directory (for example `<scratch>/senior-engineer-todo.md`, `- [ ]` and `- [x]` items, one per slice step, test, gate round, review round, remediation, deploy, verification, and wait, the current step marked `(in progress)`) and update it at every step.
 
@@ -92,7 +92,7 @@ Let the senior engineer do the engineering; do not pre-empt its choices.
 
 When it hands back, read the story yourself and confirm it is in `profile.tracker.states.in_deployment_review`; a handback is a claim, the tracker is the record.
 If it handed back blocked, or the story is not in deployment review, stop and report why.
-Then, for every PR it merged, read the PR yourself (`gh pr view <n> --json headRefOid,mergeCommit,comments`) and compare each merged PR's merged head with the head SHA in its last review-of-record comment; if they differ, report the PR and both SHAs, and stop.
+Then, for every PR it merged, read the PR yourself (`gh pr view <n> --json headRefOid,mergeCommit,comments`) and compare each merged PR's head at merge (`headRefOid`, not the merge commit) with the head SHA in its last review-of-record comment; if they differ, report the PR and both SHAs, and stop.
 
 ## 3. QA agent: verify the deployed story
 
@@ -103,13 +103,13 @@ Brief it as a QA agent, with only:
   When step 2 did not run in this engagement (the story was already in deployment review), use the environment the user named; if they named none, leave it out so `qa-verification` picks its default.
 - An instruction to load and follow `qa-verification` for the story, including its evidence and its closing status decision.
 - What to hand back: the story's final state, the verdict and evidence for each AC and DoD item, any item left outstanding with its owner, any incidental defect it noted, and each PR it merged with the head SHA its review of record covered.
-- The merge rules: a review of record binds only to the exact head it reviewed, so any change to the head, including an update-branch, needs a delta review posted before merging; every merge must run the merge guard in `references/code-review.md` and carry the reviewed full head SHA as the expected-head condition.
+- The merge rules: a review of record binds only to the exact head it reviewed, so any change to the head, including an update-branch, needs a delta review posted before merging; every merge must run the merge guard in `references/code-review.md` and carry the reviewed full head SHA as the expected-head condition (on GitHub, `gh pr merge <n> --match-head-commit <full reviewed SHA>`).
 - The secrets rule and a "Track your work" paragraph (checklist file `<scratch>/qa-agent-round-<n>-todo.md`).
 
 Never give it the senior engineer's handback beyond the environment, the PR's rationale, the fixes made, an earlier round's verdicts, or the verdict you expect.
 
 When it hands back, read the story's state yourself.
-For every PR it merged, such as the evidence PR, compare each merged PR's merged head with the head SHA in its last review-of-record comment; if they differ, report the PR and both SHAs, and stop.
+For every PR it merged, such as the evidence PR, read the PR yourself (`gh pr view <n> --json headRefOid,mergeCommit,comments`) and compare each merged PR's head at merge (`headRefOid`, not the merge commit) with the head SHA in its last review-of-record comment; if they differ, report the PR and both SHAs, and stop.
 
 ## 4. Act on the QA outcome
 

@@ -44,7 +44,7 @@ Every agent that judges work or takes delegated work (reviewer, adjudicator, sha
    Every prompt tells the agent never to write secrets to files or argv.
 4. **Act on the adjudication.**
    Fix every finding ruled valid in the same PR.
-   Post the review of record as one PR comment: head SHA reviewed, reviewer and adjudicator names and models, the reviewer's findings, the verdict per finding, and the fix commit for each valid one.
+   Post the review of record as one PR comment: the full 40-character head SHA reviewed, reviewer and adjudicator names and models, the reviewer's findings, the verdict per finding, and the fix commit for each valid one.
    Post it, confirm it landed, and only then move to merging.
 5. **Head-bound.**
    The review covers the head it reviewed.
@@ -102,7 +102,10 @@ That covers the autonomous merge, a merge the agent performs for a human owner, 
 4. Merge with the reviewed full head SHA as the expected-head condition, so the host refuses the merge if the head moved after step 1: on GitHub, `gh pr merge <n> --match-head-commit <full reviewed SHA>`.
    If the merge command cannot carry an expected-head condition, stop and report the merge blocked instead of merging unguarded.
 
-An update-branch creates a new head that needs a delta review before the PR merges, even when CI is green and the base changes touch none of the PR's files.
+When the user gave the explicit per-PR instruction to skip the review (The gate), there is no review-of-record comment: step 2 reads the head SHA the PR had when the user gave that instruction, and step 4 carries that full SHA.
+The waiver covers only that head; if the head has changed since, do not merge, and ask the user again.
+
+An update-branch that changes the head SHA creates a new head that needs a delta review before the PR merges, even when CI is green and the base changes touch none of the PR's files.
 Green CI, a docs-only diff, a base-only merge commit, or a sibling waiting to merge never stands in for that review.
 
 ## Handling findings
@@ -120,7 +123,7 @@ Green CI, a docs-only diff, a base-only merge commit, or a sibling waiting to me
 - On every watch tick read `mergeable_state`, not just CI: `behind` -> update the branch; `unstable` -> checks still running; `dirty` -> conflict to resolve.
   Never update-branch a promotion PR (`references/github.md`, Promotion).
 - Updating the branch merges base into head; afterwards fast-forward the local worktree with `git fetch origin && git merge --ff-only origin/<branch>`.
-  After updating the branch, the review of record is stale until a delta review covers the new head (Merge guard).
+  After an update that changes the head SHA, the review of record is stale until a delta review covers the new head (Merge guard), even when CI is green and the base changes touch none of the PR's files.
 - Watch the PR, not one SHA: a required up-to-date base makes every sibling merge put the PR behind, and update-branch creates a new head.
 - When polling Actions runs for a PR, filter by `head_branch` only; push-triggered workflows can be required checks too.
 

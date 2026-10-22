@@ -136,6 +136,6 @@ def test_shared_merge_rules_carry_the_delegated_carve_out() -> None:
     assert "does not merge until the matching `APPROVE` is recorded for the current head SHA" in merging
     assert "`profile.review.merge_owner` still decides who performs the merge" in merging
     code_review = (ROOT / "shared" / "code-review.md").read_text()
-    owner = code_review.split("## Merge owner", 1)[1].split("## Handling findings", 1)[0]
+    owner = code_review.split("## Merge owner", 1)[1].split("\n## ", 1)[0]
     assert "does not merge on `agent` alone" in owner
     assert "When `profile.review.merge_owner` is `human`, the human still performs the merge" in owner

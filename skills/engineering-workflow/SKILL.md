@@ -217,7 +217,7 @@ The handshake takes precedence over the autonomous merge in `references/github.m
 
 Otherwise:
 
-- If `profile.review.merge_owner` is `agent`: run the merge guard in `references/code-review.md`, then merge with `profile.git.merge_method` and the reviewed full head SHA as the expected-head condition, per `references/github.md`, and confirm the PR is actually merged.
+- If `profile.review.merge_owner` is `agent`: run the merge guard in `references/code-review.md`, then merge with `profile.git.merge_method` and the reviewed full head SHA as the expected-head condition (on GitHub, `gh pr merge <n> --match-head-commit <full reviewed SHA>` plus the merge-method flag), per `references/github.md`, and confirm the PR is actually merged.
 - If it is `human`: tell the user the PR is merge-ready (link, head SHA, review-of-record comment) and wait; resume at step 11 once it is merged.
 
 Never merge with failing required checks or before the review of record is clean on head.

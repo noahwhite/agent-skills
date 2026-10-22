@@ -80,7 +80,7 @@ Always:
 - Feature PRs merge with `profile.git.merge_method`.
   Promotion PRs merge with the method the release branch's protection requires (the consumer overlay supplies it).
 - When the base requires branches to be up to date, merge a PR as soon as it is green and its review of record covers its current head; never hold such a PR behind a sibling.
-  After any merge, update the remaining PRs and re-arm their watches; each update creates a new head that needs a delta review before that PR merges.
+  After any merge, update the remaining PRs except promotion PRs (Promotion) and re-arm their watches; each update that changes the head SHA needs a delta review before that PR merges.
 - For trivial PRs keep the posted review write-up terse; reserve long write-ups for risky changes.
 - ⛔ Never force-push (`--force`, `--force-with-lease`), even on your own new branch.
   Correct a bad branch by cutting a new one from the right base and re-applying the changes.
