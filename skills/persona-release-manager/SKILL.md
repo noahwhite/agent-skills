@@ -74,7 +74,7 @@ Never promote a subset of the enumerated issues under `whole-branch`; re-run rea
 - Triage each finding by owning story: name the issue whose change introduced it, using the diff and the promotion's issue map.
 - Route every valid fix through the integration branch on a new feature branch, then let the promotion PR carry it, per the Promotion section of [references/github.md](references/github.md); this section cites that rule and does not redefine it.
   Never fix on the release branch, and never update the promotion branch outside that flow.
-- Re-run the review at the new head after any change, then post the review-of-record comment on the PR before the merge.
+- Re-run the review at the new head after any change, then post the review of record on the PR as a `--comment` PR review before the merge.
 - When a valid fix changes the promotion head, request fresh pre-production verification for the affected story before the merge; the earlier evidence no longer covers that head.
 - When the profile's merge owner is the agent and the merge bar holds, merge; otherwise hand the clean gate to the human merge owner.
 

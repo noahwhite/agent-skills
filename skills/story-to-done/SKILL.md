@@ -92,7 +92,11 @@ Let the senior engineer do the engineering; do not pre-empt its choices.
 
 When it hands back, read the story yourself and confirm it is in `profile.tracker.states.in_deployment_review`; a handback is a claim, the tracker is the record.
 If it handed back blocked, or the story is not in deployment review, stop and report why.
-Then, for every PR it merged, read the PR yourself (`gh pr view <n> --json headRefOid,mergeCommit,comments`) and compare each merged PR's head at merge (`headRefOid`, not the merge commit) with the head SHA in its last review-of-record comment; if they differ, report the PR and both SHAs, and stop.
+Then, for every PR it merged, read the PR yourself with `gh pr view <n> --json headRefOid,mergeCommit` and `gh api --paginate repos/<owner>/<repo>/pulls/<n>/reviews`.
+Select the review of record as the merge guard in `references/code-review.md` does (the `COMMENTED` review whose body begins with `Review of record` and has the greatest `submitted_at`).
+Compare the merged PR's `headRefOid` (its head at merge, not the merge commit) separately with that review's `commit_id` and with the full head SHA on its first line.
+Except under the explicit per-PR review waiver in The gate, a missing review, a missing SHA, or either mismatch is reported with the PR and all available SHAs, and stops the loop.
+For a waived PR, compare the merged PR's `headRefOid` with the SHA recorded when the user gave the instruction; report and stop if that SHA is missing or differs.
 
 ## 3. QA agent: verify the deployed story
 
@@ -109,7 +113,11 @@ Brief it as a QA agent, with only:
 Never give it the senior engineer's handback beyond the environment, the PR's rationale, the fixes made, an earlier round's verdicts, or the verdict you expect.
 
 When it hands back, read the story's state yourself.
-For every PR it merged, such as the evidence PR, read the PR yourself (`gh pr view <n> --json headRefOid,mergeCommit,comments`) and compare each merged PR's head at merge (`headRefOid`, not the merge commit) with the head SHA in its last review-of-record comment; if they differ, report the PR and both SHAs, and stop.
+For every PR it merged, such as the evidence PR, read the PR yourself with `gh pr view <n> --json headRefOid,mergeCommit` and `gh api --paginate repos/<owner>/<repo>/pulls/<n>/reviews`.
+Select the review of record as the merge guard in `references/code-review.md` does (the `COMMENTED` review whose body begins with `Review of record` and has the greatest `submitted_at`).
+Compare the merged PR's `headRefOid` (its head at merge, not the merge commit) separately with that review's `commit_id` and with the full head SHA on its first line.
+Except under the explicit per-PR review waiver in The gate, a missing review, a missing SHA, or either mismatch is reported with the PR and all available SHAs, and stops the loop.
+For a waived PR, compare the merged PR's `headRefOid` with the SHA recorded when the user gave the instruction; report and stop if that SHA is missing or differs.
 
 ## 4. Act on the QA outcome
 

@@ -180,7 +180,7 @@ For every finding the adjudicator ruled valid:
 6. Review the new head before merging: any change to the PR head after the review of record, fixes included, needs a review at the new head.
    A round-2 or later delta review of the change since the last reviewed head, plus any regressions it introduced, is enough (see `references/code-review.md`, Rounds).
 
-Post the review of record on the PR as one comment (head SHA, findings, verdict per finding, fix commit per valid finding, the models used) **before** attempting the merge.
+Post the review of record on the PR as one PR review with the comment event (`gh pr review <n> --comment --body-file <file>`; first line `Review of record <full head SHA>`, then findings, verdict per finding, fix commit per valid finding, the models used), never as an issue comment, **before** attempting the merge.
 Resolve a human review thread only after its issue is fixed or explicitly ruled a false positive or out of scope.
 
 ## 9. Merge readiness
@@ -191,7 +191,7 @@ The PR is merge-ready only when all are true:
 - The pre-PR gate converged, or its residual findings were explicitly justified.
 - Any completed optional review has no unresolved Critical or High finding.
 - Every legitimate Medium finding is handled or justified.
-- The review of record completed at the current head, every valid finding is fixed, and its comment is posted and visible.
+- The review of record completed at the current head, every valid finding is fixed, and its `--comment` PR review is posted and visible.
 - All required checks are green.
 - The branch holds only intended changes, targets `profile.git.integration_branch`, and is mergeable.
 
@@ -218,7 +218,7 @@ The handshake takes precedence over the autonomous merge in `references/github.m
 Otherwise:
 
 - If `profile.review.merge_owner` is `agent`: run the merge guard in `references/code-review.md`, then merge with `profile.git.merge_method` and the reviewed full head SHA as the expected-head condition (on GitHub, `gh pr merge <n> --match-head-commit <full reviewed SHA>` plus the merge-method flag), per `references/github.md`, and confirm the PR is actually merged.
-- If it is `human`: tell the user the PR is merge-ready (link, head SHA, review-of-record comment) and wait; resume at step 11 once it is merged.
+- If it is `human`: tell the user the PR is merge-ready (link, head SHA, review-of-record `--comment` PR review link) and wait; resume at step 11 once it is merged.
 
 Never merge with failing required checks or before the review of record is clean on head.
 An update-branch after the review, even one that brings in only base changes, is a new head: review the delta before merging.
@@ -256,7 +256,7 @@ Done comes later, after the acceptance criteria are verified in the deployed env
 - Never force-push; never write secrets to files or command arguments.
 - Prefer small, reviewable commits and preserve the repository's conventions, scripts, CI and PR template.
 
-[scripts/pr-status.sh](scripts/pr-status.sh) prints the current branch's PR state, checks and comments.
+[scripts/pr-status.sh](scripts/pr-status.sh) prints the current branch's PR state, checks, PR reviews (including the `--comment` review of record) and issue comments.
 
 ## Completion summary
 

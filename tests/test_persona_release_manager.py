@@ -136,7 +136,7 @@ def test_review_section_covers_the_cumulative_diff_and_ownership() -> None:
         "references/github.md",
         "promotion",
         "fresh pre-production verification",
-        "review-of-record comment",
+        "post the review of record on the pr as a `--comment` pr review before the merge",
     ):
         assert phrase in body, f"review missing: {phrase}"
 

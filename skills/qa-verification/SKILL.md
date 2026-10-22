@@ -106,7 +106,7 @@ If `profile.qa.evidence_dir` is unset, the project does not keep in-repo evidenc
   The review of record is `profile.review.reviewer`, then a separate clean, neutral `profile.review.adjudicator`, as `references/code-review.md` defines.
   Never hand the reviewer or the adjudicator your QA verdicts.
   A docs-only diff, green checks, a long wait, or user frustration do not waive the gate; if you cannot get a review, hold and say so.
-- Fix what the adjudicator rules valid, and post the review-of-record comment on the PR before the merge, never after.
+- Fix what the adjudicator rules valid, and post the review of record on the PR as a `--comment` PR review before the merge, never after.
 - Merge only on the exact final head with CI finished, never by an admin override over pending checks, and per `profile.review.merge_owner` (hand the merge to the user when it is `human`): run the merge guard in `references/code-review.md` and merge with the reviewed full head SHA as the expected-head condition (on GitHub, `gh pr merge <n> --match-head-commit <full reviewed SHA>`); if the merge command cannot carry it, stop and report the merge blocked.
   An update-branch after the review is a new head that needs a delta review first, even for a docs-only PR.
 - Evidence counts as checked in only once the PR is merged; an open PR is not checked in.
