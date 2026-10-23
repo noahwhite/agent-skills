@@ -11,6 +11,16 @@ Each project supplies its own values through a profile and its own operational d
 
 The skills are runtime-neutral; CI checks that opencode discovers every one, and they load the same way in Claude Code.
 
+## Workflow
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="marketing/workflow/workflow-dark.png">
+  <img src="marketing/workflow/workflow.png" alt="The agent-skills lifecycle: Capture, Refine, Implement, Pre-PR gate, Review of record, Deploy to dev, QA verify, Done. Review findings loop back to Implement in the same PR, and a QA failure returns the story to In Progress with a new QA agent. Personas own the decisions, and your project supplies its values through a profile and overlays.">
+</picture>
+
+Every story passes the same gates: a pre-PR adversarial check, an independent review of record on the exact head, then QA against the acceptance criteria on a deployed environment.
+Done is never "merged".
+
 ## Skills
 
 | Skill | Use it to |
