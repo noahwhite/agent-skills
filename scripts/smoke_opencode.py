@@ -78,20 +78,37 @@ def check_layout(root, work, layout, binary, timeout=30):
                or not isinstance(item.get("path"), str) for item in items):
             return None, "invalid V2 skill entry"
         found = {item["id"]: os.path.realpath(item["path"]) for item in items}
+        for dup in items:
+            others = [other for other in items if other["id"] == dup["id"]]
+            if len(others) > 1 and len({os.path.realpath(o["path"]) for o in others}) > 1:
+                return None, f"skill API returned duplicate id {dup['id']} with differing paths"
         missing = [name for name, path in expected.items() if found.get(name) != path]
         if missing:
             return None, f"discovered skills are missing {', '.join(missing)}"
         return found, None
 
     # The service port is explicit so this fixture cannot attach to a user's server.
-    with socket.socket() as sock:
-        sock.bind(("127.0.0.1", 0))
-        port = sock.getsockname()[1]
-    cli("service", "set", "port", str(port))
+    # Another process can still take the port between this bind and the service start,
+    # so a start failure that names the port is retried on a fresh port (C05).
+    started = False
+    for attempt in range(3):
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        cli("service", "set", "port", str(port))
+        try:
+            cli("service", "start")
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as start_error:
+            if attempt == 2:
+                raise RuntimeError(
+                    f"{layout}: opencode service did not start on any of 3 port attempts: "
+                    f"{start_error.stderr or start_error.stdout or start_error}") from start_error
+            continue
+        started = True
+        break
     error = stop_error = None
     try:
         try:
-            cli("service", "start")
             deadline = time.monotonic() + timeout
             last_problem = "registration did not start"
             while True:

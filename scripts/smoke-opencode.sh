@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Credential-free V2 discovery across the documented project and global layouts.
+# Extra arguments are forwarded to smoke_opencode.py (see its --root and --timeout).
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"

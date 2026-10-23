@@ -35,9 +35,10 @@ def bundle(tmp_path):
 
 
 def fake_cli(monkeypatch, smoke, *, omit=None, wrong_path=False, malformed=False, fail=False,
-             truncate=False, stop_fails=False):
+             truncate=False, stop_fails=False, duplicate=False, busy_port=0):
     calls = []
     api_calls = []
+    start_attempts = []
 
     def run(argv, *, cwd, env, **kwargs):
         calls.append((argv, Path(cwd), env))
@@ -45,6 +46,15 @@ def fake_cli(monkeypatch, smoke, *, omit=None, wrong_path=False, malformed=False
         assert "LINEAR_API_KEY" not in env
         assert "OPENAI_API_KEY" not in env
         assert kwargs["check"] and kwargs["timeout"] > 0
+        if argv[1:3] == ["service", "start"]:
+            # Simulate another process taking the free port between getsockname
+            # and the first start attempt (retry must pick a new port).
+            if len(start_attempts) < int(busy_port):
+                start_attempts.append(argv)
+                raise subprocess.CalledProcessError(
+                    1, argv, stderr="port is already in use by another process")
+            start_attempts.append(argv)
+            return subprocess.CompletedProcess(argv, 0, "", "")
         if argv[1:3] == ["service", "stop"] and stop_fails:
             raise subprocess.CalledProcessError(9, argv, stderr="stop broken")
         if argv[1:4] == ["api", "get", "/api/skill"]:
@@ -64,6 +74,9 @@ def fake_cli(monkeypatch, smoke, *, omit=None, wrong_path=False, malformed=False
                 next(item for item in payload["data"] if item["id"] == "alpha")["path"] = "/builtin/alpha.md"
             if malformed:
                 payload = []
+            if duplicate:
+                payload["data"].append(dict(payload["data"][0]))
+                payload["data"][-1]["path"] = "/foreign/alpha.md"
             api_calls.append(payload)
             body = json.dumps(payload)
             # The real 2.1.3 CLI sometimes returns a truncated body with exit 0.
@@ -75,7 +88,6 @@ def fake_cli(monkeypatch, smoke, *, omit=None, wrong_path=False, malformed=False
                     argv, 0, json.dumps({"location": {"directory": str(project)}, "data": []}), "")
             return subprocess.CompletedProcess(argv, 0, body, "")
         return subprocess.CompletedProcess(argv, 0, "", "")
-
     monkeypatch.setattr(smoke.subprocess, "run", run)
     monkeypatch.setattr(smoke.time, "sleep", lambda _: None)
     return calls, api_calls
@@ -149,6 +161,31 @@ def test_stop_failure_after_success_fails_the_layout(smoke, bundle, tmp_path, mo
     fake_cli(monkeypatch, smoke, stop_fails=True)
     with pytest.raises(RuntimeError, match="service stop"):
         smoke.check_layout(bundle, tmp_path / "fixture", "project-agents", "opencode", timeout=1)
+
+
+def test_occupied_port_is_retried_with_a_new_port(smoke, bundle, tmp_path, monkeypatch):
+    calls, _ = fake_cli(monkeypatch, smoke, busy_port=1)
+    smoke.check_layout(bundle, tmp_path / "fixture", "project-agents", "opencode", timeout=1)
+    sets = [argv for argv, _, _ in calls if argv[1:3] == ["service", "set"]]
+    starts = [argv for argv, _, _ in calls if argv[1:3] == ["service", "start"]]
+    assert len(sets) == 2
+    assert len(starts) == 2
+    assert calls[-1][0] == ["opencode", "service", "stop"]
+
+
+def test_persistent_occupied_port_fails_the_layout(smoke, bundle, tmp_path, monkeypatch):
+    calls, _ = fake_cli(monkeypatch, smoke, busy_port=99)
+    with pytest.raises(RuntimeError, match="port is already in use|in use"):
+        smoke.check_layout(bundle, tmp_path / "fixture", "project-agents", "opencode", timeout=.01)
+    # Nothing was ever started, so nothing is stopped (and three fresh ports were tried).
+    assert not any(argv[1:3] == ["service", "stop"] for argv, _, _ in calls)
+    assert len(calls) == 7  # git init + 3 x (set + start)
+
+
+def test_duplicate_id_with_a_different_path_is_rejected(smoke, bundle, tmp_path, monkeypatch):
+    fake_cli(monkeypatch, smoke, duplicate=True)
+    with pytest.raises(RuntimeError, match="duplicate id [a-z]+"):
+        smoke.check_layout(bundle, tmp_path / "fixture", "project-agents", "opencode", timeout=.01)
 
 
 def test_manifest_prevents_deleted_skill_from_shrinking_expectation(smoke, bundle, tmp_path, monkeypatch):
