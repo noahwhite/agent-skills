@@ -125,9 +125,9 @@ Review roles run as subagents or as shell-launched CLIs (for example `codex exec
 - `scripts/smoke-opencode.sh` checks every skill declared in `skills.json` with OpenCode V2 2.1.2 (override with `OPENCODE_VERSION`), installing `@opencode/cli` when needed; `OPENCODE_FORCE_INSTALL=1` also exercises installation.
   It checks project and global `.agents`, `.opencode`, and `.claude` layouts in isolated homes without model credentials or requests.
   The V2 `GET /api/skill` response is an envelope with `data` entries identified by `id` and `path`, not the V1 `name`/`location` array.
-  Registration is asynchronous, so each fixture keeps its own service alive and waits up to 30 seconds for every expected ID/path before reporting missing skills and failing.
+  Registration is asynchronous, and the real CLI can truncate a large response while still exiting 0, so each fixture keeps its own service alive and polls up to 30 seconds, retrying undecodable or invalid responses, before reporting missing skills and failing.
   The request explicitly selects the fixture directory because the managed service starts in its home directory.
-  Every service is stopped on success or failure; only npm/registry access is needed for installation.
+  A stop is attempted after every fixture, success or failure; a failed stop is reported separately through the original error, and a stop that fails after discovery fails to clean up, only npm/registry access is needed for installation.
 - Markdown puts one sentence per line.
 
 ## License

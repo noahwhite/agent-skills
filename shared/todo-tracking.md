@@ -34,7 +34,7 @@ Mirror that file into your own todo list whenever you check the subagent's statu
 
 ## Missing todo tools, including primary sessions
 
-OpenCode V2 todos are off by default; `experimental.todo: true` opts in to the experimental tool, but a harness may still not expose it.
+Whether the todo tool exists at all depends on the runtime and its configuration; some ship it off by default or behind an experimental flag, and a harness may still not expose it.
 Consult `references/runtimes.md` for the version-specific mapping; do not assume a tool exists from configuration alone.
 When the primary session has no todo tool, create a checklist file at `<scratch directory>/<session-label>-todo.md` before starting, using the same item granularity and `(in progress)` marker as a subagent.
 Tell the user its path and update it at every step; this file is the visible plan and the place to mirror delegated checklists.

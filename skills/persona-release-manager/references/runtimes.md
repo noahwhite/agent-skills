@@ -48,7 +48,8 @@ If your runtime is not listed, map each capability to its closest equivalent and
   The preflight probe in Step 1 of `story-refinement` is the deciding check; an allow rule alone was not sufficient.
   On OpenCode V2, use the agent's ordered `permissions` rules with action `shell` for CLI writes; V1 uses the agent file's `permission.bash` setting.
   MCP writes have their own permission path; the real preflight probe remains decisive, not the presence of a shell allow rule.
-- **Todo availability.** Every subagent keeps its checklist in a file in the scratch directory; a primary session does the same when no todo tool is exposed (see `todo-tracking.md`).
+- **Todo availability.** The record of work is required in every runtime; only its storage differs.
+  OpenCode V2 ships todos off by default (`experimental.todo: true` opts in, and the harness must still expose the tool), so the checklist file is what every session falls back to when no todo tool is exposed (see `references/todo-tracking.md`).
 - **Models.** A skill that asks for a specific model role (reviewer, adjudicator) takes the model from the profile.
   If the runtime cannot run that model, stop and say so; do not silently substitute another model for a review of record.
   The same holds for a reasoning effort a skill asks for: if the runtime or model does not offer that level, stop and say so; never substitute another level.
@@ -108,7 +109,7 @@ For long or sensitive briefs, use a prompt file through the supported invocation
 
 Use configuration defaults (`default_agent` and root `model`) and reusable agent files for interactive startup, or command frontmatter to select an explicit agent and `model: provider/model#variant` for that command.
 Selecting a primary agent does not change the session model, and changing `default_agent` does not replace the agent already stored on an existing session.
-The root `model` default does not retain a `#variant`; do not claim a root default or primary agent file alone pins an existing session's model and effort.
+The root `model` default can retain its `#variant` for fresh sessions; a root default or primary agent file alone does not pin an existing session's model and effort, so verify the effective model and variant on a resumed or already-selected session.
 Use an explicit command model reference for a variant-pinned interactive role and verify the effective model before starting the role.
 For per-process defaults, `OPENCODE_CONFIG_CONTENT` can supply inline configuration with a private server (`opencode --standalone`), rather than assuming a previously started shared server adopts a new client's environment.
 For example, `OPENCODE_CONFIG_CONTENT='{"default_agent":"build","model":"anthropic/claude-sonnet-4-5"}' opencode --standalone` sets fresh-session defaults, not a guarantee for a resumed session or reasoning variant.

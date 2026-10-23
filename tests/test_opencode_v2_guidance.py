@@ -42,14 +42,22 @@ def test_v2_invocation_separates_automation_and_interactive_model_selection() ->
     assert "Selecting a primary agent does not change the session model" in text
     assert "OPENCODE_CONFIG_CONTENT" in text and "private server" in text
     assert "command frontmatter" in text
-    assert "root `model` default does not retain a `#variant`" in text
+    # A root `model` default keeps its #variant on fresh sessions (verified against 2.1.3);
+    # what it cannot do is pin a session that already exists.
+    assert "root `model` default can retain its `#variant`" in text
+    assert "does not retain a `#variant`" not in text
 
 
 def test_todo_is_optional_tool_not_optional_tracking() -> None:
     text = (ROOT / "shared" / "todo-tracking.md").read_text()
-    assert "off by default" in text
-    assert "experimental.todo" in text
     assert "primary session" in text
     assert "checklist file" in text
     assert "Do not block" in text
     assert "Subagents have no todo list." not in text
+    # Version- and configuration-specific facts live in the runtime map, not in the
+    # runtime-neutral capability file (see the C27/C29 arbitration finding).
+    runtimes = (ROOT / "shared" / "runtimes.md").read_text()
+    assert "off by default" in runtimes
+    assert "experimental.todo" in runtimes
+    assert "experimental.todo" not in text
+    assert "opencode" not in text.lower()

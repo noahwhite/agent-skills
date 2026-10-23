@@ -34,7 +34,8 @@ def bundle(tmp_path):
     return root
 
 
-def fake_cli(monkeypatch, smoke, *, omit=None, wrong_path=False, malformed=False, fail=False):
+def fake_cli(monkeypatch, smoke, *, omit=None, wrong_path=False, malformed=False, fail=False,
+             truncate=False, stop_fails=False):
     calls = []
     api_calls = []
 
@@ -44,6 +45,8 @@ def fake_cli(monkeypatch, smoke, *, omit=None, wrong_path=False, malformed=False
         assert "LINEAR_API_KEY" not in env
         assert "OPENAI_API_KEY" not in env
         assert kwargs["check"] and kwargs["timeout"] > 0
+        if argv[1:3] == ["service", "stop"] and stop_fails:
+            raise subprocess.CalledProcessError(9, argv, stderr="stop broken")
         if argv[1:4] == ["api", "get", "/api/skill"]:
             assert argv[4:] == ["--header", f"x-opencode-directory:{cwd}"]
             if fail:
@@ -62,9 +65,15 @@ def fake_cli(monkeypatch, smoke, *, omit=None, wrong_path=False, malformed=False
             if malformed:
                 payload = []
             api_calls.append(payload)
+            body = json.dumps(payload)
+            # The real 2.1.3 CLI sometimes returns a truncated body with exit 0.
+            # Call 1 stays the empty registration envelope; truncate call 2 only.
+            if truncate and len(api_calls) == 2:
+                body = body[:-len(body) // 3]
             if len(api_calls) == 1 and not malformed:
-                payload = {"location": {"directory": str(project)}, "data": []}
-            return subprocess.CompletedProcess(argv, 0, json.dumps(payload), "")
+                return subprocess.CompletedProcess(
+                    argv, 0, json.dumps({"location": {"directory": str(project)}, "data": []}), "")
+            return subprocess.CompletedProcess(argv, 0, body, "")
         return subprocess.CompletedProcess(argv, 0, "", "")
 
     monkeypatch.setattr(smoke.subprocess, "run", run)
@@ -97,6 +106,49 @@ def test_discovery_fails_closed_and_stops_its_service(smoke, bundle, tmp_path, m
     if defect == "wrong-path":
         assert "alpha" in str(exc.value)
     assert calls[-1][0] == ["opencode", "service", "stop"]
+
+
+def test_truncated_api_response_is_retried_within_the_deadline(smoke, bundle, tmp_path, monkeypatch):
+    calls, api_calls = fake_cli(monkeypatch, smoke, truncate=True)
+    smoke.check_layout(bundle, tmp_path / "fixture", "project-agents", "opencode", timeout=1)
+    assert len(api_calls) == 3
+    assert calls[-1][0] == ["opencode", "service", "stop"]
+
+
+def test_undecodable_or_invalid_responses_until_deadline_fail_with_a_diagnosis(smoke, bundle, tmp_path, monkeypatch):
+    calls, _ = fake_cli(monkeypatch, smoke, malformed=True)
+    with pytest.raises(RuntimeError) as exc:
+        smoke.check_layout(bundle, tmp_path / "fixture", "project-agents", "opencode", timeout=.01)
+    assert "invalid V2 skill response" in str(exc.value)
+    assert "the deadline" in str(exc.value)
+    assert "project-agents" in str(exc.value)
+    assert calls[-1][0] == ["opencode", "service", "stop"]
+
+
+def test_canonical_path_comparison_tolerates_a_symlinked_discovery_path(smoke, bundle, tmp_path, monkeypatch):
+    fake_cli(monkeypatch, smoke, wrong_path=True)
+    # The expected path is where check_layout copies the skill (the fixture destination),
+    # not the bundle source: the fake API 'resolved' /builtin/alpha.md onto that path.
+    expected_alpha = str(tmp_path / "fixture" / "project" / ".agents" / "skills" / "alpha" / "SKILL.md")
+    monkeypatch.setattr(smoke.os.path, "realpath",
+                        lambda p: expected_alpha if str(p) == "/builtin/alpha.md" else str(p))
+    smoke.check_layout(bundle, tmp_path / "fixture", "project-agents", "opencode", timeout=.01)
+
+
+def test_stop_failure_preserves_the_discovery_error_and_reports_cleanup(smoke, bundle, tmp_path, monkeypatch):
+    calls, _ = fake_cli(monkeypatch, smoke, fail=True, stop_fails=True)
+    with pytest.raises(RuntimeError) as exc:
+        smoke.check_layout(bundle, tmp_path / "fixture", "project-agents", "opencode", timeout=.01)
+    message = str(exc.value)
+    assert "API unavailable" in message
+    assert "service stop" in message
+    assert calls[-1][0] == ["opencode", "service", "stop"]
+
+
+def test_stop_failure_after_success_fails_the_layout(smoke, bundle, tmp_path, monkeypatch):
+    fake_cli(monkeypatch, smoke, stop_fails=True)
+    with pytest.raises(RuntimeError, match="service stop"):
+        smoke.check_layout(bundle, tmp_path / "fixture", "project-agents", "opencode", timeout=1)
 
 
 def test_manifest_prevents_deleted_skill_from_shrinking_expectation(smoke, bundle, tmp_path, monkeypatch):
