@@ -1,7 +1,7 @@
 # Refinement and pointing records
 
 Hand-written templates for the records the ceremony posts.
-Use the refinement comment to identify the refined story and the pointing record to capture the consensus.
+Use the refinement comment to identify the refined story, the Accept round result to record each accept round, and the pointing record to capture the consensus.
 Replace every placeholder and keep the raw voter files under `profile.workspace.scratch_dir`.
 
 ## Refinement comment
@@ -25,10 +25,10 @@ Its comment id is the refined story identifier for both stages.
 - Definition of Ready verdicts: <verdict per voter>
 - Blocking amendments: <none, or the exact amendments>
 - Non-blocking notes: <summary or none>
-- Accept round 1: <ACCEPT or OBJECT per voter>
-- Accept round 2 (only after a blocking amendment): <ACCEPT or OBJECT per voter>
-- Re-refine accept round (only after a Step 4 re-refine; one round): <ACCEPT or OBJECT per voter, or n/a>
-- Result: <accepted or unpointed>
+- Accept round 1: see the Accept round result comment
+- Accept round 2 (only after a blocking amendment): see the Accept round result comment
+- Re-refine accept round (only after a Step 4 re-refine; one round): see the Accept round result comment
+- Result: see the Accept round result comment
 - Tracker writes: product owner
 ```
 
@@ -36,6 +36,22 @@ Under the denied tracker writes fallback in `SKILL.md`, replace the tracker-writ
 
 ```markdown
 - Tracker writes: facilitator on the product owner's behalf (owner's direct authorization: "<verbatim quote>", <date>)
+```
+
+## Accept round result
+
+Post this as a separate tracker comment after each accept round, including the Step 4 re-refine accept round, authored by the product owner and posted by the product owner or, under the denied tracker writes fallback, by the facilitator verbatim.
+Never edit the refinement comment to add the result; its id keeps identifying one immutable refined version.
+
+```markdown
+## Accept round result
+
+- Refinement comment covered: <refinement comment id>
+- Round: <1, 2, or re-refine>
+- Product owner: <ACCEPT or OBJECT>
+- Engineer one (<family or model>): <ACCEPT or OBJECT>
+- Engineer two (<family or model>): <ACCEPT or OBJECT>
+- Outcome: <accepted, another round, or unpointed>
 ```
 
 ## Pointing record
