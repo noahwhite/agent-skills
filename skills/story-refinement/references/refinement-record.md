@@ -50,12 +50,12 @@ The three values are recorded before any SM/EM sizing comment or discussion.
 - Refined story identifier: <latest refinement comment id after any amendment>
 - Estimate scale: <profile.tracker.estimate_scale>
 - Values, recorded before the discussion:
-  - Product owner: <value> - <short rationale>
-  - Engineer one: <value> - <short rationale>
-  - Engineer two: <value> - <short rationale>
+  - Product owner: <value> - <short complexity rationale>
+  - Engineer one: <value> - <short complexity rationale>
+  - Engineer two: <value> - <short complexity rationale>
 - SM/EM sizing context, after all three values: <scratch path or verbatim>
 - Discussion: high <value>, low <value>
-- Re-vote: <accepted set per voter>
+- Re-vote: <accepted set per voter, with complexity rationale>
 - Consensus: <highest value in the intersection, or none>
 - No-consensus decision: <split, re-refine, or leave unpointed; n/a when there is a consensus>
 - Paths accepted: <set per voter, or n/a>
@@ -76,18 +76,20 @@ Under the denied tracker writes fallback in `SKILL.md`, replace the tracker-writ
 
 The SM/EM may give factual, reference-only sizing context after all three values are recorded.
 Everything in the forbidden column breaks independence or anchors the discussion.
+A permitted comparison names at most one comparable story and at most one complexity difference; it never names a range, an average, elapsed time, effort, or a preferred value.
 
 | Permitted (factual, reference-only) | Forbidden (leading or anchoring) |
 |---|---|
 | "The comparable story was 5 points." | "I would go higher." |
-| "A similar change took two cycles." | "I would go lower." |
+| "The named story had three interacting constraints; this one has four." | "I would go lower." |
 | "This story has one more integration than that one." | "A target of 8 fits." |
 | "The prior story also changed the schema." | "I think it is 5." |
 | "That story carried no migration." | "The highest vote is the realistic one." |
 | "The scope differs in the deploy leg." | "The lowest vote is the realistic one." |
-| "The historical range for this area is 3 to 8." | "Let us re-vote after I explain." |
-| "The comparable work included tests and docs." | "The two of you are far apart." |
+| "This story has one more unknown than that one." | "Let us re-vote after I explain." |
+| "The comparable story had the same interacting constraints." | "The two of you are far apart." |
 | "The earlier story was split once." | Comparing individual votes before the discussion. |
 | "No comparable story exists." | Naming a preferred direction or value. |
+| "The named story had one fewer external dependency." | "This would take a week." |
 
 Record every SM/EM sizing comment with the pointing record, even when it stays inside the permitted column.
