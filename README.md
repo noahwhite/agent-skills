@@ -127,7 +127,8 @@ Review roles run as subagents or as shell-launched CLIs (for example `codex exec
   The V2 `GET /api/skill` response is an envelope with `data` entries identified by `id` and `path`, not the V1 `name`/`location` array.
   Registration is asynchronous, and the real CLI can truncate a large response while still exiting 0, so each fixture keeps its own service alive and polls up to 30 seconds, retrying undecodable or invalid responses, before reporting missing skills and failing.
   The request explicitly selects the fixture directory because the managed service starts in its home directory.
-  A stop is attempted after every fixture, success or failure; a failed stop is reported separately through the original error, and a stop that fails after discovery fails to clean up, only npm/registry access is needed for installation.
+  A stop is attempted after every fixture, success or failure: a failed stop is appended to any discovery error, and if discovery succeeded, a failed stop still fails the layout.
+  Only npm/registry access is needed for installation.
 - Markdown puts one sentence per line.
 
 ## License

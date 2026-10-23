@@ -59,12 +59,12 @@ RUNTIME_TERMS = re.compile(
     r"\b(TaskCreate|TaskUpdate|TodoWrite|todowrite|AskUserQuestion|subagent_type|CLAUDE_JOB_DIR)\b"
     r"|mcp__|~/\.claude/|\.opencode/"
 )
-# A bare backticked `name.md` inside a bundle's references must be a file of that bundle,
-# or a `references/name.md` path that exists there. This catches an installed skill that
-# instructs its agent to consult a local reference file that was never vendored in
-# (the C27/H01 arbitration finding: six runtimes.md copies pointed at todo-tracking.md
-# without carrying that file).
-REF_TOKEN_RE = re.compile(r"`([a-z][a-z0-9-]*\.md)`")
+# A backticked token naming a Markdown file, bare (`name.md`) or prefixed
+# (`references/name.md`), inside a bundle's references must be a file of that bundle.
+# This catches an installed skill that instructs its agent to consult a local reference
+# file that was never vendored in (the C27/H01 arbitration finding: six runtimes.md
+# copies pointed at todo-tracking.md without carrying that file).
+REF_TOKEN_RE = re.compile(r"`(?:references/)?([a-z][a-z0-9-]*\.md)`")
 
 
 def split_frontmatter(path: Path) -> tuple[dict, str]:
