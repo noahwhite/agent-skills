@@ -102,14 +102,17 @@ The PO and the two engineers decide whether an SM/EM concern is a blocking amend
      The refinement comment includes the complete refined story and ACs, or an immutable snapshot reference; its id identifies the refined version for every later step.
   3. Run the accept round on that exact refinement comment id.
      Each of the three voters returns `ACCEPT` or `OBJECT` against the same refined version.
-  4. An `OBJECT` blocks and lists only blocking amendments.
+  4. After each accept round, including the Step 4 re-refine accept round, the PO authors and posts a separate Accept round result comment that names the refinement comment id it covers, the round number, each voter's `ACCEPT` or `OBJECT`, and the outcome: accepted, another round, or unpointed.
+     The refinement comment itself is not edited, so its id keeps identifying one immutable refined version.
+     Under the denied tracker writes fallback the facilitator applies the PO's comment verbatim.
+  5. An `OBJECT` blocks and lists only blocking amendments.
      Notes that are not blocking amendments do not block.
-  5. After any blocking amendments, the PO authors the amendments and an updated refinement comment and applies both; otherwise, under the denied tracker writes fallback, the facilitator applies the amendments and the updated refinement comment verbatim.
+  6. After any blocking amendments, the PO authors the amendments and an updated refinement comment and applies both; otherwise, under the denied tracker writes fallback, the facilitator applies the amendments and the updated refinement comment verbatim.
      The amended refinement uses its new comment id as the refined version.
      Re-run the accept round against that new id.
      The accept round is capped at two rounds.
-  6. If all three voters have not returned `ACCEPT` after two rounds, the PO authors the unpointed record and applies it, or under the denied tracker writes fallback the facilitator applies it verbatim, and the ceremony stops.
-- **Outputs:** an accepted refined story identified by the refinement comment id, or a recorded unpointed result.
+  7. If all three voters have not returned `ACCEPT` after two rounds, the PO authors the unpointed record and applies it, or under the denied tracker writes fallback the facilitator applies it verbatim, and the ceremony stops.
+- **Outputs:** an accepted refined story identified by the refinement comment id, or a recorded unpointed result, and one Accept round result comment per accept round.
 - **Stop:** two accept rounds without all three `ACCEPT`; a voter is missing; the PO cannot write to the tracker and the owner has not authorized the denied tracker writes fallback.
 
 The SM/EM's refinement comments never substitute for a voter's `ACCEPT` or `OBJECT`.
@@ -218,7 +221,7 @@ The SM/EM posts only its own comments, and applies the PO's writes only under th
 
 ## Records
 
-Use [references/refinement-record.md](references/refinement-record.md) for the refinement-comment template, the pointing-record template, and the permitted and forbidden phrasing table.
+Use [references/refinement-record.md](references/refinement-record.md) for the refinement-comment template, the Accept round result template, the pointing-record template, and the permitted and forbidden phrasing table.
 Keep the raw voter files in `profile.workspace.scratch_dir` and cite their paths in the record.
 Record the refinement comment id, every accept round, all three point values, the SM/EM sizing context, the discussion result, the consensus, any no-consensus decision with each voter's accepted paths and the decision rationale, and any split.
 

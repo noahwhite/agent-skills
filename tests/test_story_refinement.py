@@ -324,7 +324,7 @@ def pointing_template() -> list[str]:
 
 
 def test_refinement_template_records_the_re_refine_accept_round() -> None:
-    line = "- Re-refine accept round (only after a Step 4 re-refine; one round): <ACCEPT or OBJECT per voter, or n/a>"
+    line = "- Re-refine accept round (only after a Step 4 re-refine; one round): see the Accept round result comment"
     assert line in template("Refinement comment").splitlines()
 
 
@@ -817,3 +817,85 @@ def test_pointing_template_asks_for_complexity_rationales() -> None:
         "- Re-vote: <accepted set per voter, with complexity rationale>"
     ]
     assert not any("<short rationale>" in line for line in lines)
+
+
+# SKL-54: every accept round's result is posted in its own comment; the refinement comment stays immutable.
+
+STEP_TWO = "Step 2: Reconciliation and the accept round"
+RESULT_ITEM = "After each accept round, including the Step 4 re-refine accept round,"
+SEE_RESULT = "see the Accept round result comment"
+
+
+def test_step_two_requires_an_accept_round_result_comment() -> None:
+    item = process_item(STEP_TWO, RESULT_ITEM)
+    assert (
+        "After each accept round, including the Step 4 re-refine accept round, the PO authors and posts "
+        "a separate Accept round result comment that names the refinement comment id it covers, the round number, "
+        "each voter's `ACCEPT` or `OBJECT`, and the outcome: accepted, another round, or unpointed."
+    ) in item
+
+
+def test_step_two_never_edits_the_refinement_comment() -> None:
+    item = process_item(STEP_TWO, RESULT_ITEM)
+    assert (
+        "The refinement comment itself is not edited, so its id keeps identifying one immutable refined version."
+    ) in item
+
+
+def test_step_two_result_comment_applied_verbatim_under_the_fallback() -> None:
+    item = process_item(STEP_TWO, RESULT_ITEM)
+    assert "Under the denied tracker writes fallback the facilitator applies the PO's comment verbatim." in item
+
+
+def test_step_two_result_item_follows_the_accept_round_item() -> None:
+    items = process_items(STEP_TWO)
+    index = [i for i, item in enumerate(items) if item.startswith(RESULT_ITEM)]
+    assert len(index) == 1
+    assert items[index[0] - 1].startswith("Run the accept round on that exact refinement comment id.")
+
+
+def test_step_two_outputs_name_one_result_comment_per_round() -> None:
+    outputs = bullet(operative_step(STEP_TWO), "Outputs")
+    assert "and one accept round result comment per accept round" in outputs
+
+
+def test_records_points_at_the_accept_round_result_template() -> None:
+    body = spaced(section(SKILL.read_text(), "Records"))
+    assert (
+        "Use [references/refinement-record.md](references/refinement-record.md) for the refinement-comment template, "
+        "the Accept round result template, the pointing-record template, and the permitted and forbidden phrasing table."
+    ) in body
+
+
+def test_record_has_the_accept_round_result_template_with_exactly_the_fields() -> None:
+    assert template("Accept round result").splitlines() == [
+        "## Accept round result",
+        "",
+        "- Refinement comment covered: <refinement comment id>",
+        "- Round: <1, 2, or re-refine>",
+        "- Product owner: <ACCEPT or OBJECT>",
+        "- Engineer one (<family or model>): <ACCEPT or OBJECT>",
+        "- Engineer two (<family or model>): <ACCEPT or OBJECT>",
+        "- Outcome: <accepted, another round, or unpointed>",
+    ]
+
+
+def test_record_says_the_result_comment_is_separate_and_posted_after_each_round() -> None:
+    body = spaced(section(RECORD.read_text(), "Accept round result"))
+    assert (
+        "Post this as a separate tracker comment after each accept round, including the Step 4 re-refine accept round, "
+        "authored by the product owner and posted by the product owner or, under the denied tracker writes fallback, "
+        "by the facilitator verbatim."
+    ) in body
+    assert "Never edit the refinement comment to add the result; its id keeps identifying one immutable refined version." in body
+
+
+def test_refinement_template_points_every_accept_round_line_at_the_result_comment() -> None:
+    lines = template("Refinement comment").splitlines()
+    for line in (
+        f"- Accept round 1: {SEE_RESULT}",
+        f"- Accept round 2 (only after a blocking amendment): {SEE_RESULT}",
+        f"- Result: {SEE_RESULT}",
+    ):
+        assert line in lines, line
+    assert not any("<ACCEPT or OBJECT" in line or "<accepted or unpointed>" in line for line in lines)
