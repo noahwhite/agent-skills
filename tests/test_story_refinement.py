@@ -668,19 +668,31 @@ POINTING_BASIS = (
 )
 
 
+def operative_step(heading: str) -> str:
+    """A step's text with HTML comments removed, since commented-out text is not operative."""
+    return step(re.sub(r"<!--.*?-->", "", SKILL.read_text(), flags=re.DOTALL), heading)
+
+
 def process_items(heading: str) -> list[str]:
     """The numbered Process items of a step, each squashed to one lowercase line."""
-    body = step(SKILL.read_text(), heading)
+    body = operative_step(heading)
     match = re.search(r"^- \*\*Process:\*\*\n(.*?)(?=^- \*\*)", body, re.MULTILINE | re.DOTALL)
     assert match, f"no Process list in {heading}"
     items = re.split(r"^  \d+\. ", match.group(1), flags=re.MULTILINE)
     return [squash(item).strip() for item in items[1:]]
 
 
+def process_item(heading: str, start: str) -> str:
+    """The one Process item of a step that starts with the given lowercase text."""
+    found = [item for item in process_items(heading) if item.startswith(start)]
+    assert len(found) == 1, f"expected one {heading} item starting {start!r}, found {len(found)}"
+    return found[0]
+
+
 def test_pointing_basis_appears_once_in_the_skill_and_inside_step_three() -> None:
     text = squash(SKILL.read_text())
     assert text.count(squash(POINTING_BASIS)) == 1
-    assert squash(POINTING_BASIS) in squash(step(SKILL.read_text(), STEP_THREE))
+    assert squash(POINTING_BASIS) in squash(operative_step(STEP_THREE))
 
 
 def test_pointing_basis_is_its_own_item_right_after_the_launch_item() -> None:
@@ -690,15 +702,14 @@ def test_pointing_basis_is_its_own_item_right_after_the_launch_item() -> None:
 
 
 def test_step_three_requires_the_basis_in_every_pointing_prompt() -> None:
-    body = squash(step(SKILL.read_text(), STEP_THREE))
-    assert (
+    assert process_items(STEP_THREE)[2] == (
         "the sentence above is the pointing basis. every pointing prompt or prompt file carries it verbatim, "
         "including the re-run after a step 4 re-refine and each slice estimate under the split rule."
-    ) in body
+    )
 
 
 def test_step_three_rationale_names_complexity_drivers_and_no_duration() -> None:
-    body = squash(step(SKILL.read_text(), STEP_THREE))
+    body = process_item(STEP_THREE, "each voter submits one point value")
     assert "plus a short complexity rationale." in body
     assert (
         "the rationale names the complexity driver or drivers the voter weighed "
@@ -710,7 +721,7 @@ def test_step_four_re_vote_carries_the_basis_by_reference_to_step_three() -> Non
     item = process_items(STEP_FOUR)[1]
     assert item.startswith("run one re-vote.")
     assert "the re-vote prompt carries the pointing basis from step 3." in item
-    assert squash(POINTING_BASIS) not in squash(step(SKILL.read_text(), STEP_FOUR))
+    assert squash(POINTING_BASIS) not in squash(operative_step(STEP_FOUR))
 
 
 def test_step_four_re_vote_requires_a_complexity_rationale() -> None:
@@ -721,8 +732,11 @@ def test_step_four_re_vote_requires_a_complexity_rationale() -> None:
     ) in item
 
 
+SIZING_ITEM = "after all three values are recorded, the sm/em may provide"
+
+
 def test_step_three_sizing_context_is_in_complexity_terms() -> None:
-    body = squash(step(SKILL.read_text(), STEP_THREE))
+    body = process_item(STEP_THREE, SIZING_ITEM)
     assert (
         "the sm/em may provide factual, reference-only sizing context: comparable stories in complexity terms, "
         "comparable unknowns and constraints, and relevant scope differences."
@@ -731,7 +745,7 @@ def test_step_three_sizing_context_is_in_complexity_terms() -> None:
 
 
 def test_step_three_time_or_effort_statement_is_an_anchoring_event() -> None:
-    body = squash(step(SKILL.read_text(), STEP_THREE))
+    body = process_item(STEP_THREE, SIZING_ITEM)
     assert "a statement of elapsed time or effort is an anchoring event under the anchoring guardrail." in body
 
 
@@ -754,14 +768,14 @@ def test_phrasing_table_permits_the_three_complexity_comparisons() -> None:
         '"This story has one more unknown than that one."',
         '"The comparable story had the same interacting constraints."',
     ):
-        assert cell in permitted, cell
+        assert permitted.count(cell) == 1, cell
 
 
 def test_phrasing_table_ends_with_the_dependency_row_forbidding_a_duration() -> None:
-    assert phrasing_rows()[-1] == (
-        '"The named story had one fewer external dependency."',
-        '"This would take a week."',
-    )
+    row = ('"The named story had one fewer external dependency."', '"This would take a week."')
+    rows = phrasing_rows()
+    assert rows[-1] == row
+    assert rows.count(row) == 1
 
 
 def test_phrasing_table_drops_the_time_and_range_comparisons() -> None:
@@ -783,14 +797,18 @@ def test_phrasing_intro_is_unchanged_and_adds_the_comparison_principle() -> None
         "A permitted comparison names at most one comparable story and at most one complexity difference; "
         "it never names a range, an average, elapsed time, effort, or a preferred value.",
     ]
+    assert RECORD.read_text().count(intro[2]) == 1
 
 
 def test_pointing_template_asks_for_complexity_rationales() -> None:
     lines = pointing_template()
-    for line in (
+    values = lines.index("- Values, recorded before the discussion:")
+    assert lines[values + 1 : values + 4] == [
         "  - Product owner: <value> - <short complexity rationale>",
         "  - Engineer one: <value> - <short complexity rationale>",
         "  - Engineer two: <value> - <short complexity rationale>",
-        "- Re-vote: <accepted set per voter, with complexity rationale>",
-    ):
-        assert line in lines, line
+    ]
+    assert [line for line in lines if line.startswith("- Re-vote:")] == [
+        "- Re-vote: <accepted set per voter, with complexity rationale>"
+    ]
+    assert not any("<short rationale>" in line for line in lines)
