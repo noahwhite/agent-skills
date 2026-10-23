@@ -213,7 +213,8 @@ def test_only_qa_moves_the_story_to_done() -> None:
 def test_runtimes_maps_reasoning_effort() -> None:
     text = (ROOT / "shared" / "runtimes.md").read_text()
     assert "| Choose a subagent's reasoning effort | `effort` parameter" in text
-    assert "the agent file's `variant:`" in text
+    assert "provider/model#variant" in text
+    assert "V1" in text and "`variant:`" in text
     assert "never substitute another level" in text
     assert "`CLAUDE_CODE_EFFORT_LEVEL` overrides every subagent's effort" in text
     assert "`CLAUDE_CODE_SUBAGENT_MODEL_FORCE` is an on/off flag" in text
@@ -239,8 +240,15 @@ def test_both_roles_get_nesting_or_shell_launched_reviews() -> None:
     assert in_order(
         body,
         "so does the QA agent in step 3",
-        "give both delegated agents nesting",
+        "give both delegated agents nesting per that runtime map",
         "launch their review roles as shell commands",
         "does not fit this skill",
         "If neither works, stop and say so.",
     )
+
+
+def test_nesting_guidance_stays_runtime_neutral() -> None:
+    body = SKILL.read_text().split("\n---\n", 1)[1]
+    assert "subagent_depth" not in body
+    assert "grant `task`" not in body
+    assert "On opencode" not in body

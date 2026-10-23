@@ -57,7 +57,8 @@ Where this file and a capability file disagree, the capability file is authorita
 Once the story ID is known and the profile is read, before step 1, create a fine-grained todo list per `references/todo-tracking.md`.
 Seed it with at least: resolve the arguments, read the story state, spawn the senior engineer, each check on its checklist until it hands back, read back the deployment-review state, each QA round, each read-back of QA's resulting state, each failed item handed back, each fix round, and the final state read-back.
 Add an item for every new round the moment it starts, and mark each item done the moment its outcome is observed.
-Subagents have no todo tool, so every brief requires a checklist file in the scratch directory; mirror that file into your list whenever you check on the subagent.
+Every subagent brief requires a checklist file in the scratch directory; mirror that file into your list whenever you check on the subagent.
+If your own todo tool is unavailable, use the primary-session checklist fallback in `references/todo-tracking.md`; do not block on the missing tool.
 
 ## 1. Read the story and pick the starting point
 
@@ -74,7 +75,7 @@ Do not triage the story yourself: `engineering-workflow` triages it and checks t
 
 Spawn a clean, neutral subagent (not a fork of yours) on `engineer-model` at `engineer-effort`, and brief it as a senior engineer working this story.
 It spawns reviewers of its own, and so does the QA agent in step 3, so check the nesting rule in `references/runtimes.md` before spawning either.
-On opencode, give both delegated agents nesting (raise `subagent_depth` to 2 and grant `task`), or launch their review roles as shell commands (`runtime: codex` or `runtime: command`).
+Where nesting is restricted, give both delegated agents nesting per that runtime map, or launch their review roles as shell commands (`runtime: codex` or `runtime: command`).
 The nesting rule's other option, where the primary session runs the review roles after the PR handback, does not fit this skill, since each role finishes its own gates before it hands back.
 If neither works, stop and say so.
 The brief carries facts and constraints, never your expectations about the outcome.

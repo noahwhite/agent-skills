@@ -59,6 +59,12 @@ RUNTIME_TERMS = re.compile(
     r"\b(TaskCreate|TaskUpdate|TodoWrite|todowrite|AskUserQuestion|subagent_type|CLAUDE_JOB_DIR)\b"
     r"|mcp__|~/\.claude/|\.opencode/"
 )
+# A backticked token naming a Markdown file, bare (`name.md`) or prefixed
+# (`references/name.md`), inside a bundle's references must be a file of that bundle.
+# This catches an installed skill that instructs its agent to consult a local reference
+# file that was never vendored in (the C27/H01 arbitration finding: six runtimes.md
+# copies pointed at todo-tracking.md without carrying that file).
+REF_TOKEN_RE = re.compile(r"`(?:references/)?([a-z][a-z0-9-]*\.md)`")
 
 
 def split_frontmatter(path: Path) -> tuple[dict, str]:
@@ -479,3 +485,17 @@ def test_every_mentioned_reference_exists(skill):
         }
     )
     assert not missing, "\n".join(missing)
+
+
+def test_reference_mentions_in_bundles_resolve_to_local_files():
+    offenders = []
+    for skill in SKILLS:
+        references = skill / "references"
+        local = {p.name for p in references.glob("*.md")} | {"SKILL.md"}
+        for md in sorted(references.glob("*.md")):
+            for n, line in enumerate(md.read_text().splitlines(), 1):
+                for token in REF_TOKEN_RE.findall(line):
+                    if token not in local:
+                        offenders.append(
+                            f"{md.relative_to(ROOT)}:{n}: {token} has no local file in this bundle")
+    assert not offenders, "\n".join(offenders)

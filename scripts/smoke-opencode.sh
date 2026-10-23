@@ -1,40 +1,28 @@
 #!/usr/bin/env bash
-# Install the skills into a throwaway project the way a consumer would
-# (.agents/skills/<name>), then check opencode lists every one of them.
-# Needs no model credentials: `opencode debug skill` only runs discovery.
+# Credential-free V2 discovery across the documented project and global layouts.
+# Extra arguments are forwarded to smoke_opencode.py (see its --root and --timeout).
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
-version="${OPENCODE_VERSION:-1.18.32}"
+version="${OPENCODE_VERSION:-2.1.2}"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
-if ! command -v opencode >/dev/null || [ -n "${OPENCODE_FORCE_INSTALL:-}" ]; then
-  npm install --prefix "$work/npm" --no-audit --no-fund "opencode-ai@$version" >/dev/null
+installed=""
+if command -v opencode >/dev/null; then
+  installed="$(opencode --version)"
+fi
+if [ "$installed" != "opencode v$version" ] || [ -n "${OPENCODE_FORCE_INSTALL:-}" ]; then
+  mkdir -p "$work/npm"
+  # npm requires project-scoped install-script policy in package.json, not a CLI flag.
+  printf '%s\n' '{"private":true,"allowScripts":{"@opencode/cli":true}}' > "$work/npm/package.json"
+  npm install --prefix "$work/npm" --no-audit --no-fund \
+    --ignore-scripts=false "@opencode/cli@$version"
   PATH="$work/npm/node_modules/.bin:$PATH"
 fi
+if [ "$(opencode --version)" != "opencode v$version" ]; then
+  echo "Expected OpenCode $version" >&2
+  exit 1
+fi
 
-project="$work/project"
-mkdir -p "$project/.agents/skills"
-git -C "$project" init -q
-for d in "$root"/skills/*/; do
-  cp -R "$d" "$project/.agents/skills/"
-done
-
-# Isolate from any skills installed for the current user.
-export HOME="$work/home" XDG_CONFIG_HOME="$work/home/.config"
-mkdir -p "$HOME"
-
-(cd "$project" && opencode debug skill > "$work/skills.json")
-
-missing=0
-for d in "$root"/skills/*/; do
-  name="$(basename "$d")"
-  want="$project/.agents/skills/$name/SKILL.md"
-  if ! jq -e --arg n "$name" --arg p "$want" 'any(.[]; .name == $n and .location == $p)' "$work/skills.json" >/dev/null; then
-    echo "opencode did not discover $name"
-    missing=1
-  fi
-done
-[ "$missing" -eq 0 ] && echo "opencode discovered all $(find "$root/skills" -mindepth 1 -maxdepth 1 -type d | wc -l) skills"
-exit "$missing"
+python3 "$root/scripts/smoke_opencode.py" --root "$root" "$@"
