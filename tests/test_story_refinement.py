@@ -655,3 +655,165 @@ def test_step_four_unpointed_record_follows_the_apply_rule() -> None:
 def test_step_four_amendments_use_the_otherwise_apply_rule() -> None:
     body = flat(section(SKILL.read_text(), STEP_FOUR, level=3))
     assert "applies both; otherwise, under the denied tracker writes fallback, the facilitator applies the amendments and the updated refinement comment verbatim" in body
+
+
+# SKL-51: a point measures complexity, never the amount of work or elapsed time.
+
+STEP_THREE = "Step 3: Secret pointing"
+POINTING_BASIS = (
+    "A point or size measures complexity - design difficulty, interacting constraints, unknowns, "
+    "and the risk of breaking existing behaviour - and never the amount of work or elapsed time; "
+    "routine, well-understood work such as writing tests, opening a PR, review, running a fixture, "
+    "or regenerating copies adds no points however long it takes."
+)
+
+
+def operative_step(heading: str) -> str:
+    """A step's text with HTML comments removed, since commented-out text is not operative."""
+    return step(re.sub(r"<!--.*?-->", "", SKILL.read_text(), flags=re.DOTALL), heading)
+
+
+def spaced(text: str) -> str:
+    """Whitespace collapsed to single spaces, case kept, so a pin compares the exact sentence."""
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def process_items(heading: str) -> list[str]:
+    """The numbered Process items of a step, each collapsed to one line with its case kept."""
+    body = operative_step(heading)
+    match = re.search(r"^- \*\*Process:\*\*\n(.*?)(?=^- \*\*)", body, re.MULTILINE | re.DOTALL)
+    assert match, f"no Process list in {heading}"
+    items = re.split(r"^  \d+\. ", match.group(1), flags=re.MULTILINE)
+    return [spaced(item) for item in items[1:]]
+
+
+def process_item(heading: str, start: str) -> str:
+    """The one Process item of a step that starts with the given text."""
+    found = [item for item in process_items(heading) if item.startswith(start)]
+    assert len(found) == 1, f"expected one {heading} item starting {start!r}, found {len(found)}"
+    return found[0]
+
+
+def test_pointing_basis_appears_once_in_the_skill_and_inside_step_three() -> None:
+    assert spaced(SKILL.read_text()).count(POINTING_BASIS) == 1
+    assert squash(SKILL.read_text()).count(squash(POINTING_BASIS)) == 1
+    assert POINTING_BASIS in spaced(operative_step(STEP_THREE))
+
+
+def test_pointing_basis_is_its_own_item_right_after_the_launch_item() -> None:
+    items = process_items(STEP_THREE)
+    assert items[0].startswith("Launch the PO and both engineers again in separate contexts")
+    assert items[1] == POINTING_BASIS
+
+
+def test_step_three_requires_the_basis_in_every_pointing_prompt() -> None:
+    assert process_items(STEP_THREE)[2] == (
+        "The sentence above is the pointing basis. Every pointing prompt or prompt file carries it verbatim, "
+        "including the re-run after a Step 4 re-refine and each slice estimate under the Split rule."
+    )
+
+
+def test_step_three_rationale_names_complexity_drivers_and_no_duration() -> None:
+    body = process_item(STEP_THREE, "Each voter submits one point value")
+    assert "plus a short complexity rationale." in body
+    assert (
+        "The rationale names the complexity driver or drivers the voter weighed "
+        "and cites no duration, effort or run-cost measure."
+    ) in body
+
+
+def test_step_four_re_vote_carries_the_basis_by_reference_to_step_three() -> None:
+    item = process_items(STEP_FOUR)[1]
+    assert item.startswith("Run one re-vote.")
+    assert "The re-vote prompt carries the pointing basis from Step 3." in item
+    assert squash(POINTING_BASIS) not in squash(operative_step(STEP_FOUR))
+
+
+def test_step_four_re_vote_requires_a_complexity_rationale() -> None:
+    item = process_items(STEP_FOUR)[1]
+    assert (
+        "Each voter records the set of values it accepts for this story (one or more) or records no consensus, "
+        "with a short complexity rationale under the Step 3 rationale rule."
+    ) in item
+
+
+SIZING_ITEM = "After all three values are recorded, the SM/EM may provide"
+
+
+def test_step_three_sizing_context_is_in_complexity_terms() -> None:
+    body = process_item(STEP_THREE, SIZING_ITEM)
+    assert (
+        "the SM/EM may provide factual, reference-only sizing context: comparable stories in complexity terms, "
+        "comparable unknowns and constraints, and relevant scope differences."
+    ) in body
+    assert "historical sizing" not in squash(SKILL.read_text())
+
+
+def test_step_three_time_or_effort_statement_is_an_anchoring_event() -> None:
+    body = process_item(STEP_THREE, SIZING_ITEM)
+    assert "A statement of elapsed time or effort is an anchoring event under the Anchoring guardrail." in body
+
+
+def phrasing_rows() -> list[tuple[str, str]]:
+    body = section(RECORD.read_text(), "Permitted and forbidden phrasing")
+    lines = [line.strip() for line in body.splitlines() if line.strip().startswith("|")]
+    assert lines[1] == "|---|---|", "the phrasing table has no separator row"
+    rows = []
+    for line in lines[2:]:
+        cells = [cell.strip() for cell in line.strip("|").split("|")]
+        assert len(cells) == 2, line
+        rows.append((cells[0], cells[1]))
+    return rows
+
+
+def test_phrasing_table_permits_the_three_complexity_comparisons() -> None:
+    permitted = [row[0] for row in phrasing_rows()]
+    for cell in (
+        '"The named story had three interacting constraints; this one has four."',
+        '"This story has one more unknown than that one."',
+        '"The comparable story had the same interacting constraints."',
+    ):
+        assert permitted.count(cell) == 1, cell
+
+
+def test_phrasing_table_ends_with_the_dependency_row_forbidding_a_duration() -> None:
+    row = ('"The named story had one fewer external dependency."', '"This would take a week."')
+    rows = phrasing_rows()
+    assert rows[-1] == row
+    assert rows.count(row) == 1
+
+
+def test_phrasing_table_drops_the_time_and_range_comparisons() -> None:
+    text = RECORD.read_text()
+    for phrase in (
+        "A similar change took two cycles.",
+        "The historical range for this area is 3 to 8.",
+        "The comparable work included tests and docs.",
+    ):
+        assert phrase not in text, phrase
+
+
+def test_phrasing_intro_is_unchanged_and_adds_the_comparison_principle() -> None:
+    body = section(RECORD.read_text(), "Permitted and forbidden phrasing")
+    intro = [line for line in body.splitlines() if line.strip()][:3]
+    assert intro == [
+        "The SM/EM may give factual, reference-only sizing context after all three values are recorded.",
+        "Everything in the forbidden column breaks independence or anchors the discussion.",
+        "A permitted comparison names at most one comparable story and at most one complexity difference; "
+        "it never names a range, an average, elapsed time, effort, or a preferred value.",
+    ]
+    assert RECORD.read_text().count(intro[2]) == 1
+
+
+def test_pointing_template_asks_for_complexity_rationales() -> None:
+    lines = pointing_template()
+    values = lines.index("- Values, recorded before the discussion:")
+    assert lines[values + 1 : values + 4] == [
+        "  - Product owner: <value> - <short complexity rationale>",
+        "  - Engineer one: <value> - <short complexity rationale>",
+        "  - Engineer two: <value> - <short complexity rationale>",
+    ]
+    assert [line for line in lines if line.startswith("- Re-vote:")] == [
+        "- Re-vote: <accepted set per voter, with complexity rationale>"
+    ]
+    assert not any("<short rationale>" in line for line in lines)

@@ -122,14 +122,19 @@ Only the PO and the two engineers count toward the agreement.
 - **Inputs:** the accepted refined story and its refinement comment id; `profile.tracker.estimate_scale`; `profile.refinement.point_cap` for the later cap check.
 - **Process:**
   1. Launch the PO and both engineers again in separate contexts on the same refined version.
-  2. Each voter submits one point value valid for `profile.tracker.estimate_scale` plus a short rationale.
+  2. A point or size measures complexity - design difficulty, interacting constraints, unknowns, and the risk of breaking existing behaviour - and never the amount of work or elapsed time; routine, well-understood work such as writing tests, opening a PR, review, running a fixture, or regenerating copies adds no points however long it takes.
+  3. The sentence above is the pointing basis.
+     Every pointing prompt or prompt file carries it verbatim, including the re-run after a Step 4 re-refine and each slice estimate under the Split rule.
+  4. Each voter submits one point value valid for `profile.tracker.estimate_scale` plus a short complexity rationale.
+     The rationale names the complexity driver or drivers the voter weighed and cites no duration, effort or run-cost measure.
      The value is written only to that voter's own file in `profile.workspace.scratch_dir`.
-  3. No voter sees another voter's point value before its own value is recorded.
-  4. The facilitator records all three values before the SM/EM comments on sizing or the discussion opens.
+  5. No voter sees another voter's point value before its own value is recorded.
+  6. The facilitator records all three values before the SM/EM comments on sizing or the discussion opens.
      The SM/EM submits no point value.
-  5. After all three values are recorded, the SM/EM may provide factual, reference-only sizing context: comparable stories, historical sizing, and relevant scope differences.
+  7. After all three values are recorded, the SM/EM may provide factual, reference-only sizing context: comparable stories in complexity terms, comparable unknowns and constraints, and relevant scope differences.
      It must not state or imply a preferred value, recommend a direction, reveal or compare individual votes before the discussion, or use leading language.
-  6. A `tshirt` scale stops the cap step with a clear message.
+     A statement of elapsed time or effort is an anchoring event under the Anchoring guardrail.
+  8. A `tshirt` scale stops the cap step with a clear message.
      Pointing still records the three values; the split rule's numeric cap does not apply.
 - **Outputs:** three point value files and, when provided, a separate SM/EM sizing context file.
 - **Stop:** any voter value is missing; an SM/EM sizing comment appears before all three values are recorded (see the anchoring guardrail); the scale is `tshirt` at the cap step.
@@ -141,7 +146,8 @@ Only the PO and the two engineers count toward the agreement.
   1. Hold one discussion round that names only the high and the low.
      Do not compare the other values or single out a voter.
   2. Run one re-vote.
-     Each voter records the set of values it accepts for this story (one or more) or records no consensus.
+     The re-vote prompt carries the pointing basis from Step 3.
+     Each voter records the set of values it accepts for this story (one or more) or records no consensus, with a short complexity rationale under the Step 3 rationale rule.
   3. Consensus is the highest value in the intersection of the three accepted sets.
      If the intersection is empty, record no consensus and run the no-consensus decision (item 7).
   4. Never average and never take a value silently.
