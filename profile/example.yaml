@@ -72,7 +72,38 @@ review:
     - name: Claude shadow adjudicator
       runtime: claude-code
       model: sonnet
+  # Optional: non-blocking extra reviewers, one attempt each. Delete the list to skip them.
+  optional_reviewers:
+    - name: Optional reviewer
+      runtime: opencode
+      model: example/family-b
   merge_owner: human
+  # The pre-PR adversarial gate (skills/adversarial-review-pipeline/SKILL.md).
+  # hunter and arbiter are required: the gate is blocked while either is unset.
+  pre_pr:
+    # Optional: delete to skip the first-pass sweep and run the hunt only.
+    sweeper:
+      name: Sweeper
+      runtime: opencode
+      model: example/long-context
+    hunter:
+      name: Codex hunter
+      runtime: codex
+      model: gpt-5
+    # The arbiter must be a different agent from the one implementing the story.
+    arbiter:
+      name: Claude arbiter
+      runtime: claude-code
+      model: sonnet
+    # Escalation-only: used when the hybrid gate escalates to the Codex and Claude loop.
+    simplicity_reviewer:
+      name: Claude simplicity reviewer
+      runtime: claude-code
+      model: opus
+    fixer:
+      name: Claude fixer
+      runtime: claude-code
+      model: opus
 environments:
   - name: dev
     branch: develop

@@ -14,6 +14,7 @@ from markdown_it import MarkdownIt
 ROOT = Path(__file__).resolve().parent.parent
 SKILLS = sorted(p.parent for p in (ROOT / "skills").glob("*/SKILL.md"))
 SCHEMA = json.loads((ROOT / "profile" / "schema.json").read_text())
+EXAMPLE_PATH = ROOT / "profile" / "example.yaml"
 SPEC_KEYS = {"name", "description", "license", "compatibility", "metadata", "allowed-tools"}
 EM_DASH = chr(0x2014)
 NAME_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
@@ -285,7 +286,149 @@ def test_profile_references_exist_in_schema():
 
 
 def test_example_profile_matches_schema():
-    example = yaml.safe_load((ROOT / "profile" / "example.yaml").read_text())
+    example = yaml.safe_load(EXAMPLE_PATH.read_text())
+    jsonschema.validate(example, SCHEMA)
+
+
+PIPELINE_SKILL = ROOT / "skills" / "adversarial-review-pipeline" / "SKILL.md"
+REQUIRED_RULE = "The hunter and the arbiter are required"
+# Keys the skills stop on when unset, so a profile copied from the example must set them.
+REQUIRED_EXAMPLE_KEYS = ("review.pre_pr.hunter", "review.pre_pr.arbiter")
+AGENT_FIELDS = ("name", "runtime", "model")
+
+
+def required_rule_citation() -> str:
+    lines = PIPELINE_SKILL.read_text().splitlines()
+    numbers = [n for n, line in enumerate(lines, 1) if REQUIRED_RULE in line]
+    assert numbers, f"{PIPELINE_SKILL.relative_to(ROOT)} no longer says {REQUIRED_RULE!r}; update REQUIRED_EXAMPLE_KEYS"
+    return f"{PIPELINE_SKILL.relative_to(ROOT)} line {numbers[0]}"
+
+
+def lookup(example: dict, path: str):
+    node = example
+    for part in path.split("."):
+        node = node.get(part) if isinstance(node, dict) else None
+    return node
+
+
+def example_key_problems(example: dict) -> list[str]:
+    problems = []
+    for path in REQUIRED_EXAMPLE_KEYS:
+        if schema_node(path) is None:
+            problems.append(f"{path} is not defined in profile/schema.json; {required_rule_citation()}")
+        node = lookup(example, path)
+        if not isinstance(node, dict):
+            problems.append(
+                f"profile/example.yaml does not set {path} as an agent object; "
+                f"{required_rule_citation()} blocks the pre-PR gate when it is unset"
+            )
+            continue
+        absent = [field for field in AGENT_FIELDS if not (isinstance(node.get(field), str) and node[field])]
+        if absent:
+            problems.append(
+                f"profile/example.yaml {path} is missing {', '.join(absent)}; {required_rule_citation()}"
+            )
+    nodes = [lookup(example, path) for path in REQUIRED_EXAMPLE_KEYS]
+    names = [node.get("name") for node in nodes if isinstance(node, dict) and node.get("name")]
+    if len(set(names)) < len(names):
+        problems.append(f"profile/example.yaml gives the required pre-PR roles the same name: {names}")
+    return problems
+
+
+def comment_out(text: str, key: str) -> str:
+    """Comment out the YAML block of `key` inside review.pre_pr (4-space indent in the example)."""
+    out, hidden = [], False
+    for line in text.splitlines():
+        indent = len(line) - len(line.lstrip())
+        if line.startswith(f"    {key}:"):
+            hidden = True
+        elif hidden and line.strip() and indent <= 4:
+            hidden = False
+        out.append(f"# {line}" if hidden else line)
+    return "\n".join(out) + "\n"
+
+
+def test_example_profile_sets_required_keys():
+    example = yaml.safe_load(EXAMPLE_PATH.read_text())
+    problems = example_key_problems(example)
+    assert not problems, "\n".join(problems)
+
+
+def delete_pre_pr(example: dict, key: str) -> None:
+    del example["review"]["pre_pr"][key]
+
+
+def null_hunter(example: dict) -> None:
+    example["review"]["pre_pr"]["hunter"] = None
+
+
+def drop_model(example: dict) -> None:
+    del example["review"]["pre_pr"]["hunter"]["model"]
+
+
+@pytest.mark.parametrize(
+    "mutate, culprit",
+    [
+        (lambda e: delete_pre_pr(e, "hunter"), "review.pre_pr.hunter"),
+        (null_hunter, "review.pre_pr.hunter"),
+        (lambda e: delete_pre_pr(e, "arbiter"), "review.pre_pr.arbiter"),
+        (lambda e: e["review"].pop("pre_pr"), "review.pre_pr.hunter"),
+        (drop_model, "review.pre_pr.hunter is missing model"),
+    ],
+)
+def test_example_key_check_flags_missing_required_key(mutate, culprit):
+    example = yaml.safe_load(EXAMPLE_PATH.read_text())
+    mutate(example)
+    problems = example_key_problems(example)
+    assert any(culprit in problem for problem in problems), problems
+    assert any(required_rule_citation() in problem for problem in problems)
+
+
+def test_example_key_check_flags_commented_out_hunter():
+    example = yaml.safe_load(comment_out(EXAMPLE_PATH.read_text(), "hunter"))
+    assert "hunter" not in example["review"]["pre_pr"], "comment_out left the hunter block live"
+    assert any("review.pre_pr.hunter" in p for p in example_key_problems(example))
+
+
+@pytest.mark.parametrize("optional", ["sweeper", "simplicity_reviewer", "fixer", "optional_reviewers"])
+def test_example_key_check_ignores_optional_keys(optional):
+    example = yaml.safe_load(EXAMPLE_PATH.read_text())
+    if optional == "optional_reviewers":
+        example["review"].pop(optional)
+    else:
+        delete_pre_pr(example, optional)
+    assert example_key_problems(example) == []
+    jsonschema.validate(example, SCHEMA)
+
+
+def test_example_key_check_flags_same_hunter_and_arbiter_name():
+    example = yaml.safe_load(EXAMPLE_PATH.read_text())
+    example["review"]["pre_pr"]["arbiter"]["name"] = example["review"]["pre_pr"]["hunter"]["name"]
+    assert any("same name" in problem for problem in example_key_problems(example))
+
+
+def test_example_key_check_flags_non_string_agent_field():
+    example = yaml.safe_load(EXAMPLE_PATH.read_text())
+    example["review"]["pre_pr"]["hunter"]["model"] = 0
+    assert any("missing model" in problem for problem in example_key_problems(example))
+
+
+def test_example_key_check_cites_rule_when_schema_path_is_unknown(monkeypatch):
+    monkeypatch.setitem(globals(), "REQUIRED_EXAMPLE_KEYS", ("review.pre_pr.no_such_role",))
+    example = yaml.safe_load(EXAMPLE_PATH.read_text())
+    problems = [p for p in example_key_problems(example) if "not defined in profile/schema.json" in p]
+    assert problems and all(required_rule_citation() in p for p in problems), problems
+
+
+def test_schema_does_not_require_pre_pr():
+    example = yaml.safe_load(EXAMPLE_PATH.read_text())
+    example["review"].pop("pre_pr")
+    jsonschema.validate(example, SCHEMA)
+
+
+def test_schema_does_not_require_optional_reviewers():
+    example = yaml.safe_load(EXAMPLE_PATH.read_text())
+    example["review"].pop("optional_reviewers")
     jsonschema.validate(example, SCHEMA)
 
 

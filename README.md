@@ -76,6 +76,10 @@ The skills look for it in this order:
 3. `~/.config/agent-skills/profile.yaml`
 
 Start from [`profile/example.yaml`](profile/example.yaml); [`profile/schema.json`](profile/schema.json) defines every key.
+Besides the tracker, git and environment values, a profile names the agents of each review stage.
+The pre-PR adversarial gate has five roles under `review.pre_pr`: `sweeper`, `hunter`, `arbiter`, `simplicity_reviewer` and `fixer`.
+`hunter` and `arbiter` must be set for the pre-PR gate; the gate is blocked while either is unset.
+`sweeper` is optional, and `simplicity_reviewer` and `fixer` are used only when the gate escalates; see [`skills/adversarial-review-pipeline/SKILL.md`](skills/adversarial-review-pipeline/SKILL.md).
 A skill that needs a value the profile does not set stops and asks for it rather than guessing.
 
 ## Overlays
