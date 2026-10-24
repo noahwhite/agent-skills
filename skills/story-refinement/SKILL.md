@@ -130,7 +130,7 @@ Only the PO and the two engineers count toward the agreement.
   1. Launch the PO and both engineers again in separate contexts on the same refined version.
   2. A point or size measures complexity - design difficulty, interacting constraints, unknowns, and the risk of breaking existing behaviour - and never the amount of work or elapsed time; routine, well-understood work such as writing tests, opening a PR, review, running a fixture, or regenerating copies adds no points however long it takes.
   3. The sentence above is the pointing basis.
-     Every pointing prompt or prompt file carries it verbatim, including the re-run after a Step 4 re-refine and each slice estimate under the Split rule.
+     Every pointing prompt or prompt file carries it verbatim, and carries the item 4 rationale rule, including the re-run after a Step 4 re-refine and each slice estimate under the Split rule.
   4. Each voter submits one point value valid for `profile.tracker.estimate_scale` plus a short complexity rationale.
      The rationale cites no duration, effort or run-cost measure, and it names complexity drivers only, each a property of the change: design difficulty, an interacting constraint, an unknown, or the risk of breaking existing behaviour.
      Verification strength, testability, coverage and the shape of the tests are also out of basis, and so is weighing a point value already recorded for this story, a prior story, a parent or sibling, or an inherited split.

@@ -713,8 +713,9 @@ def test_pointing_basis_is_its_own_item_right_after_the_launch_item() -> None:
 
 def test_step_three_requires_the_basis_in_every_pointing_prompt() -> None:
     assert process_items(STEP_THREE)[2] == (
-        "The sentence above is the pointing basis. Every pointing prompt or prompt file carries it verbatim, "
-        "including the re-run after a Step 4 re-refine and each slice estimate under the Split rule."
+        "The sentence above is the pointing basis. Every pointing prompt or prompt file carries it verbatim, and "
+        "carries the item 4 rationale rule, including the re-run after a Step 4 re-refine and each slice estimate "
+        "under the Split rule."
     )
 
 
