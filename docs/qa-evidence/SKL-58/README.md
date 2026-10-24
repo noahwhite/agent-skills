@@ -22,4 +22,3 @@ The sanitized raw assertion output and a self-contained evidence page are attach
 | DoD: no critical regressions | Verified in tested scope | No critical defect was observed in the tested scope. |
 
 Incidental test defect: an initial OpenCode `agent-definitions.test.sh` run intermittently failed on `printf` broken pipe at line 73; a rerun passed 24 of 24 checks.
-Incidental host drift: this QA host's installed profile still carries the old variable-based scratch value; the two named images carry the corrected literal base.
