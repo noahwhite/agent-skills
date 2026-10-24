@@ -760,8 +760,7 @@ def test_step_three_sizing_context_is_in_complexity_terms() -> None:
     assert (
         "It must not name, bound or imply any point value - a prior story's, an inherited split value, a value "
         "read from this story's own recorded pointing history, or one implied by a split status - and such a "
-        "statement is an anchoring event under the Anchoring guardrail unless the SM/EM withdraws it when the "
-        "facilitator challenges it."
+        "statement is an anchoring event under the Anchoring guardrail when the facilitator challenges it."
     ) in body
 
 
@@ -796,26 +795,41 @@ def test_step_four_process_items_keep_their_count_and_order() -> None:
 def test_step_four_facilitator_challenges_every_off_basis_ground() -> None:
     item = process_items(STEP_FOUR)[0]
     assert (
-        "In that round, and against every rationale recorded in this ceremony - the Step 3 rationales and any "
-        "re-vote rationale - the facilitator challenges every ground outside the pointing basis, whether it is "
-        "heard in the discussion or read in a recorded rationale."
+        "In that round, and against the rationales recorded in Step 3, the facilitator challenges every ground "
+        "outside the pointing basis, whether it is heard in the discussion or read in a recorded rationale."
     ) in item
     assert (
-        "A challenged ground must be restated as a basis driver, withdrawn or retracted by its author, the SM/EM "
-        "for its own sizing comment; a ground that is neither is an anchoring event under the Anchoring guardrail."
+        "Challenging a ground is not comparing values: the facilitator names the ground and its author, never "
+        "the value."
+    ) in item
+    assert (
+        "A challenged ground must be restated as a basis driver or retracted, and the SM/EM withdraws or restates "
+        "its own sizing comment when the facilitator challenges it; a ground that is neither is an anchoring "
+        "event under the Anchoring guardrail."
     ) in item
 
 
-def test_anchoring_guardrail_gives_the_sm_em_a_way_to_withdraw_its_own_ground() -> None:
+def test_step_four_re_vote_challenges_an_off_basis_rationale() -> None:
+    item = process_items(STEP_FOUR)[1]
+    assert (
+        "A re-vote rationale outside the pointing basis is challenged before the consensus is recorded, under "
+        "the same restate-or-retract rule as item 1."
+    ) in item
+
+
+def test_anchoring_guardrail_makes_a_point_value_sizing_note_an_event_on_challenge() -> None:
     body = flat(section(SKILL.read_text(), GUARDRAIL))
     assert (
-        "the sm/em's own sizing comment is withdrawn or restated by the sm/em when the facilitator challenges it"
-        in body
+        "every ground outside the pointing basis is an anchoring trigger: a rationale or a sizing comment that "
+        "weighs verification strength, testability, coverage, the shape of the tests, or a prior or inherited "
+        "point value is challenged under step 4, and a sizing comment that names, bounds or implies a point "
+        "value is an anchoring event on being challenged, with no restatement or retraction path" in body
     )
     assert (
-        "a challenged ground that is neither restated as a basis driver nor withdrawn or retracted is an "
-        "anchoring event, and the void re-runs the independent vote from step 3 in newly created voter contexts"
-        in body
+        "any other challenged ground that is neither restated as a basis driver nor retracted, or a sizing "
+        "comment the sm/em neither withdraws nor restates, is an anchoring event, and the void re-runs the "
+        "independent vote from step 3 in newly created voter contexts that exclude the tainted discussion and "
+        "sizing comment" in body
     )
 
 
@@ -825,18 +839,16 @@ GUARDRAIL = "Anchoring guardrail"
 def test_anchoring_guardrail_bans_naming_bounding_or_implying_a_point_value() -> None:
     body = flat(section(SKILL.read_text(), GUARDRAIL))
     assert (
-        "naming, bounding or implying a point value, including a prior story's, an inherited split value, "
-        "a value recorded on the story surface, or one implied by a split status" in body
+        "naming, bounding or implying a point value in sizing context or in the discussion, including a prior "
+        "story's, an inherited split value, a value recorded on the story surface, or one implied by a split "
+        "status" in body
     )
 
 
 def test_anchoring_guardrail_names_off_basis_grounds_as_a_trigger() -> None:
     body = flat(section(SKILL.read_text(), GUARDRAIL))
-    assert (
-        "a ground outside the pointing basis is an anchoring trigger on the same terms: a rationale or a sizing "
-        "comment that weighs verification strength, testability, coverage, the shape of the tests, or a prior or "
-        "inherited point value is challenged under step 4" in body
-    )
+    assert "every ground outside the pointing basis is an anchoring trigger" in body
+    assert "verification strength, testability, coverage, the shape of the tests" in body
 
 
 def test_anchoring_guardrail_explains_why_context_cannot_exclude_a_recorded_value() -> None:
@@ -876,6 +888,26 @@ def phrasing_rows() -> list[tuple[str, str]]:
         assert len(cells) == 2, line
         rows.append((cells[0], cells[1]))
     return rows[2:]
+
+
+PHRASING_INTRO = [
+    "The SM/EM may give factual, reference-only sizing context after all three values are recorded.",
+    "Everything in the forbidden column breaks independence or anchors the discussion.",
+    "A permitted comparison names at most one comparable story and at most one complexity difference; "
+    "it never names a point value, a range, an average, elapsed time, effort, or a preferred value.",
+]
+PHRASING_TRAILER = (
+    "Record every SM/EM sizing comment with the pointing record, even when it stays inside the permitted column."
+)
+
+
+def test_phrasing_section_holds_only_the_intro_the_table_and_the_trailer() -> None:
+    body = section(RECORD.read_text(), "Permitted and forbidden phrasing")
+    lines = [line.strip() for line in body.splitlines() if line.strip()]
+    assert lines[:3] == PHRASING_INTRO
+    rows = len(phrasing_rows())
+    assert lines[3 : 3 + rows + 2] == [line for line in lines[3 : 3 + rows + 2] if line.startswith("|")]
+    assert lines[3 + rows + 2 :] == [PHRASING_TRAILER]
 
 
 def test_phrasing_table_permits_the_three_complexity_comparisons() -> None:
@@ -924,7 +956,8 @@ POINT_VALUE_IN_PERMITTED = re.compile(
     r"\d"
     r"|\bpoints?\b|\bpts?\b"
     r"|\bscale\b|\bsplit\b"
-    r"|\b(?:small|medium|large|extra\s+large)\b"
+    r"|\b(?:xxs|xs|xl|xxl|xxxl|small|medium|large|extra\s+large)\b"
+    r"|\b(?:cap|maximum)\b"
     rf"|\b(?:was|is|were|are|be)\s+(?:{NUMBER_WORDS})\b",
     re.IGNORECASE,
 )
@@ -959,8 +992,8 @@ def test_pointing_template_records_each_challenge_and_outcome() -> None:
     body = spaced(section(RECORD.read_text(), "Pointing record"))
     assert (
         "A challenged ground is recorded with its author (a voter, or the SM/EM for a sizing comment) and either "
-        "the restatement, the withdrawal or the retraction; a ground that is neither voids the round and is "
-        "recorded as the void."
+        "the restatement, the withdrawal or the retraction; a ground that is neither voids the round, leaves the "
+        "consensus field empty, and is recorded as the void under Anchoring events."
     ) in body
 
 

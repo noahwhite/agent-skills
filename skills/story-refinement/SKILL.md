@@ -141,7 +141,7 @@ Only the PO and the two engineers count toward the agreement.
      The SM/EM submits no point value.
   7. After all three values are recorded, the SM/EM may provide factual, reference-only sizing context: comparable stories in complexity terms, comparable unknowns and constraints, and relevant scope differences.
      It must not state or imply a preferred value, recommend a direction, reveal or compare individual votes before the discussion, or use leading language.
-     It must not name, bound or imply any point value - a prior story's, an inherited split value, a value read from this story's own recorded pointing history, or one implied by a split status - and such a statement is an anchoring event under the Anchoring guardrail unless the SM/EM withdraws it when the facilitator challenges it.
+     It must not name, bound or imply any point value - a prior story's, an inherited split value, a value read from this story's own recorded pointing history, or one implied by a split status - and such a statement is an anchoring event under the Anchoring guardrail when the facilitator challenges it.
      A statement of elapsed time or effort is an anchoring event under the Anchoring guardrail.
   8. A `tshirt` scale stops the cap step with a clear message.
      Pointing still records the three values; the split rule's numeric cap does not apply.
@@ -154,11 +154,13 @@ Only the PO and the two engineers count toward the agreement.
 - **Process:**
   1. Hold one discussion round that names only the high and the low.
      Do not compare the other values or single out a voter.
-     In that round, and against every rationale recorded in this ceremony - the Step 3 rationales and any re-vote rationale - the facilitator challenges every ground outside the pointing basis, whether it is heard in the discussion or read in a recorded rationale.
-     A challenged ground must be restated as a basis driver, withdrawn or retracted by its author, the SM/EM for its own sizing comment; a ground that is neither is an anchoring event under the Anchoring guardrail.
+     In that round, and against the rationales recorded in Step 3, the facilitator challenges every ground outside the pointing basis, whether it is heard in the discussion or read in a recorded rationale.
+     Challenging a ground is not comparing values: the facilitator names the ground and its author, never the value.
+     A challenged ground must be restated as a basis driver or retracted, and the SM/EM withdraws or restates its own sizing comment when the facilitator challenges it; a ground that is neither is an anchoring event under the Anchoring guardrail.
   2. Run one re-vote.
      The re-vote prompt carries the pointing basis from Step 3.
      Each voter records the set of values it accepts for this story (one or more) or records no consensus, with a short complexity rationale under the Step 3 rationale rule.
+     A re-vote rationale outside the pointing basis is challenged before the consensus is recorded, under the same restate-or-retract rule as item 1.
   3. Consensus is the highest value in the intersection of the three accepted sets.
      If the intersection is empty, record no consensus and run the no-consensus decision (item 7).
   4. Never average and never take a value silently.
@@ -190,14 +192,14 @@ The SM/EM's sizing comments are logged with the consensus record.
 The prohibited behaviours are:
 
 - naming a target number;
-- naming, bounding or implying a point value, including a prior story's, an inherited split value, a value recorded on the story surface, or one implied by a split status;
+- naming, bounding or implying a point value in sizing context or in the discussion, including a prior story's, an inherited split value, a value recorded on the story surface, or one implied by a split status;
 - saying "I would go higher" or "I would go lower";
 - singling out the highest or lowest vote as the realistic one;
 - asking for a revote after stating a view;
 - comparing individual votes.
 
-A ground outside the pointing basis is an anchoring trigger on the same terms: a rationale or a sizing comment that weighs verification strength, testability, coverage, the shape of the tests, or a prior or inherited point value is challenged under Step 4, and the SM/EM's own sizing comment is withdrawn or restated by the SM/EM when the facilitator challenges it.
-A challenged ground that is neither restated as a basis driver nor withdrawn or retracted is an anchoring event, and the void re-runs the independent vote from Step 3 in newly created voter contexts.
+Every ground outside the pointing basis is an anchoring trigger: a rationale or a sizing comment that weighs verification strength, testability, coverage, the shape of the tests, or a prior or inherited point value is challenged under Step 4, and a sizing comment that names, bounds or implies a point value is an anchoring event on being challenged, with no restatement or retraction path.
+Any other challenged ground that is neither restated as a basis driver nor retracted, or a sizing comment the SM/EM neither withdraws nor restates, is an anchoring event, and the void re-runs the independent vote from Step 3 in newly created voter contexts that exclude the tainted discussion and sizing comment.
 
 Fresh voter contexts exclude the tainted discussion and the sizing comment, but they cannot exclude a point value recorded on the story surface that Step 1 hands every voter with the story, so the Step 3 rationale rule is what keeps such a value out of the vote.
 
