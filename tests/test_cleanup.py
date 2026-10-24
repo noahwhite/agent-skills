@@ -5,6 +5,7 @@ story and moves the evidence it hosted onto the story. These checks pin the regi
 repository contract-tests for every skill, and then the behaviour the acceptance criteria name.
 """
 
+import importlib.util
 import json
 import re
 from pathlib import Path
@@ -12,6 +13,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 SKILL = ROOT / "skills" / "cleanup" / "SKILL.md"
 MANIFEST = json.loads((ROOT / "skills.json").read_text())
+HOST_RE = re.compile(r"\b[a-z0-9][a-z0-9-]*\.(?:ai|com|io|net|org|dev)\b", re.IGNORECASE)
 
 
 def text() -> str:
@@ -25,6 +27,21 @@ def section(body: str, heading: str) -> str:
     rest = body[match.end():]
     following = re.search(r"^## ", rest, re.MULTILINE)
     return rest[: following.start()] if following else rest
+
+
+def hosted_evidence_row() -> str:
+    rows = [line for line in (ROOT / "shared" / "runtimes.md").read_text().splitlines()
+            if line.startswith("| Hosted evidence")]
+    assert len(rows) == 1, f"expected one hosted-evidence row in shared/runtimes.md, got {len(rows)}"
+    return rows[0]
+
+
+def repository_test_helper(name: str):
+    """A function from tests/test_skills.py, loaded without making tests/ a package."""
+    spec = importlib.util.spec_from_file_location("repo_test_skills", ROOT / "tests" / "test_skills.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return getattr(module, name)
 
 
 def test_skill_file_exists() -> None:
@@ -77,7 +94,7 @@ def test_every_key_is_resolved_against_the_tracker_before_anything_is_touched() 
     body = section(text(), "1. Resolve every key against the tracker")
     for phrase in (
         "before anything is touched",
-        "Resolve each key with `linear issue view <story-key>`",
+        "Resolve each key with `linear issue view <story-key> --no-download`, so resolving a key writes no file",
         "`profile.tracker.team_key`",
         "Report an unresolved key as `unresolved` and skip it",
         "The other keys still run",
@@ -91,8 +108,20 @@ def test_inventory_prints_before_anything_is_removed_and_finds_artefacts_by_key(
     for phrase in (
         "nothing is removed before the inventory report is printed",
         "states the artefact, its path or URL, and its disposition",
+        "A cited pull request is `keep`",
         "Find artefacts by story key",
         "per-session and randomly named",
+    ):
+        assert phrase in body, phrase
+
+
+def test_the_key_is_matched_at_a_token_boundary_never_as_a_substring() -> None:
+    body = section(text(), "2. Inventory every artefact before removing any")
+    for phrase in (
+        "**Match the key at a token boundary.**",
+        "A name carries the key only when the key ends the name, or when the next character is `-`.",
+        "`<key>0` or `<key>-sibling`",
+        "It is never inventoried as removable and never acted on, whatever a glob or a search returns.",
     ):
         assert phrase in body, phrase
 
@@ -104,15 +133,17 @@ def test_inventory_names_every_source() -> None:
         "worktree helper created",
         "under a prefix in `profile.git.branch_prefixes`",
         "`git ls-remote --heads origin '*<key>*'`",
-        "`gh pr list --state all --search '<key>'`",
+        "`gh pr list --state all --search '<key>' --limit 200`",
         "its full URL",
         "QA runner scratch output and uncommitted evidence copies only",
+        "including an uncommitted copy inside `profile.qa.evidence_dir`",
         "Session checklist and scratch files naming the key under `profile.workspace.scratch_dir`",
+        "the report names this source as unsearchable instead of reporting it as empty",
     ):
         assert phrase in body, phrase
 
 
-def test_inventory_excludes_the_durable_record_and_the_live_session() -> None:
+def test_inventory_excludes_the_durable_record_and_refuses_a_live_session() -> None:
     body = section(text(), "2. Inventory every artefact before removing any")
     for phrase in (
         "Evidence committed under `profile.qa.evidence_dir`",
@@ -121,7 +152,8 @@ def test_inventory_excludes_the_durable_record_and_the_live_session() -> None:
         "Evidence `qa-verification` already attached",
         "The invoking session's own scratch directory",
         "merge-approval rendezvous file",
-        "still live",
+        "idle only when it holds a checklist file whose every item is checked",
+        "A directory with no checklist file at all is inventoried as `skip`, never as idle",
         "cannot attribute to the key is left out, and the report names it as skipped",
     ):
         assert phrase in body, phrase
@@ -131,8 +163,9 @@ def test_deletion_requires_merge_evidence_from_the_storys_pull_requests() -> Non
     body = section(text(), "3. Delete only with merge evidence")
     for phrase in (
         "Nothing is deleted while it still holds unmerged or unreviewed work",
-        "A merged PR whose head commit is the branch tip",
-        "`gh pr view <n> --json state,headRefOid`",
+        "Before each removal, after `git fetch origin`, establish merge evidence",
+        "A merged PR whose head commit is the tip: `gh pr view <n> --json state,headRefOid`",
+        "from `git ls-remote --heads origin <branch>` for a remote one",
         "Containment, only when `profile.git.merge_method` is neither `squash` nor `rebase`",
         "`git merge-base --is-ancestor",
         "origin/<profile.git.integration_branch>",
@@ -144,37 +177,44 @@ def test_deletion_requires_merge_evidence_from_the_storys_pull_requests() -> Non
 def test_each_artefact_kind_has_its_guarded_removal() -> None:
     body = section(text(), "3. Delete only with merge evidence")
     for phrase in (
-        "Removed with `git branch -D`",
-        "Removed with `git worktree remove` only when `git status --porcelain` is empty inside it",
+        "Remove in this order, so a branch is never refused because a worktree still holds it",
+        "Removed with `git worktree remove` only when `git status --porcelain --ignored` is empty inside it",
         "not the worktree hosting the current session",
-        "only when no open PR heads it",
-        "`gh pr list --state open --json headRefName`",
+        "Ignored files count",
+        "Removed with `git branch -D`",
+        "only when the remote tip has merge evidence and no open PR heads it",
+        "`gh pr list --state open --json headRefName --limit 200`",
+        "a remote branch that never became a PR is refused rather than deleted",
         "Removed only from a directory the inventory proved idle",
     ):
         assert phrase in body, phrase
 
 
+def test_worktrees_are_removed_before_the_branch_they_hold() -> None:
+    body = section(text(), "3. Delete only with merge evidence")
+    assert body.index("**Worktree.**") < body.index("**Local branch.**") < body.index("**Remote branch.**")
+
+
 def test_the_never_force_and_per_artefact_refusal_rules_are_pinned() -> None:
     body = section(text(), "3. Delete only with merge evidence")
     for phrase in (
-        "`--force` is never used",
-        "skipped, not forced, and the run continues with the others",
-        "Every refusal is recorded in the report and posted as a dated comment on the named story",
-        "naming the artefact, the failed check, and why",
-        "confirmed by reading it back",
+        "`--force` is never used, on any command, and a removal that would need it is refused instead.",
+        "An artefact that fails a check is skipped, not forced, and the run continues with the others.",
+        "A read-back that still lists it is a refusal, not a removal",
+        "Every refusal is recorded in the report as a dated line naming the artefact, the failed check, and why",
     ):
         assert phrase in body, phrase
+    assert "except" not in body.lower().replace("excerpt", ""), "a never-force exception crept into the guard"
 
 
-def test_the_hosted_evidence_row_names_list_download_and_a_conditional_delete() -> None:
-    runtimes = (ROOT / "shared" / "runtimes.md").read_text()
-    row = next(line for line in runtimes.splitlines() if line.startswith("| Hosted evidence"))
-    capability, claude, opencode = (cell.strip() for cell in row.split("|")[1:4])
+def test_the_hosted_evidence_row_names_list_download_and_a_per_artefact_delete() -> None:
+    capability, claude, opencode = (cell.strip() for cell in hosted_evidence_row().split("|")[1:4])
     assert capability.startswith("Hosted evidence")
-    for phrase in ("list and download", "delete"):
+    for phrase in ("list and download", "per-artifact delete action"):
         assert phrase in claude, phrase
-    assert "where no delete action is exposed, the map gives none and the copy stays" in claude
+    assert "where no per-artifact delete action is exposed, the map gives none and the copy stays" in claude
     assert "nothing to list, download, or delete" in opencode
+    assert "conversation delete" not in claude, "a conversation-wide delete is not a per-artefact action"
 
 
 def test_the_hosted_evidence_section_is_separated_and_cites_the_map() -> None:
@@ -185,7 +225,6 @@ def test_the_hosted_evidence_section_is_separated_and_cites_the_map() -> None:
         "names no host and no runtime",
         "[references/runtimes.md](references/runtimes.md)",
         "Read that row for the runtime this session runs on",
-        "map the capability to the closest equivalent and say which one was used",
     ):
         assert phrase in body, phrase
 
@@ -196,6 +235,7 @@ def test_the_capability_skip_leg_prints_the_pinned_line_and_touches_nothing() ->
         "print `skipped: this runtime has no hosted-evidence capability`",
         "touch no hosted content",
         "name the skip and its reason in the final report",
+        "A capability is never guessed from a runtime the map does list",
     ):
         assert phrase in body, phrase
 
@@ -205,8 +245,8 @@ def test_the_sweep_downloads_and_deletes_through_the_mapped_action_only() -> Non
     for phrase in (
         "download it into the session's scratch directory",
         "attach it to the named story as step 5 says",
-        "delete the hosted copy only through the mapped delete action",
-        "With no mapped delete action the copy stays where it is",
+        "delete the hosted copy only through the mapped per-artefact delete action",
+        "With no mapped per-artefact delete action the copy stays where it is",
         "There is no user-facing runtime switch",
     ):
         assert phrase in body, phrase
@@ -218,7 +258,7 @@ def test_an_unreachable_mapped_capability_fails_loudly_instead_of_sweeping() -> 
         "Detection never guesses",
         "`error: hosted-evidence capability unreachable: <failure>`",
         "touch no hosted content",
-        "print the report so the work already done is not silent",
+        "print the report and post the story comments step 6 requires so the work already done is not silent",
         "exit non-zero",
         "never a silent skip and never a pass",
     ):
@@ -244,6 +284,7 @@ def test_existing_evidence_is_cited_and_never_re_uploaded_or_deleted() -> None:
         "Cite, never re-upload and never delete",
         "evidence `qa-verification` already attached",
         "evidence committed under `profile.qa.evidence_dir`",
+        "`linear issue view <story-key> --json` lists the story's attachments",
         "No hosted-page or third-party link goes to the tracker",
         "attached to the story it is evidence for",
     ):
@@ -260,25 +301,39 @@ def test_the_run_ends_with_one_report_covering_every_outcome() -> None:
         "what it refused to touch, with the failed check",
         "nothing is removed before the inventory report is printed",
         "post the same summary as a comment on that story",
+        "One comment per story per run",
     ):
         assert phrase in body, phrase
 
 
-HOST_RE = re.compile(r"\b[a-z0-9][a-z0-9-]*\.(?:ai|com|io|net|org|dev)\b", re.IGNORECASE)
+def test_the_run_acts_in_one_repository() -> None:
+    body = section(text(), "Boundaries")
+    for phrase in (
+        "It acts in one repository: the one the run starts in, or the one this skill's overlay names",
+        "named as skipped rather than touched",
+    ):
+        assert phrase in body, phrase
 
 
 def test_the_skill_text_names_no_host_the_capability_map_names() -> None:
-    row = next(
-        line
-        for line in (ROOT / "shared" / "runtimes.md").read_text().splitlines()
-        if line.startswith("| Hosted evidence")
-    )
-    map_hosts = set(HOST_RE.findall(row))
+    map_hosts = set(HOST_RE.findall(hosted_evidence_row()))
     assert map_hosts, "the hosted-evidence row names no host at all"
     assert map_hosts & set(HOST_RE.findall(text())) == set()
 
 
-def test_the_runtime_neutral_wording_check_is_extended_for_hosted_store_hosts() -> None:
-    source = (ROOT / "tests" / "test_skills.py").read_text()
-    assert "HOSTED_STORE_HOSTS" in source, "the runtime-neutral check does not carry the extension"
-    assert "HOSTED_STORE_HOSTS.search(" in source, "the extension is never applied to a line"
+def test_the_runtime_neutral_wording_check_flags_the_host_the_map_names() -> None:
+    offenders = repository_test_helper("hosted_store_offenders")
+    map_hosts = sorted(HOST_RE.findall(hosted_evidence_row()))
+    assert map_hosts, "the hosted-evidence row names no host to test the wording check with"
+    for host in map_hosts:
+        assert named_host(offenders, host), f"the extended wording check does not flag {host}"
+
+
+def named_host(offenders, host: str) -> list[str]:
+    """Run the shared check over one synthetic skill line naming `host`."""
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        probe = Path(tmp) / "SKILL.md"
+        probe.write_text(f"Download the evidence from {host}.\n")
+        return offenders([probe])

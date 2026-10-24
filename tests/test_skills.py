@@ -60,8 +60,28 @@ RUNTIME_TERMS = re.compile(
     r"|mcp__|~/\.claude/|\.opencode/"
 )
 # A hosted artefact store's host name is runtime detail too: the capability map names the host,
-# and a skill names the capability and cites that map (SKL-63, AC7).
-HOSTED_STORE_HOSTS = re.compile(r"(?i)\b(?:claude|chatgpt|gemini|grok)\.(?:ai|com)\b")
+# and a skill names the capability and cites that map (SKL-63, AC7). The scan covers skill prose
+# only, and exempts any file named runtimes.md on purpose: that map is where a host belongs.
+HOSTED_STORE_HOSTS = re.compile(
+    r"(?i)\b(?:claude|chatgpt)\.(?:ai|com)\b"
+    r"|\b(?:gemini|copilot)\.(?:google|microsoft)\.com\b"
+    r"|\b(?:drive|docs)\.google\.com\b"
+    r"|\b(?:www\.)?dropbox\.com\b"
+)
+
+
+def hosted_store_offenders(paths) -> list[str]:
+    """Lines of the given Markdown files that name a hosted artefact store, runtimes maps aside."""
+    offenders = []
+    for md in paths:
+        if md.name == "runtimes.md":
+            continue
+        label = md.relative_to(ROOT) if md.is_relative_to(ROOT) else md.name
+        for n, line in enumerate(md.read_text().splitlines(), 1):
+            if HOSTED_STORE_HOSTS.search(line):
+                offenders.append(f"{label}:{n}: names a hosted-evidence store host")
+    return offenders
+
 # A backticked token naming a Markdown file, bare (`name.md`) or prefixed
 # (`references/name.md`), inside a bundle's references must be a file of that bundle.
 # This catches an installed skill that instructs its agent to consult a local reference
@@ -126,25 +146,49 @@ def test_no_runtime_specific_terms():
         for n, line in enumerate(md.read_text().splitlines(), 1):
             if RUNTIME_TERMS.search(line):
                 offenders.append(f"{md.relative_to(ROOT)}:{n}: {line.strip()}")
-            if HOSTED_STORE_HOSTS.search(line):
-                offenders.append(f"{md.relative_to(ROOT)}:{n}: names a hosted-evidence store host")
     assert not offenders, "\n".join(offenders)
 
 
+def skill_prose() -> list[Path]:
+    return sorted((ROOT / "skills").rglob("*.md"))
+
+
+def test_no_skill_file_names_a_hosted_store_host():
+    assert not hosted_store_offenders(skill_prose())
+
+
 def test_hosted_store_host_check_catches_a_pasted_host():
-    for text in (
-        "list the artefacts on claude.ai",
-        "download them from https://chatgpt.com/share/1",
-        "the Gemini.com page",
+    for host in (
+        "claude.ai",
+        "https://chatgpt.com/share/1",
+        "gemini.google.com",
+        "copilot.microsoft.com",
+        "drive.google.com",
+        "docs.google.com",
+        "www.dropbox.com/s/x",
     ):
-        assert HOSTED_STORE_HOSTS.search(text), text
+        assert HOSTED_STORE_HOSTS.search(f"see {host} for it"), host
     for text in (
         "read the hosted-evidence row",
         "a profile model such as claude-sonnet-4-5",
         "see https://opencode.ai/v2/docs/agents",
         "the capability map names the host",
+        "a profile stores values, not pages",
     ):
         assert not HOSTED_STORE_HOSTS.search(text), text
+
+
+def test_hosted_store_offenders_reports_lines_and_exempts_the_capability_map(tmp_path):
+    skill = tmp_path / "skills" / "demo"
+    skill.mkdir(parents=True)
+    prose = skill / "SKILL.md"
+    prose.write_text("Download it from claude.ai.\n")
+    capability_map = skill / "references" / "runtimes.md"
+    capability_map.parent.mkdir()
+    capability_map.write_text("| Hosted evidence | reachable on claude.ai |\n")
+    offenders = hosted_store_offenders([prose, capability_map])
+    assert len(offenders) == 1, offenders
+    assert offenders[0] == "SKILL.md:1: names a hosted-evidence store host", offenders
 
 
 # An agent that judges work is clean and neutral together (shared/code-review.md). Prose

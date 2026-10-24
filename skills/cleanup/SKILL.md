@@ -19,8 +19,10 @@ It deletes; it never implements, reviews, or verifies a story.
 - [references/profile.md](references/profile.md) - find the profile and this skill's overlay before anything else.
   Every value this skill names comes from the profile: the tracker team, the branch prefixes, the merge method, the scratch base, and the evidence directory.
 - [references/todo-tracking.md](references/todo-tracking.md) - required before step 1: one item per named story key, per inventory source, per removal, per tracker attachment, and for the final report.
-- [references/linear.md](references/linear.md) - steps 1, 5, and 6: resolving a story key, the refusal comment, and the tracker writes.
-- [references/github.md](references/github.md) - steps 2 and 3: branches, worktrees, merge evidence, and deletion.
+- [references/linear.md](references/linear.md) - background for the tracker: resolving an issue, the status lifecycle the run leaves alone, and the comment path.
+  The exact commands this skill runs are in steps 1 and 5.
+- [references/github.md](references/github.md) - background for branches, worktrees, and merges.
+  The merge evidence this skill requires is stated in step 3, and it is stricter than the general rule there.
 - [references/runtimes.md](references/runtimes.md) - step 4: the hosted-evidence capability row, and the capability mapping when a runtime is not listed.
 
 ## Invocation
@@ -45,7 +47,7 @@ Give it one item per named story key, per inventory source, per removal, per tra
 
 Do this before anything is touched, so a mistyped key removes nothing.
 
-- Resolve each key with `linear issue view <story-key>`.
+- Resolve each key with `linear issue view <story-key> --no-download`, so resolving a key writes no file.
   A key does not resolve when that lookup fails, or when the story it returns belongs to a team other than `profile.tracker.team_key`.
 - Report an unresolved key as `unresolved` and skip it.
   The other keys still run: one bad key never stops the run, and no artefact is attributed to it.
@@ -56,16 +58,24 @@ Do this before anything is touched, so a mistyped key removes nothing.
 
 Print the inventory first: nothing is removed before the inventory report is printed.
 Each line states the artefact, its path or URL, and its disposition, which is `remove`, `keep`, `skip`, or `refuse`.
+A cited pull request is `keep`: it is the evidence the removal guard needs, not something to delete.
 Find artefacts by story key: a session's scratch directory is per-session and randomly named, so nothing can be located by the directory a session happens to be in.
+
+**Match the key at a token boundary.**
+A name carries the key only when the key ends the name, or when the next character is `-`.
+A name that matches the key only as the start of a longer key, such as `<key>0` or `<key>-sibling`, is a different story's artefact.
+It is never inventoried as removable and never acted on, whatever a glob or a search returns.
 
 Sources, all of them:
 
 - **Worktrees.** Every entry `git worktree list` reports whose path or branch carries the key, which includes worktrees any worktree helper created.
 - **Local branches.** Every branch whose name carries the key under a prefix in `profile.git.branch_prefixes`.
-- **Remote branches.** Every head `git ls-remote --heads origin '*<key>*'` reports.
-- **Pull requests.** Every PR `gh pr list --state all --search '<key>'` returns, each cited with its full URL.
-- **Disposable QA output.** QA runner scratch output and uncommitted evidence copies only, in the scratch location the overlay's QA lane names, never a committed evidence directory.
+- **Remote branches.** Every head `git ls-remote --heads origin '*<key>*'` reports whose name carries the key at the boundary.
+- **Pull requests.** Every PR `gh pr list --state all --search '<key>' --limit 200` returns, each cited with its full URL.
+- **Disposable QA output.** QA runner scratch output and uncommitted evidence copies only, in the scratch location the overlay's QA lane names, including an uncommitted copy inside `profile.qa.evidence_dir`.
+  A tracked file under that directory is committed evidence and is out of scope here.
 - **Session files.** Session checklist and scratch files naming the key under `profile.workspace.scratch_dir`.
+  When that key is unset, the sessions of this profile used standalone temporary directories, so the report names this source as unsearchable instead of reporting it as empty.
 
 Never inventoried as removable:
 
@@ -76,34 +86,37 @@ Never inventoried as removable:
 
 Two more rules:
 
-- A per-session scratch directory is inventoried as `skip` when its checklist file still carries an unchecked item, because that session is still live.
-  Only the individual files naming the key are removed from a directory the run can prove idle.
+- A per-session scratch directory is idle only when it holds a checklist file whose every item is checked.
+  A directory with no checklist file at all is inventoried as `skip`, never as idle, because nothing proves that session has finished.
 - Anything the skill cannot attribute to the key is left out, and the report names it as skipped.
 
 ## 3. Delete only with merge evidence
 
-Nothing is deleted while it still holds unmerged or unreviewed work.
-Before each removal, establish merge evidence from the story's pull requests:
+Nothing is deleted while it still holds unmerged or unreviewed work: a branch holds it, and a worktree holds its own uncommitted or ignored files.
+Before each removal, after `git fetch origin`, establish merge evidence from the story's pull requests:
 
-- A merged PR whose head commit is the branch tip: `gh pr view <n> --json state,headRefOid` reports `MERGED`, and its `headRefOid` equals the tip from `git rev-parse <branch>`.
-- Containment, only when `profile.git.merge_method` is neither `squash` nor `rebase`: `git merge-base --is-ancestor <branch-tip> origin/<profile.git.integration_branch>`.
+- A merged PR whose head commit is the tip: `gh pr view <n> --json state,headRefOid` reports `MERGED`, and its `headRefOid` equals the tip from `git rev-parse <branch>` for a local branch, or from `git ls-remote --heads origin <branch>` for a remote one.
+- Containment, only when `profile.git.merge_method` is neither `squash` nor `rebase`: `git merge-base --is-ancestor <branch-tip> origin/<profile.git.integration_branch>`, read after the same fetch.
   Under a squash or a rebase merge the integration branch holds a different commit, so containment proves nothing and is never used.
 
-Then, per artefact kind:
+Remove in this order, so a branch is never refused because a worktree still holds it:
 
+- **Worktree.** Removed with `git worktree remove` only when `git status --porcelain --ignored` is empty inside it, and only when it is not the worktree hosting the current session.
+  Ignored files count: a worktree holding an ignored `.env`, build output, or local note is refused, because `git worktree remove` deletes those files with the directory and they never reached the inventory.
+  A worktree hosting the current session is refused, because removing it deletes the ground the run stands on.
 - **Local branch.** Removed with `git branch -D` once it has merge evidence.
   `-D` rather than `-d`, because a squash or a rebase merge leaves the tip unmerged in git's own eyes.
-- **Worktree.** Removed with `git worktree remove` only when `git status --porcelain` is empty inside it, and only when it is not the worktree hosting the current session.
-  A worktree hosting the current session is refused, because removing it deletes the ground the run stands on.
-- **Remote branch.** Deleted with `git push origin --delete <branch>` only when no open PR heads it: a branch named by `gh pr list --state open --json headRefName` is refused.
+- **Remote branch.** Deleted with `git push origin --delete <branch>` only when the remote tip has merge evidence and no open PR heads it.
+  A branch named by `gh pr list --state open --json headRefName --limit 200` is refused, and a remote branch that never became a PR is refused rather than deleted.
 - **Disposable QA output and session files.** Removed only from a directory the inventory proved idle.
 
 Guards that hold for every removal:
 
 - `--force` is never used, on any command, and a removal that would need it is refused instead.
 - An artefact that fails a check is skipped, not forced, and the run continues with the others.
-- Every refusal is recorded in the report and posted as a dated comment on the named story, naming the artefact, the failed check, and why.
-- Each removal is confirmed by reading it back: `git branch`, `git worktree list`, or `git ls-remote --heads origin '*<key>*'` no longer lists it.
+- Each removal is confirmed by reading it back: `git branch --list <branch>`, `git worktree list`, and `git ls-remote --heads origin <branch>` must no longer list the artefact.
+  A read-back that still lists it is a refusal, not a removal, and its output is reported as the evidence.
+- Every refusal is recorded in the report as a dated line naming the artefact, the failed check, and why, and step 6 posts it on the named story.
 
 ## 4. Hosted evidence (a self-contained, capability-detected section)
 
@@ -112,12 +125,12 @@ It names no host and no runtime: both come from the hosted-evidence row of [refe
 
 - Read that row for the runtime this session runs on.
   The row says whether the session can reach the evidence it hosted, and the mechanism to list it, download it, and delete it.
-  A runtime the map does not list follows the map's unlisted rule: map the capability to the closest equivalent and say which one was used.
-- When the row gives the runtime no such capability, print `skipped: this runtime has no hosted-evidence capability`, touch no hosted content, and name the skip and its reason in the final report.
-- When it does, sweep only through the mapped mechanism: list the evidence this session hosted for the story, download it into the session's scratch directory, attach it to the named story as step 5 says, and delete the hosted copy only through the mapped delete action.
-  With no mapped delete action the copy stays where it is, and the report names it as left in place.
+- When the row gives the runtime no such capability, or the map has no row for it, print `skipped: this runtime has no hosted-evidence capability`, touch no hosted content, and name the skip and its reason in the final report.
+  A capability is never guessed from a runtime the map does list: for this capability a missing row means the skip, never a nearby mechanism.
+- When the row does give the capability, sweep only through the mapped mechanism: list the evidence this session hosted for the story, download it into the session's scratch directory, attach it to the named story as step 5 says, and delete the hosted copy only through the mapped per-artefact delete action.
+  With no mapped per-artefact delete action the copy stays where it is, and the report names it as left in place.
 - Detection never guesses.
-  A capability the row gives but the session cannot reach fails the run loudly: print `error: hosted-evidence capability unreachable: <failure>` naming the failure, touch no hosted content, print the report so the work already done is not silent, and exit non-zero.
+  A capability the row gives but the session cannot reach fails the run loudly: print `error: hosted-evidence capability unreachable: <failure>` naming the failure, touch no hosted content, print the report and post the story comments step 6 requires so the work already done is not silent, and exit non-zero.
   That is never a silent skip and never a pass.
 - There is no user-facing runtime switch: the map decides, never a flag, an argument, or a phrase in this text.
 
@@ -130,6 +143,7 @@ Evidence the run swept into the tracker goes through the same tracker-attachment
 - Name each attachment in a comment on the story, saying what it shows, because a plain CLI attachment is a sidebar link and images do not render inline.
 - Cite, never re-upload and never delete: evidence `qa-verification` already attached, and evidence committed under `profile.qa.evidence_dir`.
   The in-repo copy is the durable record, and a second upload is noise on the story.
+  Discover what is already attached before uploading: `linear issue view <story-key> --json` lists the story's attachments.
 - No hosted-page or third-party link goes to the tracker: a hosted page can be private to its owner or deleted, which leaves a dead link on the story.
 
 ## 6. Report and confirm
@@ -157,12 +171,14 @@ refused:
 - Every story named at invocation gets its own section, including an unresolved key, which carries only its resolution line.
 - The report carries four parts per story: what was removed, what was archived to the tracker, with the attachment names, what was skipped and why, including the hosted-evidence skip, and what it refused to touch, with the failed check.
 - The inventory report already printed before the first removal: nothing is removed before the inventory report is printed.
-- When anything was archived or refused, post the same summary as a comment on that story, so the story carries the record of what happened to its artefacts.
-- A clean run says so plainly: nothing removed, nothing archived, every skip and its reason.
+- When anything was archived or refused, post the same summary as a comment on that story, carrying the dated refusal lines step 3 recorded.
+  One comment per story per run: the refusal detail lives inside this summary, never in a second comment.
 
 ## Boundaries
 
-- It removes only artefacts it can attribute to a named key, in the repositories and directories the profile names.
+- It acts in one repository: the one the run starts in, or the one this skill's overlay names.
+  An artefact in another repository is that repository's own run to clean, and is named as skipped rather than touched.
+- It removes only artefacts it can attribute to a named key at a token boundary.
   Everything else is left out and named as skipped.
 - It never removes work that has not landed, and it never forces a removal.
 - It never edits, reviews, or verifies a story, and it never moves a story's status.
