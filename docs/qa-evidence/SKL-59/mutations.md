@@ -98,7 +98,7 @@ File: `SKILL.md`
 Matched text:
 
 ```text
-Challenging a ground is not comparing values or singling out a voter: the facilitator names the ground and its author, and never the author's value.
+Challenging a ground is not comparing values or singling out a voter: the facilitator names the ground's kind and its author, never the ground's verbatim text, and a ground that embeds a point value is named by its kind alone.
 ```
 
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_step_four_facilitator_challenges_every_off_basis_ground`
@@ -219,7 +219,7 @@ File: `SKILL.md`
 Matched text:
 
 ```text
-Any other challenged ground that is neither restated as a basis driver nor retracted, or a sizing comment the SM/EM neither withdraws nor restates, is an anchoring event; because such a ground can taint votes recorded before it, the recovery re-runs the independent vote from Step 3 in newly created voter contexts that exclude the tainted discussion and sizing comment.
+Any other challenged ground that is neither restated as a basis driver nor retracted, or a sizing comment the SM/EM neither withdraws nor restates, is an anchoring event; because such a ground can taint votes recorded before it, it supersedes the three recorded values, and the recovery re-runs the independent vote from Step 3 in newly created voter contexts that exclude the tainted discussion and sizing comment.
 ```
 
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_anchoring_guardrail_makes_a_point_value_sizing_note_an_event_on_challenge`
@@ -303,7 +303,8 @@ File: `refinement-record.md`
 Matched text:
 
 ```text
-A challenged ground is recorded with its author (a voter, or the SM/EM for a sizing comment) and either the restatement, the withdrawal or the retraction; a sizing comment that names, bounds or implies a point value voids the round under the Anchoring guardrail recovery as soon as the facilitator sees it, as does any ground that is neither restated nor retracted, and the void leaves the consensus field empty and is recorded under Anchoring events.
+While a round is open, a challenged ground is recorded by its kind, its author (a voter, or the SM/EM for a sizing comment) and its outcome, with any embedded point value elided, because a verbatim quote of a value-embedding ground in an open record is itself naming a point value; once the consensus is recorded, the final record may quote the grounds verbatim.
+A sizing comment that names, bounds or implies a point value voids the round under the Anchoring guardrail recovery as soon as the facilitator sees it, as does any ground that is neither restated nor retracted, and the void leaves the consensus field empty and is recorded under Anchoring events.
 ```
 
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_pointing_template_records_each_challenge_and_outcome`
@@ -316,7 +317,7 @@ File: `refinement-record.md`
 Matched text:
 
 ```text
-- Challenges: <none, or each ground challenged, its author (a voter, or the SM/EM for a sizing comment), and the restatement, withdrawal or retraction, or the void>
+- Challenges: <none, or each ground challenged by kind, its author (a voter, or the SM/EM for a sizing comment), the restatement, withdrawal or retraction, or the void; elide an embedded point value while the round is open>
 ```
 
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_pointing_template_records_each_challenge_and_outcome`

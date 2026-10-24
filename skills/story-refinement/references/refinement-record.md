@@ -60,7 +60,8 @@ Never edit the refinement comment to add the result; its id keeps identifying on
 
 Post this after the re-vote, or record it as an unpointed result.
 The three values are recorded before any SM/EM sizing comment or discussion.
-A challenged ground is recorded with its author (a voter, or the SM/EM for a sizing comment) and either the restatement, the withdrawal or the retraction; a sizing comment that names, bounds or implies a point value voids the round under the Anchoring guardrail recovery as soon as the facilitator sees it, as does any ground that is neither restated nor retracted, and the void leaves the consensus field empty and is recorded under Anchoring events.
+While a round is open, a challenged ground is recorded by its kind, its author (a voter, or the SM/EM for a sizing comment) and its outcome, with any embedded point value elided, because a verbatim quote of a value-embedding ground in an open record is itself naming a point value; once the consensus is recorded, the final record may quote the grounds verbatim.
+A sizing comment that names, bounds or implies a point value voids the round under the Anchoring guardrail recovery as soon as the facilitator sees it, as does any ground that is neither restated nor retracted, and the void leaves the consensus field empty and is recorded under Anchoring events.
 
 ```markdown
 ## Pointing record
@@ -81,7 +82,7 @@ A challenged ground is recorded with its author (a voter, or the SM/EM for a siz
 - Decision rationale: <one line, or n/a>
 - Effective maximum: <profile.refinement.point_cap; the 8-point rule still triggers at 8 or more>
 - Split: <none, or the slice mapping and sibling issue keys>
-- Challenges: <none, or each ground challenged, its author (a voter, or the SM/EM for a sizing comment), and the restatement, withdrawal or retraction, or the void>
+- Challenges: <none, or each ground challenged by kind, its author (a voter, or the SM/EM for a sizing comment), the restatement, withdrawal or retraction, or the void; elide an embedded point value while the round is open>
 - Superseded values after a void: <none, or the voided values and the blind vote that replaced them>
 - Anchoring events: <none, or the verbatim comment and the recovery, including the newly created voter contexts>
 - Tracker writes: product owner
