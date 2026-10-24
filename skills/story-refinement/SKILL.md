@@ -200,9 +200,9 @@ The prohibited behaviours are:
 - asking for a revote after stating a view;
 - comparing individual votes.
 
-An anchoring trigger is an off-basis ground Step 4 challenges, so it becomes an anchoring event only when it is neither restated as a basis driver nor retracted: a ground that weighs verification strength, testability, coverage, the shape of the tests, a duration, effort or run cost, or a prior or inherited point value is such a trigger when it is weighed in a rationale, used to justify a value, or stated in a sizing comment.
+An anchoring trigger is an off-basis ground Step 4 challenges, so it becomes an anchoring event only when it is neither restated as a basis driver nor retracted: a ground that weighs verification strength, testability, coverage, the shape of the tests, a duration, effort or run cost, or a prior or inherited point value is such a trigger when a voter weighs it in a rationale or raises it in the discussion.
 Every prohibited behaviour above, and a sizing comment that names, bounds or implies a point value or that states elapsed time, effort or run cost, is an anchoring event as soon as it is seen, with no challenge, restatement or retraction path.
-Any other challenged ground that is neither restated as a basis driver nor retracted, or a sizing comment the SM/EM neither withdraws nor restates, is an anchoring event; a ground that taints votes recorded before it voids those votes too, and the independent vote from Step 3 is re-run in newly created voter contexts that exclude the tainted discussion and sizing comment.
+Any other challenged ground that is neither restated as a basis driver nor retracted, or a sizing comment the SM/EM neither withdraws nor restates, is an anchoring event; because such a ground can taint votes recorded before it, the recovery re-runs the independent vote from Step 3 in newly created voter contexts that exclude the tainted discussion and sizing comment.
 
 Fresh voter contexts exclude the tainted discussion and the sizing comment, but they cannot exclude a point value recorded on the story surface that Step 1 hands every voter with the story, so the Step 3 rationale rule is what keeps such a value out of the vote.
 

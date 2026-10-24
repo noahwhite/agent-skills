@@ -219,7 +219,7 @@ File: `SKILL.md`
 Matched text:
 
 ```text
-Any other challenged ground that is neither restated as a basis driver nor retracted, or a sizing comment the SM/EM neither withdraws nor restates, is an anchoring event; a ground that taints votes recorded before it voids those votes too, and the independent vote from Step 3 is re-run in newly created voter contexts that exclude the tainted discussion and sizing comment.
+Any other challenged ground that is neither restated as a basis driver nor retracted, or a sizing comment the SM/EM neither withdraws nor restates, is an anchoring event; because such a ground can taint votes recorded before it, the recovery re-runs the independent vote from Step 3 in newly created voter contexts that exclude the tainted discussion and sizing comment.
 ```
 
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_anchoring_guardrail_makes_a_point_value_sizing_note_an_event_on_challenge`
@@ -316,7 +316,7 @@ File: `refinement-record.md`
 Matched text:
 
 ```text
-- Challenges: <none, or each ground challenged, its author (a voter, or the SM/EM for a sizing comment), and the restatement, withdrawal or retraction, or the void>
+- Challenges: <none, or each ground challenged, its author (a voter, or the SM/EM for a sizing comment), the restatement, withdrawal or retraction, or the void, with the value before and after where a restatement moved it>
 ```
 
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_pointing_template_records_each_challenge_and_outcome`

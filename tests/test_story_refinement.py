@@ -843,9 +843,9 @@ def test_anchoring_guardrail_makes_a_point_value_sizing_note_an_event_on_challen
     )
     assert (
         "any other challenged ground that is neither restated as a basis driver nor retracted, or a sizing "
-        "comment the sm/em neither withdraws nor restates, is an anchoring event; a ground that taints votes "
-        "recorded before it voids those votes too, and the independent vote from step 3 is re-run in newly "
-        "created voter contexts that exclude the tainted discussion and sizing comment" in body
+        "comment the sm/em neither withdraws nor restates, is an anchoring event; because such a ground can "
+        "taint votes recorded before it, the recovery re-runs the independent vote from step 3 in newly created "
+        "voter contexts that exclude the tainted discussion and sizing comment" in body
     )
 
 
@@ -869,8 +869,8 @@ def test_anchoring_guardrail_names_off_basis_grounds_as_a_trigger() -> None:
     )
     assert (
         "a ground that weighs verification strength, testability, coverage, the shape of the tests, a duration, "
-        "effort or run cost, or a prior or inherited point value is such a trigger when it is weighed in a "
-        "rationale, used to justify a value, or stated in a sizing comment" in body
+        "effort or run cost, or a prior or inherited point value is such a trigger when a voter weighs it in a "
+        "rationale or raises it in the discussion" in body
     )
     assert "verification strength, testability, coverage, the shape of the tests" in body
 
@@ -1037,7 +1037,8 @@ def test_phrasing_table_permitted_cells_never_name_a_point_value() -> None:
 def test_pointing_template_records_each_challenge_and_outcome() -> None:
     assert (
         "- Challenges: <none, or each ground challenged, its author (a voter, or the SM/EM for a sizing comment), "
-        "and the restatement, withdrawal or retraction, or the void>" in pointing_template()
+        "the restatement, withdrawal or retraction, or the void, with the value before and after where a "
+        "restatement moved it>" in pointing_template()
     )
     assert (
         "- Superseded values after a void: <none, or the voided values and the blind vote that replaced them>"
