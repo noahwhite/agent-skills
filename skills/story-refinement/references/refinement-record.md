@@ -60,6 +60,7 @@ Never edit the refinement comment to add the result; its id keeps identifying on
 
 Post this after the re-vote, or record it as an unpointed result.
 The three values are recorded before any SM/EM sizing comment or discussion.
+A challenged ground is recorded with its voter and either the restatement or the retraction; a ground that is neither voids the round and is recorded as the void.
 
 ```markdown
 ## Pointing record
@@ -80,6 +81,7 @@ The three values are recorded before any SM/EM sizing comment or discussion.
 - Decision rationale: <one line, or n/a>
 - Effective maximum: <profile.refinement.point_cap; the 8-point rule still triggers at 8 or more>
 - Split: <none, or the slice mapping and sibling issue keys>
+- Challenges: <each ground challenged, its voter, and the restatement or retraction, or the void>
 - Anchoring events: <none, or the verbatim comment and the recovery, including the newly created voter contexts>
 - Tracker writes: product owner
 ```
@@ -94,11 +96,11 @@ Under the denied tracker writes fallback in `SKILL.md`, replace the tracker-writ
 
 The SM/EM may give factual, reference-only sizing context after all three values are recorded.
 Everything in the forbidden column breaks independence or anchors the discussion.
-A permitted comparison names at most one comparable story and at most one complexity difference; it never names a range, an average, elapsed time, effort, or a preferred value.
+A permitted comparison names at most one comparable story and at most one complexity difference; it never names a point value, a range, an average, elapsed time, effort, or a preferred value.
 
 | Permitted (factual, reference-only) | Forbidden (leading or anchoring) |
 |---|---|
-| "The comparable story was 5 points." | "I would go higher." |
+| "The comparable story had one fewer unknown to resolve." | "I would go higher." |
 | "The named story had three interacting constraints; this one has four." | "I would go lower." |
 | "This story has one more integration than that one." | "A target of 8 fits." |
 | "The prior story also changed the schema." | "I think it is 5." |
@@ -106,7 +108,7 @@ A permitted comparison names at most one comparable story and at most one comple
 | "The scope differs in the deploy leg." | "The lowest vote is the realistic one." |
 | "This story has one more unknown than that one." | "Let us re-vote after I explain." |
 | "The comparable story had the same interacting constraints." | "The two of you are far apart." |
-| "The earlier story was split once." | Comparing individual votes before the discussion. |
+| "The earlier story carried more breaking-behaviour risk." | Comparing individual votes before the discussion. |
 | "No comparable story exists." | Naming a preferred direction or value. |
 | "The named story had one fewer external dependency." | "This would take a week." |
 
