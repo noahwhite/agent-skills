@@ -112,3 +112,66 @@ def test_without_scratch_the_run_stays_out_of_the_checkout(tmp_path):
     assert runtime_tmp in written.parents, \
         f"without --scratch the run must use a standalone directory, got {written}"
     assert repo not in written.parents, f"the dossier was written inside the checkout: {written}"
+
+
+def test_a_relative_scratch_path_is_refused_before_any_phase_runs(tmp_path):
+    repo = make_repo(tmp_path)
+    env = {**os.environ, "TMPDIR": str(tmp_path / "runtime-tmp")}
+    (tmp_path / "runtime-tmp").mkdir()
+    result = run_script(
+        "preflight", "--repo", str(repo), "--base", "HEAD", "--test-cmd", "true",
+        "--scratch", "relative-scratch", env=env,
+    )
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "absolute path" in result.stderr, result.stderr
+    assert not (repo / "relative-scratch").exists(), "a relative scratch path dirtied the checkout"
+
+
+def test_a_scratch_path_that_is_a_file_is_refused_without_clobbering_the_phase_report(tmp_path):
+    repo = make_repo(tmp_path)
+    env = {**os.environ, "TMPDIR": str(tmp_path / "runtime-tmp")}
+    (tmp_path / "runtime-tmp").mkdir()
+    scratch = tmp_path / "session-scratch"
+    scratch.mkdir()
+    first = run_script(
+        "preflight", "--repo", str(repo), "--base", "HEAD", "--test-cmd", "true",
+        "--scratch", str(scratch), env=env,
+    )
+    assert first.returncode == 0, first.stdout + first.stderr
+    report = Path(first.stderr.strip().splitlines()[-1].split(" -> ")[-1])
+    assert report.is_file() and "PASS" in report.read_text()
+
+    unusable = tmp_path / "not-a-directory"
+    unusable.write_text("x\n")
+    rejected = run_script(
+        "preflight", "--repo", str(repo), "--base", "HEAD", "--test-cmd", "true",
+        "--scratch", str(unusable), env=env,
+    )
+    assert rejected.returncode == 2, rejected.stdout + rejected.stderr
+    assert "must be a directory" in rejected.stderr, rejected.stderr
+    assert "PASS" in report.read_text(), "the refused run clobbered the accepted phase report"
+
+
+def test_the_phase_agent_receives_the_session_scratch_directory(tmp_path):
+    repo = make_repo(tmp_path)
+    scratch = tmp_path / "session-scratch"
+    scratch.mkdir()
+    env = {**os.environ, "TMPDIR": str(tmp_path / "runtime-tmp")}
+    (tmp_path / "runtime-tmp").mkdir()
+    preflight = run_script(
+        "preflight", "--repo", str(repo), "--base", "HEAD", "--test-cmd", "true",
+        "--scratch", str(scratch), env=env,
+    )
+    assert preflight.returncode == 0, preflight.stdout + preflight.stderr
+
+    agent = (
+        '{ printf "REVIEW-RAN: yes\\n"; '
+        'printf "scratch=%s\\n" "${ADVERSARIAL_SESSION_SCRATCH:-none}"; } > {output_file}'
+    )
+    sweep = run_script(
+        "run", "sweep", "--repo", str(repo), "--base", "HEAD",
+        "--scratch", str(scratch), "--agent-cmd", agent, env=env,
+    )
+    assert sweep.returncode == 0, sweep.stdout + sweep.stderr
+    report = Path(sweep.stderr.strip().splitlines()[-1].split(" -> ")[-1])
+    assert f"scratch={scratch}" in report.read_text(), report.read_text()

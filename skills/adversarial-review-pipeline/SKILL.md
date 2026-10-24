@@ -81,8 +81,9 @@ Common inputs:
   Write it to the session's scratch directory (`references/runtimes.md`, Scratch files), never the profile's base directory.
   A `--spec` naming a missing file is an error; only omitting it gives the "judge scope from the diff alone" fallback.
 - `--test-cmd`: `profile.project.test_command`; `--test-dir` when the suite must run from a subdirectory.
-- `--scratch <dir>`: the session's scratch directory (`references/runtimes.md`, Scratch files), passed to every command so the dossiers and throwaway checkouts stay in it; the script gives each run its own directory inside it and hands that same directory to the phase agent as `ADVERSARIAL_SESSION_SCRATCH`.
+- `--scratch <dir>`: the absolute path of the session's scratch directory (`references/runtimes.md`, Scratch files), passed to every command so the dossiers and throwaway checkouts stay in it; the script gives each run its own directory inside it and hands the session directory to the phase agent as `ADVERSARIAL_SESSION_SCRATCH`.
   Never pass the profile's base directory; omitted, the script creates a standalone directory per invocation, so two commands no longer share one.
+  The script keeps its own run state (accepted phases, logs, stamps) under the repository's git dir (`git rev-parse --git-path adversarial-pipeline`), keyed by base and head: that is the script's state, not a session scratch artefact.
 
 Launching a phase depends on the profile agent's `runtime`:
 
@@ -94,7 +95,7 @@ Launching a phase depends on the profile agent's `runtime`:
   Never default to `-s danger-full-access`; see the hunt phase for when it is allowed.
   For `runtime: opencode`, run it non-interactively with the agent's model and a short instruction to read `{prompt_file}` with its file tools and output only the report.
 - A subagent runtime (`claude-code`, or the runtime you are in): run `dossier <phase>` to write the dossier and print its path.
-  Also run `checkout --base "$BASE"` for a throwaway worktree, for every phase.
+  Also run `checkout --base "$BASE" --scratch "$scratch"` for a throwaway worktree, for every phase.
   Spawn a clean, neutral subagent (its whole brief is the dossier) with the agent's model, tell it to read the dossier and work only in that checkout, and save its final report to the phase's artifact path (`paths` prints them).
   Then run `record <phase>` with the same `--base`, `--spec` and `--no-sweep` as the dossier.
   It accepts the report only if it is non-empty, newer than the dossier, starts with `REVIEW-RAN: yes`, its inputs still match the dossier's, and the tripwire saw no change to the primary checkout since the dossier was written.
@@ -112,8 +113,7 @@ Set these once, in the consumer repository, before Phase 0:
 ```bash
 PIPELINE="<skill dir>/scripts/run-adversarial-pipeline.sh"   # absolute path the runtime loaded this skill from
 BASE="origin/<profile.git.integration_branch>"              # after: git fetch origin <profile.git.integration_branch>
-scratch_base="<the runtime's scratch base, else profile.workspace.scratch_dir>"
-scratch="$(mktemp -d -- "${scratch_base%/}/session.XXXXXX")"  # this session's one scratch directory (references/runtimes.md)
+scratch="<the path the Scratch files one-liner in references/runtimes.md printed>"  # this session's one directory
 SPEC="$scratch/spec.md"                                      # the story text and acceptance criteria, written first
 ```
 

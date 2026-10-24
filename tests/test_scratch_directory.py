@@ -67,7 +67,9 @@ def run_one_liner(block: str, env: dict[str, str]) -> Path:
 
 def test_the_snippet_prints_the_directory_it_chose():
     """The rule says to run it once and pass the printed path, so the snippet prints it."""
-    assert "printf" in scratch_one_liner()
+    code = [line.strip() for line in scratch_one_liner().splitlines()
+            if line.strip() and not line.strip().startswith("#")]
+    assert code and code[-1] == 'printf \'%s\\n\' "$scratch"', code
 
 
 def test_the_snippet_runs_with_scratch_base_unset_under_set_u(tmp_path):
@@ -169,7 +171,8 @@ def test_no_doc_states_the_profile_must_set_the_scratch_dir():
         r"must set[^.\n]*scratch_dir"
         r"|scratch_dir[^.\n]*must be set"
         r"|require[sd]?[^.\n]*scratch_dir"
-        r"|scratch_dir[^.\n]*(?:is|are) required",
+        r"|scratch_dir[^.\n]*(?:is|are) required"
+        r"|scratch_dir[^.\n]*must be (?:set|non-empty|configured)",
         re.IGNORECASE,
     )
     offenders = [
@@ -196,9 +199,9 @@ def test_no_doc_names_a_fixed_scratch_path_under_the_base():
     offenders = []
     for md in md_files():
         for n, line in enumerate(md.read_text().splitlines(), 1):
-            if line.startswith("| Scratch base directory"):
-                continue  # the capability map names the runtime's own base, and stays
-            for hit in fixed_under_base.findall(line):
+            # The capability map names the runtime's own base and stays; only that token is exempt.
+            scanned = line.replace("`$CLAUDE_JOB_DIR/tmp`", "")
+            for hit in fixed_under_base.findall(scanned):
                 offenders.append(f"{md.relative_to(ROOT)}:{n}: {hit}")
     assert not offenders, "\n".join(offenders)
 

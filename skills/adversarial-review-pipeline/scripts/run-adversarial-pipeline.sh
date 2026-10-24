@@ -45,8 +45,9 @@
 # --scratch DIR names the session's scratch directory (references/runtimes.md, Scratch files): the
 # script gives each run its own directory inside it, so a run's dossiers and checkouts do not
 # collide. Never pass the profile's base directory itself. Omitted, the script creates its own
-# standalone directory and exposes nothing to the agent. A phase agent also receives the session
-# directory in ADVERSARIAL_SESSION_SCRATCH, so it can keep its own artefacts beside the run.
+# standalone directory per invocation and exposes that directory to the phase agent. A phase agent
+# also receives the session directory (the supplied one, else the standalone run directory) in
+# ADVERSARIAL_SESSION_SCRATCH, so it can keep its own artefacts beside the run.
 #
 # --agent-cmd is a shell command template built from the profile's agent definition for that phase.
 # Placeholders (substituted shell-quoted): {prompt_file} the dossier, {output_file} the artifact,
@@ -103,6 +104,19 @@ while [ $# -gt 0 ]; do
     *) echo "ERROR: unknown option $1" >&2; usage ;;
   esac
 done
+
+# A supplied scratch directory is validated once, here: a phase must never write a partial
+# artifact and then fail on the directory, and a relative path would dirty the reviewed tree.
+if [ -n "$SCRATCH" ]; then
+  case "$SCRATCH" in
+    /*) ;;
+    *) die 2 "--scratch must be an absolute path: $SCRATCH" ;;
+  esac
+  if [ -e "$SCRATCH" ] && [ ! -d "$SCRATCH" ]; then
+    die 2 "--scratch must be a directory, not a file: $SCRATCH"
+  fi
+  mkdir -p -- "$SCRATCH" || die 2 "--scratch is not usable as a directory: $SCRATCH"
+fi
 
 # A named spec that is missing is an error; only an omitted spec gets the "no spec" fallback.
 if [ -n "$SPEC_FILE" ]; then
@@ -323,8 +337,6 @@ scratch_dir() {
     # A supplied directory is the session's scratch directory (references/runtimes.md, Scratch
     # files): give this run its own directory inside it, so two runs never share dossier names.
     SESSION_SCRATCH="$SCRATCH"
-    mkdir -p -- "$SCRATCH" || die 2 "--scratch is not usable as a directory: $SCRATCH"
-    [ -d "$SCRATCH" ] || die 2 "--scratch must be a directory, not a file: $SCRATCH"
     SCRATCH="$(mktemp -d -p "$SCRATCH" run.XXXXXX)"
   fi
   printf '%s\n' "$SCRATCH"
