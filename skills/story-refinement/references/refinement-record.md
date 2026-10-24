@@ -60,8 +60,8 @@ Never edit the refinement comment to add the result; its id keeps identifying on
 
 Post this after the re-vote, or record it as an unpointed result.
 The three values are recorded before any SM/EM sizing comment or discussion.
-While a round is open, a challenged ground is recorded by its kind, its author (a voter, or the SM/EM for a sizing comment) and its outcome, with any embedded point value elided, because a verbatim quote of a value-embedding ground in an open record is itself naming a point value; once the consensus is recorded, the final record may quote the grounds verbatim.
-A sizing comment that names, bounds or implies a point value voids the round under the Anchoring guardrail recovery as soon as the facilitator sees it, as does any ground that is neither restated nor retracted, and the void leaves the consensus field empty and is recorded under Anchoring events.
+While a round is open, a challenged ground is recorded by its kind, its author (a voter, or the SM/EM for a sizing comment) and its outcome, with a point value named before the reveal or a target value for this story elided, because a verbatim quote of one in an open record names it again; once the consensus is recorded, the final record may quote the grounds verbatim.
+A sizing comment that names a point value before the reveal, names or implies a target value for this story, or states elapsed time, effort or run cost voids the round under the Anchoring guardrail recovery as soon as the facilitator sees it, as does any ground that is neither restated nor retracted, and the void leaves the consensus field empty and is recorded under Anchoring events.
 
 ```markdown
 ## Pointing record
@@ -82,7 +82,7 @@ A sizing comment that names, bounds or implies a point value voids the round und
 - Decision rationale: <one line, or n/a>
 - Effective maximum: <profile.refinement.point_cap; the 8-point rule still triggers at 8 or more>
 - Split: <none, or the slice mapping and sibling issue keys>
-- Challenges: <none, or each ground challenged by kind, its author (a voter, or the SM/EM for a sizing comment), the restatement, withdrawal or retraction, or the void; elide an embedded point value while the round is open>
+- Challenges: <none, or each ground challenged by kind, its author (a voter, or the SM/EM for a sizing comment), the restatement, withdrawal or retraction, or the void; elide a pre-reveal value or a target value while the round is open>
 - Superseded values after a void: <none, or the voided values and the blind vote that replaced them>
 - Anchoring events: <none, or the verbatim comment and the recovery, including the newly created voter contexts>
 - Tracker writes: product owner
@@ -98,11 +98,11 @@ Under the denied tracker writes fallback in `SKILL.md`, replace the tracker-writ
 
 The SM/EM may give factual, reference-only sizing context after all three values are recorded.
 Everything in the forbidden column breaks independence or anchors the discussion.
-A permitted comparison names at most one comparable story and at most one complexity difference; it never names a point value, a range, an average, elapsed time, effort, or a preferred value.
+A permitted comparison names at most one comparable story and at most one basis difference; it never names a range, an average, elapsed time, effort, a target value for the story under estimate, or a preferred value, and it names a point value only after all three values are recorded.
 
 | Permitted (factual, reference-only) | Forbidden (leading or anchoring) |
 |---|---|
-| "The comparable story had one fewer unknown to resolve." | "I would go higher." |
+| "The comparable story was 5 points." | "I would go higher." |
 | "The named story had three interacting constraints; this one has four." | "I would go lower." |
 | "This story has one more integration than that one." | "A target of 8 fits." |
 | "The prior story also changed the schema." | "I think it is 5." |
@@ -110,7 +110,7 @@ A permitted comparison names at most one comparable story and at most one comple
 | "The scope differs in the deploy leg." | "The lowest vote is the realistic one." |
 | "This story has one more unknown than that one." | "Let us re-vote after I explain." |
 | "The comparable story had the same interacting constraints." | "The two of you are far apart." |
-| "The earlier story carried more breaking-behaviour risk." | Comparing individual votes before the discussion. |
+| "The earlier story was split once." | Comparing individual votes before the discussion. |
 | "No comparable story exists." | Naming a preferred direction or value. |
 | "The named story had one fewer external dependency." | "This would take a week." |
 
