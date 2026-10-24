@@ -120,7 +120,8 @@ def test_the_key_is_matched_at_a_token_boundary_never_as_a_substring() -> None:
     body = section(text(), "2. Inventory every artefact before removing any")
     for phrase in (
         "**Match the key at a token boundary.**",
-        "the key starts the name or follows a `-` or `/` in it, and the key ends the name or is followed by a `-` in it",
+        "the key starts the name or follows a `-` or `/` in it, and the key ends the name or is followed by a `-` or `/` in it",
+        "the directory `<key>` in `/tmp/<key>/checkout` all carry it",
         "`<key>0`, `x<key>`, and `<key>x` do not",
         "A name that fails the boundary test is a different story's artefact",
     ):
@@ -135,6 +136,7 @@ def test_inventory_names_every_source() -> None:
         "under a prefix in `profile.git.branch_prefixes`",
         "`git ls-remote --heads origin '*<key>*'`",
         "`gh pr list --state all --search '<key>' --limit 200`",
+        "A listing that returns exactly its limit is not proven complete",
         "its full URL",
         "QA runner scratch output and uncommitted evidence copies only",
         "an uncommitted copy inside `profile.qa.evidence_dir`",
@@ -157,9 +159,9 @@ def test_inventory_excludes_the_durable_record_and_refuses_a_live_session() -> N
         "The invoking session's own scratch directory",
         "merge-approval rendezvous file",
         "its checklist file exists and every item is checked",
-        "nothing in it was modified at or after the moment this run started",
-        "`find <dir> -newer <stamp>`",
-        "Anything else is inventoried as `skip`, because a session may still be writing",
+        "A directory with no checklist file is never idle",
+        "the report names it with the files it keeps, so a human can remove them deliberately",
+        "This is the strict direction on purpose",
         "cannot attribute to the key is left out, and the report names it as skipped",
     ):
         assert phrase in body, phrase
@@ -197,6 +199,7 @@ def test_each_artefact_kind_has_its_guarded_removal() -> None:
         "a listing that returns exactly its limit is not proven complete",
         "A remote branch that never became a PR is refused rather than deleted",
         "Removed only from a directory the inventory proved idle, and only after step 5 has attached the evidence the run swept",
+        "An uncommitted evidence copy is removable only once it has a home the story keeps",
     ):
         assert phrase in body, phrase
 

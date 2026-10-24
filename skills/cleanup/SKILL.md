@@ -63,8 +63,8 @@ A cited pull request is `keep`: it is the evidence the removal guard needs, not 
 Find artefacts by story key: a session's scratch directory is per-session and randomly named, so nothing can be located by the directory a session happens to be in.
 
 **Match the key at a token boundary.**
-A name carries the key only when the key stands as its own token: the key starts the name or follows a `-` or `/` in it, and the key ends the name or is followed by a `-` in it.
-`feature/<key>`, `<key>-follow-up`, and `fix-x-<key>` carry it; `<key>0`, `x<key>`, and `<key>x` do not.
+A name carries the key only when the key stands as its own token: the key starts the name or follows a `-` or `/` in it, and the key ends the name or is followed by a `-` or `/` in it.
+`feature/<key>`, `<key>-follow-up`, `fix-x-<key>`, and the directory `<key>` in `/tmp/<key>/checkout` all carry it; `<key>0`, `x<key>`, and `<key>x` do not.
 A name that fails the boundary test is a different story's artefact: it is never inventoried as removable and never acted on, whatever a glob or a search returns.
 
 Sources, all of them:
@@ -73,6 +73,7 @@ Sources, all of them:
 - **Local branches.** Every branch whose name carries the key under a prefix in `profile.git.branch_prefixes`.
 - **Remote branches.** Every head `git ls-remote --heads origin '*<key>*'` reports whose name carries the key at the boundary.
 - **Pull requests.** Every PR `gh pr list --state all --search '<key>' --limit 200` returns, each cited with its full URL.
+  A listing that returns exactly its limit is not proven complete, so the inventory reports it as incomplete rather than as the whole record.
 - **Disposable QA output.** QA runner scratch output and uncommitted evidence copies only.
   Scan the session scratch base this runtime gives (`profile.workspace.scratch_dir`, or the runtime's own base as the capability map names it), an uncommitted copy inside `profile.qa.evidence_dir`, and the QA runner's scratch directory when this skill's overlay names one.
   A location the overlay names but the run cannot reach is reported as unsearchable, never as empty.
@@ -89,9 +90,10 @@ Never inventoried as removable:
 
 Two more rules:
 
-- A per-session scratch directory is idle only when the run can prove its session has finished: its checklist file exists and every item is checked, or, with no checklist file, nothing in it was modified at or after the moment this run started.
-  Stamp that moment once, portably, in the session's scratch directory (`touch <stamp>` at the start of the run) and test it with `find <dir> -newer <stamp>`.
-  Anything else is inventoried as `skip`, because a session may still be writing.
+- A per-session scratch directory is idle only when the run can prove its session has finished: its checklist file exists and every item is checked.
+  A directory with no checklist file is never idle: a session using its runtime's todo list writes no file, and a paused session's files look exactly like a finished one's, so nothing on disk proves that session is done.
+  That directory is inventoried as `skip`, and the report names it with the files it keeps, so a human can remove them deliberately.
+  This is the strict direction on purpose: a wrongly skipped directory leaves reported debris, while a wrongly deleted one destroys a live session's work.
 - Anything the skill cannot attribute to the key is left out, and the report names it as skipped.
 
 ## 3. Delete only with merge evidence
@@ -117,6 +119,7 @@ Remove in this order, so a branch is never refused because a worktree still hold
   Match head refs from that listing, not a free-text search: a search matches titles and bodies, so a PR whose head branch carries the key but whose text does not would slip past.
   A remote branch that never became a PR is refused rather than deleted.
 - **Disposable QA output and session files.** Removed only from a directory the inventory proved idle, and only after step 5 has attached the evidence the run swept, so the run never deletes the only copy of something the story is about to receive.
+  An uncommitted evidence copy is removable only once it has a home the story keeps: attached in step 5, or committed. Until then it is skipped, because a copy with no home is the durable record.
 
 Guards that hold for every removal:
 
