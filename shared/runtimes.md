@@ -18,6 +18,7 @@ If your runtime is not listed, map each capability to its closest equivalent and
 | Wake the manager (merge approval) | `SendMessage` | no push capability; the approvals file plus the manager's watcher is the delivery path |
 | Run a shell command | `Bash` | V2: `shell`; V1: `bash` |
 | Fetch a URL | `WebFetch` | `webfetch` |
+| Hosted evidence (the artefacts a session published for itself) | reachable where the session published artifacts from its own conversation on `claude.ai`: list and download them in that conversation's artifact view, and delete them with the product's artifact or conversation delete action; where no delete action is exposed, the map gives none and the copy stays | none: an OpenCode session publishes no hosted artefacts, so there is nothing to list, download, or delete |
 | Scratch base directory | `$CLAUDE_JOB_DIR/tmp` in background jobs, else `profile.workspace.scratch_dir` | `profile.workspace.scratch_dir` |
 | Session label (for agent stamps) | the session or job name if set, else the session id | the session title if set, else the session id |
 | Tracker writes from a subagent | a subagent's write can be denied by the auto-mode permission check; only the owner grants it | V2: agent `permissions` rules for `shell`; V1: `permission.bash`; probe the actual write path |
@@ -70,6 +71,8 @@ If your runtime is not listed, map each capability to its closest equivalent and
   The preflight probe in Step 1 of `story-refinement` is the deciding check; an allow rule alone was not sufficient.
   On OpenCode V2, use the agent's ordered `permissions` rules with action `shell` for CLI writes; V1 uses the agent file's `permission.bash` setting.
   MCP writes have their own permission path; the real preflight probe remains decisive, not the presence of a shell allow rule.
+- **Hosted evidence.** A skill that touches hosted evidence reads this row and names no host itself.
+  A capability the row gives but the session cannot reach is a failure the skill reports loudly, with a non-zero exit and an error line naming it, never a silent skip and never a pass.
 - **Todo availability.** The record of work is required in every runtime; only its storage differs.
   OpenCode V2 ships todos off by default (`experimental.todo: true` opts in, and the harness must still expose the tool), so the checklist file is what every session falls back to when no todo tool is exposed (see `references/todo-tracking.md`).
 - **Models.** A skill that asks for a specific model role (reviewer, adjudicator) takes the model from the profile.

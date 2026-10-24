@@ -105,6 +105,22 @@ Guards that hold for every removal:
 - Every refusal is recorded in the report and posted as a dated comment on the named story, naming the artefact, the failed check, and why.
 - Each removal is confirmed by reading it back: `git branch`, `git worktree list`, or `git ls-remote --heads origin '*<key>*'` no longer lists it.
 
+## 4. Hosted evidence (a self-contained, capability-detected section)
+
+This section is separated on purpose: a consumer variant can drop it, or layer it through an overlay, without touching the rest of the skill.
+It names no host and no runtime: both come from the hosted-evidence row of [references/runtimes.md](references/runtimes.md).
+
+- Read that row for the runtime this session runs on.
+  The row says whether the session can reach the evidence it hosted, and the mechanism to list it, download it, and delete it.
+  A runtime the map does not list follows the map's unlisted rule: map the capability to the closest equivalent and say which one was used.
+- When the row gives the runtime no such capability, print `skipped: this runtime has no hosted-evidence capability`, touch no hosted content, and name the skip and its reason in the final report.
+- When it does, sweep only through the mapped mechanism: list the evidence this session hosted for the story, download it into the session's scratch directory, attach it to the named story as step 5 says, and delete the hosted copy only through the mapped delete action.
+  With no mapped delete action the copy stays where it is, and the report names it as left in place.
+- Detection never guesses.
+  A capability the row gives but the session cannot reach fails the run loudly: print `error: hosted-evidence capability unreachable: <failure>` naming the failure, touch no hosted content, print the report so the work already done is not silent, and exit non-zero.
+  That is never a silent skip and never a pass.
+- There is no user-facing runtime switch: the map decides, never a flag, an argument, or a phrase in this text.
+
 ## Boundaries
 
 - It removes only artefacts it can attribute to a named key, in the repositories and directories the profile names.

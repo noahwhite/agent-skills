@@ -164,3 +164,62 @@ def test_the_never_force_and_per_artefact_refusal_rules_are_pinned() -> None:
         "confirmed by reading it back",
     ):
         assert phrase in body, phrase
+
+
+def test_the_hosted_evidence_row_names_list_download_and_a_conditional_delete() -> None:
+    runtimes = (ROOT / "shared" / "runtimes.md").read_text()
+    row = next(line for line in runtimes.splitlines() if line.startswith("| Hosted evidence"))
+    capability, claude, opencode = (cell.strip() for cell in row.split("|")[1:4])
+    assert capability.startswith("Hosted evidence")
+    for phrase in ("list and download", "delete"):
+        assert phrase in claude, phrase
+    assert "where no delete action is exposed, the map gives none and the copy stays" in claude
+    assert "nothing to list, download, or delete" in opencode
+
+
+def test_the_hosted_evidence_section_is_separated_and_cites_the_map() -> None:
+    body = section(text(), "4. Hosted evidence (a self-contained, capability-detected section)")
+    for phrase in (
+        "separated on purpose",
+        "drop it, or layer it through an overlay",
+        "names no host and no runtime",
+        "[references/runtimes.md](references/runtimes.md)",
+        "Read that row for the runtime this session runs on",
+        "map the capability to the closest equivalent and say which one was used",
+    ):
+        assert phrase in body, phrase
+
+
+def test_the_capability_skip_leg_prints_the_pinned_line_and_touches_nothing() -> None:
+    body = section(text(), "4. Hosted evidence (a self-contained, capability-detected section)")
+    for phrase in (
+        "print `skipped: this runtime has no hosted-evidence capability`",
+        "touch no hosted content",
+        "name the skip and its reason in the final report",
+    ):
+        assert phrase in body, phrase
+
+
+def test_the_sweep_downloads_and_deletes_through_the_mapped_action_only() -> None:
+    body = section(text(), "4. Hosted evidence (a self-contained, capability-detected section)")
+    for phrase in (
+        "download it into the session's scratch directory",
+        "attach it to the named story as step 5 says",
+        "delete the hosted copy only through the mapped delete action",
+        "With no mapped delete action the copy stays where it is",
+        "There is no user-facing runtime switch",
+    ):
+        assert phrase in body, phrase
+
+
+def test_an_unreachable_mapped_capability_fails_loudly_instead_of_sweeping() -> None:
+    body = section(text(), "4. Hosted evidence (a self-contained, capability-detected section)")
+    for phrase in (
+        "Detection never guesses",
+        "`error: hosted-evidence capability unreachable: <failure>`",
+        "touch no hosted content",
+        "print the report so the work already done is not silent",
+        "exit non-zero",
+        "never a silent skip and never a pass",
+    ):
+        assert phrase in body, phrase
