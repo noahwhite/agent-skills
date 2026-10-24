@@ -4,6 +4,9 @@ import json
 import re
 from pathlib import Path
 
+import jsonschema
+import yaml
+
 ROOT = Path(__file__).resolve().parent.parent
 SKILL = ROOT / "skills" / "persona-release-manager" / "SKILL.md"
 MANIFEST = json.loads((ROOT / "skills.json").read_text())
@@ -139,6 +142,68 @@ def test_review_section_covers_the_cumulative_diff_and_ownership() -> None:
         "post the review of record on the pr as a `--comment` pr review before the merge",
     ):
         assert phrase in body, f"review missing: {phrase}"
+
+
+def test_release_profile_contract() -> None:
+    schema = json.loads((ROOT / "profile" / "schema.json").read_text())
+    release = schema["properties"]["release"]
+    assert schema["additionalProperties"] is False
+    assert "release" not in schema["required"]
+    assert release["type"] == "object"
+    assert release["additionalProperties"] is False
+    assert not release.get("required")
+    expected = {
+        "versioning": {"semver", "calver"},
+        "notes": {"github-release", "tracker-comment"},
+    }
+    assert set(release["properties"]) == set(expected)
+    example = yaml.safe_load((ROOT / "profile" / "example.yaml").read_text())
+    for key, values in expected.items():
+        prop = release["properties"][key]
+        assert set(prop["enum"]) == values
+        assert prop["description"].strip()
+        assert example["release"][key] in values
+    jsonschema.validate(example["release"], release)
+
+
+def test_versioning_section_covers_release_schemes() -> None:
+    body = section(SKILL.read_text(), "Versioning")
+    for phrase in (
+        "profile.release.versioning",
+        "v0.1.0",
+        "Release-Type",
+        "major",
+        "minor",
+        "patch",
+        "YYYY.MM.DD",
+        "untagged",
+        "profile.git.release_branch",
+    ):
+        assert phrase in body, f"versioning missing: {phrase}"
+
+
+def test_release_notes_section_covers_destinations_and_safety() -> None:
+    body = section(SKILL.read_text(), "Release notes")
+    for phrase in (
+        "profile.release.notes",
+        "github-release",
+        "tracker-comment",
+        "requires a tag",
+        "auto-generated",
+    ):
+        assert phrase in body, f"release notes missing: {phrase}"
+
+
+def test_release_sections_follow_promotion_review_before_production() -> None:
+    text = SKILL.read_text()
+    headings = (
+        "Promotion review",
+        "Versioning",
+        "Release notes",
+        "Production verification",
+    )
+    positions = [text.index(f"## {heading}\n") for heading in headings]
+    assert positions == sorted(positions)
 
 
 def test_production_verification_section_covers_evidence_and_failure() -> None:

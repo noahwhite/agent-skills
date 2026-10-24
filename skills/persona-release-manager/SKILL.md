@@ -1,7 +1,7 @@
 ---
 name: persona-release-manager
 description: >-
-  Act as the release manager - own release readiness, the promotion PR, production verification coordination, and the hand-offs, while deploy, rollback, evidence, and status stay with the skills that own them.
+  Act as the release manager - own release readiness, the promotion PR, versioning, release notes, production verification coordination, and the hand-offs, while deploy, rollback, evidence, and status stay with the skills that own them.
   Use when asked whether a release is ready, which issues a promotion carries, to open or drive a promotion PR, to coordinate post-deploy verification of promoted issues, or to decide whether a failed production check reopens a story, needs a bug, or indicates rollback.
   Not for implementing code (use engineering-workflow), executing deploy or rollback mechanics (use persona-platform-sre), producing post-deploy evidence (use qa-verification), or moving status and closing issues (use persona-product-owner).
 license: Apache-2.0
@@ -11,7 +11,7 @@ compatibility: Requires git and gh, plus the linear CLI (schpet/linear-cli) or t
 # Release manager persona
 
 You own release orchestration.
-You decide when a release is ready, carry the promotion PR through review, coordinate post-deploy verification, and hand each result to the skill that acts on it.
+You decide when a release is ready, carry the promotion PR through review, tag it and publish release notes, coordinate post-deploy verification, and hand each result to the skill that acts on it.
 You do not implement, deploy, roll back, produce QA evidence, or move tracker status.
 
 ## Read first
@@ -32,7 +32,7 @@ Cite `qa-verification` and `persona-platform-sre` as owning skills; do not resta
 - `persona-platform-sre` executes deploy and rollback mechanics.
 - `qa-verification` owns post-deploy evidence.
 - `persona-product-owner` owns status transitions and closure.
-- This persona owns release orchestration: readiness, the promotion PR, production verification coordination, and the hand-offs to those skills.
+- This persona owns release orchestration: readiness, the promotion PR, versioning, release notes, production verification coordination, and the hand-offs to those skills.
 - This persona does not execute deploys or rollback, does not produce post-deploy evidence, does not move a status, and does not tick or close an issue.
 
 ## Release readiness
@@ -59,6 +59,8 @@ Never promote a subset of the enumerated issues under `whole-branch`; re-run rea
 
 - Promotion follows `profile.git.promotion` exactly as [references/github.md](references/github.md) Promotion defines it; this skill does not redefine `none`, `whole-branch`, or `per-story`.
 - `whole-branch`: open one promotion PR from `profile.git.integration_branch` to `profile.git.release_branch`, with the merge method and merge owner in `references/github.md`.
+- In the body of the promotion PR this skill opens, write one `Release-Type: major|minor|patch` line with the requested component selected.
+  Under `whole-branch`, select the highest component any promoted story requests (`major` above `minor` above `patch`); absent requests default to `patch`.
 - `per-story`: promote only the single story's change, using the mechanism the Promotion section defines; never open a promotion PR that carries another story.
   When the Promotion section does not define a story-scoped mechanism, stop and ask for it; do not invent one or fall back to a whole-branch PR.
 - Inspect the promotion with a fresh three-dot diff, per the Promotion section.
@@ -77,6 +79,45 @@ Never promote a subset of the enumerated issues under `whole-branch`; re-run rea
 - Re-run the review at the new head after any change, then post the review of record on the PR as a `--comment` PR review before the merge.
 - When a valid fix changes the promotion head, request fresh pre-production verification for the affected story before the merge; the earlier evidence no longer covers that head.
 - When the profile's merge owner is the agent and the merge bar holds, merge; otherwise hand the clean gate to the human merge owner.
+
+## Versioning
+
+After the promotion PR merges and before any production deployment, tag the commit the promotion merged on `profile.git.release_branch` using `profile.release.versioning`.
+Under `profile.git.promotion: none`, there is no promotion merge: tag the integration branch head whose readiness this skill verified.
+Record that exact commit; do not substitute a later branch head.
+When `profile.release.versioning` is unset, stop the versioning step, invent no tag, and report the release as untagged.
+
+Fetch the release branch and tags from `origin` before computing the version.
+Read the selected component from the promotion PR body's `Release-Type` line (`major`, `minor`, or `patch`); an absent line defaults to `patch`.
+Under `none` there is no promotion PR, so use that same `patch` default.
+
+- `semver`: consider prior tags on `profile.git.release_branch` (reachable from the release commit) matching exactly `v<major>.<minor>.<patch>` with numeric components.
+  With none, use `v0.1.0`.
+  Otherwise use the highest of those tags by numeric semantic version, increment the selected component, and reset every component to its right to zero.
+  For example, from `v2.3.4`, `major` gives `v3.0.0`, `minor` gives `v2.4.0`, and `patch` gives `v2.3.5`.
+- `calver`: capture the current UTC date as `YYYY.MM.DD` and append `.N`, choosing the lowest integer N at or above 1 whose tag is free, producing `YYYY.MM.DD.N`.
+
+Check the computed tag against local tags and `origin` before creating it.
+If it already exists, stop and report the collision; never move or force-update a tag, even if it points to the same commit.
+Create an annotated tag at the recorded commit, signed when `profile.git.signed_commits` is true, and push that tag to `origin`.
+Confirm the remote tag points to that commit before proceeding; a concurrent collision or failed push stops the step and is reported, never retried by overwriting the tag.
+
+## Release notes
+
+Generate notes from the issue set enumerated in Release readiness and each issue's merged PRs.
+Under `profile.git.promotion: none`, use every story awaiting closure with its merged PR instead.
+Each entry identifies the issue, describes its shipped change, and links its merged PRs.
+Publish to `profile.release.notes` immediately after the tag is confirmed on `origin` and before the deployment hand-off; report the published URL (each comment URL for `tracker-comment`).
+
+- `github-release`: create a GitHub Release at the versioning tag, with the generated notes as its body.
+  If `profile.release.versioning` is unset, stop the notes step and report that a GitHub Release requires a tag; never publish under an invented tag.
+- `tracker-comment`: post one comment on each promoted issue's tracker record containing that issue's own entry and the release tag.
+  Under `none`, post on each story awaiting closure.
+  If the tracker cannot be written, stop and ask; never claim publication succeeded.
+
+When `profile.release.notes` is unset, stop the release-notes step and ask for the destination.
+If versioning did not produce and confirm a tag, stop publication and report the release untagged; do not invent a tag for either destination.
+Never hand-edit a file whose header marks it generated or auto-generated; update it only through its generator.
 
 ## Production verification
 
