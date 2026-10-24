@@ -144,7 +144,11 @@ def test_canonical_path_comparison_tolerates_a_symlinked_discovery_path(smoke, b
     expected_alpha = str(tmp_path / "fixture" / "project" / ".agents" / "skills" / "alpha" / "SKILL.md")
     monkeypatch.setattr(smoke.os.path, "realpath",
                         lambda p: expected_alpha if str(p) == "/builtin/alpha.md" else str(p))
-    smoke.check_layout(bundle, tmp_path / "fixture", "project-agents", "opencode", timeout=.01)
+    # A success path, so the deadline must outlast the first poll: a 10 ms budget loses the
+    # race under load and fails with "did not discover" instead of exercising the path check.
+    # One second matches the other success-path tests in this file; the fake CLI answers on the
+    # first poll, so it is a bound on the race, not a wait.
+    smoke.check_layout(bundle, tmp_path / "fixture", "project-agents", "opencode", timeout=1)
 
 
 def test_stop_failure_preserves_the_discovery_error_and_reports_cleanup(smoke, bundle, tmp_path, monkeypatch):

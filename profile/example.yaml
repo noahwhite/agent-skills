@@ -141,6 +141,9 @@ refinement:
       family: family-b
   point_cap: 5
 workspace:
+  # A base directory only: each session creates one directory inside it with mktemp -d
+  # (shared/runtimes.md, Scratch files). Optional; the session falls back to a standalone
+  # mktemp -d when it is unset, and creates the base when it does not exist yet.
   scratch_dir: /tmp/agent-skills
 overlays:
   engineering-workflow: overlays/engineering-workflow.md

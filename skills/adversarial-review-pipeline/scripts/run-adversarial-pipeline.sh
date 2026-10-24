@@ -8,7 +8,7 @@
 # location, and the skills repository itself is refused unless --repo names it explicitly.
 #
 # Usage:
-#   run-adversarial-pipeline.sh preflight --base REF [--test-cmd CMD] [--test-dir DIR]
+#   run-adversarial-pipeline.sh preflight --base REF [--test-cmd CMD] [--test-dir DIR] [--scratch DIR]
 #   run-adversarial-pipeline.sh run <sweep|hunt|arbitrate> --base REF --agent-cmd TEMPLATE
 #                               [--spec FILE] [--no-sweep] [--scratch DIR] [--timeout SECONDS]
 #   run-adversarial-pipeline.sh dossier <sweep|hunt|arbitrate> --base REF [--spec FILE] [--no-sweep] [--scratch DIR]
@@ -41,6 +41,13 @@
 #
 # Env equivalents: ADVERSARIAL_REPO, ADVERSARIAL_TEST_CMD, ADVERSARIAL_TEST_DIR, ADVERSARIAL_BASE,
 # ADVERSARIAL_SPEC_FILE, ADVERSARIAL_SCRATCH, ADVERSARIAL_AGENT_CMD, ADVERSARIAL_TIMEOUT (900).
+#
+# --scratch DIR names the session's scratch directory (references/runtimes.md, Scratch files): the
+# script gives each run its own directory inside it, so a run's dossiers and checkouts do not
+# collide. Never pass the profile's base directory itself. Omitted, the script creates its own
+# standalone directory per invocation and exposes that directory to the phase agent. A phase agent
+# also receives the session directory (the supplied one, else the standalone run directory) in
+# ADVERSARIAL_SESSION_SCRATCH, so it can keep its own artefacts beside the run.
 #
 # --agent-cmd is a shell command template built from the profile's agent definition for that phase.
 # Placeholders (substituted shell-quoted): {prompt_file} the dossier, {output_file} the artifact,
@@ -78,6 +85,7 @@ SCRATCH="${ADVERSARIAL_SCRATCH:-}"
 AGENT_CMD="${ADVERSARIAL_AGENT_CMD:-}"
 TIMEOUT="${ADVERSARIAL_TIMEOUT:-900}"
 NO_SWEEP=0
+SCRATCH_SET=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --repo|--base|--spec|--test-cmd|--test-dir|--scratch|--agent-cmd|--timeout)
@@ -88,7 +96,7 @@ while [ $# -gt 0 ]; do
         --spec) SPEC_FILE="$2" ;;
         --test-cmd) TEST_CMD="$2" ;;
         --test-dir) TEST_DIR="$2" ;;
-        --scratch) SCRATCH="$2" ;;
+        --scratch) SCRATCH="$2"; SCRATCH_SET=1 ;;
         --agent-cmd) AGENT_CMD="$2" ;;
         --timeout) TIMEOUT="$2" ;;
       esac
@@ -106,7 +114,6 @@ if [ -n "$SPEC_FILE" ]; then
   SPEC_FILE="$(abspath "$SPEC_FILE")"
 fi
 [[ "$TIMEOUT" =~ ^[0-9]+$ ]] || die 2 "--timeout must be a whole number of seconds."
-if [ -n "$SCRATCH" ]; then SCRATCH="$(abspath "$SCRATCH")"; fi
 
 # The target repository: --repo, else the current directory. Never this script's location.
 if [ -n "$REPO" ]; then
@@ -118,6 +125,40 @@ else
   fi
 fi
 cd "$ROOT"
+
+# A supplied scratch directory is validated once, here and before any command creates something:
+# a phase must never write a partial artifact and then reject the directory, a relative path would
+# dirty the reviewed tree, and a directory inside the checkout dirties it too. Only the commands
+# that use it validate it, so `cleanup` never fails on an unrelated flag.
+validate_scratch() {
+  local resolved_scratch resolved_root
+  case "$cmd" in
+    preflight|dossier|run|checkout) ;;
+    *) return 0 ;;
+  esac
+  if [ "$SCRATCH_SET" -eq 1 ] && [ -z "$SCRATCH" ]; then
+    die 2 "--scratch needs a directory value; omit the flag to let the script choose one"
+  fi
+  [ -n "${SCRATCH:-}" ] || return 0
+  case "$SCRATCH" in
+    /*) ;;
+    *) die 2 "--scratch must be an absolute path: $SCRATCH" ;;
+  esac
+  if [ -e "$SCRATCH" ] && [ ! -d "$SCRATCH" ]; then
+    die 2 "--scratch must be a directory, not a file: $SCRATCH"
+  fi
+  resolved_scratch="$(realpath -m -- "$SCRATCH")"
+  resolved_root="$(realpath -m -- "$ROOT")"
+  case "$resolved_scratch" in
+    "$resolved_root" | "$resolved_root"/*)
+      die 2 "--scratch must be outside the repository under review: $resolved_scratch"
+      ;;
+  esac
+  mkdir -p -- "$SCRATCH" || die 2 "--scratch is not usable as a directory: $SCRATCH"
+  [ -w "$SCRATCH" ] || die 2 "--scratch is not writable: $SCRATCH"
+}
+
+validate_scratch
 
 OUT_BASE="$(git rev-parse --git-path adversarial-pipeline)"
 mkdir -p "$OUT_BASE"
@@ -309,10 +350,18 @@ accept_phase() {  # $1 = phase, $2 = stderr log or "": validate a freshly writte
 
 # The dossier and checkouts live outside .git: some agent runtimes refuse to read files under a
 # repository's git dir, and some sandboxes make it read-only.
-scratch_dir() {
-  if [ -z "$SCRATCH" ]; then SCRATCH="$(mktemp -d -t adversarial-scratch.XXXXXX)"; fi
-  mkdir -p -- "$SCRATCH"
-  printf '%s\n' "$SCRATCH"
+init_scratch() {  # sets SCRATCH (this run's directory) and SESSION_SCRATCH (the supplied one)
+  if [ -z "$SCRATCH" ]; then
+    SCRATCH="$(mktemp -d -t adversarial-scratch.XXXXXX)" || die 2 "could not create a scratch directory"
+    SESSION_SCRATCH=""
+  else
+    # A supplied directory is the session's scratch directory (references/runtimes.md, Scratch
+    # files): give this run its own directory inside it, so two runs never share dossier names.
+    SESSION_SCRATCH="$SCRATCH"
+    [ -w "$SESSION_SCRATCH" ] || die 2 "--scratch is not writable: $SESSION_SCRATCH"
+    SCRATCH="$(mktemp -d -p "$SESSION_SCRATCH" run.XXXXXX)" \
+      || die 2 "could not create a run directory inside --scratch $SESSION_SCRATCH"
+  fi
 }
 
 emit_spec() {
@@ -349,6 +398,7 @@ write_dossier() {  # $1 = phase, $2 = dossier path
         echo "Cover: vulnerability vectors, logic flaws, breaking changes, API/contract mismatches, test gaps, code smells."
         echo "Be exhaustive; volume over precision, and mark speculation as such."
         echo "Do NOT modify any files. Never write secrets to files or command arguments."
+        echo "The session's scratch directory is ${SESSION_SCRATCH:-$SCRATCH}; keep any artefact you create there."
         echo "The FIRST line of your report must be exactly 'REVIEW-RAN: yes' when you read the diff below; otherwise"
         echo "make it 'REVIEW-RAN: no - <reason>'. A report without that line is treated as a review that did not run."
         echo
@@ -360,6 +410,7 @@ write_dossier() {  # $1 = phase, $2 = dossier path
         echo "You are an empirical adversarial reviewer working in a THROWAWAY checkout of the unfixed head."
         echo "You may edit files in that checkout to run experiments; never commit, push, or touch any other tree."
         echo "Never write secrets to files or command arguments."
+        echo "The session's scratch directory is ${SESSION_SCRATCH:-$SCRATCH}; keep any artefact you create there."
         echo
         echo "Job 1 - VERIFY. For each candidate below, write and run a minimal adversarial check (mutate the"
         echo "code, run the relevant tests, revert) and report VERIFIED with the exact command and observed"
@@ -389,6 +440,7 @@ write_dossier() {  # $1 = phase, $2 = dossier path
         echo "2. Surface cross-module logic inconsistencies, security bypasses and architectural regressions"
         echo "   the lower tiers missed."
         echo "3. Never invent findings to fill a section. Do not modify files. Never write secrets to files or command arguments."
+        echo "The session's scratch directory is ${SESSION_SCRATCH:-$SCRATCH}; keep any artefact you create there."
         echo "4. Output the final report in EXACTLY this Markdown layout and nothing else, after one first line:"
         echo "   'REVIEW-RAN: yes' when you read the diff and both phase results below; otherwise"
         echo "   'REVIEW-RAN: no - <reason>'. A report without that line is treated as a review that did not run."
@@ -471,7 +523,12 @@ case "$cmd" in
       else
         # A detached worktree, not an archive export: it keeps git metadata, so tests that shell out to
         # git (ls-files, rev-parse) still work.
-        EXPORT_ROOT="$(mktemp -d -t adversarial-preflight.XXXXXX)"
+        if [ -n "$SCRATCH" ]; then
+          mkdir -p -- "$SCRATCH"
+          EXPORT_ROOT="$(mktemp -d -p "$SCRATCH" adversarial-preflight.XXXXXX)"
+        else
+          EXPORT_ROOT="$(mktemp -d -t adversarial-preflight.XXXXXX)"
+        fi
         EXPORT="$EXPORT_ROOT/HEAD"
         if ! git worktree add -q --detach "$EXPORT" "$HEAD_SHA" 2>/dev/null; then
           echo "ERROR - could not create a throwaway worktree at HEAD (stale registration? run 'git worktree prune')."
@@ -527,8 +584,9 @@ case "$cmd" in
 
   dossier)
     require_predecessors "$phase"
+    init_scratch
     begin_phase "$phase"
-    dossier="$(scratch_dir)/${phase}-dossier.md"
+    dossier="$SCRATCH/${phase}-dossier.md"
     write_dossier "$phase" "$dossier"
     bind_phase "$phase"
     echo "Work in a throwaway checkout from 'checkout' (never the primary checkout)." >&2
@@ -545,8 +603,9 @@ case "$cmd" in
   run)
     [ -n "$AGENT_CMD" ] || die 2 "--agent-cmd (or ADVERSARIAL_AGENT_CMD) is required; build it from the profile agent for this phase."
     require_predecessors "$phase"
+    init_scratch
     out="$(artifact_for "$phase")"
-    dossier="$(scratch_dir)/${phase}-dossier.md"
+    dossier="$SCRATCH/${phase}-dossier.md"
     write_dossier "$phase" "$dossier"
     # Every phase gets its own throwaway checkout; no agent ever runs in the primary checkout.
     checkout="$(make_checkout)"
@@ -562,9 +621,9 @@ case "$cmd" in
     rc=0
     if [[ "$AGENT_CMD" == *"{output_file}"* ]]; then
       line="${line//\{output_file\}/$q_out}"
-      (cd "$checkout" && timeout -s KILL "${TIMEOUT}s" bash -c "$line" < "$dossier" > "$RUN_DIR/${phase}-agent.log" 2> "$errlog") || rc=$?
+      (cd "$checkout" && ADVERSARIAL_SESSION_SCRATCH="${SESSION_SCRATCH:-$SCRATCH}" timeout -s KILL "${TIMEOUT}s" bash -c "$line" < "$dossier" > "$RUN_DIR/${phase}-agent.log" 2> "$errlog") || rc=$?
     else
-      (cd "$checkout" && timeout -s KILL "${TIMEOUT}s" bash -c "$line" < "$dossier" > "$out" 2> "$errlog") || rc=$?
+      (cd "$checkout" && ADVERSARIAL_SESSION_SCRATCH="${SESSION_SCRATCH:-$SCRATCH}" timeout -s KILL "${TIMEOUT}s" bash -c "$line" < "$dossier" > "$out" 2> "$errlog") || rc=$?
     fi
     if [ "$(primary_state)" != "$(cat -- "$RUN_DIR/$phase.primary")" ]; then
       rm -f -- "$out.stamp"

@@ -78,16 +78,19 @@ Never retry a denied write through a different tool or server.
      The probe exercises comment add only; later write kinds fall under the denied tracker writes fallback, and the Step 2 stop stays as the backstop.
      After the owner acts, run the probe again; if the owner directly authorizes the facilitator under the denied tracker writes fallback, the facilitator applies the PO-authored probe verbatim, records its comment id, and the voters launch.
   3. Launch the PO and both engineers in separate contexts with the same story surface.
-     Give each voter only its own profile entry and the story; never give it another voter's file or a summary of another input.
-  4. Each voter writes only its own input file in `profile.workspace.scratch_dir`, under a per-story directory and a role-specific name.
+     Give each voter only its own profile entry, the story, and the session's scratch directory it writes into; never give it another voter's file or a summary of another input.
+     A voter runs in its own child context and cannot derive the parent's directory, so the brief carries the path.
+  4. Each voter writes only its own input file in the session's scratch directory (`references/runtimes.md`, Scratch files), under a subdirectory named after the story key and a role-specific name; never a path component outside that directory.
+     The session's directory sits inside `profile.workspace.scratch_dir` when that is the base the runtime or the profile gives (the runtime's base wins), and is a standalone `mktemp -d` when neither gives one.
      A voter may read its own file back but must not write another role's file.
   5. The facilitator records its own SM/EM refinement contribution in a separate file.
      That contribution may challenge acceptance criteria, propose refinements, and identify gaps: missing ACs, gaps within an AC, and unobservable criteria.
   6. No voter sees another voter's refinement input or value before its own input is recorded.
      No tracker comment is posted until all three voter inputs are recorded, except the tracker-write preflight, which is the only exception.
 - **Reviewer output contract:** a refinement input includes a Definition of Ready verdict, per-AC gaps with exact proposed wording, scope and split, risks, refined AC deltas, and an `ACCEPT` or `OBJECT` position.
-- **Outputs:** three voter input files and one separate SM/EM contribution file in `profile.workspace.scratch_dir`.
-- **Stop:** a profile key is unset, a voter cannot run on its configured runtime and model, a voter file is missing, or the tracker-write preflight is denied and the owner has not authorized the denied tracker writes fallback.
+- **Outputs:** three voter input files and one separate SM/EM contribution file in the session's scratch directory.
+- **Stop:** a required profile key is unset, a voter cannot run on its configured runtime and model, a voter file is missing, or the tracker-write preflight is denied and the owner has not authorized the denied tracker writes fallback.
+  The scratch directory is never such a key: without one the documented standalone `mktemp -d` fallback applies.
   Never substitute a different model, a different voter, or a guessed value.
 
 The SM/EM contribution is not a vote.
@@ -130,7 +133,7 @@ Only the PO and the two engineers count toward the agreement.
      Every pointing prompt or prompt file carries it verbatim, including the re-run after a Step 4 re-refine and each slice estimate under the Split rule.
   4. Each voter submits one point value valid for `profile.tracker.estimate_scale` plus a short complexity rationale.
      The rationale names the complexity driver or drivers the voter weighed and cites no duration, effort or run-cost measure.
-     The value is written only to that voter's own file in `profile.workspace.scratch_dir`.
+     The value is written only to that voter's own file in the session's scratch directory.
   5. No voter sees another voter's point value before its own value is recorded.
   6. The facilitator records all three values before the SM/EM comments on sizing or the discussion opens.
      The SM/EM submits no point value.
@@ -222,7 +225,7 @@ The SM/EM posts only its own comments, and applies the PO's writes only under th
 ## Records
 
 Use [references/refinement-record.md](references/refinement-record.md) for the refinement-comment template, the Accept round result template, the pointing-record template, and the permitted and forbidden phrasing table.
-Keep the raw voter files in `profile.workspace.scratch_dir` and cite their paths in the record.
+Keep the raw voter files in the session's scratch directory and cite their paths in the record.
 Record the refinement comment id, every accept round, all three point values, the SM/EM sizing context, the discussion result, the consensus, any no-consensus decision with each voter's accepted paths and the decision rationale, and any split.
 
 ## Runtime portability
