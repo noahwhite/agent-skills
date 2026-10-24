@@ -832,11 +832,11 @@ def test_step_four_re_vote_challenges_an_off_basis_rationale() -> None:
 def test_anchoring_guardrail_makes_a_point_value_sizing_note_an_event_on_challenge() -> None:
     body = flat(section(SKILL.read_text(), GUARDRAIL))
     assert (
-        "every ground weighed in a rationale or used to justify a value, and every sizing comment, that falls "
-        "outside the pointing basis is an anchoring trigger: a ground that weighs verification strength, "
-        "testability, coverage, the shape of the tests, or a prior or inherited point value is challenged under "
-        "step 4, and a sizing comment that names, bounds or implies a point value is an anchoring event as soon "
-        "as the facilitator sees it, with no challenge, restatement or retraction path" in body
+        "a ground that weighs verification strength, testability, coverage, the shape of the tests, a duration, "
+        "effort or run cost, or a prior or inherited point value is an anchoring trigger when it is weighed in a "
+        "rationale, used to justify a value, or stated in a sizing comment, and a sizing comment that names, "
+        "bounds or implies a point value is an anchoring event as soon as the facilitator sees it, with no "
+        "challenge, restatement or retraction path" in body
     )
     assert (
         "any other challenged ground that is neither restated as a basis driver nor retracted, or a sizing "
@@ -862,8 +862,9 @@ def test_anchoring_guardrail_bans_naming_bounding_or_implying_a_point_value() ->
 def test_anchoring_guardrail_names_off_basis_grounds_as_a_trigger() -> None:
     body = flat(section(SKILL.read_text(), GUARDRAIL))
     assert (
-        "every ground weighed in a rationale or used to justify a value, and every sizing comment, that falls "
-        "outside the pointing basis is an anchoring trigger" in body
+        "a ground that weighs verification strength, testability, coverage, the shape of the tests, a duration, "
+        "effort or run cost, or a prior or inherited point value is an anchoring trigger when it is weighed in a "
+        "rationale, used to justify a value, or stated in a sizing comment" in body
     )
     assert "verification strength, testability, coverage, the shape of the tests" in body
 
@@ -980,7 +981,7 @@ POINT_VALUE_IN_PERMITTED = re.compile(
     r"\d"
     r"|\bpoints?\b|\bpts?\b"
     r"|\bscale\b|\bsplit\b"
-    r"|\b(?:xxs|xs|s|m|l|xl|xxl|xxxl|small|medium|large|extra\s+large)\b"
+    r"|\b(?:xxs|xs|s|m|l|xl|xxl|xxxl)\b"
     r"|\b(?:cap|maximum)\b"
     r"|\b(?:sizes?|sized|sizing|scores?|scored|rated|rating|estimates?)\b"
     rf"|\b(?:was|is|were|are|be|at)\s+(?:a|an|the)?\s*(?:{NUMBER_WORDS})\b",
@@ -1048,9 +1049,10 @@ def test_pointing_template_records_each_challenge_and_outcome() -> None:
 
 def test_pointing_template_places_challenges_before_anchoring_events() -> None:
     lines = pointing_template()
-    assert lines.index("- Challenges: <none, or each ground challenged, its author (a voter, or the SM/EM for a sizing comment), and the restatement, withdrawal or retraction, or the void>") < lines.index(
-        "- Anchoring events: <none, or the verbatim comment and the recovery, including the newly created voter contexts>"
-    )
+    challenges = [index for index, line in enumerate(lines) if line.startswith("- Challenges:")]
+    anchoring = [index for index, line in enumerate(lines) if line.startswith("- Anchoring events:")]
+    assert len(challenges) == 1 and len(anchoring) == 1
+    assert challenges[0] < anchoring[0]
 
 
 def test_pointing_template_asks_for_complexity_rationales() -> None:

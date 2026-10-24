@@ -206,14 +206,14 @@ Any other challenged ground that is neither restated as a basis driver nor retra
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_anchoring_guardrail_makes_a_point_value_sizing_note_an_event_on_challenge`
 Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_anchoring_guardrail_makes_a_point_value_sizing_note_an_event_on_challenge`.
 
-## 15. Remove the anchoring-trigger lead-in from the Anchoring guardrail
+## 15. Remove the off-basis trigger clause from the Anchoring guardrail
 
 File: `SKILL.md`
 
 Matched text:
 
 ```text
-Every ground weighed in a rationale or used to justify a value, and every sizing comment, that falls outside the pointing basis is an anchoring trigger: 
+A ground that weighs verification strength, testability, coverage, the shape of the tests, a duration, effort or run cost, or a prior or inherited point value is an anchoring trigger when it is weighed in a rationale, used to justify a value, or stated in a sizing comment, and
 ```
 
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_anchoring_guardrail_names_off_basis_grounds_as_a_trigger`
@@ -226,7 +226,7 @@ File: `SKILL.md`
 Matched text:
 
 ```text
-every challenge with its outcome, 
+every challenge with its outcome,
 ```
 
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_records_requires_every_challenge_with_its_outcome`
@@ -452,8 +452,8 @@ Replaced with:
 "The earlier story sat at Medium."
 ```
 
-Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_phrasing_table_permitted_cells_never_name_a_point_value`
-Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_phrasing_table_permitted_cells_never_name_a_point_value`.
+Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_phrasing_table_permitted_column_is_the_exact_curated_list`
+Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_phrasing_table_permitted_column_is_the_exact_curated_list`.
 
 ## 30. Put a value bounded by the cap in a permitted cell
 
