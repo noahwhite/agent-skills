@@ -341,6 +341,7 @@ def test_pointing_template_records_the_no_consensus_decision() -> None:
 def test_records_names_the_no_consensus_decision() -> None:
     body = flat(section(SKILL.read_text(), "Records"))
     assert "any no-consensus decision with each voter's accepted paths and the decision rationale" in body
+    assert "every challenge with its outcome" in body
 
 
 def test_skill_links_every_required_reference() -> None:
@@ -803,10 +804,11 @@ def test_step_four_facilitator_challenges_every_off_basis_ground() -> None:
         "the value."
     ) in item
     assert (
-        "A challenged ground must be restated as a basis driver or retracted, and the SM/EM withdraws or restates "
-        "its own sizing comment when the facilitator challenges it; a ground that is neither is an anchoring "
-        "event under the Anchoring guardrail."
+        "A challenged ground must be restated as a basis driver or retracted; the SM/EM withdraws or restates its "
+        "own sizing comment on the same terms, except a statement that names, bounds or implies a point value, "
+        "which is an anchoring event at once."
     ) in item
+    assert "A ground that is neither is an anchoring event under the Anchoring guardrail." in item
 
 
 def test_step_four_re_vote_challenges_an_off_basis_rationale() -> None:
@@ -843,6 +845,7 @@ def test_anchoring_guardrail_bans_naming_bounding_or_implying_a_point_value() ->
         "story's, an inherited split value, a value recorded on the story surface, or one implied by a split "
         "status" in body
     )
+    assert "the sm/em's prohibited behaviours are:" in body
 
 
 def test_anchoring_guardrail_names_off_basis_grounds_as_a_trigger() -> None:
@@ -949,16 +952,16 @@ def test_phrasing_intro_is_unchanged_and_adds_the_comparison_principle() -> None
     assert RECORD.read_text().count(intro[2]) == 1
 
 
-NUMBER_WORDS = "one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen"
+NUMBER_WORDS = "one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|dozen|thirty|fifty|hundred"
 # A permitted cell never names, bounds or implies a point value: no digit-valued statement, no point
 # or size unit, no scale position, no split status, and no value stated in value position ("was five").
 POINT_VALUE_IN_PERMITTED = re.compile(
     r"\d"
     r"|\bpoints?\b|\bpts?\b"
     r"|\bscale\b|\bsplit\b"
-    r"|\b(?:xxs|xs|xl|xxl|xxxl|small|medium|large|extra\s+large)\b"
+    r"|\b(?:xxs|xs|s|m|l|xl|xxl|xxxl|small|medium|large|extra\s+large)\b"
     r"|\b(?:cap|maximum)\b"
-    rf"|\b(?:was|is|were|are|be)\s+(?:{NUMBER_WORDS})\b",
+    rf"|\b(?:was|is|were|are|be|at)\s+(?:a|an|the)?\s*(?:{NUMBER_WORDS})\b",
     re.IGNORECASE,
 )
 NUMBER_WORD = re.compile(rf"\b(?:{NUMBER_WORDS})\b", re.IGNORECASE)
@@ -992,8 +995,9 @@ def test_pointing_template_records_each_challenge_and_outcome() -> None:
     body = spaced(section(RECORD.read_text(), "Pointing record"))
     assert (
         "A challenged ground is recorded with its author (a voter, or the SM/EM for a sizing comment) and either "
-        "the restatement, the withdrawal or the retraction; a ground that is neither voids the round, leaves the "
-        "consensus field empty, and is recorded as the void under Anchoring events."
+        "the restatement, the withdrawal or the retraction; a sizing comment that names, bounds or implies a point "
+        "value, and any ground that is neither, voids the round, leaves the consensus field empty, and is "
+        "recorded as the void under Anchoring events."
     ) in body
 
 

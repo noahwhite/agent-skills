@@ -156,7 +156,8 @@ Only the PO and the two engineers count toward the agreement.
      Do not compare the other values or single out a voter.
      In that round, and against the rationales recorded in Step 3, the facilitator challenges every ground outside the pointing basis, whether it is heard in the discussion or read in a recorded rationale.
      Challenging a ground is not comparing values: the facilitator names the ground and its author, never the value.
-     A challenged ground must be restated as a basis driver or retracted, and the SM/EM withdraws or restates its own sizing comment when the facilitator challenges it; a ground that is neither is an anchoring event under the Anchoring guardrail.
+     A challenged ground must be restated as a basis driver or retracted; the SM/EM withdraws or restates its own sizing comment on the same terms, except a statement that names, bounds or implies a point value, which is an anchoring event at once.
+     A ground that is neither is an anchoring event under the Anchoring guardrail.
   2. Run one re-vote.
      The re-vote prompt carries the pointing basis from Step 3.
      Each voter records the set of values it accepts for this story (one or more) or records no consensus, with a short complexity rationale under the Step 3 rationale rule.
@@ -189,7 +190,7 @@ Only the PO and the two engineers count toward the agreement.
 The three point values are recorded before the SM/EM comments on sizing or the discussion opens.
 The SM/EM's sizing comments are logged with the consensus record.
 
-The prohibited behaviours are:
+The SM/EM's prohibited behaviours are:
 
 - naming a target number;
 - naming, bounding or implying a point value in sizing context or in the discussion, including a prior story's, an inherited split value, a value recorded on the story surface, or one implied by a split status;
@@ -240,7 +241,7 @@ The SM/EM posts only its own comments, and applies the PO's writes only under th
 Use [references/refinement-record.md](references/refinement-record.md) for the refinement-comment template, the Accept round result template, the pointing-record template, and the permitted and forbidden phrasing table.
 Keep the raw voter files in the session's scratch directory and cite each file by its base name only (never a directory path) in the record.
 Quote or attach any file content a reader needs in the record.
-Record the refinement comment id, every accept round, all three point values, the SM/EM sizing context, the discussion result, the consensus, any no-consensus decision with each voter's accepted paths and the decision rationale, and any split.
+Record the refinement comment id, every accept round, all three point values, the SM/EM sizing context, the discussion result, every challenge with its outcome, the consensus, any no-consensus decision with each voter's accepted paths and the decision rationale, and any split.
 
 ## Runtime portability
 
