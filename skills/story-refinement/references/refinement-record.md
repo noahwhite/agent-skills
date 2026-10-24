@@ -2,7 +2,7 @@
 
 Hand-written templates for the records the ceremony posts.
 Use the refinement comment to identify the refined story, the Accept round result to record each accept round, and the pointing record to capture the consensus.
-Replace every placeholder and keep the raw voter files under `profile.workspace.scratch_dir`.
+Replace every placeholder and keep the raw voter files in the session's scratch directory.
 
 ## Refinement comment
 

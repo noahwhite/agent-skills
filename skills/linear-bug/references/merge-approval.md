@@ -19,7 +19,8 @@ This file defines the handshake once so a brief does not invent its own.
 ## Approvals file: location and ownership
 
 - The manager names one absolute path in the brief and creates the file before delegating.
-  The normal path is `<profile.workspace.scratch_dir>/<engagement>/merge-approvals.md`, where `<engagement>` is the story key and a short engagement label.
+  The normal path is the merge-approvals file inside a fresh `mktemp -d` engagement directory the manager creates under `profile.workspace.scratch_dir` (or a standalone `mktemp -d` when the profile sets none), and the brief carries the file's absolute path.
+  The engagement directory is unique per engagement, so two engagements never share one file.
 - Both sides use that exact path for the whole engagement.
 - The manager owns the file and is the only writer of `APPROVE` and `BOUNCE` records.
 - The engineer is the only writer of `REQUEST` records.

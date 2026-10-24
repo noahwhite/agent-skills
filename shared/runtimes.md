@@ -18,7 +18,7 @@ If your runtime is not listed, map each capability to its closest equivalent and
 | Wake the manager (merge approval) | `SendMessage` | no push capability; the approvals file plus the manager's watcher is the delivery path |
 | Run a shell command | `Bash` | V2: `shell`; V1: `bash` |
 | Fetch a URL | `WebFetch` | `webfetch` |
-| Scratch directory | `$CLAUDE_JOB_DIR/tmp` in background jobs, else `profile.workspace.scratch_dir` | `profile.workspace.scratch_dir` |
+| Scratch base directory | `$CLAUDE_JOB_DIR/tmp` in background jobs, else `profile.workspace.scratch_dir` | `profile.workspace.scratch_dir` |
 | Session label (for agent stamps) | the session or job name if set, else the session id | the session title if set, else the session id |
 | Tracker writes from a subagent | a subagent's write can be denied by the auto-mode permission check; only the owner grants it | V2: agent `permissions` rules for `shell`; V1: `permission.bash`; probe the actual write path |
 
@@ -28,15 +28,22 @@ If your runtime is not listed, map each capability to its closest equivalent and
   The wake is a prompt to read the file, never the record itself.
   Where the runtime has no push capability, the approvals file plus the manager's watcher is the delivery path.
   The handshake is defined once in the merge-approval capability.
-- **Scratch files.** Create exactly one scratch directory for the session's lifetime with `mktemp -d` inside `profile.workspace.scratch_dir`, and use it for every scratch artefact of the session: gate dossiers, throwaway checkouts, agent config homes, checklist files, and subagent inputs.
-  Pass that same path to every subagent and shell-launched agent you start.
+- **Scratch files.** Create exactly one scratch directory for the session's lifetime with `mktemp -d` inside the base directory the runtime or the profile gives, and use it for every scratch artefact of the session: gate dossiers, throwaway checkouts, agent config homes, checklist files, and subagent inputs.
+  The base directory is the runtime's own scratch directory when the runtime provides one (the capability row above), else `profile.workspace.scratch_dir`; it is a base only, never the directory a session works in.
+  Pass the session's directory to every subagent and shell-launched agent you start.
   When neither the runtime nor `profile.workspace.scratch_dir` gives a directory, create one with a standalone `mktemp -d` and use it for the whole task.
+  A base that cannot be created or written falls back the same way.
   Never write to a fixed file directly under the base directory or under `/tmp`; parallel sessions collide there.
+  The one deliberate exception is the merge-approval rendezvous, which is an engagement's shared file rather than a session's scratch (the merge-approval handshake).
 
   ```bash
-  # One scratch directory per session: inside the profile's base directory when it has one.
+  # One scratch directory per session: inside the base directory when there is one.
   # scratch_base is profile.workspace.scratch_dir when the profile sets it, empty otherwise.
-  if [ -n "${scratch_base:-}" ]; then scratch="$(mktemp -d "${scratch_base%/}/session.XXXXXX")"; else scratch="$(mktemp -d)"; fi
+  if [ -n "${scratch_base:-}" ] && mkdir -p -- "$scratch_base" && [ -w "$scratch_base" ]; then
+    scratch="$(mktemp -d -- "${scratch_base%/}/session.XXXXXX")" || scratch="$(mktemp -d)"
+  else
+    scratch="$(mktemp -d)"
+  fi
   ```
 - **Nested subagents.** A delegated agent that runs a review gate spawns subagents of its own.
   Claude Code allows that.

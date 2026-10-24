@@ -78,7 +78,7 @@ Common inputs:
   A local branch of that name is usually stale and would hand reviewers the whole merged delta.
   Every command except `cleanup` needs it.
 - `--spec <file>`: the story text and acceptance criteria, so reviewers can reject out-of-scope work as a category.
-  Write it to the scratch directory.
+  Write it to the session's scratch directory (`references/runtimes.md`, Scratch files), never the profile's base directory.
   A `--spec` naming a missing file is an error; only omitting it gives the "judge scope from the diff alone" fallback.
 - `--test-cmd`: `profile.project.test_command`; `--test-dir` when the suite must run from a subdirectory.
 
@@ -110,7 +110,7 @@ Set these once, in the consumer repository, before Phase 0:
 ```bash
 PIPELINE="<skill dir>/scripts/run-adversarial-pipeline.sh"   # absolute path the runtime loaded this skill from
 BASE="origin/<profile.git.integration_branch>"              # after: git fetch origin <profile.git.integration_branch>
-SPEC="<scratch dir>/spec.md"                                # the story text and acceptance criteria, written first
+SPEC="<session scratch dir>/spec.md"                        # the story text and acceptance criteria, written first
 ```
 
 ```bash

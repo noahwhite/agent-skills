@@ -42,6 +42,10 @@
 # Env equivalents: ADVERSARIAL_REPO, ADVERSARIAL_TEST_CMD, ADVERSARIAL_TEST_DIR, ADVERSARIAL_BASE,
 # ADVERSARIAL_SPEC_FILE, ADVERSARIAL_SCRATCH, ADVERSARIAL_AGENT_CMD, ADVERSARIAL_TIMEOUT (900).
 #
+# --scratch DIR names the session's scratch directory (references/runtimes.md, Scratch files): one
+# session runs one gate at a time there, so its phase-named dossiers do not collide. Never pass the
+# profile's base directory itself. Omitted, the script creates its own standalone directory.
+#
 # --agent-cmd is a shell command template built from the profile's agent definition for that phase.
 # Placeholders (substituted shell-quoted): {prompt_file} the dossier, {output_file} the artifact,
 # {checkout} the phase's throwaway worktree. If the template has no {output_file}, its stdout
