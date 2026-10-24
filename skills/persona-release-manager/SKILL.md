@@ -102,7 +102,8 @@ Under `none` there is no promotion PR, so use that same `patch` default.
   With none, use `v0.1.0`.
   Otherwise use the highest of those tags by numeric semantic version, increment the selected component, and reset every component to its right to zero.
   For example, from `v2.3.4`, `major` gives `v3.0.0`, `minor` gives `v2.4.0`, and `patch` gives `v2.3.5`.
-- `calver`: capture the current UTC date as `YYYY.MM.DD` and append `.N`, choosing the lowest integer N at or above 1 whose tag is free, producing `YYYY.MM.DD.N`.
+- `calver`: capture the current UTC date as `YYYY.MM.DD`. Use the bare date when it is free.
+  Only when the bare date tag is taken, append `.N`, choosing the lowest integer N at or above 1 whose tag is free, producing `YYYY.MM.DD.N`.
 
 Check the computed tag against local tags and `origin` before creating it.
 If it already exists, stop and report the collision; never move or force-update a tag, even if it points to the same commit.
