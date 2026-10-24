@@ -43,8 +43,9 @@ If your runtime is not listed, map each capability to its closest equivalent and
   # One scratch directory per session: inside the base directory when there is one. Run it once
   # per session and pass the printed path to every subagent and shell-launched agent.
   # scratch_base is the runtime's scratch base when it gives one, else profile.workspace.scratch_dir,
-  # and is empty when neither gives one.
-  if [ -n "${scratch_base:-}" ] && mkdir -p -- "$scratch_base" && [ -w "$scratch_base" ]; then
+  # and is empty when neither gives one. A relative base is refused, not resolved.
+  case "${scratch_base:-}" in /*) ;; *) scratch_base="" ;; esac
+  if [ -n "$scratch_base" ] && mkdir -p -- "$scratch_base" && [ -w "$scratch_base" ]; then
     scratch="$(mktemp -d -- "${scratch_base%/}/session.XXXXXX")" || scratch="$(mktemp -d)"
   else
     scratch="$(mktemp -d)"

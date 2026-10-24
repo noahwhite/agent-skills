@@ -11,6 +11,8 @@ import shlex
 import subprocess
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = ROOT / "skills" / "adversarial-review-pipeline" / "scripts" / "run-adversarial-pipeline.sh"
 
@@ -28,6 +30,12 @@ def make_repo(tmp_path: Path) -> Path:
     subprocess.run(["git", "add", "tracked.txt"], cwd=repo, check=True, capture_output=True)
     subprocess.run(["git", "commit", "-qm", "init"], cwd=repo, check=True, capture_output=True)
     return repo
+
+
+def clean_env(extra: dict[str, str] | None = None) -> dict[str, str]:
+    """The test's own environment: the gate's ADVERSARIAL_* variables must never leak in."""
+    env = {k: v for k, v in os.environ.items() if not k.startswith("ADVERSARIAL_")}
+    return {**env, **(extra or {})}
 
 
 def run_script(*args: str, env: dict[str, str]) -> subprocess.CompletedProcess:
@@ -51,7 +59,7 @@ def test_gate_artefacts_stay_inside_the_supplied_session_directory(tmp_path):
     spec = tmp_path / "spec.md"
     spec.write_text("Story SKL-58.\n")
     marker = tmp_path / "suite-cwd.txt"
-    env = {**os.environ, "TMPDIR": str(runtime_tmp)}
+    env = clean_env({"TMPDIR": str(runtime_tmp)})
 
     preflight = run_script(
         "preflight", "--repo", str(repo), "--base", "HEAD",
@@ -98,7 +106,7 @@ def test_without_scratch_the_run_stays_out_of_the_checkout(tmp_path):
     runtime_tmp.mkdir()
     spec = tmp_path / "spec.md"
     spec.write_text("Story SKL-58.\n")
-    env = {**os.environ, "TMPDIR": str(runtime_tmp)}
+    env = clean_env({"TMPDIR": str(runtime_tmp)})
 
     preflight = run_script(
         "preflight", "--repo", str(repo), "--base", "HEAD", "--test-cmd", "true", env=env,
@@ -116,7 +124,7 @@ def test_without_scratch_the_run_stays_out_of_the_checkout(tmp_path):
 
 def test_a_relative_scratch_path_is_refused_before_any_phase_runs(tmp_path):
     repo = make_repo(tmp_path)
-    env = {**os.environ, "TMPDIR": str(tmp_path / "runtime-tmp")}
+    env = clean_env({"TMPDIR": str(tmp_path / "runtime-tmp")})
     (tmp_path / "runtime-tmp").mkdir()
     result = run_script(
         "preflight", "--repo", str(repo), "--base", "HEAD", "--test-cmd", "true",
@@ -129,7 +137,7 @@ def test_a_relative_scratch_path_is_refused_before_any_phase_runs(tmp_path):
 
 def test_a_scratch_path_that_is_a_file_is_refused_without_clobbering_the_phase_report(tmp_path):
     repo = make_repo(tmp_path)
-    env = {**os.environ, "TMPDIR": str(tmp_path / "runtime-tmp")}
+    env = clean_env({"TMPDIR": str(tmp_path / "runtime-tmp")})
     (tmp_path / "runtime-tmp").mkdir()
     scratch = tmp_path / "session-scratch"
     scratch.mkdir()
@@ -156,7 +164,7 @@ def test_the_phase_agent_receives_the_session_scratch_directory(tmp_path):
     repo = make_repo(tmp_path)
     scratch = tmp_path / "session-scratch"
     scratch.mkdir()
-    env = {**os.environ, "TMPDIR": str(tmp_path / "runtime-tmp")}
+    env = clean_env({"TMPDIR": str(tmp_path / "runtime-tmp")})
     (tmp_path / "runtime-tmp").mkdir()
     preflight = run_script(
         "preflight", "--repo", str(repo), "--base", "HEAD", "--test-cmd", "true",
@@ -186,7 +194,7 @@ def test_the_phase_agent_receives_the_session_scratch_directory(tmp_path):
 
 def test_a_scratch_directory_inside_the_repository_is_refused(tmp_path):
     repo = make_repo(tmp_path)
-    env = {**os.environ, "TMPDIR": str(tmp_path / "runtime-tmp")}
+    env = clean_env({"TMPDIR": str(tmp_path / "runtime-tmp")})
     (tmp_path / "runtime-tmp").mkdir()
     inside = repo / "scratch"
     result = run_script(
@@ -198,9 +206,10 @@ def test_a_scratch_directory_inside_the_repository_is_refused(tmp_path):
     assert not inside.exists(), "a refused scratch path was created inside the checkout"
 
 
+@pytest.mark.skipif(os.geteuid() == 0, reason="root ignores a 0500 directory mode (CAP_DAC_OVERRIDE)")
 def test_read_only_scratch_is_refused_before_any_phase_report_is_written(tmp_path):
     repo = make_repo(tmp_path)
-    env = {**os.environ, "TMPDIR": str(tmp_path / "runtime-tmp")}
+    env = clean_env({"TMPDIR": str(tmp_path / "runtime-tmp")})
     (tmp_path / "runtime-tmp").mkdir()
     scratch = tmp_path / "session-scratch"
     scratch.mkdir()
@@ -225,7 +234,7 @@ def test_read_only_scratch_is_refused_before_any_phase_report_is_written(tmp_pat
 
 def test_an_empty_scratch_value_is_refused(tmp_path):
     repo = make_repo(tmp_path)
-    env = {**os.environ, "TMPDIR": str(tmp_path / "runtime-tmp")}
+    env = clean_env({"TMPDIR": str(tmp_path / "runtime-tmp")})
     (tmp_path / "runtime-tmp").mkdir()
     result = run_script(
         "preflight", "--repo", str(repo), "--base", "HEAD", "--test-cmd", "true",
@@ -239,7 +248,7 @@ def test_a_refused_dossier_keeps_the_accepted_phase_report(tmp_path):
     repo = make_repo(tmp_path)
     scratch = tmp_path / "session-scratch"
     scratch.mkdir()
-    env = {**os.environ, "TMPDIR": str(tmp_path / "runtime-tmp")}
+    env = clean_env({"TMPDIR": str(tmp_path / "runtime-tmp")})
     (tmp_path / "runtime-tmp").mkdir()
     preflight = run_script(
         "preflight", "--repo", str(repo), "--base", "HEAD", "--test-cmd", "true",
@@ -254,3 +263,28 @@ def test_a_refused_dossier_keeps_the_accepted_phase_report(tmp_path):
     )
     assert refused.returncode == 2, refused.stdout + refused.stderr
     assert "PASS" in report.read_text(), "a refused dossier discarded the accepted preflight report"
+
+
+def test_an_ambient_adversarial_scratch_cannot_redirect_the_run(tmp_path, monkeypatch):
+    repo = make_repo(tmp_path)
+    scratch = tmp_path / "session-scratch"
+    scratch.mkdir()
+    runtime_tmp = tmp_path / "runtime-tmp"
+    runtime_tmp.mkdir()
+    ambient = tmp_path / "ambient-scratch"
+    monkeypatch.setenv("ADVERSARIAL_SCRATCH", str(ambient))
+    spec = tmp_path / "spec.md"
+    spec.write_text("Story SKL-58.\n")
+    env = clean_env({"TMPDIR": str(runtime_tmp)})
+
+    preflight = run_script(
+        "preflight", "--repo", str(repo), "--base", "HEAD", "--test-cmd", "true",
+        "--scratch", str(scratch), env=env,
+    )
+    assert preflight.returncode == 0, preflight.stdout + preflight.stderr
+    written = dossier_path(run_script(
+        "dossier", "sweep", "--repo", str(repo), "--base", "HEAD", "--spec", str(spec),
+        "--scratch", str(scratch), env=env,
+    ))
+    assert scratch in written.parents, written
+    assert not ambient.exists(), "the ambient ADVERSARIAL_SCRATCH redirected the run"

@@ -583,8 +583,8 @@ case "$cmd" in
     ;;
 
   dossier)
-    init_scratch
     require_predecessors "$phase"
+    init_scratch
     begin_phase "$phase"
     dossier="$SCRATCH/${phase}-dossier.md"
     write_dossier "$phase" "$dossier"
@@ -602,8 +602,8 @@ case "$cmd" in
 
   run)
     [ -n "$AGENT_CMD" ] || die 2 "--agent-cmd (or ADVERSARIAL_AGENT_CMD) is required; build it from the profile agent for this phase."
-    init_scratch
     require_predecessors "$phase"
+    init_scratch
     out="$(artifact_for "$phase")"
     dossier="$SCRATCH/${phase}-dossier.md"
     write_dossier "$phase" "$dossier"

@@ -95,9 +95,9 @@ Launching a phase depends on the profile agent's `runtime`:
   Never default to `-s danger-full-access`; see the hunt phase for when it is allowed.
   For `runtime: opencode`, run it non-interactively with the agent's model and a short instruction to read `{prompt_file}` with its file tools and output only the report.
 - A subagent runtime (`claude-code`, or the runtime you are in): run `dossier <phase>` to write the dossier and print its path.
-  Also run `checkout --base "$BASE" --scratch "$scratch"` for a throwaway worktree, for every phase, and pass `--scratch "$scratch"` to `dossier` and `record` too, so the whole run stays in the session's directory.
+  Also run `checkout --base "$BASE" --scratch "$scratch"` for a throwaway worktree, for every phase, and pass `--scratch "$scratch"` to `dossier` too, so the run's dossiers and checkouts stay in the session's directory.
   Spawn a clean, neutral subagent (its whole brief is the dossier) with the agent's model, tell it to read the dossier and work only in that checkout, and save its final report to the phase's artifact path (`paths` prints them).
-  Then run `record <phase>` with the same `--base`, `--spec`, `--scratch` and `--no-sweep` as the dossier.
+  Then run `record <phase>` with the same `--base`, `--spec` and `--no-sweep` as the dossier; it reads the script's own run state, not a scratch directory.
   It accepts the report only if it is non-empty, newer than the dossier, starts with `REVIEW-RAN: yes`, its inputs still match the dossier's, and the tripwire saw no change to the primary checkout since the dossier was written.
   Remove the checkout with `cleanup <path>`; it removes only a checkout the script created and registered, and refuses any other path.
 

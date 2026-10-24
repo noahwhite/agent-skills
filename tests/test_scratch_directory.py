@@ -65,6 +65,60 @@ def run_one_liner(block: str, env: dict[str, str]) -> Path:
     return Path(res.stdout.strip().splitlines()[-1])
 
 
+def test_the_published_snippet_parses():
+    """The block is executed as published, so it must parse as published."""
+    res = subprocess.run(["bash", "-n", "-c", scratch_one_liner()], capture_output=True, text=True)
+    assert res.returncode == 0, res.stderr
+
+
+def test_a_relative_base_falls_back_instead_of_escaping():
+    """A relative base is refused, never resolved against the working directory."""
+    block = scratch_one_liner()
+    for relative in ("relative-base", ".scratch"):
+        path = run_one_liner(block, {"scratch_base": relative, "TMPDIR": "/tmp"})
+        assert path.parent == Path("/tmp"), f"{relative} leaked into the chosen directory: {path}"
+        assert not Path(relative).exists(), f"{relative} was created in the working directory"
+
+
+def test_the_snippet_falls_back_when_mktemp_inside_the_base_fails(tmp_path):
+    """The last-resort branch: a base that mktemp refuses must degrade, not abort."""
+    shim = tmp_path / "bin"
+    shim.mkdir()
+    shim_script = shim / "mktemp"
+    shim_script.write_text(
+        "#!/usr/bin/env bash\n"
+        "printf 'call %s\\n' \"$*\" >>\"$MARKER\"\n"
+        "case \"$*\" in *session.*) exit 1 ;; esac\n"
+        "exec /usr/bin/mktemp \"$@\"\n"
+    )
+    shim_script.chmod(0o755)
+    marker = tmp_path / "calls"
+    base = tmp_path / "base"
+    base.mkdir()
+    fallback_root = tmp_path / "runtime-tmp"
+    fallback_root.mkdir()
+    script = "\n".join(
+        line for line in scratch_one_liner().splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    )
+    res = subprocess.run(
+        ["bash", "-euo", "pipefail", "-c", script + '\nprintf "%s\\n" "$scratch"'],
+        capture_output=True, text=True,
+        env={**os.environ, "PATH": f"{shim}:{os.environ['PATH']}", "MARKER": str(marker),
+             "scratch_base": str(base), "TMPDIR": str(fallback_root)},
+    )
+    assert res.returncode == 0, res.stderr
+    chosen = Path(res.stdout.strip().splitlines()[-1])
+    assert chosen.parent == fallback_root, f"the fallback did not use the standalone directory: {chosen}"
+    calls = marker.read_text()
+    assert "session." in calls and "call " in calls, calls
+
+
+def test_the_rule_no_longer_forbids_only_fixed_paths_under_tmp():
+    """AC1: the old contradictory sentence must not come back."""
+    assert "Never write to a fixed path under `/tmp`" not in RUNTIMES.read_text()
+
+
 def test_the_snippet_prints_the_directory_it_chose():
     """The rule says to run it once and pass the printed path, so the snippet prints it."""
     code = [line.strip() for line in scratch_one_liner().splitlines()
@@ -196,7 +250,7 @@ def test_no_doc_names_a_fixed_scratch_path_under_the_base():
         r"profile\.workspace\.scratch_dir[}>]?\s*/\s*[^\s`'\"]+"
         r"|\$CLAUDE_JOB_DIR/tmp/[A-Za-z0-9_.<>-]+"
         r"|<(?:scratch base|base)>/[^\s`'\"]+"
-        r"|scratch_base[}>]?\s*/\s*[^\s`'\"]+"
+        r"|scratch_base[}>\"]?\s*/\s*[^\s`'\"]+"
         r"|/tmp/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\.(?:md|txt|json|log)"
     )
     offenders = []
@@ -212,8 +266,7 @@ def test_no_doc_names_a_fixed_scratch_path_under_the_base():
 def md_files() -> list[Path]:
     return sorted(
         p
-        for root in (SHARED, ROOT / "skills", ROOT / "profile")
-        for p in root.rglob("*.md")
+        for p in ROOT.rglob("*.md")
         if ".git" not in p.parts and ".venv" not in p.parts
     )
 
