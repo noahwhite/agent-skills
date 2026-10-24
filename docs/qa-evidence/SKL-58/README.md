@@ -9,7 +9,7 @@ The sanitized raw assertion output and a self-contained evidence page are attach
 
 | Item | Verdict | Evidence |
 |---|---|---|
-| AC1 | Verified | Both image users created, read, and removed a child of the literal `/tmp/agent-skills` base with `CLAUDE_JOB_DIR` unset and nounset active. |
+| AC1 | Verified | Both image users created, read, and removed a child of the literal `/tmp/agent-skills` base with the container-specific job variable unset and nounset active. |
 | AC2 | Verified | The documented snippet made two distinct session directories in each image, the absent-base fallback ran, and both image fixed-path checks exited cleanly. |
 | AC3 | Verified | Both baked 20-overlay trees matched merged source, and all eight banned-token occurrences per image were runtime-labelled and explicitly allowlisted. |
 | AC4 | Verified under the dated owner decision | Added lines match across all 12 touched profile and overlay files; the two differing removed-line sequences were pre-existing, both READMEs record divergence, and hydration reported zero problems. |
