@@ -76,7 +76,9 @@ def rules(text: str) -> dict[int, str]:
     for line in section(text, "## Rules").splitlines():
         head = re.match(r"^(\d+)\. (.*)$", line)
         if head:
-            current = found[int(head.group(1))] = [head.group(2)]
+            number = int(head.group(1))
+            assert number not in found, f"rule {number} is defined twice"
+            current = found[number] = [head.group(2)]
         elif current is not None and line.startswith("   "):
             current.append(line.strip())
         else:
