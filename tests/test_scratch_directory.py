@@ -50,7 +50,11 @@ def scratch_one_liner() -> str:
 
 
 def run_one_liner(block: str, env: dict[str, str]) -> Path:
-    """Run the documented snippet in a clean shell and return the directory it chose."""
+    """Run the documented snippet in a clean shell and return the directory it chose.
+
+    Comment lines are dropped, as a reader copying the block into a shell effectively does; the
+    block is separately parsed verbatim by `test_the_published_snippet_parses`.
+    """
     script = "\n".join(
         line for line in block.splitlines() if line.strip() and not line.strip().startswith("#")
     )
@@ -85,11 +89,14 @@ def test_the_snippet_falls_back_when_mktemp_inside_the_base_fails(tmp_path):
     shim = tmp_path / "bin"
     shim.mkdir()
     shim_script = shim / "mktemp"
+    real_mktemp = subprocess.run(
+        ["bash", "-c", 'command -v mktemp'], capture_output=True, text=True, check=True,
+    ).stdout.strip()
     shim_script.write_text(
         "#!/usr/bin/env bash\n"
         "printf 'call %s\\n' \"$*\" >>\"$MARKER\"\n"
         "case \"$*\" in *session.*) exit 1 ;; esac\n"
-        "exec /usr/bin/mktemp \"$@\"\n"
+        f"exec {real_mktemp} \"$@\"\n"
     )
     shim_script.chmod(0o755)
     marker = tmp_path / "calls"
@@ -128,6 +135,7 @@ def test_the_snippet_fails_loudly_when_no_directory_can_be_created(tmp_path):
     )
     assert res.returncode != 0, f"the snippet silently succeeded: {res.stdout!r}"
     assert res.stdout.strip() == "", res.stdout
+    # The wording is pinned on purpose: it is what the documented snippet tells the caller.
     assert "could not create a scratch directory" in res.stderr, res.stderr
 
 
@@ -280,11 +288,18 @@ def test_no_doc_names_a_fixed_scratch_path_under_the_base():
     assert not offenders, "\n".join(offenders)
 
 
+OWNED_TREES = (SHARED, ROOT / "skills", ROOT / "profile")
+
+
 def md_files() -> list[Path]:
+    """The repository's own Markdown: the top level plus the trees this story owns.
+
+    Deliberately not a recursive walk of the whole checkout, so a dependency or build tree
+    that happens to carry a README cannot fail the suite.
+    """
     return sorted(
-        p
-        for p in ROOT.rglob("*.md")
-        if ".git" not in p.parts and ".venv" not in p.parts
+        [p for p in ROOT.glob("*.md")]
+        + [p for tree in OWNED_TREES for p in tree.rglob("*.md")]
     )
 
 
