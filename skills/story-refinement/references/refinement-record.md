@@ -3,6 +3,8 @@
 Hand-written templates for the records the ceremony posts.
 Use the refinement comment to identify the refined story, the Accept round result to record each accept round, and the pointing record to capture the consensus.
 Replace every placeholder and keep the raw voter files in the session's scratch directory.
+The record never carries a local path; cite each raw voter file by its base name only.
+Quote or attach any file content a reader needs in the record.
 
 ## Refinement comment
 
@@ -18,10 +20,10 @@ Its comment id is the refined story identifier for both stages.
 - Refined story snapshot: <the complete refined story and ACs, or an immutable link/commit>
 - Refined story identifier after blocking amendments: <the new comment id, or none>
 - Voter inputs, each recorded in its own separate context:
-  - Product owner: <scratch path>
-  - Engineer one (<family or model>): <scratch path>
-  - Engineer two (<family or model>): <scratch path>
-- SM/EM contribution (not a vote): <scratch path>
+  - Product owner: <file base name>
+  - Engineer one (<family or model>): <file base name>
+  - Engineer two (<family or model>): <file base name>
+- SM/EM contribution (not a vote): <file base name>
 - Definition of Ready verdicts: <verdict per voter>
 - Blocking amendments: <none, or the exact amendments>
 - Non-blocking notes: <summary or none>
@@ -69,7 +71,7 @@ The three values are recorded before any SM/EM sizing comment or discussion.
   - Product owner: <value> - <short complexity rationale>
   - Engineer one: <value> - <short complexity rationale>
   - Engineer two: <value> - <short complexity rationale>
-- SM/EM sizing context, after all three values: <scratch path or verbatim>
+- SM/EM sizing context, after all three values: <file base name> or verbatim
 - Discussion: high <value>, low <value>
 - Re-vote: <accepted set per voter, with complexity rationale>
 - Consensus: <highest value in the intersection, or none>
