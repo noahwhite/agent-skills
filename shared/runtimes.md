@@ -28,8 +28,16 @@ If your runtime is not listed, map each capability to its closest equivalent and
   The wake is a prompt to read the file, never the record itself.
   Where the runtime has no push capability, the approvals file plus the manager's watcher is the delivery path.
   The handshake is defined once in the merge-approval capability.
-- **Scratch files.** When neither the runtime nor `profile.workspace.scratch_dir` gives a directory, create one with `mktemp -d` and use it for the whole task.
-  Never write to a fixed path under `/tmp`; parallel sessions collide there.
+- **Scratch files.** Create exactly one scratch directory for the session's lifetime with `mktemp -d` inside `profile.workspace.scratch_dir`, and use it for every scratch artefact of the session: gate dossiers, throwaway checkouts, agent config homes, checklist files, and subagent inputs.
+  Pass that same path to every subagent and shell-launched agent you start.
+  When neither the runtime nor `profile.workspace.scratch_dir` gives a directory, create one with a standalone `mktemp -d` and use it for the whole task.
+  Never write to a fixed file directly under the base directory or under `/tmp`; parallel sessions collide there.
+
+  ```bash
+  # One scratch directory per session: inside the profile's base directory when it has one.
+  # scratch_base is profile.workspace.scratch_dir when the profile sets it, empty otherwise.
+  if [ -n "${scratch_base:-}" ]; then scratch="$(mktemp -d "${scratch_base%/}/session.XXXXXX")"; else scratch="$(mktemp -d)"; fi
+  ```
 - **Nested subagents.** A delegated agent that runs a review gate spawns subagents of its own.
   Claude Code allows that.
   OpenCode V2 defaults `experimental.subagent_depth` to 1; top-level `subagent_depth` is ignored with a warning.

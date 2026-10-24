@@ -28,6 +28,13 @@ Skills cite values as `profile.<path>`, for example `profile.git.integration_bra
   Never substitute a value from an example, from memory of another project, or from a guess.
 - Values under the profile's `extra` key belong to overlays; base skills never read them.
 
+## Scratch directories
+
+`profile.workspace.scratch_dir` is a base directory only: it is never the per-session directory, and nothing writes a fixed file directly under it.
+The session creates exactly one directory for its lifetime with `mktemp -d` inside it and uses that directory for every scratch artefact (`runtimes.md`, Scratch files).
+The key is optional, and no skill or overlay requires it to be set.
+When the runtime gives no directory and the profile sets none, the session creates one with a standalone `mktemp -d` and uses it for the whole task.
+
 ## Apply overlays
 
 `profile.overlays` maps a skill name, or a shared capability name such as `linear` or `code-review`, to a Markdown file relative to the profile file.
