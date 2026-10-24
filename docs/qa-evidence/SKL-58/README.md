@@ -8,7 +8,7 @@ The sanitized raw assertion output is attached to Linear SKL-58 as `SKL-58 QA as
 
 | Item | Verdict | Evidence |
 |---|---|---|
-| AC1 | Verified | Both image users created and removed a child of the literal `/tmp/agent-skills` base with `CLAUDE_JOB_DIR` unset and nounset active. |
+| AC1 | Verified | Both image users created and removed a child of the literal `/tmp/agent-skills` base with the container-specific job variable unset and nounset active. |
 | AC2 | Verified | The documented snippet made distinct session children and the absent-base fallback in both images; the shipped overlay checkers passed. |
 | AC3 | Verified | Both shipped 20-overlay trees matched merged source; all eight banned-token occurrences per tree were labelled and allowlisted. |
 | AC4 | Failed as written | All added lines match across 12 touched files, but the removed sides of the `code-review.md` and `engineering-workflow.md` changed hunks differ, leaving only 10 complete changed-line sequences identical. Hydration and consumer suites passed. |
@@ -21,4 +21,4 @@ The sanitized raw assertion output is attached to Linear SKL-58 as `SKL-58 QA as
 | DoD: no critical regressions | Verified in tested scope | No critical defect was observed in the tested scope. |
 
 SKL-58 engineering owns the AC4 hunk reconciliation and README correction, followed by rebuilt images and repeat QA.
-The QA host's installed profile still carries the old `$CLAUDE_JOB_DIR/tmp` value; the two images under test do not.
+The QA host's installed profile still carries the old variable-based scratch path; the two images under test do not.
