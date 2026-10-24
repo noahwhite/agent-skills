@@ -1,0 +1,122 @@
+# Consumer profile for the agent-skills repository itself.
+# The base skills read every project fact from a profile, whole and unmerged, so this file
+# replaces the container's home default for any session whose working directory is inside
+# this checkout. It describes this repository only: no consumer estate, hosts or environments.
+version: 1
+project:
+  name: Agent Skills
+  repos:
+    - noahwhite/agent-skills
+  test_command: uv run pytest
+tracker:
+  kind: linear
+  team_key: SKL
+  team_name: Agent Skills
+  assignee: self
+  agent_stamp: true
+  states:
+    triage: Triage
+    backlog: Backlog
+    ready: Ready To Work
+    in_progress: In Progress
+    blocked: Blocked
+    in_review: In PR Review
+    in_deployment_review: In Deployment Review
+    done: Done
+    canceled: Canceled
+    duplicate: Duplicate
+  labels:
+    user_story: User Story
+    spike: Spike
+    bug: Bug
+    investigation: Investigation
+    feature: Feature
+    improvement: Improvement
+    rtb: RTB
+  epic:
+    name_prefix: "[EPIC]"
+    icon: Cube
+    lead: "@me"
+  estimate_scale: fibonacci
+  cycle_weeks: 2
+  velocity_window_cycles: 3
+  standup_aging_days: 3
+git:
+  host: github
+  integration_branch: main
+  release_branch: main
+  promotion: none
+  merge_method: squash
+  signed_commits: true
+  ai_attribution: forbid
+  branch_prefixes:
+    feature: feature/
+  pr_assignee: noahwhite
+review:
+  reviewer:
+    name: Codex GPT-6 Sol
+    runtime: codex
+    model: gpt-6-sol
+  adjudicator:
+    name: Kimi K3
+    runtime: opencode
+    model: kimi/kimi-k3
+  shadow_adjudicators: []
+  merge_owner: agent
+  pre_pr:
+    sweeper:
+      name: DeepSeek V4.1 Flash
+      runtime: opencode
+      model: deepseek/deepseek-flash
+    hunter:
+      name: Codex GPT-6 Sol
+      runtime: codex
+      model: gpt-6-sol
+    arbiter:
+      name: Kimi K3
+      runtime: opencode
+      model: kimi/kimi-k3
+    simplicity_reviewer:
+      name: DeepSeek V4 Pro
+      runtime: opencode
+      model: deepseek/deepseek-v4-pro
+    fixer:
+      name: DeepSeek V4 Pro
+      runtime: opencode
+      model: deepseek/deepseek-v4-pro
+# This repository deploys nothing, so there is no environment to promote to or verify in.
+environments: []
+qa:
+  evidence_dir: docs/qa-evidence
+refinement:
+  facilitator:
+    name: Scrum Master
+    runtime: opencode
+    model: deepseek/deepseek-v4-pro
+  product_owner:
+    name: Product Owner
+    runtime: command
+    model: deepseek/deepseek-v4-pro
+    command: >-
+      opencode run --model deepseek/deepseek-v4-pro "Follow the instructions in the attached file exactly. Do not modify any file."
+      --file "{prompt_file}" > "{output_file}"
+    family: deepseek
+  reviewers:
+    - name: DeepSeek Flash V4.1
+      runtime: command
+      model: deepseek/deepseek-flash
+      command: >-
+        opencode run --model deepseek/deepseek-flash "Follow the instructions in the attached file exactly. Do not modify any file."
+        --file "{prompt_file}" > "{output_file}"
+      family: deepseek
+    - name: Kimi K3
+      runtime: command
+      model: kimi/kimi-k3
+      command: >-
+        f="{prompt_file}"; NODE_OPTIONS=--max-old-space-size=4096 kimi -m k3 --add-dir "${f%/*}"
+        -p "Read the file $f and follow its instructions exactly. Do not modify any file."
+        --output-format text > "{output_file}"
+      family: moonshot
+  point_cap: 5
+workspace:
+  scratch_dir: /tmp/agent-skills
