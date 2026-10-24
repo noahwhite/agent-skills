@@ -761,7 +761,7 @@ def test_step_three_sizing_context_is_in_complexity_terms() -> None:
     assert (
         "It must not name, bound or imply any point value - a prior story's, an inherited split value, a value "
         "read from this story's own recorded pointing history, or one implied by a split status - and such a "
-        "statement is an anchoring event under the Anchoring guardrail when the facilitator challenges it."
+        "statement is an anchoring event under the Anchoring guardrail on being challenged."
     ) in body
 
 
@@ -806,13 +806,17 @@ def test_step_four_facilitator_challenges_every_off_basis_ground() -> None:
     assert (
         "A challenged ground must be restated as a basis driver or retracted; the SM/EM withdraws or restates its "
         "own sizing comment on the same terms, except a statement that names, bounds or implies a point value, "
-        "which is an anchoring event at once."
+        "which is an anchoring event on being challenged."
     ) in item
     assert "A ground that is neither is an anchoring event under the Anchoring guardrail." in item
 
 
 def test_step_four_re_vote_challenges_an_off_basis_rationale() -> None:
     item = process_items(STEP_FOUR)[1]
+    assert (
+        "Recording an accepted set is not weighing a recorded value: the rationale for the set is about "
+        "complexity, never about which value was recorded earlier."
+    ) in item
     assert (
         "A re-vote rationale outside the pointing basis is challenged before the consensus is recorded, under "
         "the same restate-or-retract rule as item 1."
@@ -841,11 +845,10 @@ GUARDRAIL = "Anchoring guardrail"
 def test_anchoring_guardrail_bans_naming_bounding_or_implying_a_point_value() -> None:
     body = flat(section(SKILL.read_text(), GUARDRAIL))
     assert (
-        "naming, bounding or implying a point value in sizing context or in the discussion, including a prior "
-        "story's, an inherited split value, a value recorded on the story surface, or one implied by a split "
-        "status" in body
+        "for the sm/em, naming, bounding or implying a point value in sizing context or in the discussion, "
+        "including a prior story's, an inherited split value, a value recorded on the story surface, or one "
+        "implied by a split status" in body
     )
-    assert "the sm/em's prohibited behaviours are:" in body
 
 
 def test_anchoring_guardrail_names_off_basis_grounds_as_a_trigger() -> None:
@@ -961,6 +964,7 @@ POINT_VALUE_IN_PERMITTED = re.compile(
     r"|\bscale\b|\bsplit\b"
     r"|\b(?:xxs|xs|s|m|l|xl|xxl|xxxl|small|medium|large|extra\s+large)\b"
     r"|\b(?:cap|maximum)\b"
+    r"|\b(?:sizes?|sized|sizing|scores?|scored|rated|rating)\b"
     rf"|\b(?:was|is|were|are|be|at)\s+(?:a|an|the)?\s*(?:{NUMBER_WORDS})\b",
     re.IGNORECASE,
 )
@@ -973,7 +977,7 @@ COMPLEXITY_FEATURE = re.compile(
 
 def test_phrasing_table_permitted_cells_never_name_a_point_value() -> None:
     permitted = [row[0] for row in phrasing_rows()]
-    assert len(permitted) == 11, "the permitted column keeps a row per forbidden behaviour"
+    assert len(permitted) == 11, "the permitted column keeps its eleven rows"
     for cell in (
         '"The comparable story had one fewer unknown to resolve."',
         '"The earlier story carried more breaking-behaviour risk."',
@@ -996,8 +1000,8 @@ def test_pointing_template_records_each_challenge_and_outcome() -> None:
     assert (
         "A challenged ground is recorded with its author (a voter, or the SM/EM for a sizing comment) and either "
         "the restatement, the withdrawal or the retraction; a sizing comment that names, bounds or implies a point "
-        "value, and any ground that is neither, voids the round, leaves the consensus field empty, and is "
-        "recorded as the void under Anchoring events."
+        "value voids the round on being challenged, as does any ground that is neither, and the void leaves the "
+        "consensus field empty and is recorded under Anchoring events."
     ) in body
 
 

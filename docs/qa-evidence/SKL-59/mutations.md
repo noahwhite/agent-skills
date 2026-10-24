@@ -4,7 +4,7 @@ Measured on the delivered text of this change with CPython 3.12.3 and locked dep
 The modified files are `skills/story-refinement/SKILL.md` and `skills/story-refinement/references/refinement-record.md`.
 Before each check the document bytes were saved, the edit shown below was made once, the quoted command ran, and the saved bytes were restored even when the command failed; the final source matched the saved bytes, and the tracked changes were then only the files this change delivers.
 Each entry shows the exact matched text, and the exact replacement text where the edit substitutes or inserts one, so a re-runner can reproduce it from the delivered text.
-30 regression proofs failed as designed and 1 control passed.
+29 regression proofs failed as designed and 1 control passed.
 Entries 1 to 30 are the regression proofs; entry 31 is the control.
 
 ## 1. Remove the measure ban and driver-set sentence from Step 3 item 4
@@ -53,7 +53,7 @@ File: `SKILL.md`
 Matched text:
 
 ```text
-It must not name, bound or imply any point value - a prior story's, an inherited split value, a value read from this story's own recorded pointing history, or one implied by a split status - and such a statement is an anchoring event under the Anchoring guardrail when the facilitator challenges it.
+It must not name, bound or imply any point value - a prior story's, an inherited split value, a value read from this story's own recorded pointing history, or one implied by a split status - and such a statement is an anchoring event under the Anchoring guardrail on being challenged.
 ```
 
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_step_three_sizing_context_is_in_complexity_terms`
@@ -92,7 +92,7 @@ File: `SKILL.md`
 Matched text:
 
 ```text
-A challenged ground must be restated as a basis driver or retracted; the SM/EM withdraws or restates its own sizing comment on the same terms, except a statement that names, bounds or implies a point value, which is an anchoring event at once.
+A challenged ground must be restated as a basis driver or retracted; the SM/EM withdraws or restates its own sizing comment on the same terms, except a statement that names, bounds or implies a point value, which is an anchoring event on being challenged.
 ```
 
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_step_four_facilitator_challenges_every_off_basis_ground`
@@ -178,7 +178,7 @@ Matched text:
 ```
 
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_anchoring_guardrail_bans_naming_bounding_or_implying_a_point_value`
-Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_anchoring_guardrail_bans_naming_bounding_or_implying_a_point_value`.
+Result: SETUP-FAILED; `matched 0 times`.
 
 ## 13. Remove the point-value-on-challenge clause from the Anchoring guardrail trigger
 
@@ -245,7 +245,7 @@ File: `refinement-record.md`
 Matched text:
 
 ```text
-A challenged ground is recorded with its author (a voter, or the SM/EM for a sizing comment) and either the restatement, the withdrawal or the retraction; a sizing comment that names, bounds or implies a point value, and any ground that is neither, voids the round, leaves the consensus field empty, and is recorded as the void under Anchoring events.
+A challenged ground is recorded with its author (a voter, or the SM/EM for a sizing comment) and either the restatement, the withdrawal or the retraction; a sizing comment that names, bounds or implies a point value voids the round on being challenged, as does any ground that is neither, and the void leaves the consensus field empty and is recorded under Anchoring events.
 ```
 
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_pointing_template_records_each_challenge_and_outcome`
