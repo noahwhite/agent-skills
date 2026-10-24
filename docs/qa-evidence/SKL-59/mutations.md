@@ -213,7 +213,7 @@ File: `SKILL.md`
 Matched text:
 
 ```text
-Every ground outside the pointing basis is an anchoring trigger: 
+Every ground weighed in a rationale or used to justify a value, and every sizing comment, that falls outside the pointing basis is an anchoring trigger: 
 ```
 
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_anchoring_guardrail_names_off_basis_grounds_as_a_trigger`

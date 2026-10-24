@@ -831,11 +831,11 @@ def test_step_four_re_vote_challenges_an_off_basis_rationale() -> None:
 def test_anchoring_guardrail_makes_a_point_value_sizing_note_an_event_on_challenge() -> None:
     body = flat(section(SKILL.read_text(), GUARDRAIL))
     assert (
-        "every ground outside the pointing basis is an anchoring trigger: a rationale or a sizing comment that "
-        "weighs verification strength, testability, coverage, the shape of the tests, or a prior or inherited "
-        "point value is challenged under step 4, and a sizing comment that names, bounds or implies a point "
-        "value is an anchoring event as soon as the facilitator sees it, with no challenge, restatement or "
-        "retraction path" in body
+        "every ground weighed in a rationale or used to justify a value, and every sizing comment, that falls "
+        "outside the pointing basis is an anchoring trigger: a ground that weighs verification strength, "
+        "testability, coverage, the shape of the tests, or a prior or inherited point value is challenged under "
+        "step 4, and a sizing comment that names, bounds or implies a point value is an anchoring event as soon "
+        "as the facilitator sees it, with no challenge, restatement or retraction path" in body
     )
     assert (
         "any other challenged ground that is neither restated as a basis driver nor retracted, or a sizing "
@@ -860,7 +860,10 @@ def test_anchoring_guardrail_bans_naming_bounding_or_implying_a_point_value() ->
 
 def test_anchoring_guardrail_names_off_basis_grounds_as_a_trigger() -> None:
     body = flat(section(SKILL.read_text(), GUARDRAIL))
-    assert "every ground outside the pointing basis is an anchoring trigger" in body
+    assert (
+        "every ground weighed in a rationale or used to justify a value, and every sizing comment, that falls "
+        "outside the pointing basis is an anchoring trigger" in body
+    )
     assert "verification strength, testability, coverage, the shape of the tests" in body
 
 
