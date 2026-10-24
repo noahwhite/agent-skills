@@ -125,3 +125,42 @@ def test_inventory_excludes_the_durable_record_and_the_live_session() -> None:
         "cannot attribute to the key is left out, and the report names it as skipped",
     ):
         assert phrase in body, phrase
+
+
+def test_deletion_requires_merge_evidence_from_the_storys_pull_requests() -> None:
+    body = section(text(), "3. Delete only with merge evidence")
+    for phrase in (
+        "Nothing is deleted while it still holds unmerged or unreviewed work",
+        "A merged PR whose head commit is the branch tip",
+        "`gh pr view <n> --json state,headRefOid`",
+        "Containment, only when `profile.git.merge_method` is neither `squash` nor `rebase`",
+        "`git merge-base --is-ancestor",
+        "origin/<profile.git.integration_branch>",
+        "Under a squash or a rebase merge the integration branch holds a different commit",
+    ):
+        assert phrase in body, phrase
+
+
+def test_each_artefact_kind_has_its_guarded_removal() -> None:
+    body = section(text(), "3. Delete only with merge evidence")
+    for phrase in (
+        "Removed with `git branch -D`",
+        "Removed with `git worktree remove` only when `git status --porcelain` is empty inside it",
+        "not the worktree hosting the current session",
+        "only when no open PR heads it",
+        "`gh pr list --state open --json headRefName`",
+        "Removed only from a directory the inventory proved idle",
+    ):
+        assert phrase in body, phrase
+
+
+def test_the_never_force_and_per_artefact_refusal_rules_are_pinned() -> None:
+    body = section(text(), "3. Delete only with merge evidence")
+    for phrase in (
+        "`--force` is never used",
+        "skipped, not forced, and the run continues with the others",
+        "Every refusal is recorded in the report and posted as a dated comment on the named story",
+        "naming the artefact, the failed check, and why",
+        "confirmed by reading it back",
+    ):
+        assert phrase in body, phrase

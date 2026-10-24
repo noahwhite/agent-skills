@@ -80,6 +80,31 @@ Two more rules:
   Only the individual files naming the key are removed from a directory the run can prove idle.
 - Anything the skill cannot attribute to the key is left out, and the report names it as skipped.
 
+## 3. Delete only with merge evidence
+
+Nothing is deleted while it still holds unmerged or unreviewed work.
+Before each removal, establish merge evidence from the story's pull requests:
+
+- A merged PR whose head commit is the branch tip: `gh pr view <n> --json state,headRefOid` reports `MERGED`, and its `headRefOid` equals the tip from `git rev-parse <branch>`.
+- Containment, only when `profile.git.merge_method` is neither `squash` nor `rebase`: `git merge-base --is-ancestor <branch-tip> origin/<profile.git.integration_branch>`.
+  Under a squash or a rebase merge the integration branch holds a different commit, so containment proves nothing and is never used.
+
+Then, per artefact kind:
+
+- **Local branch.** Removed with `git branch -D` once it has merge evidence.
+  `-D` rather than `-d`, because a squash or a rebase merge leaves the tip unmerged in git's own eyes.
+- **Worktree.** Removed with `git worktree remove` only when `git status --porcelain` is empty inside it, and only when it is not the worktree hosting the current session.
+  A worktree hosting the current session is refused, because removing it deletes the ground the run stands on.
+- **Remote branch.** Deleted with `git push origin --delete <branch>` only when no open PR heads it: a branch named by `gh pr list --state open --json headRefName` is refused.
+- **Disposable QA output and session files.** Removed only from a directory the inventory proved idle.
+
+Guards that hold for every removal:
+
+- `--force` is never used, on any command, and a removal that would need it is refused instead.
+- An artefact that fails a check is skipped, not forced, and the run continues with the others.
+- Every refusal is recorded in the report and posted as a dated comment on the named story, naming the artefact, the failed check, and why.
+- Each removal is confirmed by reading it back: `git branch`, `git worktree list`, or `git ls-remote --heads origin '*<key>*'` no longer lists it.
+
 ## Boundaries
 
 - It removes only artefacts it can attribute to a named key, in the repositories and directories the profile names.
