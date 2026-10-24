@@ -262,3 +262,23 @@ def test_the_run_ends_with_one_report_covering_every_outcome() -> None:
         "post the same summary as a comment on that story",
     ):
         assert phrase in body, phrase
+
+
+HOST_RE = re.compile(r"\b[a-z0-9][a-z0-9-]*\.(?:ai|com|io|net|org|dev)\b", re.IGNORECASE)
+
+
+def test_the_skill_text_names_no_host_the_capability_map_names() -> None:
+    row = next(
+        line
+        for line in (ROOT / "shared" / "runtimes.md").read_text().splitlines()
+        if line.startswith("| Hosted evidence")
+    )
+    map_hosts = set(HOST_RE.findall(row))
+    assert map_hosts, "the hosted-evidence row names no host at all"
+    assert map_hosts & set(HOST_RE.findall(text())) == set()
+
+
+def test_the_runtime_neutral_wording_check_is_extended_for_hosted_store_hosts() -> None:
+    source = (ROOT / "tests" / "test_skills.py").read_text()
+    assert "HOSTED_STORE_HOSTS" in source, "the runtime-neutral check does not carry the extension"
+    assert "HOSTED_STORE_HOSTS.search(" in source, "the extension is never applied to a line"
