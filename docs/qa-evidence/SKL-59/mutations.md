@@ -79,7 +79,7 @@ File: `SKILL.md`
 Matched text:
 
 ```text
-Challenging a ground is not comparing values or singling out a voter: the facilitator names the ground and its author, never the value.
+Challenging a ground is not comparing values or singling out a voter: the facilitator names the ground and its author, and never the author's value.
 ```
 
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_step_four_facilitator_challenges_every_off_basis_ground`
@@ -92,7 +92,7 @@ File: `SKILL.md`
 Matched text:
 
 ```text
-A challenged ground must be restated as a basis driver or retracted; the SM/EM withdraws or restates its own sizing comment on the same terms, except a statement that names, bounds or implies a point value, which is an anchoring event as soon as the facilitator sees it.
+A challenged ground must be restated as a basis driver or retracted; the SM/EM withdraws or restates its own sizing comment on the same terms, except a statement that names, bounds or implies a point value, or states elapsed time, effort or run cost, which is an anchoring event as soon as the facilitator sees it.
 ```
 
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_step_four_facilitator_challenges_every_off_basis_ground`
@@ -284,7 +284,7 @@ File: `refinement-record.md`
 Matched text:
 
 ```text
-A challenged ground is recorded with its author (a voter, or the SM/EM for a sizing comment) and either the restatement, the withdrawal or the retraction; a sizing comment that names, bounds or implies a point value voids the round as soon as the facilitator sees it, as does any ground that is neither restated nor retracted, and the void leaves the consensus field empty and is recorded under Anchoring events.
+A challenged ground is recorded with its author (a voter, or the SM/EM for a sizing comment) and either the restatement, the withdrawal or the retraction; a sizing comment that names, bounds or implies a point value voids the round under the Anchoring guardrail recovery as soon as the facilitator sees it, as does any ground that is neither restated nor retracted, and the void leaves the consensus field empty and is recorded under Anchoring events.
 ```
 
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_pointing_template_records_each_challenge_and_outcome`

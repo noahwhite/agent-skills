@@ -155,8 +155,8 @@ Only the PO and the two engineers count toward the agreement.
   1. Hold one discussion round that names only the high and the low.
      Do not compare the other values or single out a voter.
      In that round, and against the rationales recorded in Step 3, the facilitator challenges every ground outside the pointing basis, whether it is heard in the discussion or read in a recorded rationale.
-     Challenging a ground is not comparing values or singling out a voter: the facilitator names the ground and its author, never the value.
-     A challenged ground must be restated as a basis driver or retracted; the SM/EM withdraws or restates its own sizing comment on the same terms, except a statement that names, bounds or implies a point value, which is an anchoring event as soon as the facilitator sees it.
+     Challenging a ground is not comparing values or singling out a voter: the facilitator names the ground and its author, and never the author's value.
+     A challenged ground must be restated as a basis driver or retracted; the SM/EM withdraws or restates its own sizing comment on the same terms, except a statement that names, bounds or implies a point value, or states elapsed time, effort or run cost, which is an anchoring event as soon as the facilitator sees it.
      A ground that is neither is an anchoring event under the Anchoring guardrail.
   2. Run one re-vote.
      The re-vote prompt carries the pointing basis from Step 3.
