@@ -14,7 +14,7 @@ The earlier attachment is preserved, not re-uploaded or adopted as this verifica
 | AC2: inventory | Verified | Live worktree/local/remote/PR inventory commands succeeded; token examples excluded SKL-630 and SKL-59; all source, exclusion and inventory-first contracts passed. |
 | AC3: guarded deletion | Verified | Real merged PR head checked; disposable clone proved actual squash containment fails, dirty removal is refused, ignored output requires the stronger status check, and clean worktree then branch removal reads back absent; remaining guards/refusal rules contract-verified. |
 | AC4: hosted-evidence capability | Verified within the story's recorded boundary | Capability row inspected and no-capability skip instruction executed; loud-error/non-zero, mapped per-artefact deletion and runtime-neutral wording contracts passed; no hosted content touched. |
-| AC5: story attachments | Verified | Commands match installed CLI; the new named assertion attachment was uploaded to SKL-63 and read back; existing-evidence citation and no-hosted-link contracts passed. |
+| AC5: story attachments | Verified | Commands match installed CLI; the named round-2 assertion attachment is present in the story's attachment metadata; existing-evidence citation and no-hosted-link contracts passed. |
 | AC6: report and confirmation | Verified | Per-story removed/archived/skipped/refused report, inventory-before-removal, dated refusal and single-summary-comment contracts passed. |
 | AC7: registration and tests | Verified | All 26 cleanup contracts passed; cleanup/todo selection passed 52; full suite passed 466; fresh vendoring produced no diff and vendor checks passed; manifest, README, counts and host-wording checks passed. |
 | DoD: all AC met | Verified within the recorded boundary | AC1-AC7 above. |
@@ -26,6 +26,8 @@ The earlier attachment is preserved, not re-uploaded or adopted as this verifica
 
 Reproduce from the build above: `uv run --locked pytest -q`, `uv run --locked pytest tests/test_cleanup.py tests/test_todo_tracking.py -v`, `python3 scripts/vendor_shared.py`, `python3 scripts/vendor_shared.py --check`, and `git diff --exit-code`.
 The attachment records independently rerun invocation, tracker/inventory commands, disposable git fixture results, named contracts, and exact-head implementation review verification.
+The assertion file predates its own upload, so its command log does not record that upload or read-back.
+Separate tracker metadata confirms the attachment title, and the downloaded copy is byte-identical to the original upload source.
 AC4's positive hosted-evidence sweep is unexercised, neither passed nor failed, under the explicit story verification boundary; the publishing-session operator owns exercising it once hosted access returns.
 The unreachable-capability leg is text-contract verified, not a real inaccessible-host test or an executable exit-code probe.
 Current-session and detached worktree, open-PR, remote-tip-change, incomplete-list and idle-scratch refusal rules are text-contract verified, not full destructive cleanup integration runs.
