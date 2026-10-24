@@ -20,6 +20,13 @@ def section(text: str, heading: str) -> str:
     return rest[: following.start()] if following else rest
 
 
+def per_story_readiness_line(body: str) -> str:
+    """The single Release readiness bullet that binds per-story evidence; assert it is not duplicated."""
+    lines = [line for line in body.splitlines() if "under `per-story`, that head is" in line]
+    assert len(lines) == 1, f"expected one per-story readiness binding, found {len(lines)}"
+    return lines[0]
+
+
 def test_skill_file_exists() -> None:
     assert SKILL.is_file(), f"missing {SKILL.relative_to(ROOT)}"
 
@@ -100,6 +107,10 @@ def test_readiness_section_covers_each_promotion_mode() -> None:
         "rather than the integration branch head",
     ):
         assert phrase in body, f"readiness missing: {phrase}"
+    binding = per_story_readiness_line(body)
+    for phrase in ("story-scoped promotion branch", "rather than the integration branch head",
+                   "covers exactly the story-scoped changes that branch carries"):
+        assert phrase in binding, f"per-story readiness binding missing: {phrase}"
     whole = SKILL.read_text().lower()
     for forbidden in ("promotion set under `none`", "promotion set for `none`", "stale evidence is accepted", "accept stale evidence"):
         assert forbidden not in whole, f"readiness contradicts itself: {forbidden}"
@@ -127,6 +138,8 @@ def test_promotion_section_cites_and_does_not_redefine() -> None:
         assert phrase in body, f"promotion missing: {phrase}"
     for removed in ("story-scoped mechanism", "stop and ask for it"):
         assert removed not in body, f"promotion still asks for a defined mechanism: {removed}"
+    assert "\n  never open a promotion pr that carries another story.\n" in body, \
+        "the no-other-story prohibition must stay its own exact line"
     whole = SKILL.read_text().lower()
     for forbidden in ("batch all pending stories", "batch the promotion", "batch stories into",
                       "include every pending story", "every pending story in one promotion"):
@@ -144,12 +157,14 @@ def test_review_section_covers_the_cumulative_diff_and_ownership() -> None:
         "integration branch",
         "references/github.md",
         "promotion",
-        "under `whole-branch`",
-        "story-scoped promotion branch",
         "fresh pre-production verification",
         "post the review of record on the pr as a `--comment` pr review before the merge",
     ):
         assert phrase in body, f"review missing: {phrase}"
+    fix_bullets = [line for line in body.splitlines() if "route every valid fix" in line]
+    assert len(fix_bullets) == 2, fix_bullets
+    assert fix_bullets[0].startswith("- under `whole-branch`,"), fix_bullets[0]
+    assert fix_bullets[1].startswith("- under `per-story`,"), fix_bullets[1]
 
 
 def test_release_profile_contract() -> None:

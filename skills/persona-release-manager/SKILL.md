@@ -45,7 +45,8 @@ A step that needs a value the profile does not set stops and asks for it.
   For each issue, confirm passing pre-production verification evidence from the last environment in `profile.environments` whose `production` is not true.
   That evidence is produced per `qa-verification`; a build check alone is not verification evidence.
   Bind the evidence to the promotion head: record the build SHA or commit it was taken against, and re-check that it matches the head the promotion will carry.
-  Under `per-story`, that head is the story-scoped promotion branch's head, rather than the integration branch head.
+  Under `per-story`, that head is the head of the story-scoped promotion branch the Promotion step builds, rather than the integration branch head: confirm the evidence covers exactly the story-scoped changes that branch carries, by matching its story-scoped three-dot diff against the commits the evidence was taken against.
+  Evidence that does not cover those carried changes is stale for that promotion and stops it until `qa-verification` refreshes it against that head.
   Evidence for an earlier build, or for a head that a later merge or review fix changed, is stale and stops the promotion.
   A promotion whose tree is identical to the verified build satisfies this check even when its commit SHA differs.
   Evidence-only commits under `profile.qa.evidence_dir` do not invalidate readiness; compare the code tree, not the evidence directory.
@@ -53,7 +54,7 @@ A step that needs a value the profile does not set stops and asks for it.
 - `none`: the integration branch is the release branch, so readiness is each story's own deploy verification in the environment that branch deploys to.
   There is no promotion set and no promotion PR.
 
-For `per-story`, run the same check for the single story being promoted, binding the evidence to the head of the story-scoped promotion branch rather than the integration branch head, and promote only that story's change; never open a promotion PR that carries another story.
+For `per-story`, run the same check for the single story being promoted, and promote only that story's change; never open a promotion PR that carries another story.
 Never promote a subset of the enumerated issues under `whole-branch`; re-run readiness when a merge or review fix changes the promotion head.
 
 ## Promotion
@@ -65,7 +66,7 @@ Never promote a subset of the enumerated issues under `whole-branch`; re-run rea
   Keep the promotion PR's field separate from quoted or copied story excerpts; those excerpts are not additional release-type fields.
 - In the body of the promotion PR this skill opens, write one `Release-Type: major|minor|patch` line with the requested component selected.
   Under `whole-branch`, select the highest component any promoted story requests (`major` above `minor` above `patch`); absent requests default to `patch`.
-- `per-story`: promote only the single story's change with the `per-story` promotion mechanism that [references/github.md](references/github.md) Promotion defines: the story-scoped promotion branch cut from the release branch, the merge-method commit selection, and the fail-closed stops.
+- `per-story`: promote only the single story's change with the `per-story` promotion mechanism that [references/github.md](references/github.md) Promotion defines.
   Never open a promotion PR that carries another story.
   This skill cites that mechanism and does not redefine it; stop and ask only for a profile value the profile does not set, never for a mechanism the Promotion section defines.
 - Inspect the promotion with a fresh three-dot diff, per the Promotion section.
@@ -80,7 +81,7 @@ Never promote a subset of the enumerated issues under `whole-branch`; re-run rea
   If the runtime cannot launch a configured role, stop and say the review is unavailable.
 - Triage each finding by owning story: name the issue whose change introduced it, using the diff and the promotion's issue map.
 - Under `whole-branch`, route every valid fix through the integration branch on a new feature branch, then let the promotion PR carry it, per the Promotion section of [references/github.md](references/github.md); this section cites that rule and does not redefine it.
-- Under `per-story`, route every valid fix per that section's review-fix flow: a new feature branch to the integration branch, then a fresh story-scoped promotion branch or the fix commit cherry-picked onto it, with refreshed pre-production evidence before the merge.
+- Under `per-story`, route every valid fix per that section's review-fix flow, with the story's pre-production evidence refreshed before the merge.
   Never fix on the release branch, and never update the promotion branch outside that flow.
 - Re-run the review at the new head after any change, then post the review of record on the PR as a `--comment` PR review before the merge.
 - When a valid fix changes the promotion head, request fresh pre-production verification for the affected story before the merge; the earlier evidence no longer covers that head.

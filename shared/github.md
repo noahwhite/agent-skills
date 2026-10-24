@@ -104,18 +104,21 @@ Always:
 Under `per-story`, build the promotion branch and its PR like this:
 
 1. Cut the promotion branch from `origin/<profile.git.release_branch>` with that explicit base ref, after `git fetch --prune origin`.
-2. Select, from `origin/<profile.git.integration_branch>`, only the commits the promoted story's merged feature PR added.
-   With `profile.git.merge_method` `squash` or `rebase`, select the commits whose subjects carry the story's issue key as that PR's squash or rebase commits.
-   With `profile.git.merge_method` `merge`, select the feature PR's merge commit and cherry-pick it with `-m 1`.
-3. Carry the selected commits onto the promotion branch by cherry-picking them in their original order, or by squash-applying them as one commit.
-4. Open the promotion PR from that branch to `profile.git.release_branch`.
+2. Identify the story's merged feature PR, by its issue key, with `gh pr list --state merged --search "<issue key>"`, and select from `origin/<profile.git.integration_branch>` only the commits that PR added.
+   With `profile.git.merge_method` `squash`, select that PR's squash commit.
+   With `profile.git.merge_method` `rebase`, select the commits that PR replayed onto the integration branch.
+   With `profile.git.merge_method` `merge`, select that PR's merge commit and cherry-pick it with `-m 1`.
+3. Carry the selected commits onto the promotion branch by cherry-picking them in their original order, or by squash-applying them with `git cherry-pick -n` and one commit.
+4. Push the branch, then open the promotion PR from it to `profile.git.release_branch`.
    A whole-branch integration-to-release PR is not used under `per-story`.
 5. Stop and report instead of carrying another story's commit or merging the integration branch into the promotion when the selection finds no commit, matches more than one feature PR, or cannot apply without an un-promoted story.
+   A cherry-pick conflict that needs another story's commits is that stop: report the conflicting commit and the story it needs, and do not pull that story in to clear the conflict.
 
 Under `per-story`, a valid review fix lands on a new feature branch to `profile.git.integration_branch`.
-The stale promotion PR is closed unmerged and a fresh story-scoped promotion branch is cut from the release branch, or the fix commit is cherry-picked onto the promotion branch, carrying the story's updated commits.
+The stale promotion PR is closed unmerged and a fresh story-scoped promotion branch is cut from the release branch, or the fix commit is cherry-picked onto the promotion branch.
+Open the promotion PR again from that branch, as a reopened PR or a fresh one, carrying the story's updated commits.
 Refresh the story's pre-production evidence against that promotion head before the merge.
-No back-merge of the release branch, no update-branch of the promotion PR, and no force-push of the promotion branch applies to that flow.
+Do not back-merge the release branch into the promotion branch, update-branch a promotion PR, or force-push one; rebuild it instead.
 
 For any promotion:
 
