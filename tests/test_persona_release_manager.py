@@ -228,6 +228,8 @@ def test_release_notes_section_covers_destinations_and_safety() -> None:
         "report the published URL",
         "If versioning did not produce and confirm a tag, stop publication",
         "reuse the already confirmed tag",
+        "existing per-issue tracker comment",
+        "retry only missing entries",
     ):
         assert phrase in body, f"release notes missing: {phrase}"
 

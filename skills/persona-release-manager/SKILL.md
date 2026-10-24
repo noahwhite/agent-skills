@@ -117,6 +117,9 @@ Under `profile.git.promotion: none`, use every story awaiting closure with its m
 Each entry identifies the issue, describes its shipped change, and links its merged PRs.
 Publish to `profile.release.notes` immediately after the tag is confirmed on `origin` and before the deployment hand-off; report the published URL (each comment URL for `tracker-comment`).
 On resumption, reuse the already confirmed tag for notes publication; never compute a second version for the same recorded release commit.
+Before publishing, check the destination for confirmed notes matching this release tag and the intended entries.
+Reuse a matching GitHub Release or existing per-issue tracker comment and its published URL; retry only missing entries.
+If a previous write's outcome is uncertain or existing notes conflict with the intended entry, stop and ask before publishing again.
 
 - `github-release`: create a GitHub Release at the versioning tag, with the generated notes as its body.
   If `profile.release.versioning` is unset, stop the notes step and report that a GitHub Release requires a tag; never publish under an invented tag.
