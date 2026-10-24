@@ -1,23 +1,24 @@
 # SKL-58 QA evidence
 
-Date: 2026-10-24 UTC, repeat verification.
-Environment: `claude-code-env:skl58-ac2` (`sha256:f95c8e23f6cea1918df7ead1495a8b89ce148f6a293e8782f7b9124f9d4aacaf`) and `opencode-env:skl58-ac2` (`sha256:8a38cfb137b3037d1aad700cdfd05e71c50dbdc010f55c5f61c0b0df78245b7c`).
-Build commits: `agent-skills` `221502c05445cd9bdf5e709656eddc0f02d5599d`, `claude-dev-container` `231a19ebbbda60a1968d5da4cd402570f26e399d`, and `opencode-dev-container` `f0c36df3d8352a4d1dbcf6eb97ead7b3d96fe445`.
-Fixtures: container session users `claude` and `opencode`; no visual surface applies.
-The sanitized assertion output is attached to SKL-58 as `SKL-58 QA assertions round 2`.
+Date: 2026-10-24 UTC, repeat verification round 3.
+Environment: `claude-code-env:skl58-rqa` (`sha256:a6f25779aab0c6b54e7425fba71e885ce731360df1ad712f807d2369120f2cc0`) and `opencode-env:skl58-rqa` (`sha256:950b1cb3bb0bf7b1cd90ba99c25be77ab8d4890f58ec1211727bb5452290a038`).
+Build commits: `agent-skills` `a6e03c94b94e41e4b118d90772216acae8ccda17`, `claude-dev-container` `df162ab196cf6dca840f4b3c4e352188f8169a54`, and `opencode-dev-container` `82ce5c8fc649c30fd5252eb0e10ca61b9970b670`.
+Fixtures: container session users `claude` and `opencode`; this story has no visual surface.
+The sanitized raw assertion output is attached to SKL-58 as `SKL-58 QA assertions round 3`.
 
 | Item | Verdict | Evidence |
 |---|---|---|
-| AC1 | Verified | Both installed profiles use `/tmp/agent-skills`, and both session users created and removed a subdirectory with the runtime job variable unset and `bash -u` active. |
-| AC2 | Failed | The OpenCode `code-review.md` overlay still instructs an extra adjudicator `mktemp -d` under the profile base outside the one session directory; its shipped checker returns zero findings. |
-| AC3 | Verified | The installed 20-overlay trees match the pinned source trees, and both consumer portability suites passed their runtime-label allowlist checks. |
-| AC4 | Failed as written | Eleven of twelve changed profile and overlay line sets match; `engineering-workflow.md` has a Claude-only label addition because the OpenCode line was already labelled. |
-| AC5 | Verified | The documented snippet made distinct directories and used the no-base fallback in both images; all 17 vendored runtime references match, the schema keeps the base optional, and the base suite and vendor check passed. |
-| DoD: all AC met | Failed | AC2 and the literal AC4 hunk requirement remain open. |
-| DoD: tests | Verified | The base suite passed 391 tests, the Claude suite passed 84 tests and 16 subtests, and all six OpenCode shell suites passed. |
-| DoD: independent review | Verified | Six merged implementation PRs have `COMMENTED` reviews of record bound to their exact merged heads. |
-| DoD: docs updated | Verified | The shared scratch rules, schema description, and consumer divergence READMEs are present at the pinned commits. |
-| DoD: deployed verification | Verified | Both pinned image IDs and installed profile and overlay digests were checked directly. |
-| DoD: no critical regressions | Verified in tested scope | No critical defect was observed; the AC2 contract failure remains open. |
+| AC1 | Verified | Both image users created and removed a child of the literal `/tmp/agent-skills` base with the runtime job variable unset and `bash -u` active. |
+| AC2 | Verified | The published snippet produced distinct existing session directories and its absent-base fallback in both images, while both shipped overlay checkers passed and rejected a base-level adjudicator path. |
+| AC3 | Verified | Both 20-overlay image trees matched their merged sources, and direct scans found eight banned-token hits per tree, all labelled and allowlisted. |
+| AC4 | Failed as written | Ten of 12 edited profile/overlay files have identical changed-line sets; `code-review.md` and `engineering-workflow.md` contain nonidentical changed lines, so their shared fragments do not satisfy byte-identical hunks. |
+| AC5 | Verified | The absent-base fallback ran in both images, all 17 vendored runtime references match the shared source, the schema keeps `scratch_dir` optional, 416 base tests passed, and the vendor check passed. |
+| DoD: all AC met | Failed | AC4 is unmet at the pinned consumer heads. |
+| DoD: tests | Verified | The base suite passed 416 tests, the Claude suite passed 90, OpenCode portability passed 66, and all six OpenCode shell suites exited zero. |
+| DoD: independent review | Verified | GitHub `COMMENTED` reviews of record match the exact final heads of all eight implementation PRs and include reviewer and adjudicator sections. |
+| DoD: docs updated | Not fully met | Both consumer READMEs falsely say every SKL-58 changed hunk is byte-identical, and the OpenCode README also has a stale Workflow-label claim. |
+| DoD: deployed verification | Verified | Both image IDs, the image profile payloads, and the OpenCode default entrypoint installation were checked directly. |
+| DoD: no critical regressions | Verified in tested scope | No critical defect was observed in the tested scope. |
 
-SKL-58 engineering owns the corrections, rebuilt images, and repeat QA.
+SKL-58 engineering owns the AC4 hunk reconciliation and correction of the two consumer README claims, followed by rebuilt images and repeat QA.
+The stale OpenCode Workflow-label claim is incidental to the literal hunk-parity failure.
