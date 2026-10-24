@@ -76,7 +76,7 @@ Never inventoried as removable:
 
 Two more rules:
 
-- A per-session scratch directory is inventoried as `skip` once its checklist file still carries an unchecked item, because that session is still live.
+- A per-session scratch directory is inventoried as `skip` when its checklist file still carries an unchecked item, because that session is still live.
   Only the individual files naming the key are removed from a directory the run can prove idle.
 - Anything the skill cannot attribute to the key is left out, and the report names it as skipped.
 
