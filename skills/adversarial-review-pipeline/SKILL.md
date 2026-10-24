@@ -126,14 +126,20 @@ The message names the phase, the model id supplied, the probe's exit code (or th
 With no probe configured the phase writes `availability check: not configured`, so the absence is visible rather than silent; a configured probe is never silently skipped.
 A passing probe is not proof that the real call will run: the observed cause is account state on a listed model, so a phase can still fail after a clean check.
 
+One deadline bounds the whole phase: `--timeout` (`ADVERSARIAL_TIMEOUT`, default 900) covers the availability check and the agent command, so a phase can never outlive it.
 The agent command runs in its own process group under one SIGKILL deadline of that whole group, so a child the CLI leaves retrying after the main call failed cannot keep the phase alive.
-A phase killed by `--timeout` (`ADVERSARIAL_TIMEOUT`, default 900) exits 19 and names the phase, the model id when supplied and the timeout in seconds; no other failure path changes its exit code.
+A phase killed by `--timeout` exits 19 and names the phase, the model id when supplied and the timeout in seconds; no other failure path changes its exit code.
+An interrupted gate (SIGINT, SIGTERM, SIGHUP) kills the in-flight process group before it exits, so an interruption never orphans an agent.
+The probe's own `--probe-timeout` is still honoured, bounded by whatever is left of the phase deadline at that moment.
 
-While the agent runs, `run` writes an elapsed-time line to its own stderr, the first after one second and then at least every 30 seconds, carrying the phase, the elapsed seconds, the configured timeout and the availability-check state, plus one completion line with the elapsed time.
+While the agent runs, `run` writes an elapsed-time line to its own stderr, the first after one second and then at least every 30 seconds, carrying the phase, the elapsed seconds, the configured timeout and the availability-check state, plus one completion line with the elapsed time when the phase succeeds.
 Progress never reaches the artifact or the agent's stdout, so a report's first line stays `REVIEW-RAN: yes`.
 
-On a non-zero agent exit, a timeout, or a report `accept_phase` rejects, `run` prints the phase, the exit code, the model id when supplied, and the last 40 lines of `${phase}-agent.err` and `${phase}-agent.log`, so a provider-error line appears verbatim; `record` prints the phase, the model id when supplied, the reason and the report tail.
+On a non-zero agent exit, a timeout, or a report `accept_phase` rejects, `run` prints the phase, the exit code, the model id when supplied, and the last 40 lines of `${phase}-agent.err` and `${phase}-agent.log`, plus every provider-error line found in the full stderr log, so one is never lost past the tail window; `record` prints the phase, the model id when supplied, the reason and the report tail.
 The script cannot read a runtime's own session or event stream: a runtime that reports provider errors only there must surface them on the phase's stderr in its `--agent-cmd` template (`references/runtimes.md`, Models).
+
+A failed phase is never acceptable.
+It removes its own launch and binding, so a later `record` of the leftover report fails instead of stamping a report the run declared failed, and a re-run that fails before the agent starts still discards this phase's previous acceptance and every later phase.
 
 ## Phase 0: preflight (deterministic)
 
@@ -165,7 +171,7 @@ Fix a FAIL before spending any model budget.
 ## Phase 1: sweep
 
 ```bash
-"$PIPELINE" run sweep --base "$BASE" --spec "$SPEC" --scratch "$scratch" --agent-cmd "<template>"
+"$PIPELINE" run sweep --base "$BASE" --model "<profile.review.pre_pr.sweeper model>" --spec "$SPEC" --scratch "$scratch" --agent-cmd "<template>"
 ```
 
 The sweeper returns a structured candidate list, each entry with `file:line`, a severity, a one-line claim and a concrete failure scenario.
@@ -174,7 +180,7 @@ Expect false positives; Phase 2 exists to remove them.
 ## Phase 2: verify and hunt
 
 ```bash
-"$PIPELINE" run hunt --base "$BASE" --spec "$SPEC" --scratch "$scratch" --agent-cmd "<template>"
+"$PIPELINE" run hunt --base "$BASE" --model "<profile.review.pre_pr.hunter model>" --spec "$SPEC" --scratch "$scratch" --agent-cmd "<template>"
 ```
 
 The hunter works in a throwaway detached worktree of the **unfixed** head, never the working tree.
@@ -196,7 +202,7 @@ Its dossier asks for both jobs and demands execution rather than reasoning:
 ## Phase 3: arbitration
 
 ```bash
-"$PIPELINE" run arbitrate --base "$BASE" --spec "$SPEC" --scratch "$scratch" --agent-cmd "<template>"
+"$PIPELINE" run arbitrate --base "$BASE" --model "<profile.review.pre_pr.arbiter model>" --spec "$SPEC" --scratch "$scratch" --agent-cmd "<template>"
 ```
 
 The arbiter filters hallucinations and unexploitable edge cases, weighs Phase-2 empirical results over Phase-1 theory, surfaces cross-module and architectural regressions, writes the report, and states which categories it found clean.

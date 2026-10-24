@@ -10,6 +10,7 @@ repository, following tests/test_pipeline_scratch.py.
 """
 
 import os
+import re
 import shlex
 import subprocess
 import time
@@ -318,3 +319,183 @@ def test_a_heartbeat_carries_the_probe_state_when_a_probe_ran(gate):
     beats = [line for line in result.stderr.splitlines() if "phase=sweep elapsed=" in line]
     assert beats, result.stderr
     assert "availability check: probe ok" in beats[0], beats[0]
+
+
+# --- the probe contract: placeholders, env equivalents, and a healthy probe that says "unavailable"
+
+def test_the_probe_receives_the_model_id_and_honours_the_env_equivalents(gate, tmp_path):
+    repo, scratch, env = gate
+    seen = tmp_path / "probe-model.txt"
+    probe = f'printf "%s\\n" {{model}} > {shlex.quote(str(seen))}'
+    env = {
+        **env,
+        "ADVERSARIAL_MODEL": "kimi/kimi-k3",
+        "ADVERSARIAL_PROBE_CMD": probe,
+        "ADVERSARIAL_PROBE_TIMEOUT": "5",
+    }
+    result = run_sweep(repo, scratch, env)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert seen.read_text().strip() == "kimi/kimi-k3", seen.read_text()
+    assert "model=kimi/kimi-k3" in result.stderr, result.stderr
+    assert "availability check: probe ok" in result.stderr, result.stderr
+
+
+def test_a_healthy_probe_that_merely_says_unavailable_does_not_fail_the_phase(gate):
+    repo, scratch, env = gate
+    result = run_sweep(
+        repo, scratch, env, "--model", "gpt-6-sol",
+        "--probe-cmd", "echo 'unavailable'; exit 0",
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+# --- a failed phase is never acceptable, and a failed re-run discards the earlier acceptance ------
+
+def test_a_record_after_a_failed_run_cannot_accept_the_leftover_report(gate):
+    repo, scratch, env = gate
+    agent = 'printf "REVIEW-RAN: yes\\npartial report\\n"; exit 7'
+    failed = run_sweep(repo, scratch, env, "--model", "gpt-6-sol", agent=agent)
+    assert failed.returncode == 15, failed.stdout + failed.stderr
+    rejected = run_script(
+        "record", "sweep", "--repo", str(repo), "--base", "HEAD", "--model", "gpt-6-sol", env=env,
+    )
+    assert rejected.returncode != 0, rejected.stdout + rejected.stderr
+    assert "no launch" in rejected.stderr, rejected.stderr
+    assert_not_stamped(artifacts(repo, env), "sweep")
+
+
+def test_a_failed_probe_discards_a_previously_accepted_phase(gate):
+    repo, scratch, env = gate
+    accepted = run_sweep(repo, scratch, env, "--model", "deepseek/deepseek-flash")
+    assert accepted.returncode == 0, accepted.stdout + accepted.stderr
+    hunt = run_script(
+        "run", "hunt", "--repo", str(repo), "--base", "HEAD", "--scratch", str(scratch),
+        "--model", "gpt-6-sol", "--agent-cmd", SWEEP_AGENT, env=env,
+    )
+    assert hunt.returncode == 0, hunt.stdout + hunt.stderr
+    paths = artifacts(repo, env)
+    sweep_stamp = Path(f"{paths['sweep']}.stamp")
+    hunt_stamp = Path(f"{paths['hunt']}.stamp")
+    assert sweep_stamp.exists() and hunt_stamp.exists(), "the first run was not accepted"
+
+    rerun = run_sweep(
+        repo, scratch, env, "--model", "deepseek/deepseek-flash",
+        "--probe-cmd", "echo 'rate limit exceeded' >&2; exit 7",
+    )
+    assert rerun.returncode == 20, rerun.stdout + rerun.stderr
+    assert not sweep_stamp.exists(), "a failed re-run left the previous sweep accepted"
+    assert not hunt_stamp.exists(), "a failed re-run left the later hunt accepted"
+
+    again = run_script(
+        "run", "hunt", "--repo", str(repo), "--base", "HEAD", "--scratch", str(scratch),
+        "--model", "gpt-6-sol", "--agent-cmd", SWEEP_AGENT, env=env,
+    )
+    assert again.returncode == 13, again.stdout + again.stderr
+    assert "accepted sweep artifact" in again.stderr, again.stderr
+
+
+def test_a_probe_that_changes_the_primary_checkout_fails_the_phase(gate):
+    repo, scratch, env = gate
+    probe = f'printf x >> {shlex.quote(str(repo / "tracked.txt"))}; true'
+    result = run_sweep(repo, scratch, env, "--model", "gpt-6-sol", "--probe-cmd", probe)
+    assert result.returncode == 18, result.stdout + result.stderr
+    assert "primary checkout" in result.stderr, result.stderr
+    assert "availability check" in result.stderr, result.stderr
+    assert_not_stamped(artifacts(repo, env), "sweep")
+
+
+# --- the phase deadline bounds the availability check as well as the agent ------------------------
+
+def test_the_phase_deadline_bounds_the_availability_check(gate):
+    repo, scratch, env = gate
+    started = time.monotonic()
+    result = run_sweep(
+        repo, scratch, env, "--model", "gpt-6-sol", "--probe-cmd", "sleep 10",
+        "--timeout", "1", "--probe-timeout", "30", timeout=60,
+    )
+    elapsed = time.monotonic() - started
+    assert result.returncode == 19, result.stdout + result.stderr
+    assert elapsed < 9, f"the phase outlived its 1s deadline by {elapsed:.1f}s"
+    assert "1s" in result.stderr and "--timeout" in result.stderr, result.stderr
+
+
+# --- the diagnosis keeps a provider error past the tail window, and the stdout log -------------
+
+def test_a_provider_error_past_the_tail_window_still_appears_verbatim(gate):
+    repo, scratch, env = gate
+    agent = (
+        "printf 'AI_APICallError: rate limit exceeded for model\\n' >&2; "
+        'for i in $(seq 1 60); do printf "retry_%s\\n" "$i" >&2; done; exit 1'
+    )
+    result = run_sweep(repo, scratch, env, "--model", "gpt-6-sol", agent=agent)
+    assert result.returncode == 15, result.stdout + result.stderr
+    assert "AI_APICallError: rate limit exceeded for model" in result.stderr, result.stderr
+    assert "provider-error lines from" in result.stderr, result.stderr
+
+
+def test_the_agents_stdout_log_is_diagnosed_when_stdout_is_the_artifact(gate):
+    repo, scratch, env = gate
+    agent = "printf 'partial report line\\n'; printf 'boom-on-stdout\\n'; exit 1"
+    result = run_sweep(repo, scratch, env, "--model", "gpt-6-sol", agent=agent)
+    assert result.returncode == 15, result.stdout + result.stderr
+    assert "boom-on-stdout" in result.stderr, result.stderr
+    assert "sweep-agent.log: last 40 lines" in result.stderr, result.stderr
+
+
+# --- usage errors -------------------------------------------------------------------------------
+
+def test_zero_timeouts_are_rejected_as_usage_errors(gate):
+    repo, scratch, env = gate
+    for flag in ("--timeout", "--probe-timeout"):
+        result = run_sweep(repo, scratch, env, "--model", "gpt-6-sol", flag, "0")
+        assert result.returncode == 2, result.stdout + result.stderr
+        assert "at least 1" in result.stderr, result.stderr
+
+
+def test_a_model_id_that_is_not_one_line_is_rejected(gate):
+    repo, scratch, env = gate
+    result = run_sweep(repo, scratch, env, "--model", "gpt-6-sol\nFORGED_LINE")
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "FORGED_LINE" not in result.stderr, "an unvalidated model id forged a line of output"
+
+
+# --- the heartbeat cadence and an interrupted gate ------------------------------------------------
+
+def test_the_heartbeat_repeats_within_thirty_seconds(gate):
+    repo, scratch, env = gate
+    agent = 'sleep 12; { printf "REVIEW-RAN: yes\\n"; } > {output_file}'
+    result = run_sweep(repo, scratch, env, "--model", "gpt-6-sol", agent=agent)
+    assert result.returncode == 0, result.stdout + result.stderr
+    beats = []
+    for line in result.stderr.splitlines():
+        match = re.search(r"phase=sweep elapsed=([0-9]+)s", line)
+        if match:
+            beats.append(int(match.group(1)))
+    assert len(beats) >= 2, f"one progress line in 12s is not a 30s cadence: {beats}"
+    gaps = [b - a for a, b in zip(beats, beats[1:])]
+    assert max(gaps) <= 30, f"a progress gap exceeded 30s: {beats}"
+
+
+def test_an_interrupted_gate_kills_its_agents_process_group(gate, tmp_path):
+    repo, scratch, env = gate
+    ticks = tmp_path / "interrupt-ticks.txt"
+    agent = f'( while true; do printf x >> {shlex.quote(str(ticks))}; sleep 0.2; done ) & sleep 60'
+    gate_process = subprocess.Popen(
+        ["bash", str(SCRIPT), "run", "sweep", "--repo", str(repo), "--base", "HEAD",
+         "--scratch", str(scratch), "--model", "gpt-6-sol", "--agent-cmd", agent],
+        env=env, cwd=str(ROOT), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+    try:
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline and not (ticks.exists() and ticks.stat().st_size > 2):
+            time.sleep(0.1)
+        assert ticks.exists(), "the agent never started"
+        gate_process.terminate()
+        gate_process.wait(timeout=30)
+        size = ticks.stat().st_size
+        time.sleep(2)
+        assert ticks.stat().st_size == size, \
+            "the agent's process group outlived an interrupted gate"
+    finally:
+        if gate_process.poll() is None:
+            gate_process.kill()

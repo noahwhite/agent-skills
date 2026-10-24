@@ -151,6 +151,8 @@ The `adversarial-review-pipeline` skill defines the pre-PR gate; these rules app
 - Adjudicate residual findings against your diff's scope and pick the proportionate fix.
 - A deleted file in `origin/<base>..HEAD` can be a branch-behind artifact; rebase before judging deletions.
 - Pass the gate the model id each phase must use (`--model`) and, when the consumer configures one, an availability probe (`--probe-cmd`); the gate script never resolves a model and never substitutes one.
-- A phase whose model is rate limited, unauthorized or unavailable fails fast with a distinct exit code, 20 for a failed availability check and 19 for a `--timeout` kill, naming the phase, the model and its output tail; never retry it as a different model and never read it as a clean phase.
+- A phase whose model is rate limited, unauthorized or unavailable fails fast with a distinct exit code, 20 for a failed availability check (including a probe configured with no model supplied) and 19 for a `--timeout` kill, naming the phase, the model and its output tail; never retry it as a different model and never read it as a clean phase.
+- A failed phase is never acceptable: it discards its own launch and binding, so never re-accept its leftover report with the gate's record step, and never build a later phase on an acceptance the failed re-run should have invalidated.
+- An interrupted gate must kill the phase's process group before it exits; a gate that leaves an agent retrying keeps spending model budget with nothing left to stop it.
 - Surface provider errors on the phase's stderr in the `--agent-cmd` template when the runtime reports them only in its own session or event stream; the gate cannot read that stream.
 - A passing availability probe is one minimal provider call, not proof that the real phase will run: keep the phase's own failure diagnosis in the evidence.
