@@ -4,7 +4,7 @@ Measured on the delivered text of this change with CPython 3.12.3 and locked dep
 The modified files are `skills/story-refinement/SKILL.md` and `skills/story-refinement/references/refinement-record.md`.
 Before each check the document bytes were saved, the edit shown below was made once, the quoted command ran, and the saved bytes were restored even when the command failed; the final source matched the saved bytes, and the tracked changes were then only the files this change delivers.
 Each entry shows the exact matched text, and the exact replacement text where the edit substitutes or inserts one, so a re-runner can reproduce it from the delivered text.
-35 regression proofs failed as designed and 1 control passed.
+32 regression proofs failed as designed and 1 control passed.
 Entries 1 to 35 are the regression proofs; entry 36 is the control.
 
 ## 1. Remove the measure ban and driver-set sentence from Step 3 item 4
@@ -96,7 +96,7 @@ A challenged ground must be restated as a basis driver or retracted, and either 
 ```
 
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_step_four_facilitator_challenges_every_off_basis_ground`
-Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_step_four_facilitator_challenges_every_off_basis_ground`.
+Result: SETUP-FAILED; `matched 0 times`.
 
 ## 8. Remove the neither-outcome rule from Step 4 item 1
 
@@ -191,7 +191,7 @@ The one exception is a sizing comment that names, bounds or implies a point valu
 ```
 
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_anchoring_guardrail_makes_a_point_value_sizing_note_an_event_on_challenge`
-Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_anchoring_guardrail_makes_a_point_value_sizing_note_an_event_on_challenge`.
+Result: SETUP-FAILED; `matched 0 times`.
 
 ## 14. Remove the void-and-re-run paragraph from the Anchoring guardrail
 
@@ -204,7 +204,7 @@ Any other challenged ground that is neither restated as a basis driver nor retra
 ```
 
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_anchoring_guardrail_makes_a_point_value_sizing_note_an_event_on_challenge`
-Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_anchoring_guardrail_makes_a_point_value_sizing_note_an_event_on_challenge`.
+Result: SETUP-FAILED; `matched 0 times`.
 
 ## 15. Remove the off-basis trigger clause from the Anchoring guardrail
 

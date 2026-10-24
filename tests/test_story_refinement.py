@@ -809,9 +809,8 @@ def test_step_four_facilitator_challenges_every_off_basis_ground() -> None:
         "and its author, and never the author's value."
     ) in item
     assert (
-        "A challenged ground must be restated as a basis driver or retracted, and either outcome requires its "
-        "author to record the value again with a rationale the Step 3 rule permits; the SM/EM withdraws or "
-        "restates its own sizing comment on the same terms, except a statement that names, bounds or implies a point value, "
+        "A challenged ground must be restated as a basis driver that supports the value already recorded, or "
+        "retracted; the SM/EM withdraws or restates its own sizing comment on the same terms, except a statement that names, bounds or implies a point value, "
         "or states elapsed time, effort or run cost, which is an anchoring event as soon as the facilitator sees "
         "it."
     ) in item
@@ -837,15 +836,15 @@ def test_anchoring_guardrail_makes_a_point_value_sizing_note_an_event_on_challen
         "neither restated as a basis driver nor retracted" in body
     )
     assert (
-        "the one exception is a sizing comment that names, bounds or implies a point value: it is an anchoring "
-        "event as soon as the facilitator sees it, with no challenge, restatement or retraction path" in body
+        "the exceptions are a sizing comment that names, bounds or implies a point value and a statement of "
+        "elapsed time, effort or run cost: each is an anchoring event as soon as the facilitator sees it, with "
+        "no challenge, restatement or retraction path" in body
     )
     assert (
         "any other challenged ground that is neither restated as a basis driver nor retracted, or a sizing "
-        "comment the sm/em neither withdraws nor restates, is an anchoring event; because such a ground can land "
-        "after all three values are recorded, its recovery applies the mechanics below by re-running the "
-        "independent vote from step 3 in newly created voter contexts that exclude the tainted discussion and "
-        "sizing comment" in body
+        "comment the sm/em neither withdraws nor restates, is an anchoring event; because such a ground can taint "
+        "votes recorded before it, the recovery below also voids those votes, and the independent vote from step "
+        "3 is re-run in newly created voter contexts that exclude the tainted discussion and sizing comment" in body
     )
 
 
