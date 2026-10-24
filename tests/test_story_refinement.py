@@ -898,3 +898,42 @@ def test_refinement_template_points_every_accept_round_line_at_the_result_commen
     ):
         assert line in lines, line
     assert not any("<ACCEPT or OBJECT" in line or "<accepted or unpointed>" in line for line in lines)
+
+
+def test_records_cite_base_names_and_include_needed_content() -> None:
+    body = spaced(section(SKILL.read_text(), "Records"))
+    assert (
+        "Keep the raw voter files in the session's scratch directory and cite each file by its base name only "
+        "(never a directory path) in the record."
+    ) in body
+    assert "Quote or attach any file content a reader needs in the record." in body
+
+
+@pytest.mark.parametrize("phrase", ["<scratch path>", "cite their paths"])
+def test_skill_records_never_request_local_paths(phrase: str) -> None:
+    assert phrase not in SKILL.read_text()
+
+
+def test_record_intro_excludes_local_paths_and_includes_needed_content() -> None:
+    intro = spaced(RECORD.read_text().split("## Refinement comment", 1)[0])
+    assert "The record never carries a local path; cite each raw voter file by its base name only." in intro
+    assert "Quote or attach any file content a reader needs in the record." in intro
+
+
+@pytest.mark.parametrize(
+    ("heading", "line"),
+    [
+        ("Refinement comment", "- Product owner: <file base name>"),
+        ("Refinement comment", "- Engineer one (<family or model>): <file base name>"),
+        ("Refinement comment", "- Engineer two (<family or model>): <file base name>"),
+        ("Refinement comment", "- SM/EM contribution (not a vote): <file base name>"),
+        ("Pointing record", "- SM/EM sizing context, after all three values: <file base name> or verbatim"),
+    ],
+)
+def test_record_templates_cite_file_base_names(heading: str, line: str) -> None:
+    assert line in [item.strip() for item in template(heading).splitlines()]
+
+
+@pytest.mark.parametrize("phrase", ["<scratch path>", "cite their paths"])
+def test_record_templates_never_request_local_paths(phrase: str) -> None:
+    assert phrase not in RECORD.read_text()

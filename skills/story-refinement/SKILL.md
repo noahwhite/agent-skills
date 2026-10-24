@@ -225,7 +225,8 @@ The SM/EM posts only its own comments, and applies the PO's writes only under th
 ## Records
 
 Use [references/refinement-record.md](references/refinement-record.md) for the refinement-comment template, the Accept round result template, the pointing-record template, and the permitted and forbidden phrasing table.
-Keep the raw voter files in the session's scratch directory and cite their paths in the record.
+Keep the raw voter files in the session's scratch directory and cite each file by its base name only (never a directory path) in the record.
+Quote or attach any file content a reader needs in the record.
 Record the refinement comment id, every accept round, all three point values, the SM/EM sizing context, the discussion result, the consensus, any no-consensus decision with each voter's accepted paths and the decision rationale, and any split.
 
 ## Runtime portability
