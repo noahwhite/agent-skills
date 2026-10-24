@@ -51,7 +51,6 @@ git:
   ai_attribution: forbid
   branch_prefixes:
     feature: feature/
-  pr_assignee: noahwhite
 review:
   reviewer:
     name: Codex GPT-6 Sol
