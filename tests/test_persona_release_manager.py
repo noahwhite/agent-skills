@@ -96,6 +96,8 @@ def test_readiness_section_covers_each_promotion_mode() -> None:
         "evidence-only commits",
         "compare the code tree",
         "evidence for an earlier build, or for a head that a later merge or review fix changed, is stale and stops the promotion",
+        "story-scoped promotion branch",
+        "rather than the integration branch head",
     ):
         assert phrase in body, f"readiness missing: {phrase}"
     whole = SKILL.read_text().lower()
@@ -115,12 +117,16 @@ def test_promotion_section_cites_and_does_not_redefine() -> None:
         "per-story",
         "single story's change",
         "never open a promotion pr that carries another story",
-        "story-scoped mechanism",
-        "stop and ask for it",
+        "`per-story` promotion mechanism",
+        "cites",
+        "stop and ask only for a profile value the profile does not set",
+        "never for a mechanism the promotion section defines",
         "three-dot diff",
         "no back-merges",
     ):
         assert phrase in body, f"promotion missing: {phrase}"
+    for removed in ("story-scoped mechanism", "stop and ask for it"):
+        assert removed not in body, f"promotion still asks for a defined mechanism: {removed}"
     whole = SKILL.read_text().lower()
     for forbidden in ("batch all pending stories", "batch the promotion", "batch stories into",
                       "include every pending story", "every pending story in one promotion"):
@@ -138,6 +144,8 @@ def test_review_section_covers_the_cumulative_diff_and_ownership() -> None:
         "integration branch",
         "references/github.md",
         "promotion",
+        "under `whole-branch`",
+        "story-scoped promotion branch",
         "fresh pre-production verification",
         "post the review of record on the pr as a `--comment` pr review before the merge",
     ):

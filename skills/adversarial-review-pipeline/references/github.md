@@ -103,14 +103,32 @@ Always:
   Never promote a single story on its own.
 - `per-story`: promote each story individually after its feature PR merges, deploy, then close the story; never batch stories.
 
+Under `per-story`, build the promotion branch and its PR like this:
+
+1. Cut the promotion branch from `origin/<profile.git.release_branch>` with that explicit base ref, after `git fetch --prune origin`.
+2. Select, from `origin/<profile.git.integration_branch>`, only the commits the promoted story's merged feature PR added.
+   With `profile.git.merge_method` `squash` or `rebase`, select the commits whose subjects carry the story's issue key as that PR's squash or rebase commits.
+   With `profile.git.merge_method` `merge`, select the feature PR's merge commit and cherry-pick it with `-m 1`.
+3. Carry the selected commits onto the promotion branch by cherry-picking them in their original order, or by squash-applying them as one commit.
+4. Open the promotion PR from that branch to `profile.git.release_branch`.
+   A whole-branch integration-to-release PR is not used under `per-story`.
+5. Stop and report instead of carrying another story's commit or merging the integration branch into the promotion when the selection finds no commit, matches more than one feature PR, or cannot apply without an un-promoted story.
+
+Under `per-story`, a valid review fix lands on a new feature branch to `profile.git.integration_branch`.
+The stale promotion PR is closed unmerged and a fresh story-scoped promotion branch is cut from the release branch, or the fix commit is cherry-picked onto the promotion branch, carrying the story's updated commits.
+Refresh the story's pre-production evidence against that promotion head before the merge.
+No back-merge of the release branch, no update-branch of the promotion PR, and no force-push of the promotion branch applies to that flow.
+
 For any promotion:
 
 - Review the promotion PR's whole cumulative diff (`references/code-review.md`).
-- Inspect promotions with a fresh three-dot diff: `git fetch --prune origin` then `git diff --stat origin/<release>...origin/<integration>`.
+- Inspect a `whole-branch` promotion with a fresh three-dot diff: `git fetch --prune origin` then `git diff --stat origin/<release>...origin/<integration>`.
   The two-dot diff shows release-only files as deletions.
+- Inspect a `per-story` promotion with its own story-scoped three-dot diff: `git fetch --prune origin` then `git diff --stat origin/<release>...<promotion-branch>`.
+  Never inspect the whole integration branch for a `per-story` promotion.
 - ⛔ Never merge the release branch into the integration branch (no back-merges), and never update-branch a promotion PR, which does the same.
   Resolve promotion conflicts on a separate branch.
-- Fixes for a promotion PR go on a new feature branch to the integration branch and flow into the promotion.
+- Under `whole-branch`, fixes for a promotion PR go on a new feature branch to the integration branch and flow into the promotion.
 
 ## Attribution
 
