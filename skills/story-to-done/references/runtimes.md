@@ -50,6 +50,10 @@ If your runtime is not listed, map each capability to its closest equivalent and
   else
     scratch="$(mktemp -d)"
   fi
+  if [ -z "$scratch" ] || [ ! -d "$scratch" ]; then
+    printf 'could not create a scratch directory\n' >&2
+    exit 1
+  fi
   printf '%s\n' "$scratch"
   ```
 - **Nested subagents.** A delegated agent that runs a review gate spawns subagents of its own.

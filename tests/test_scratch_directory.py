@@ -114,6 +114,23 @@ def test_the_snippet_falls_back_when_mktemp_inside_the_base_fails(tmp_path):
     assert "session." in calls and "call " in calls, calls
 
 
+def test_the_snippet_fails_loudly_when_no_directory_can_be_created(tmp_path):
+    """No base and a broken temp dir: the snippet must not print an empty path and exit 0."""
+    script = "\n".join(
+        line for line in scratch_one_liner().splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    )
+    res = subprocess.run(
+        ["bash", "-c", script],
+        capture_output=True, text=True,
+        env={k: v for k, v in os.environ.items()
+             if k not in {"scratch_base"} } | {"TMPDIR": str(tmp_path / "missing-tmp")},
+    )
+    assert res.returncode != 0, f"the snippet silently succeeded: {res.stdout!r}"
+    assert res.stdout.strip() == "", res.stdout
+    assert "could not create a scratch directory" in res.stderr, res.stderr
+
+
 def test_the_rule_no_longer_forbids_only_fixed_paths_under_tmp():
     """AC1: the old contradictory sentence must not come back."""
     assert "Never write to a fixed path under `/tmp`" not in RUNTIMES.read_text()
