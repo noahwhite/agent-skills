@@ -839,7 +839,8 @@ def test_anchoring_guardrail_makes_a_point_value_sizing_note_an_event_on_challen
     )
     assert (
         "any other challenged ground that is neither restated as a basis driver nor retracted, or a sizing "
-        "comment the sm/em neither withdraws nor restates, is an anchoring event, and the void re-runs the "
+        "comment the sm/em neither withdraws nor restates, is an anchoring event; because such a ground can land "
+        "after all three values are recorded, its recovery applies the mechanics below by re-running the "
         "independent vote from step 3 in newly created voter contexts that exclude the tainted discussion and "
         "sizing comment" in body
     )
@@ -922,6 +923,13 @@ def test_phrasing_section_holds_only_the_intro_the_table_and_the_trailer() -> No
     assert lines[3 + rows + 2 :] == [PHRASING_TRAILER]
 
 
+def test_phrasing_table_header_names_both_columns() -> None:
+    body = section(RECORD.read_text(), "Permitted and forbidden phrasing")
+    lines = [line.strip() for line in body.splitlines() if line.strip()]
+    header = next(line for line in lines if line.startswith("|"))
+    assert header == "| Permitted (factual, reference-only) | Forbidden (leading or anchoring) |"
+
+
 def test_phrasing_table_permits_the_three_complexity_comparisons() -> None:
     permitted = [row[0] for row in phrasing_rows()]
     for cell in (
@@ -981,9 +989,27 @@ COMPLEXITY_FEATURE = re.compile(
 )
 
 
+PERMITTED_CELLS = [
+    '"The comparable story had one fewer unknown to resolve."',
+    '"The named story had three interacting constraints; this one has four."',
+    '"This story has one more integration than that one."',
+    '"The prior story also changed the schema."',
+    '"That story carried no migration."',
+    '"The scope differs in the deploy leg."',
+    '"This story has one more unknown than that one."',
+    '"The comparable story had the same interacting constraints."',
+    '"The earlier story carried more breaking-behaviour risk."',
+    '"No comparable story exists."',
+    '"The named story had one fewer external dependency."',
+]
+
+
+def test_phrasing_table_permitted_column_is_the_exact_curated_list() -> None:
+    assert [row[0] for row in phrasing_rows()] == PERMITTED_CELLS
+
+
 def test_phrasing_table_permitted_cells_never_name_a_point_value() -> None:
     permitted = [row[0] for row in phrasing_rows()]
-    assert len(permitted) == 11, "the permitted column keeps its eleven rows"
     for cell in (
         '"The comparable story had one fewer unknown to resolve."',
         '"The earlier story carried more breaking-behaviour risk."',
@@ -999,8 +1025,12 @@ def test_phrasing_table_permitted_cells_never_name_a_point_value() -> None:
 
 def test_pointing_template_records_each_challenge_and_outcome() -> None:
     assert (
-        "- Challenges: <each ground challenged, its author (a voter, or the SM/EM for a sizing comment), and the "
-        "restatement, withdrawal or retraction, or the void>" in pointing_template()
+        "- Challenges: <none, or each ground challenged, its author (a voter, or the SM/EM for a sizing comment), "
+        "and the restatement, withdrawal or retraction, or the void>" in pointing_template()
+    )
+    assert (
+        "- Superseded values after a void: <none, or the voided values and the blind vote that replaced them>"
+        in pointing_template()
     )
     body = spaced(section(RECORD.read_text(), "Pointing record"))
     assert (
@@ -1013,7 +1043,7 @@ def test_pointing_template_records_each_challenge_and_outcome() -> None:
 
 def test_pointing_template_places_challenges_before_anchoring_events() -> None:
     lines = pointing_template()
-    assert lines.index("- Challenges: <each ground challenged, its author (a voter, or the SM/EM for a sizing comment), and the restatement, withdrawal or retraction, or the void>") < lines.index(
+    assert lines.index("- Challenges: <none, or each ground challenged, its author (a voter, or the SM/EM for a sizing comment), and the restatement, withdrawal or retraction, or the void>") < lines.index(
         "- Anchoring events: <none, or the verbatim comment and the recovery, including the newly created voter contexts>"
     )
 

@@ -201,7 +201,7 @@ The prohibited behaviours are:
 - comparing individual votes.
 
 Every ground outside the pointing basis is an anchoring trigger: a rationale or a sizing comment that weighs verification strength, testability, coverage, the shape of the tests, or a prior or inherited point value is challenged under Step 4, and a sizing comment that names, bounds or implies a point value is an anchoring event as soon as the facilitator sees it, with no challenge, restatement or retraction path.
-Any other challenged ground that is neither restated as a basis driver nor retracted, or a sizing comment the SM/EM neither withdraws nor restates, is an anchoring event, and the void re-runs the independent vote from Step 3 in newly created voter contexts that exclude the tainted discussion and sizing comment.
+Any other challenged ground that is neither restated as a basis driver nor retracted, or a sizing comment the SM/EM neither withdraws nor restates, is an anchoring event; because such a ground can land after all three values are recorded, its recovery applies the mechanics below by re-running the independent vote from Step 3 in newly created voter contexts that exclude the tainted discussion and sizing comment.
 
 Fresh voter contexts exclude the tainted discussion and the sizing comment, but they cannot exclude a point value recorded on the story surface that Step 1 hands every voter with the story, so the Step 3 rationale rule is what keeps such a value out of the vote.
 

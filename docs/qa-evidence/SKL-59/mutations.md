@@ -4,8 +4,8 @@ Measured on the delivered text of this change with CPython 3.12.3 and locked dep
 The modified files are `skills/story-refinement/SKILL.md` and `skills/story-refinement/references/refinement-record.md`.
 Before each check the document bytes were saved, the edit shown below was made once, the quoted command ran, and the saved bytes were restored even when the command failed; the final source matched the saved bytes, and the tracked changes were then only the files this change delivers.
 Each entry shows the exact matched text, and the exact replacement text where the edit substitutes or inserts one, so a re-runner can reproduce it from the delivered text.
-33 regression proofs failed as designed and 1 control passed.
-Entries 1 to 33 are the regression proofs; entry 34 is the control.
+35 regression proofs failed as designed and 1 control passed.
+Entries 1 to 35 are the regression proofs; entry 36 is the control.
 
 ## 1. Remove the measure ban and driver-set sentence from Step 3 item 4
 
@@ -200,7 +200,7 @@ File: `SKILL.md`
 Matched text:
 
 ```text
-Any other challenged ground that is neither restated as a basis driver nor retracted, or a sizing comment the SM/EM neither withdraws nor restates, is an anchoring event, and the void re-runs the independent vote from Step 3 in newly created voter contexts that exclude the tainted discussion and sizing comment.
+Any other challenged ground that is neither restated as a basis driver nor retracted, or a sizing comment the SM/EM neither withdraws nor restates, is an anchoring event; because such a ground can land after all three values are recorded, its recovery applies the mechanics below by re-running the independent vote from Step 3 in newly created voter contexts that exclude the tainted discussion and sizing comment.
 ```
 
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_anchoring_guardrail_makes_a_point_value_sizing_note_an_event_on_challenge`
@@ -297,7 +297,7 @@ File: `refinement-record.md`
 Matched text:
 
 ```text
-- Challenges: <each ground challenged, its author (a voter, or the SM/EM for a sizing comment), and the restatement, withdrawal or retraction, or the void>
+- Challenges: <none, or each ground challenged, its author (a voter, or the SM/EM for a sizing comment), and the restatement, withdrawal or retraction, or the void>
 ```
 
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_pointing_template_records_each_challenge_and_outcome`
@@ -474,7 +474,39 @@ Replaced with:
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_phrasing_table_permitted_cells_never_name_a_point_value`
 Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_phrasing_table_permitted_cells_never_name_a_point_value`.
 
-## 31. Delete one unpinned permitted row, leaving ten
+## 31. Remove the superseded-values line from the pointing-record template
+
+File: `refinement-record.md`
+
+Matched text:
+
+```text
+- Superseded values after a void: <none, or the voided values and the blind vote that replaced them>
+```
+
+Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_pointing_template_records_each_challenge_and_outcome`
+Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_pointing_template_records_each_challenge_and_outcome`.
+
+## 32. Add a permitted cell that implies a value without any banned token
+
+File: `refinement-record.md`
+
+Matched text:
+
+```text
+"The prior story also changed the schema."
+```
+
+Replaced with:
+
+```text
+"The earlier story drew a four on unknowns."
+```
+
+Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_phrasing_table_permitted_column_is_the_exact_curated_list`
+Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_phrasing_table_permitted_column_is_the_exact_curated_list`.
+
+## 33. Delete one unpinned permitted row, leaving ten
 
 File: `refinement-record.md`
 
@@ -484,10 +516,10 @@ Matched text:
 | "The prior story also changed the schema." | "I think it is 5." |
 ```
 
-Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_phrasing_table_permitted_cells_never_name_a_point_value`
-Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_phrasing_table_permitted_cells_never_name_a_point_value`.
+Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_phrasing_table_permitted_column_is_the_exact_curated_list`
+Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_phrasing_table_permitted_column_is_the_exact_curated_list`.
 
-## 32. Insert a non-row line carrying a point value between two table rows
+## 34. Insert a non-row line carrying a point value between two table rows
 
 File: `refinement-record.md`
 
@@ -507,7 +539,7 @@ The comparable story was 5 points.
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_phrasing_section_holds_only_the_intro_the_table_and_the_trailer`
 Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_phrasing_section_holds_only_the_intro_the_table_and_the_trailer`.
 
-## 33. Insert a point-value sentence between the intro and the table
+## 35. Insert a point-value sentence between the intro and the table
 
 File: `refinement-record.md`
 
@@ -530,7 +562,7 @@ The comparable story was a 3, so stay near it.
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_phrasing_section_holds_only_the_intro_the_table_and_the_trailer`
 Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_phrasing_section_holds_only_the_intro_the_table_and_the_trailer`.
 
-## 34. Control: add a blank line after the table
+## 36. Control: add a blank line after the table
 
 File: `refinement-record.md`
 
