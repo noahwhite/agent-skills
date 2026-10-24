@@ -33,6 +33,7 @@ If your runtime is not listed, map each capability to its closest equivalent and
   Pass the session's directory to every subagent and shell-launched agent you start.
   When neither the runtime nor `profile.workspace.scratch_dir` gives a directory, create one with a standalone `mktemp -d` and use it for the whole task.
   A base that cannot be created or written falls back the same way.
+  Keep the base outside every repository under review: a session directory inside a checkout shows up as untracked work and fails the clean-tree preflight.
   Never write to a fixed file directly under the base directory or under `/tmp`; parallel sessions collide there.
   The one deliberate exception is the merge-approval rendezvous, which is an engagement's shared file rather than a session's scratch (the merge-approval handshake).
 

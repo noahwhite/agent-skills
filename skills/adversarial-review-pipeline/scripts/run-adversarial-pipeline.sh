@@ -106,6 +106,15 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+# A named spec that is missing is an error; only an omitted spec gets the "no spec" fallback.
+if [ -n "$SPEC_FILE" ]; then
+  if [ ! -f "$SPEC_FILE" ] || [ ! -r "$SPEC_FILE" ]; then
+    die 2 "--spec file '$SPEC_FILE' does not exist or is not readable."
+  fi
+  SPEC_FILE="$(abspath "$SPEC_FILE")"
+fi
+[[ "$TIMEOUT" =~ ^[0-9]+$ ]] || die 2 "--timeout must be a whole number of seconds."
+
 # The target repository: --repo, else the current directory. Never this script's location.
 if [ -n "$REPO" ]; then
   ROOT="$(git -C "$REPO" rev-parse --show-toplevel 2>/dev/null)" || die 11 "--repo '$REPO' is not inside a Git repository."
