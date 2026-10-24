@@ -2,7 +2,7 @@
 
 Verified on 2026-10-24 against fetched `origin/main` at `a30477e15a692fde158a7423caa191adfc1723e3` in an isolated worktree.
 This repository has no hosted environment or deploy pipeline; `main` is the integration environment and no deploy step exists.
-[Story](https://linear.app/officina-pub/issue/SKL-18/user-story-require-a-todo-list-update-after-every-step-in-every) and [QA evidence comment](https://linear.app/officina-pub/issue/SKL-18/user-story-require-a-todo-list-update-after-every-step-in-every#comment-a6c3366a) hold the tracker record.
+The tracker record is story SKL-18, QA comment `a6c3366a`, and its attachment titled `SKL-18 complete QA assertions: AC1-5 and DoD1-6`.
 [Implementation PR](https://github.com/noahwhite/agent-skills/pull/30) merged as the tested SHA.
 Fixtures are `shared/todo-tracking.md`, `skills.json`, all 17 bundled references, `tests/test_todo_tracking.py`, and the implementation PR and CI runs.
 Repository, GitHub, and Linear CLI lanes apply; there is no visual surface requiring screenshots.
