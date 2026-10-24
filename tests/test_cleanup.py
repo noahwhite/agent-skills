@@ -136,7 +136,9 @@ def test_inventory_names_every_source() -> None:
         "`gh pr list --state all --search '<key>' --limit 200`",
         "its full URL",
         "QA runner scratch output and uncommitted evidence copies only",
-        "including an uncommitted copy inside `profile.qa.evidence_dir`",
+        "an uncommitted copy inside `profile.qa.evidence_dir`",
+        "Scan the session scratch base this runtime gives",
+        "reported as unsearchable, never as empty",
         "Committed evidence, meaning the content the branch tip holds",
         "Session checklist and scratch files naming the key under `profile.workspace.scratch_dir`",
         "the report names this source as unsearchable instead of reporting it as empty",
@@ -153,8 +155,9 @@ def test_inventory_excludes_the_durable_record_and_refuses_a_live_session() -> N
         "Evidence `qa-verification` already attached",
         "The invoking session's own scratch directory",
         "merge-approval rendezvous file",
-        "idle only when it holds a checklist file whose every item is checked",
-        "A directory with no checklist file at all is inventoried as `skip`, never as idle",
+        "its checklist file exists and every item is checked",
+        "no file in it was modified at or after the moment this run started",
+        "Anything else is inventoried as `skip`, because a session may still be writing",
         "cannot attribute to the key is left out, and the report names it as skipped",
     ):
         assert phrase in body, phrase
@@ -180,12 +183,16 @@ def test_each_artefact_kind_has_its_guarded_removal() -> None:
     for phrase in (
         "Remove in this order, so a branch is never refused because a worktree still holds it",
         "Removed with `git worktree remove` only when `git status --porcelain --ignored` is empty inside it",
+        "only when its HEAD is the tip of a branch with merge evidence",
+        "A worktree with a detached HEAD, or on a branch without merge evidence, is refused",
         "not the worktree hosting the current session",
         "Ignored files count",
         "Removed with `git branch -D`",
         "only when the remote tip has merge evidence and no open PR heads it",
-        "`gh pr list --state open --json headRefName --limit 200`",
-        "a remote branch that never became a PR is refused rather than deleted",
+        "Read the remote tip a second time immediately before the delete and refuse if it moved",
+        "`gh pr list --state open --search '<key>' --json headRefName --limit 200`",
+        "a listing that returns exactly its limit is not proven complete",
+        "A remote branch that never became a PR is refused rather than deleted",
         "Removed only from a directory the inventory proved idle, and only after step 5 has attached the evidence the run swept",
     ):
         assert phrase in body, phrase

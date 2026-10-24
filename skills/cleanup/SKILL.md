@@ -72,7 +72,9 @@ Sources, all of them:
 - **Local branches.** Every branch whose name carries the key under a prefix in `profile.git.branch_prefixes`.
 - **Remote branches.** Every head `git ls-remote --heads origin '*<key>*'` reports whose name carries the key at the boundary.
 - **Pull requests.** Every PR `gh pr list --state all --search '<key>' --limit 200` returns, each cited with its full URL.
-- **Disposable QA output.** QA runner scratch output and uncommitted evidence copies only, in the scratch location the overlay's QA lane names, including an uncommitted copy inside `profile.qa.evidence_dir`.
+- **Disposable QA output.** QA runner scratch output and uncommitted evidence copies only.
+  Scan the session scratch base this runtime gives (`profile.workspace.scratch_dir`, or the runtime's own base as the capability map names it), an uncommitted copy inside `profile.qa.evidence_dir`, and the QA runner's scratch directory when this skill's overlay names one.
+  A location the overlay names but the run cannot reach is reported as unsearchable, never as empty.
   Committed evidence, meaning the content the branch tip holds at `profile.qa.evidence_dir`, is out of scope here; a working-tree edit there is uncommitted and is inventoried.
 - **Session files.** Session checklist and scratch files naming the key under `profile.workspace.scratch_dir`.
   When that key is unset, the sessions of this profile used standalone temporary directories, so the report names this source as unsearchable instead of reporting it as empty.
@@ -86,8 +88,8 @@ Never inventoried as removable:
 
 Two more rules:
 
-- A per-session scratch directory is idle only when it holds a checklist file whose every item is checked.
-  A directory with no checklist file at all is inventoried as `skip`, never as idle, because nothing proves that session has finished.
+- A per-session scratch directory is idle only when the run can prove its session has finished: its checklist file exists and every item is checked, or, with no checklist file, no file in it was modified at or after the moment this run started (`find <dir> -newermt '@<run-start>'` prints nothing).
+  Anything else is inventoried as `skip`, because a session may still be writing.
 - Anything the skill cannot attribute to the key is left out, and the report names it as skipped.
 
 ## 3. Delete only with merge evidence
@@ -101,13 +103,16 @@ Before each removal, after `git fetch origin`, establish merge evidence from the
 
 Remove in this order, so a branch is never refused because a worktree still holds it:
 
-- **Worktree.** Removed with `git worktree remove` only when `git status --porcelain --ignored` is empty inside it, and only when it is not the worktree hosting the current session.
+- **Worktree.** Removed with `git worktree remove` only when `git status --porcelain --ignored` is empty inside it, only when its HEAD is the tip of a branch with merge evidence, and only when it is not the worktree hosting the current session.
+  A worktree with a detached HEAD, or on a branch without merge evidence, is refused, because nothing proves the commit it holds has landed.
   Ignored files count: a worktree holding an ignored `.env`, build output, or local note is refused, because `git worktree remove` deletes those files with the directory and they never reached the inventory.
   A worktree hosting the current session is refused, because removing it deletes the ground the run stands on.
 - **Local branch.** Removed with `git branch -D` once it has merge evidence.
   `-D` rather than `-d`, because a squash or a rebase merge leaves the tip unmerged in git's own eyes.
 - **Remote branch.** Deleted with `git push origin --delete <branch>` only when the remote tip has merge evidence and no open PR heads it.
-  A branch named by `gh pr list --state open --json headRefName --limit 200` is refused, and a remote branch that never became a PR is refused rather than deleted.
+  Read the remote tip a second time immediately before the delete and refuse if it moved: a push that lands between the check and the delete is the one case this run cannot prevent, because the repository forbids a force or lease push.
+  A branch named by `gh pr list --state open --search '<key>' --json headRefName --limit 200` is refused, and a listing that returns exactly its limit is not proven complete, so the run refuses instead of deleting.
+  A remote branch that never became a PR is refused rather than deleted.
 - **Disposable QA output and session files.** Removed only from a directory the inventory proved idle, and only after step 5 has attached the evidence the run swept, so the run never deletes the only copy of something the story is about to receive.
 
 Guards that hold for every removal:
