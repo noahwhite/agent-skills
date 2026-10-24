@@ -154,6 +154,8 @@ Only the PO and the two engineers count toward the agreement.
 - **Process:**
   1. Hold one discussion round that names only the high and the low.
      Do not compare the other values or single out a voter.
+     In that round, and against the rationales recorded in Step 3, the facilitator challenges every ground outside the pointing basis, whether it is heard in the discussion or read in a recorded rationale.
+     A challenged ground must be restated as a basis driver or retracted; a ground that is neither is an anchoring event under the Anchoring guardrail.
   2. Run one re-vote.
      The re-vote prompt carries the pointing basis from Step 3.
      Each voter records the set of values it accepts for this story (one or more) or records no consensus, with a short complexity rationale under the Step 3 rationale rule.
@@ -188,10 +190,15 @@ The SM/EM's sizing comments are logged with the consensus record.
 The prohibited behaviours are:
 
 - naming a target number;
+- naming, bounding or implying a point value, including a prior story's, an inherited split value, a value recorded on the story surface, or one implied by a split status;
 - saying "I would go higher" or "I would go lower";
 - singling out the highest or lowest vote as the realistic one;
 - asking for a revote after stating a view;
 - comparing individual votes.
+
+A ground outside the pointing basis is an anchoring trigger on the same terms: a rationale or a sizing comment that weighs verification strength, testability, coverage, the shape of the tests, or a prior or inherited point value is challenged under Step 4 and voids the round when it is neither restated as a basis driver nor retracted.
+
+Fresh voter contexts exclude the tainted discussion and the sizing comment, but they cannot exclude a point value recorded on the story surface that Step 1 requires every voter to read, so the Step 3 rationale rule is what keeps such a value out of the vote.
 
 On anchoring: stop the round, record the comment verbatim, void the consensus and any vote recorded after the anchor, and re-run the independent vote with newly created voter contexts that exclude the tainted discussion and sizing comment. Never reuse the sessions that saw the anchor. Record the recovery.
 Do not resume the tainted discussion.
