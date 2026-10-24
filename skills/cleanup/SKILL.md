@@ -121,6 +121,45 @@ It names no host and no runtime: both come from the hosted-evidence row of [refe
   That is never a silent skip and never a pass.
 - There is no user-facing runtime switch: the map decides, never a flag, an argument, or a phrase in this text.
 
+## 5. Land the evidence on the story
+
+Evidence the run swept into the tracker goes through the same tracker-attachment path `qa-verification` uses, and it is attached to the story it is evidence for.
+
+- `linear issue attach <story-key> <file>` for a sidebar attachment on the story.
+- `linear issue comment add <story-key> --attach <file>` where the image renders inline in the comment, with the body naming what the attachment shows.
+- Name each attachment in a comment on the story, saying what it shows, because a plain CLI attachment is a sidebar link and images do not render inline.
+- Cite, never re-upload and never delete: evidence `qa-verification` already attached, and evidence committed under `profile.qa.evidence_dir`.
+  The in-repo copy is the durable record, and a second upload is noise on the story.
+- No hosted-page or third-party link goes to the tracker: a hosted page can be private to its owner or deleted, which leaves a dead link on the story.
+
+## 6. Report and confirm
+
+The run ends with one report, structured per story, as the run's final message:
+
+```
+cleanup report
+
+<story-key>: resolved | unresolved
+
+removed:
+- <artefact>: <path or URL>
+
+archived to the tracker:
+- <attachment name>: <what it shows>
+
+skipped:
+- <artefact>: <reason>
+
+refused:
+- <artefact>: <failed check>, <why>
+```
+
+- Every story named at invocation gets its own section, including an unresolved key, which carries only its resolution line.
+- The report carries four parts per story: what was removed, what was archived to the tracker, with the attachment names, what was skipped and why, including the hosted-evidence skip, and what it refused to touch, with the failed check.
+- The inventory report already printed before the first removal: nothing is removed before the inventory report is printed.
+- When anything was archived or refused, post the same summary as a comment on that story, so the story carries the record of what happened to its artefacts.
+- A clean run says so plainly: nothing removed, nothing archived, every skip and its reason.
+
 ## Boundaries
 
 - It removes only artefacts it can attribute to a named key, in the repositories and directories the profile names.

@@ -223,3 +223,42 @@ def test_an_unreachable_mapped_capability_fails_loudly_instead_of_sweeping() -> 
         "never a silent skip and never a pass",
     ):
         assert phrase in body, phrase
+
+
+def test_evidence_is_attached_through_the_path_qa_verification_uses() -> None:
+    body = section(text(), "5. Land the evidence on the story")
+    for phrase in (
+        "the same tracker-attachment path `qa-verification` uses",
+        "`linear issue attach <story-key> <file>`",
+        "`linear issue comment add <story-key> --attach <file>`",
+        "where the image renders inline",
+        "Name each attachment in a comment on the story, saying what it shows",
+        "a plain CLI attachment is a sidebar link and images do not render inline",
+    ):
+        assert phrase in body, phrase
+
+
+def test_existing_evidence_is_cited_and_never_re_uploaded_or_deleted() -> None:
+    body = section(text(), "5. Land the evidence on the story")
+    for phrase in (
+        "Cite, never re-upload and never delete",
+        "evidence `qa-verification` already attached",
+        "evidence committed under `profile.qa.evidence_dir`",
+        "No hosted-page or third-party link goes to the tracker",
+        "attached to the story it is evidence for",
+    ):
+        assert phrase in body, phrase
+
+
+def test_the_run_ends_with_one_report_covering_every_outcome() -> None:
+    body = section(text(), "6. Report and confirm")
+    for phrase in (
+        "one report, structured per story, as the run's final message",
+        "what was removed",
+        "what was archived to the tracker, with the attachment names",
+        "what was skipped and why, including the hosted-evidence skip",
+        "what it refused to touch, with the failed check",
+        "nothing is removed before the inventory report is printed",
+        "post the same summary as a comment on that story",
+    ):
+        assert phrase in body, phrase
