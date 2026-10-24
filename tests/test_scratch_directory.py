@@ -9,6 +9,7 @@ a scratch file goes through the one `mktemp -d` directory the session creates. S
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -96,7 +97,7 @@ def test_the_snippet_falls_back_when_mktemp_inside_the_base_fails(tmp_path):
         "#!/usr/bin/env bash\n"
         "printf 'call %s\\n' \"$*\" >>\"$MARKER\"\n"
         "case \"$*\" in *session.*) exit 1 ;; esac\n"
-        f"exec {real_mktemp} \"$@\"\n"
+        f"exec {shlex.quote(real_mktemp)} \"$@\"\n"
     )
     shim_script.chmod(0o755)
     marker = tmp_path / "calls"
