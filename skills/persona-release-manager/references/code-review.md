@@ -31,7 +31,7 @@ Every agent that judges work or takes delegated work (reviewer, adjudicator, sha
   A delegated engineer gets the story, plan, and constraints, plus the findings or QA gaps ruled valid that it must fix, never the delegator's expectations about the outcome.
 
 1. **Reviewer: `profile.review.reviewer`.**
-   Run it against a throwaway detached worktree of the PR head (`git worktree add --detach <scratch>/pr-review <head-sha>`), so it cannot touch the working branch, and remove the worktree afterwards.
+   Run it against a throwaway detached worktree of the PR head in the session's scratch directory (`git worktree add --detach <scratch directory>/pr-review <head-sha>`), so it cannot touch the working branch, and remove the worktree afterwards.
    The prompt names the repo, PR number, and head SHA, tells it to run `git diff origin/<base>...HEAD` and read the changed files, their call sites, and tests, and asks for correctness, security, and design defects, each with `file:line`, severity, rationale, and a concrete failure scenario.
    It is read-only: no edits, commits, or PR posts.
    Its findings go to an output file the adjudicator receives.

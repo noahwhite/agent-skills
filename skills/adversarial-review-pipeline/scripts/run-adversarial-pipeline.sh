@@ -116,6 +116,7 @@ if [ -n "$SCRATCH" ]; then
     die 2 "--scratch must be a directory, not a file: $SCRATCH"
   fi
   mkdir -p -- "$SCRATCH" || die 2 "--scratch is not usable as a directory: $SCRATCH"
+  [ -w "$SCRATCH" ] || die 2 "--scratch is not writable: $SCRATCH"
 fi
 
 # A named spec that is missing is an error; only an omitted spec gets the "no spec" fallback.
@@ -329,17 +330,30 @@ accept_phase() {  # $1 = phase, $2 = stderr log or "": validate a freshly writte
 
 # The dossier and checkouts live outside .git: some agent runtimes refuse to read files under a
 # repository's git dir, and some sandboxes make it read-only.
-scratch_dir() {
+init_scratch() {  # sets SCRATCH (this run's directory) and SESSION_SCRATCH (the supplied one)
   if [ -z "$SCRATCH" ]; then
-    SCRATCH="$(mktemp -d -t adversarial-scratch.XXXXXX)"
+    SCRATCH="$(mktemp -d -t adversarial-scratch.XXXXXX)" || die 2 "could not create a scratch directory"
     SESSION_SCRATCH=""
   else
     # A supplied directory is the session's scratch directory (references/runtimes.md, Scratch
     # files): give this run its own directory inside it, so two runs never share dossier names.
     SESSION_SCRATCH="$SCRATCH"
-    SCRATCH="$(mktemp -d -p "$SCRATCH" run.XXXXXX)"
+    [ -w "$SESSION_SCRATCH" ] || die 2 "--scratch is not writable: $SESSION_SCRATCH"
+    SCRATCH="$(mktemp -d -p "$SESSION_SCRATCH" run.XXXXXX)" \
+      || die 2 "could not create a run directory inside --scratch $SESSION_SCRATCH"
   fi
-  printf '%s\n' "$SCRATCH"
+}
+
+check_scratch_outside_root() {  # a scratch directory inside the checkout would dirty the reviewed tree
+  local resolved_scratch resolved_root
+  [ -n "${SESSION_SCRATCH:-}${SCRATCH:-}" ] || return 0
+  resolved_scratch="$(realpath -m -- "${SESSION_SCRATCH:-$SCRATCH}")"
+  resolved_root="$(realpath -m -- "$ROOT")"
+  case "$resolved_scratch" in
+    "$resolved_root" | "$resolved_root"/*)
+      die 2 "--scratch must be outside the repository under review: $resolved_scratch"
+      ;;
+  esac
 }
 
 emit_spec() {
@@ -376,6 +390,7 @@ write_dossier() {  # $1 = phase, $2 = dossier path
         echo "Cover: vulnerability vectors, logic flaws, breaking changes, API/contract mismatches, test gaps, code smells."
         echo "Be exhaustive; volume over precision, and mark speculation as such."
         echo "Do NOT modify any files. Never write secrets to files or command arguments."
+        echo "The session's scratch directory is ${SESSION_SCRATCH:-$SCRATCH}; keep any artefact you create there."
         echo "The FIRST line of your report must be exactly 'REVIEW-RAN: yes' when you read the diff below; otherwise"
         echo "make it 'REVIEW-RAN: no - <reason>'. A report without that line is treated as a review that did not run."
         echo
@@ -387,6 +402,7 @@ write_dossier() {  # $1 = phase, $2 = dossier path
         echo "You are an empirical adversarial reviewer working in a THROWAWAY checkout of the unfixed head."
         echo "You may edit files in that checkout to run experiments; never commit, push, or touch any other tree."
         echo "Never write secrets to files or command arguments."
+        echo "The session's scratch directory is ${SESSION_SCRATCH:-$SCRATCH}; keep any artefact you create there."
         echo
         echo "Job 1 - VERIFY. For each candidate below, write and run a minimal adversarial check (mutate the"
         echo "code, run the relevant tests, revert) and report VERIFIED with the exact command and observed"
@@ -416,6 +432,7 @@ write_dossier() {  # $1 = phase, $2 = dossier path
         echo "2. Surface cross-module logic inconsistencies, security bypasses and architectural regressions"
         echo "   the lower tiers missed."
         echo "3. Never invent findings to fill a section. Do not modify files. Never write secrets to files or command arguments."
+        echo "The session's scratch directory is ${SESSION_SCRATCH:-$SCRATCH}; keep any artefact you create there."
         echo "4. Output the final report in EXACTLY this Markdown layout and nothing else, after one first line:"
         echo "   'REVIEW-RAN: yes' when you read the diff and both phase results below; otherwise"
         echo "   'REVIEW-RAN: no - <reason>'. A report without that line is treated as a review that did not run."
@@ -462,6 +479,7 @@ make_checkout() {  # prints the path of a registered throwaway detached worktree
 
 case "$cmd" in
   preflight)
+    check_scratch_outside_root
     rm -f -- "$PHASE0.stamp"
     invalidate_downstream preflight
     status=0
@@ -560,7 +578,9 @@ case "$cmd" in
   dossier)
     require_predecessors "$phase"
     begin_phase "$phase"
-    dossier="$(scratch_dir)/${phase}-dossier.md"
+    init_scratch
+    check_scratch_outside_root
+    dossier="$SCRATCH/${phase}-dossier.md"
     write_dossier "$phase" "$dossier"
     bind_phase "$phase"
     echo "Work in a throwaway checkout from 'checkout' (never the primary checkout)." >&2
@@ -578,7 +598,9 @@ case "$cmd" in
     [ -n "$AGENT_CMD" ] || die 2 "--agent-cmd (or ADVERSARIAL_AGENT_CMD) is required; build it from the profile agent for this phase."
     require_predecessors "$phase"
     out="$(artifact_for "$phase")"
-    dossier="$(scratch_dir)/${phase}-dossier.md"
+    init_scratch
+    check_scratch_outside_root
+    dossier="$SCRATCH/${phase}-dossier.md"
     write_dossier "$phase" "$dossier"
     # Every phase gets its own throwaway checkout; no agent ever runs in the primary checkout.
     checkout="$(make_checkout)"
@@ -612,7 +634,7 @@ case "$cmd" in
     if [ "$phase" = "arbitrate" ]; then cat -- "$out"; fi
     ;;
 
-  checkout) make_checkout ;;
+  checkout) check_scratch_outside_root; make_checkout ;;
   paths)
     printf 'run %s\npreflight %s\nsuite_log %s\nsweep %s\nhunt %s\narbitrate %s\n' \
       "$RUN_DIR" "$PHASE0" "$SUITE_LOG" "$PHASE1" "$PHASE2" "$PHASE3"
