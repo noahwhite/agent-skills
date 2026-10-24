@@ -59,3 +59,28 @@ def test_readme_lists_skill_in_table() -> None:
 
 def test_todo_tracking_has_seed_entry() -> None:
     assert "- **cleanup:**" in (ROOT / "shared" / "todo-tracking.md").read_text()
+
+
+def test_invocation_takes_one_or_more_story_keys_and_pins_the_usage_line() -> None:
+    body = section(text(), "Invocation")
+    assert [line.strip() for line in body.splitlines() if line.strip() == "/cleanup <story-key> [<story-key> ...]"]
+    assert "prints `usage: /cleanup <story-key> [<story-key> ...]` and stops without touching anything" in body
+    for phrase in (
+        "never infers a story from ambient context",
+        "from the current branch",
+        "from a worktree path",
+    ):
+        assert phrase in body, phrase
+
+
+def test_every_key_is_resolved_against_the_tracker_before_anything_is_touched() -> None:
+    body = section(text(), "1. Resolve every key against the tracker")
+    for phrase in (
+        "before anything is touched",
+        "Resolve each key with `linear issue view <story-key>`",
+        "`profile.tracker.team_key`",
+        "Report an unresolved key as `unresolved` and skip it",
+        "The other keys still run",
+        "Never invent, guess, or shorten a key",
+    ):
+        assert phrase in body, phrase

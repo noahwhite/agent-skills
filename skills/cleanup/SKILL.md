@@ -36,6 +36,22 @@ The skill takes one or more story keys and nothing else:
 - With no story key it prints `usage: /cleanup <story-key> [<story-key> ...]` and stops without touching anything.
 - This skill is not the `cleanup <path>` subcommand of the adversarial pre-PR pipeline: that one removes a throwaway checkout the script created and takes a path, never a story key.
 
+## 0. Track the run on a todo list
+
+Create the list before the first command, and update it after each step's outcome.
+Give it one item per named story key, per inventory source, per removal, per tracker attachment, and for the final report, as [references/todo-tracking.md](references/todo-tracking.md) requires.
+
+## 1. Resolve every key against the tracker
+
+Do this before anything is touched, so a mistyped key removes nothing.
+
+- Resolve each key with `linear issue view <story-key>`.
+  A key does not resolve when that lookup fails, or when the story it returns belongs to a team other than `profile.tracker.team_key`.
+- Report an unresolved key as `unresolved` and skip it.
+  The other keys still run: one bad key never stops the run, and no artefact is attributed to it.
+- Never invent, guess, or shorten a key, and never take one from the current branch, a worktree path, or the session's own history.
+- Record each key's resolution in the final report.
+
 ## Boundaries
 
 - It removes only artefacts it can attribute to a named key, in the repositories and directories the profile names.
