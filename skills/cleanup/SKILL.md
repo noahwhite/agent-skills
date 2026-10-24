@@ -52,6 +52,34 @@ Do this before anything is touched, so a mistyped key removes nothing.
 - Never invent, guess, or shorten a key, and never take one from the current branch, a worktree path, or the session's own history.
 - Record each key's resolution in the final report.
 
+## 2. Inventory every artefact before removing any
+
+Print the inventory first: nothing is removed before the inventory report is printed.
+Each line states the artefact, its path or URL, and its disposition, which is `remove`, `keep`, `skip`, or `refuse`.
+Find artefacts by story key: a session's scratch directory is per-session and randomly named, so nothing can be located by the directory a session happens to be in.
+
+Sources, all of them:
+
+- **Worktrees.** Every entry `git worktree list` reports whose path or branch carries the key, which includes worktrees any worktree helper created.
+- **Local branches.** Every branch whose name carries the key under a prefix in `profile.git.branch_prefixes`.
+- **Remote branches.** Every head `git ls-remote --heads origin '*<key>*'` reports.
+- **Pull requests.** Every PR `gh pr list --state all --search '<key>'` returns, each cited with its full URL.
+- **Disposable QA output.** QA runner scratch output and uncommitted evidence copies only, in the scratch location the overlay's QA lane names, never a committed evidence directory.
+- **Session files.** Session checklist and scratch files naming the key under `profile.workspace.scratch_dir`.
+
+Never inventoried as removable:
+
+- Evidence committed under `profile.qa.evidence_dir`: that directory is the durable record, so it is cited and never removed.
+- Evidence `qa-verification` already attached to the story.
+- The invoking session's own scratch directory.
+- The merge-approval rendezvous file an engagement's brief names, because it belongs to the engagement rather than to a story.
+
+Two more rules:
+
+- A per-session scratch directory is inventoried as `skip` once its checklist file still carries an unchecked item, because that session is still live.
+  Only the individual files naming the key are removed from a directory the run can prove idle.
+- Anything the skill cannot attribute to the key is left out, and the report names it as skipped.
+
 ## Boundaries
 
 - It removes only artefacts it can attribute to a named key, in the repositories and directories the profile names.

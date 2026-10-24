@@ -84,3 +84,44 @@ def test_every_key_is_resolved_against_the_tracker_before_anything_is_touched() 
         "Never invent, guess, or shorten a key",
     ):
         assert phrase in body, phrase
+
+
+def test_inventory_prints_before_anything_is_removed_and_finds_artefacts_by_key() -> None:
+    body = section(text(), "2. Inventory every artefact before removing any")
+    for phrase in (
+        "nothing is removed before the inventory report is printed",
+        "states the artefact, its path or URL, and its disposition",
+        "Find artefacts by story key",
+        "per-session and randomly named",
+    ):
+        assert phrase in body, phrase
+
+
+def test_inventory_names_every_source() -> None:
+    body = section(text(), "2. Inventory every artefact before removing any")
+    for phrase in (
+        "Every entry `git worktree list` reports whose path or branch carries the key",
+        "worktree helper created",
+        "under a prefix in `profile.git.branch_prefixes`",
+        "`git ls-remote --heads origin '*<key>*'`",
+        "`gh pr list --state all --search '<key>'`",
+        "its full URL",
+        "QA runner scratch output and uncommitted evidence copies only",
+        "Session checklist and scratch files naming the key under `profile.workspace.scratch_dir`",
+    ):
+        assert phrase in body, phrase
+
+
+def test_inventory_excludes_the_durable_record_and_the_live_session() -> None:
+    body = section(text(), "2. Inventory every artefact before removing any")
+    for phrase in (
+        "Evidence committed under `profile.qa.evidence_dir`",
+        "durable record",
+        "never removed",
+        "Evidence `qa-verification` already attached",
+        "The invoking session's own scratch directory",
+        "merge-approval rendezvous file",
+        "still live",
+        "cannot attribute to the key is left out, and the report names it as skipped",
+    ):
+        assert phrase in body, phrase
