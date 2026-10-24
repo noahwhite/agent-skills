@@ -92,7 +92,7 @@ File: `SKILL.md`
 Matched text:
 
 ```text
-A challenged ground must be restated as a basis driver or retracted; the SM/EM withdraws or restates its own sizing comment on the same terms, except a statement that names, bounds or implies a point value, or states elapsed time, effort or run cost, which is an anchoring event as soon as the facilitator sees it.
+A challenged ground must be restated as a basis driver or retracted, and either outcome requires its author to record the value again with a rationale the Step 3 rule permits; the SM/EM withdraws or restates its own sizing comment on the same terms, except a statement that names, bounds or implies a point value, or states elapsed time, effort or run cost, which is an anchoring event as soon as the facilitator sees it.
 ```
 
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_step_four_facilitator_challenges_every_off_basis_ground`
@@ -187,7 +187,7 @@ File: `SKILL.md`
 Matched text:
 
 ```text
-, and a sizing comment that names, bounds or implies a point value is an anchoring event as soon as the facilitator sees it, with no challenge, restatement or retraction path
+The one exception is a sizing comment that names, bounds or implies a point value: it is an anchoring event as soon as the facilitator sees it, with no challenge, restatement or retraction path.
 ```
 
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_anchoring_guardrail_makes_a_point_value_sizing_note_an_event_on_challenge`
@@ -213,7 +213,7 @@ File: `SKILL.md`
 Matched text:
 
 ```text
-A ground that weighs verification strength, testability, coverage, the shape of the tests, a duration, effort or run cost, or a prior or inherited point value is an anchoring trigger when it is weighed in a rationale, used to justify a value, or stated in a sizing comment, and
+An anchoring trigger is a ground Step 4 challenges, so it becomes an anchoring event only when it is neither restated as a basis driver nor retracted:
 ```
 
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_anchoring_guardrail_names_off_basis_grounds_as_a_trigger`
