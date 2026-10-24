@@ -4,7 +4,7 @@ Measured on the delivered text of this change with CPython 3.12.3 and locked dep
 The modified files are `skills/story-refinement/SKILL.md` and `skills/story-refinement/references/refinement-record.md`.
 Before each check the document bytes were saved, the edit shown below was made once, the quoted command ran, and the saved bytes were restored even when the command failed; the final source matched the saved bytes, and the tracked changes were then only the files this change delivers.
 Each entry shows the exact matched text, and the exact replacement text where the edit substitutes or inserts one, so a re-runner can reproduce it from the delivered text.
-32 regression proofs failed as designed and 1 control passed.
+35 regression proofs failed as designed and 1 control passed.
 Entries 1 to 35 are the regression proofs; entry 36 is the control.
 
 ## 1. Remove the measure ban and driver-set sentence from Step 3 item 4
@@ -92,11 +92,11 @@ File: `SKILL.md`
 Matched text:
 
 ```text
-A challenged ground must be restated as a basis driver or retracted, and either outcome requires its author to record the value again with a rationale the Step 3 rule permits; the SM/EM withdraws or restates its own sizing comment on the same terms, except a statement that names, bounds or implies a point value, or states elapsed time, effort or run cost, which is an anchoring event as soon as the facilitator sees it.
+A challenged ground must be restated as a basis driver that supports the value already recorded, or retracted; the SM/EM withdraws or restates its own sizing comment on the same terms, except a statement that names, bounds or implies a point value, or states elapsed time, effort or run cost, which is an anchoring event as soon as the facilitator sees it.
 ```
 
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_step_four_facilitator_challenges_every_off_basis_ground`
-Result: SETUP-FAILED; `matched 0 times`.
+Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_step_four_facilitator_challenges_every_off_basis_ground`.
 
 ## 8. Remove the neither-outcome rule from Step 4 item 1
 
@@ -187,11 +187,11 @@ File: `SKILL.md`
 Matched text:
 
 ```text
-The one exception is a sizing comment that names, bounds or implies a point value: it is an anchoring event as soon as the facilitator sees it, with no challenge, restatement or retraction path.
+The exceptions are a sizing comment that names, bounds or implies a point value and a statement of elapsed time, effort or run cost: each is an anchoring event as soon as the facilitator sees it, with no challenge, restatement or retraction path.
 ```
 
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_anchoring_guardrail_makes_a_point_value_sizing_note_an_event_on_challenge`
-Result: SETUP-FAILED; `matched 0 times`.
+Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_anchoring_guardrail_makes_a_point_value_sizing_note_an_event_on_challenge`.
 
 ## 14. Remove the void-and-re-run paragraph from the Anchoring guardrail
 
@@ -200,11 +200,11 @@ File: `SKILL.md`
 Matched text:
 
 ```text
-Any other challenged ground that is neither restated as a basis driver nor retracted, or a sizing comment the SM/EM neither withdraws nor restates, is an anchoring event; because such a ground can land after all three values are recorded, its recovery applies the mechanics below by re-running the independent vote from Step 3 in newly created voter contexts that exclude the tainted discussion and sizing comment.
+Any other challenged ground that is neither restated as a basis driver nor retracted, or a sizing comment the SM/EM neither withdraws nor restates, is an anchoring event; because such a ground can taint votes recorded before it, the recovery below also voids those votes, and the independent vote from Step 3 is re-run in newly created voter contexts that exclude the tainted discussion and sizing comment.
 ```
 
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_anchoring_guardrail_makes_a_point_value_sizing_note_an_event_on_challenge`
-Result: SETUP-FAILED; `matched 0 times`.
+Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_anchoring_guardrail_makes_a_point_value_sizing_note_an_event_on_challenge`.
 
 ## 15. Remove the off-basis trigger clause from the Anchoring guardrail
 
