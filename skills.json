@@ -5,6 +5,11 @@
       "secrets",
       "engineering-practice"
     ],
+    "cleanup": [
+      "todo-tracking",
+      "linear",
+      "github"
+    ],
     "engineering-workflow": [
       "github",
       "linear",
