@@ -716,9 +716,19 @@ def test_step_three_rationale_names_complexity_drivers_and_no_duration() -> None
     body = process_item(STEP_THREE, "Each voter submits one point value")
     assert "plus a short complexity rationale." in body
     assert (
-        "The rationale names the complexity driver or drivers the voter weighed "
-        "and cites no duration, effort or run-cost measure."
+        "The rationale names complexity drivers only, and each named driver is a property of the change: "
+        "design difficulty, an interacting constraint, an unknown, or the risk of breaking existing behaviour."
     ) in body
+    assert (
+        "Beside the ban on a duration, effort or run-cost measure, verification strength, testability, coverage "
+        "and the shape of the tests are out of basis, and so is weighing a point value already recorded for this "
+        "story, a prior story, a parent or sibling, or an inherited split."
+    ) in body
+    assert (
+        "Verification strength is how well a behaviour is checked and breakage risk is what can silently change, "
+        "so the first is out of basis and the second is a basis driver."
+    ) in body
+    assert "the complexity driver or drivers the voter weighed" not in body
 
 
 def test_step_four_re_vote_carries_the_basis_by_reference_to_step_three() -> None:
@@ -746,6 +756,69 @@ def test_step_three_sizing_context_is_in_complexity_terms() -> None:
         "comparable unknowns and constraints, and relevant scope differences."
     ) in body
     assert "historical sizing" not in squash(SKILL.read_text())
+
+
+def test_step_three_sizing_context_forbids_any_point_value() -> None:
+    body = process_item(STEP_THREE, SIZING_ITEM)
+    assert (
+        "It must not name, bound or imply any point value - a prior story's, an inherited split value, a value "
+        "read from this story's own recorded pointing history, or one implied by a split status - and such a "
+        "statement is an anchoring event under the Anchoring guardrail."
+    ) in body
+
+
+def test_step_four_facilitator_challenges_every_off_basis_ground() -> None:
+    items = process_items(STEP_FOUR)
+    assert len(items) == 9, "the Step 4 process-item count and order stay as delivered"
+    item = items[0]
+    assert "Hold one discussion round that names only the high and the low." in item
+    assert (
+        "In that round, and against the rationales recorded in Step 3, the facilitator challenges every ground "
+        "outside the pointing basis, whether it is heard in the discussion or read in a recorded rationale."
+    ) in item
+    assert (
+        "A challenged ground must be restated as a basis driver or retracted; a ground that is neither is an "
+        "anchoring event under the Anchoring guardrail."
+    ) in item
+
+
+GUARDRAIL = "Anchoring guardrail"
+
+
+def test_anchoring_guardrail_bans_naming_bounding_or_implying_a_point_value() -> None:
+    body = flat(section(SKILL.read_text(), GUARDRAIL))
+    assert (
+        "naming, bounding or implying a point value, including a prior story's, an inherited split value, "
+        "a value recorded on the story surface, or one implied by a split status" in body
+    )
+
+
+def test_anchoring_guardrail_names_off_basis_grounds_as_a_trigger() -> None:
+    body = flat(section(SKILL.read_text(), GUARDRAIL))
+    assert (
+        "a ground outside the pointing basis is an anchoring trigger on the same terms: a rationale or a sizing "
+        "comment that weighs verification strength, testability, coverage, the shape of the tests, or a prior or "
+        "inherited point value is challenged under step 4 and voids the round when it is neither restated as a "
+        "basis driver nor retracted" in body
+    )
+
+
+def test_anchoring_guardrail_explains_why_context_cannot_exclude_a_recorded_value() -> None:
+    body = flat(section(SKILL.read_text(), GUARDRAIL))
+    assert (
+        "fresh voter contexts exclude the tainted discussion and the sizing comment, but they cannot exclude a "
+        "point value recorded on the story surface that step 1 requires every voter to read, so the step 3 "
+        "rationale rule is what keeps such a value out of the vote" in body
+    )
+
+
+def test_anchoring_guardrail_recovery_mechanics_are_unchanged() -> None:
+    body = spaced(section(SKILL.read_text(), GUARDRAIL))
+    assert (
+        "On anchoring: stop the round, record the comment verbatim, void the consensus and any vote recorded "
+        "after the anchor, and re-run the independent vote with newly created voter contexts that exclude the "
+        "tainted discussion and sizing comment. Never reuse the sessions that saw the anchor. Record the recovery."
+    ) in body
 
 
 def test_step_three_time_or_effort_statement_is_an_anchoring_event() -> None:
@@ -799,9 +872,32 @@ def test_phrasing_intro_is_unchanged_and_adds_the_comparison_principle() -> None
         "The SM/EM may give factual, reference-only sizing context after all three values are recorded.",
         "Everything in the forbidden column breaks independence or anchors the discussion.",
         "A permitted comparison names at most one comparable story and at most one complexity difference; "
-        "it never names a range, an average, elapsed time, effort, or a preferred value.",
+        "it never names a point value, a range, an average, elapsed time, effort, or a preferred value.",
     ]
     assert RECORD.read_text().count(intro[2]) == 1
+
+
+POINT_VALUE_IN_PERMITTED = re.compile(r"\bpoints?\b|\bpts?\b|\bscale\b|\bsplit\b", re.IGNORECASE)
+
+
+def test_phrasing_table_permitted_cells_never_name_a_point_value() -> None:
+    permitted = [row[0] for row in phrasing_rows()]
+    assert '"The comparable story was 5 points."' not in permitted
+    assert '"The earlier story was split once."' not in permitted
+    for cell in permitted:
+        assert not POINT_VALUE_IN_PERMITTED.search(cell), cell
+
+
+def test_pointing_template_records_each_challenge_and_outcome() -> None:
+    assert (
+        "- Challenges: <each ground challenged, its voter, and the restatement or retraction, or the void>"
+        in pointing_template()
+    )
+    body = spaced(section(RECORD.read_text(), "Pointing record"))
+    assert (
+        "A challenged ground is recorded with its voter and either the restatement or the retraction; a ground "
+        "that is neither voids the round and is recorded as the void."
+    ) in body
 
 
 def test_pointing_template_asks_for_complexity_rationales() -> None:

@@ -132,13 +132,16 @@ Only the PO and the two engineers count toward the agreement.
   3. The sentence above is the pointing basis.
      Every pointing prompt or prompt file carries it verbatim, including the re-run after a Step 4 re-refine and each slice estimate under the Split rule.
   4. Each voter submits one point value valid for `profile.tracker.estimate_scale` plus a short complexity rationale.
-     The rationale names the complexity driver or drivers the voter weighed and cites no duration, effort or run-cost measure.
+     The rationale names complexity drivers only, and each named driver is a property of the change: design difficulty, an interacting constraint, an unknown, or the risk of breaking existing behaviour.
+     Beside the ban on a duration, effort or run-cost measure, verification strength, testability, coverage and the shape of the tests are out of basis, and so is weighing a point value already recorded for this story, a prior story, a parent or sibling, or an inherited split.
+     Verification strength is how well a behaviour is checked and breakage risk is what can silently change, so the first is out of basis and the second is a basis driver.
      The value is written only to that voter's own file in the session's scratch directory.
   5. No voter sees another voter's point value before its own value is recorded.
   6. The facilitator records all three values before the SM/EM comments on sizing or the discussion opens.
      The SM/EM submits no point value.
   7. After all three values are recorded, the SM/EM may provide factual, reference-only sizing context: comparable stories in complexity terms, comparable unknowns and constraints, and relevant scope differences.
      It must not state or imply a preferred value, recommend a direction, reveal or compare individual votes before the discussion, or use leading language.
+     It must not name, bound or imply any point value - a prior story's, an inherited split value, a value read from this story's own recorded pointing history, or one implied by a split status - and such a statement is an anchoring event under the Anchoring guardrail.
      A statement of elapsed time or effort is an anchoring event under the Anchoring guardrail.
   8. A `tshirt` scale stops the cap step with a clear message.
      Pointing still records the three values; the split rule's numeric cap does not apply.
