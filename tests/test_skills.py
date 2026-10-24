@@ -62,11 +62,15 @@ RUNTIME_TERMS = re.compile(
 # A hosted artefact store's host name is runtime detail too: the capability map names the host,
 # and a skill names the capability and cites that map (SKL-63, AC7). The scan covers skill prose
 # only, and exempts any file named runtimes.md on purpose: that map is where a host belongs.
+# The list covers the stores a session publishes screenshots and files to; a name-based check can
+# never be exhaustive, so a store outside it is a follow-up, not a gap in this rule's own intent.
 HOSTED_STORE_HOSTS = re.compile(
     r"(?i)\b(?:claude|chatgpt)\.(?:ai|com)\b"
     r"|\b(?:gemini|copilot)\.(?:google|microsoft)\.com\b"
     r"|\b(?:drive|docs)\.google\.com\b"
-    r"|\b(?:www\.)?dropbox\.com\b"
+    r"|\b(?:www\.)?(?:dropbox|box|notion|figma|imgur|wetransfer)\.(?:com|so|io)\b"
+    r"|\b(?:1drv\.ms|onedrive\.live\.com|sharepoint\.com)\b"
+    r"|\bs3\.amazonaws\.com\b"
 )
 
 
@@ -154,7 +158,12 @@ def skill_prose() -> list[Path]:
 
 
 def test_no_skill_file_names_a_hosted_store_host():
-    assert not hosted_store_offenders(skill_prose())
+    prose = skill_prose()
+    # Not vacuous: every skill's own SKILL.md and its vendored references are in scope.
+    for skill in SKILLS:
+        assert skill / "SKILL.md" in prose, skill
+        assert list((skill / "references").glob("*.md")), skill
+    assert not hosted_store_offenders(prose)
 
 
 def test_hosted_store_host_check_catches_a_pasted_host():
@@ -166,6 +175,9 @@ def test_hosted_store_host_check_catches_a_pasted_host():
         "drive.google.com",
         "docs.google.com",
         "www.dropbox.com/s/x",
+        "imgur.com/a/x",
+        "notion.so/page",
+        "1drv.ms/u/x",
     ):
         assert HOSTED_STORE_HOSTS.search(f"see {host} for it"), host
     for text in (
@@ -174,6 +186,7 @@ def test_hosted_store_host_check_catches_a_pasted_host():
         "see https://opencode.ai/v2/docs/agents",
         "the capability map names the host",
         "a profile stores values, not pages",
+        "open skills/cleanup/SKILL.md",
     ):
         assert not HOSTED_STORE_HOSTS.search(text), text
 

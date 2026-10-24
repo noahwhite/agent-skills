@@ -62,9 +62,9 @@ A cited pull request is `keep`: it is the evidence the removal guard needs, not 
 Find artefacts by story key: a session's scratch directory is per-session and randomly named, so nothing can be located by the directory a session happens to be in.
 
 **Match the key at a token boundary.**
-A name carries the key only when the key ends the name, or when the next character is `-`.
-A name that matches the key only as the start of a longer key, such as `<key>0` or `<key>-sibling`, is a different story's artefact.
-It is never inventoried as removable and never acted on, whatever a glob or a search returns.
+A name carries the key only when the key stands as its own token: the key starts the name or follows a `-` or `/` in it, and the key ends the name or is followed by a `-` in it.
+`feature/<key>`, `<key>-follow-up`, and `fix-x-<key>` carry it; `<key>0`, `x<key>`, and `<key>x` do not.
+A name that fails the boundary test is a different story's artefact: it is never inventoried as removable and never acted on, whatever a glob or a search returns.
 
 Sources, all of them:
 
@@ -73,7 +73,7 @@ Sources, all of them:
 - **Remote branches.** Every head `git ls-remote --heads origin '*<key>*'` reports whose name carries the key at the boundary.
 - **Pull requests.** Every PR `gh pr list --state all --search '<key>' --limit 200` returns, each cited with its full URL.
 - **Disposable QA output.** QA runner scratch output and uncommitted evidence copies only, in the scratch location the overlay's QA lane names, including an uncommitted copy inside `profile.qa.evidence_dir`.
-  A tracked file under that directory is committed evidence and is out of scope here.
+  Committed evidence, meaning the content the branch tip holds at `profile.qa.evidence_dir`, is out of scope here; a working-tree edit there is uncommitted and is inventoried.
 - **Session files.** Session checklist and scratch files naming the key under `profile.workspace.scratch_dir`.
   When that key is unset, the sessions of this profile used standalone temporary directories, so the report names this source as unsearchable instead of reporting it as empty.
 
@@ -108,7 +108,7 @@ Remove in this order, so a branch is never refused because a worktree still hold
   `-D` rather than `-d`, because a squash or a rebase merge leaves the tip unmerged in git's own eyes.
 - **Remote branch.** Deleted with `git push origin --delete <branch>` only when the remote tip has merge evidence and no open PR heads it.
   A branch named by `gh pr list --state open --json headRefName --limit 200` is refused, and a remote branch that never became a PR is refused rather than deleted.
-- **Disposable QA output and session files.** Removed only from a directory the inventory proved idle.
+- **Disposable QA output and session files.** Removed only from a directory the inventory proved idle, and only after step 5 has attached the evidence the run swept, so the run never deletes the only copy of something the story is about to receive.
 
 Guards that hold for every removal:
 

@@ -119,9 +119,9 @@ def test_the_key_is_matched_at_a_token_boundary_never_as_a_substring() -> None:
     body = section(text(), "2. Inventory every artefact before removing any")
     for phrase in (
         "**Match the key at a token boundary.**",
-        "A name carries the key only when the key ends the name, or when the next character is `-`.",
-        "`<key>0` or `<key>-sibling`",
-        "It is never inventoried as removable and never acted on, whatever a glob or a search returns.",
+        "the key starts the name or follows a `-` or `/` in it, and the key ends the name or is followed by a `-` in it",
+        "`<key>0`, `x<key>`, and `<key>x` do not",
+        "A name that fails the boundary test is a different story's artefact",
     ):
         assert phrase in body, phrase
 
@@ -137,6 +137,7 @@ def test_inventory_names_every_source() -> None:
         "its full URL",
         "QA runner scratch output and uncommitted evidence copies only",
         "including an uncommitted copy inside `profile.qa.evidence_dir`",
+        "Committed evidence, meaning the content the branch tip holds",
         "Session checklist and scratch files naming the key under `profile.workspace.scratch_dir`",
         "the report names this source as unsearchable instead of reporting it as empty",
     ):
@@ -185,7 +186,7 @@ def test_each_artefact_kind_has_its_guarded_removal() -> None:
         "only when the remote tip has merge evidence and no open PR heads it",
         "`gh pr list --state open --json headRefName --limit 200`",
         "a remote branch that never became a PR is refused rather than deleted",
-        "Removed only from a directory the inventory proved idle",
+        "Removed only from a directory the inventory proved idle, and only after step 5 has attached the evidence the run swept",
     ):
         assert phrase in body, phrase
 
@@ -204,7 +205,10 @@ def test_the_never_force_and_per_artefact_refusal_rules_are_pinned() -> None:
         "Every refusal is recorded in the report as a dated line naming the artefact, the failed check, and why",
     ):
         assert phrase in body, phrase
-    assert "except" not in body.lower().replace("excerpt", ""), "a never-force exception crept into the guard"
+    for line in body.splitlines():
+        if "--force" in line:
+            for escape in ("except", "unless", "other than", "apart from"):
+                assert escape not in line.lower(), f"a never-force exception crept in: {line.strip()}"
 
 
 def test_the_hosted_evidence_row_names_list_download_and_a_per_artefact_delete() -> None:
