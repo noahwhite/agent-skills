@@ -836,15 +836,15 @@ def test_anchoring_guardrail_makes_a_point_value_sizing_note_an_event_on_challen
         "neither restated as a basis driver nor retracted" in body
     )
     assert (
-        "the exceptions are a sizing comment that names, bounds or implies a point value and a statement of "
-        "elapsed time, effort or run cost: each is an anchoring event as soon as the facilitator sees it, with "
-        "no challenge, restatement or retraction path" in body
+        "the exceptions are a sizing comment that names, bounds or implies a point value, or that states elapsed "
+        "time, effort or run cost: each is an anchoring event as soon as the facilitator sees it, with no "
+        "challenge, restatement or retraction path" in body
     )
     assert (
         "any other challenged ground that is neither restated as a basis driver nor retracted, or a sizing "
-        "comment the sm/em neither withdraws nor restates, is an anchoring event; because such a ground can taint "
-        "votes recorded before it, the recovery below also voids those votes, and the independent vote from step "
-        "3 is re-run in newly created voter contexts that exclude the tainted discussion and sizing comment" in body
+        "comment the sm/em neither withdraws nor restates, is an anchoring event; a ground that taints votes "
+        "recorded before it voids those votes too, and the independent vote from step 3 is re-run in newly "
+        "created voter contexts that exclude the tainted discussion and sizing comment" in body
     )
 
 
