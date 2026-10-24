@@ -173,7 +173,8 @@ def test_no_doc_states_the_profile_must_set_the_scratch_dir():
         r"|require[sd]?[^.\n]*scratch_dir"
         r"|scratch_dir[^.\n]*(?:is|are) required"
         r"|scratch_dir[^.\n]*must be (?:set|non-empty|configured)"
-        r"|configure[^.\n]*scratch_dir",
+        r"|configure[^.\n]*scratch_dir"
+        r"|set[^.\n]*workspace\.scratch_dir",
         re.IGNORECASE,
     )
     offenders = [
@@ -195,6 +196,7 @@ def test_no_doc_names_a_fixed_scratch_path_under_the_base():
         r"profile\.workspace\.scratch_dir[}>]?\s*/\s*[^\s`'\"]+"
         r"|\$CLAUDE_JOB_DIR/tmp/[A-Za-z0-9_.<>-]+"
         r"|<(?:scratch base|base)>/[^\s`'\"]+"
+        r"|scratch_base[}>]?\s*/\s*[^\s`'\"]+"
         r"|/tmp/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\.(?:md|txt|json|log)"
     )
     offenders = []

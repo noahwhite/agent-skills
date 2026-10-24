@@ -85,6 +85,7 @@ SCRATCH="${ADVERSARIAL_SCRATCH:-}"
 AGENT_CMD="${ADVERSARIAL_AGENT_CMD:-}"
 TIMEOUT="${ADVERSARIAL_TIMEOUT:-900}"
 NO_SWEEP=0
+SCRATCH_SET=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --repo|--base|--spec|--test-cmd|--test-dir|--scratch|--agent-cmd|--timeout)
@@ -95,7 +96,7 @@ while [ $# -gt 0 ]; do
         --spec) SPEC_FILE="$2" ;;
         --test-cmd) TEST_CMD="$2" ;;
         --test-dir) TEST_DIR="$2" ;;
-        --scratch) SCRATCH="$2" ;;
+        --scratch) SCRATCH="$2"; SCRATCH_SET=1 ;;
         --agent-cmd) AGENT_CMD="$2" ;;
         --timeout) TIMEOUT="$2" ;;
       esac
@@ -104,30 +105,6 @@ while [ $# -gt 0 ]; do
     *) echo "ERROR: unknown option $1" >&2; usage ;;
   esac
 done
-
-# A supplied scratch directory is validated once, here: a phase must never write a partial
-# artifact and then fail on the directory, and a relative path would dirty the reviewed tree.
-if [ -n "$SCRATCH" ]; then
-  case "$SCRATCH" in
-    /*) ;;
-    *) die 2 "--scratch must be an absolute path: $SCRATCH" ;;
-  esac
-  if [ -e "$SCRATCH" ] && [ ! -d "$SCRATCH" ]; then
-    die 2 "--scratch must be a directory, not a file: $SCRATCH"
-  fi
-  mkdir -p -- "$SCRATCH" || die 2 "--scratch is not usable as a directory: $SCRATCH"
-  [ -w "$SCRATCH" ] || die 2 "--scratch is not writable: $SCRATCH"
-fi
-
-# A named spec that is missing is an error; only an omitted spec gets the "no spec" fallback.
-if [ -n "$SPEC_FILE" ]; then
-  if [ ! -f "$SPEC_FILE" ] || [ ! -r "$SPEC_FILE" ]; then
-    die 2 "--spec file '$SPEC_FILE' does not exist or is not readable."
-  fi
-  SPEC_FILE="$(abspath "$SPEC_FILE")"
-fi
-[[ "$TIMEOUT" =~ ^[0-9]+$ ]] || die 2 "--timeout must be a whole number of seconds."
-if [ -n "$SCRATCH" ]; then SCRATCH="$(abspath "$SCRATCH")"; fi
 
 # The target repository: --repo, else the current directory. Never this script's location.
 if [ -n "$REPO" ]; then
@@ -139,6 +116,40 @@ else
   fi
 fi
 cd "$ROOT"
+
+# A supplied scratch directory is validated once, here and before any command creates something:
+# a phase must never write a partial artifact and then reject the directory, a relative path would
+# dirty the reviewed tree, and a directory inside the checkout dirties it too. Only the commands
+# that use it validate it, so `cleanup` never fails on an unrelated flag.
+validate_scratch() {
+  local resolved_scratch resolved_root
+  case "$cmd" in
+    preflight|dossier|run|checkout) ;;
+    *) return 0 ;;
+  esac
+  if [ "$SCRATCH_SET" -eq 1 ] && [ -z "$SCRATCH" ]; then
+    die 2 "--scratch needs a directory value; omit the flag to let the script choose one"
+  fi
+  [ -n "${SCRATCH:-}" ] || return 0
+  case "$SCRATCH" in
+    /*) ;;
+    *) die 2 "--scratch must be an absolute path: $SCRATCH" ;;
+  esac
+  if [ -e "$SCRATCH" ] && [ ! -d "$SCRATCH" ]; then
+    die 2 "--scratch must be a directory, not a file: $SCRATCH"
+  fi
+  resolved_scratch="$(realpath -m -- "$SCRATCH")"
+  resolved_root="$(realpath -m -- "$ROOT")"
+  case "$resolved_scratch" in
+    "$resolved_root" | "$resolved_root"/*)
+      die 2 "--scratch must be outside the repository under review: $resolved_scratch"
+      ;;
+  esac
+  mkdir -p -- "$SCRATCH" || die 2 "--scratch is not usable as a directory: $SCRATCH"
+  [ -w "$SCRATCH" ] || die 2 "--scratch is not writable: $SCRATCH"
+}
+
+validate_scratch
 
 OUT_BASE="$(git rev-parse --git-path adversarial-pipeline)"
 mkdir -p "$OUT_BASE"
@@ -344,18 +355,6 @@ init_scratch() {  # sets SCRATCH (this run's directory) and SESSION_SCRATCH (the
   fi
 }
 
-check_scratch_outside_root() {  # a scratch directory inside the checkout would dirty the reviewed tree
-  local resolved_scratch resolved_root
-  [ -n "${SESSION_SCRATCH:-}${SCRATCH:-}" ] || return 0
-  resolved_scratch="$(realpath -m -- "${SESSION_SCRATCH:-$SCRATCH}")"
-  resolved_root="$(realpath -m -- "$ROOT")"
-  case "$resolved_scratch" in
-    "$resolved_root" | "$resolved_root"/*)
-      die 2 "--scratch must be outside the repository under review: $resolved_scratch"
-      ;;
-  esac
-}
-
 emit_spec() {
   if [ -n "$SPEC_FILE" ]; then
     cat -- "$SPEC_FILE"
@@ -479,7 +478,6 @@ make_checkout() {  # prints the path of a registered throwaway detached worktree
 
 case "$cmd" in
   preflight)
-    check_scratch_outside_root
     rm -f -- "$PHASE0.stamp"
     invalidate_downstream preflight
     status=0
@@ -576,10 +574,9 @@ case "$cmd" in
     ;;
 
   dossier)
+    init_scratch
     require_predecessors "$phase"
     begin_phase "$phase"
-    init_scratch
-    check_scratch_outside_root
     dossier="$SCRATCH/${phase}-dossier.md"
     write_dossier "$phase" "$dossier"
     bind_phase "$phase"
@@ -596,10 +593,9 @@ case "$cmd" in
 
   run)
     [ -n "$AGENT_CMD" ] || die 2 "--agent-cmd (or ADVERSARIAL_AGENT_CMD) is required; build it from the profile agent for this phase."
+    init_scratch
     require_predecessors "$phase"
     out="$(artifact_for "$phase")"
-    init_scratch
-    check_scratch_outside_root
     dossier="$SCRATCH/${phase}-dossier.md"
     write_dossier "$phase" "$dossier"
     # Every phase gets its own throwaway checkout; no agent ever runs in the primary checkout.
@@ -634,7 +630,7 @@ case "$cmd" in
     if [ "$phase" = "arbitrate" ]; then cat -- "$out"; fi
     ;;
 
-  checkout) check_scratch_outside_root; make_checkout ;;
+  checkout) make_checkout ;;
   paths)
     printf 'run %s\npreflight %s\nsuite_log %s\nsweep %s\nhunt %s\narbitrate %s\n' \
       "$RUN_DIR" "$PHASE0" "$SUITE_LOG" "$PHASE1" "$PHASE2" "$PHASE3"

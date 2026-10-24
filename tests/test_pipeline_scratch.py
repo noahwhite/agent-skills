@@ -195,6 +195,7 @@ def test_a_scratch_directory_inside_the_repository_is_refused(tmp_path):
     )
     assert result.returncode == 2, result.stdout + result.stderr
     assert "outside the repository" in result.stderr, result.stderr
+    assert not inside.exists(), "a refused scratch path was created inside the checkout"
 
 
 def test_read_only_scratch_is_refused_before_any_phase_report_is_written(tmp_path):
@@ -220,3 +221,36 @@ def test_read_only_scratch_is_refused_before_any_phase_report_is_written(tmp_pat
     assert rejected.returncode == 2, rejected.stdout + rejected.stderr
     assert "not writable" in rejected.stderr, rejected.stderr
     assert "PASS" in report.read_text(), "the refused run discarded the accepted phase report"
+
+
+def test_an_empty_scratch_value_is_refused(tmp_path):
+    repo = make_repo(tmp_path)
+    env = {**os.environ, "TMPDIR": str(tmp_path / "runtime-tmp")}
+    (tmp_path / "runtime-tmp").mkdir()
+    result = run_script(
+        "preflight", "--repo", str(repo), "--base", "HEAD", "--test-cmd", "true",
+        "--scratch", "", env=env,
+    )
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "needs a directory value" in result.stderr, result.stderr
+
+
+def test_a_refused_dossier_keeps_the_accepted_phase_report(tmp_path):
+    repo = make_repo(tmp_path)
+    scratch = tmp_path / "session-scratch"
+    scratch.mkdir()
+    env = {**os.environ, "TMPDIR": str(tmp_path / "runtime-tmp")}
+    (tmp_path / "runtime-tmp").mkdir()
+    preflight = run_script(
+        "preflight", "--repo", str(repo), "--base", "HEAD", "--test-cmd", "true",
+        "--scratch", str(scratch), env=env,
+    )
+    assert preflight.returncode == 0, preflight.stdout + preflight.stderr
+    report = Path(preflight.stderr.strip().splitlines()[-1].split(" -> ")[-1])
+
+    refused = run_script(
+        "dossier", "sweep", "--repo", str(repo), "--base", "HEAD",
+        "--scratch", str(repo / "badscratch"), env=env,
+    )
+    assert refused.returncode == 2, refused.stdout + refused.stderr
+    assert "PASS" in report.read_text(), "a refused dossier discarded the accepted preflight report"
