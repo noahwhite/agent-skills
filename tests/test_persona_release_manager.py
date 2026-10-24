@@ -4,6 +4,9 @@ import json
 import re
 from pathlib import Path
 
+import jsonschema
+import yaml
+
 ROOT = Path(__file__).resolve().parent.parent
 SKILL = ROOT / "skills" / "persona-release-manager" / "SKILL.md"
 MANIFEST = json.loads((ROOT / "skills.json").read_text())
@@ -139,6 +142,115 @@ def test_review_section_covers_the_cumulative_diff_and_ownership() -> None:
         "post the review of record on the pr as a `--comment` pr review before the merge",
     ):
         assert phrase in body, f"review missing: {phrase}"
+
+
+def test_release_profile_contract() -> None:
+    schema = json.loads((ROOT / "profile" / "schema.json").read_text())
+    release = schema["properties"]["release"]
+    assert schema["additionalProperties"] is False
+    assert "release" not in schema["required"]
+    assert release["type"] == "object"
+    assert release["additionalProperties"] is False
+    assert not release.get("required")
+    expected = {
+        "versioning": {"semver", "calver"},
+        "notes": {"github-release", "tracker-comment"},
+    }
+    assert set(release["properties"]) == set(expected)
+    example = yaml.safe_load((ROOT / "profile" / "example.yaml").read_text())
+    for key, values in expected.items():
+        prop = release["properties"][key]
+        assert sorted(prop["enum"]) == sorted(values)
+        assert prop["description"].strip()
+        assert example["release"][key] in values
+    jsonschema.validate(example["release"], release)
+
+
+def test_promotion_release_type_has_a_validated_request_source() -> None:
+    body = section(SKILL.read_text(), "Promotion")
+    for phrase in (
+        "tracker description",
+        "Release-Type: major|minor|patch",
+        "highest component any promoted story requests",
+        "exact lowercase",
+        "malformed or duplicate",
+        "stop and ask",
+    ):
+        assert phrase in body, f"release type missing: {phrase}"
+
+
+def test_versioning_section_covers_release_schemes() -> None:
+    body = section(SKILL.read_text(), "Versioning")
+    for phrase in (
+        "profile.release.versioning",
+        "v0.1.0",
+        "Release-Type",
+        "major",
+        "minor",
+        "patch",
+        "YYYY.MM.DD",
+        "Use the bare date when it is free",
+        "Only when the bare date tag is taken",
+        "lowest integer N at or above 1 whose tag is free",
+        "untagged",
+        "profile.git.release_branch",
+        "highest of those tags by numeric semantic version",
+        "increment the selected component",
+        "reset every component to its right to zero",
+        "v3.0.0",
+        "v2.4.0",
+        "v2.3.5",
+        "already carries",
+        "reuse that tag",
+        "annotated",
+        "signed when `profile.git.signed_commits` is true",
+        "push that tag to `origin`",
+        "If it already exists, stop and report the collision",
+        "never move or force-update a tag",
+        "If signing fails, stop and report",
+    ):
+        assert phrase in body, f"versioning missing: {phrase}"
+    for forbidden in (
+        "force-update the tag when the commit matches",
+        "create an unsigned tag if signing fails",
+    ):
+        assert forbidden not in body.lower(), f"unsafe versioning: {forbidden}"
+
+
+def test_release_notes_section_covers_destinations_and_safety() -> None:
+    body = section(SKILL.read_text(), "Release notes")
+    for phrase in (
+        "profile.release.notes",
+        "github-release",
+        "tracker-comment",
+        "requires a tag",
+        "auto-generated",
+        "issue set enumerated in Release readiness",
+        "each issue's merged PRs",
+        "immediately after the tag is confirmed on `origin` and before the deployment hand-off",
+        "report the published URL",
+        "If versioning did not produce and confirm a tag, stop publication",
+        "reuse the already confirmed tag",
+        "existing per-issue tracker comment",
+        "retry only missing entries",
+    ):
+        assert phrase in body, f"release notes missing: {phrase}"
+
+
+def test_release_sections_follow_promotion_review_before_production() -> None:
+    text = SKILL.read_text()
+    headings = (
+        "Promotion review",
+        "Versioning",
+        "Release notes",
+        "Production verification",
+    )
+    positions = []
+    for heading in headings:
+        matches = list(re.finditer(rf"^## {re.escape(heading)}\s*$", text, re.MULTILINE))
+        assert len(matches) == 1, f"expected one section: {heading}"
+        positions.append(matches[0].start())
+    assert positions == sorted(positions)
 
 
 def test_production_verification_section_covers_evidence_and_failure() -> None:
