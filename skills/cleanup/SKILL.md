@@ -73,7 +73,7 @@ Sources, all of them:
 - **Local branches.** Every branch whose name carries the key under a prefix in `profile.git.branch_prefixes`.
 - **Remote branches.** Every head `git ls-remote --heads origin '*<key>*'` reports whose name carries the key at the boundary.
 - **Pull requests.** Every PR `gh pr list --state all --search '<key>' --limit 200` returns, each cited with its full URL.
-  A listing that returns exactly its limit is not proven complete, so the inventory reports it as incomplete rather than as the whole record.
+  Page the listing until a page returns fewer than its limit, so the record is complete; if it never does, the inventory is reported as incomplete and nothing is removed for that story until it is.
 - **Disposable QA output.** QA runner scratch output and uncommitted evidence copies only.
   Scan the session scratch base this runtime gives (`profile.workspace.scratch_dir`, or the runtime's own base as the capability map names it), an uncommitted copy inside `profile.qa.evidence_dir`, and the QA runner's scratch directory when this skill's overlay names one.
   A location the overlay names but the run cannot reach is reported as unsearchable, never as empty.
