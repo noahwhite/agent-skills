@@ -4,8 +4,8 @@ Measured on the delivered text of this change with CPython 3.12.3 and locked dep
 The modified files are `skills/story-refinement/SKILL.md` and `skills/story-refinement/references/refinement-record.md`.
 Before each check the document bytes were saved, the edit shown below was made once, the quoted command ran, and the saved bytes were restored even when the command failed; the final source matched the saved bytes, and the tracked changes were then only the files this change delivers.
 Each entry shows the exact matched text, and the exact replacement text where the edit substitutes or inserts one, so a re-runner can reproduce it from the delivered text.
-29 regression proofs failed as designed and 1 control passed.
-Entries 1 to 30 are the regression proofs; entry 31 is the control.
+30 regression proofs failed as designed and 1 control passed.
+Entries 1 to 33 are the regression proofs; entry 34 is the control.
 
 ## 1. Remove the measure ban and driver-set sentence from Step 3 item 4
 
@@ -53,7 +53,7 @@ File: `SKILL.md`
 Matched text:
 
 ```text
-It must not name, bound or imply any point value - a prior story's, an inherited split value, a value read from this story's own recorded pointing history, or one implied by a split status - and such a statement is an anchoring event under the Anchoring guardrail on being challenged.
+It must not name, bound or imply any point value - a prior story's, an inherited split value, a value read from this story's own recorded pointing history, or one implied by a split status - and such a statement is an anchoring event under the Anchoring guardrail.
 ```
 
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_step_three_sizing_context_is_in_complexity_terms`
@@ -83,7 +83,7 @@ Challenging a ground is not comparing values: the facilitator names the ground a
 ```
 
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_step_four_facilitator_challenges_every_off_basis_ground`
-Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_step_four_facilitator_challenges_every_off_basis_ground`.
+Result: SETUP-FAILED; `matched 0 times`.
 
 ## 7. Remove the restate-or-retract rule from Step 4 item 1
 
@@ -92,7 +92,7 @@ File: `SKILL.md`
 Matched text:
 
 ```text
-A challenged ground must be restated as a basis driver or retracted; the SM/EM withdraws or restates its own sizing comment on the same terms, except a statement that names, bounds or implies a point value, which is an anchoring event on being challenged.
+A challenged ground must be restated as a basis driver or retracted; the SM/EM withdraws or restates its own sizing comment on the same terms, except a statement that names, bounds or implies a point value, which is an anchoring event as soon as the facilitator sees it.
 ```
 
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_step_four_facilitator_challenges_every_off_basis_ground`
@@ -174,11 +174,11 @@ File: `SKILL.md`
 Matched text:
 
 ```text
-- naming, bounding or implying a point value in sizing context or in the discussion, including a prior story's, an inherited split value, a value recorded on the story surface, or one implied by a split status;
+- for the SM/EM, naming, bounding or implying a point value in sizing context or in the discussion, including a prior story's, an inherited split value, a value recorded on the story surface, or one implied by a split status;
 ```
 
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_anchoring_guardrail_bans_naming_bounding_or_implying_a_point_value`
-Result: SETUP-FAILED; `matched 0 times`.
+Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_anchoring_guardrail_bans_naming_bounding_or_implying_a_point_value`.
 
 ## 13. Remove the point-value-on-challenge clause from the Anchoring guardrail trigger
 
@@ -191,7 +191,7 @@ Matched text:
 ```
 
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_anchoring_guardrail_makes_a_point_value_sizing_note_an_event_on_challenge`
-Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_anchoring_guardrail_makes_a_point_value_sizing_note_an_event_on_challenge`.
+Result: SETUP-FAILED; `matched 0 times`.
 
 ## 14. Remove the void-and-re-run paragraph from the Anchoring guardrail
 
@@ -206,7 +206,46 @@ Any other challenged ground that is neither restated as a basis driver nor retra
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_anchoring_guardrail_makes_a_point_value_sizing_note_an_event_on_challenge`
 Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_anchoring_guardrail_makes_a_point_value_sizing_note_an_event_on_challenge`.
 
-## 15. Remove the fresh-context limitation paragraph from the Anchoring guardrail
+## 15. Remove the anchoring-trigger lead-in from the Anchoring guardrail
+
+File: `SKILL.md`
+
+Matched text:
+
+```text
+Every ground outside the pointing basis is an anchoring trigger: 
+```
+
+Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_anchoring_guardrail_names_off_basis_grounds_as_a_trigger`
+Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_anchoring_guardrail_names_off_basis_grounds_as_a_trigger`.
+
+## 16. Remove the challenge requirement from the Records enumeration
+
+File: `SKILL.md`
+
+Matched text:
+
+```text
+every challenge with its outcome, 
+```
+
+Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_records_requires_every_challenge_with_its_outcome`
+Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_records_requires_every_challenge_with_its_outcome`.
+
+## 17. Remove the accepted-set clarification from Step 4 item 2
+
+File: `SKILL.md`
+
+Matched text:
+
+```text
+     Recording an accepted set is not weighing a recorded value: the rationale for the set is about complexity, never about which value was recorded earlier.
+```
+
+Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_step_four_re_vote_challenges_an_off_basis_rationale`
+Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_step_four_re_vote_challenges_an_off_basis_rationale`.
+
+## 18. Remove the fresh-context limitation paragraph from the Anchoring guardrail
 
 File: `SKILL.md`
 
@@ -219,7 +258,7 @@ Fresh voter contexts exclude the tainted discussion and the sizing comment, but 
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_anchoring_guardrail_explains_why_context_cannot_exclude_a_recorded_value`
 Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_anchoring_guardrail_explains_why_context_cannot_exclude_a_recorded_value`.
 
-## 16. Drop the vote-voiding phrase from the anchoring recovery sentence
+## 19. Drop the vote-voiding phrase from the anchoring recovery sentence
 
 File: `SKILL.md`
 
@@ -238,7 +277,7 @@ void the consensus and re-run the independent vote
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_anchoring_guardrail_recovery_mechanics_are_unchanged`
 Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_anchoring_guardrail_recovery_mechanics_are_unchanged`.
 
-## 17. Remove the challenge sentence from the pointing-record intro
+## 20. Remove the challenge sentence from the pointing-record intro
 
 File: `refinement-record.md`
 
@@ -249,9 +288,9 @@ A challenged ground is recorded with its author (a voter, or the SM/EM for a siz
 ```
 
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_pointing_template_records_each_challenge_and_outcome`
-Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_pointing_template_records_each_challenge_and_outcome`.
+Result: SETUP-FAILED; `matched 0 times`.
 
-## 18. Remove the challenge line from the pointing-record template
+## 21. Remove the challenge line from the pointing-record template
 
 File: `refinement-record.md`
 
@@ -264,7 +303,7 @@ Matched text:
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_pointing_template_records_each_challenge_and_outcome`
 Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_pointing_template_records_each_challenge_and_outcome`.
 
-## 19. Drop the point-value ban from the phrasing principle sentence
+## 22. Drop the point-value ban from the phrasing principle sentence
 
 File: `refinement-record.md`
 
@@ -283,7 +322,7 @@ it never names a range,
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_phrasing_intro_is_unchanged_and_adds_the_comparison_principle`
 Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_phrasing_intro_is_unchanged_and_adds_the_comparison_principle`.
 
-## 20. Put a point-value permitted cell back in a row that no other assertion pins
+## 23. Put a point-value permitted cell back in a row that no other assertion pins
 
 File: `refinement-record.md`
 
@@ -302,7 +341,7 @@ Replaced with:
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_phrasing_table_permitted_cells_never_name_a_point_value`
 Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_phrasing_table_permitted_cells_never_name_a_point_value`.
 
-## 21. Put a split-status permitted cell in an unpinned row
+## 24. Put a split-status permitted cell in an unpinned row
 
 File: `refinement-record.md`
 
@@ -321,7 +360,7 @@ Replaced with:
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_phrasing_table_permitted_cells_never_name_a_point_value`
 Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_phrasing_table_permitted_cells_never_name_a_point_value`.
 
-## 22. Put a digit-valued permitted cell in an unpinned row
+## 25. Put a digit-valued permitted cell in an unpinned row
 
 File: `refinement-record.md`
 
@@ -340,7 +379,7 @@ Replaced with:
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_phrasing_table_permitted_cells_never_name_a_point_value`
 Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_phrasing_table_permitted_cells_never_name_a_point_value`.
 
-## 23. Put a spelled-out value in a permitted cell
+## 26. Put a spelled-out value in a permitted cell
 
 File: `refinement-record.md`
 
@@ -359,7 +398,7 @@ Replaced with:
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_phrasing_table_permitted_cells_never_name_a_point_value`
 Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_phrasing_table_permitted_cells_never_name_a_point_value`.
 
-## 24. Put a bare t-shirt size letter in a permitted cell
+## 27. Put a bare t-shirt size letter in a permitted cell
 
 File: `refinement-record.md`
 
@@ -378,7 +417,7 @@ Replaced with:
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_phrasing_table_permitted_cells_never_name_a_point_value`
 Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_phrasing_table_permitted_cells_never_name_a_point_value`.
 
-## 25. Put a spelled-out value in a count frame
+## 28. Put a spelled-out value in a count frame
 
 File: `refinement-record.md`
 
@@ -397,7 +436,7 @@ Replaced with:
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_phrasing_table_permitted_cells_never_name_a_point_value`
 Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_phrasing_table_permitted_cells_never_name_a_point_value`.
 
-## 26. Put a t-shirt scale position in a permitted cell
+## 29. Put a t-shirt scale position in a permitted cell
 
 File: `refinement-record.md`
 
@@ -416,7 +455,7 @@ Replaced with:
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_phrasing_table_permitted_cells_never_name_a_point_value`
 Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_phrasing_table_permitted_cells_never_name_a_point_value`.
 
-## 27. Put a value bounded by the cap in a permitted cell
+## 30. Put a value bounded by the cap in a permitted cell
 
 File: `refinement-record.md`
 
@@ -435,7 +474,7 @@ Replaced with:
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_phrasing_table_permitted_cells_never_name_a_point_value`
 Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_phrasing_table_permitted_cells_never_name_a_point_value`.
 
-## 28. Delete one unpinned permitted row, leaving ten
+## 31. Delete one unpinned permitted row, leaving ten
 
 File: `refinement-record.md`
 
@@ -448,7 +487,7 @@ Matched text:
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_phrasing_table_permitted_cells_never_name_a_point_value`
 Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_phrasing_table_permitted_cells_never_name_a_point_value`.
 
-## 29. Insert a non-row line carrying a point value between two table rows
+## 32. Insert a non-row line carrying a point value between two table rows
 
 File: `refinement-record.md`
 
@@ -468,7 +507,7 @@ The comparable story was 5 points.
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_phrasing_section_holds_only_the_intro_the_table_and_the_trailer`
 Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_phrasing_section_holds_only_the_intro_the_table_and_the_trailer`.
 
-## 30. Insert a point-value sentence between the intro and the table
+## 33. Insert a point-value sentence between the intro and the table
 
 File: `refinement-record.md`
 
@@ -491,7 +530,7 @@ The comparable story was a 3, so stay near it.
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_phrasing_section_holds_only_the_intro_the_table_and_the_trailer`
 Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_phrasing_section_holds_only_the_intro_the_table_and_the_trailer`.
 
-## 31. Control: add a blank line after the table
+## 34. Control: add a blank line after the table
 
 File: `refinement-record.md`
 

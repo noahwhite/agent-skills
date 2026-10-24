@@ -141,7 +141,7 @@ Only the PO and the two engineers count toward the agreement.
      The SM/EM submits no point value.
   7. After all three values are recorded, the SM/EM may provide factual, reference-only sizing context: comparable stories in complexity terms, comparable unknowns and constraints, and relevant scope differences.
      It must not state or imply a preferred value, recommend a direction, reveal or compare individual votes before the discussion, or use leading language.
-     It must not name, bound or imply any point value - a prior story's, an inherited split value, a value read from this story's own recorded pointing history, or one implied by a split status - and such a statement is an anchoring event under the Anchoring guardrail on being challenged.
+     It must not name, bound or imply any point value - a prior story's, an inherited split value, a value read from this story's own recorded pointing history, or one implied by a split status - and such a statement is an anchoring event under the Anchoring guardrail.
      A statement of elapsed time or effort is an anchoring event under the Anchoring guardrail.
   8. A `tshirt` scale stops the cap step with a clear message.
      Pointing still records the three values; the split rule's numeric cap does not apply.
@@ -153,10 +153,10 @@ Only the PO and the two engineers count toward the agreement.
 - **Inputs:** the three recorded point values and any recorded SM/EM sizing context.
 - **Process:**
   1. Hold one discussion round that names only the high and the low.
-     Do not compare the other values or single out a voter's value as the realistic one.
+     Do not compare the other values or single out a voter.
      In that round, and against the rationales recorded in Step 3, the facilitator challenges every ground outside the pointing basis, whether it is heard in the discussion or read in a recorded rationale.
-     Challenging a ground is not comparing values: the facilitator names the ground and its author, never the value.
-     A challenged ground must be restated as a basis driver or retracted; the SM/EM withdraws or restates its own sizing comment on the same terms, except a statement that names, bounds or implies a point value, which is an anchoring event on being challenged.
+     Challenging a ground is not comparing values or singling out a voter: the facilitator names the ground and its author, never the value.
+     A challenged ground must be restated as a basis driver or retracted; the SM/EM withdraws or restates its own sizing comment on the same terms, except a statement that names, bounds or implies a point value, which is an anchoring event as soon as the facilitator sees it.
      A ground that is neither is an anchoring event under the Anchoring guardrail.
   2. Run one re-vote.
      The re-vote prompt carries the pointing basis from Step 3.
@@ -200,7 +200,7 @@ The prohibited behaviours are:
 - asking for a revote after stating a view;
 - comparing individual votes.
 
-Every ground outside the pointing basis is an anchoring trigger: a rationale or a sizing comment that weighs verification strength, testability, coverage, the shape of the tests, or a prior or inherited point value is challenged under Step 4, and a sizing comment that names, bounds or implies a point value is an anchoring event on being challenged, with no restatement or retraction path.
+Every ground outside the pointing basis is an anchoring trigger: a rationale or a sizing comment that weighs verification strength, testability, coverage, the shape of the tests, or a prior or inherited point value is challenged under Step 4, and a sizing comment that names, bounds or implies a point value is an anchoring event as soon as the facilitator sees it, with no challenge, restatement or retraction path.
 Any other challenged ground that is neither restated as a basis driver nor retracted, or a sizing comment the SM/EM neither withdraws nor restates, is an anchoring event, and the void re-runs the independent vote from Step 3 in newly created voter contexts that exclude the tainted discussion and sizing comment.
 
 Fresh voter contexts exclude the tainted discussion and the sizing comment, but they cannot exclude a point value recorded on the story surface that Step 1 hands every voter with the story, so the Step 3 rationale rule is what keeps such a value out of the vote.

@@ -341,6 +341,11 @@ def test_pointing_template_records_the_no_consensus_decision() -> None:
 def test_records_names_the_no_consensus_decision() -> None:
     body = flat(section(SKILL.read_text(), "Records"))
     assert "any no-consensus decision with each voter's accepted paths and the decision rationale" in body
+
+
+
+def test_records_requires_every_challenge_with_its_outcome() -> None:
+    body = flat(section(SKILL.read_text(), "Records"))
     assert "every challenge with its outcome" in body
 
 
@@ -761,7 +766,7 @@ def test_step_three_sizing_context_is_in_complexity_terms() -> None:
     assert (
         "It must not name, bound or imply any point value - a prior story's, an inherited split value, a value "
         "read from this story's own recorded pointing history, or one implied by a split status - and such a "
-        "statement is an anchoring event under the Anchoring guardrail on being challenged."
+        "statement is an anchoring event under the Anchoring guardrail."
     ) in body
 
 
@@ -800,13 +805,13 @@ def test_step_four_facilitator_challenges_every_off_basis_ground() -> None:
         "outside the pointing basis, whether it is heard in the discussion or read in a recorded rationale."
     ) in item
     assert (
-        "Challenging a ground is not comparing values: the facilitator names the ground and its author, never "
-        "the value."
+        "Challenging a ground is not comparing values or singling out a voter: the facilitator names the ground "
+        "and its author, never the value."
     ) in item
     assert (
         "A challenged ground must be restated as a basis driver or retracted; the SM/EM withdraws or restates its "
         "own sizing comment on the same terms, except a statement that names, bounds or implies a point value, "
-        "which is an anchoring event on being challenged."
+        "which is an anchoring event as soon as the facilitator sees it."
     ) in item
     assert "A ground that is neither is an anchoring event under the Anchoring guardrail." in item
 
@@ -829,7 +834,8 @@ def test_anchoring_guardrail_makes_a_point_value_sizing_note_an_event_on_challen
         "every ground outside the pointing basis is an anchoring trigger: a rationale or a sizing comment that "
         "weighs verification strength, testability, coverage, the shape of the tests, or a prior or inherited "
         "point value is challenged under step 4, and a sizing comment that names, bounds or implies a point "
-        "value is an anchoring event on being challenged, with no restatement or retraction path" in body
+        "value is an anchoring event as soon as the facilitator sees it, with no challenge, restatement or "
+        "retraction path" in body
     )
     assert (
         "any other challenged ground that is neither restated as a basis driver nor retracted, or a sizing "
@@ -964,7 +970,7 @@ POINT_VALUE_IN_PERMITTED = re.compile(
     r"|\bscale\b|\bsplit\b"
     r"|\b(?:xxs|xs|s|m|l|xl|xxl|xxxl|small|medium|large|extra\s+large)\b"
     r"|\b(?:cap|maximum)\b"
-    r"|\b(?:sizes?|sized|sizing|scores?|scored|rated|rating)\b"
+    r"|\b(?:sizes?|sized|sizing|scores?|scored|rated|rating|estimates?)\b"
     rf"|\b(?:was|is|were|are|be|at)\s+(?:a|an|the)?\s*(?:{NUMBER_WORDS})\b",
     re.IGNORECASE,
 )
@@ -1000,9 +1006,16 @@ def test_pointing_template_records_each_challenge_and_outcome() -> None:
     assert (
         "A challenged ground is recorded with its author (a voter, or the SM/EM for a sizing comment) and either "
         "the restatement, the withdrawal or the retraction; a sizing comment that names, bounds or implies a point "
-        "value voids the round on being challenged, as does any ground that is neither, and the void leaves the "
-        "consensus field empty and is recorded under Anchoring events."
+        "value voids the round as soon as the facilitator sees it, as does any ground that is neither restated "
+        "nor retracted, and the void leaves the consensus field empty and is recorded under Anchoring events."
     ) in body
+
+
+def test_pointing_template_places_challenges_before_anchoring_events() -> None:
+    lines = pointing_template()
+    assert lines.index("- Challenges: <each ground challenged, its author (a voter, or the SM/EM for a sizing comment), and the restatement, withdrawal or retraction, or the void>") < lines.index(
+        "- Anchoring events: <none, or the verbatim comment and the recovery, including the newly created voter contexts>"
+    )
 
 
 def test_pointing_template_asks_for_complexity_rationales() -> None:
