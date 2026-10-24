@@ -95,7 +95,8 @@ def test_every_key_is_resolved_against_the_tracker_before_anything_is_touched() 
     for phrase in (
         "before anything is touched",
         "Resolve each key with `linear issue view <story-key> --no-download`, so resolving a key writes no file",
-        "`profile.tracker.team_key`",
+        "the key's own team prefix is not `profile.tracker.team_key`",
+        "The view's team field carries no key, so the prefix is the check",
         "Report an unresolved key as `unresolved` and skip it",
         "The other keys still run",
         "Never invent, guess, or shorten a key",
@@ -156,7 +157,8 @@ def test_inventory_excludes_the_durable_record_and_refuses_a_live_session() -> N
         "The invoking session's own scratch directory",
         "merge-approval rendezvous file",
         "its checklist file exists and every item is checked",
-        "no file in it was modified at or after the moment this run started",
+        "nothing in it was modified at or after the moment this run started",
+        "`find <dir> -newer <stamp>`",
         "Anything else is inventoried as `skip`, because a session may still be writing",
         "cannot attribute to the key is left out, and the report names it as skipped",
     ):
@@ -190,7 +192,8 @@ def test_each_artefact_kind_has_its_guarded_removal() -> None:
         "Removed with `git branch -D`",
         "only when the remote tip has merge evidence and no open PR heads it",
         "Read the remote tip a second time immediately before the delete and refuse if it moved",
-        "`gh pr list --state open --search '<key>' --json headRefName --limit 200`",
+        "`gh pr list --state open --json headRefName,number --limit 1000`",
+        "Match head refs from that listing, not a free-text search",
         "a listing that returns exactly its limit is not proven complete",
         "A remote branch that never became a PR is refused rather than deleted",
         "Removed only from a directory the inventory proved idle, and only after step 5 has attached the evidence the run swept",
@@ -236,6 +239,7 @@ def test_the_hosted_evidence_section_is_separated_and_cites_the_map() -> None:
         "names no host and no runtime",
         "[references/runtimes.md](references/runtimes.md)",
         "Read that row for the runtime this session runs on",
+        "a later session reaches none of an earlier session's hosted copies",
     ):
         assert phrase in body, phrase
 

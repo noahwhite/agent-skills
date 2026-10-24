@@ -48,7 +48,8 @@ Give it one item per named story key, per inventory source, per removal, per tra
 Do this before anything is touched, so a mistyped key removes nothing.
 
 - Resolve each key with `linear issue view <story-key> --no-download`, so resolving a key writes no file.
-  A key does not resolve when that lookup fails, or when the story it returns belongs to a team other than `profile.tracker.team_key`.
+  A key does not resolve when that lookup fails, or when the key's own team prefix is not `profile.tracker.team_key`: an issue identifier carries its team key, which is what makes the check applyable without a team field.
+  The view's team field carries no key, so the prefix is the check, never a guess about the returned object.
 - Report an unresolved key as `unresolved` and skip it.
   The other keys still run: one bad key never stops the run, and no artefact is attributed to it.
 - Never invent, guess, or shorten a key, and never take one from the current branch, a worktree path, or the session's own history.
@@ -88,7 +89,8 @@ Never inventoried as removable:
 
 Two more rules:
 
-- A per-session scratch directory is idle only when the run can prove its session has finished: its checklist file exists and every item is checked, or, with no checklist file, no file in it was modified at or after the moment this run started (`find <dir> -newermt '@<run-start>'` prints nothing).
+- A per-session scratch directory is idle only when the run can prove its session has finished: its checklist file exists and every item is checked, or, with no checklist file, nothing in it was modified at or after the moment this run started.
+  Stamp that moment once, portably, in the session's scratch directory (`touch <stamp>` at the start of the run) and test it with `find <dir> -newer <stamp>`.
   Anything else is inventoried as `skip`, because a session may still be writing.
 - Anything the skill cannot attribute to the key is left out, and the report names it as skipped.
 
@@ -111,7 +113,8 @@ Remove in this order, so a branch is never refused because a worktree still hold
   `-D` rather than `-d`, because a squash or a rebase merge leaves the tip unmerged in git's own eyes.
 - **Remote branch.** Deleted with `git push origin --delete <branch>` only when the remote tip has merge evidence and no open PR heads it.
   Read the remote tip a second time immediately before the delete and refuse if it moved: a push that lands between the check and the delete is the one case this run cannot prevent, because the repository forbids a force or lease push.
-  A branch named by `gh pr list --state open --search '<key>' --json headRefName --limit 200` is refused, and a listing that returns exactly its limit is not proven complete, so the run refuses instead of deleting.
+  A branch whose head ref is named at the key boundary by `gh pr list --state open --json headRefName,number --limit 1000` is refused, and a listing that returns exactly its limit is not proven complete, so the run refuses instead of deleting.
+  Match head refs from that listing, not a free-text search: a search matches titles and bodies, so a PR whose head branch carries the key but whose text does not would slip past.
   A remote branch that never became a PR is refused rather than deleted.
 - **Disposable QA output and session files.** Removed only from a directory the inventory proved idle, and only after step 5 has attached the evidence the run swept, so the run never deletes the only copy of something the story is about to receive.
 
@@ -130,6 +133,7 @@ It names no host and no runtime: both come from the hosted-evidence row of [refe
 
 - Read that row for the runtime this session runs on.
   The row says whether the session can reach the evidence it hosted, and the mechanism to list it, download it, and delete it.
+  Reachability is the publishing session's own: a later session reaches none of an earlier session's hosted copies, which is why this step sweeps only what this session hosted.
 - When the row gives the runtime no such capability, or the map has no row for it, print `skipped: this runtime has no hosted-evidence capability`, touch no hosted content, and name the skip and its reason in the final report.
   A capability is never guessed from a runtime the map does list: for this capability a missing row means the skip, never a nearby mechanism.
 - When the row does give the capability, sweep only through the mapped mechanism: list the evidence this session hosted for the story, download it into the session's scratch directory, attach it to the named story as step 5 says, and delete the hosted copy only through the mapped per-artefact delete action.
