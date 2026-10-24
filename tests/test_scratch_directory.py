@@ -54,7 +54,8 @@ def run_one_liner(block: str, env: dict[str, str]) -> Path:
     script = "\n".join(
         line for line in block.splitlines() if line.strip() and not line.strip().startswith("#")
     )
-    script += '\nprintf "%s\\n" "$scratch"\n'
+    if "printf" not in script:
+        script += '\nprintf "%s\\n" "$scratch"\n'
     base_env = {k: v for k, v in os.environ.items() if k != "scratch_base"}
     res = subprocess.run(
         ["bash", "-euo", "pipefail", "-c", script],
@@ -62,6 +63,11 @@ def run_one_liner(block: str, env: dict[str, str]) -> Path:
     )
     assert res.returncode == 0, res.stderr
     return Path(res.stdout.strip().splitlines()[-1])
+
+
+def test_the_snippet_prints_the_directory_it_chose():
+    """The rule says to run it once and pass the printed path, so the snippet prints it."""
+    assert "printf" in scratch_one_liner()
 
 
 def test_the_snippet_runs_with_scratch_base_unset_under_set_u(tmp_path):
@@ -161,6 +167,7 @@ def test_no_doc_states_the_profile_must_set_the_scratch_dir():
     """AC5: the key is optional everywhere, so no instruction makes it mandatory."""
     pattern = re.compile(
         r"must set[^.\n]*scratch_dir"
+        r"|scratch_dir[^.\n]*must be set"
         r"|require[sd]?[^.\n]*scratch_dir"
         r"|scratch_dir[^.\n]*(?:is|are) required",
         re.IGNORECASE,
@@ -183,6 +190,8 @@ def test_no_doc_names_a_fixed_scratch_path_under_the_base():
     fixed_under_base = re.compile(
         r"profile\.workspace\.scratch_dir[}>]?\s*/\s*[^\s`'\"]+"
         r"|\$CLAUDE_JOB_DIR/tmp/[A-Za-z0-9_.<>-]+"
+        r"|<(?:scratch )?base>/[^\s`'\"]+"
+        r"|/tmp/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\.(?:md|txt|json|log)"
     )
     offenders = []
     for md in md_files():

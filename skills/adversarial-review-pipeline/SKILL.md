@@ -81,8 +81,8 @@ Common inputs:
   Write it to the session's scratch directory (`references/runtimes.md`, Scratch files), never the profile's base directory.
   A `--spec` naming a missing file is an error; only omitting it gives the "judge scope from the diff alone" fallback.
 - `--test-cmd`: `profile.project.test_command`; `--test-dir` when the suite must run from a subdirectory.
-- `--scratch <dir>`: the session's scratch directory (`references/runtimes.md`, Scratch files), passed to every command so the dossiers and throwaway checkouts stay in it; the script gives each run its own directory inside it.
-  Never pass the profile's base directory; omitted, the script creates a standalone directory, and a second invocation then no longer shares the first one's.
+- `--scratch <dir>`: the session's scratch directory (`references/runtimes.md`, Scratch files), passed to every command so the dossiers and throwaway checkouts stay in it; the script gives each run its own directory inside it and hands that same directory to the phase agent as `ADVERSARIAL_SESSION_SCRATCH`.
+  Never pass the profile's base directory; omitted, the script creates a standalone directory per invocation, so two commands no longer share one.
 
 Launching a phase depends on the profile agent's `runtime`:
 
@@ -112,11 +112,13 @@ Set these once, in the consumer repository, before Phase 0:
 ```bash
 PIPELINE="<skill dir>/scripts/run-adversarial-pipeline.sh"   # absolute path the runtime loaded this skill from
 BASE="origin/<profile.git.integration_branch>"              # after: git fetch origin <profile.git.integration_branch>
-SPEC="<session scratch dir>/spec.md"                        # the story text and acceptance criteria, written first
+scratch_base="<the runtime's scratch base, else profile.workspace.scratch_dir>"
+scratch="$(mktemp -d -- "${scratch_base%/}/session.XXXXXX")"  # this session's one scratch directory (references/runtimes.md)
+SPEC="$scratch/spec.md"                                      # the story text and acceptance criteria, written first
 ```
 
 ```bash
-"$PIPELINE" preflight --base "$BASE" --test-cmd "<profile.project.test_command>"
+"$PIPELINE" preflight --base "$BASE" --test-cmd "<profile.project.test_command>" --scratch "$scratch"
 ```
 
 It asserts the working tree is clean (`git status --porcelain --untracked-files=all` empty), creates a detached worktree at `HEAD`, and runs the suite there.
@@ -134,7 +136,7 @@ Fix a FAIL before spending any model budget.
 ## Phase 1: sweep
 
 ```bash
-"$PIPELINE" run sweep --base "$BASE" --spec "$SPEC" --agent-cmd "<template>"
+"$PIPELINE" run sweep --base "$BASE" --spec "$SPEC" --scratch "$scratch" --agent-cmd "<template>"
 ```
 
 The sweeper returns a structured candidate list, each entry with `file:line`, a severity, a one-line claim and a concrete failure scenario.
@@ -143,7 +145,7 @@ Expect false positives; Phase 2 exists to remove them.
 ## Phase 2: verify and hunt
 
 ```bash
-"$PIPELINE" run hunt --base "$BASE" --spec "$SPEC" --agent-cmd "<template>"
+"$PIPELINE" run hunt --base "$BASE" --spec "$SPEC" --scratch "$scratch" --agent-cmd "<template>"
 ```
 
 The hunter works in a throwaway detached worktree of the **unfixed** head, never the working tree.
@@ -165,7 +167,7 @@ Its dossier asks for both jobs and demands execution rather than reasoning:
 ## Phase 3: arbitration
 
 ```bash
-"$PIPELINE" run arbitrate --base "$BASE" --spec "$SPEC" --agent-cmd "<template>"
+"$PIPELINE" run arbitrate --base "$BASE" --spec "$SPEC" --scratch "$scratch" --agent-cmd "<template>"
 ```
 
 The arbiter filters hallucinations and unexploitable edge cases, weighs Phase-2 empirical results over Phase-1 theory, surfaces cross-module and architectural regressions, writes the report, and states which categories it found clean.

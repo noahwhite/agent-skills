@@ -8,7 +8,7 @@
 # location, and the skills repository itself is refused unless --repo names it explicitly.
 #
 # Usage:
-#   run-adversarial-pipeline.sh preflight --base REF [--test-cmd CMD] [--test-dir DIR]
+#   run-adversarial-pipeline.sh preflight --base REF [--test-cmd CMD] [--test-dir DIR] [--scratch DIR]
 #   run-adversarial-pipeline.sh run <sweep|hunt|arbitrate> --base REF --agent-cmd TEMPLATE
 #                               [--spec FILE] [--no-sweep] [--scratch DIR] [--timeout SECONDS]
 #   run-adversarial-pipeline.sh dossier <sweep|hunt|arbitrate> --base REF [--spec FILE] [--no-sweep] [--scratch DIR]
@@ -42,9 +42,11 @@
 # Env equivalents: ADVERSARIAL_REPO, ADVERSARIAL_TEST_CMD, ADVERSARIAL_TEST_DIR, ADVERSARIAL_BASE,
 # ADVERSARIAL_SPEC_FILE, ADVERSARIAL_SCRATCH, ADVERSARIAL_AGENT_CMD, ADVERSARIAL_TIMEOUT (900).
 #
-# --scratch DIR names the session's scratch directory (references/runtimes.md, Scratch files): one
-# session runs one gate at a time there, so its phase-named dossiers do not collide. Never pass the
-# profile's base directory itself. Omitted, the script creates its own standalone directory.
+# --scratch DIR names the session's scratch directory (references/runtimes.md, Scratch files): the
+# script gives each run its own directory inside it, so a run's dossiers and checkouts do not
+# collide. Never pass the profile's base directory itself. Omitted, the script creates its own
+# standalone directory and exposes nothing to the agent. A phase agent also receives the session
+# directory in ADVERSARIAL_SESSION_SCRATCH, so it can keep its own artefacts beside the run.
 #
 # --agent-cmd is a shell command template built from the profile's agent definition for that phase.
 # Placeholders (substituted shell-quoted): {prompt_file} the dossier, {output_file} the artifact,
@@ -316,10 +318,13 @@ accept_phase() {  # $1 = phase, $2 = stderr log or "": validate a freshly writte
 scratch_dir() {
   if [ -z "$SCRATCH" ]; then
     SCRATCH="$(mktemp -d -t adversarial-scratch.XXXXXX)"
+    SESSION_SCRATCH=""
   else
     # A supplied directory is the session's scratch directory (references/runtimes.md, Scratch
     # files): give this run its own directory inside it, so two runs never share dossier names.
-    mkdir -p -- "$SCRATCH"
+    SESSION_SCRATCH="$SCRATCH"
+    mkdir -p -- "$SCRATCH" || die 2 "--scratch is not usable as a directory: $SCRATCH"
+    [ -d "$SCRATCH" ] || die 2 "--scratch must be a directory, not a file: $SCRATCH"
     SCRATCH="$(mktemp -d -p "$SCRATCH" run.XXXXXX)"
   fi
   printf '%s\n' "$SCRATCH"
@@ -577,9 +582,9 @@ case "$cmd" in
     rc=0
     if [[ "$AGENT_CMD" == *"{output_file}"* ]]; then
       line="${line//\{output_file\}/$q_out}"
-      (cd "$checkout" && timeout -s KILL "${TIMEOUT}s" bash -c "$line" < "$dossier" > "$RUN_DIR/${phase}-agent.log" 2> "$errlog") || rc=$?
+      (cd "$checkout" && ADVERSARIAL_SESSION_SCRATCH="${SESSION_SCRATCH:-$SCRATCH}" timeout -s KILL "${TIMEOUT}s" bash -c "$line" < "$dossier" > "$RUN_DIR/${phase}-agent.log" 2> "$errlog") || rc=$?
     else
-      (cd "$checkout" && timeout -s KILL "${TIMEOUT}s" bash -c "$line" < "$dossier" > "$out" 2> "$errlog") || rc=$?
+      (cd "$checkout" && ADVERSARIAL_SESSION_SCRATCH="${SESSION_SCRATCH:-$SCRATCH}" timeout -s KILL "${TIMEOUT}s" bash -c "$line" < "$dossier" > "$out" 2> "$errlog") || rc=$?
     fi
     if [ "$(primary_state)" != "$(cat -- "$RUN_DIR/$phase.primary")" ]; then
       rm -f -- "$out.stamp"

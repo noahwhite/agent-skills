@@ -48,6 +48,7 @@ If your runtime is not listed, map each capability to its closest equivalent and
   else
     scratch="$(mktemp -d)"
   fi
+  printf '%s\n' "$scratch"
   ```
 - **Nested subagents.** A delegated agent that runs a review gate spawns subagents of its own.
   Claude Code allows that.
