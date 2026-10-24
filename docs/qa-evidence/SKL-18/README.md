@@ -2,7 +2,7 @@
 
 Verified on 2026-10-24 against fetched `origin/main` at `a30477e15a692fde158a7423caa191adfc1723e3` in an isolated worktree.
 This repository has no hosted environment or deploy pipeline; `main` is the integration environment and no deploy step exists.
-[Story](https://linear.app/officina-pub/issue/SKL-18/user-story-require-a-todo-list-update-after-every-step-in-every) and [complete raw assertions and command output](https://uploads.linear.app/7fbfc592-b1ef-432c-96af-87e5111c541e/be1c0152-0fa6-4e7a-b8a0-e9d10c57ad8d/ebadd60c-29c0-497b-b268-9334dfd5b34e) hold the tracker record.
+[Story](https://linear.app/officina-pub/issue/SKL-18/user-story-require-a-todo-list-update-after-every-step-in-every) and [QA evidence comment](https://linear.app/officina-pub/issue/SKL-18/user-story-require-a-todo-list-update-after-every-step-in-every#comment-a6c3366a) hold the tracker record.
 [Implementation PR](https://github.com/noahwhite/agent-skills/pull/30) merged as the tested SHA.
 Fixtures are `shared/todo-tracking.md`, `skills.json`, all 17 bundled references, `tests/test_todo_tracking.py`, and the implementation PR and CI runs.
 Repository, GitHub, and Linear CLI lanes apply; there is no visual surface requiring screenshots.
@@ -10,7 +10,7 @@ Repository, GitHub, and Linear CLI lanes apply; there is no visual surface requi
 | Item | Verdict | Evidence |
 | --- | --- | --- |
 | AC1: exact rules | Verified | Five exact sentences in rules 3/4; retired text absent; rule 4 retention text and rules 5/6 preserved against the parent. |
-| AC2: bundles and seeds | Verified | All 17 copies match the source after the generated header; 11 direct manifest entries plus six transitive bundles match exactly; seed preamble, all 11 labels, and combined staff bullet present. |
+| AC2: bundles and seeds | Verified | All 17 copies match the source after the generated header; 11 direct manifest entries plus six transitive bundles match exactly; seed preamble present; all 11 direct skills represented by 10 seed labels, including the combined staff bullet. |
 | AC3: regression and mutation evidence | Verified | Merged tests assert exact phrases, all copies, seed labels and final-report text; PR mutation (a) records 18 failures including `test_rule_three_requires_the_update_in_the_same_step` and every copy case; mutation (b) records `test_vendored_references_are_current` failing. |
 | AC4: final-report rule | Verified | Exact rule 6 retained; `test_rules_five_and_six_are_unchanged` asserts both the complete rule and final-report sentence, so deletion fails. |
 | AC5: suite and CI | Verified | Fresh `uv run --locked pytest -q`: 416 passed in 7.62s, exit 0; `python3 scripts/vendor_shared.py --check`: no output, exit 0; implementation-head and main CI successful. |
