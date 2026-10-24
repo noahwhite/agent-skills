@@ -15,10 +15,12 @@ The list is the visible record of the run: how many steps there are and where yo
    Good: "reproduce the 500 on dev", "write failing test for slice 2", "review round 1", "dispatch the dev deploy", "verify AC 3 on dev", "wait for CI on PR head".
    Bad: "implement", "review", "deploy".
    Each investigation, repro, slice, test, gate round, dispatch, deploy, verification, and wait is its own item.
-3. **Exactly one item in progress** at a time.
-   Mark it completed the moment it is done, never in a batch at the end.
+3. **Update the list before you move on.**
+   Mark the finished item completed and put the next item in progress as soon as that step's outcome is observed, before starting the next step.
+   Batching those two updates, or leaving a stale in-progress item while the next step runs, is forbidden.
+   Exactly one item is in progress whenever a next item exists; when none does, none is.
 4. **Grow the list as work appears.**
-   A new finding, remediation round, blocker, or follow-up gets an item when it is discovered.
+   A new finding, remediation round, blocker, or follow-up gets an item when it is discovered, before that step starts.
    Do not delete items that turned out unnecessary; mark them completed with a short note, or drop them only if they were never started.
 5. **An item is completed only when its outcome was observed** (test output seen, run concluded, state read back), not when the command was issued.
 6. **Finish the list before reporting.**
@@ -47,6 +49,7 @@ Tracking remains mandatory; only the storage mechanism changes.
 ## Seed lists
 
 Starting points only; split further as the task demands.
+Every seed list below carries one rule: update the list after each step's outcome, before the next step starts.
 
 - **engineering-workflow:** triage the issue, read the code, one item per slice (failing test, implementation, green run), pre-PR gate preflight, each gate round, open PR, each review round, each remediation, CI green, merge, deploy, verify in the environment, each status move.
 - **persona-platform-sre:** read primary-source running state, one item per IaC change and per test, plan and apply per stack, each dispatch, each wait on a run, verification of running state, cleanup of any debris.
