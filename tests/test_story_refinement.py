@@ -809,10 +809,10 @@ def test_step_four_facilitator_challenges_every_off_basis_ground() -> None:
         "and its author, and never the author's value."
     ) in item
     assert (
-        "A challenged ground must be restated as a basis driver that supports the value already recorded, or "
-        "retracted; the SM/EM withdraws or restates its own sizing comment on the same terms, except a statement that names, bounds or implies a point value, "
-        "or states elapsed time, effort or run cost, which is an anchoring event as soon as the facilitator sees "
-        "it."
+        "A challenged ground must be restated as a basis driver, which may move the voter's value to the one its "
+        "basis supports, or retracted; the SM/EM withdraws or restates its own sizing comment on the same terms, "
+        "except a statement that names, bounds or implies a point value, or states elapsed time, effort or run "
+        "cost, which is an anchoring event as soon as the facilitator sees it."
     ) in item
     assert "A ground that is neither is an anchoring event under the Anchoring guardrail." in item
 
@@ -832,12 +832,12 @@ def test_step_four_re_vote_challenges_an_off_basis_rationale() -> None:
 def test_anchoring_guardrail_makes_a_point_value_sizing_note_an_event_on_challenge() -> None:
     body = flat(section(SKILL.read_text(), GUARDRAIL))
     assert (
-        "an anchoring trigger is a ground step 4 challenges, so it becomes an anchoring event only when it is "
-        "neither restated as a basis driver nor retracted" in body
+        "an anchoring trigger is an off-basis ground step 4 challenges, so it becomes an anchoring event only "
+        "when it is neither restated as a basis driver nor retracted" in body
     )
     assert (
-        "the exceptions are a sizing comment that names, bounds or implies a point value, or that states elapsed "
-        "time, effort or run cost: each is an anchoring event as soon as the facilitator sees it, with no "
+        "every prohibited behaviour above, and a sizing comment that names, bounds or implies a point value or "
+        "that states elapsed time, effort or run cost, is an anchoring event as soon as it is seen, with no "
         "challenge, restatement or retraction path" in body
     )
     assert (
@@ -863,8 +863,8 @@ def test_anchoring_guardrail_bans_naming_bounding_or_implying_a_point_value() ->
 def test_anchoring_guardrail_names_off_basis_grounds_as_a_trigger() -> None:
     body = flat(section(SKILL.read_text(), GUARDRAIL))
     assert (
-        "an anchoring trigger is a ground step 4 challenges, so it becomes an anchoring event only when it is "
-        "neither restated as a basis driver nor retracted" in body
+        "an anchoring trigger is an off-basis ground step 4 challenges, so it becomes an anchoring event only "
+        "when it is neither restated as a basis driver nor retracted" in body
     )
     assert (
         "a ground that weighs verification strength, testability, coverage, the shape of the tests, a duration, "
