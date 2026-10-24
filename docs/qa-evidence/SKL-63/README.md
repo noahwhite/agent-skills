@@ -5,7 +5,7 @@ Build: `f446716699c15f6c40e7839be7f34d9a71fa987b`, merged `main` repository stat
 Fixtures: detached QA worktree at that commit, read-only real tracker/GitHub inventory, and a disposable local clone with the actual squash-merged PR head and dirty, ignored-file, and clean worktree states.
 This repository delivers a Markdown skill: contracts verify its instructions, and documented-command probes are not a full destructive cleanup integration run.
 No visual surface or publishing capability applies, so there are no screenshots or hosted evidence page.
-Raw output: attachment **SKL-63 round 2 independent assertions** on [SKL-63](https://linear.app/officina-pub/issue/SKL-63), filename `SKL-63-round-2-assertions.txt`.
+Raw output: attachment **SKL-63 round 2 independent assertions** on story SKL-63, filename `SKL-63-round-2-assertions.txt`.
 The earlier attachment is preserved, not re-uploaded or adopted as this verification's evidence.
 
 | Item | Verdict | Evidence |
