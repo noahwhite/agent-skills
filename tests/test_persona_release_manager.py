@@ -21,10 +21,16 @@ def section(text: str, heading: str) -> str:
 
 
 def per_story_readiness_line(body: str) -> str:
-    """The single Release readiness bullet that binds per-story evidence; assert it is not duplicated."""
-    lines = [line for line in body.splitlines() if "under `per-story`, that head is" in line]
-    assert len(lines) == 1, f"expected one per-story readiness binding, found {len(lines)}"
-    return lines[0]
+    """The single Release readiness binding for per-story evidence, with its continuation lines."""
+    lines = body.splitlines()
+    starts = [i for i, line in enumerate(lines) if "under `per-story`, that head is" in line]
+    assert len(starts) == 1, f"expected one per-story readiness binding, found {len(starts)}"
+    block = [lines[starts[0]]]
+    for follow in lines[starts[0] + 1:]:
+        if not follow.startswith("  "):
+            break
+        block.append(follow)
+    return "\n".join(block)
 
 
 def test_skill_file_exists() -> None:
@@ -109,7 +115,9 @@ def test_readiness_section_covers_each_promotion_mode() -> None:
         assert phrase in body, f"readiness missing: {phrase}"
     binding = per_story_readiness_line(body)
     for phrase in ("story-scoped promotion branch", "rather than the integration branch head",
-                   "covers exactly the story-scoped changes that branch carries"):
+                   "this check runs once that branch exists",
+                   "must equal the change the evidence covered",
+                   "carried no other un-promoted story's changes"):
         assert phrase in binding, f"per-story readiness binding missing: {phrase}"
     whole = SKILL.read_text().lower()
     for forbidden in ("promotion set under `none`", "promotion set for `none`", "stale evidence is accepted", "accept stale evidence"):
@@ -117,6 +125,7 @@ def test_readiness_section_covers_each_promotion_mode() -> None:
 
 
 def test_promotion_section_cites_and_does_not_redefine() -> None:
+    skill_text = SKILL.read_text().lower()
     body = section(SKILL.read_text(), "Promotion").lower()
     for phrase in (
         "follows `profile.git.promotion` exactly",
@@ -138,8 +147,18 @@ def test_promotion_section_cites_and_does_not_redefine() -> None:
         assert phrase in body, f"promotion missing: {phrase}"
     for removed in ("story-scoped mechanism", "stop and ask for it"):
         assert removed not in body, f"promotion still asks for a defined mechanism: {removed}"
-    assert "\n  never open a promotion pr that carries another story.\n" in body, \
-        "the no-other-story prohibition must stay its own exact line"
+    lines = body.splitlines()
+    prohibition = "never open a promotion pr that carries another story."
+    matches = [line for line in lines if line.strip().startswith(prohibition)]
+    assert len(matches) == 1, "the no-other-story prohibition must appear exactly once"
+    assert matches[0].strip() == prohibition, "the prohibition must not carry an exception"
+    mechanism = [line for line in lines if line.startswith("- `per-story`: promote only")]
+    assert len(mechanism) == 1, mechanism
+    assert "[references/github.md](references/github.md)" in mechanism[0], "the mechanism link must resolve"
+    assert "`per-story` promotion mechanism" in mechanism[0], "the mechanism must be cited by name"
+    for forbidden in ("stale per-story evidence is accepted", "per-story evidence may be stale",
+                      "accept stale evidence for per-story"):
+        assert forbidden not in skill_text, f"readiness accepts stale per-story evidence: {forbidden}"
     whole = SKILL.read_text().lower()
     for forbidden in ("batch all pending stories", "batch the promotion", "batch stories into",
                       "include every pending story", "every pending story in one promotion"):

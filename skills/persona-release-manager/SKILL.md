@@ -45,8 +45,9 @@ A step that needs a value the profile does not set stops and asks for it.
   For each issue, confirm passing pre-production verification evidence from the last environment in `profile.environments` whose `production` is not true.
   That evidence is produced per `qa-verification`; a build check alone is not verification evidence.
   Bind the evidence to the promotion head: record the build SHA or commit it was taken against, and re-check that it matches the head the promotion will carry.
-  Under `per-story`, that head is the head of the story-scoped promotion branch the Promotion step builds, rather than the integration branch head: confirm the evidence covers exactly the story-scoped changes that branch carries, by matching its story-scoped three-dot diff against the commits the evidence was taken against.
-  Evidence that does not cover those carried changes is stale for that promotion and stops it until `qa-verification` refreshes it against that head.
+  Under `per-story`, that head is the head of the story-scoped promotion branch the Promotion step builds, rather than the integration branch head, and this check runs once that branch exists: the promotion branch's own story-scoped diff (`git diff origin/<release>...<promotion-branch>`) must equal the change the evidence covered, which is the diff of the story's merged feature PR.
+  Evidence for an integration build satisfies it only when that build carried no other un-promoted story's changes; otherwise the evidence does not cover that head, so stop and request it for that head per `qa-verification`.
+  Evidence that does not cover those carried changes is stale for that promotion and stops it.
   Evidence for an earlier build, or for a head that a later merge or review fix changed, is stale and stops the promotion.
   A promotion whose tree is identical to the verified build satisfies this check even when its commit SHA differs.
   Evidence-only commits under `profile.qa.evidence_dir` do not invalidate readiness; compare the code tree, not the evidence directory.
