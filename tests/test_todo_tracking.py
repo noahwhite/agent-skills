@@ -125,7 +125,7 @@ def test_seed_lists_state_the_rule_they_carry() -> None:
 def test_every_composing_skill_has_a_seed_entry() -> None:
     labels = [label for label, _ in SEED_BULLET_RE.findall(section(TODO.read_text(), "## Seed lists"))]
     composing = [name for name, caps in MANIFEST["skills"].items() if "todo-tracking" in caps]
-    assert len(composing) == 11
+    assert len(composing) == 12
     for name in composing:
         assert any(name in label for label in labels), name
 
@@ -135,10 +135,10 @@ def test_the_staff_personas_share_one_seed_entry() -> None:
     assert "persona-staff-engineer and persona-staff-devops" in labels
 
 
-def test_the_file_reaches_all_seventeen_bundles() -> None:
+def test_the_file_reaches_all_eighteen_bundles() -> None:
     composing = [name for name, caps in MANIFEST["skills"].items() if "todo-tracking" in caps]
     expected = sorted(composing + RUNTIME_BUNDLES)
-    assert len(expected) == 17
+    assert len(expected) == 18
     assert [copy.parent.parent.name for copy in COPIES] == expected
 
 
