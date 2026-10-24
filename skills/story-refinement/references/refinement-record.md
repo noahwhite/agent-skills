@@ -60,7 +60,7 @@ Never edit the refinement comment to add the result; its id keeps identifying on
 
 Post this after the re-vote, or record it as an unpointed result.
 The three values are recorded before any SM/EM sizing comment or discussion.
-A challenged ground is recorded with its voter and either the restatement or the retraction; a ground that is neither voids the round and is recorded as the void.
+A challenged ground is recorded with its author (a voter, or the SM/EM for a sizing comment) and either the restatement, the withdrawal or the retraction; a ground that is neither voids the round and is recorded as the void.
 
 ```markdown
 ## Pointing record
@@ -81,7 +81,7 @@ A challenged ground is recorded with its voter and either the restatement or the
 - Decision rationale: <one line, or n/a>
 - Effective maximum: <profile.refinement.point_cap; the 8-point rule still triggers at 8 or more>
 - Split: <none, or the slice mapping and sibling issue keys>
-- Challenges: <each ground challenged, its voter, and the restatement or retraction, or the void>
+- Challenges: <each ground challenged, its author (a voter, or the SM/EM for a sizing comment), and the restatement, withdrawal or retraction, or the void>
 - Anchoring events: <none, or the verbatim comment and the recovery, including the newly created voter contexts>
 - Tracker writes: product owner
 ```

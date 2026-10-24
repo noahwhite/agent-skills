@@ -132,8 +132,8 @@ Only the PO and the two engineers count toward the agreement.
   3. The sentence above is the pointing basis.
      Every pointing prompt or prompt file carries it verbatim, including the re-run after a Step 4 re-refine and each slice estimate under the Split rule.
   4. Each voter submits one point value valid for `profile.tracker.estimate_scale` plus a short complexity rationale.
-     The rationale names complexity drivers only, and each named driver is a property of the change: design difficulty, an interacting constraint, an unknown, or the risk of breaking existing behaviour.
-     Beside the ban on a duration, effort or run-cost measure, verification strength, testability, coverage and the shape of the tests are out of basis, and so is weighing a point value already recorded for this story, a prior story, a parent or sibling, or an inherited split.
+     The rationale cites no duration, effort or run-cost measure, and it names complexity drivers only, each a property of the change: design difficulty, an interacting constraint, an unknown, or the risk of breaking existing behaviour.
+     Verification strength, testability, coverage and the shape of the tests are also out of basis, and so is weighing a point value already recorded for this story, a prior story, a parent or sibling, or an inherited split.
      Verification strength is how well a behaviour is checked and breakage risk is what can silently change, so the first is out of basis and the second is a basis driver.
      The value is written only to that voter's own file in the session's scratch directory.
   5. No voter sees another voter's point value before its own value is recorded.
@@ -141,7 +141,7 @@ Only the PO and the two engineers count toward the agreement.
      The SM/EM submits no point value.
   7. After all three values are recorded, the SM/EM may provide factual, reference-only sizing context: comparable stories in complexity terms, comparable unknowns and constraints, and relevant scope differences.
      It must not state or imply a preferred value, recommend a direction, reveal or compare individual votes before the discussion, or use leading language.
-     It must not name, bound or imply any point value - a prior story's, an inherited split value, a value read from this story's own recorded pointing history, or one implied by a split status - and such a statement is an anchoring event under the Anchoring guardrail.
+     It must not name, bound or imply any point value - a prior story's, an inherited split value, a value read from this story's own recorded pointing history, or one implied by a split status - and such a statement is an anchoring event under the Anchoring guardrail unless the SM/EM withdraws it when the facilitator challenges it.
      A statement of elapsed time or effort is an anchoring event under the Anchoring guardrail.
   8. A `tshirt` scale stops the cap step with a clear message.
      Pointing still records the three values; the split rule's numeric cap does not apply.
@@ -154,8 +154,8 @@ Only the PO and the two engineers count toward the agreement.
 - **Process:**
   1. Hold one discussion round that names only the high and the low.
      Do not compare the other values or single out a voter.
-     In that round, and against the rationales recorded in Step 3, the facilitator challenges every ground outside the pointing basis, whether it is heard in the discussion or read in a recorded rationale.
-     A challenged ground must be restated as a basis driver or retracted; a ground that is neither is an anchoring event under the Anchoring guardrail.
+     In that round, and against every rationale recorded in this ceremony - the Step 3 rationales and any re-vote rationale - the facilitator challenges every ground outside the pointing basis, whether it is heard in the discussion or read in a recorded rationale.
+     A challenged ground must be restated as a basis driver, withdrawn or retracted by its author, the SM/EM for its own sizing comment; a ground that is neither is an anchoring event under the Anchoring guardrail.
   2. Run one re-vote.
      The re-vote prompt carries the pointing basis from Step 3.
      Each voter records the set of values it accepts for this story (one or more) or records no consensus, with a short complexity rationale under the Step 3 rationale rule.
@@ -196,9 +196,10 @@ The prohibited behaviours are:
 - asking for a revote after stating a view;
 - comparing individual votes.
 
-A ground outside the pointing basis is an anchoring trigger on the same terms: a rationale or a sizing comment that weighs verification strength, testability, coverage, the shape of the tests, or a prior or inherited point value is challenged under Step 4 and voids the round when it is neither restated as a basis driver nor retracted.
+A ground outside the pointing basis is an anchoring trigger on the same terms: a rationale or a sizing comment that weighs verification strength, testability, coverage, the shape of the tests, or a prior or inherited point value is challenged under Step 4, and the SM/EM's own sizing comment is withdrawn or restated by the SM/EM when the facilitator challenges it.
+A challenged ground that is neither restated as a basis driver nor withdrawn or retracted is an anchoring event, and the void re-runs the independent vote from Step 3 in newly created voter contexts.
 
-Fresh voter contexts exclude the tainted discussion and the sizing comment, but they cannot exclude a point value recorded on the story surface that Step 1 requires every voter to read, so the Step 3 rationale rule is what keeps such a value out of the vote.
+Fresh voter contexts exclude the tainted discussion and the sizing comment, but they cannot exclude a point value recorded on the story surface that Step 1 hands every voter with the story, so the Step 3 rationale rule is what keeps such a value out of the vote.
 
 On anchoring: stop the round, record the comment verbatim, void the consensus and any vote recorded after the anchor, and re-run the independent vote with newly created voter contexts that exclude the tainted discussion and sizing comment. Never reuse the sessions that saw the anchor. Record the recovery.
 Do not resume the tainted discussion.
