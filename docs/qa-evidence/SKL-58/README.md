@@ -8,7 +8,7 @@ The sanitized command assertions are attached to the Linear story as `SKL-58 QA 
 
 | Item | Verdict | Evidence |
 |---|---|---|
-| AC1 | Verified | Both image users created and removed a directory under the identical literal `/tmp/agent-skills` with `CLAUDE_JOB_DIR` unset. |
+| AC1 | Verified | Both image users created and removed a directory under the identical literal `/tmp/agent-skills` with the runtime job variable unset. |
 | AC2 | Failed | Both shipped `code-review.md` and `engineering-workflow.md` overlays still use fixed `/tmp/pr-review*` and `/tmp/loop-review*` worktree and `CODEX_HOME` paths outside the session directory. |
 | AC3 | Verified | Both consumer portability suites passed their labelled-exception checks. |
 | AC4 | Verified for changed portions | The shared profile hunk and nine common overlay patch hunks matched byte for byte, the existing model-map divergence is documented, and hydration reported zero problems. |
