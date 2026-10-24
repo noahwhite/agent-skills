@@ -194,7 +194,7 @@ The SM/EM's sizing comments are logged with the consensus record.
 The prohibited behaviours are:
 
 - naming a target number;
-- for the SM/EM, naming, bounding or implying a point value in sizing context or in the discussion, including a prior story's, an inherited split value, a value recorded on the story surface, or one implied by a split status;
+- for the SM/EM, naming, bounding or implying a point value in sizing context or in any comment of its own, including a prior story's, an inherited split value, a value recorded on the story surface, or one implied by a split status;
 - saying "I would go higher" or "I would go lower";
 - singling out the highest or lowest vote as the realistic one;
 - asking for a revote after stating a view;

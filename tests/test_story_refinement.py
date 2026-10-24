@@ -856,8 +856,8 @@ GUARDRAIL = "Anchoring guardrail"
 def test_anchoring_guardrail_bans_naming_bounding_or_implying_a_point_value() -> None:
     body = flat(section(SKILL.read_text(), GUARDRAIL))
     assert (
-        "for the sm/em, naming, bounding or implying a point value in sizing context or in the discussion, "
-        "including a prior story's, an inherited split value, a value recorded on the story surface, or one "
+        "for the sm/em, naming, bounding or implying a point value in sizing context or in any comment of its "
+        "own, including a prior story's, an inherited split value, a value recorded on the story surface, or one "
         "implied by a split status" in body
     )
 
