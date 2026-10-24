@@ -111,7 +111,7 @@ File: `SKILL.md`
 Matched text:
 
 ```text
-A challenged ground must be restated as a basis driver, which may move the voter's value to the one its basis supports, or retracted; the SM/EM withdraws or restates its own sizing comment on the same terms, except a statement that names, bounds or implies a point value, or states elapsed time, effort or run cost, which is an anchoring event as soon as the facilitator sees it.
+A challenged ground must be restated as a basis driver or retracted, and a voter whose basis does not support its recorded value records that in the re-vote; the SM/EM withdraws or restates its own sizing comment on the same terms, except a statement that names, bounds or implies a point value, or states elapsed time, effort or run cost, which is an anchoring event as soon as the facilitator sees it.
 ```
 
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_step_four_facilitator_challenges_every_off_basis_ground`
@@ -316,7 +316,7 @@ File: `refinement-record.md`
 Matched text:
 
 ```text
-- Challenges: <none, or each ground challenged, its author (a voter, or the SM/EM for a sizing comment), the restatement, withdrawal or retraction, or the void, with the value before and after where a restatement moved it>
+- Challenges: <none, or each ground challenged, its author (a voter, or the SM/EM for a sizing comment), and the restatement, withdrawal or retraction, or the void>
 ```
 
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_pointing_template_records_each_challenge_and_outcome`

@@ -81,7 +81,7 @@ A challenged ground is recorded with its author (a voter, or the SM/EM for a siz
 - Decision rationale: <one line, or n/a>
 - Effective maximum: <profile.refinement.point_cap; the 8-point rule still triggers at 8 or more>
 - Split: <none, or the slice mapping and sibling issue keys>
-- Challenges: <none, or each ground challenged, its author (a voter, or the SM/EM for a sizing comment), the restatement, withdrawal or retraction, or the void, with the value before and after where a restatement moved it>
+- Challenges: <none, or each ground challenged, its author (a voter, or the SM/EM for a sizing comment), and the restatement, withdrawal or retraction, or the void>
 - Superseded values after a void: <none, or the voided values and the blind vote that replaced them>
 - Anchoring events: <none, or the verbatim comment and the recovery, including the newly created voter contexts>
 - Tracker writes: product owner

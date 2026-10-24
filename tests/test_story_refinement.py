@@ -810,8 +810,9 @@ def test_step_four_facilitator_challenges_every_off_basis_ground() -> None:
         "and its author, and never the author's value."
     ) in item
     assert (
-        "A challenged ground must be restated as a basis driver, which may move the voter's value to the one its "
-        "basis supports, or retracted; the SM/EM withdraws or restates its own sizing comment on the same terms, "
+        "A challenged ground must be restated as a basis driver or retracted, and a voter whose basis does not "
+        "support its recorded value records that in the re-vote; the SM/EM withdraws or restates its own sizing "
+        "comment on the same terms, "
         "except a statement that names, bounds or implies a point value, or states elapsed time, effort or run "
         "cost, which is an anchoring event as soon as the facilitator sees it."
     ) in item
@@ -1037,8 +1038,7 @@ def test_phrasing_table_permitted_cells_never_name_a_point_value() -> None:
 def test_pointing_template_records_each_challenge_and_outcome() -> None:
     assert (
         "- Challenges: <none, or each ground challenged, its author (a voter, or the SM/EM for a sizing comment), "
-        "the restatement, withdrawal or retraction, or the void, with the value before and after where a "
-        "restatement moved it>" in pointing_template()
+        "and the restatement, withdrawal or retraction, or the void>" in pointing_template()
     )
     assert (
         "- Superseded values after a void: <none, or the voided values and the blind vote that replaced them>"
