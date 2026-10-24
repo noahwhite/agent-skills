@@ -10,9 +10,10 @@
 # Usage:
 #   run-adversarial-pipeline.sh preflight --base REF [--test-cmd CMD] [--test-dir DIR] [--scratch DIR]
 #   run-adversarial-pipeline.sh run <sweep|hunt|arbitrate> --base REF --agent-cmd TEMPLATE
+#                               [--model ID] [--probe-cmd TEMPLATE] [--probe-timeout SECONDS]
 #                               [--spec FILE] [--no-sweep] [--scratch DIR] [--timeout SECONDS]
 #   run-adversarial-pipeline.sh dossier <sweep|hunt|arbitrate> --base REF [--spec FILE] [--no-sweep] [--scratch DIR]
-#   run-adversarial-pipeline.sh record <sweep|hunt|arbitrate> --base REF [--spec FILE] [--no-sweep]  # accept a subagent's report
+#   run-adversarial-pipeline.sh record <sweep|hunt|arbitrate> --base REF [--model ID] [--spec FILE] [--no-sweep]  # accept a subagent's report
 #   run-adversarial-pipeline.sh checkout --base REF [--scratch DIR]   # throwaway detached worktree at HEAD (subagent flow)
 #   run-adversarial-pipeline.sh cleanup <checkout-path>               # removes a checkout this script made
 #   run-adversarial-pipeline.sh paths --base REF                      # prints this run's artifact paths
@@ -40,7 +41,41 @@
 # real boundary (see references/runtimes.md).
 #
 # Env equivalents: ADVERSARIAL_REPO, ADVERSARIAL_TEST_CMD, ADVERSARIAL_TEST_DIR, ADVERSARIAL_BASE,
-# ADVERSARIAL_SPEC_FILE, ADVERSARIAL_SCRATCH, ADVERSARIAL_AGENT_CMD, ADVERSARIAL_TIMEOUT (900).
+# ADVERSARIAL_SPEC_FILE, ADVERSARIAL_SCRATCH, ADVERSARIAL_AGENT_CMD, ADVERSARIAL_MODEL,
+# ADVERSARIAL_PROBE_CMD, ADVERSARIAL_PROBE_TIMEOUT (30), ADVERSARIAL_TIMEOUT (900).
+#
+# --model ID (ADVERSARIAL_MODEL) is the model id this phase was given. The script never resolves a
+# model: it echoes back the id it was handed. A phase that cannot run is failed, never skipped and
+# never substituted with another model, provider or reviewer.
+#
+# --probe-cmd (ADVERSARIAL_PROBE_CMD) is an optional availability check: a shell command template
+# whose {model} placeholder is replaced with the shell-quoted model id. It runs under its own
+# --probe-timeout (ADVERSARIAL_PROBE_TIMEOUT, 30 seconds), with stdin from /dev/null, in a fresh
+# empty directory under the run's scratch directory - never inside the checkout under review. A
+# configured probe that exits non-zero, prints a provider error (rate limit, authentication, quota
+# exhaustion, unavailable or unknown model), or outlives its timeout fails the phase with exit 20
+# before the dossier is built and before any agent command runs, naming the phase, the model id
+# supplied, the probe's exit code and its output tail (the timeout is named instead of an exit
+# code when the probe outlived it). With no probe configured the phase records
+# 'availability check: not configured' on stderr, so the absence is visible rather than silent.
+#
+# Progress: while the agent runs, `run` writes an elapsed-time line to its own stderr - the first
+# after one second, then at least every 30 seconds - carrying the phase, the elapsed seconds, the
+# configured timeout and the availability-check state, and one completion line with the elapsed
+# time. Progress never reaches the artifact or the agent's stdout, so the artifact's first line
+# stays 'REVIEW-RAN: yes'.
+#
+# The agent command runs in its own process group under one SIGKILL deadline of that whole group, so
+# a child the CLI leaves retrying after the main call failed cannot keep the phase alive. A phase
+# killed by --timeout (ADVERSARIAL_TIMEOUT, default 900) exits 19, naming the phase, the model id
+# when supplied and the timeout in seconds; no other failure path changes its exit code.
+#
+# Diagnosis: a non-zero agent exit, a timeout kill, and a report `accept_phase` rejects all print the
+# phase, the exit code, the model id when supplied, and the last 40 lines of ${phase}-agent.err and
+# ${phase}-agent.log (or, for `record`, the reason and the report tail) before exiting non-zero. A
+# provider-error line on the agent's stderr appears there verbatim. The script cannot read a
+# runtime's own session or event stream: a runtime that reports provider errors only there must
+# surface them on the phase's stderr in its --agent-cmd template (references/runtimes.md, Models).
 #
 # --scratch DIR names the session's scratch directory (references/runtimes.md, Scratch files): the
 # script gives each run its own directory inside it, so a run's dossiers and checkouts do not
@@ -59,7 +94,8 @@
 # Exit codes: 0 ok / PASS, 1 preflight FAIL, 2 usage, 3 preflight INCOMPLETE, 11 not a git repo,
 # 12 bad base, 13 missing or invalid prior artifact, 14 cleanup refused, 15 agent command failed
 # or wrote no fresh report, 17 agent ran blind (sandbox error on its stderr, or no `REVIEW-RAN: yes`
-# first line), 18 the agent changed the primary checkout.
+# first line), 18 the agent changed the primary checkout, 19 the phase was killed by --timeout,
+# 20 the phase's availability check failed before any agent ran.
 set -euo pipefail
 
 usage() { awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0" >&2; exit 2; }
@@ -84,11 +120,14 @@ TEST_DIR="${ADVERSARIAL_TEST_DIR:-}"
 SCRATCH="${ADVERSARIAL_SCRATCH:-}"
 AGENT_CMD="${ADVERSARIAL_AGENT_CMD:-}"
 TIMEOUT="${ADVERSARIAL_TIMEOUT:-900}"
+MODEL="${ADVERSARIAL_MODEL:-}"
+PROBE_CMD="${ADVERSARIAL_PROBE_CMD:-}"
+PROBE_TIMEOUT="${ADVERSARIAL_PROBE_TIMEOUT:-30}"
 NO_SWEEP=0
 SCRATCH_SET=0
 while [ $# -gt 0 ]; do
   case "$1" in
-    --repo|--base|--spec|--test-cmd|--test-dir|--scratch|--agent-cmd|--timeout)
+    --repo|--base|--spec|--test-cmd|--test-dir|--scratch|--agent-cmd|--timeout|--model|--probe-cmd|--probe-timeout)
       [ $# -ge 2 ] || die 2 "$1 needs a value"
       case "$1" in
         --repo) REPO="$2" ;;
@@ -99,6 +138,9 @@ while [ $# -gt 0 ]; do
         --scratch) SCRATCH="$2"; SCRATCH_SET=1 ;;
         --agent-cmd) AGENT_CMD="$2" ;;
         --timeout) TIMEOUT="$2" ;;
+        --model) MODEL="$2" ;;
+        --probe-cmd) PROBE_CMD="$2" ;;
+        --probe-timeout) PROBE_TIMEOUT="$2" ;;
       esac
       shift 2 ;;
     --no-sweep) NO_SWEEP=1; shift ;;
@@ -114,6 +156,9 @@ if [ -n "$SPEC_FILE" ]; then
   SPEC_FILE="$(abspath "$SPEC_FILE")"
 fi
 [[ "$TIMEOUT" =~ ^[0-9]+$ ]] || die 2 "--timeout must be a whole number of seconds."
+[[ "$PROBE_TIMEOUT" =~ ^[0-9]+$ ]] || die 2 "--probe-timeout must be a whole number of seconds."
+MODEL_LABEL="${MODEL:-not supplied}"
+availability_state="availability check: not configured"
 
 # The target repository: --repo, else the current directory. Never this script's location.
 if [ -n "$REPO" ]; then
@@ -364,6 +409,146 @@ init_scratch() {  # sets SCRATCH (this run's directory) and SESSION_SCRATCH (the
   fi
 }
 
+# --- process control: one SIGKILL deadline per phase, over the whole process group -----------------
+# Seconds between progress lines once the first one has been written; the contract is "at least
+# every 30 seconds", and the first line comes one second in so a short phase still shows progress.
+HEARTBEAT_SECONDS=10
+POLL_SECONDS=0.2
+DIAGNOSIS_LINES=40
+PROBE_TAIL_LINES=20
+# Provider failures worth failing a phase for before spending budget on it. Deliberately broad: the
+# probe's output tail is surfaced verbatim, so a false positive is visible and cheap to correct.
+PROVIDER_ERROR_RE='rate[ _-]?limit|too many requests|(^|[^0-9])429([^0-9]|$)|unauthori[sz]ed|authentication (failed|error|required)|invalid[ _-]?api[ _-]?key|(^|[^0-9])40[13]([^0-9]|$)|quota|insufficient[ _-](funds|credits|quota)|exceeded your (current )?quota|out of credits|credits? (are )?(exhausted|depleted)|billing|(^|[^0-9])402([^0-9]|$)|model[ _-]?not[ _-]?found|unknown model|no such model|model .*(not found|not available|unavailable)|unavailable|overloaded|(^|[^0-9])50[23]([^0-9]|$)|service unavailable|provider error'
+
+# Runs a command line in its own process group under one SIGKILL deadline of that whole group, so a
+# child the CLI leaves retrying cannot keep the phase alive. The deadline is our own, so a timeout
+# is attributable from this path and never guessed from an exit code (a self-killed child also
+# exits 137). Results: RUN_RC (the command's exit status), RUN_TIMED_OUT (1 when the deadline
+# killed the group), RUN_ELAPSED (whole seconds).
+#   $1 command line  $2 timeout seconds  $3 stdin path  $4 stdout path
+#   $5 stderr path, or --combined to merge stderr into $4  $6 phase to heartbeat for ("" = none)
+RUN_RC=0
+RUN_TIMED_OUT=0
+RUN_ELAPSED=0
+run_guarded() {
+  local line="$1" secs="$2" stdin_path="$3" stdout_path="$4" stderr_path="$5" hb_phase="$6"
+  local rcfile pid start elapsed next_hb rc_extra=""
+  RUN_RC=0
+  RUN_TIMED_OUT=0
+  RUN_ELAPSED=0
+  rcfile="$(mktemp -p "$RUN_DIR" run-status.XXXXXX)" || die 2 "could not create a status file in the run directory"
+  rm -f -- "$rcfile"
+  if [ "$stderr_path" = "--combined" ]; then rc_extra="2>&1"; fi
+  start="$SECONDS"
+  next_hb=1
+  # Job control gives the background job its own process group, so the kill reaches every child.
+  # The status is captured with `||` so `set -e` cannot abort the job before it records it.
+  set -m
+  if [ -n "$rc_extra" ]; then
+    { rc=0; bash -c "$line" < "$stdin_path" > "$stdout_path" 2>&1 || rc=$?; printf '%s\n' "$rc" > "$rcfile"; } &
+  else
+    { rc=0; bash -c "$line" < "$stdin_path" > "$stdout_path" 2> "$stderr_path" || rc=$?; printf '%s\n' "$rc" > "$rcfile"; } &
+  fi
+  pid=$!
+  set +m
+  while [ ! -f "$rcfile" ]; do
+    elapsed=$(( SECONDS - start ))
+    if [ "$elapsed" -ge "$secs" ]; then
+      kill -KILL -- "-$pid" 2>/dev/null || true
+      wait "$pid" 2>/dev/null || true
+      rm -f -- "$rcfile"
+      RUN_TIMED_OUT=1
+      RUN_RC=137
+      RUN_ELAPSED="$elapsed"
+      return 0
+    fi
+    if [ -n "$hb_phase" ] && [ "$elapsed" -ge "$next_hb" ]; then
+      progress_line "$hb_phase" "$elapsed"
+      next_hb=$(( elapsed + HEARTBEAT_SECONDS ))
+    fi
+    sleep "$POLL_SECONDS"
+  done
+  RUN_RC="$(cat -- "$rcfile" 2>/dev/null || echo "")"
+  case "$RUN_RC" in ''|*[!0-9]*) RUN_RC=1 ;; esac
+  wait "$pid" 2>/dev/null || true
+  rm -f -- "$rcfile"
+  RUN_ELAPSED="$(( SECONDS - start ))"
+}
+
+progress_line() {  # $1 phase, $2 elapsed seconds: stderr only, never the artifact or the agent's stdout
+  printf 'adversarial-pipeline: phase=%s elapsed=%ss timeout=%ss model=%s; %s\n' \
+    "$1" "$2" "$TIMEOUT" "$MODEL_LABEL" "$availability_state" >&2
+}
+
+completion_line() {  # $1 phase, $2 elapsed seconds
+  printf 'adversarial-pipeline: phase=%s complete elapsed=%ss model=%s\n' "$1" "$2" "$MODEL_LABEL" >&2
+}
+
+emit_tail() {  # $1 label, $2 file: the last DIAGNOSIS_LINES lines, verbatim, or a note that it is absent
+  local lines
+  if [ ! -f "$2" ]; then
+    printf '%s: (no such file: %s)\n' "$1" "$2" >&2
+    return 0
+  fi
+  lines="$(tail -n "$DIAGNOSIS_LINES" -- "$2" 2>/dev/null || true)"
+  if [ -z "$lines" ]; then
+    printf '%s: (empty: %s)\n' "$1" "$2" >&2
+  else
+    printf '%s: last %s lines of %s:\n%s\n' "$1" "$DIAGNOSIS_LINES" "$2" "$lines" >&2
+  fi
+}
+
+diagnose_phase() {  # $1 phase, $2 exit code, $3 reason (already captured), $4 report path when applicable
+  local phase_name="$1" code="$2" reason="${3:-}" report="${4:-}"
+  printf 'adversarial-pipeline: phase=%s exit=%s model=%s\n' "$phase_name" "$code" "$MODEL_LABEL" >&2
+  if [ -n "$reason" ]; then
+    printf 'adversarial-pipeline: reason: %s\n' "$reason" >&2
+  fi
+  if [ -n "$report" ]; then
+    emit_tail "adversarial-pipeline: report tail" "$report"
+    return 0
+  fi
+  emit_tail "adversarial-pipeline: ${phase_name}-agent.err" "$RUN_DIR/${phase_name}-agent.err"
+  emit_tail "adversarial-pipeline: ${phase_name}-agent.log" "$RUN_DIR/${phase_name}-agent.log"
+}
+
+# The availability check: a caller-supplied probe template, run before the dossier is built and
+# before any agent command. The script never resolves a model; it substitutes the id it was given.
+availability_probe() {  # $1 phase: sets availability_state, or exits 20
+  local phase_name="$1" probedir out line q_model tail_text provider_hit
+  if [ -z "$MODEL" ]; then
+    die 20 "the $phase_name phase cannot run: a probe is configured but no model was supplied (pass --model ID, or ADVERSARIAL_MODEL); probe: $PROBE_CMD"
+  fi
+  probedir="$(mktemp -d -p "$SCRATCH" "probe.$phase_name.XXXXXX")" \
+    || die 2 "could not create a probe directory under the run's scratch directory"
+  out="$RUN_DIR/$phase_name-probe.log"
+  : > "$out"
+  q_model="$(printf '%q' "$MODEL")"
+  line="${PROBE_CMD//\{model\}/$q_model}"
+  # stdin is /dev/null, and the working directory is a fresh empty directory under the run's
+  # scratch directory - never the checkout under review.
+  line="cd $(printf '%q' "$probedir") && ${line}"
+  run_guarded "$line" "$PROBE_TIMEOUT" /dev/null "$out" --combined ""
+  tail_text="$(tail -n "$PROBE_TAIL_LINES" -- "$out" 2>/dev/null || true)"
+  if [ "$RUN_TIMED_OUT" -eq 1 ]; then
+    die 20 "the $phase_name phase cannot run for model '$MODEL': the availability check (--probe-timeout ${PROBE_TIMEOUT}s) timed out and its process group was killed. Probe: $PROBE_CMD
+probe output tail:
+${tail_text:-(no output)}"
+  fi
+  provider_hit="$(grep -iE -- "$PROVIDER_ERROR_RE" "$out" 2>/dev/null | head -n 1 || true)"
+  if [ "$RUN_RC" -ne 0 ]; then
+    die 20 "the $phase_name phase cannot run for model '$MODEL': the availability check failed with exit code ${RUN_RC}. Probe: $PROBE_CMD
+probe output tail:
+${tail_text:-(no output)}"
+  fi
+  if [ -n "$provider_hit" ]; then
+    die 20 "the $phase_name phase cannot run for model '$MODEL': the availability check reported a provider error with exit code 0. Probe: $PROBE_CMD
+probe output tail:
+${tail_text:-(no output)}"
+  fi
+  availability_state="availability check: probe ok"
+}
+
 emit_spec() {
   if [ -n "$SPEC_FILE" ]; then
     cat -- "$SPEC_FILE"
@@ -596,7 +781,15 @@ case "$cmd" in
 
   record)
     require_predecessors "$phase"
-    accept_phase "$phase" ""
+    rc_accept=0
+    reason_file="$RUN_DIR/$phase-accept.err"
+    ( accept_phase "$phase" "" ) 2> "$reason_file" || rc_accept=$?
+    if [ "$rc_accept" -ne 0 ]; then
+      diagnose_phase "$phase" "$rc_accept" "$(cat -- "$reason_file" 2>/dev/null || true)" "$(artifact_for "$phase")"
+      rm -f -- "$reason_file"
+      exit "$rc_accept"
+    fi
+    rm -f -- "$reason_file"
     echo "Phase $phase accepted -> $(artifact_for "$phase")" >&2
     ;;
 
@@ -604,6 +797,11 @@ case "$cmd" in
     [ -n "$AGENT_CMD" ] || die 2 "--agent-cmd (or ADVERSARIAL_AGENT_CMD) is required; build it from the profile agent for this phase."
     require_predecessors "$phase"
     init_scratch
+    # The availability check runs before the dossier is built and before any agent command.
+    if [ -n "$PROBE_CMD" ]; then
+      availability_probe "$phase"
+    fi
+    printf 'adversarial-pipeline: phase=%s model=%s; %s\n' "$phase" "$MODEL_LABEL" "$availability_state" >&2
     out="$(artifact_for "$phase")"
     dossier="$SCRATCH/${phase}-dossier.md"
     write_dossier "$phase" "$dossier"
@@ -616,25 +814,41 @@ case "$cmd" in
     line="${AGENT_CMD//\{prompt_file\}/$q_prompt}"
     line="${line//\{checkout\}/$q_checkout}"
     errlog="$RUN_DIR/${phase}-agent.err"
+    agentlog="$RUN_DIR/${phase}-agent.log"
     begin_phase "$phase"
     bind_phase "$phase"
-    rc=0
+    rm -f -- "$errlog" "$agentlog"
+    result_out="$out"
     if [[ "$AGENT_CMD" == *"{output_file}"* ]]; then
       line="${line//\{output_file\}/$q_out}"
-      (cd "$checkout" && ADVERSARIAL_SESSION_SCRATCH="${SESSION_SCRATCH:-$SCRATCH}" timeout -s KILL "${TIMEOUT}s" bash -c "$line" < "$dossier" > "$RUN_DIR/${phase}-agent.log" 2> "$errlog") || rc=$?
-    else
-      (cd "$checkout" && ADVERSARIAL_SESSION_SCRATCH="${SESSION_SCRATCH:-$SCRATCH}" timeout -s KILL "${TIMEOUT}s" bash -c "$line" < "$dossier" > "$out" 2> "$errlog") || rc=$?
+      result_out="$agentlog"
     fi
+    export ADVERSARIAL_SESSION_SCRATCH="${SESSION_SCRATCH:-$SCRATCH}"
+    run_guarded "cd $q_checkout && ${line}" "$TIMEOUT" "$dossier" "$result_out" "$errlog" "$phase"
+    unset ADVERSARIAL_SESSION_SCRATCH
+    completion_line "$phase" "$RUN_ELAPSED"
     if [ "$(primary_state)" != "$(cat -- "$RUN_DIR/$phase.primary")" ]; then
       rm -f -- "$out.stamp"
-      die 18 "the primary checkout ($ROOT) changed while the $phase agent ran; this phase is not accepted. Inspect 'git status' there."
+      diagnose_phase "$phase" 18 "the primary checkout ($ROOT) changed while the $phase agent ran; this phase is not accepted. Inspect 'git status' there."
+      exit 18
     fi
-    if [ "$rc" -ne 0 ]; then
-      echo "ERROR: agent command failed for $phase (exit $rc; 137 = timed out). See $errlog:" >&2
-      tail -n 5 "$errlog" >&2 || true
-      exit 15
+    if [ "$RUN_TIMED_OUT" -eq 1 ]; then
+      diagnose_phase "$phase" 19 "the phase was killed by --timeout (${TIMEOUT}s): its whole process group received SIGKILL"
+      die 19 "the $phase phase gave no result within its ${TIMEOUT}s timeout (model=$MODEL_LABEL); it is a failed phase, not a clean one, and nothing was substituted for it."
     fi
-    accept_phase "$phase" "$errlog"
+    if [ "$RUN_RC" -ne 0 ]; then
+      diagnose_phase "$phase" 15 "the $phase agent command exited ${RUN_RC}"
+      die 15 "the $phase agent command failed (exit $RUN_RC, model=$MODEL_LABEL); this phase is failed, not clean, and nothing was substituted for it."
+    fi
+    rc_accept=0
+    reason_file="$RUN_DIR/$phase-accept.err"
+    ( accept_phase "$phase" "$errlog" ) 2> "$reason_file" || rc_accept=$?
+    if [ "$rc_accept" -ne 0 ]; then
+      diagnose_phase "$phase" "$rc_accept" "$(cat -- "$reason_file" 2>/dev/null || true)"
+      rm -f -- "$reason_file"
+      exit "$rc_accept"
+    fi
+    rm -f -- "$reason_file"
     echo "Phase $phase -> $out" >&2
     if [ "$phase" = "arbitrate" ]; then cat -- "$out"; fi
     ;;
