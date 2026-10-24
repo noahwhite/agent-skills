@@ -106,9 +106,9 @@ Always:
 Under `per-story`, build the promotion branch and its PR like this:
 
 1. Cut the promotion branch from `origin/<profile.git.release_branch>` with that explicit base ref, after `git fetch --prune origin`.
-2. Identify the story's merged feature PR, by its issue key, with `gh pr list --state merged --base <profile.git.integration_branch> --limit 1000 --search "<issue key>" --json number,headRefName,mergeCommit`, keep the one whose head branch carries the issue key under the feature branch prefix, and select from `origin/<profile.git.integration_branch>` only the commits that PR added.
+2. Identify the story's merged feature PR, by its issue key, with `gh pr list --state merged --base <profile.git.integration_branch> --limit 1000 --search "<issue key>" --json number,headRefName,mergeCommit,commits`, keep the one whose head branch carries the issue key under the feature branch prefix, and select from `origin/<profile.git.integration_branch>` only the commits that PR added.
    With `profile.git.merge_method` `squash`, select that PR's squash commit.
-   With `profile.git.merge_method` `rebase`, select the integration-branch commits whose patch ids match the PR's commits, the ones `git cherry origin/<profile.git.release_branch> origin/<profile.git.integration_branch>` marks with `+`.
+   With `profile.git.merge_method` `rebase`, select the integration-branch commits whose patch id matches one of that PR's own commits.
    With `profile.git.merge_method` `merge`, select that PR's merge commit.
 3. Carry the selected commits onto the promotion branch by cherry-picking them in their original order, with `-m 1` when a selected commit is a merge commit, or by squash-applying non-merge selections with `git cherry-pick -n` and one commit.
 4. Push the branch, then open the promotion PR from it to `profile.git.release_branch`.
