@@ -77,6 +77,9 @@ If your runtime is not listed, map each capability to its closest equivalent and
   OpenCode V2 ships todos off by default (`experimental.todo: true` opts in, and the harness must still expose the tool), so the checklist file is what every session falls back to when no todo tool is exposed (see `references/todo-tracking.md`).
 - **Models.** A skill that asks for a specific model role (reviewer, adjudicator) takes the model from the profile.
   If the runtime cannot run that model, stop and say so; do not silently substitute another model for a review of record.
+  A gate phase launched through `run-adversarial-pipeline.sh` takes the model id with `--model` and, when the consumer configures one, an availability probe with `--probe-cmd`; the script never resolves or substitutes a model.
+  The script reads only a phase's own stderr, its stdout log and its artifact, never a runtime's session log or event stream: a runtime that reports provider errors only there must surface them on the phase's stderr in its `--agent-cmd` template, or a rate-limited or unauthorized model cannot be diagnosed.
+  A phase killed by its `--timeout` exits 19 and a failed availability check exits 20; report either as a failed phase, never as a clean one.
   The same holds for a reasoning effort a skill asks for: if the runtime or model does not offer that level, stop and say so; never substitute another level.
   On Claude Code, `CLAUDE_CODE_EFFORT_LEVEL` overrides every subagent's effort and removes the `effort` parameter; if it differs from the effort a skill asks for, stop and say so.
   `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` is an on/off flag: when it is on, the `model` parameter is removed and a subagent runs on `CLAUDE_CODE_SUBAGENT_MODEL`, or on the main session's model when that is unset or `inherit`; if that model differs from the one a skill asks for, stop and say so.

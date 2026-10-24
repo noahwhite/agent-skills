@@ -84,6 +84,10 @@ Common inputs:
 - `--scratch <dir>`: the absolute path of the session's scratch directory (`references/runtimes.md`, Scratch files), passed to every command so the dossiers and throwaway checkouts stay in it; the script gives each run its own directory inside it and hands the session directory to the phase agent as `ADVERSARIAL_SESSION_SCRATCH`.
   Never pass the profile's base directory; omitted, the script creates a standalone directory per invocation, so two commands no longer share one.
   The script keeps its own run state (accepted phases, logs, stamps) under the repository's git dir (`git rev-parse --git-path adversarial-pipeline`), keyed by base and head: that is the script's state, not a session scratch artefact.
+- `--model ID` (`ADVERSARIAL_MODEL`): the model id this phase was given.
+  The script never resolves a model; it echoes the id back in every progress and failure line, so the evidence names the model that was actually asked for.
+- `--probe-cmd TEMPLATE` (`ADVERSARIAL_PROBE_CMD`) and `--probe-timeout SECONDS` (`ADVERSARIAL_PROBE_TIMEOUT`, default 30): an optional availability check for that model, run before the dossier is built.
+- `--timeout SECONDS` (`ADVERSARIAL_TIMEOUT`, default 900): the deadline of the whole phase, auxiliary calls included.
 
 Launching a phase depends on the profile agent's `runtime`:
 
@@ -105,6 +109,31 @@ Never put the dossier's contents in argv: argv is visible to other processes, an
 Give it to the agent on stdin or as a path it reads.
 Every dossier asks for a first line of `REVIEW-RAN: yes`, or `REVIEW-RAN: no - <reason>` when the agent could not read or run what it needed; keep that instruction in any prompt you write yourself.
 Every prompt the script writes tells the agent never to write secrets to files or command arguments; keep that line in any prompt you write yourself.
+
+## Availability, timeout, progress and diagnosis
+
+A phase whose model cannot run is failed with its exit code and reason, never skipped and never substituted.
+The gate adds no model, provider or reviewer substitution; an explicitly configured fallback is a separate story.
+
+`--model ID` (`ADVERSARIAL_MODEL`) is the model id the phase was given.
+The script never resolves one: it echoes the id it was handed, and names it in its progress and failure lines.
+
+`--probe-cmd TEMPLATE` (`ADVERSARIAL_PROBE_CMD`) is an optional availability check spent before any agent budget.
+Its only placeholder is `{model}`, substituted shell-quoted.
+It runs with stdin from `/dev/null` in a fresh empty directory under the run's scratch directory, never in the checkout under review, under its own `--probe-timeout` (`ADVERSARIAL_PROBE_TIMEOUT`, default 30 seconds).
+A probe that exits non-zero, prints a provider error (rate limit, authentication, quota exhaustion, unavailable or unknown model), or outlives its timeout fails the phase with exit 20 before the dossier is built and before any agent command runs.
+The message names the phase, the model id supplied, the probe's exit code (or the timeout) and the probe's output tail.
+With no probe configured the phase writes `availability check: not configured`, so the absence is visible rather than silent; a configured probe is never silently skipped.
+A passing probe is not proof that the real call will run: the observed cause is account state on a listed model, so a phase can still fail after a clean check.
+
+The agent command runs in its own process group under one SIGKILL deadline of that whole group, so a child the CLI leaves retrying after the main call failed cannot keep the phase alive.
+A phase killed by `--timeout` (`ADVERSARIAL_TIMEOUT`, default 900) exits 19 and names the phase, the model id when supplied and the timeout in seconds; no other failure path changes its exit code.
+
+While the agent runs, `run` writes an elapsed-time line to its own stderr, the first after one second and then at least every 30 seconds, carrying the phase, the elapsed seconds, the configured timeout and the availability-check state, plus one completion line with the elapsed time.
+Progress never reaches the artifact or the agent's stdout, so a report's first line stays `REVIEW-RAN: yes`.
+
+On a non-zero agent exit, a timeout, or a report `accept_phase` rejects, `run` prints the phase, the exit code, the model id when supplied, and the last 40 lines of `${phase}-agent.err` and `${phase}-agent.log`, so a provider-error line appears verbatim; `record` prints the phase, the model id when supplied, the reason and the report tail.
+The script cannot read a runtime's own session or event stream: a runtime that reports provider errors only there must surface them on the phase's stderr in its `--agent-cmd` template (`references/runtimes.md`, Models).
 
 ## Phase 0: preflight (deterministic)
 
