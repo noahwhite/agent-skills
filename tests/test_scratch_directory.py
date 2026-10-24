@@ -159,7 +159,12 @@ def test_schema_calls_scratch_dir_a_base_and_keeps_it_optional():
 
 def test_no_doc_states_the_profile_must_set_the_scratch_dir():
     """AC5: the key is optional everywhere, so no instruction makes it mandatory."""
-    pattern = re.compile(r"must set[^.\n]*scratch_dir|scratch_dir[^.\n]*is required", re.IGNORECASE)
+    pattern = re.compile(
+        r"must set[^.\n]*scratch_dir"
+        r"|require[sd]?[^.\n]*scratch_dir"
+        r"|scratch_dir[^.\n]*(?:is|are) required",
+        re.IGNORECASE,
+    )
     offenders = [
         f"{md.relative_to(ROOT)}:{n}: {line.strip()}"
         for md in md_files()
@@ -176,13 +181,13 @@ def test_no_doc_names_a_fixed_scratch_path_under_the_base():
     manager-created unique directory, not a session's scratch (shared/merge-approval.md).
     """
     fixed_under_base = re.compile(
-        r"profile\.workspace\.scratch_dir\s*/\s*[^\s`'\"]+"
+        r"profile\.workspace\.scratch_dir[}>]?\s*/\s*[^\s`'\"]+"
         r"|\$CLAUDE_JOB_DIR/tmp/[A-Za-z0-9_.<>-]+"
     )
     offenders = []
     for md in md_files():
         for n, line in enumerate(md.read_text().splitlines(), 1):
-            if md.name == "runtimes.md":
+            if line.startswith("| Scratch base directory"):
                 continue  # the capability map names the runtime's own base, and stays
             for hit in fixed_under_base.findall(line):
                 offenders.append(f"{md.relative_to(ROOT)}:{n}: {hit}")
@@ -212,3 +217,15 @@ def test_vendor_check_passes():
         capture_output=True, text=True,
     )
     assert res.returncode == 0, res.stdout + res.stderr
+
+
+def test_snippet_falls_back_when_the_base_cannot_be_used(tmp_path):
+    """An unusable base (here, a regular file) must degrade, never abort the session."""
+    unusable = tmp_path / "scratch-base"
+    unusable.write_text("not a directory\n")
+    fallback_root = tmp_path / "runtime-tmp"
+    fallback_root.mkdir()
+    path = run_one_liner(scratch_one_liner(), {"scratch_base": str(unusable), "TMPDIR": str(fallback_root)})
+    assert path.is_dir()
+    assert path.parent == fallback_root, f"{path} did not fall back to the standalone directory"
+    assert unusable.read_text() == "not a directory\n", "the unusable base was overwritten"

@@ -80,7 +80,7 @@ Never retry a denied write through a different tool or server.
   3. Launch the PO and both engineers in separate contexts with the same story surface.
      Give each voter only its own profile entry and the story; never give it another voter's file or a summary of another input.
   4. Each voter writes only its own input file in the session's scratch directory (`references/runtimes.md`, Scratch files), under a `<story>/` subdirectory and a role-specific name.
-     The session's directory sits inside `profile.workspace.scratch_dir` when the profile sets it, and is a standalone `mktemp -d` otherwise.
+     The session's directory sits inside `profile.workspace.scratch_dir` when that is the base the runtime or the profile gives (the runtime's base wins), and is a standalone `mktemp -d` when neither gives one.
      A voter may read its own file back but must not write another role's file.
   5. The facilitator records its own SM/EM refinement contribution in a separate file.
      That contribution may challenge acceptance criteria, propose refinements, and identify gaps: missing ACs, gaps within an AC, and unobservable criteria.

@@ -314,8 +314,14 @@ accept_phase() {  # $1 = phase, $2 = stderr log or "": validate a freshly writte
 # The dossier and checkouts live outside .git: some agent runtimes refuse to read files under a
 # repository's git dir, and some sandboxes make it read-only.
 scratch_dir() {
-  if [ -z "$SCRATCH" ]; then SCRATCH="$(mktemp -d -t adversarial-scratch.XXXXXX)"; fi
-  mkdir -p -- "$SCRATCH"
+  if [ -z "$SCRATCH" ]; then
+    SCRATCH="$(mktemp -d -t adversarial-scratch.XXXXXX)"
+  else
+    # A supplied directory is the session's scratch directory (references/runtimes.md, Scratch
+    # files): give this run its own directory inside it, so two runs never share dossier names.
+    mkdir -p -- "$SCRATCH"
+    SCRATCH="$(mktemp -d -p "$SCRATCH" run.XXXXXX)"
+  fi
   printf '%s\n' "$SCRATCH"
 }
 
@@ -475,7 +481,12 @@ case "$cmd" in
       else
         # A detached worktree, not an archive export: it keeps git metadata, so tests that shell out to
         # git (ls-files, rev-parse) still work.
-        EXPORT_ROOT="$(mktemp -d -t adversarial-preflight.XXXXXX)"
+        if [ -n "$SCRATCH" ]; then
+          mkdir -p -- "$SCRATCH"
+          EXPORT_ROOT="$(mktemp -d -p "$SCRATCH" adversarial-preflight.XXXXXX)"
+        else
+          EXPORT_ROOT="$(mktemp -d -t adversarial-preflight.XXXXXX)"
+        fi
         EXPORT="$EXPORT_ROOT/HEAD"
         if ! git worktree add -q --detach "$EXPORT" "$HEAD_SHA" 2>/dev/null; then
           echo "ERROR - could not create a throwaway worktree at HEAD (stale registration? run 'git worktree prune')."

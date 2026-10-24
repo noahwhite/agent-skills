@@ -81,6 +81,8 @@ Common inputs:
   Write it to the session's scratch directory (`references/runtimes.md`, Scratch files), never the profile's base directory.
   A `--spec` naming a missing file is an error; only omitting it gives the "judge scope from the diff alone" fallback.
 - `--test-cmd`: `profile.project.test_command`; `--test-dir` when the suite must run from a subdirectory.
+- `--scratch <dir>`: the session's scratch directory (`references/runtimes.md`, Scratch files), passed to every command so the dossiers and throwaway checkouts stay in it; the script gives each run its own directory inside it.
+  Never pass the profile's base directory; omitted, the script creates a standalone directory, and a second invocation then no longer shares the first one's.
 
 Launching a phase depends on the profile agent's `runtime`:
 

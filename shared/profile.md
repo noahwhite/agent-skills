@@ -32,7 +32,7 @@ Skills cite values as `profile.<path>`, for example `profile.git.integration_bra
 The session creates exactly one directory for its lifetime with `mktemp -d` inside the base the runtime or the profile gives, and keeps every scratch artefact of that session in it (`runtimes.md`, Scratch files).
 The key is optional, and no skill or overlay requires it to be set.
 When the runtime gives no directory and the profile sets none, the session creates one with a standalone `mktemp -d` and uses it for the whole task.
-The one deliberate exception is the merge-approval rendezvous: an engagement's shared file that the manager creates under the base before delegating, not a session's scratch directory (the merge-approval handshake).
+The one deliberate exception is the merge-approval rendezvous: an engagement's shared file that the manager creates in a directory of its own inside the same base before delegating, not a session's scratch directory (the merge-approval handshake).
 
 ## Apply overlays
 
