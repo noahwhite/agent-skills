@@ -59,6 +59,9 @@ Never promote a subset of the enumerated issues under `whole-branch`; re-run rea
 
 - Promotion follows `profile.git.promotion` exactly as [references/github.md](references/github.md) Promotion defines it; this skill does not redefine `none`, `whole-branch`, or `per-story`.
 - `whole-branch`: open one promotion PR from `profile.git.integration_branch` to `profile.git.release_branch`, with the merge method and merge owner in `references/github.md`.
+- A story requests a component with a standalone `Release-Type: major|minor|patch` line in its tracker description; an absent request defaults to `patch`.
+  For both story requests and the promotion PR's own field, accept only one exact lowercase line with one of those values; malformed or duplicate lines stop the step: stop and ask rather than silently defaulting or choosing one.
+  Keep the promotion PR's field separate from quoted or copied story excerpts; those excerpts are not additional release-type fields.
 - In the body of the promotion PR this skill opens, write one `Release-Type: major|minor|patch` line with the requested component selected.
   Under `whole-branch`, select the highest component any promoted story requests (`major` above `minor` above `patch`); absent requests default to `patch`.
 - `per-story`: promote only the single story's change, using the mechanism the Promotion section defines; never open a promotion PR that carries another story.
@@ -88,7 +91,11 @@ Record that exact commit; do not substitute a later branch head.
 When `profile.release.versioning` is unset, stop the versioning step, invent no tag, and report the release as untagged.
 
 Fetch the release branch and tags from `origin` before computing the version.
-Read the selected component from the promotion PR body's `Release-Type` line (`major`, `minor`, or `patch`); an absent line defaults to `patch`.
+Before computing, list scheme-matching tags already pointing at the recorded release commit locally and on `origin`; peel annotated tags when comparing commits.
+If the commit already carries one such tag, do not compute another version: verify that it is annotated, signed when required, and confirmed on `origin`, then reuse that tag to resume notes publication.
+If there are multiple matching tags, an unconfirmed local-only tag, or a tag that fails those checks, stop and ask rather than guessing or creating another tag.
+Record the selected tag with the release commit for resumption.
+Read the selected component from the promotion PR body's own standalone `Release-Type` line (`major`, `minor`, or `patch`), applying Promotion's validation; an absent line defaults to `patch`.
 Under `none` there is no promotion PR, so use that same `patch` default.
 
 - `semver`: consider prior tags on `profile.git.release_branch` (reachable from the release commit) matching exactly `v<major>.<minor>.<patch>` with numeric components.
@@ -100,6 +107,7 @@ Under `none` there is no promotion PR, so use that same `patch` default.
 Check the computed tag against local tags and `origin` before creating it.
 If it already exists, stop and report the collision; never move or force-update a tag, even if it points to the same commit.
 Create an annotated tag at the recorded commit, signed when `profile.git.signed_commits` is true, and push that tag to `origin`.
+If signing fails, stop and report; never fall back to an unsigned tag.
 Confirm the remote tag points to that commit before proceeding; a concurrent collision or failed push stops the step and is reported, never retried by overwriting the tag.
 
 ## Release notes
@@ -108,6 +116,7 @@ Generate notes from the issue set enumerated in Release readiness and each issue
 Under `profile.git.promotion: none`, use every story awaiting closure with its merged PR instead.
 Each entry identifies the issue, describes its shipped change, and links its merged PRs.
 Publish to `profile.release.notes` immediately after the tag is confirmed on `origin` and before the deployment hand-off; report the published URL (each comment URL for `tracker-comment`).
+On resumption, reuse the already confirmed tag for notes publication; never compute a second version for the same recorded release commit.
 
 - `github-release`: create a GitHub Release at the versioning tag, with the generated notes as its body.
   If `profile.release.versioning` is unset, stop the notes step and report that a GitHub Release requires a tag; never publish under an invented tag.
@@ -135,10 +144,10 @@ Never hand-edit a file whose header marks it generated or auto-generated; update
 
 ## Hand-offs
 
-- Readiness, the promotion set, and the promotion PR: this skill.
+- Readiness, the promotion set, the promotion PR, versioning, and release notes: this skill.
 - Deploy and rollback mechanics: `persona-platform-sre`; this skill hands off deploy and rollback and never executes either.
   The release manager does not execute deploy or rollback mechanics.
 - Post-deploy evidence: `qa-verification`.
 - A failed production check or a code fix: `engineering-workflow`, after `persona-product-owner` reopens the owning story.
 - Status transitions, acceptance-criteria and Definition-of-Done ticks, and closure: `persona-product-owner`.
-- Report the release outcome to the user: the readiness verdict per issue, the promotion PR and its merge result, the review result, the post-deploy verdict per issue, and each rollback recommendation and deploy or rollback execution result.
+- Report the release outcome to the user: the readiness verdict per issue, the promotion PR and its merge result, the review result, the release tag and commit, the published notes URL (each comment URL for `tracker-comment`), the post-deploy verdict per issue, and each rollback recommendation and deploy or rollback execution result.

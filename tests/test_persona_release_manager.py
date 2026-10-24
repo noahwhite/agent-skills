@@ -160,10 +160,23 @@ def test_release_profile_contract() -> None:
     example = yaml.safe_load((ROOT / "profile" / "example.yaml").read_text())
     for key, values in expected.items():
         prop = release["properties"][key]
-        assert set(prop["enum"]) == values
+        assert sorted(prop["enum"]) == sorted(values)
         assert prop["description"].strip()
         assert example["release"][key] in values
     jsonschema.validate(example["release"], release)
+
+
+def test_promotion_release_type_has_a_validated_request_source() -> None:
+    body = section(SKILL.read_text(), "Promotion")
+    for phrase in (
+        "tracker description",
+        "Release-Type: major|minor|patch",
+        "highest component any promoted story requests",
+        "exact lowercase",
+        "malformed or duplicate",
+        "stop and ask",
+    ):
+        assert phrase in body, f"release type missing: {phrase}"
 
 
 def test_versioning_section_covers_release_schemes() -> None:
@@ -178,8 +191,27 @@ def test_versioning_section_covers_release_schemes() -> None:
         "YYYY.MM.DD",
         "untagged",
         "profile.git.release_branch",
+        "highest of those tags by numeric semantic version",
+        "increment the selected component",
+        "reset every component to its right to zero",
+        "v3.0.0",
+        "v2.4.0",
+        "v2.3.5",
+        "already carries",
+        "reuse that tag",
+        "annotated",
+        "signed when `profile.git.signed_commits` is true",
+        "push that tag to `origin`",
+        "If it already exists, stop and report the collision",
+        "never move or force-update a tag",
+        "If signing fails, stop and report",
     ):
         assert phrase in body, f"versioning missing: {phrase}"
+    for forbidden in (
+        "force-update the tag when the commit matches",
+        "create an unsigned tag if signing fails",
+    ):
+        assert forbidden not in body.lower(), f"unsafe versioning: {forbidden}"
 
 
 def test_release_notes_section_covers_destinations_and_safety() -> None:
@@ -190,6 +222,12 @@ def test_release_notes_section_covers_destinations_and_safety() -> None:
         "tracker-comment",
         "requires a tag",
         "auto-generated",
+        "issue set enumerated in Release readiness",
+        "each issue's merged PRs",
+        "immediately after the tag is confirmed on `origin` and before the deployment hand-off",
+        "report the published URL",
+        "If versioning did not produce and confirm a tag, stop publication",
+        "reuse the already confirmed tag",
     ):
         assert phrase in body, f"release notes missing: {phrase}"
 
@@ -202,7 +240,11 @@ def test_release_sections_follow_promotion_review_before_production() -> None:
         "Release notes",
         "Production verification",
     )
-    positions = [text.index(f"## {heading}\n") for heading in headings]
+    positions = []
+    for heading in headings:
+        matches = list(re.finditer(rf"^## {re.escape(heading)}\s*$", text, re.MULTILINE))
+        assert len(matches) == 1, f"expected one section: {heading}"
+        positions.append(matches[0].start())
     assert positions == sorted(positions)
 
 
