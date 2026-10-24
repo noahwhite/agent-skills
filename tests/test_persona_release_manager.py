@@ -117,7 +117,7 @@ def test_readiness_section_covers_each_promotion_mode() -> None:
     for phrase in ("story-scoped promotion branch", "rather than the integration branch head",
                    "this check runs once that branch exists",
                    "must equal the change the evidence covered",
-                   "carried no other un-promoted story's changes"):
+                   "when no evidence covers that head"):
         assert phrase in binding, f"per-story readiness binding missing: {phrase}"
     whole = SKILL.read_text().lower()
     for forbidden in ("promotion set under `none`", "promotion set for `none`", "stale evidence is accepted", "accept stale evidence"):

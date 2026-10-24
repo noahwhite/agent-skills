@@ -18,17 +18,17 @@ PER_STORY_SENTENCES = (
     "Under `per-story`, build the promotion branch and its PR like this:",
     "Cut the promotion branch from `origin/<profile.git.release_branch>` with that explicit base ref, after `git fetch --prune origin`.",
     # Merge-method-dependent commit selection, identified by the story's issue key.
-    "Identify the story's merged feature PR, by its issue key, with `gh pr list --state merged --base <profile.git.integration_branch> --limit 1000 --search \"<issue key>\"`, and select from `origin/<profile.git.integration_branch>` only the commits that PR added.",
-    "With `profile.git.merge_method` `squash`, select that PR's squash commit.",
-    "With `profile.git.merge_method` `rebase`, select the commits that PR replayed onto the integration branch.",
-    "With `profile.git.merge_method` `merge`, select that PR's merge commit.",
+    "Identify the story's merged feature PRs, by its issue key, with `gh pr list --state merged --base <profile.git.integration_branch> --limit 1000 --search \"<issue key>\" --json number,headRefName,mergeCommit`, keep the PRs whose head branch carries the issue key under the feature branch prefix, and select from `origin/<profile.git.integration_branch>` only the commits those PRs added.",
+    "With `profile.git.merge_method` `squash`, select each PR's squash commit.",
+    "With `profile.git.merge_method` `rebase`, select the commits each PR replayed onto the integration branch.",
+    "With `profile.git.merge_method` `merge`, select each PR's merge commit.",
     # Carrying the selected commits onto the promotion branch.
     "Carry the selected commits onto the promotion branch by cherry-picking them in their original order, with `-m 1` when a selected commit is a merge commit, or by squash-applying non-merge selections with `git cherry-pick -n` and one commit.",
     # The promotion PR, and the explicit refusal of a whole-branch PR under per-story.
     "Push the branch, then open the promotion PR from it to `profile.git.release_branch`.",
     "A whole-branch integration-to-release PR is not used under `per-story`.",
     # Fail-closed stop, including the un-promoted-story case.
-    "Stop and report instead of carrying another story's commit or merging the integration branch into the promotion when the selection finds no commit, matches more than one feature PR, or cannot apply without an un-promoted story.",
+    "Stop and report instead of carrying another story's commit or merging the integration branch into the promotion when the selection finds no commit, matches more than one feature PR it cannot attribute to the promoted story, or cannot apply without an un-promoted story.",
     "A cherry-pick conflict that needs another story's commits is that stop: report the conflicting commit and the story it needs, and do not pull that story in to clear the conflict.",
     "An empty application, because every selected commit is already on the release branch, is that stop too: report the story as already promoted.",
     # Story-scoped three-dot diff, split by mode.
@@ -38,8 +38,8 @@ PER_STORY_SENTENCES = (
     "Never inspect the whole integration branch for a `per-story` promotion.",
     # The per-story review-fix flow.
     "Under `per-story`, a valid review fix lands on a new feature branch to `profile.git.integration_branch` and merges there before its commit is carried.",
-    "The stale promotion PR is closed unmerged and a fresh story-scoped promotion branch is cut from the release branch, or the fix commit is cherry-picked onto the promotion branch.",
-    "Open the promotion PR again from that branch, as a reopened PR or a fresh one, carrying the story's updated commits.",
+    "The stale promotion PR is then closed unmerged, and the story's updated commits are rebuilt onto a fresh story-scoped promotion branch cut from the release branch, either by rerunning the selection above or by cherry-picking the fix commit.",
+    "Open a fresh promotion PR from that branch to `profile.git.release_branch`, carrying the story's updated commits.",
     "Refresh the story's pre-production evidence against that promotion head before the merge.",
     "Do not back-merge the release branch into the promotion branch, update-branch a promotion PR, or force-push one; rebuild it instead.",
 )
@@ -171,20 +171,20 @@ EXPECTED_PROMOTION_SECTION = (
     'Under `per-story`, build the promotion branch and its PR like this:\n'
     '\n'
     '1. Cut the promotion branch from `origin/<profile.git.release_branch>` with that explicit base ref, after `git fetch --prune origin`.\n'
-    '2. Identify the story\'s merged feature PR, by its issue key, with `gh pr list --state merged --base <profile.git.integration_branch> --limit 1000 --search "<issue key>"`, and select from `origin/<profile.git.integration_branch>` only the commits that PR added.\n'
-    "   With `profile.git.merge_method` `squash`, select that PR's squash commit.\n"
-    '   With `profile.git.merge_method` `rebase`, select the commits that PR replayed onto the integration branch.\n'
-    "   With `profile.git.merge_method` `merge`, select that PR's merge commit.\n"
+    '2. Identify the story\'s merged feature PRs, by its issue key, with `gh pr list --state merged --base <profile.git.integration_branch> --limit 1000 --search "<issue key>" --json number,headRefName,mergeCommit`, keep the PRs whose head branch carries the issue key under the feature branch prefix, and select from `origin/<profile.git.integration_branch>` only the commits those PRs added.\n'
+    "   With `profile.git.merge_method` `squash`, select each PR's squash commit.\n"
+    '   With `profile.git.merge_method` `rebase`, select the commits each PR replayed onto the integration branch.\n'
+    "   With `profile.git.merge_method` `merge`, select each PR's merge commit.\n"
     '3. Carry the selected commits onto the promotion branch by cherry-picking them in their original order, with `-m 1` when a selected commit is a merge commit, or by squash-applying non-merge selections with `git cherry-pick -n` and one commit.\n'
     '4. Push the branch, then open the promotion PR from it to `profile.git.release_branch`.\n'
     '   A whole-branch integration-to-release PR is not used under `per-story`.\n'
-    "5. Stop and report instead of carrying another story's commit or merging the integration branch into the promotion when the selection finds no commit, matches more than one feature PR, or cannot apply without an un-promoted story.\n"
+    "5. Stop and report instead of carrying another story's commit or merging the integration branch into the promotion when the selection finds no commit, matches more than one feature PR it cannot attribute to the promoted story, or cannot apply without an un-promoted story.\n"
     "   A cherry-pick conflict that needs another story's commits is that stop: report the conflicting commit and the story it needs, and do not pull that story in to clear the conflict.\n"
     '   An empty application, because every selected commit is already on the release branch, is that stop too: report the story as already promoted.\n'
     '\n'
     'Under `per-story`, a valid review fix lands on a new feature branch to `profile.git.integration_branch` and merges there before its commit is carried.\n'
-    'The stale promotion PR is closed unmerged and a fresh story-scoped promotion branch is cut from the release branch, or the fix commit is cherry-picked onto the promotion branch.\n'
-    "Open the promotion PR again from that branch, as a reopened PR or a fresh one, carrying the story's updated commits.\n"
+    "The stale promotion PR is then closed unmerged, and the story's updated commits are rebuilt onto a fresh story-scoped promotion branch cut from the release branch, either by rerunning the selection above or by cherry-picking the fix commit.\n"
+    "Open a fresh promotion PR from that branch to `profile.git.release_branch`, carrying the story's updated commits.\n"
     "Refresh the story's pre-production evidence against that promotion head before the merge.\n"
     'Do not back-merge the release branch into the promotion branch, update-branch a promotion PR, or force-push one; rebuild it instead.\n'
     '\n'
