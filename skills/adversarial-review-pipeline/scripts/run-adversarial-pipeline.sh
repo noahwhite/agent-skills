@@ -44,8 +44,9 @@
 # ADVERSARIAL_SPEC_FILE, ADVERSARIAL_SCRATCH, ADVERSARIAL_AGENT_CMD, ADVERSARIAL_MODEL,
 # ADVERSARIAL_PROBE_CMD, ADVERSARIAL_PROBE_TIMEOUT (30), ADVERSARIAL_TIMEOUT (900).
 #
-# --model ID (ADVERSARIAL_MODEL) is the model id this phase was given (letters, digits and . _ / : @
-# # + ~ -). The script never resolves a model: it echoes back the id it was handed. A phase that cannot run is failed, never skipped and
+# --model ID (ADVERSARIAL_MODEL) is the model id this phase was given: letters, digits and
+# . _ / : @ # + ~ , [ ] - only, so no id can forge a field of a progress line. The script never
+# resolves a model: it echoes back the id it was handed. A phase that cannot run is failed, never skipped and
 # never substituted with another model, provider or reviewer.
 #
 # --probe-cmd (ADVERSARIAL_PROBE_CMD) is an optional availability check for `run` (dossier and
@@ -185,7 +186,7 @@ fi
 # Only the commands that use a model validate one, so a stale ADVERSARIAL_MODEL cannot refuse a
 # preflight or a dossier. A model id may carry punctuation, never whitespace or '=' (which is how a
 # progress line states its exit status).
-if [ "$cmd" = "run" ] || [ "$cmd" = "record" ]; then
+if [ "$cmd" = "run" ]; then
   if [ "$MODEL_SET" -eq 1 ] && [ -z "$MODEL" ]; then
     die 2 "--model needs a non-empty model id"
   fi
@@ -547,8 +548,8 @@ completion_line() {  # $1 phase, $2 elapsed seconds, $3 the phase's exit status
 }
 
 # A phase attempt reports completion however it ends, so the elapsed time and the exit status are
-# never missing from the evidence. The attempt starts at init_scratch, so a refusal before it (usage,
-# not a Git repository, a bad base) is the only path with no completion line.
+# never missing from the evidence. The attempt starts once `run` accepts its agent command, so a
+# refusal before it (usage, not a Git repository, a bad base) is the only path with no completion line.
 PHASE_START=0
 CHECKOUT_PATH=""
 COMPLETION_EMITTED=0
@@ -914,8 +915,8 @@ case "$cmd" in
     fi
     require_predecessors "$phase"
     rc_accept=0
-    reason_file="$RUN_DIR/$phase-record.err"
-    : > "$reason_file" || die 2 "could not write a status file in the run directory"
+    reason_file="$(mktemp -p "$RUN_DIR" record-reason.XXXXXX)" \
+      || die 2 "could not create a status file in the run directory"
     ( accept_phase "$phase" "" ) 2> "$reason_file" || rc_accept=$?
     if [ "$rc_accept" -ne 0 ]; then
       diagnose_phase "$phase" "$rc_accept" "$(cat -- "$reason_file" 2>/dev/null || true)" "$(artifact_for "$phase")"
@@ -932,6 +933,9 @@ case "$cmd" in
     CHECKOUT_PATH=""
     COMPLETION_EMITTED=0
     trap on_run_exit EXIT
+    trap 'on_signal 130' INT
+    trap 'on_signal 143' TERM
+    trap 'on_signal 129' HUP
     # From here the phase attempt is real, so every exit reports completion; a missing predecessor is
     # one of those failures, not a refusal before the attempt starts. The scratch directory is made
     # only once the phase may actually run, so a refused attempt leaves no run directory behind.
@@ -948,9 +952,6 @@ case "$cmd" in
     begin_phase "$phase"
     bind_phase "$phase"
     rm -f -- "$errlog" "$agentlog"
-    trap 'on_signal 130' INT
-    trap 'on_signal 143' TERM
-    trap 'on_signal 129' HUP
     # One deadline for the whole phase: the availability check and the agent share it.
     phase_deadline=$(( SECONDS + TIMEOUT ))
     # The availability check runs before the dossier is built and before any agent command.
@@ -1002,8 +1003,8 @@ case "$cmd" in
       fail_phase 18 "the primary checkout ($ROOT) changed while the $phase agent ran; this phase is not accepted. Inspect 'git status' there."
     fi
     rc_accept=0
-    reason_file="$RUN_DIR/$phase-accept.err"
-    : > "$reason_file" || fail_phase 2 "could not write a status file in the run directory"
+    reason_file="$(mktemp -p "$RUN_DIR" accept-reason.XXXXXX)" \
+      || fail_phase 2 "could not create a status file in the run directory"
     ( accept_phase "$phase" "$errlog" ) 2> "$reason_file" || rc_accept=$?
     if [ "$rc_accept" -ne 0 ]; then
       fail_phase "$rc_accept" "$(cat -- "$reason_file" 2>/dev/null || true)"

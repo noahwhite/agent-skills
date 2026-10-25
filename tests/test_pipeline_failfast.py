@@ -805,3 +805,28 @@ def test_a_stale_invalid_model_in_the_environment_does_not_refuse_other_commands
     assert preflight.returncode == 0, preflight.stdout + preflight.stderr
     paths = run_script("paths", "--repo", str(repo), "--base", "HEAD", env=env)
     assert paths.returncode == 0, paths.stdout + paths.stderr
+
+
+def test_an_early_interrupt_reports_its_own_status(gate, tmp_path):
+    """A signal in the window just after the attempt starts is reported as that signal, not exit 0."""
+    repo, scratch, env = gate
+    started = tmp_path / "early-signal.txt"
+    agent = f'touch {shlex.quote(str(started))}; sleep 60'
+    gate_process = subprocess.Popen(
+        ["bash", str(SCRIPT), "run", "sweep", "--repo", str(repo), "--base", "HEAD",
+         "--scratch", str(scratch), "--model", "m", "--agent-cmd", agent],
+        env=env, cwd=str(ROOT), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+    )
+    try:
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline and not started.exists():
+            time.sleep(0.05)
+        assert started.exists(), "the agent never started"
+        gate_process.terminate()
+        _, stderr = gate_process.communicate(timeout=30)
+    finally:
+        if gate_process.poll() is None:
+            gate_process.kill()
+    completion = [line for line in stderr.splitlines() if "phase=sweep complete elapsed=" in line]
+    assert len(completion) == 1, stderr
+    assert completion[0].endswith("exit=143"), (gate_process.returncode, completion[0])
