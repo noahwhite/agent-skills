@@ -29,7 +29,9 @@ This is a disposable tabletop fixture for exercising the story-refinement pointi
 
 The discussion named only the high value, 3, and the low value, 2. No other value was compared and no voter was singled out.
 
-Record the set of values you accept for this story (one or more), or record no consensus, with a short rationale under the rationale rule.
+Record the set of values you accept for this story (one or more), or record no consensus.
+
+Hard constraints on the rationale, from the rationale rule above: name only a driver the pointing basis admits. Do not name a target value for this story, do not say which value the story should size at, do not weigh verification strength, testability, coverage or the shape of the tests, and do not describe a range or a scale position.
 
 Reply in this exact shape and nothing else:
 

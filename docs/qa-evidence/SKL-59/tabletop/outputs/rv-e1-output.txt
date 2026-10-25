@@ -1,2 +1,2 @@
-ACCEPTED: {2, 3}
-RATIONALE: The change adds one focused flag with a single new behaviour (comparing candidate content to the last committed state); the only real complexity driver is the regression risk on existing dry-run output and how "changed" is determined against git, which stays within a small-to-low range.
+ACCEPTED: {2}
+RATIONALE: The change is a single additive flag on an existing dry run; the only driver the basis admits is the byte-identical-default constraint, which carries a small risk of breaking existing behaviour, and detecting difference-from-committed-state is a routine, well-understood comparison with no interacting constraints or unknowns beyond normal git state detection.
