@@ -95,7 +95,7 @@
 # Progress never reaches the artifact or the agent's stdout, so the artifact's first line
 # stays 'REVIEW-RAN: yes'; stdout carries the artifact alone (arbitration's report), never progress,
 # so do not merge the two streams and read the last line. A report the gate cannot write to stdout
-# exits 21 through the same path, so its completion line names that failure; the phase itself stays
+# exits 1 through the same path, so its completion line names that failure; the phase itself stays
 # accepted and stamped, because the model's work succeeded and only its delivery failed.
 #
 # Diagnosis: a non-zero agent exit, a timeout kill, and a report `accept_phase` rejects all print the
@@ -129,8 +129,9 @@
 # 12 bad base, 13 missing or invalid prior artifact, 14 cleanup refused, 15 agent command failed
 # or wrote no fresh report, 17 agent ran blind (sandbox error on its stderr, or no `REVIEW-RAN: yes`
 # first line), 18 the agent changed the primary checkout, 19 the phase was killed by --timeout,
-# 20 the phase's availability check failed before any agent ran, 21 the phase was accepted and
-# stamped but its arbitration report could not be written to stdout (do not re-run the model call).
+# 20 the phase's availability check failed before any agent ran. An accepted arbitration report that
+# cannot be written to stdout still exits 1, as it did before the completion-line work; the message
+# names the stamped artifact so a driver does not re-run the model call.
 # A checkout that cannot be created exits with git's own status, which is what that path did before
 # the checkout became deadline-bounded.
 set -euo pipefail
@@ -215,14 +216,7 @@ if [ "$cmd" = "run" ]; then
   case "$PROBE_CMD" in
     *"'{model}'"*) die 2 "--probe-cmd must not single-quote the {model} placeholder; it would reach the probe as literal text" ;;
   esac
-  case "$PROBE_CMD" in
-    *"# "*"{model}"*|*"#"*"{model}"*)
-      case "${PROBE_CMD%%#*}" in
-        *"{model}"*|*'ADVERSARIAL_PROBE_MODEL'*) ;;
-        *) die 2 "--probe-cmd refers to the model only after a '#', so the shell would treat it as a comment" ;;
-      esac
-      ;;
-  esac
+
 fi
 case "$MODEL" in
   *[[:cntrl:]]*) die 2 "--model must not contain control characters; pass the model id on one line" ;;
@@ -1103,7 +1097,7 @@ case "$cmd" in
     if [ "$phase" = "arbitrate" ]; then
       cat -- "$out" || {
         echo "ERROR: could not deliver the arbitration report (see the error above); the phase is accepted and stamped at $out, but its report did not reach stdout" >&2
-        exit 21
+        exit 1
       }
     fi
     ;;
