@@ -126,7 +126,8 @@ The message names the phase, the model id supplied, the probe's exit code (or th
 With no probe configured the phase writes `availability check: not configured`, so the absence is visible rather than silent; a configured probe is never silently skipped.
 A passing probe is not proof that the real call will run: the observed cause is account state on a listed model, so a phase can still fail after a clean check.
 
-One deadline bounds the phase: `--timeout` (`ADVERSARIAL_TIMEOUT`, default 900, at least 1) covers the availability check, the throwaway checkout and the agent command; only the dossier write and the teardown after the completion line fall outside it.
+One deadline bounds the phase's work against a provider: `--timeout` (`ADVERSARIAL_TIMEOUT`, default 900, at least 1) covers the availability check, the throwaway checkout and the agent command with its whole process group.
+The local bookkeeping after the agent (the tripwire fingerprint and the acceptance checks) and the dossier write are not model work and are not bounded by it.
 The agent command runs in its own process group under one SIGKILL deadline of that whole group, and the group is killed when the command returns too, so a child the CLI leaves retrying after the main call failed neither keeps the phase alive nor keeps running past it.
 A phase killed by `--timeout` exits 19 and names the phase, the model id when supplied and the timeout in seconds; no other failure path changes its exit code.
 An interrupted gate (SIGINT, SIGTERM, SIGHUP) kills the in-flight process group before it exits, so an interruption never orphans an agent.

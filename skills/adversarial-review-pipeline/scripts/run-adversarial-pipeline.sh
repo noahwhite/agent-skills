@@ -68,9 +68,11 @@
 # records 'availability check: not configured' on stderr, so the absence is visible rather than
 # silent.
 #
-# One deadline bounds the phase: the availability check, the throwaway checkout and the agent
-# command all share --timeout (ADVERSARIAL_TIMEOUT, default 900, at least 1). Only the dossier write
-# and the teardown after the completion line fall outside it. The agent command runs in its own
+# One deadline bounds the phase's work against a provider: the availability check, the throwaway
+# checkout and the agent command with its whole process group share --timeout (ADVERSARIAL_TIMEOUT,
+# default 900, at least 1). The local bookkeeping after the agent - the tripwire fingerprint and the
+# acceptance checks - and the dossier write are not model work and are not bounded by it; they cost
+# a few git calls each. The agent command runs in its own
 # process group under one SIGKILL deadline of that whole group, and the group is killed when the
 # command returns too, so a child the CLI leaves retrying after the main call failed cannot keep
 # running past the phase. A phase killed by
