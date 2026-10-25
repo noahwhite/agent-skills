@@ -113,16 +113,18 @@ def test_readiness_section_covers_each_promotion_mode() -> None:
         "rather than the integration branch head",
     ):
         assert phrase in body, f"readiness missing: {phrase}"
-    binding = per_story_readiness_line(body)
+    binding = per_story_readiness_line(body).splitlines()
     for phrase in ("story-scoped promotion branch", "rather than the integration branch head",
                    "this check runs once that branch exists",
-                   "must equal the diff of the story's merged feature prs it carries",
-                   "the evidence must cover that change",
-                   "a build that predates or omits that change does not"):
-        assert phrase in binding, f"per-story readiness binding missing: {phrase}"
+                   "must carry only the story's recorded commits",
+                   "git log --oneline origin/<release>..<promotion-branch>",
+                   "the evidence must have been taken against a build that included the story's change"):
+        assert phrase in binding[0], f"per-story readiness binding missing: {phrase}"
+    assert "a build that predates or omits that change does not cover it" in binding[1]
     whole = SKILL.read_text().lower()
     for forbidden in ("promotion set under `none`", "promotion set for `none`", "stale evidence is accepted", "accept stale evidence",
-                      "skip this check", "promote without evidence", "do not require evidence"):
+                      "skip this check", "promote without evidence", "do not require evidence",
+                      "may be deferred", "deferred until after merge"):
         assert forbidden not in whole, f"readiness contradicts itself: {forbidden}"
 
 
@@ -154,6 +156,7 @@ def test_promotion_section_cites_and_does_not_redefine() -> None:
     matches = [line for line in lines if line.strip().startswith(prohibition)]
     assert len(matches) == 1, "the no-other-story prohibition must appear exactly once"
     assert matches[0].strip() == prohibition, "the prohibition must not carry an exception"
+    assert "unless" not in body, "the Promotion section must not qualify a prohibition"
     mechanism = [line for line in lines if line.startswith("- `per-story`: promote only")]
     assert len(mechanism) == 1, mechanism
     assert "[references/github.md](references/github.md)" in mechanism[0], "the mechanism link must resolve"
@@ -186,6 +189,8 @@ def test_review_section_covers_the_cumulative_diff_and_ownership() -> None:
     assert len(fix_bullets) == 2, fix_bullets
     assert fix_bullets[0].startswith("- under `whole-branch`,"), fix_bullets[0]
     assert fix_bullets[1].startswith("- under `per-story`,"), fix_bullets[1]
+    assert "review-fix flow" in fix_bullets[1], fix_bullets[1]
+    assert "pre-production evidence refreshed before the merge" in fix_bullets[1], fix_bullets[1]
 
 
 def test_release_profile_contract() -> None:

@@ -45,10 +45,10 @@ A step that needs a value the profile does not set stops and asks for it.
   For each issue, confirm passing pre-production verification evidence from the last environment in `profile.environments` whose `production` is not true.
   That evidence is produced per `qa-verification`; a build check alone is not verification evidence.
   Bind the evidence to the promotion head: record the build SHA or commit it was taken against, and re-check that it matches the head the promotion will carry.
-  Under `per-story`, that head is the head of the story-scoped promotion branch the Promotion step builds, rather than the integration branch head, and this check runs once that branch exists: the branch's own story-scoped diff (`git diff origin/<release>...<promotion-branch>`) must equal the diff of the story's merged feature PRs it carries, and the evidence must cover that change.
-  A pre-production build that included the story's change covers it; a build that predates or omits that change does not, so stop and request evidence for that head per `qa-verification`.
+  Under `per-story`, that head is the head of the story-scoped promotion branch the Promotion step builds, rather than the integration branch head, and this check runs once that branch exists: the branch must carry only the story's recorded commits, which `git log --oneline origin/<release>..<promotion-branch>` lists, and the evidence must have been taken against a build that included the story's change.
+  A build that predates or omits that change does not cover it, so stop and request evidence for that head per `qa-verification`.
   Evidence for an earlier build, or for a head that a later merge or review fix changed, is stale and stops the promotion.
-  A promotion whose tree is identical to the verified build satisfies this check even when its commit SHA differs.
+  Under `whole-branch`, a promotion whose tree is identical to the verified build satisfies this check even when its commit SHA differs, and `per-story` takes the story-only change above instead of that tree rule.
   Evidence-only commits under `profile.qa.evidence_dir` do not invalidate readiness; compare the code tree, not the evidence directory.
   Missing evidence stops the promotion and names the issue.
 - `none`: the integration branch is the release branch, so readiness is each story's own deploy verification in the environment that branch deploys to.
