@@ -4,8 +4,8 @@ Measured on the delivered text of this change with CPython 3.12.3 and locked dep
 The modified files are `skills/story-refinement/SKILL.md` and `skills/story-refinement/references/refinement-record.md`.
 Before each check the document bytes were saved, the edit shown below was made once, the quoted command ran, and the saved bytes were restored even when the command failed; the final source matched the saved bytes, and the only tracked changes were then the files this change delivers.
 Each entry shows the exact matched text, and the exact replacement text where the edit substitutes or inserts one, so a re-runner can reproduce it from the delivered text.
-30 regression proofs failed as designed and 1 control passed.
-Entries 1 to 30 are the regression proofs; entry 31 is the control.
+33 regression proofs failed as designed and 1 control passed.
+Entries 1 to 33 are the regression proofs; entry 34 is the control.
 
 ## 1. Remove the basis-by-reference and out-of-basis sentence from Step 3 item 4
 
@@ -14,7 +14,7 @@ File: `SKILL.md`
 Matched text:
 
 ```text
-The rationale names drivers the pointing basis admits and nothing else, so verification strength, testability, coverage and the shape of the tests are out of basis beside the duration, effort and run-cost measure the basis already bars.
+The rationale names drivers the pointing basis admits and nothing else, so verification strength, testability, coverage, the shape of the tests, a duration, effort or run-cost measure are out of basis.
 ```
 
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_step_three_rationale_names_complexity_drivers_and_no_duration`
@@ -255,7 +255,7 @@ File: `SKILL.md`
 Matched text:
 
 ```text
-Any other challenged ground that is neither restated as a basis driver nor retracted, or a sizing comment the SM/EM neither withdraws nor restates, is an anchoring event; because such a ground can taint votes recorded before it, it supersedes the three recorded values, and the recovery re-runs the independent vote from Step 3 in newly created voter contexts that exclude the tainted discussion and sizing comment.
+Any other challenged ground that is neither restated as a basis driver nor retracted, or a sizing comment the SM/EM neither withdraws nor restates, is an anchoring event; because a ground read in a recorded rationale taints the votes recorded before it, it supersedes the three recorded values, and the recovery re-runs the independent vote from Step 3 in newly created voter contexts that exclude the tainted discussion and sizing comment.
 ```
 
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_anchoring_guardrail_makes_a_point_value_sizing_note_an_event_on_challenge`
@@ -313,7 +313,7 @@ File: `refinement-record.md`
 Matched text:
 
 ```text
-While a round is open, a challenged ground is recorded by its kind, its author (a voter, or the SM/EM for a sizing comment) and its outcome, with a point value named before the reveal or a target value for this story elided, because a verbatim quote of one in an open record names it again; once the consensus is recorded, the final record may quote the grounds verbatim.
+While a round is open, the Challenges line records a challenged ground by its kind, its author (a voter, or the SM/EM for a sizing comment) and its outcome, with a point value named before the reveal or a target value for this story elided, because a verbatim quote of one in an open record names it again; the Anchoring events line is the one place that carries an anchoring comment verbatim, and both lines may carry the grounds verbatim once the round closes.
 ```
 
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_pointing_template_records_each_challenge_and_outcome`
@@ -326,7 +326,7 @@ File: `refinement-record.md`
 Matched text:
 
 ```text
-A sizing comment that names a point value before the reveal, names or implies a target value for this story, or states elapsed time, effort or run cost voids the round under the Anchoring guardrail recovery as soon as the facilitator sees it, as does any ground that is neither restated nor retracted, and the void leaves the consensus field empty and is recorded under Anchoring events.
+A sizing comment that names a point value before the reveal, names or implies a target value for this story, or states elapsed time, effort or run cost voids the round under the Anchoring guardrail recovery as soon as the facilitator sees it, as does any ground that is neither restated nor retracted, and the void records the consensus as void and is recorded under Anchoring events.
 ```
 
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_pointing_template_records_each_challenge_and_outcome`
@@ -442,7 +442,52 @@ This story is a 5.
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_phrasing_section_holds_only_the_intro_the_table_and_the_trailer`
 Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_phrasing_section_holds_only_the_intro_the_table_and_the_trailer`.
 
-## 31. Control: add a blank line after the table
+## 31. Remove the reveal definition from Step 3 item 5
+
+File: `SKILL.md`
+
+Matched text:
+
+```text
+The reveal is the moment the facilitator has recorded all three values, after which the SM/EM may comment on sizing and the discussion opens.
+```
+
+Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_step_three_defines_the_reveal`
+Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_step_three_defines_the_reveal - a...`.
+
+## 32. Remove the rationale rule from the re-vote prompt sentence
+
+File: `SKILL.md`
+
+Matched text:
+
+```text
+     It also carries the item 4 rationale rule.
+```
+
+Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_step_four_re_vote_prompt_carries_the_rationale_rule`
+Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_step_four_re_vote_prompt_carries_the_rationale_rule`.
+
+## 33. Make a voided consensus look like an untouched field
+
+File: `refinement-record.md`
+
+Matched text:
+
+```text
+- Consensus: <highest value in the intersection, or void when the round was voided>
+```
+
+Replaced with:
+
+```text
+- Consensus: <highest value in the intersection, or none>
+```
+
+Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_pointing_template_marks_a_voided_consensus`
+Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_pointing_template_marks_a_voided_consensus`.
+
+## 34. Control: add a blank line after the table
 
 File: `refinement-record.md`
 

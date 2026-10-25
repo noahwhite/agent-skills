@@ -724,8 +724,7 @@ def test_step_three_rationale_names_complexity_drivers_and_no_duration() -> None
     assert "plus a short rationale under the pointing basis in item 2." in body
     assert (
         "The rationale names drivers the pointing basis admits and nothing else, so verification strength, "
-        "testability, coverage and the shape of the tests are out of basis beside the duration, effort and "
-        "run-cost measure the basis already bars."
+        "testability, coverage, the shape of the tests, a duration, effort or run-cost measure are out of basis."
     ) in body
     assert (
         "Verification strength is how well a behaviour is checked and the risk of breaking existing behaviour is "
@@ -751,6 +750,26 @@ def test_step_four_re_vote_carries_the_basis_by_reference_to_step_three() -> Non
     assert item.startswith("Run one re-vote.")
     assert "The re-vote prompt carries the pointing basis from Step 3." in item
     assert squash(POINTING_BASIS) not in squash(operative_step(STEP_FOUR))
+
+
+def test_step_three_defines_the_reveal() -> None:
+    items = process_items(STEP_THREE)
+    assert (
+        "The reveal is the moment the facilitator has recorded all three values, after which the SM/EM may "
+        "comment on sizing and the discussion opens."
+    ) in items[4]
+
+
+def test_step_four_re_vote_prompt_carries_the_rationale_rule() -> None:
+    item = process_items(STEP_FOUR)[1]
+    assert "It also carries the item 4 rationale rule." in item
+
+
+def test_pointing_template_marks_a_voided_consensus() -> None:
+    assert (
+        "- Consensus: <highest value in the intersection, or void when the round was voided>"
+        in pointing_template()
+    )
 
 
 def test_step_four_re_vote_requires_a_complexity_rationale() -> None:
@@ -857,10 +876,10 @@ def test_anchoring_guardrail_makes_a_point_value_sizing_note_an_event_on_challen
     )
     assert (
         "any other challenged ground that is neither restated as a basis driver nor retracted, or a sizing "
-        "comment the sm/em neither withdraws nor restates, is an anchoring event; because such a ground can "
-        "taint votes recorded before it, it supersedes the three recorded values, and the recovery re-runs the "
-        "independent vote from step 3 in newly created voter contexts that exclude the tainted discussion and "
-        "sizing comment" in body
+        "comment the sm/em neither withdraws nor restates, is an anchoring event; because a ground read in a "
+        "recorded rationale taints the votes recorded before it, it supersedes the three recorded values, and "
+        "the recovery re-runs the independent vote from step 3 in newly created voter contexts that exclude the "
+        "tainted discussion and sizing comment" in body
     )
 
 
@@ -883,9 +902,9 @@ def test_anchoring_guardrail_names_off_basis_grounds_as_a_trigger() -> None:
         "when it is neither restated as a basis driver nor retracted" in body
     )
     assert (
-        "a ground that weighs verification strength, testability, coverage, the shape of the tests, a duration, "
-        "effort or run cost, or a target value for this story is such a trigger when a voter weighs it in a "
-        "rationale or raises it in the discussion" in body
+        "a ground that weighs verification strength, testability, coverage, the shape of the tests, or a "
+        "duration, effort or run cost is such a trigger when a voter weighs it in a rationale or raises it in "
+        "the discussion" in body
     )
     assert "verification strength, testability, coverage, the shape of the tests" in body
 
@@ -1041,16 +1060,17 @@ def test_pointing_template_records_each_challenge_and_outcome() -> None:
     )
     body = spaced(section(RECORD.read_text(), "Pointing record"))
     assert (
-        "While a round is open, a challenged ground is recorded by its kind, its author (a voter, or the SM/EM for "
-        "a sizing comment) and its outcome, with a point value named before the reveal or a target value for this "
-        "story elided, because a verbatim quote of one in an open record names it again; once the consensus is "
-        "recorded, the final record may quote the grounds verbatim."
+        "While a round is open, the Challenges line records a challenged ground by its kind, its author (a voter, "
+        "or the SM/EM for a sizing comment) and its outcome, with a point value named before the reveal or a "
+        "target value for this story elided, because a verbatim quote of one in an open record names it again; "
+        "the Anchoring events line is the one place that carries an anchoring comment verbatim, and both lines "
+        "may carry the grounds verbatim once the round closes."
     ) in body
     assert (
         "A sizing comment that names a point value before the reveal, names or implies a target value for this "
         "story, or states elapsed time, effort or run cost voids the round under the Anchoring guardrail recovery "
         "as soon as the facilitator sees it, as does any ground that is neither restated nor retracted, and the "
-        "void leaves the consensus field empty and is recorded under Anchoring events."
+        "void records the consensus as void and is recorded under Anchoring events."
     ) in body
 
 

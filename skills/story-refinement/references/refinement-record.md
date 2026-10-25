@@ -60,8 +60,8 @@ Never edit the refinement comment to add the result; its id keeps identifying on
 
 Post this after the re-vote, or record it as an unpointed result.
 The three values are recorded before any SM/EM sizing comment or discussion.
-While a round is open, a challenged ground is recorded by its kind, its author (a voter, or the SM/EM for a sizing comment) and its outcome, with a point value named before the reveal or a target value for this story elided, because a verbatim quote of one in an open record names it again; once the consensus is recorded, the final record may quote the grounds verbatim.
-A sizing comment that names a point value before the reveal, names or implies a target value for this story, or states elapsed time, effort or run cost voids the round under the Anchoring guardrail recovery as soon as the facilitator sees it, as does any ground that is neither restated nor retracted, and the void leaves the consensus field empty and is recorded under Anchoring events.
+While a round is open, the Challenges line records a challenged ground by its kind, its author (a voter, or the SM/EM for a sizing comment) and its outcome, with a point value named before the reveal or a target value for this story elided, because a verbatim quote of one in an open record names it again; the Anchoring events line is the one place that carries an anchoring comment verbatim, and both lines may carry the grounds verbatim once the round closes.
+A sizing comment that names a point value before the reveal, names or implies a target value for this story, or states elapsed time, effort or run cost voids the round under the Anchoring guardrail recovery as soon as the facilitator sees it, as does any ground that is neither restated nor retracted, and the void records the consensus as void and is recorded under Anchoring events.
 
 ```markdown
 ## Pointing record
@@ -76,7 +76,7 @@ A sizing comment that names a point value before the reveal, names or implies a 
 - SM/EM sizing context, after all three values: <file base name> or verbatim
 - Discussion: high <value>, low <value>
 - Re-vote: <accepted set per voter, with complexity rationale>
-- Consensus: <highest value in the intersection, or none>
+- Consensus: <highest value in the intersection, or void when the round was voided>
 - No-consensus decision: <split, re-refine, or leave unpointed; n/a when there is a consensus>
 - Paths accepted: <set per voter, or n/a>
 - Decision rationale: <one line, or n/a>
