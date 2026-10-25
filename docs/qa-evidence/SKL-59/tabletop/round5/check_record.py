@@ -39,8 +39,8 @@ FIELDS = [
     "- Anchoring events:",
     "- Tracker writes:",
 ]
-PERMITTED = "SKL-53 recorded 5 points, and this story carries one more interacting constraint than that one."
-PRESCRIPTION = "This one should be 2, not 5."
+PERMITTED = (HERE / "prompts" / "sm-em-reference.txt").read_text().strip()
+PRESCRIPTION = (HERE / "prompts" / "sm-em-prescription.txt").read_text().strip()
 # A prescription says what this story's value is or should be; a reference never does.
 PRESCRIPTION_PATTERN = re.compile(
     r"(?i)\b(?:this (?:one|story)|it)\s+(?:should|ought to|must|has to|needs to|is|scores?|lands?)\s+(?:be\s+)?(?:a\s+|an\s+)?\d"
@@ -113,9 +113,7 @@ else:
                 problems.append(f"superseded line does not carry the {stage} {ROLES[k]} capture")
 
 for number, line in enumerate(BODY.splitlines(), 1):
-    if line.startswith("- Superseded values after a void:"):
-        continue
-    if PRESCRIPTION_PATTERN.search(line):
+    if PRESCRIPTION in line or PRESCRIPTION_PATTERN.search(line):
         problems.append(f"prescription leaks at record line {number}: {line[:60]!r}")
 if PRESCRIPTION not in RAW:
     problems.append("raw record does not quote the prescription verbatim")
@@ -140,10 +138,14 @@ for k in ROLES:
     if remark.upper() != "NONE" and f'- {ROLES[k]}: "{remark}"' not in RAW:
         problems.append(f"raw record does not attribute the {ROLES[k]} discussion remark to that voter")
 
+allowed_values = {max(standing.values()), min(standing.values())}
 for prompt in sorted((HERE / "prompts").glob("disc3-*-prompt.txt")):
     text = prompt.read_text()
     if f"high value, {max(standing.values())}, and the low value, {min(standing.values())}" not in text:
         problems.append(f"{prompt.name} does not state the standing high and low")
+    named = {int(n) for n in re.findall(r"(?:value,?|points?)\s*(\d+)", text, re.I)}
+    if not named <= allowed_values:
+        problems.append(f"{prompt.name} discloses a value other than the high and the low: {sorted(named - allowed_values)}")
 
 anchoring = re.search(r"^- Anchoring events: (.*)$", BODY, re.M)
 if not anchoring:
