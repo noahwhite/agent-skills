@@ -1,0 +1,2 @@
+PATHS: {re-refine}
+AMENDMENTS: clarify the acceptance criteria that distinguish a 2-point from a 3-point scope, and state which optional work is in scope so the size is unambiguous.

@@ -1,0 +1,2 @@
+VALUE: 3
+RATIONALE: Adding a git-state comparison introduces a new interacting constraint with the existing dry-run path, and the byte-identical default output carries a real risk of silently changing existing behaviour.

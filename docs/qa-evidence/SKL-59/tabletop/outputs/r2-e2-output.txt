@@ -1,0 +1,2 @@
+VALUE: 3
+RATIONALE: Detecting which candidate paths differ from the last committed state is a design unknown that must integrate with the existing dry-run path, and the byte-identical default-output requirement carries a real risk of silently breaking existing behaviour.

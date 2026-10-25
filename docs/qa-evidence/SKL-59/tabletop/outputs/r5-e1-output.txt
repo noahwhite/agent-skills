@@ -1,0 +1,2 @@
+PATHS: {re-refine}
+AMENDMENTS: Clarify whether the story contains one deliverable worth 2 points or a slightly larger deliverable worth 3; enumerate the discrete tasks so the 2-vs-3 boundary is explicit, then re-vote.

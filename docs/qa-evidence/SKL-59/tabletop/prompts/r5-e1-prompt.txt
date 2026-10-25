@@ -1,0 +1,12 @@
+You are one voter in the no-consensus decision of a pointing round.
+
+The three accepted sets were {2}, {3} and {2, 3}, so the intersection is empty and the story has no consensus.
+
+The facilitator presents only the empty intersection and the three paths: split the story, re-refine it, or leave it unpointed. The facilitator does not recommend a path.
+
+Record the set of paths you accept. A voter that accepts re-refine also lists the amendments it needs.
+
+Reply in this exact shape and nothing else:
+
+PATHS: <the set, for example {leave unpointed} or {split, leave unpointed}>
+AMENDMENTS: <none, or the amendments you need if you accept re-refine>
