@@ -60,7 +60,7 @@ Never edit the refinement comment to add the result; its id keeps identifying on
 
 Post this after the re-vote, or record it as an unpointed result.
 The three values are recorded before any SM/EM sizing comment or discussion.
-The Challenges and Anchoring events lines record a ground by its kind, its author (a voter, or the SM/EM for a sizing comment) and its outcome or recovery, and they elide a point value named before the reveal or a target value for this story permanently, because the posted record stays on the story surface that later voters read; the verbatim quote lives in the session's raw record, cited by its base name.
+No line of the posted record carries a point value named before the reveal or a target value for this story: the Challenges and Anchoring events lines record a ground by its kind, its author (a voter, or the SM/EM for a sizing comment) and its outcome or recovery, and every field that could quote a participant elides those two classes permanently, because the posted record stays on the story surface that later voters read; the verbatim quote lives in the session's raw record, cited by its base name.
 A sizing comment that names a point value before the reveal, names or implies a target value for this story, or states elapsed time, effort or run cost voids the round under the Anchoring guardrail recovery as soon as the facilitator sees it, as does any ground that is neither restated nor retracted, and the void records the consensus as void and is recorded under Anchoring events.
 
 ```markdown
@@ -73,10 +73,10 @@ A sizing comment that names a point value before the reveal, names or implies a 
   - Product owner: <value> - <short complexity rationale>
   - Engineer one: <value> - <short complexity rationale>
   - Engineer two: <value> - <short complexity rationale>
-- SM/EM sizing context, after all three values: <file base name> or verbatim
+- SM/EM sizing context, after all three values: <file base name> or verbatim, eliding a pre-reveal value or a target value
 - Discussion: high <value>, low <value>
 - Re-vote: <accepted set per voter, with complexity rationale>
-- Consensus: <highest value in the intersection, or void when the round was voided>
+- Consensus: <highest value in the intersection of the vote that stands>
 - No-consensus decision: <split, re-refine, or leave unpointed; n/a when there is a consensus>
 - Paths accepted: <set per voter, or n/a>
 - Decision rationale: <one line, or n/a>

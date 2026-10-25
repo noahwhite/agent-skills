@@ -766,9 +766,9 @@ def test_step_four_re_vote_prompt_carries_the_rationale_rule() -> None:
     assert "It also carries the Step 3 item 4 rationale rule." in item
 
 
-def test_pointing_template_marks_a_voided_consensus() -> None:
+def test_pointing_template_states_the_standing_consensus() -> None:
     assert (
-        "- Consensus: <highest value in the intersection, or void when the round was voided>"
+        "- Consensus: <highest value in the intersection of the vote that stands>"
         in pointing_template()
     )
 
@@ -856,7 +856,8 @@ def test_step_four_re_vote_challenges_an_off_basis_rationale() -> None:
     ) in item
     assert (
         "A re-vote rationale outside the pointing basis is challenged before the consensus is recorded, under "
-        "the same restate-or-retract rule as item 1."
+        "the same restate-or-retract rule as item 1, and a voter that retracts its re-vote rationale records a "
+        "new accepted set with a basis-driver rationale or records no consensus."
     ) in item
 
 
@@ -874,9 +875,10 @@ def test_anchoring_guardrail_makes_a_point_value_sizing_note_an_event_on_challen
     assert (
         "any other challenged ground that is neither restated as a basis driver nor retracted, or a sizing "
         "comment the sm/em neither withdraws nor restates, is an anchoring event; because a ground read in a "
-        "recorded rationale taints the votes recorded before it, it supersedes the three recorded values, and "
-        "the recovery re-runs the independent vote from step 3 in newly created voter contexts that exclude the "
-        "tainted discussion and sizing comment" in body
+        "recorded rationale was recorded with the vote it grounds, every value recorded in the round is a vote "
+        "recorded after the anchor, so the recovery voids the consensus and all three recorded values and "
+        "re-runs the independent vote from step 3 in newly created voter contexts that exclude the tainted "
+        "discussion and sizing comment" in body
     )
 
 
@@ -1063,11 +1065,11 @@ def test_pointing_template_records_each_challenge_and_outcome() -> None:
     )
     body = spaced(section(RECORD.read_text(), "Pointing record"))
     assert (
-        "The Challenges and Anchoring events lines record a ground by its kind, its author (a voter, or the "
-        "SM/EM for a sizing comment) and its outcome or recovery, and they elide a point value named before the "
-        "reveal or a target value for this story permanently, because the posted record stays on the story "
-        "surface that later voters read; the verbatim quote lives in the session's raw record, cited by its "
-        "base name."
+        "No line of the posted record carries a point value named before the reveal or a target value for this "
+        "story: the Challenges and Anchoring events lines record a ground by its kind, its author (a voter, or "
+        "the SM/EM for a sizing comment) and its outcome or recovery, and every field that could quote a "
+        "participant elides those two classes permanently, because the posted record stays on the story surface "
+        "that later voters read; the verbatim quote lives in the session's raw record, cited by its base name."
     ) in body
     assert (
         "A sizing comment that names a point value before the reveal, names or implies a target value for this "
@@ -1208,7 +1210,7 @@ def test_record_intro_excludes_local_paths_and_includes_needed_content() -> None
         ("Refinement comment", "- Engineer one (<family or model>): <file base name>"),
         ("Refinement comment", "- Engineer two (<family or model>): <file base name>"),
         ("Refinement comment", "- SM/EM contribution (not a vote): <file base name>"),
-        ("Pointing record", "- SM/EM sizing context, after all three values: <file base name> or verbatim"),
+        ("Pointing record", "- SM/EM sizing context, after all three values: <file base name> or verbatim, eliding a pre-reveal value or a target value"),
     ],
 )
 def test_record_templates_cite_file_base_names(heading: str, line: str) -> None:
