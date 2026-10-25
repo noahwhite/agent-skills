@@ -356,14 +356,14 @@ Removed or matched text:
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_pointing_template_records_each_challenge_and_outcome`
 Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_pointing_template_records_each_challenge_and_outcome`.
 
-## 26. Drop the session-record wording from the Anchoring events template line
+## 26. Drop the raw-session-record citation from the Anchoring events template line
 
 File: `refinement-record.md`
 
 Removed or matched text:
 
 ```text
-, quoted verbatim in the session record and elided here
+, with the verbatim comment in the raw session record and its base name cited here
 ```
 
 Written instead:
@@ -394,14 +394,14 @@ Written instead:
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_pointing_template_states_the_standing_consensus`
 Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_pointing_template_states_the_standing_consensus`.
 
-## 28. Drop the elision from a voter values line
+## 28. Drop the not-recorded option from a voter values line
 
 File: `refinement-record.md`
 
 Removed or matched text:
 
 ```text
-  - Engineer one: <value> - <short complexity rationale, eliding a pre-reveal value or a target value>
+  - Engineer one: <value> - <short complexity rationale, or not recorded>
 ```
 
 Written instead:

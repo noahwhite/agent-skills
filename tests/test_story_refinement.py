@@ -1068,7 +1068,7 @@ def test_pointing_template_records_each_challenge_and_outcome() -> None:
     )
     assert (
         "- Anchoring events: <none, or the comment and the recovery, including the newly created voter contexts, "
-        "quoted verbatim in the session record and elided here>" in pointing_template()
+        "with the verbatim comment in the raw session record and its base name cited here>" in pointing_template()
     )
     assert (
         "- Superseded values after a void: <none, or the voided values, the voided consensus and the blind vote that replaced them>"
@@ -1104,9 +1104,9 @@ def test_pointing_template_asks_for_complexity_rationales() -> None:
     lines = pointing_template()
     values = next(index for index, line in enumerate(lines) if line.startswith("- Values, recorded before the discussion:"))
     assert lines[values + 1 : values + 4] == [
-        "  - Product owner: <value> - <short complexity rationale, eliding a pre-reveal value or a target value>",
-        "  - Engineer one: <value> - <short complexity rationale, eliding a pre-reveal value or a target value>",
-        "  - Engineer two: <value> - <short complexity rationale, eliding a pre-reveal value or a target value>",
+        "  - Product owner: <value> - <short complexity rationale, or not recorded>",
+        "  - Engineer one: <value> - <short complexity rationale, or not recorded>",
+        "  - Engineer two: <value> - <short complexity rationale, or not recorded>",
     ]
     assert [line for line in lines if line.startswith("- Re-vote:")] == [
         "- Re-vote: <accepted set per voter, with complexity rationale, or none>"

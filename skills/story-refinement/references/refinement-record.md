@@ -70,9 +70,9 @@ A sizing comment that names a point value before the reveal, names or implies a 
 - Refined story identifier: <latest refinement comment id after any amendment>
 - Estimate scale: <profile.tracker.estimate_scale>
 - Values, recorded before the discussion: <the three values, or the values recorded before a void>
-  - Product owner: <value> - <short complexity rationale, eliding a pre-reveal value or a target value>
-  - Engineer one: <value> - <short complexity rationale, eliding a pre-reveal value or a target value>
-  - Engineer two: <value> - <short complexity rationale, eliding a pre-reveal value or a target value>
+  - Product owner: <value> - <short complexity rationale, or not recorded>
+  - Engineer one: <value> - <short complexity rationale, or not recorded>
+  - Engineer two: <value> - <short complexity rationale, or not recorded>
 - SM/EM sizing context, after all three values: <file base name> or verbatim, eliding a pre-reveal value or a target value, or none
 - Discussion: <high <value>, low <value>, or none>
 - Re-vote: <accepted set per voter, with complexity rationale, or none>
@@ -84,7 +84,7 @@ A sizing comment that names a point value before the reveal, names or implies a 
 - Split: <none, or the slice mapping and sibling issue keys>
 - Challenges: <none, or each ground challenged by kind, its author (a voter, or the SM/EM for a sizing comment), the restatement, withdrawal or retraction, or the void; elide a pre-reveal value or a target value>
 - Superseded values after a void: <none, or the voided values, the voided consensus and the blind vote that replaced them>
-- Anchoring events: <none, or the comment and the recovery, including the newly created voter contexts, quoted verbatim in the session record and elided here>
+- Anchoring events: <none, or the comment and the recovery, including the newly created voter contexts, with the verbatim comment in the raw session record and its base name cited here>
 - Tracker writes: product owner
 ```
 
