@@ -169,8 +169,10 @@ for field in ("- Tracker-write preflight: comment `19253345` on SKL-77.",
 
 # 7b. The re-vote prompts must not assert a discussion that the record says did not happen.
 for prompt in sorted((HERE / "prompts").glob("v3-*-prompt.txt")):
-    text = prompt.read_text()
-    if "discussion named" in text.lower():
+    text = prompt.read_text().lower()
+    if "no discussion was held" not in text:
+        problems.append(f"{prompt.name} does not state that no discussion was held")
+    if "discussed" in text or "discussion named" in text:
         problems.append(f"{prompt.name} claims a discussion that was not held")
 
 # 8. Capture inventory.

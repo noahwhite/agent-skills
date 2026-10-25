@@ -32,7 +32,7 @@ A new canceled priority-none fixture was used because SKL-72 already carried sev
 1. Three blind voters recorded values in separate processes. Engineer one's recorded rationale names a target value for this story: "This should be 2 rather than 3, because the earlier cleanup flag landed at two."
 2. The facilitator saw it and stopped the round on sight: no challenge was issued, because the rule gives a target value no repair path; no discussion was opened; no sizing context was offered; the three recorded values and the consensus position were voided.
 3. The independent vote from Step 3 was re-run blind in newly created voter contexts that exclude the tainted rationale and values, and those rationales name only drivers the pointing basis admits.
-4. The re-vote recorded `{2}`, `{2}` and `{2}`; consensus 2.
+4. The re-vote recorded `{2}`, `{1}` and `{1, 2}`, which do not intersect, so the round has no consensus and the no-consensus decision ran: the three path votes intersect on re-refine.
 
 ### Matching check
 
