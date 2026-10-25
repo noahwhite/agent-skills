@@ -1,0 +1,2 @@
+VALUE: 2
+RATIONALE: The only real complexity is the interacting constraint that the dry-run output without the byte column must stay byte-identical to the previous release, which carries a modest risk of silently changing existing behaviour, plus the small unknown of a size that cannot be determined. Design difficulty beyond that is low.

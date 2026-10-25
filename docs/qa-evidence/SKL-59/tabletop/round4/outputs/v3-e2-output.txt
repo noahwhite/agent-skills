@@ -1,0 +1,2 @@
+ACCEPTED: {2}
+RATIONALE: Complexity is low - the main driver is the byte-identical output constraint, a single interacting constraint carrying a modest risk of silently changing existing dry-run behaviour, while the size computation and the unknown-size fallback are routine and add no points.

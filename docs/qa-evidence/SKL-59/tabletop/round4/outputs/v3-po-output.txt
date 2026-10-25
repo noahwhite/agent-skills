@@ -1,0 +1,2 @@
+ACCEPTED: {2, 3}
+RATIONALE: This is a small additive change to an existing dry-run path with low design difficulty and no new interacting constraints; the only admitted driver is a contained risk of breaking existing behaviour, which the byte-identical requirement bounds rather than increases.

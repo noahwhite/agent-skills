@@ -1,6 +1,6 @@
 # SKL-59 AC2 tabletop at 702f53c9
 
-This directory holds the inspectable artefacts of the AC2 behavioural round: twenty-five prompt files and outputs for the SKL-72 ceremony, plus nine of each for the SKL-77 round in `round3/`, the raw session record with the verbatim target quotation, and the pointing record posted on the fixture.
+This directory holds the inspectable artefacts of the AC2 behavioural round: twenty-five prompt files and outputs for the SKL-72 ceremony, twelve of each for the SKL-77 round in `round3/` (nine votes plus three path votes), and ten of each for the SKL-78 round in `round4/`, the raw session record with the verbatim target quotation, and the pointing record posted on the fixture.
 
 ## Run statement
 
@@ -52,3 +52,12 @@ QA round 2 ruled the earlier run's target-value handling short of the delivered 
 - One durable record: SKL-77 comment `264d0a47`, reproduced exactly by `round3/pointing-record.md`. Five posts were needed, which is a deviation from the one-record precedent: `04540f95` omitted the voided rationales, `1dd2bb8c` added them but quoted the target sentence in its Anchoring events line, `077378a0` used a non-template tracker-writes form, `45e5ecac` still claimed a discussion that was never held, and `2b11599e` is the durable record.
 - The round: three blind voters; engineer one's recorded rationale named a target value; the facilitator stopped on sight, voided the recorded values and the consensus position, never opened the discussion and offered no sizing context; the independent vote was re-run blind in newly created contexts; the re-vote recorded `{2}`, `{1}` and `{1, 2}`, which do not intersect, so the no-consensus decision ran and the three path votes intersect on re-refine.
 - Every rationale in the record, standing and voided, is generated from its capture in `round3/outputs/`.
+
+## Round four - the compliant run on SKL-78 (after QA round 3)
+
+QA round 3 found two gaps in round three: the recovered run skipped the required high/low discussion, and six records were posted where one was required. `RECONCILIATION.md` records the chain; `round4/` holds the artefacts.
+
+- Fixture: SKL-78, `[Tabletop fixture] Show reclaimable bytes in the cleanup dry run (SKL-59 AC2 round 4)`, priority none, no implementation, canceled after the run, tracker-write preflight comment `c671f2cd`.
+- One durable record: SKL-78 comment `e0bcb6f8`, the only pointing record posted for this run, reproduced exactly by `round4/pointing-record.md`.
+- The round, in order: three blind voters, one of whom recorded a target-value rationale; the facilitator stopped on sight, voided the recorded values and the consensus position, opened no discussion on that thread and offered no sizing context; the independent vote was re-run blind in newly created voter contexts; **the required Step 4 discussion round was then held in those fresh contexts**, naming only the high and the low and challenging the one off-basis ground, which was retracted; the Step 4 re-vote recorded `{2, 3}`, `{2}` and `{2}`, so the consensus is 2.
+- `round4/check_record.py` recomputes the record from the ten captures, including that the discussion names exactly the standing high and low and that the challenged ground and its outcome are recorded; its output is `round4/check_record.out`.

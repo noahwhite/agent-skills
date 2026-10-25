@@ -52,3 +52,10 @@ Three defects in earlier drafts of the SKL-77 record and its prompts were caught
 - The discussion field asserted a high and a low of the standing values, and the first re-vote prompts described that non-existent discussion to the voters. Both were wrong: no discussion was held. The re-vote was run again with a prompt that says so, and the record now records `Discussion: none`. The captures from the first re-vote are not kept as the record's basis; they are superseded by the truthful run, and this note is the record of that replacement.
 - The re-vote sets from that truthful run do not intersect, so the no-consensus decision ran on the same fixture: the three path votes intersect on re-refine, which the record carries.
 
+## 6. Round four: the discussion round and the one-record requirement (QA round 3)
+
+QA round 3 found that the round-three recovery skipped the Step 4 discussion round and that six records had been posted where one was required.
+
+- The discussion round is now held where the delivered text puts it: after the blind re-vote, in the newly created voter contexts, naming only the high value 5 and the low value 2, and challenging the one off-basis ground (coverage), which was retracted. The tainted thread is still not resumed: the stop and the void happened on the recorded target value in round one, and the discussion that was held is a new one in fresh contexts.
+- The run is on a new canceled priority-none fixture, SKL-78, and carries exactly one pointing record, comment `e0bcb6f8`, generated from the captures and committed as `round4/pointing-record.md`. No correction post was needed.
+- The supersession history of the earlier fixtures is unchanged and stays in this file and in `PROVENANCE.md`; the SKL-78 record's Supersession line states that it is the only record for that run.

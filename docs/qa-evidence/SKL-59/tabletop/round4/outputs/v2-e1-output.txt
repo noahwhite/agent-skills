@@ -1,0 +1,2 @@
+VALUE: 2
+RATIONALE: The change is additive and low-design, but AC2 imposes an interacting constraint - the byte column must be added without altering the byte-identical legacy output - and the unknown-size edge case (AC3) is a small further constraint. The risk of silently changing existing output is the main complexity driver.
