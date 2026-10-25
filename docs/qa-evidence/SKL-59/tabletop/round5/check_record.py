@@ -39,12 +39,13 @@ FIELDS = [
     "- Anchoring events:",
     "- Tracker writes:",
 ]
-PERMITTED = (HERE / "prompts" / "sm-em-reference.txt").read_text().strip()
-PRESCRIPTION = (HERE / "prompts" / "sm-em-prescription.txt").read_text().strip()
+SM_EM = (HERE / "outputs" / "sm-em-output.txt").read_text()
+PERMITTED = re.search(r"^REFERENCE: (.*)$", SM_EM, re.M).group(1).strip()
+PRESCRIPTION = re.search(r"^PRESCRIPTION: (.*)$", SM_EM, re.M).group(1).strip()
 # A prescription says what this story's value is or should be; a reference never does.
 PRESCRIPTION_PATTERN = re.compile(
     r"(?i)\b(?:this (?:one|story)|it)\s+(?:should|ought to|must|has to|needs to|is|scores?|lands?)\s+(?:be\s+)?(?:a\s+|an\s+)?\d"
-    r"|\btarget of \d+ fits\b|\bi would go (?:higher|lower)\b|\bthe (?:highest|lowest) vote is the realistic one\b"
+    r"|\bi would size\b[^.\n]*\d|\bthis story at \d+ points\b|\btarget of \d+ fits\b|\bi would go (?:higher|lower)\b|\bthe (?:highest|lowest) vote is the realistic one\b"
     r"|\ba (?:target|score) of \d+\b"
 )
 problems = []
@@ -146,6 +147,12 @@ for prompt in sorted((HERE / "prompts").glob("disc3-*-prompt.txt")):
     named = {int(n) for n in re.findall(r"(?:value,?|points?)\s*(\d+)", text, re.I)}
     if not named <= allowed_values:
         problems.append(f"{prompt.name} discloses a value other than the high and the low: {sorted(named - allowed_values)}")
+    if re.search(r"(?i)\bvoted\b|\bscored\b|\bsubmitted\b", text):
+        problems.append(f"{prompt.name} reports how another voter voted")
+    own = prompt.name.split("-")[1]
+    for other_key, other_role in ROLES.items():
+        if other_key != own and re.search(rf"(?i)\b{other_role.lower()}\b[^.\n]*\d", text):
+            problems.append(f"{prompt.name} carries another voter's role with a value")
 
 anchoring = re.search(r"^- Anchoring events: (.*)$", BODY, re.M)
 if not anchoring:

@@ -1,0 +1,2 @@
+REFERENCE: SKL-53's pointing record fixed its consensus at 5 points, and unlike that story this one is a narrower cleanup dry-run enhancement whose only hard constraint is keeping the ungrouped output byte-identical.
+PRESCRIPTION: I would size this story at 3 points as a well-bounded dry-run grouping change with a verifiable byte-identical output invariant.
