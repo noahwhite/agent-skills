@@ -51,10 +51,9 @@
 # --probe-cmd (ADVERSARIAL_PROBE_CMD) is an optional availability check for `run` (dossier and
 # record say so and never probe): a shell command template whose {model} placeholder is replaced
 # with the shell-quoted model id, so do not quote the placeholder inside the template. It runs under
-# its own
-# --probe-timeout (ADVERSARIAL_PROBE_TIMEOUT, 30 seconds, never past the phase deadline), with stdin
-# from /dev/null, in a fresh empty directory under the run's scratch directory - never inside the
-# checkout under review. A configured probe that exits non-zero, prints a provider error (rate
+# its own --probe-timeout (ADVERSARIAL_PROBE_TIMEOUT, 30 seconds, never past the phase deadline),
+# with stdin from /dev/null, in a fresh empty directory under the run's scratch directory - never
+# inside the checkout under review. A configured probe that exits non-zero, prints a provider error (rate
 # limit, authentication, quota exhaustion, unavailable or unknown model), or outlives its timeout
 # fails the phase with exit 20 before the dossier is built and before any agent command runs,
 # naming the phase, the model id supplied, the probe's exit code and its output tail (the timeout is
@@ -913,7 +912,7 @@ case "$cmd" in
     write_dossier "$phase" "$dossier"
     # Every phase gets its own throwaway checkout; no agent ever runs in the primary checkout.
     checkout="$(make_checkout)"
-    trap 'rc=$?; trap - EXIT; ( remove_checkout "$checkout" ) >/dev/null 2>&1 || echo "WARNING: could not remove checkout $checkout" >&2; exit $rc' EXIT
+    trap 'rc=$?; trap - EXIT; ( remove_checkout "$checkout" ) >/dev/null || echo "WARNING: could not remove checkout $checkout (see above)" >&2; exit $rc' EXIT
     q_prompt="$(printf '%q' "$dossier")"
     q_out="$(printf '%q' "$out")"
     q_checkout="$(printf '%q' "$checkout")"

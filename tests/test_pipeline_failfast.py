@@ -574,6 +574,7 @@ def test_an_interrupted_run_cannot_be_recorded(gate, tmp_path):
         "record", "sweep", "--repo", str(repo), "--base", "HEAD", "--model", "gpt-6-sol", env=env,
     )
     assert rejected.returncode != 0, rejected.stdout + rejected.stderr
+    assert "no launch" in rejected.stderr, rejected.stderr
     assert_not_stamped(artifacts(repo, env), "sweep")
 
 
