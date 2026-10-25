@@ -152,7 +152,10 @@ probe_names_model() {
         case "$c" in
           "'") state=single ;;
           '"') state=double ;;
-          '#') state=comment ;;
+          '#')
+            case "${t:$(( i > 0 ? i - 1 : 0 )):1}" in
+              ""|" "|"	"|";"|"|"|"&"|"("|")") state=comment ;;
+            esac ;;
           *) case "${t:$i}" in
                "{model}"*|ADVERSARIAL_PROBE_MODEL*) return 0 ;;
              esac ;;
@@ -164,7 +167,7 @@ probe_names_model() {
           '"') state=normal ;;
           '\\') i=$(( i + 1 )) ;;
           *) case "${t:$i}" in
-               ADVERSARIAL_PROBE_MODEL*) return 0 ;;
+               ADVERSARIAL_PROBE_MODEL*|"{model}"*) return 0 ;;
              esac ;;
         esac ;;
       comment) : ;;
@@ -245,6 +248,8 @@ if [ "$cmd" = "run" ] && [ -n "$PROBE_CMD" ]; then
   probe_names_model "$PROBE_CMD" \
     || die 2 "--probe-cmd must reference the supplied model where the shell expands it ({model} unquoted, or ADVERSARIAL_PROBE_MODEL outside single quotes and comments); this is a lint, not proof that the template queries the provider"
 fi
+# A control character in a model id is a broken configuration on any command: refusing it loudly is
+# better than printing a line it could forge.
 case "$MODEL" in
   *[[:cntrl:]]*) die 2 "--model must not contain control characters; pass the model id on one line" ;;
 esac
