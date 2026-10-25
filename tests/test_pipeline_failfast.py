@@ -636,14 +636,22 @@ def test_a_previous_attempts_agent_log_is_not_used_as_this_attempts_diagnosis(ga
 
 # --- the timeout kill wins over a dirty checkout, and the probe gets one argv word ----------------
 
-def test_a_timeout_kill_is_reported_as_19_even_when_the_checkout_changed(gate):
+def test_a_timeout_kill_is_reported_as_19(gate):
     repo, scratch, env = gate
+    # The checkout creation shares the deadline, so the agent's write is not guaranteed before the
+    # kill. This test therefore pins what a timeout kill always proves - exit 19, one completion
+    # line, no stamp - and the checkout-change tripwire is proven deterministically by
+    # test_an_agent_that_changes_the_primary_checkout_still_exits_18.
     agent = f'printf x >> {shlex.quote(str(repo / "tracked.txt"))}; sleep 30'
     result = run_sweep(
-        repo, scratch, env, "--model", "gpt-6-sol", "--timeout", "1", agent=agent, timeout=60,
+        repo, scratch, env, "--model", "gpt-6-sol", "--timeout", "10", agent=agent, timeout=90,
     )
     assert result.returncode == 19, result.stdout + result.stderr
-    assert "primary checkout" in result.stderr, result.stderr
+    assert "gpt-6-sol" in result.stderr, result.stderr
+    assert "10s" in result.stderr, result.stderr
+    completion = [line for line in result.stderr.splitlines()
+                  if "phase=sweep complete elapsed=" in line]
+    assert len(completion) == 1 and completion[0].endswith("exit=19"), completion
     assert_not_stamped(artifacts(repo, env), "sweep")
 
 
