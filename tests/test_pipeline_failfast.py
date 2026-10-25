@@ -991,10 +991,19 @@ def test_a_failed_checkout_is_not_reported_as_a_timeout(gate, tmp_path):
 def test_a_probe_placeholder_that_cannot_take_effect_is_refused(gate):
     """A single-quoted or commented placeholder would reach the probe as dead text."""
     repo, scratch, env = gate
-    for probe in ("printf '%s\\n' '{model}'",):
+    for probe in (
+        "printf '%s\\n' '{model}'", "true # {model}", "true #{model}",
+        "'x{model}y'", "false # $ADVERSARIAL_PROBE_MODEL",
+    ):
         result = run_sweep(repo, scratch, env, "--model", "m", "--probe-cmd", probe)
         assert result.returncode == 2, (probe, result.stdout + result.stderr)
-        assert "{model}" in result.stderr or "comment" in result.stderr, result.stderr
+        assert "where the shell expands it" in result.stderr, result.stderr
+    # and a doubled-quoted reference, which the shell does expand, is accepted
+    ok = run_sweep(
+        repo, scratch, env, "--model", "m",
+        "--probe-cmd", 'test -n "$ADVERSARIAL_PROBE_MODEL"',
+    )
+    assert ok.returncode == 0, ok.stdout + ok.stderr
 
 
 def test_a_checkout_that_kills_itself_is_not_a_deadline_expiry(gate, tmp_path):

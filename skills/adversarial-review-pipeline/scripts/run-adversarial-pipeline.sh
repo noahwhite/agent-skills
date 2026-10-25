@@ -138,6 +138,41 @@ set -euo pipefail
 
 usage() { awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0" >&2; exit 2; }
 die() { local code="$1"; shift; echo "ERROR: $*" >&2; exit "$code"; }
+
+# Does a probe template reference the model somewhere the shell actually expands it? Walks the text
+# with shell quoting state: {model} or ADVERSARIAL_PROBE_MODEL in normal text, and
+# ADVERSARIAL_PROBE_MODEL inside double quotes (which expand), but never inside single quotes or a
+# comment.
+probe_names_model() {
+  local t="$1" i=0 n=${#1} c state=normal
+  while [ "$i" -lt "$n" ]; do
+    c="${t:$i:1}"
+    case "$state" in
+      normal)
+        case "$c" in
+          "'") state=single ;;
+          '"') state=double ;;
+          '#') state=comment ;;
+          *) case "${t:$i}" in
+               "{model}"*|ADVERSARIAL_PROBE_MODEL*) return 0 ;;
+             esac ;;
+        esac ;;
+      single)
+        [ "$c" = "'" ] && state=normal ;;
+      double)
+        case "$c" in
+          '"') state=normal ;;
+          '\\') i=$(( i + 1 )) ;;
+          *) case "${t:$i}" in
+               ADVERSARIAL_PROBE_MODEL*) return 0 ;;
+             esac ;;
+        esac ;;
+      comment) : ;;
+    esac
+    i=$(( i + 1 ))
+  done
+  return 1
+}
 abspath() { realpath -m -- "$1"; }
 
 cmd="${1:-}"; [ -n "$cmd" ] || usage; shift
@@ -206,17 +241,9 @@ fi
 if [ "$PROBE_SET" -eq 1 ] && [ -z "$PROBE_CMD" ] && [ "$cmd" = "run" ]; then
   die 2 "--probe-cmd needs a non-empty template"
 fi
-if [ "$cmd" = "run" ]; then
-  case "$PROBE_CMD" in
-    "") ;;
-    *"{model}"*|*'ADVERSARIAL_PROBE_MODEL'*) ;;
-    *) die 2 "--probe-cmd must reference the supplied model, through {model} or ADVERSARIAL_PROBE_MODEL; this is a lint, not proof that the template queries the provider" ;;
-  esac
-  # The placeholder has to be able to take effect: not single-quoted, not commented out.
-  case "$PROBE_CMD" in
-    *"'{model}'"*) die 2 "--probe-cmd must not single-quote the {model} placeholder; it would reach the probe as literal text" ;;
-  esac
-
+if [ "$cmd" = "run" ] && [ -n "$PROBE_CMD" ]; then
+  probe_names_model "$PROBE_CMD" \
+    || die 2 "--probe-cmd must reference the supplied model where the shell expands it ({model} unquoted, or ADVERSARIAL_PROBE_MODEL outside single quotes and comments); this is a lint, not proof that the template queries the provider"
 fi
 case "$MODEL" in
   *[[:cntrl:]]*) die 2 "--model must not contain control characters; pass the model id on one line" ;;
@@ -830,11 +857,12 @@ make_checkout() {  # prints the path of a registered throwaway detached worktree
     [ "$bounded" -ge 1 ] || return 124   # 124 = the phase deadline left no time (timeout's own code)
   fi
   if [ -n "$SCRATCH" ]; then
-    mkdir -p -- "$SCRATCH"
-    container="$(mktemp -d -p "$SCRATCH" adversarial-checkout.XXXXXX)"
+    mkdir -p -- "$SCRATCH" || return 2
+    container="$(mktemp -d -p "$SCRATCH" adversarial-checkout.XXXXXX)" || return 2
   else
-    container="$(mktemp -d -t adversarial-checkout.XXXXXX)"
+    container="$(mktemp -d -t adversarial-checkout.XXXXXX)" || return 2
   fi
+  [ -n "$container" ] && [ -d "$container" ] || return 2
   dir="$(abspath "$container/head-${HEAD_SHA:0:12}")"
   add_cmd="git worktree prune && git worktree add -q --detach $(printf '%q' "$dir") $(printf '%q' "$HEAD_SHA")"
   if [ -n "$bounded" ] && command -v timeout >/dev/null 2>&1; then
