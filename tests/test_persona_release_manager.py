@@ -118,7 +118,7 @@ def test_readiness_section_covers_each_promotion_mode() -> None:
                    "this check runs once that branch exists",
                    "must carry only the story's change",
                    "the same patch ids as the story's merged feature prs",
-                   "the evidence must have been taken against a build that included that change"):
+                   "for a build whose tree, for the files the story changes, is identical to that branch's"):
         assert phrase in binding[0], f"per-story readiness binding missing: {phrase}"
     assert "a build that predates or omits that change does not cover it" in binding[1]
     whole = SKILL.read_text().lower()
