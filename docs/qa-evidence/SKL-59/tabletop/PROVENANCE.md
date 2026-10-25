@@ -37,5 +37,6 @@ Where a file is a reconstruction or a replacement, this file says so and names t
 ## Round 5 (SKL-59 AC2 round 5, after QA round 4 and the owner amendments)
 
 - `round5/prompts/` and `round5/outputs/` are original captures from sixteen voter processes and one SM/EM process against the delivered text of this branch at `b73ed09`, the commit that carried the owner amendments into `skills/story-refinement/SKILL.md` and its record reference, read from a worktree checkout; the prompts say so, and the captures are committed unchanged.
-- `round5/pointing-record.md` is the record generated from those captures and posted on SKL-79 as its only pointing record, comment `466d7155`. No correction post was needed, so the run holds one record.
+- `round5/pointing-record.md` is the record generated from those captures and posted on SKL-79 as its only pointing record, comment `466d7155`.
+- The record was corrected in place twice rather than re-posted, so the run still holds one record: first to harden the checker, then to quote the SM/EM capture exactly. The quoted reference and prescription in the posted comment are now the captured sentences in `round5/outputs/sm-em-output.txt`, and the earlier wording it replaced is superseded in place, with no second record.
 - No capture from an earlier round was removed or rewritten in this round; the earlier labels above stand.

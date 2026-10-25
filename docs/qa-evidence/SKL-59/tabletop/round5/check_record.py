@@ -42,12 +42,34 @@ FIELDS = [
 SM_EM = (HERE / "outputs" / "sm-em-output.txt").read_text()
 PERMITTED = re.search(r"^REFERENCE: (.*)$", SM_EM, re.M).group(1).strip()
 PRESCRIPTION = re.search(r"^PRESCRIPTION: (.*)$", SM_EM, re.M).group(1).strip()
-# A prescription says what this story's value is or should be; a reference never does.
-PRESCRIPTION_PATTERN = re.compile(
-    r"(?i)\b(?:this (?:one|story)|it)\s+(?:should|ought to|must|has to|needs to|is|scores?|lands?)\s+(?:be\s+)?(?:a\s+|an\s+)?\d"
-    r"|\bi would size\b[^.\n]*\d|\bthis story at \d+ points\b|\btarget of \d+ fits\b|\bi would go (?:higher|lower)\b|\bthe (?:highest|lowest) vote is the realistic one\b"
-    r"|\ba (?:target|score) of \d+\b"
+# A prescription says what this story's value is, should be or comes out at; a reference never does.
+# The test is deliberately phrasing-agnostic: any sentence that pairs a number with a reference to the
+# story under estimate and a sizing verb is a prescription, whatever its wording.
+STORY_REFERENCE = re.compile(r"(?i)\bthis (?:one|story)\b|\bthe story\b|\bit\b")
+SIZING_VERB = re.compile(
+    r"(?i)\b(?:should|ought to|must be|has to be|needs to be|is a|is an|is worth|scores?|sizes?|sized|"
+    r"lands?|comes? out at|estimates?|fits|go (?:higher|lower)|goes (?:higher|lower)|realistic|"
+    r"the answer|feels right|is right)\b"
 )
+FIRST_PERSON = re.compile(
+    r"(?i)\b(?:i would|i'd|i would go|i'd go)\b[^.\n]{0,30}\b(?:size|score|point|estimate|pick|choose|say|go with)\b"
+)
+VALUATION = re.compile(r"(?i)\b(?:target|score|answer|realistic)\b")
+NUMBER = re.compile(r"\b\d+\b")
+
+
+def prescriptions(text: str) -> list[str]:
+    """Return the sentences that prescribe this story's value rather than referencing another story's."""
+    found = []
+    for sentence in re.split(r"(?<=[.;:])\s+|\n+", text):
+        if not NUMBER.search(sentence):
+            continue
+        sized = SIZING_VERB.search(sentence) or FIRST_PERSON.search(sentence) or VALUATION.search(sentence)
+        if not sized:
+            continue
+        if STORY_REFERENCE.search(sentence) or FIRST_PERSON.search(sentence) or VALUATION.search(sentence):
+            found.append(sentence.strip())
+    return found
 problems = []
 
 
@@ -114,8 +136,10 @@ else:
                 problems.append(f"superseded line does not carry the {stage} {ROLES[k]} capture")
 
 for number, line in enumerate(BODY.splitlines(), 1):
-    if PRESCRIPTION in line or PRESCRIPTION_PATTERN.search(line):
+    if PRESCRIPTION in line:
         problems.append(f"prescription leaks at record line {number}: {line[:60]!r}")
+for sentence in prescriptions(BODY):
+    problems.append(f"record reads as a prescription: {sentence[:70]!r}")
 if PRESCRIPTION not in RAW:
     problems.append("raw record does not quote the prescription verbatim")
 
@@ -165,14 +189,14 @@ else:
 
 for prompt in sorted((HERE / "prompts").glob("v4-*-prompt.txt")):
     text = prompt.read_text()
-    if PRESCRIPTION_PATTERN.search(text):
-        problems.append(f"{prompt.name} carries a prescription")
+    for sentence in prescriptions(text):
+        problems.append(f"{prompt.name} carries a prescription: {sentence[:60]!r}")
     for value in {str(n) for n in range(1, 14)}:
         if re.search(rf"\bvalue,? {value}\b", text) and int(value) not in {max(standing.values()), min(standing.values())}:
             problems.append(f"{prompt.name} names a value other than the high and the low")
 
-if PRESCRIPTION_PATTERN.search(PERMITTED):
-    problems.append("the permitted reference itself reads as a prescription")
+for sentence in prescriptions(PERMITTED):
+    problems.append(f"the permitted reference itself reads as a prescription: {sentence[:60]!r}")
 
 for field in ("- Tracker-write preflight: comment `48c57a07` on SKL-79.",
               "- Estimate scale: fibonacci",
