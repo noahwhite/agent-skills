@@ -24,7 +24,7 @@ A new canceled priority-none fixture was used because SKL-72 already carried sev
 
 - Fixture: SKL-77, `[Tabletop fixture] Show candidate path age in the cleanup dry run (SKL-59 AC2 round 3)`, priority none, no implementation, canceled after the run, tracker-write preflight comment `19253345`.
 - Delivered text loaded: `662c84b21e6aea973b41f2a2981b30b18af4118f`.
-- One durable pointing record: SKL-77 comment `077378a0`. The chain is `04540f95` (first post, omitted the voided rationales), then `1dd2bb8c` (added them but quoted the target sentence in its Anchoring events line), then `077378a0`, which names the event by kind, cites `raw-record.md` for the verbatim sentence and keeps the voided rationales only in the superseded-values line, which the delivered template exempts.
+- One durable pointing record: SKL-77 comment `45e5ecac`. The chain is `04540f95` (first post, omitted the voided rationales), `1dd2bb8c` (added them but quoted the target sentence in its Anchoring events line), `077378a0` (used a non-template tracker-writes form), and `45e5ecac`, which names the event by kind, cites `raw-record.md` for the verbatim sentence, keeps the voided rationales only in the superseded-values line that the delivered template exempts, and uses the template's `product owner` form.
 - Artefacts: `tabletop/round3/prompts/` (nine prompts) and `tabletop/round3/outputs/` (nine captures), `tabletop/round3/raw-record.md`, and `tabletop/round3/pointing-record.md`, whose body is the exact text posted on the fixture.
 
 ### What the round shows

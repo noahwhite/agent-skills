@@ -1,6 +1,6 @@
 # SKL-77 pointing record (the durable record posted on the fixture)
 
-This file is the exact text posted on SKL-77 as comment `077378a0`, superseding `04540f95` and `1dd2bb8c`. The record was generated from the captured outputs, so every rationale - standing and voided - matches its capture byte for byte; the target sentence is elided from the Anchoring events line and quoted verbatim in `raw-record.md`.
+This file is the exact text posted on SKL-77 as comment `45e5ecac`, superseding `077378a0`, `04540f95` and `1dd2bb8c`. The record was generated from the captured outputs, so every rationale - standing and voided - matches its capture byte for byte; the target sentence is elided from the Anchoring events line and quoted verbatim in `raw-record.md`.
 
 ## Pointing record
 
