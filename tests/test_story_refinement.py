@@ -816,8 +816,8 @@ def test_step_three_sizing_context_is_in_complexity_terms() -> None:
     ) in body
     assert (
         "It must not prescribe this story's value - no value to score, no target, no preferred direction - and "
-        "must not reveal or compare individual votes before the discussion." in body
-    )
+        "must not reveal or compare individual votes before the discussion."
+    ) in body
     assert (
         "A prescription of this story's value, from the SM/EM or from a voter, is an anchoring event under the "
         "Anchoring guardrail."
