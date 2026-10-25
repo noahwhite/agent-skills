@@ -124,9 +124,9 @@ challenges = re.search(r"^- Challenges: (.*)$", BODY, re.M)
 if not challenges:
     problems.append("challenges line missing")
 else:
-    coverage = capture("v1", "e2")[1]
-    if "Coverage is thin" not in challenges.group(1):
-        problems.append("challenges line does not quote the challenged coverage ground")
+    standing_e2 = capture("v2", "e2")[1]
+    if standing_e2 not in challenges.group(1):
+        problems.append("challenges line does not quote the standing challenged rationale verbatim")
     outcome = (HERE / "outputs" / "chal-e2-output.txt").read_text().splitlines()[0].split(":", 1)[1].strip()
     if f"Outcome: {outcome}" not in challenges.group(1):
         problems.append(f"challenges line does not record the outcome {outcome!r}")
@@ -139,9 +139,15 @@ else:
 
 # 8. Re-vote prompts state the discussion that was held.
 for prompt in sorted((HERE / "prompts").glob("v3-*-prompt.txt")):
-    text = prompt.read_text().lower()
-    if "discussion round was held" not in text or "high value" not in text:
+    text = prompt.read_text()
+    if "discussion round was held" not in text.lower():
         problems.append(f"{prompt.name} does not state the held discussion round")
+    if f"high value, {max(standing.values())}, and the low value, {min(standing.values())}" not in text:
+        problems.append(f"{prompt.name} does not state the standing high and low")
+for prompt in sorted((HERE / "prompts").glob("disc-*-prompt.txt")):
+    text = prompt.read_text()
+    if f"high value, {max(standing.values())}, and the low value, {min(standing.values())}" not in text:
+        problems.append(f"{prompt.name} does not state the standing high and low")
 
 # 9. Fixed header values and capture inventory.
 for field in ("- Tracker-write preflight: comment `c671f2cd` on SKL-78.",
@@ -151,7 +157,7 @@ for field in ("- Tracker-write preflight: comment `c671f2cd` on SKL-78.",
               "- Tracker writes: product owner"):
     if field not in BODY:
         problems.append(f"header value absent: {field!r}")
-for stage, expected in (("v1", 3), ("v2", 3), ("v3", 3), ("chal", 1)):
+for stage, expected in (("v1", 3), ("v2", 3), ("v3", 3), ("chal", 1), ("disc", 3)):
     found = len(list((HERE / "outputs").glob(f"{stage}-*-output.txt")))
     if found != expected:
         problems.append(f"{stage}: expected {expected} captures, found {found}")

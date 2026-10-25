@@ -26,6 +26,13 @@ Challenge: "coverage is out of basis under the delivered rule. Restate it as a b
 
 Outcome: retracted.
 
+The discussion round's per-voter captures (`outputs/disc-*`) record the facilitator's statement of the high and the low and each voter's remark:
+
+- Product owner: "The byte-identical dry-run output is the behaviour that silently breaks if the size edge case is mishandled, so my 3 hinges on that risk being absorbed without failing the run."
+- Engineer one: "The value hinges on the byte-identical legacy-output constraint, which makes a nominally additive change carry real regression risk, so 2 reflects that hidden complexity rather than the change's surface size."
+- Engineer two: "NONE"
+
+
 ## The re-vote
 
 - Product owner: accepts {2, 3} - "This is a small additive change to an existing dry-run path with low design difficulty and no new interacting constraints; the only admitted driver is a contained risk of breaking existing behaviour, which the byte-identical requirement bounds rather than increases."

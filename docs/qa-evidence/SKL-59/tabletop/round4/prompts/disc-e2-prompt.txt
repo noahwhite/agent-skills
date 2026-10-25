@@ -1,0 +1,14 @@
+You are one voter in the required discussion round of a pointing ceremony. This round is held in a newly created context, after the blind re-vote, and it names only the high value, 5, and the low value, 2. No other value is named and no voter is singled out.
+
+Your own recorded value and rationale are below.
+
+VALUE: 5
+RATIONALE: "Coverage is thin - no test reaches the byte column - so a silent regression there would go unnoticed."
+
+The facilitator has challenged every ground outside the pointing basis against the recorded rationales. Your coverage ground was challenged and you retracted it in this round.
+
+You may add one short remark about your own ground, or reply NONE if you have nothing to add.
+
+Reply in this exact shape and nothing else:
+
+REMARK: <one sentence, or NONE>
