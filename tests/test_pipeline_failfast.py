@@ -638,9 +638,11 @@ def test_a_previous_attempts_agent_log_is_not_used_as_this_attempts_diagnosis(ga
 
 def test_a_timeout_kill_is_reported_as_19_even_when_the_checkout_changed(gate):
     repo, scratch, env = gate
+    # A 5s window guarantees the agent's write lands before the kill, so the test observes the
+    # checkout-change note rather than racing a 1s deadline it sometimes lost.
     agent = f'printf x >> {shlex.quote(str(repo / "tracked.txt"))}; sleep 30'
     result = run_sweep(
-        repo, scratch, env, "--model", "gpt-6-sol", "--timeout", "1", agent=agent, timeout=60,
+        repo, scratch, env, "--model", "gpt-6-sol", "--timeout", "5", agent=agent, timeout=60,
     )
     assert result.returncode == 19, result.stdout + result.stderr
     assert "primary checkout" in result.stderr, result.stderr
