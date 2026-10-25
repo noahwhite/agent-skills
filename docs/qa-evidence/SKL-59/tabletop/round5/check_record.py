@@ -46,18 +46,18 @@ PRESCRIPTION = re.search(r"^PRESCRIPTION: (.*)$", SM_EM, re.M).group(1).strip()
 # The test is phrasing-agnostic and position-aware: it looks inside one sentence for the story under
 # estimate followed by a sizing verb and then a number, so a reference that scores another story in an
 # earlier clause, or a constraint count that follows the story, never trips it.
-STORY_SIZING = re.compile(
-    r"(?i)(?P<story>\bthis (?:one|story)\b|\bthe story\b|\bit\b)"
-    r"(?P<gap>[^.\n]{0,60}?)"
-    r"\b(?:should|ought to|must be|has to be|needs to be|is a|is an|is worth|scores?|sizes?|sized|lands?|"
+SIZING_VERB = re.compile(
+    r"(?i)\b(?:should|ought to|must be|has to be|needs to be|is a|is an|is worth|scores?|sizes?|sized|lands?|"
     r"comes? out at|estimates?|fits|go (?:higher|lower)|goes (?:higher|lower))\b"
-    r"[^.\n]{0,30}?\b\d"
 )
-# A gap that hands the clause to another item means the sizing verb is not the story's own.
-REASSIGNED = re.compile(
-    r"(?i)\bwhich\b|\bwho\b|\banother\b|\bthat (?:item|story)\b|\bSKL-\d+[:,]?\s*the (?:story|item) that\b|"
-    r"\bSKL-\d+\s*$"
-)
+STORY_REF = re.compile(r"(?i)\bSKL-\d+\b|\bthis (?:one|story)\b|\bthe story\b|\bit\b")
+THIS_STORY_REF = re.compile(r"(?i)\bthis (?:one|story)\b|\bit\b")
+COMPARATIVE = re.compile(r"(?i)\b(?:unlike|than|from|versus|vs\.?)\s+$")
+RELATIVE = re.compile(r"(?i)\b(?:which|who|that)\b")
+COPULA = re.compile(r"(?i)\b(?:is|are|was|were|remains|seems)\s+$")
+# A coordinated clause inherits the subject of the clause it follows, so a second sizing verb in the same
+# sentence is still attributed, and a comparison clause that scores the comparable is not.
+CLAUSE_SPLIT = re.compile(r"(?i);\s*|,\s*(?:and|but|while|yet|so)\s+|\s+(?:and|but|while|yet|so)\s+")
 STORY_AT_VALUE = re.compile(r"(?i)\bthis (?:one|story)\b[^.\n]{0,25}?\bat\s+\d")
 FIRST_PERSON = re.compile(
     r"(?i)\b(?:i would|i'd|i have)\b[^.\n]{0,30}\b(?:size|score|point|estimate|pick|choose|say|go with|put)\b"
@@ -85,11 +85,44 @@ def target_is_stated(sentence: str) -> bool:
 
 
 def story_is_sized(sentence: str) -> bool:
-    """True when this story, not another item, is the subject the sizing verb and the number attach to."""
-    for match in STORY_SIZING.finditer(sentence):
-        if not REASSIGNED.search(match.group("gap")):
-            return True
+    """True when a sizing verb with a number is attributed to this story, not to a comparable."""
+    subject = None
+    for clause in CLAUSE_SPLIT.split(sentence):
+        refs = list(STORY_REF.finditer(clause))
+        if refs:
+            subject = "this" if is_this_story(clause, refs, 0) else "other"
+        for verb in SIZING_VERB.finditer(clause):
+            if not re.match(r"[^.\n]{0,30}?\b\d", clause[verb.end():]):
+                continue
+            preceding = [index for index, ref in enumerate(refs) if ref.end() <= verb.start()]
+            if not preceding:
+                if subject == "this":
+                    return True
+                continue
+            nearest = refs[preceding[-1]]
+            if is_this_story(clause, refs, preceding[-1]):
+                return True
+            # the nearest reference is another item's; a relative clause binds the verb to it
+            if RELATIVE.search(clause[nearest.end():verb.start()]):
+                continue
+            owner = None
+            for index in reversed(preceding):
+                if COMPARATIVE.search(clause[:refs[index].start()]):
+                    continue
+                owner = "this" if is_this_story(clause, refs, index) else "other"
+                break
+            if owner == "this":
+                return True
     return False
+
+
+def is_this_story(clause: str, refs: list, index: int) -> bool:
+    """A reference is this story, except a bare "the story" that names another item."""
+    token = refs[index].group(0)
+    if token.lower() != "the story":
+        return bool(THIS_STORY_REF.fullmatch(token))
+    before = clause[: refs[index].start()]
+    return index == 0 or bool(COPULA.search(before))
 
 
 def prescriptions(text: str) -> list[str]:
@@ -246,7 +279,7 @@ for stage, expected_count in (("v1", 3), ("v2", 3), ("v3", 3), ("v4", 3), ("disc
         problems.append(f"{stage}: expected {expected_count} captures, found {found}")
 
 # The committed matrix must not shrink: adding cases means updating this count deliberately.
-MATRIX_COUNTS = (20, 10)
+MATRIX_COUNTS = (21, 11)
 cases_file = HERE / "prescription-cases.md"
 section = None
 must_fail, must_pass = [], []
