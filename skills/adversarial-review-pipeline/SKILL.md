@@ -119,15 +119,16 @@ The gate adds no model, provider or reviewer substitution; an explicitly configu
 The script never resolves one: it echoes the id it was handed, and names it in its progress and failure lines.
 
 `--probe-cmd TEMPLATE` (`ADVERSARIAL_PROBE_CMD`) is an optional availability check spent before any agent budget.
-Its only placeholder is `{model}`, substituted shell-quoted.
+`run` performs it; `dossier` and `record` say they do not, and never pretend to have probed.
+Its only placeholder is `{model}`, substituted shell-quoted, so do not quote the placeholder inside the template.
 It runs with stdin from `/dev/null` in a fresh empty directory under the run's scratch directory, never in the checkout under review, under its own `--probe-timeout` (`ADVERSARIAL_PROBE_TIMEOUT`, default 30 seconds).
-A probe that exits non-zero, prints a provider error (rate limit, authentication, quota exhaustion, unavailable or unknown model), or outlives its timeout fails the phase with exit 20 before the dossier is built and before any agent command runs.
+A probe that exits non-zero, prints a provider error (rate limit, authentication, quota exhaustion, unavailable or unknown model), or outlives its own `--probe-timeout` fails the phase with exit 20 before the dossier is built and before any agent command runs; when the phase deadline is what expired first the phase exits 19 instead, as a timeout kill.
 The message names the phase, the model id supplied, the probe's exit code (or the timeout) and the probe's output tail.
 With no probe configured the phase writes `availability check: not configured`, so the absence is visible rather than silent; a configured probe is never silently skipped.
 A passing probe is not proof that the real call will run: the observed cause is account state on a listed model, so a phase can still fail after a clean check.
 
-One deadline bounds the whole phase: `--timeout` (`ADVERSARIAL_TIMEOUT`, default 900) covers the availability check and the agent command, so a phase can never outlive it.
-The agent command runs in its own process group under one SIGKILL deadline of that whole group, so a child the CLI leaves retrying after the main call failed cannot keep the phase alive.
+One deadline bounds the phase's model work: `--timeout` (`ADVERSARIAL_TIMEOUT`, default 900, at least 1) covers the availability check and the agent command, not the local dossier and worktree work around them.
+The agent command runs in its own process group under one SIGKILL deadline of that whole group, and the group is killed when the command returns too, so a child the CLI leaves retrying after the main call failed neither keeps the phase alive nor keeps running past it.
 A phase killed by `--timeout` exits 19 and names the phase, the model id when supplied and the timeout in seconds; no other failure path changes its exit code.
 An interrupted gate (SIGINT, SIGTERM, SIGHUP) kills the in-flight process group before it exits, so an interruption never orphans an agent.
 The probe's own `--probe-timeout` is still honoured, bounded by whatever is left of the phase deadline at that moment.
@@ -135,11 +136,11 @@ The probe's own `--probe-timeout` is still honoured, bounded by whatever is left
 While the agent runs, `run` writes an elapsed-time line to its own stderr, the first after one second and then at least every 30 seconds, carrying the phase, the elapsed seconds, the configured timeout and the availability-check state, plus one completion line with the elapsed time when the phase succeeds.
 Progress never reaches the artifact or the agent's stdout, so a report's first line stays `REVIEW-RAN: yes`.
 
-On a non-zero agent exit, a timeout, or a report `accept_phase` rejects, `run` prints the phase, the exit code, the model id when supplied, and the last 40 lines of `${phase}-agent.err` and `${phase}-agent.log`, plus every provider-error line found in the full stderr log, so one is never lost past the tail window; `record` prints the phase, the model id when supplied, the reason and the report tail.
+On a non-zero agent exit, a timeout, or a report `accept_phase` rejects, `run` prints the phase, the exit code, the model id when supplied, and the last 40 lines of `${phase}-agent.err` and `${phase}-agent.log`, plus every provider-error line it detects in the full stderr log, so one is never lost past the tail window; `record` prints the phase, the model id when supplied, the reason and the report tail.
 The script cannot read a runtime's own session or event stream: a runtime that reports provider errors only there must surface them on the phase's stderr in its `--agent-cmd` template (`references/runtimes.md`, Models).
 
-A failed phase is never acceptable.
-It removes its own launch and binding, so a later `record` of the leftover report fails instead of stamping a report the run declared failed, and a re-run that fails before the agent starts still discards this phase's previous acceptance and every later phase.
+A failed `run` is never acceptable.
+It removes its own launch and binding, so a later `record` of the leftover report fails instead of stamping a report the run declared failed, an interrupt does the same, and a re-run that fails before the agent starts still discards this phase's previous acceptance and every later phase.
 
 ## Phase 0: preflight (deterministic)
 

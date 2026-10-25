@@ -48,8 +48,10 @@
 # model: it echoes back the id it was handed. A phase that cannot run is failed, never skipped and
 # never substituted with another model, provider or reviewer.
 #
-# --probe-cmd (ADVERSARIAL_PROBE_CMD) is an optional availability check: a shell command template
-# whose {model} placeholder is replaced with the shell-quoted model id. It runs under its own
+# --probe-cmd (ADVERSARIAL_PROBE_CMD) is an optional availability check for `run` (dossier and
+# record say so and never probe): a shell command template whose {model} placeholder is replaced
+# with the shell-quoted model id, so do not quote the placeholder inside the template. It runs under
+# its own
 # --probe-timeout (ADVERSARIAL_PROBE_TIMEOUT, 30 seconds, never past the phase deadline), with stdin
 # from /dev/null, in a fresh empty directory under the run's scratch directory - never inside the
 # checkout under review. A configured probe that exits non-zero, prints a provider error (rate
@@ -60,10 +62,12 @@
 # records 'availability check: not configured' on stderr, so the absence is visible rather than
 # silent.
 #
-# One deadline bounds the whole phase: the availability check and the agent command share
-# --timeout (ADVERSARIAL_TIMEOUT, default 900), so a phase can never outlive it. The agent command
-# runs in its own process group under one SIGKILL deadline of that whole group, so a child the CLI
-# leaves retrying after the main call failed cannot keep the phase alive. A phase killed by
+# One deadline bounds the phase's model work: the availability check and the agent command share
+# --timeout (ADVERSARIAL_TIMEOUT, default 900, at least 1). The local work around them (dossier,
+# throwaway worktree) is not model work and is not bounded by it. The agent command runs in its own
+# process group under one SIGKILL deadline of that whole group, and the group is killed when the
+# command returns too, so a child the CLI leaves retrying after the main call failed cannot keep
+# running past the phase. A phase killed by
 # --timeout exits 19, naming the phase, the model id when supplied and the timeout in seconds; an
 # interrupted gate (SIGINT, SIGTERM, SIGHUP) kills the same process group before it exits. No other
 # failure path changes its exit code.
@@ -433,7 +437,7 @@ PROBE_TAIL_LINES=20
 # the provider condition or the model it is about, so healthy output that merely contains a word
 # like "unavailable" does not fail a phase; the probe's own output tail is surfaced verbatim, so a
 # false positive is visible and cheap to correct.
-PROVIDER_ERROR_RE='rate[ _-]?limit|too many requests|(^|[^0-9])429([^0-9]|$)|unauthori[sz]ed|authentication (failed|error|required)|invalid[ _-]?api[ _-]?key|(^|[^0-9])40[13]([^0-9]|$)|quota|insufficient[ _-](funds|credits|quota)|exceeded your (current )?quota|out of credits|credits? (are )?(exhausted|depleted)|(^|[^0-9])402([^0-9]|$)|model[ _-]?not[ _-]?found|unknown model|no such model|model[^.]*(not found|not available|unavailable|overloaded)|service unavailable|(^|[^0-9])50[23]([^0-9]|$)'
+PROVIDER_ERROR_RE='rate[ _-]?limit|too many requests|(^|[^0-9])429([^0-9]|$)|unauthori[sz]ed|authentication (failed|error|required)|invalid[ _-]?api[ _-]?key|(http|status)[ _/-]?(code)?[ :=]*40[13]|quota[ _-]?(exceeded|exhausted)|exceeded your (current )?quota|insufficient[ _-](funds|credits|quota)|out of quota|credits? (are )?(exhausted|depleted)|(http|status)[ _/-]?(code)?[ :=]*5[0-9][0-9]|service unavailable|model[ _-]?not[ _-]?found|unknown model|no such model|model[^.]*(not found|not available|unavailable|overloaded)'
 
 # Runs a command line in its own process group under one SIGKILL deadline of that whole group, so a
 # child the CLI leaves retrying cannot keep the phase alive. The deadline is our own, so a timeout
@@ -488,6 +492,8 @@ run_guarded() {
   RUN_RC="$(cat -- "$rcfile" 2>/dev/null || echo "")"
   case "$RUN_RC" in ''|*[!0-9]*) RUN_RC=1 ;; esac
   wait "$pid" 2>/dev/null || true
+  # A CLI can leave a retry child behind after its main call returns; never let it outlive the phase.
+  kill -KILL -- "-$pid" 2>/dev/null || true
   GUARDED_PID=""
   rm -f -- "$rcfile"
   RUN_ELAPSED="$(( SECONDS - start ))"
@@ -500,8 +506,13 @@ kill_guarded() {  # SIGKILL the in-flight guarded process group, if any
   fi
 }
 
-on_signal() {  # $1 exit code: an interrupted gate never orphans the phase's process group
+on_signal() {  # $1 exit code: an interrupted gate orphans neither its process group nor its state
   kill_guarded
+  printf 'adversarial-pipeline: interrupted (exit %s); this phase is not accepted\n' "$1" >&2
+  if [ -n "${phase:-}" ] && [ -n "${RUN_DIR:-}" ] && [ -d "$RUN_DIR" ]; then
+    rm -f -- "$RUN_DIR/$phase.launch" "$RUN_DIR/$phase.binding" "$RUN_DIR/$phase.primary" \
+      "$(artifact_for "$phase").stamp" 2>/dev/null || true
+  fi
   exit "$1"
 }
 
@@ -531,7 +542,7 @@ emit_tail() {  # $1 label, $2 file: the last DIAGNOSIS_LINES lines, verbatim, or
 provider_lines() {  # $1 file: every provider-error line, verbatim, even past the tail window
   local lines
   [ -f "$1" ] || return 0
-  lines="$(grep -iE -- "$PROVIDER_ERROR_RE" "$1" 2>/dev/null | tail -n "$DIAGNOSIS_LINES" || true)"
+  lines="$(grep -aiE -- "$PROVIDER_ERROR_RE" "$1" 2>/dev/null | tail -n "$DIAGNOSIS_LINES" || true)"
   if [ -n "$lines" ]; then
     printf 'adversarial-pipeline: provider-error lines from %s:\n%s\n' "$1" "$lines" >&2
   fi
@@ -590,7 +601,7 @@ availability_probe() {  # $1 phase, $2 phase deadline ($SECONDS at expiry): sets
   line="cd $(printf '%q' "$probedir") && ${line}"
   run_guarded "$line" "$limit" /dev/null "$out" --combined ""
   tail_text="$(tail -n "$PROBE_TAIL_LINES" -- "$out" 2>/dev/null || true)"
-  provider_hit="$(grep -iE -- "$PROVIDER_ERROR_RE" "$out" 2>/dev/null | head -n 1 || true)"
+  provider_hit="$(grep -aiE -- "$PROVIDER_ERROR_RE" "$out" 2>/dev/null | head -n 1 || true)"
   if [ "$RUN_TIMED_OUT" -eq 1 ]; then
     remove_probe_dir "$probedir"
     if [ "$phase_bound" -eq 1 ]; then
@@ -838,6 +849,9 @@ case "$cmd" in
     ;;
 
   dossier)
+    if [ -n "$PROBE_CMD" ]; then
+      echo "note: the availability check runs in 'run' only; dossier does not probe the model" >&2
+    fi
     require_predecessors "$phase"
     init_scratch
     begin_phase "$phase"
@@ -850,6 +864,9 @@ case "$cmd" in
     ;;
 
   record)
+    if [ -n "$PROBE_CMD" ]; then
+      echo "note: the availability check runs in 'run' only; record does not probe the model" >&2
+    fi
     require_predecessors "$phase"
     rc_accept=0
     reason_file="$(mktemp -p "$RUN_DIR" record-reason.XXXXXX)" \
@@ -868,13 +885,18 @@ case "$cmd" in
     [ -n "$AGENT_CMD" ] || die 2 "--agent-cmd (or ADVERSARIAL_AGENT_CMD) is required; build it from the profile agent for this phase."
     require_predecessors "$phase"
     init_scratch
+    phase_start=$SECONDS
     out="$(artifact_for "$phase")"
     dossier="$SCRATCH/${phase}-dossier.md"
+    errlog="$RUN_DIR/${phase}-agent.err"
+    agentlog="$RUN_DIR/${phase}-agent.log"
     # A re-run that fails at any point, even before the agent starts, discards this phase's previous
     # acceptance and every later phase. The primary-checkout baseline is taken before the probe, so a
-    # probe that writes into the checkout cannot hide inside it.
+    # probe that writes into the checkout cannot hide inside it. Stale logs go first: a diagnosis must
+    # never show a previous attempt's streams as this attempt's.
     begin_phase "$phase"
     bind_phase "$phase"
+    rm -f -- "$errlog" "$agentlog"
     trap 'on_signal 130' INT
     trap 'on_signal 143' TERM
     trap 'on_signal 129' HUP
@@ -891,15 +913,12 @@ case "$cmd" in
     write_dossier "$phase" "$dossier"
     # Every phase gets its own throwaway checkout; no agent ever runs in the primary checkout.
     checkout="$(make_checkout)"
-    trap 'remove_checkout "$checkout" >/dev/null || echo "WARNING: could not remove checkout $checkout" >&2' EXIT
+    trap 'rc=$?; trap - EXIT; ( remove_checkout "$checkout" ) >/dev/null 2>&1 || echo "WARNING: could not remove checkout $checkout" >&2; exit $rc' EXIT
     q_prompt="$(printf '%q' "$dossier")"
     q_out="$(printf '%q' "$out")"
     q_checkout="$(printf '%q' "$checkout")"
     line="${AGENT_CMD//\{prompt_file\}/$q_prompt}"
     line="${line//\{checkout\}/$q_checkout}"
-    errlog="$RUN_DIR/${phase}-agent.err"
-    agentlog="$RUN_DIR/${phase}-agent.log"
-    rm -f -- "$errlog" "$agentlog"
     result_out="$out"
     if [[ "$AGENT_CMD" == *"{output_file}"* ]]; then
       line="${line//\{output_file\}/$q_out}"
@@ -915,17 +934,21 @@ case "$cmd" in
     if [[ "$AGENT_CMD" != *"{output_file}"* ]]; then
       cp -- "$out" "$agentlog" 2>/dev/null || true   # the agent's stdout is both the artifact and its log
     fi
+    changed_note=""
     if [ "$(primary_state)" != "$(cat -- "$RUN_DIR/$phase.primary")" ]; then
-      fail_phase 18 "the primary checkout ($ROOT) changed while the $phase agent ran; this phase is not accepted. Inspect 'git status' there."
+      changed_note=" It also changed the primary checkout ($ROOT), which no later phase would accept."
     fi
     if [ "$RUN_TIMED_OUT" -eq 1 ]; then
-      fail_phase 19 "the $phase phase was killed by --timeout: its whole process group received SIGKILL ${RUN_ELAPSED}s into the ${TIMEOUT}s deadline (model=$MODEL_LABEL); the phase is a failure, not a clean one, and nothing was substituted for it."
+      fail_phase 19 "the $phase phase was killed by --timeout: its whole process group received SIGKILL ${RUN_ELAPSED}s into the ${TIMEOUT}s deadline (model=$MODEL_LABEL); the phase is a failure, not a clean one, and nothing was substituted for it.${changed_note}"
     fi
     if [ "$RUN_RC" -ne 0 ]; then
       if [ "$RUN_RC" -ge 128 ]; then
-        fail_phase 15 "the $phase agent command was killed by signal $((RUN_RC - 128)) (exit $RUN_RC, model=$MODEL_LABEL); this phase is failed, not clean, and nothing was substituted for it."
+        fail_phase 15 "the $phase agent command was killed by signal $((RUN_RC - 128)) (exit $RUN_RC, model=$MODEL_LABEL); this phase is failed, not clean, and nothing was substituted for it.${changed_note}"
       fi
-      fail_phase 15 "the $phase agent command failed (exit $RUN_RC, model=$MODEL_LABEL); this phase is failed, not clean, and nothing was substituted for it."
+      fail_phase 15 "the $phase agent command failed (exit $RUN_RC, model=$MODEL_LABEL); this phase is failed, not clean, and nothing was substituted for it.${changed_note}"
+    fi
+    if [ -n "$changed_note" ]; then
+      fail_phase 18 "the primary checkout ($ROOT) changed while the $phase agent ran; this phase is not accepted. Inspect 'git status' there."
     fi
     rc_accept=0
     reason_file="$(mktemp -p "$RUN_DIR" accept-reason.XXXXXX)" \
@@ -935,7 +958,7 @@ case "$cmd" in
       fail_phase "$rc_accept" "$(cat -- "$reason_file" 2>/dev/null || true)"
     fi
     rm -f -- "$reason_file"
-    completion_line "$phase" "$RUN_ELAPSED"
+    completion_line "$phase" "$(( SECONDS - phase_start ))"
     echo "Phase $phase -> $out" >&2
     if [ "$phase" = "arbitrate" ]; then cat -- "$out"; fi
     ;;

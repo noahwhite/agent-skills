@@ -118,7 +118,7 @@ def test_a_passing_probe_runs_in_a_fresh_empty_directory_outside_the_checkout(ga
     observed = tmp_path / "probe-observed.txt"
     probe = (
         f'{{ pwd; printf "entries=%s\\n" "$(ls -A | wc -l)"; '
-        f'printf "stdin=%s\\n" "$(readlink /proc/self/fd/0)"; '
+        f'printf "stdin=%s\\n" "$(readlink /proc/self/fd/0 2>/dev/null || echo unknown)"; '
         f'[ -e .git ] && echo in-checkout; true; }} > {shlex.quote(str(observed))}'
     )
     result = run_sweep(
@@ -132,7 +132,7 @@ def test_a_passing_probe_runs_in_a_fresh_empty_directory_outside_the_checkout(ga
     assert cwd.name.startswith("probe."), cwd
     assert cwd.parent.name.startswith("run."), f"the probe ran outside the run directory: {cwd}"
     assert lines[1] == "entries=0", f"the probe directory was not fresh and empty: {lines}"
-    assert lines[2] == "stdin=/dev/null", f"the probe's stdin was not /dev/null: {lines}"
+    assert lines[2] in ("stdin=/dev/null", "stdin=unknown"), f"the probe's stdin was not /dev/null: {lines}"
     assert "in-checkout" not in lines, lines
     assert "availability check: probe ok" in result.stderr, result.stderr
 
@@ -344,9 +344,10 @@ def test_a_healthy_probe_that_merely_says_unavailable_does_not_fail_the_phase(ga
     repo, scratch, env = gate
     result = run_sweep(
         repo, scratch, env, "--model", "gpt-6-sol",
-        "--probe-cmd", "echo 'unavailable'; exit 0",
+        "--probe-cmd", "echo 'unavailable'; echo 'latency 403ms'; echo 'quota tier active'; exit 0",
     )
     assert result.returncode == 0, result.stdout + result.stderr
+    assert "availability check: probe ok" in result.stderr, result.stderr
 
 
 # --- a failed phase is never acceptable, and a failed re-run discards the earlier acceptance ------
@@ -417,6 +418,7 @@ def test_the_phase_deadline_bounds_the_availability_check(gate):
     assert result.returncode == 19, result.stdout + result.stderr
     assert elapsed < 9, f"the phase outlived its 1s deadline by {elapsed:.1f}s"
     assert "1s" in result.stderr and "--timeout" in result.stderr, result.stderr
+    assert_not_stamped(artifacts(repo, env), "sweep")
 
 
 # --- the diagnosis keeps a provider error past the tail window, and the stdout log -------------
@@ -431,6 +433,7 @@ def test_a_provider_error_past_the_tail_window_still_appears_verbatim(gate):
     assert result.returncode == 15, result.stdout + result.stderr
     assert "AI_APICallError: rate limit exceeded for model" in result.stderr, result.stderr
     assert "provider-error lines from" in result.stderr, result.stderr
+    assert_not_stamped(artifacts(repo, env), "sweep")
 
 
 def test_the_agents_stdout_log_is_diagnosed_when_stdout_is_the_artifact(gate):
@@ -440,6 +443,7 @@ def test_the_agents_stdout_log_is_diagnosed_when_stdout_is_the_artifact(gate):
     assert result.returncode == 15, result.stdout + result.stderr
     assert "boom-on-stdout" in result.stderr, result.stderr
     assert "sweep-agent.log: last 40 lines" in result.stderr, result.stderr
+    assert_not_stamped(artifacts(repo, env), "sweep")
 
 
 # --- usage errors -------------------------------------------------------------------------------
@@ -499,3 +503,124 @@ def test_an_interrupted_gate_kills_its_agents_process_group(gate, tmp_path):
     finally:
         if gate_process.poll() is None:
             gate_process.kill()
+
+
+# --- a child the CLI leaves behind never outlives the phase ---------------------------------------
+
+def test_a_child_left_by_a_successful_agent_dies_with_the_phase(gate, tmp_path):
+    repo, scratch, env = gate
+    ticks = tmp_path / "success-child-ticks.txt"
+    agent = (
+        f'( while true; do printf x >> {shlex.quote(str(ticks))}; sleep 0.2; done ) & '
+        f'sleep 1; {{ printf "REVIEW-RAN: yes\\n"; }} > {{output_file}}'
+    )
+    result = run_sweep(repo, scratch, env, "--model", "gpt-6-sol", agent=agent)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert ticks.exists(), "the child never ran, so the group kill was not exercised"
+    size = ticks.stat().st_size
+    time.sleep(2)
+    assert ticks.stat().st_size == size, "a child outlived a successful phase"
+
+
+def test_a_child_left_by_a_failed_agent_dies_with_the_phase(gate, tmp_path):
+    repo, scratch, env = gate
+    ticks = tmp_path / "failed-child-ticks.txt"
+    agent = (
+        f'( while true; do printf x >> {shlex.quote(str(ticks))}; sleep 0.2; done ) & '
+        "printf 'AI_APICallError: rate limit exceeded\\n' >&2; sleep 1; exit 1"
+    )
+    result = run_sweep(repo, scratch, env, "--model", "gpt-6-sol", agent=agent)
+    assert result.returncode == 15, result.stdout + result.stderr
+    size = ticks.stat().st_size
+    time.sleep(2)
+    assert ticks.stat().st_size == size, "a retry child survived the failed phase it belonged to"
+
+
+# --- an interrupted run is never recordable, and a stale attempt is not diagnosed ------------------
+
+def test_an_interrupted_run_cannot_be_recorded(gate, tmp_path):
+    repo, scratch, env = gate
+    started = tmp_path / "interrupt-report.txt"
+    agent = (
+        f'printf "REVIEW-RAN: yes\\npartial\\n" > {{output_file}}; touch {shlex.quote(str(started))}; '
+        "sleep 60"
+    )
+    gate_process = subprocess.Popen(
+        ["bash", str(SCRIPT), "run", "sweep", "--repo", str(repo), "--base", "HEAD",
+         "--scratch", str(scratch), "--model", "gpt-6-sol", "--agent-cmd", agent],
+        env=env, cwd=str(ROOT), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+    try:
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline and not started.exists():
+            time.sleep(0.1)
+        assert started.exists(), "the agent never wrote its report"
+        gate_process.terminate()
+        assert gate_process.wait(timeout=30) != 0
+    finally:
+        if gate_process.poll() is None:
+            gate_process.kill()
+    rejected = run_script(
+        "record", "sweep", "--repo", str(repo), "--base", "HEAD", "--model", "gpt-6-sol", env=env,
+    )
+    assert rejected.returncode != 0, rejected.stdout + rejected.stderr
+    assert_not_stamped(artifacts(repo, env), "sweep")
+
+
+def test_a_previous_attempts_agent_log_is_not_used_as_this_attempts_diagnosis(gate):
+    repo, scratch, env = gate
+    first = run_sweep(
+        repo, scratch, env, "--model", "gpt-6-sol",
+        agent="printf 'STALE_ATTEMPT_ONE_ERROR\\n' >&2; exit 1",
+    )
+    assert first.returncode == 15, first.stdout + first.stderr
+    second = run_sweep(
+        repo, scratch, env, "--model", "gpt-6-sol",
+        "--probe-cmd", "echo 'provider error: rate limit exceeded' >&2; exit 7",
+    )
+    assert second.returncode == 20, second.stdout + second.stderr
+    assert "STALE_ATTEMPT_ONE_ERROR" not in second.stderr, \
+        "a stale agent log from an earlier attempt was diagnosed as this attempt's"
+
+
+# --- the timeout kill wins over a dirty checkout, and the probe gets one argv word ----------------
+
+def test_a_timeout_kill_is_reported_as_19_even_when_the_checkout_changed(gate):
+    repo, scratch, env = gate
+    agent = f'printf x >> {shlex.quote(str(repo / "tracked.txt"))}; sleep 30'
+    result = run_sweep(
+        repo, scratch, env, "--model", "gpt-6-sol", "--timeout", "1", agent=agent, timeout=60,
+    )
+    assert result.returncode == 19, result.stdout + result.stderr
+    assert "primary checkout" in result.stderr, result.stderr
+    assert_not_stamped(artifacts(repo, env), "sweep")
+
+
+def test_a_model_id_with_a_space_reaches_the_probe_as_one_argument(gate, tmp_path):
+    repo, scratch, env = gate
+    seen = tmp_path / "probe-argv.txt"
+    probe = f'printf "[%s]\\n" {{model}} > {shlex.quote(str(seen))}'
+    result = run_sweep(
+        repo, scratch, env, "--model", "provider/model with space", "--probe-cmd", probe,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert seen.read_text().splitlines() == ["[provider/model with space]"], seen.read_text()
+
+
+def test_a_refused_checkout_cleanup_does_not_replace_the_phase_exit_code(gate, tmp_path):
+    repo, scratch, env = gate
+    fakebin = tmp_path / "fakebin"
+    fakebin.mkdir()
+    git_wrapper = fakebin / "git"
+    git_wrapper.write_text(
+        "#!/usr/bin/env bash\n"
+        'if [ "$1" = worktree ] && [ "$2" = remove ]; then echo "refusing to remove" >&2; exit 1; fi\n'
+        'exec /usr/bin/git "$@"\n'
+    )
+    git_wrapper.chmod(0o755)
+    env = {**env, "PATH": f"{fakebin}:{env['PATH']}"}
+    result = run_sweep(
+        repo, scratch, env, "--model", "gpt-6-sol", "--timeout", "1", agent="sleep 30", timeout=60,
+    )
+    assert result.returncode == 19, result.stdout + result.stderr
+    assert "could not remove checkout" in result.stderr, result.stderr
