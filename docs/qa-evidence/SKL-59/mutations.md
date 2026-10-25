@@ -1,7 +1,7 @@
 # SKL-59 mutation evidence
 
 Measured on the delivered text of this change with CPython 3.12.3 and locked dependencies, with every command run from the repository root.
-The modified files are `skills/story-refinement/SKILL.md` and `skills/story-refinement/references/refinement-record.md`.
+The modified files are `skills/story-refinement/SKILL.md`, `skills/story-refinement/references/refinement-record.md`, `tests/test_story_refinement.py` (the pins) and this evidence file.
 Before each check the document bytes were saved, the edit shown below was made once, the quoted command ran, and the saved bytes were restored even when the command failed; the final source matched the saved bytes, and the only tracked changes were then the files this change delivers.
 Each entry shows the exact matched text, and the exact replacement text where the edit substitutes or inserts one, so a re-runner can reproduce it from the delivered text.
 36 regression proofs failed as designed and 1 control passed.
