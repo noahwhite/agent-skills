@@ -46,14 +46,16 @@
 #
 # --model ID (ADVERSARIAL_MODEL) is the model id this phase was given, quoted whole into the probe
 # and echoed on every line as a label in which anything outside letters, digits and . _ / : @ # + ~
-# , [ ] - becomes '_' (so no id can forge a field of a progress line). It must not contain control
-# characters. The script never resolves a model: it echoes back the id it was handed. A phase that cannot run is failed, never skipped and
+# , [ ] - becomes '_' (so no id can forge a field of a progress line), and an unset model prints as
+# not-supplied. It must not contain control characters. The script never resolves a model: it echoes back the id it was handed. A phase that cannot run is failed, never skipped and
 # never substituted with another model, provider or reviewer.
 #
 # --probe-cmd (ADVERSARIAL_PROBE_CMD) is an optional availability check for `run` (dossier and
 # record say so and never probe): a shell command template whose {model} placeholder is replaced
 # with the shell-quoted model id, so do not quote the placeholder inside the template. A template
-# without {model} is refused (exit 2): it would check nothing about the model. It runs under
+# without {model} is refused (exit 2), and the model is also exported to the probe as
+# ADVERSARIAL_PROBE_MODEL, which is the authoritative channel: a template that comments or quotes the
+# placeholder still receives the model there. It runs under
 # its own --probe-timeout (ADVERSARIAL_PROBE_TIMEOUT, 30 seconds, never past the phase deadline),
 # with stdin from /dev/null, in a fresh empty directory under the run's scratch directory - never
 # inside the checkout under review. A configured probe that exits non-zero, prints a provider error (rate
@@ -210,7 +212,7 @@ esac
 # The label is printed by every command, so any character that could forge a field or a line is
 # mapped to '_' here; the model id's own shell metacharacters are still quoted whole into the probe.
 if [ -z "$MODEL" ]; then
-  MODEL_LABEL="not supplied"
+  MODEL_LABEL="not-supplied"
 else
   MODEL_LABEL="$(printf '%s' "$MODEL" | tr -c 'A-Za-z0-9._/:@#+~,][-' '_')" || MODEL_LABEL="not supplied"
 fi
@@ -564,7 +566,7 @@ progress_line() {  # $1 phase, $2 elapsed seconds: stderr only, never the artifa
 
 completion_line() {  # $1 phase, $2 elapsed seconds, $3 the phase's exit status
   printf 'adversarial-pipeline: phase=%s complete elapsed=%ss model=%s exit=%s\n' \
-    "$1" "$2" "${MODEL_LABEL:-not supplied}" "$3" >&2
+    "$1" "$2" "${MODEL_LABEL:-not-supplied}" "$3" >&2
 }
 
 # A phase attempt reports completion however it ends, so the elapsed time and the exit status are
@@ -616,7 +618,7 @@ provider_lines() {  # $1 file: every provider-error line, verbatim, even past th
 
 diagnose_phase() {  # $1 phase, $2 exit code, $3 reason (already captured), $4 report path when applicable
   local phase_name="$1" code="$2" reason="${3:-}" report="${4:-}"
-  printf 'adversarial-pipeline: phase=%s exit=%s model=%s\n' "$phase_name" "$code" "${MODEL_LABEL:-not supplied}" >&2
+  printf 'adversarial-pipeline: phase=%s exit=%s model=%s\n' "$phase_name" "$code" "${MODEL_LABEL:-not-supplied}" >&2
   if [ -n "$reason" ]; then
     printf 'adversarial-pipeline: reason: %s\n' "${reason#ERROR: }" >&2
   fi
@@ -657,7 +659,7 @@ availability_probe() {  # $1 phase, $2 phase deadline ($SECONDS at expiry): sets
   if [ "$remaining" -lt "$limit" ]; then limit="$remaining"; phase_bound=1; fi
   [ "$limit" -lt 0 ] && limit=0
   probedir="$(mktemp -d -p "$SCRATCH" "probe.$phase_name.XXXXXX")" \
-    || die 2 "could not create a probe directory under the run's scratch directory"
+    || fail_phase 2 "could not create a probe directory under the run's scratch directory ($SCRATCH)"
   out="$RUN_DIR/$phase_name-probe.log"
   : > "$out"
   q_model="$(printf '%q' "$MODEL")"
@@ -666,7 +668,10 @@ availability_probe() {  # $1 phase, $2 phase deadline ($SECONDS at expiry): sets
   # scratch directory - never the checkout under review.
   line="cd $(printf '%q' "$probedir") && ${line}"
   availability_state="availability check: running"
-  run_guarded "$line" "$limit" /dev/null "$out" --combined "$phase_name"
+  # The environment is the authoritative channel: a template that puts {model} in a comment or a
+  # string still receives the model here, so a check can never silently test nothing.
+  ADVERSARIAL_PROBE_MODEL="$MODEL" \
+    run_guarded "$line" "$limit" /dev/null "$out" --combined "$phase_name"
   tail_text="$(tail -n "$PROBE_TAIL_LINES" -- "$out" 2>/dev/null || true)"
   provider_hit="$(grep -aiE -- "$PROVIDER_ERROR_RE" "$out" 2>/dev/null | head -n 1 || true)"
   if [ "$RUN_TIMED_OUT" -eq 1 ]; then

@@ -891,3 +891,38 @@ def test_probe_validation_belongs_to_run_only(gate):
     empty = run_sweep(repo, scratch, env, "--model", "m", "--probe-cmd", "")
     assert empty.returncode == 2, empty.stdout + empty.stderr
     assert "non-empty template" in empty.stderr, empty.stderr
+
+
+def test_the_probe_receives_the_model_in_its_environment(gate, tmp_path):
+    """The model reaches the probe even when the template only quotes or comments {model}."""
+    repo, scratch, env = gate
+    seen = tmp_path / "probe-env.txt"
+    probe = f': {{model}}; printf "%s\\n" "$ADVERSARIAL_PROBE_MODEL" > {shlex.quote(str(seen))}'
+    result = run_sweep(repo, scratch, env, "--model", "kimi/kimi-k3", "--probe-cmd", probe)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert seen.read_text().strip() == "kimi/kimi-k3", seen.read_text()
+
+
+def test_an_early_interrupt_gets_the_signal_status_in_the_process_and_the_line(gate, tmp_path):
+    repo, scratch, env = gate
+    started = tmp_path / "early-signal-rc.txt"
+    agent = f'touch {shlex.quote(str(started))}; sleep 60'
+    gate_process = subprocess.Popen(
+        ["bash", str(SCRIPT), "run", "sweep", "--repo", str(repo), "--base", "HEAD",
+         "--scratch", str(scratch), "--model", "m", "--agent-cmd", agent],
+        env=env, cwd=str(ROOT), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+    )
+    try:
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline and not started.exists():
+            time.sleep(0.05)
+        assert started.exists(), "the agent never started"
+        gate_process.terminate()
+        _, stderr = gate_process.communicate(timeout=30)
+    finally:
+        if gate_process.poll() is None:
+            gate_process.kill()
+    assert gate_process.returncode == 143, gate_process.returncode
+    completion = [line for line in stderr.splitlines() if "phase=sweep complete elapsed=" in line]
+    assert len(completion) == 1, stderr
+    assert completion[0].endswith("exit=143"), completion[0]
