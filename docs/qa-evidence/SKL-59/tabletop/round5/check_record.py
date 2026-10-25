@@ -43,33 +43,48 @@ SM_EM = (HERE / "outputs" / "sm-em-output.txt").read_text()
 PERMITTED = re.search(r"^REFERENCE: (.*)$", SM_EM, re.M).group(1).strip()
 PRESCRIPTION = re.search(r"^PRESCRIPTION: (.*)$", SM_EM, re.M).group(1).strip()
 # A prescription says what this story's value is, should be or comes out at; a reference never does.
-# The test is deliberately phrasing-agnostic: any sentence that pairs a number with a reference to the
-# story under estimate and a sizing verb is a prescription, whatever its wording.
+# The test is phrasing-agnostic and clause-scoped, so a reference that scores another story in one clause
+# never trips it: a clause that carries a number is a prescription when it also refers to the story under
+# estimate and sizes it, or when it stages the number as a first-person sizing, a target, a score, an
+# answer or a settlement, or when it stages the number itself as the verdict.
+CLAUSE = re.compile(r"(?i),|;|:|\s-\s|\band\b|\bbut\b|\bwhile\b|\bwhereas\b|\bthough\b")
 STORY_REFERENCE = re.compile(r"(?i)\bthis (?:one|story)\b|\bthe story\b|\bit\b")
 SIZING_VERB = re.compile(
     r"(?i)\b(?:should|ought to|must be|has to be|needs to be|is a|is an|is worth|scores?|sizes?|sized|"
-    r"lands?|comes? out at|estimates?|fits|go (?:higher|lower)|goes (?:higher|lower)|realistic|"
-    r"the answer|feels right|is right)\b"
+    r"lands?|comes? out at|estimates?|fits|go (?:higher|lower)|goes (?:higher|lower)|have|holds?|"
+    r"put|sits|weighs)\b"
 )
+STORY_AT_VALUE = re.compile(r"(?i)\bthis (?:one|story)\b[^.\n]{0,25}?\bat\s+\d")
 FIRST_PERSON = re.compile(
-    r"(?i)\b(?:i would|i'd|i would go|i'd go)\b[^.\n]{0,30}\b(?:size|score|point|estimate|pick|choose|say|go with)\b"
+    r"(?i)\b(?:i would|i'd|i have|i'd put|i would put)\b[^.\n]{0,30}\b(?:size|score|point|estimate|pick|choose|say|go with|put|have)\b"
 )
-VALUATION = re.compile(r"(?i)\b(?:target|score|answer|realistic)\b")
+VALUATION = re.compile(r"(?i)\b(?:target|score|answer|realistic|verdict)\b")
+SETTLED = re.compile(r"(?i)\d+\s*(?:points?|pts)\b[^.\n]{0,25}\b(?:is right|fits|feels right|is the answer)\b")
+NON_NUMERIC = re.compile(
+    r"(?i)\b(?:i would|i'd) go (?:higher|lower)\b|\bthe (?:highest|lowest) vote is (?:the )?realistic\b|"
+    r"\bleaning (?:higher|lower)\b|\bgo (?:up|down) on (?:this|it)\b"
+)
 NUMBER = re.compile(r"\b\d+\b")
 
 
 def prescriptions(text: str) -> list[str]:
-    """Return the sentences that prescribe this story's value rather than referencing another story's."""
-    found = []
-    for sentence in re.split(r"(?<=[.;:])\s+|\n+", text):
-        if not NUMBER.search(sentence):
+    """Return the clauses that prescribe this story's value rather than referencing another story's."""
+    found = [m.group(0) for m in NON_NUMERIC.finditer(text)]
+    for clause in CLAUSE.split(text):
+        if not NUMBER.search(clause):
             continue
-        sized = SIZING_VERB.search(sentence) or FIRST_PERSON.search(sentence) or VALUATION.search(sentence)
-        if not sized:
-            continue
-        if STORY_REFERENCE.search(sentence) or FIRST_PERSON.search(sentence) or VALUATION.search(sentence):
-            found.append(sentence.strip())
+        sized = (
+            (STORY_REFERENCE.search(clause) and (SIZING_VERB.search(clause) or STORY_AT_VALUE.search(clause)))
+            or STORY_AT_VALUE.search(clause)
+            or FIRST_PERSON.search(clause)
+            or VALUATION.search(clause)
+            or SETTLED.search(clause)
+        )
+        if sized:
+            found.append(clause.strip())
     return found
+
+
 problems = []
 
 
