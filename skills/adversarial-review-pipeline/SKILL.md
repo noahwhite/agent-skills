@@ -84,7 +84,7 @@ Common inputs:
 - `--scratch <dir>`: the absolute path of the session's scratch directory (`references/runtimes.md`, Scratch files), passed to every command so the dossiers and throwaway checkouts stay in it; the script gives each run its own directory inside it and hands the session directory to the phase agent as `ADVERSARIAL_SESSION_SCRATCH`.
   Never pass the profile's base directory; omitted, the script creates a standalone directory per invocation, so two commands no longer share one.
   The script keeps its own run state (accepted phases, logs, stamps) under the repository's git dir (`git rev-parse --git-path adversarial-pipeline`), keyed by base and head: that is the script's state, not a session scratch artefact.
-- `--model ID` (`ADVERSARIAL_MODEL`), `--probe-cmd TEMPLATE` (`ADVERSARIAL_PROBE_CMD`), `--probe-timeout SECONDS` and `--timeout SECONDS`: the model id the phase was given, the optional availability check and the phase deadline.
+- `--model ID` (`ADVERSARIAL_MODEL`), `--probe-cmd TEMPLATE` (`ADVERSARIAL_PROBE_CMD`), `--probe-timeout SECONDS` and `--timeout SECONDS`: the model id the phase was given (letters, digits and `.` `_` `/` `:` `@` `#` `+` `~` `-`), the optional availability check and the phase deadline.
   See "Availability, timeout, progress and diagnosis" below; the script never resolves a model.
 
 Launching a phase depends on the profile agent's `runtime`:
@@ -132,8 +132,8 @@ An interrupted gate (SIGINT, SIGTERM, SIGHUP) kills the in-flight process group 
 The probe's own `--probe-timeout` is still honoured, bounded by whatever is left of the phase deadline at that moment.
 
 While the agent runs, `run` writes an elapsed-time line to its own stderr, the first after one second and then at least every 30 seconds (a `run`-only feature: a `dossier` plus `record` subagent flow has no heartbeat), carrying the phase, the elapsed seconds, the configured timeout and the availability-check state, plus one completion line with the elapsed time and the phase's exit status on every exit of the phase attempt, success or failure.
-It is written before the checkout cleanup, so only a cleanup warning can follow it; its `elapsed` is the whole attempt (a heartbeat line reports the agent's own seconds) and it carries `exit=<status>` after the model id.
-The phase attempt starts when the run directory is made, so a `run` refused before that (usage, not a Git repository, a bad base) prints no completion line, because no phase ran.
+A successful phase writes it before echoing an arbitration report to stdout, and on every path only the checkout cleanup's own result can follow it; its `elapsed` is the whole attempt (a heartbeat line reports the agent's own seconds) and it carries `exit=<status>` after the model id.
+The phase attempt starts once `run` accepts its agent command, so a `run` refused before that (usage, not a Git repository, a bad base) prints no completion line, because no phase ran.
 Stdout carries the artifact alone (arbitration's report), never progress, so do not merge the two streams and read the last line.
 Progress never reaches the artifact or the agent's stdout, so a report's first line stays `REVIEW-RAN: yes`.
 

@@ -182,7 +182,9 @@ def test_the_phase_agent_receives_the_session_scratch_directory(tmp_path):
         "--scratch", str(scratch), "--agent-cmd", agent, env=env,
     )
     assert sweep.returncode == 0, sweep.stdout + sweep.stderr
-    # A phase ends with its completion line (SKL-20 AC4), so read the artifact path from `paths`
+    assert any(line.startswith("Phase sweep -> ") for line in sweep.stderr.splitlines()), \
+        f"the phase never reported its artifact path: {sweep.stderr}"
+    # A phase reports its completion line too (SKL-20 AC4), so read the artifact path from `paths`
     # rather than from the last stderr line.
     paths = run_script("paths", "--repo", str(repo), "--base", "HEAD", env=env)
     assert paths.returncode == 0, paths.stdout + paths.stderr

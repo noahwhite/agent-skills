@@ -182,6 +182,9 @@ def test_a_probe_that_outlives_its_own_timeout_fails_the_phase_and_names_the_tim
     assert "timed out" in result.stderr, result.stderr
     assert "1s" in result.stderr, result.stderr
     assert "deepseek/deepseek-flash" in result.stderr, result.stderr
+    completion = [line for line in result.stderr.splitlines()
+                  if "phase=sweep complete elapsed=" in line]
+    assert len(completion) == 1 and completion[0].endswith("exit=20"), completion
     assert_no_artifact(artifacts(repo, env), "sweep")
 
 
@@ -262,6 +265,9 @@ def test_an_agent_that_changes_the_primary_checkout_still_exits_18(gate):
     assert "primary checkout" in result.stderr, result.stderr
     assert "phase=sweep" in result.stderr, result.stderr
     assert "exit=18" in result.stderr, result.stderr
+    completion = [line for line in result.stderr.splitlines()
+                  if "phase=sweep complete elapsed=" in line]
+    assert len(completion) == 1 and completion[0].endswith("exit=18"), completion
     assert_not_stamped(artifacts(repo, env), "sweep")
 
 
@@ -493,10 +499,12 @@ def test_zero_timeouts_are_rejected_as_usage_errors(gate):
         assert "at least 1" in result.stderr, result.stderr
 
 
-def test_a_model_id_that_is_not_one_line_is_rejected(gate):
+def test_a_model_id_that_is_not_a_plain_id_is_rejected(gate):
     repo, scratch, env = gate
-    result = run_sweep(repo, scratch, env, "--model", "gpt-6-sol\nFORGED_LINE")
-    assert result.returncode == 2, result.stdout + result.stderr
+    for bad in ("gpt-6-sol\nFORGED_LINE", "provider/model with space", "model;exit=0"):
+        result = run_sweep(repo, scratch, env, "--model", bad)
+        assert result.returncode == 2, (bad, result.stdout + result.stderr)
+        assert "must be a plain model id" in result.stderr, result.stderr
     assert "FORGED_LINE" not in result.stderr, "an unvalidated model id forged a line of output"
 
 
@@ -634,15 +642,15 @@ def test_a_timeout_kill_is_reported_as_19_even_when_the_checkout_changed(gate):
     assert_not_stamped(artifacts(repo, env), "sweep")
 
 
-def test_a_model_id_with_a_space_reaches_the_probe_as_one_argument(gate, tmp_path):
+def test_the_probe_receives_a_plain_model_id_verbatim(gate, tmp_path):
     repo, scratch, env = gate
     seen = tmp_path / "probe-argv.txt"
     probe = f'printf "[%s]\\n" {{model}} > {shlex.quote(str(seen))}'
     result = run_sweep(
-        repo, scratch, env, "--model", "provider/model with space", "--probe-cmd", probe,
+        repo, scratch, env, "--model", "provider/model#variant-1", "--probe-cmd", probe,
     )
     assert result.returncode == 0, result.stdout + result.stderr
-    assert seen.read_text().splitlines() == ["[provider/model with space]"], seen.read_text()
+    assert seen.read_text().splitlines() == ["[provider/model#variant-1]"], seen.read_text()
 
 
 def test_a_refused_checkout_cleanup_does_not_replace_the_phase_exit_code(gate, tmp_path):
@@ -754,6 +762,7 @@ def test_an_interrupted_phase_reports_completion_with_its_signal_status(gate, tm
     finally:
         if gate_process.poll() is None:
             gate_process.kill()
+    assert gate_process.returncode == 143, gate_process.returncode
     completion = [line for line in stderr.splitlines() if "phase=sweep complete elapsed=" in line]
     assert len(completion) == 1, stderr
     assert completion[0].endswith("exit=143"), completion[0]

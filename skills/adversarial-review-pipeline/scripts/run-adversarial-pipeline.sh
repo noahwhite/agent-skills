@@ -44,8 +44,8 @@
 # ADVERSARIAL_SPEC_FILE, ADVERSARIAL_SCRATCH, ADVERSARIAL_AGENT_CMD, ADVERSARIAL_MODEL,
 # ADVERSARIAL_PROBE_CMD, ADVERSARIAL_PROBE_TIMEOUT (30), ADVERSARIAL_TIMEOUT (900).
 #
-# --model ID (ADVERSARIAL_MODEL) is the model id this phase was given. The script never resolves a
-# model: it echoes back the id it was handed. A phase that cannot run is failed, never skipped and
+# --model ID (ADVERSARIAL_MODEL) is the model id this phase was given (letters, digits and . _ / : @
+# # + ~ -). The script never resolves a model: it echoes back the id it was handed. A phase that cannot run is failed, never skipped and
 # never substituted with another model, provider or reviewer.
 #
 # --probe-cmd (ADVERSARIAL_PROBE_CMD) is an optional availability check for `run` (dossier and
@@ -74,12 +74,12 @@
 # Progress: while the agent runs, `run` writes an elapsed-time line to its own stderr - the first
 # after one second, then at least every 30 seconds - carrying the phase, the elapsed seconds, the
 # configured timeout and the availability-check state, and one completion line with the elapsed time
-# and the phase's exit status on every exit of the phase attempt, success or failure. That line is
-# written before the checkout cleanup, so only a cleanup warning can follow it ('elapsed' there is
-# the whole attempt; a heartbeat line reports the agent's own elapsed seconds), and it carries
-# 'exit=<status>' after the model id. The attempt starts when the run directory is made, so a `run`
-# refused before that - usage, not a Git repository, a bad base - prints no completion line, because
-# no phase ran. Progress never reaches the artifact or the agent's stdout, so the artifact's first
+# and the phase's exit status on every exit of the phase attempt, success or failure. A successful
+# phase writes it before echoing an arbitration report to stdout; on every path only the checkout
+# cleanup's own result can follow it ('elapsed' there is the whole attempt; a heartbeat line reports
+# the agent's own elapsed seconds), and it carries 'exit=<status>' after the model id. The attempt
+# starts once `run` accepts its agent command, so a `run` refused before that - usage, not a Git
+# repository, a bad base - prints no completion line, because no phase ran. Progress never reaches the artifact or the agent's stdout, so the artifact's first
 # line stays 'REVIEW-RAN: yes'; stdout carries the artifact alone (arbitration's report), never
 # progress, so do not merge the two streams and read the last line.
 #
@@ -177,7 +177,8 @@ fi
 [[ "$TIMEOUT" =~ ^[1-9][0-9]*$ ]] || die 2 "--timeout must be a whole number of seconds, at least 1."
 [[ "$PROBE_TIMEOUT" =~ ^[1-9][0-9]*$ ]] || die 2 "--probe-timeout must be a whole number of seconds, at least 1."
 case "$MODEL" in
-  *[[:cntrl:]]*) die 2 "--model must not contain control characters; pass the model id as one line" ;;
+  "") ;;
+  *[!A-Za-z0-9._/:@#+~-]*) die 2 "--model must be a plain model id (letters, digits and . _ / : @ # + ~ -), not '$MODEL'" ;;
 esac
 MODEL_LABEL="${MODEL:-not supplied}"
 availability_state="availability check: not configured"
@@ -536,12 +537,16 @@ completion_line() {  # $1 phase, $2 elapsed seconds, $3 the phase's exit status
 # not a Git repository, a bad base) is the only path with no completion line.
 PHASE_START=0
 CHECKOUT_PATH=""
+COMPLETION_EMITTED=0
 on_run_exit() {  # a run attempt's single exit path: report completion, then clean up, keeping the status
   local rc=$?
   set +e
   trap - EXIT
   trap '' INT TERM HUP   # the status is reported; a second interrupt must not rewrite it
-  completion_line "${phase:-}" "$(( SECONDS - PHASE_START ))" "$rc"
+  if [ "$COMPLETION_EMITTED" -eq 0 ] && [ -n "${phase:-}" ]; then
+    COMPLETION_EMITTED=1
+    completion_line "$phase" "$(( SECONDS - PHASE_START ))" "$rc"
+  fi
   if [ -n "${CHECKOUT_PATH:-}" ]; then
     ( remove_checkout "$CHECKOUT_PATH" ) >/dev/null \
       || echo "WARNING: could not remove checkout $CHECKOUT_PATH (see above)" >&2
@@ -911,6 +916,7 @@ case "$cmd" in
     [ -n "$AGENT_CMD" ] || die 2 "--agent-cmd (or ADVERSARIAL_AGENT_CMD) is required; build it from the profile agent for this phase."
     PHASE_START=$SECONDS
     CHECKOUT_PATH=""
+    COMPLETION_EMITTED=0
     trap on_run_exit EXIT
     # From here the phase attempt is real, so every exit reports completion; a missing predecessor is
     # one of those failures, not a refusal before the attempt starts. The scratch directory is made
@@ -989,6 +995,8 @@ case "$cmd" in
       fail_phase "$rc_accept" "$(cat -- "$reason_file" 2>/dev/null || true)"
     fi
     rm -f -- "$reason_file"
+    COMPLETION_EMITTED=1
+    completion_line "$phase" "$(( SECONDS - PHASE_START ))" 0
     echo "Phase $phase -> $out" >&2
     if [ "$phase" = "arbitrate" ]; then cat -- "$out"; fi
     ;;
