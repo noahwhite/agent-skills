@@ -349,6 +349,15 @@ def test_an_http_status_line_in_the_probe_output_fails_the_phase(gate):
     assert "HTTP/2 429" in result.stderr, result.stderr
 
 
+def test_a_probe_reporting_quota_exhaustion_fails_the_phase(gate):
+    repo, scratch, env = gate
+    for probe in ("printf 'RESOURCE_EXHAUSTED\\n'; exit 0", "echo 'quota reached'; exit 0"):
+        result = run_sweep(repo, scratch, env, "--model", "gpt-6-sol", "--probe-cmd", probe)
+        assert result.returncode == 20, (probe, result.stdout + result.stderr)
+        assert "provider error" in result.stderr, result.stderr
+        assert_not_stamped(artifacts(repo, env), "sweep")
+
+
 def test_a_healthy_probe_that_merely_says_unavailable_does_not_fail_the_phase(gate):
     repo, scratch, env = gate
     result = run_sweep(
@@ -444,6 +453,17 @@ def test_a_provider_error_past_the_tail_window_still_appears_verbatim(gate):
     assert "AI_APICallError: rate limit exceeded for model" in result.stderr, result.stderr
     assert "provider-error lines from" in result.stderr, result.stderr
     assert_not_stamped(artifacts(repo, env), "sweep")
+
+
+def test_a_root_provider_error_survives_a_retry_storm_in_the_diagnosis(gate):
+    repo, scratch, env = gate
+    agent = (
+        "printf 'AI_APICallError: your credit balance is too low\n' >&2; "
+        'for i in $(seq 1 50); do printf "status 429 retry %s\n" "$i" >&2; done; exit 1'
+    )
+    result = run_sweep(repo, scratch, env, "--model", "gpt-6-sol", agent=agent)
+    assert result.returncode == 15, result.stdout + result.stderr
+    assert "AI_APICallError: your credit balance is too low" in result.stderr, result.stderr
 
 
 def test_the_agents_stdout_log_is_diagnosed_when_stdout_is_the_artifact(gate):
