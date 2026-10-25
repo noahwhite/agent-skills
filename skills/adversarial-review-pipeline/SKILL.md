@@ -84,10 +84,8 @@ Common inputs:
 - `--scratch <dir>`: the absolute path of the session's scratch directory (`references/runtimes.md`, Scratch files), passed to every command so the dossiers and throwaway checkouts stay in it; the script gives each run its own directory inside it and hands the session directory to the phase agent as `ADVERSARIAL_SESSION_SCRATCH`.
   Never pass the profile's base directory; omitted, the script creates a standalone directory per invocation, so two commands no longer share one.
   The script keeps its own run state (accepted phases, logs, stamps) under the repository's git dir (`git rev-parse --git-path adversarial-pipeline`), keyed by base and head: that is the script's state, not a session scratch artefact.
-- `--model ID` (`ADVERSARIAL_MODEL`): the model id this phase was given.
-  The script never resolves a model; it echoes the id back in every progress and failure line, so the evidence names the model that was actually asked for.
-- `--probe-cmd TEMPLATE` (`ADVERSARIAL_PROBE_CMD`) and `--probe-timeout SECONDS` (`ADVERSARIAL_PROBE_TIMEOUT`, default 30): an optional availability check for that model, run before the dossier is built.
-- `--timeout SECONDS` (`ADVERSARIAL_TIMEOUT`, default 900): the deadline of the whole phase, auxiliary calls included.
+- `--model ID` (`ADVERSARIAL_MODEL`), `--probe-cmd TEMPLATE` (`ADVERSARIAL_PROBE_CMD`), `--probe-timeout SECONDS` and `--timeout SECONDS`: the model id the phase was given, the optional availability check and the phase deadline.
+  See "Availability, timeout, progress and diagnosis" below; the script never resolves a model.
 
 Launching a phase depends on the profile agent's `runtime`:
 
@@ -133,7 +131,7 @@ A phase killed by `--timeout` exits 19 and names the phase, the model id when su
 An interrupted gate (SIGINT, SIGTERM, SIGHUP) kills the in-flight process group before it exits, so an interruption never orphans an agent.
 The probe's own `--probe-timeout` is still honoured, bounded by whatever is left of the phase deadline at that moment.
 
-While the agent runs, `run` writes an elapsed-time line to its own stderr, the first after one second and then at least every 30 seconds, carrying the phase, the elapsed seconds, the configured timeout and the availability-check state, plus one completion line with the elapsed time when the phase succeeds.
+While the agent runs, `run` writes an elapsed-time line to its own stderr, the first after one second and then at least every 30 seconds (a `run`-only feature: a `dossier` plus `record` subagent flow has no heartbeat), carrying the phase, the elapsed seconds, the configured timeout and the availability-check state, plus one completion line with the elapsed time when the phase succeeds.
 Progress never reaches the artifact or the agent's stdout, so a report's first line stays `REVIEW-RAN: yes`.
 
 On a non-zero agent exit, a timeout, or a report `accept_phase` rejects, `run` prints the phase, the exit code, the model id when supplied, and the last 40 lines of `${phase}-agent.err` and `${phase}-agent.log`, plus every provider-error line it detects in the full stderr log, so one is never lost past the tail window; `record` prints the phase, the model id when supplied, the reason and the report tail.
