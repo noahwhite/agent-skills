@@ -61,7 +61,7 @@ Never edit the refinement comment to add the result; its id keeps identifying on
 Post this after the re-vote, or record it as an unpointed result.
 The three values are recorded before any SM/EM sizing comment or discussion.
 Outside the recorded numeric values and the superseded-values line, no line of the posted record carries a point value named before the reveal or a target value for this story: the Challenges and Anchoring events lines record a ground by its kind, its author (a voter, or the SM/EM for a sizing comment) and its outcome or recovery, and every field that could quote a participant elides those two classes permanently, because the posted record stays on the story surface that later voters read; the verbatim quote lives in the session's raw record, cited by its base name.
-A sizing comment that names a point value before the reveal, names or implies a target value for this story, or states elapsed time, effort or run cost voids the round under the Anchoring guardrail recovery as soon as the facilitator sees it, as does any ground that is neither restated nor retracted, and the void records the consensus as void and is recorded under Anchoring events.
+A sizing comment that names a point value before the reveal, names or implies a target value for this story, or states elapsed time, effort or run cost voids the round under the Anchoring guardrail recovery as soon as the facilitator sees it, as does any ground that is neither restated nor retracted, and the void records the voided consensus under Superseded values after a void, so the Consensus field always carries the vote that stands.
 
 ```markdown
 ## Pointing record

@@ -740,10 +740,12 @@ def test_step_three_rationale_names_complexity_drivers_and_no_duration() -> None
 
 
 def test_step_three_does_not_restate_the_pointing_basis() -> None:
-    item = process_item(STEP_THREE, "Each voter submits one point value")
-    assert squash(POINTING_BASIS) not in squash(item)
+    items = process_items(STEP_THREE)
+    assert squash(POINTING_BASIS) in squash(items[1]), "Step 3 item 2 carries the basis and belongs to SKL-60"
+    without_basis_item = " ".join(items[:1] + items[2:])
+    assert squash(POINTING_BASIS) not in squash(without_basis_item)
     for fragment in ("A point or size measures", "A point measures", "design difficulty", "the amount of work or elapsed time"):
-        assert fragment not in item, fragment
+        assert fragment not in without_basis_item, fragment
 
 
 def test_step_four_re_vote_carries_the_basis_by_reference_to_step_three() -> None:
@@ -823,7 +825,9 @@ def test_step_four_facilitator_challenges_every_off_basis_ground() -> None:
     item = process_items(STEP_FOUR)[0]
     assert (
         "In that round, and against the rationales recorded in Step 3, the facilitator challenges every ground "
-        "outside the pointing basis, whether it is heard in the discussion or read in a recorded rationale."
+        "outside the pointing basis, whether it is heard in the discussion or read in a recorded rationale, "
+        "except a target value for this story and a statement of elapsed time, effort or run cost, which are "
+        "anchoring events the moment they are seen."
     ) in item
     assert (
         "Challenging a ground is not comparing values or singling out a voter: the facilitator names the ground's "
@@ -1072,7 +1076,8 @@ def test_pointing_template_records_each_challenge_and_outcome() -> None:
         "A sizing comment that names a point value before the reveal, names or implies a target value for this "
         "story, or states elapsed time, effort or run cost voids the round under the Anchoring guardrail recovery "
         "as soon as the facilitator sees it, as does any ground that is neither restated nor retracted, and the "
-        "void records the consensus as void and is recorded under Anchoring events."
+        "void records the voided consensus under Superseded values after a void, so the Consensus field always "
+        "carries the vote that stands."
     ) in body
 
 

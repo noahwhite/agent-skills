@@ -117,7 +117,7 @@ File: `SKILL.md`
 Removed or matched text:
 
 ```text
-     In that round, and against the rationales recorded in Step 3, the facilitator challenges every ground outside the pointing basis, whether it is heard in the discussion or read in a recorded rationale.
+     In that round, and against the rationales recorded in Step 3, the facilitator challenges every ground outside the pointing basis, whether it is heard in the discussion or read in a recorded rationale, except a target value for this story and a statement of elapsed time, effort or run cost, which are anchoring events the moment they are seen.
 ```
 
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_step_four_facilitator_challenges_every_off_basis_ground`
@@ -324,7 +324,7 @@ File: `refinement-record.md`
 Removed or matched text:
 
 ```text
-A sizing comment that names a point value before the reveal, names or implies a target value for this story, or states elapsed time, effort or run cost voids the round under the Anchoring guardrail recovery as soon as the facilitator sees it, as does any ground that is neither restated nor retracted, and the void records the consensus as void and is recorded under Anchoring events.
+A sizing comment that names a point value before the reveal, names or implies a target value for this story, or states elapsed time, effort or run cost voids the round under the Anchoring guardrail recovery as soon as the facilitator sees it, as does any ground that is neither restated nor retracted, and the void records the voided consensus under Superseded values after a void, so the Consensus field always carries the vote that stands.
 ```
 
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_pointing_template_records_each_challenge_and_outcome`

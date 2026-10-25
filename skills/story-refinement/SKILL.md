@@ -155,8 +155,8 @@ Only the PO and the two engineers count toward the agreement.
 - **Inputs:** the three recorded point values and any recorded SM/EM sizing context.
 - **Process:**
   1. Hold one discussion round that names only the high and the low.
-     Do not compare the other values or single out a voter.
-     In that round, and against the rationales recorded in Step 3, the facilitator challenges every ground outside the pointing basis, whether it is heard in the discussion or read in a recorded rationale.
+     Do not compare the other values, or single out a voter by value.
+     In that round, and against the rationales recorded in Step 3, the facilitator challenges every ground outside the pointing basis, whether it is heard in the discussion or read in a recorded rationale, except a target value for this story and a statement of elapsed time, effort or run cost, which are anchoring events the moment they are seen.
      Challenging a ground is not comparing values or singling out a voter: the facilitator names the ground's kind and its author, never the ground's verbatim text, and a ground that embeds a point value is named by its kind alone.
      A challenged ground must be restated as a basis driver or retracted, except a target value named or implied for this story, which is an anchoring event as soon as it is seen; a voter whose basis does not support its recorded value records that in the re-vote.
      The SM/EM withdraws or restates its own sizing comment on the same terms, except a point value named before the reveal, a target value named or implied for this story, including one implied by a split status, treating another voter's revealed value as the answer, or a statement of elapsed time, effort or run cost, each of which is an anchoring event as soon as the facilitator sees it.
