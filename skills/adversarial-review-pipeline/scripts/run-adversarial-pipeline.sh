@@ -882,8 +882,8 @@ make_checkout() {  # prints the path of a registered throwaway detached worktree
     # external timeout(1) and a hung git cannot outlive the phase.
     run_guarded "$add_cmd" "$bounded" /dev/null "$RUN_DIR/checkout.log" "$RUN_DIR/checkout.err" ""
     if [ "$RUN_TIMED_OUT" -eq 1 ]; then
-      # The cleanup prune is bounded too: the hung call was the git work itself.
-      run_guarded "git worktree prune" 10 /dev/null "$RUN_DIR/checkout.log" "$RUN_DIR/checkout.err" ""
+      # Nothing else runs on this path: the phase deadline is spent, so the container is removed and
+      # the registration is left for the next checkout's prune (which runs under its own budget).
       case "$container" in */adversarial-checkout.*) rm -rf -- "$container" ;; esac
       return 124
     fi
