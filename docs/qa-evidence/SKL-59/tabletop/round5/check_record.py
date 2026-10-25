@@ -41,6 +41,12 @@ FIELDS = [
 ]
 PERMITTED = "SKL-53 recorded 5 points, and this story carries one more interacting constraint than that one."
 PRESCRIPTION = "This one should be 2, not 5."
+# A prescription says what this story's value is or should be; a reference never does.
+PRESCRIPTION_PATTERN = re.compile(
+    r"(?i)\b(?:this (?:one|story)|it)\s+(?:should|ought to|must|has to|needs to|is|scores?|lands?)\s+(?:be\s+)?(?:a\s+|an\s+)?\d"
+    r"|\btarget of \d+ fits\b|\bi would go (?:higher|lower)\b|\bthe (?:highest|lowest) vote is the realistic one\b"
+    r"|\ba (?:target|score) of \d+\b"
+)
 problems = []
 
 
@@ -91,7 +97,7 @@ if not revote or revote.group(0).strip() != expected_line:
     problems.append("re-vote line is not exactly the three captures in order")
 sets = [{int(n) for n in re.findall(r"\d+", capture("v4", k)[0])} for k in ROLES]
 inter = set.intersection(*sets)
-want = (f"{max(inter)} (the highest value in the intersection {{{max(inter)}}})" if inter
+want = (f"{max(inter)} (the highest value in the intersection {{{', '.join(str(n) for n in sorted(inter))}}})" if inter
         else "none; the intersection of " + ", ".join(capture("v4", k)[0] for k in ROLES) + " is empty")
 if not consensus or consensus.group(1).strip() != want:
     problems.append(f"consensus {consensus.group(1).strip() if consensus else None!r} disagrees with the sets {sets}")
@@ -107,8 +113,10 @@ else:
                 problems.append(f"superseded line does not carry the {stage} {ROLES[k]} capture")
 
 for number, line in enumerate(BODY.splitlines(), 1):
-    if PRESCRIPTION in line and not line.startswith("- Superseded values after a void:") and "elided" not in line:
-        problems.append(f"prescription leaks at record line {number}")
+    if line.startswith("- Superseded values after a void:"):
+        continue
+    if PRESCRIPTION_PATTERN.search(line):
+        problems.append(f"prescription leaks at record line {number}: {line[:60]!r}")
 if PRESCRIPTION not in RAW:
     problems.append("raw record does not quote the prescription verbatim")
 
@@ -136,6 +144,26 @@ for prompt in sorted((HERE / "prompts").glob("disc3-*-prompt.txt")):
     text = prompt.read_text()
     if f"high value, {max(standing.values())}, and the low value, {min(standing.values())}" not in text:
         problems.append(f"{prompt.name} does not state the standing high and low")
+
+anchoring = re.search(r"^- Anchoring events: (.*)$", BODY, re.M)
+if not anchoring:
+    problems.append("anchoring events line missing")
+else:
+    claim = anchoring.group(1)
+    for fragment in ("prescribed this story's value", "raw-record.md", "coverage ground", "neither restated nor retracted", "re-run blind in newly created voter contexts"):
+        if fragment not in claim:
+            problems.append(f"anchoring events line lacks {fragment!r}")
+
+for prompt in sorted((HERE / "prompts").glob("v4-*-prompt.txt")):
+    text = prompt.read_text()
+    if PRESCRIPTION_PATTERN.search(text):
+        problems.append(f"{prompt.name} carries a prescription")
+    for value in {str(n) for n in range(1, 14)}:
+        if re.search(rf"\bvalue,? {value}\b", text) and int(value) not in {max(standing.values()), min(standing.values())}:
+            problems.append(f"{prompt.name} names a value other than the high and the low")
+
+if PRESCRIPTION_PATTERN.search(PERMITTED):
+    problems.append("the permitted reference itself reads as a prescription")
 
 for field in ("- Tracker-write preflight: comment `48c57a07` on SKL-79.",
               "- Estimate scale: fibonacci",

@@ -778,7 +778,7 @@ def test_step_four_re_vote_prompt_carries_the_rationale_rule() -> None:
 def test_pointing_template_notes_the_private_self_context_rule() -> None:
     assert (
         "- Discussion: <high <value>, low <value>, or none; the shared content names only the high and the low, "
-        "while a voter's own recorded value and rationale is carried privately in that voter's prompt>"
+        "while a voter's own recorded value and rationale are carried privately in that voter's prompt>"
         in pointing_template()
     )
 

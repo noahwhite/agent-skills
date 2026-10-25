@@ -74,7 +74,7 @@ A sizing comment that names a point value before the reveal, names or implies a 
   - Engineer one: <value, or not recorded> - <short complexity rationale, or none when the value is not recorded>
   - Engineer two: <value, or not recorded> - <short complexity rationale, or none when the value is not recorded>
 - SM/EM sizing context, after all three values: <file base name> or verbatim, eliding a pre-reveal value or a target value, or none
-- Discussion: <high <value>, low <value>, or none; the shared content names only the high and the low, while a voter's own recorded value and rationale is carried privately in that voter's prompt>
+- Discussion: <high <value>, low <value>, or none; the shared content names only the high and the low, while a voter's own recorded value and rationale are carried privately in that voter's prompt>
 - Re-vote: <accepted set per voter, with complexity rationale, or none>
 - Consensus: <highest value in the intersection of the vote that stands, or none when the intersection is empty>
 - No-consensus decision: <split, re-refine, or leave unpointed; n/a when there is a consensus>
