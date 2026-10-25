@@ -877,21 +877,16 @@ make_checkout() {  # prints the path of a registered throwaway detached worktree
   [ -n "$container" ] && [ -d "$container" ] || return 2
   dir="$(abspath "$container/head-${HEAD_SHA:0:12}")"
   add_cmd="git worktree prune && git worktree add -q --detach $(printf '%q' "$dir") $(printf '%q' "$HEAD_SHA")"
-  if [ -n "$bounded" ] && command -v timeout >/dev/null 2>&1; then
-    started="$SECONDS"
-    timeout -s KILL "${bounded}s" bash -c "$add_cmd"
-    rc=$?
-    # 137 is a deadline kill only when the budget was actually spent; a git that kills itself is a
-    # git failure carrying its own status.
-    if [ "$rc" -eq 124 ] || { [ "$rc" -eq 137 ] && [ "$(( SECONDS - started ))" -ge "$bounded" ]; }; then
+  if [ -n "$bounded" ]; then
+    # The checkout runs under the same guarded SIGKILL deadline as the agent, so it needs no
+    # external timeout(1) and a hung git cannot outlive the phase.
+    run_guarded "$add_cmd" "$bounded" /dev/null "$RUN_DIR/checkout.log" "$RUN_DIR/checkout.err" ""
+    if [ "$RUN_TIMED_OUT" -eq 1 ]; then
       git worktree prune >/dev/null 2>&1 || true
-      rmdir -- "$container" 2>/dev/null || true
+      case "$container" in */adversarial-checkout.*) rm -rf -- "$container" ;; esac
       return 124
     fi
-  elif [ -n "$bounded" ]; then
-    echo "WARNING: timeout(1) is not installed, so the throwaway checkout is not bounded by --timeout" >&2
-    bash -c "$add_cmd"
-    rc=$?
+    rc="$RUN_RC"
   else
     bash -c "$add_cmd"
     rc=$?

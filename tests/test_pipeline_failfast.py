@@ -1024,3 +1024,39 @@ def test_a_checkout_that_kills_itself_is_not_a_deadline_expiry(gate, tmp_path):
     assert "could not create the throwaway checkout" in result.stderr, result.stderr
     assert "deadline expired" not in result.stderr, result.stderr
 
+
+
+def test_the_checkout_is_bounded_without_timeout_on_the_host(gate, tmp_path):
+    """The guarded deadline is the script's own, so a host without timeout(1) is still bounded."""
+    repo, scratch, env = gate
+    fakebin = tmp_path / "fakebin"
+    fakebin.mkdir()
+    for name in ("timeout",):
+        stub = fakebin / name
+        stub.write_text("#!/usr/bin/env bash\necho 'timeout: not installed' >&2\nexit 127\n")
+        stub.chmod(0o755)
+    env = {**env, "PATH": f"{fakebin}:{env['PATH']}"}
+    result = run_sweep(repo, scratch, env, "--model", "m")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "WARNING" not in result.stderr, result.stderr
+    assert "complete elapsed=" in result.stderr, result.stderr
+
+
+def test_a_timed_out_checkout_leaves_no_registration(gate, tmp_path):
+    """A checkout that stalls past the deadline is killed and pruned."""
+    repo, scratch, env = gate
+    fakebin = tmp_path / "fakebin"
+    fakebin.mkdir()
+    git_wrapper = fakebin / "git"
+    git_wrapper.write_text(
+        "#!/usr/bin/env bash\n"
+        'if [ "$1" = worktree ] && [ "$2" = add ]; then sleep 30; fi\n'
+        'if [ "$1" = worktree ] && [ "$2" = prune ]; then exit 0; fi\n'
+        'if [ "$1" = worktree ] && [ "$2" = list ]; then exec /usr/bin/git "$@"; fi\n'
+        'exec /usr/bin/git "$@"\n'
+    )
+    git_wrapper.chmod(0o755)
+    env = {**env, "PATH": f"{fakebin}:{env['PATH']}"}
+    result = run_sweep(repo, scratch, env, "--model", "m", "--timeout", "2", timeout=60)
+    assert result.returncode == 19, result.stdout + result.stderr
+    assert "deadline" in result.stderr, result.stderr
