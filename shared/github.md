@@ -108,11 +108,11 @@ Under `per-story`, build the promotion branch and its PR like this:
    Keep the PR whose head branch carries the issue key as a whole token, delimited by a non-alphanumeric character or the end of the name, and stop when that leaves zero or more than one.
    Select, from `origin/<profile.git.integration_branch>`, only the commits that PR added:
    With `profile.git.merge_method` `squash`, select that PR's squash commit.
-   With `profile.git.merge_method` `rebase`, select the integration-branch commits whose `git patch-id --stable` id matches one of the PR's own commits fetched with `git fetch origin refs/pull/<number>/head`, stopping when the match count differs from the PR's commit count.
+   With `profile.git.merge_method` `rebase`, select the PR's recorded commits that are still ancestors of `origin/<profile.git.integration_branch>`, checked with `git merge-base --is-ancestor`, and stop when that set is empty.
    With `profile.git.merge_method` `merge`, select that PR's merge commit.
-   Confirm the selected commits' cumulative diff equals that PR's own diff, from `gh pr diff <number>`, and stop when it differs, because another story's change is riding along.
+   Confirm the selected commits' patch ids equal the patch ids of that PR's own commits, and stop when they differ, because another story's change is riding along.
    Record the PR number and the selected commit SHAs in the promotion PR body.
-   Before carrying them, confirm the selected change is still live on `origin/<profile.git.integration_branch>` by applying its reverse patch to a worktree of that branch, taking `git diff <commit>^ <commit>` for a merge commit, and stop and report the story as reverted when that patch does not apply.
+   Before carrying them, confirm the story's change is still present on `origin/<profile.git.integration_branch>` by finding its added lines with `git log -S`, and stop and report the story as reverted when they are absent.
 3. Carry the selected commits onto the promotion branch by cherry-picking them in their original order, with `-m 1` when a selected commit is a merge commit, or by squash-applying non-merge selections with `git cherry-pick -n` and one commit.
 4. Run the promotion branch's checks, then push it and open the promotion PR from it to `profile.git.release_branch`.
    A whole-branch integration-to-release PR is not used under `per-story`.

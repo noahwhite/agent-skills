@@ -117,7 +117,7 @@ def test_readiness_section_covers_each_promotion_mode() -> None:
     for phrase in ("story-scoped promotion branch", "rather than the integration branch head",
                    "this check runs once that branch exists",
                    "must carry only the story's change",
-                   "the same files and hunks as the story's merged feature prs",
+                   "the same patch ids as the story's merged feature prs",
                    "the evidence must have been taken against a build that included that change"):
         assert phrase in binding[0], f"per-story readiness binding missing: {phrase}"
     assert "a build that predates or omits that change does not cover it" in binding[1]
