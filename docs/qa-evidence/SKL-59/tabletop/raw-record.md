@@ -33,6 +33,23 @@ The 2026-10-24 owner amendment permits naming an already-estimated item's record
   > Engineer two, your recorded rationale weighs coverage - that no test reaches the new filter path - which is out of basis. Restate it as a basis driver or retract it.
   Outcome: unretracted - "I stand by the recorded rationale." Neither restated nor retracted, so this ground is an anchoring event.
 
+
+## Round 1, the exact re-challenge prompt sent to engineer one
+
+```text
+You are one voter in a pointing round. Your recorded value and rationale are below.
+
+VALUE: 3
+RATIONALE: "Testability is weak here: the flag's behaviour can only be confirmed by reading the skill text, and that is what I weighed."
+
+The facilitator does not accept your restatement: "The change's behaviour can only be confirmed by reading the skill text, not by running or observing it, which raises the story's uncertainty and risk" describes how well the behaviour is checked, which is the same ground the delivered rule puts out of basis. A restatement must name a genuinely different property of the change - an interacting constraint, an unknown that is not about how the behaviour is checked, or the risk of breaking existing behaviour.
+
+Reply in this exact shape and nothing else:
+
+OUTCOME: <restated or retracted>
+RATIONALE: <one or two sentences, or none>
+```
+
 ## Round 1, blind re-run in newly created voter contexts
 
 - Product owner: 2 - "The main driver is the regression risk the change carries - AC2 pins the existing dry-run output byte-identical, so the flag must be purely additive without disturbing current behaviour - plus the mild design unknown of how 'content differs from the last committed state' is determined against git state."
@@ -65,18 +82,8 @@ This names a target value for the story under estimate, one, implied by an earli
 
 ## Round 2, re-vote
 
-The first attempt at this re-vote produced rationales that named a target value for the story, weighed verification strength, and bounded a scale position. The facilitator did not accept them: the duty covers a re-vote rationale, so the re-vote was re-run with the rationale rule restated and with the true statement that no discussion was held. The rejected capture is kept verbatim in `rejected/rv-*-output.txt`, and the recorded re-vote below is the clean run.
+The first attempt at this re-vote produced rationales that named a target value for the story, weighed verification strength and bounded a scale position. The facilitator rejected that capture, kept it verbatim in `rejected/rv-po-output.txt`, `rejected/rv-e1-output.txt` and `rejected/rv-e2-output.txt`, and re-ran the re-vote with the rationale rule restated and with the true statement that no discussion was held. The recorded re-vote is that run.
 
-- Product owner: accepts {3} - "Filtering on 'differs from the last committed state' adds an interacting constraint between the dry run and repository state, and AC2's byte-identical requirement is a real risk of breaking existing behaviour the change must preserve."
-- Engineer one: accepts {2} - "The change is a single additive flag on an existing dry run; the only driver the basis admits is the byte-identical-default constraint, which carries a small risk of breaking existing behaviour, and detecting difference-from-committed-state is a routine, well-understood comparison with no interacting constraints or unknowns beyond normal git state detection."
-- Engineer two: accepts {2} - "The change is a single additive flag that filters candidate paths against the last committed state, so it carries little design difficulty, and the one real interacting constraint is keeping the default dry-run output byte-identical, which is also the only meaningful risk of breaking existing behaviour. Comparing content to HEAD is a small, well-understood unknown."
-
-## Round 2, the no-consensus decision
-
-The three accepted sets were {3}, {2} and {2}, so the intersection is empty. Each voter then recorded the paths it accepts:
-
-- Product owner: {leave unpointed} - no amendments offered.
-- Engineer one: {re-refine} - "clarify the scope boundary between the {3} and {2} estimates, and pin the acceptance criteria so the remaining size ambiguity resolves."
-- Engineer two: {re-refine} - "clarify acceptance criteria so the 2-vs-3 complexity difference is testable; define explicit boundaries and dependencies before re-pointing."
-
-The intersection of the three accepted path sets is empty, so the story is left unpointed, which is the default when no path is in all three sets.
+- Product owner: accepts {3} - "The flag depends on comparing candidate content against git's last-committed state, an interacting constraint, and the default dry-run path must stay byte-identical, a real risk of silently breaking existing behaviour."
+- Engineer one: accepts {2} - "A single additive filter on the existing dry run; the only real complexity is the interacting constraint that the default output must stay byte-identical and the change must distinguish changed candidate paths from the last committed state, a modest risk of breaking existing behaviour."
+- Engineer two: accepts {2} - "The admitted driver is the risk of breaking existing behaviour: AC2 requires the default dry-run output to remain byte-identical, so the new filter must be introduced without altering the existing output path. The only interacting constraint is comparing each candidate's content against the last committed state."
