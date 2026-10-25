@@ -166,7 +166,7 @@ Only the PO and the two engineers count toward the agreement.
      It also carries the Step 3 item 4 rationale rule.
      Each voter records the set of values it accepts for this story (one or more) or records no consensus, with a short complexity rationale under the Step 3 rationale rule.
      Recording an accepted set is not treating another voter's revealed value as the answer: the rationale for the set is about the basis, never about which value another voter recorded.
-     A re-vote rationale outside the pointing basis is challenged before the consensus is recorded, under the same restate-or-retract rule as item 1, and a voter that retracts its re-vote rationale records a new accepted set with a basis-driver rationale or records no consensus.
+     A re-vote rationale outside the pointing basis is challenged before the consensus is recorded, under the same restate-or-retract rule as item 1, and a voter that retracts its re-vote rationale records a replacement accepted set within that same re-vote, with a basis-driver rationale, or records no consensus.
   3. Consensus is the highest value in the intersection of the three accepted sets.
      If the intersection is empty, record no consensus and run the no-consensus decision (item 7).
   4. Never average and never take a value silently.

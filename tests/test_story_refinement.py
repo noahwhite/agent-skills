@@ -744,7 +744,14 @@ def test_step_three_does_not_restate_the_pointing_basis() -> None:
     assert squash(POINTING_BASIS) in squash(items[1]), "Step 3 item 2 carries the basis and belongs to SKL-60"
     without_basis_item = " ".join(items[:1] + items[2:])
     assert squash(POINTING_BASIS) not in squash(without_basis_item)
-    for fragment in ("A point or size measures", "A point measures", "design difficulty", "the amount of work or elapsed time"):
+    for fragment in (
+        "A point or size measures",
+        "A point measures",
+        "measures design difficulty",
+        "design difficulty",
+        "the amount of work or elapsed time",
+        "amount of work",
+    ):
         assert fragment not in without_basis_item, fragment
 
 
@@ -857,7 +864,8 @@ def test_step_four_re_vote_challenges_an_off_basis_rationale() -> None:
     assert (
         "A re-vote rationale outside the pointing basis is challenged before the consensus is recorded, under "
         "the same restate-or-retract rule as item 1, and a voter that retracts its re-vote rationale records a "
-        "new accepted set with a basis-driver rationale or records no consensus."
+        "replacement accepted set within that same re-vote, with a basis-driver rationale, or records no "
+        "consensus."
     ) in item
 
 

@@ -195,7 +195,7 @@ File: `SKILL.md`
 Removed or matched text:
 
 ```text
-     A re-vote rationale outside the pointing basis is challenged before the consensus is recorded, under the same restate-or-retract rule as item 1, and a voter that retracts its re-vote rationale records a new accepted set with a basis-driver rationale or records no consensus.
+     A re-vote rationale outside the pointing basis is challenged before the consensus is recorded, under the same restate-or-retract rule as item 1, and a voter that retracts its re-vote rationale records a replacement accepted set within that same re-vote, with a basis-driver rationale, or records no consensus.
 ```
 
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_step_four_re_vote_challenges_an_off_basis_rationale`
