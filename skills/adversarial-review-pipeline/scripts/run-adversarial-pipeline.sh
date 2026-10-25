@@ -157,7 +157,11 @@ probe_names_model() {
               ""|" "|"	"|";"|"|"|"&"|"("|")") state=comment ;;
             esac ;;
           *) case "${t:$i}" in
-               "{model}"*|ADVERSARIAL_PROBE_MODEL*) return 0 ;;
+               "{model}"*) return 0 ;;
+               ADVERSARIAL_PROBE_MODEL*)
+                 case "${t:$(( i + 23 )):1}" in
+                   ""|[!A-Za-z0-9_]*) return 0 ;;
+                 esac ;;
              esac ;;
         esac ;;
       single)
@@ -167,7 +171,11 @@ probe_names_model() {
           '"') state=normal ;;
           '\\') i=$(( i + 1 )) ;;
           *) case "${t:$i}" in
-               ADVERSARIAL_PROBE_MODEL*|"{model}"*) return 0 ;;
+               "{model}"*) return 0 ;;
+               ADVERSARIAL_PROBE_MODEL*)
+                 case "${t:$(( i + 23 )):1}" in
+                   ""|[!A-Za-z0-9_]*) return 0 ;;
+                 esac ;;
              esac ;;
         esac ;;
       comment) : ;;
