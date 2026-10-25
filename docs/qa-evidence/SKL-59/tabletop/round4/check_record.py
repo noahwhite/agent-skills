@@ -152,6 +152,10 @@ for prompt in sorted(list((HERE / "prompts").glob("disc-*-prompt.txt")) + list((
     allowed = {max(standing.values()), min(standing.values())}
     if not named <= allowed:
         problems.append(f"{prompt.name} names a value outside the high and the low: {sorted(named - allowed)}")
+    lowered = text.lower()
+    for banned in ("middle", "median", "the other value", "the other values"):
+        if banned in lowered:
+            problems.append(f"{prompt.name} refers to a value between the high and the low ({banned!r})")
 
 # The discussion responses are quoted in the raw record under their own voter's label.
 for key in ROLES:
