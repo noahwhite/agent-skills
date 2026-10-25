@@ -120,7 +120,7 @@ Under `per-story`, build the promotion branch and its PR like this:
    A check that fails only because another story's change is absent is that stop as well.
 
 Under `per-story`, a valid review fix lands on a new feature branch to `profile.git.integration_branch` and merges there before its commit is carried.
-The stale promotion PR is then closed unmerged, and the fix is carried in this order: cut a fresh story-scoped promotion branch from the release branch under a new branch name, carry the selection recorded in the closed PR body, and cherry-pick the fix commit onto it.
+The stale promotion PR is then closed unmerged, and the fix is carried in this order: cut a fresh story-scoped promotion branch from the release branch under a new branch name, carry the selection recorded in the closed PR body, and cherry-pick the fix commit onto it with `-m 1` when that commit is a merge commit.
 The story's updated commits, the original selection plus the fix commit, are what the branch carries, and no discovery runs again after the fix PR merges, which would match a second feature PR and stop.
 Open a fresh promotion PR from that branch to `profile.git.release_branch`, carrying the story's updated commits.
 Refresh the story's pre-production evidence against that promotion head before the merge.

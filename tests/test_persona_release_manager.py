@@ -124,7 +124,8 @@ def test_readiness_section_covers_each_promotion_mode() -> None:
     whole = SKILL.read_text().lower()
     for forbidden in ("promotion set under `none`", "promotion set for `none`", "stale evidence is accepted", "accept stale evidence",
                       "skip this check", "promote without evidence", "do not require evidence",
-                      "may be deferred", "deferred until after merge"):
+                      "may be deferred", "deferred until after merge", "accepted when stale",
+                      "evidence is optional"):
         assert forbidden not in whole, f"readiness contradicts itself: {forbidden}"
 
 
@@ -161,6 +162,8 @@ def test_promotion_section_cites_and_does_not_redefine() -> None:
     assert len(mechanism) == 1, mechanism
     assert "[references/github.md](references/github.md)" in mechanism[0], "the mechanism link must resolve"
     assert "`per-story` promotion mechanism" in mechanism[0], "the mechanism must be cited by name"
+    assert "cites that mechanism" in mechanism[0] or "cites that mechanism" in body, "the skill must cite it"
+    assert "cites nothing" not in body
     for forbidden in ("stale per-story evidence is accepted", "per-story evidence may be stale",
                       "accept stale evidence for per-story"):
         assert forbidden not in skill_text, f"readiness accepts stale per-story evidence: {forbidden}"
