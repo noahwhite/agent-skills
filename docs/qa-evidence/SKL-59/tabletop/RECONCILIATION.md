@@ -24,7 +24,7 @@ A new canceled priority-none fixture was used because SKL-72 already carried sev
 
 - Fixture: SKL-77, `[Tabletop fixture] Show candidate path age in the cleanup dry run (SKL-59 AC2 round 3)`, priority none, no implementation, canceled after the run, tracker-write preflight comment `19253345`.
 - Delivered text loaded: `662c84b21e6aea973b41f2a2981b30b18af4118f`.
-- One durable pointing record: SKL-77 comment `45e5ecac`. The chain is `04540f95` (first post, omitted the voided rationales), `1dd2bb8c` (added them but quoted the target sentence in its Anchoring events line), `077378a0` (used a non-template tracker-writes form), and `45e5ecac`, which names the event by kind, cites `raw-record.md` for the verbatim sentence, keeps the voided rationales only in the superseded-values line that the delivered template exempts, and uses the template's `product owner` form.
+- One durable pointing record: SKL-77 comment `2b11599e`. The chain is `04540f95` (first post, omitted the voided rationales), `1dd2bb8c` (added them but quoted the target sentence in its Anchoring events line), `077378a0` (used a non-template tracker-writes form), `45e5ecac` (still claimed a discussion that was never held), and `2b11599e`, which records that no discussion was held, names the event by kind, cites `raw-record.md` for the verbatim sentence, keeps the voided rationales only in the superseded-values line that the delivered template exempts, and uses the template's `product owner` form.
 - Artefacts: `tabletop/round3/prompts/` (nine prompts) and `tabletop/round3/outputs/` (nine captures), `tabletop/round3/raw-record.md`, and `tabletop/round3/pointing-record.md`, whose body is the exact text posted on the fixture.
 
 ### What the round shows
@@ -43,3 +43,11 @@ A new canceled priority-none fixture was used because SKL-72 already carried sev
 - New: `tabletop/round3/` (prompts, outputs, raw record, record), this file, and the SKL-77 fixture with its record.
 - New: the SKL-72 correction comment `c2121700`.
 - Unchanged: all earlier captures, the `rejected/` files, the mutation evidence, the skill text and the tests. No capture was rewritten for this round; `PROVENANCE.md` is extended, not pruned.
+
+## 5. Record defects found and corrected while preparing this round
+
+Two defects in earlier drafts of the SKL-77 record were caught before this PR and are recorded here for completeness.
+
+- The first posted record quoted the target sentence in its Anchoring events line; the durable record names the event by kind and cites `raw-record.md` instead.
+- The discussion field asserted a high and a low of the standing values. No discussion was held, and the durable record says so. The re-vote prompt's preamble nevertheless described a high and a low, which is a defect in that prompt: the voters' accepted sets are their own and unaffected, but the preamble should have said no discussion was held. The record does not repeat the claim.
+

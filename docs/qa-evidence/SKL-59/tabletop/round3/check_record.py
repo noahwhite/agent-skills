@@ -109,10 +109,12 @@ discussion = re.search(r"^- Discussion: (.*)$", BODY, re.M)
 if not discussion:
     problems.append("discussion line missing")
 else:
-    high, low = max(standing.values()), min(standing.values())
-    want = f"high {high}, low {low}."
-    if discussion.group(1).strip() != want:
-        problems.append(f"discussion {discussion.group(1).strip()!r} disagrees with standing values {standing}")
+    claim = discussion.group(1).strip()
+    if not claim.startswith("none"):
+        problems.append(f"discussion field must record that none was held, found {claim!r}")
+    for number, line in enumerate(BODY.splitlines(), 1):
+        if re.search(r"\bhigh \d+, low \d+\b", line) and line.startswith("- Discussion:"):
+            problems.append(f"discussion line at {number} claims a high/low discussion that was not held")
 
 # 5. Superseded line carries the three voided captures.
 superseded = re.search(r"^- Superseded values after a void: (.*)$", BODY, re.M)
