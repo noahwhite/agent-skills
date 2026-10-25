@@ -47,18 +47,20 @@ PRESCRIPTION = re.search(r"^PRESCRIPTION: (.*)$", SM_EM, re.M).group(1).strip()
 # estimate followed by a sizing verb and then a number, so a reference that scores another story in an
 # earlier clause, or a constraint count that follows the story, never trips it.
 STORY_SIZING = re.compile(
-    r"(?i)(?:\bthis (?:one|story)\b|\bthe story\b|\bit\b)"
-    r"[^.\n]{0,60}?"
+    r"(?i)(?P<story>\bthis (?:one|story)\b|\bthe story\b|\bit\b)"
+    r"(?P<gap>[^.\n]{0,60}?)"
     r"\b(?:should|ought to|must be|has to be|needs to be|is a|is an|is worth|scores?|sizes?|sized|lands?|"
     r"comes? out at|estimates?|fits|go (?:higher|lower)|goes (?:higher|lower))\b"
     r"[^.\n]{0,30}?\b\d"
 )
+# A gap that hands the clause to another item means the sizing verb is not the story's own.
+REASSIGNED = re.compile(r"(?i)\bSKL-\d+\b|\bwhich\b|\bwho\b|\banother\b|\bthat (?:item|story)\b")
 STORY_AT_VALUE = re.compile(r"(?i)\bthis (?:one|story)\b[^.\n]{0,25}?\bat\s+\d")
 FIRST_PERSON = re.compile(
     r"(?i)\b(?:i would|i'd|i have)\b[^.\n]{0,30}\b(?:size|score|point|estimate|pick|choose|say|go with|put)\b"
     r"[^.\n]{0,25}?\b\d"
 )
-VALUATION = re.compile(r"(?i)\b(?:target|score) of \d+|\bthe answer\b[^.\n]{0,30}?\d")
+VALUATION = re.compile(r"(?i)\btarget\s*(?:is|of|:)?\s*\d|\bscore of \d|\bthe answer\b[^.\n]{0,30}?\d")
 SETTLED = re.compile(r"(?i)\d+\s*(?:points?|pts)\b[^.\n]{0,25}\b(?:is right|fits|feels right|is the answer)\b")
 NON_NUMERIC = re.compile(
     r"(?i)\b(?:i would|i'd) go (?:higher|lower)\b|\bthe (?:highest|lowest) vote is (?:the )?realistic\b|"
@@ -68,16 +70,23 @@ NUMBER = re.compile(r"\b\d+\b")
 SENTENCE = re.compile(r"(?<=[.;!?])\s+|\n+")
 
 
+def story_is_sized(sentence: str) -> bool:
+    """True when this story, not another item, is the subject the sizing verb and the number attach to."""
+    for match in STORY_SIZING.finditer(sentence):
+        if not REASSIGNED.search(match.group("gap")):
+            return True
+    return False
+
+
 def prescriptions(text: str) -> list[str]:
     """Return the sentences that prescribe this story's value rather than referencing another story's."""
     found = [m.group(0) for m in NON_NUMERIC.finditer(text)]
     for sentence in SENTENCE.split(text):
         if not NUMBER.search(sentence):
             continue
-        for pattern in (STORY_SIZING, STORY_AT_VALUE, FIRST_PERSON, VALUATION, SETTLED):
-            if pattern.search(sentence):
-                found.append(sentence.strip())
-                break
+        if (story_is_sized(sentence) or STORY_AT_VALUE.search(sentence) or FIRST_PERSON.search(sentence)
+                or VALUATION.search(sentence) or SETTLED.search(sentence)):
+            found.append(sentence.strip())
     return found
 
 
