@@ -76,7 +76,7 @@ A sizing comment that names a point value before the reveal, names or implies a 
 - SM/EM sizing context, after all three values: <file base name> or verbatim, eliding a pre-reveal value or a target value
 - Discussion: high <value>, low <value>
 - Re-vote: <accepted set per voter, with complexity rationale>
-- Consensus: <highest value in the intersection of the vote that stands, or none when the intersection is empty>
+- Consensus: <highest value in the intersection of the vote that stands, or none when the intersection is empty, or void when the round was voided>
 - No-consensus decision: <split, re-refine, or leave unpointed; n/a when there is a consensus>
 - Paths accepted: <set per voter, or n/a>
 - Decision rationale: <one line, or n/a>

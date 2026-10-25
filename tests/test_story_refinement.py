@@ -768,7 +768,7 @@ def test_step_four_re_vote_prompt_carries_the_rationale_rule() -> None:
 
 def test_pointing_template_states_the_standing_consensus() -> None:
     assert (
-        "- Consensus: <highest value in the intersection of the vote that stands, or none when the intersection is empty>"
+        "- Consensus: <highest value in the intersection of the vote that stands, or none when the intersection is empty, or void when the round was voided>"
         in pointing_template()
     )
 
@@ -863,9 +863,9 @@ def test_anchoring_guardrail_makes_a_point_value_sizing_note_an_event_on_challen
         "when it is neither restated as a basis driver nor retracted" in body
     )
     assert (
-        "the sm/em's prohibited behaviours above, and a sizing comment that names a point value before the "
-        "reveal, names or implies a target value for this story, or states elapsed time, effort or run cost, are "
-        "anchoring events as soon as they are seen, with no challenge, restatement or retraction path" in body
+        "every prohibited behaviour above, a target value named or implied for this story by any participant, "
+        "and a sizing comment that names a point value before the reveal or states elapsed time, effort or run "
+        "cost, are anchoring events as soon as they are seen, with no challenge, restatement or retraction path" in body
     )
     assert (
         "any other challenged ground that is neither restated as a basis driver nor retracted, or a sizing "
@@ -897,9 +897,9 @@ def test_anchoring_guardrail_names_off_basis_grounds_as_a_trigger() -> None:
         "when it is neither restated as a basis driver nor retracted" in body
     )
     assert (
-        "a ground that weighs verification strength, testability, coverage, the shape of the tests, a duration, "
-        "effort or run cost, or a target value for this story is such a trigger when a voter weighs it in a "
-        "rationale or raises it in the discussion" in body
+        "a ground that weighs verification strength, testability, coverage, the shape of the tests, or a "
+        "duration, effort or run cost is such a trigger when a voter weighs it in a rationale or raises it in "
+        "the discussion" in body
     )
     assert "verification strength, testability, coverage, the shape of the tests" in body
 

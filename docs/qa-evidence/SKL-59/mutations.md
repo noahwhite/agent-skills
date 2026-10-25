@@ -221,7 +221,7 @@ File: `SKILL.md`
 Removed or matched text:
 
 ```text
-An anchoring trigger is an off-basis ground Step 4 challenges, so it becomes an anchoring event only when it is neither restated as a basis driver nor retracted: a ground that weighs verification strength, testability, coverage, the shape of the tests, a duration, effort or run cost, or a target value for this story is such a trigger when a voter weighs it in a rationale or raises it in the discussion.
+An anchoring trigger is an off-basis ground Step 4 challenges, so it becomes an anchoring event only when it is neither restated as a basis driver nor retracted: a ground that weighs verification strength, testability, coverage, the shape of the tests, or a duration, effort or run cost is such a trigger when a voter weighs it in a rationale or raises it in the discussion.
 ```
 
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_anchoring_guardrail_names_off_basis_grounds_as_a_trigger`
@@ -234,7 +234,7 @@ File: `SKILL.md`
 Removed or matched text:
 
 ```text
-The SM/EM's prohibited behaviours above, and a sizing comment that names a point value before the reveal, names or implies a target value for this story, or states elapsed time, effort or run cost, are anchoring events as soon as they are seen, with no challenge, restatement or retraction path.
+Every prohibited behaviour above, a target value named or implied for this story by any participant, and a sizing comment that names a point value before the reveal or states elapsed time, effort or run cost, are anchoring events as soon as they are seen, with no challenge, restatement or retraction path.
 ```
 
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_anchoring_guardrail_makes_a_point_value_sizing_note_an_event_on_challenge`
@@ -382,7 +382,7 @@ File: `refinement-record.md`
 Removed or matched text:
 
 ```text
-- Consensus: <highest value in the intersection of the vote that stands, or none when the intersection is empty>
+- Consensus: <highest value in the intersection of the vote that stands, or none when the intersection is empty, or void when the round was voided>
 ```
 
 Written instead:
