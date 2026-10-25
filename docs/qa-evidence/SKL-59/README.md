@@ -116,7 +116,7 @@ Retained from the QA round and unchanged: a phrase test pins the challenge duty'
 QA round 2 (tracker comment `89a12de3`) left AC2 outstanding on two points: the live SKL-72 record did not reproduce the committed captures, and the rejected target-value rationales lacked the fresh blind recovery the rule requires.
 
 - The record is corrected to the captures: SKL-72 comment `c2121700` carries the committed record verbatim.
-- The missing recovery is supplied by a fresh run on the canceled priority-none fixture SKL-77, with one durable record (comment `2b11599e`), nine captured prompts and outputs in `tabletop/round3/`, an on-sight stop at a target value, and an independent blind re-run in newly created voter contexts.
+- The missing recovery is supplied by a fresh run on the canceled priority-none fixture SKL-77, with one durable record (comment `264d0a47`), nine captured prompts and outputs in `tabletop/round3/`, an on-sight stop at a target value, and an independent blind re-run in newly created voter contexts.
 - `tabletop/RECONCILIATION.md` records the deviation in the earlier handling and the artefacts that replace it; `tabletop/PROVENANCE.md` is extended to cover round 3.
 - AC4, DoD2 and DoD3 depend on AC2 and are submitted with it for QA's re-verification; no skill text or test changed.
 - What is not claimed here: the earlier SKL-72 handling of its rejected target-value rationales is recorded as a deviation, and the recovery mechanism is demonstrated on SKL-77 rather than retro-applied to SKL-72. QA decides whether that satisfies AC2.
