@@ -55,7 +55,8 @@ STORY_SIZING = re.compile(
 )
 # A gap that hands the clause to another item means the sizing verb is not the story's own.
 REASSIGNED = re.compile(
-    r"(?i)\bwhich\b|\bwho\b|\banother\b|\bthat (?:item|story)\b|\bthe (?:story|item) that\b|\bSKL-\d+\s*$"
+    r"(?i)\bwhich\b|\bwho\b|\banother\b|\bthat (?:item|story)\b|\bSKL-\d+[:,]?\s*the (?:story|item) that\b|"
+    r"\bSKL-\d+\s*$"
 )
 STORY_AT_VALUE = re.compile(r"(?i)\bthis (?:one|story)\b[^.\n]{0,25}?\bat\s+\d")
 FIRST_PERSON = re.compile(
@@ -64,7 +65,7 @@ FIRST_PERSON = re.compile(
 )
 TARGET = re.compile(r"(?i)\btarget\s+(?:of|is|:)?\s*\d")
 # A target attached to a named other item is that item's recorded value, not a target for this story.
-OTHER_ITEMS_TARGET = re.compile(r"(?i)\bSKL-\d+'s\s*$|\b(?:their|its own)\s*$")
+OTHER_ITEMS_TARGET = re.compile(r"(?i)\bSKL-\d+'?s?\s*$|\b(?:their|its own)\s*$")
 VALUATION = re.compile(r"(?i)\bscore of \d|\bthe answer\b[^.\n]{0,30}?\d")
 SETTLED = re.compile(r"(?i)\d+\s*(?:points?|pts)\b[^.\n]{0,25}\b(?:is right|fits|feels right|is the answer)\b")
 NON_NUMERIC = re.compile(
@@ -244,6 +245,8 @@ for stage, expected_count in (("v1", 3), ("v2", 3), ("v3", 3), ("v4", 3), ("disc
     if found != expected_count:
         problems.append(f"{stage}: expected {expected_count} captures, found {found}")
 
+# The committed matrix must not shrink: adding cases means updating this count deliberately.
+MATRIX_COUNTS = (19, 10)
 cases_file = HERE / "prescription-cases.md"
 section = None
 must_fail, must_pass = [], []
@@ -258,6 +261,8 @@ for sentence in must_fail:
 for sentence in must_pass:
     if prescriptions(sentence):
         problems.append(f"case matrix: a permitted reference trips the detector: {sentence[:70]!r}")
+if (len(must_fail), len(must_pass)) != (MATRIX_COUNTS):
+    problems.append(f"case matrix is {len(must_fail)} must fail and {len(must_pass)} must pass, expected {MATRIX_COUNTS}")
 
 print(f"template fields checked: {len(FIELDS)}")
 print(f"prescription cases: {len(must_fail)} must fail, {len(must_pass)} must pass")
