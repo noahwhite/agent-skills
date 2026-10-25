@@ -24,6 +24,6 @@ Where a file is a reconstruction or a replacement, this file says so and names t
 ## Round 3 (SKL-59 AC2 round 3, after QA round 2)
 
 - `round3/prompts/` and `round3/outputs/` are original captures from nine voter processes, taken after the delivered text at `662c84b21e6aea973b41f2a2981b30b18af4118f`, and committed unchanged.
-- `round3/pointing-record.md` is the record generated from those captures and posted on SKL-77 as comment `04540f95`; comment `1dd2bb8c` is superseded because it omitted the voided rationales.
+- `round3/pointing-record.md` is the record generated from those captures and posted on SKL-77 as comment `077378a0`, superseding `04540f95` and `1dd2bb8c`; the first omitted the voided rationales and the second quoted the target on the story surface in its Anchoring events line.
 - The SKL-72 record was corrected in the tracker, not in the captures: comment `c2121700` carries the committed record verbatim and names the comments it supersedes.
 - Nothing from earlier rounds was removed or rewritten in this round; the earlier labels above stand, including the one recording that the first round-two re-vote was rejected and that one intervening clean run was replaced.
