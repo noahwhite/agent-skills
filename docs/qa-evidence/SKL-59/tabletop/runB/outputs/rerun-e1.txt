@@ -1,0 +1,2 @@
+VALUE: 2
+RATIONALE: The change introduces one interacting constraint (gating the filter so the default dry-run output stays byte-identical) and a modest risk of altering existing listing behaviour, both contained by a single well-understood flag gate with no new unknowns.

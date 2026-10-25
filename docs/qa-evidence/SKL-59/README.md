@@ -68,3 +68,46 @@ The [exact-build hosted CI](https://github.com/noahwhite/agent-skills/actions/ru
 The [implementation review of record](https://github.com/noahwhite/agent-skills/pull/49#pullrequestreview-5641230204) binds to the reviewed head and predates merge; its accepted Low is a lexical restatement guard that can miss a deliberately different paraphrase.
 The weaker sizing sentence in `persona-scrum-master/SKILL.md:39` is an incidental, nonblocking follow-up already excluded by the owner's scope decision, with the product owner responsible and no follow-up issue yet.
 The intended closing decision is to return SKL-59 to In Progress for its unmet behavioural evidence after this evidence PR's external review and merge; the story remains In Deployment Review while that required handoff is pending.
+
+## Remediation round, 2026-10-25 (closes AC1 ground four, AC2, AC4, DoD2, DoD3; records DoD4)
+
+The delivered skill text and its tests are unchanged by this round: QA verified AC3 as amended, and no QA finding required a text or test change.
+Only evidence is added, under `docs/qa-evidence/SKL-59/tabletop/`.
+
+### AC1 - the four grounds, all determinate
+
+The substitution stands and is restated here: the original SKL-16 round cannot be re-run, so replaying the grounds its pointing record quotes is the substitute.
+
+The original SM/EM sizing note is now settled. The product owner ruled on 2026-10-25 (tracker comment `4a2485a2`) that the inherited 3-point split pointing is this story's own inherited value, so naming it in the sizing context implies a target value for the story under estimate.
+The note, as the ruling quotes it verbatim from the original SKL-16 pointing record:
+
+> SM/EM sizing context, after all three values: no comparable story carries a recorded estimate; the only comparable number is the inherited 3-point split pointing; SKL-19 additionally regenerates 12 vendored copies, this story changes no `shared/*.md` file
+
+| Ground | Verdict | Deciding delivered sentence | Required action |
+|---|---|---|---|
+| 1. Engineer one, value 5, "checkability is uneven ... the versioning and notes semantics are pinned by phrase tests alone" | Out of basis | Step 3 item 4: "verification strength, testability, coverage, the shape of the tests, a duration, effort or run-cost measure are out of basis" | Challenged under Step 4 item 1, then restated as a basis driver or retracted |
+| 2. Engineer two, value 3, "the prior split already de-risked the slice; the earlier split consensus was also 3", with its re-vote resolved the same way | Out of basis | Step 3 item 4: "The rationale names no target value for this story ..."; Step 4 item 1: "a target value named or implied for this story, including one implied by a split status ... an anchoring event as soon as the facilitator sees it" | An anchoring event on sight: no restatement or retraction path; the round stops, the consensus and the affected votes are void and the independent vote is re-run |
+| 3. Product owner re-vote, "because the phrase-level contract test caps the verification risk" | Out of basis | Step 3 item 4's verification-strength sentence, carried into the re-vote by Step 4 item 2 | Challenged under Step 4 item 2 before the consensus is recorded, then restated or retracted; a retraction records a replacement accepted set or no consensus |
+| 4. The SM/EM sizing note naming the inherited 3-point split pointing | Out of basis, per the product owner's 2026-10-25 ruling | Step 3 item 7: "it must not name or imply a target value for this story, including one implied by a split status, and such a statement is an anchoring event under the Anchoring guardrail" | Challenged and an anchoring event: the SM/EM restates or retracts it, and because it implies a target value for this story it is an anchoring event on sight with no repair path, so the round stops and the vote is re-run blind |
+
+Ground 4 is not treated as a permitted post-reveal comparison: the ruling establishes that the inherited value is this story's own inherited value, so naming it implies a target value for the story under estimate.
+
+### AC2 - the behavioural round, inspectable
+
+The whole run is in `tabletop/`: twelve voter prompts, their raw outputs, the two challenge-reply prompts and outputs, the raw session record and the elided pointing record.
+
+- `tabletop/README.md` - the run statement: the loaded commit `702f53c9ab6fe4209fd4600ad2224c6e0431671a`, the fixture SKL-72, the per-voter process and directory isolation, and both runs in order.
+- `tabletop/raw-record.md` - the verbatim sizing comment (the target quotation), every value and every rationale, cited by base name from the posted record.
+- `tabletop/pointing-record.md` - the record posted on SKL-72, with the target quotation elided, standing values in the values block and voided values under the superseded line.
+- `tabletop/runA/` - the immediate target-value stop: three blind values, the SM/EM sizing comment, the stop before any discussion, the blind re-run and the re-vote.
+- `tabletop/runB/` - the voter grounds: a verification-strength ground and a testability ground challenged and retracted, a coverage ground challenged and left unretracted, the void, the blind re-run in newly created contexts and the re-vote.
+
+Each voter prompt carries the pointing basis from Step 3 item 2 verbatim and the Step 3 item 4 rationale rule; each voter ran as its own process in a directory containing only its own prompt.
+
+### DoD4 - review-policy qualification
+
+The product owner ruled on 2026-10-25 (tracker comment `4a2485a2`) that the accepted-Low disposition on PR #49 satisfies the review policy for this story: the reviewer and the adjudicator both ruled the Low non-blocking, the disposition and its reason are recorded on the pull request, and no fix is required. This round records that ruling and does not treat the Low as fixed.
+
+### DoD3 - why the duty has no automated guard
+
+Retained from the QA round and unchanged: a phrase test pins the challenge duty's text and the mutation evidence proves that pin, but a live round is the only evidence that a facilitator performs the challenge. The tabletop run above is that evidence.

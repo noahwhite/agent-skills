@@ -1,0 +1,2 @@
+VALUE: 2
+RATIONALE: The primary driver is the interacting constraint that the un-flagged dry run must stay byte-identical to the prior release, which carries a small risk of silently changing existing output; determining content difference against the last committed state is otherwise a well-understood design with no material unknowns.

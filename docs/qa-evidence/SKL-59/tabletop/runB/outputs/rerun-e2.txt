@@ -1,0 +1,2 @@
+VALUE: 2
+RATIONALE: A single additive filter whose main driver is the interacting constraint of keeping the existing dry-run output byte-identical; comparing candidate content to the last committed state is well-defined, so unknowns and breakage risk are minimal.

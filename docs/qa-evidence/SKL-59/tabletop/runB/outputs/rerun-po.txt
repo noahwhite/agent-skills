@@ -1,0 +1,2 @@
+VALUE: 2
+RATIONALE: The change is a simple additive filter over the dry run, so design difficulty is low; the admitted driver is the risk of breaking existing behaviour, since the unfiltered path must stay byte-identical to the prior release (AC2), plus a small unknown in how "differs from the last committed state" is determined across tracked and untracked candidates.

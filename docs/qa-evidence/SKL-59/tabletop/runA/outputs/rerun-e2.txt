@@ -1,0 +1,2 @@
+VALUE: 2
+RATIONALE: A single flag on an existing dry-run path whose "differs from the last committed state" check is well-understood; the main driver is the interacting constraint that un-flagged output must stay byte-identical, a regression risk to existing behaviour.

@@ -1,0 +1,2 @@
+ACCEPTED: {2}
+RATIONALE: The change adds one narrow, well-understood filter to the dry-run path. The only admitted complexity drivers are the backward-compatibility constraint (byte-identical output without the flag) and the routine design question of detecting paths that differ from the last committed state, both low-complexity.

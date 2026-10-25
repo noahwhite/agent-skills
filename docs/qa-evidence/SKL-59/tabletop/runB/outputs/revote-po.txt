@@ -1,0 +1,2 @@
+ACCEPTED: {2}
+RATIONALE: A single additive filter over an existing dry run, so design difficulty and unknowns are low; the only interacting constraint is keeping the default output unchanged, which is itself a low, well-understood risk to existing behaviour.

@@ -1,0 +1,2 @@
+ACCEPTED: {2}
+RATIONALE: The only real complexity driver is the interacting constraint that the default dry-run output must stay byte-identical (a risk of breaking existing behaviour), plus the small unknown of computing each candidate path's content against the last committed state; beyond that this is routine, well-understood filtering that adds no points.

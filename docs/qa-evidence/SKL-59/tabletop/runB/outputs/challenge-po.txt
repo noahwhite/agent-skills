@@ -1,0 +1,2 @@
+OUTCOME: restated
+RATIONALE: The change carries an unknown: its acceptance criteria are checkable only by phrase tests in the skill text, leaving genuine uncertainty about how the change's correctness is actually verified.

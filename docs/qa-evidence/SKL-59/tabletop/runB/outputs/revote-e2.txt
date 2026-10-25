@@ -1,0 +1,2 @@
+ACCEPTED: {2}
+RATIONALE: Low design difficulty - a filter over already-computed candidate paths compared against HEAD. The only interacting constraint is preserving byte-identical default output, with no meaningful unknowns.
