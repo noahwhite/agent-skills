@@ -55,16 +55,17 @@ STORY_SIZING = re.compile(
 )
 # A gap that hands the clause to another item means the sizing verb is not the story's own.
 REASSIGNED = re.compile(
-    r"(?i)\bwhich\b|\bwho\b|\banother\b|\bthat (?:item|story)\b|\bSKL-\d+\s*$"
+    r"(?i)\bwhich\b|\bwho\b|\banother\b|\bthat (?:item|story)\b|\bthe (?:story|item) that\b|\bSKL-\d+\s*$"
 )
 STORY_AT_VALUE = re.compile(r"(?i)\bthis (?:one|story)\b[^.\n]{0,25}?\bat\s+\d")
 FIRST_PERSON = re.compile(
     r"(?i)\b(?:i would|i'd|i have)\b[^.\n]{0,30}\b(?:size|score|point|estimate|pick|choose|say|go with|put)\b"
     r"[^.\n]{0,25}?\b\d"
 )
-VALUATION = re.compile(
-    r"(?i)\b(?:a|the|this story's)\s+target\s+(?:of|is|:)?\s*\d|\bscore of \d|\bthe answer\b[^.\n]{0,30}?\d"
-)
+TARGET = re.compile(r"(?i)\btarget\s+(?:of|is|:)?\s*\d")
+# A target attached to a named other item is that item's recorded value, not a target for this story.
+OTHER_ITEMS_TARGET = re.compile(r"(?i)\bSKL-\d+'s\s*$|\b(?:their|its own)\s*$")
+VALUATION = re.compile(r"(?i)\bscore of \d|\bthe answer\b[^.\n]{0,30}?\d")
 SETTLED = re.compile(r"(?i)\d+\s*(?:points?|pts)\b[^.\n]{0,25}\b(?:is right|fits|feels right|is the answer)\b")
 NON_NUMERIC = re.compile(
     r"(?i)\b(?:i would|i'd) go (?:higher|lower)\b|\bthe (?:highest|lowest) vote is (?:the )?realistic\b|"
@@ -72,6 +73,14 @@ NON_NUMERIC = re.compile(
 )
 NUMBER = re.compile(r"\b\d+\b")
 SENTENCE = re.compile(r"(?<=[.;!?])\s+|\n+")
+
+
+def target_is_stated(sentence: str) -> bool:
+    """True when a target for this story is stated, and not another item's recorded value."""
+    for match in TARGET.finditer(sentence):
+        if not OTHER_ITEMS_TARGET.search(sentence[: match.start()][-24:]):
+            return True
+    return False
 
 
 def story_is_sized(sentence: str) -> bool:
@@ -89,7 +98,7 @@ def prescriptions(text: str) -> list[str]:
         if not NUMBER.search(sentence):
             continue
         if (story_is_sized(sentence) or STORY_AT_VALUE.search(sentence) or FIRST_PERSON.search(sentence)
-                or VALUATION.search(sentence) or SETTLED.search(sentence)):
+                or target_is_stated(sentence) or VALUATION.search(sentence) or SETTLED.search(sentence)):
             found.append(sentence.strip())
     return found
 
@@ -235,7 +244,23 @@ for stage, expected_count in (("v1", 3), ("v2", 3), ("v3", 3), ("v4", 3), ("disc
     if found != expected_count:
         problems.append(f"{stage}: expected {expected_count} captures, found {found}")
 
+cases_file = HERE / "prescription-cases.md"
+section = None
+must_fail, must_pass = [], []
+for line in cases_file.read_text().splitlines():
+    if line.startswith("## "):
+        section = line[3:].strip()
+    elif line.startswith("- ") and section in ("Must fail", "Must pass"):
+        (must_fail if section == "Must fail" else must_pass).append(line[2:].strip())
+for sentence in must_fail:
+    if not prescriptions(sentence):
+        problems.append(f"case matrix: a prescription passes the detector: {sentence[:70]!r}")
+for sentence in must_pass:
+    if prescriptions(sentence):
+        problems.append(f"case matrix: a permitted reference trips the detector: {sentence[:70]!r}")
+
 print(f"template fields checked: {len(FIELDS)}")
+print(f"prescription cases: {len(must_fail)} must fail, {len(must_pass)} must pass")
 print(f"captures compared: {sum(1 for _ in (HERE / 'outputs').glob('*-output.txt'))}")
 if problems:
     print("MISMATCHES:")
