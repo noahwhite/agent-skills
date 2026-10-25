@@ -874,3 +874,20 @@ def test_a_probe_template_without_the_model_placeholder_is_refused(gate):
     assert result.returncode == 2, result.stdout + result.stderr
     assert "{model}" in result.stderr, result.stderr
     assert_not_stamped(artifacts(repo, env), "sweep")
+
+
+def test_probe_validation_belongs_to_run_only(gate):
+    """A stale ADVERSARIAL_PROBE_CMD must not refuse a command that never probes."""
+    repo, scratch, env = gate
+    env = {**env, "ADVERSARIAL_PROBE_CMD": "echo hi"}
+    paths = run_script("paths", "--repo", str(repo), "--base", "HEAD", env=env)
+    assert paths.returncode == 0, paths.stdout + paths.stderr
+    preflight = run_script(
+        "preflight", "--repo", str(repo), "--base", "HEAD", "--test-cmd", "true",
+        "--scratch", str(scratch), env=env,
+    )
+    assert preflight.returncode == 0, preflight.stdout + preflight.stderr
+    # An explicitly empty probe is a usage error wherever the flag is given.
+    empty = run_sweep(repo, scratch, env, "--model", "m", "--probe-cmd", "")
+    assert empty.returncode == 2, empty.stdout + empty.stderr
+    assert "non-empty template" in empty.stderr, empty.stderr

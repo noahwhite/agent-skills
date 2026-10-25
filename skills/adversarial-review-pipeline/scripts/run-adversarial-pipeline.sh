@@ -153,6 +153,7 @@ MODEL="${ADVERSARIAL_MODEL:-}"
 MODEL_SET=0
 PROBE_CMD="${ADVERSARIAL_PROBE_CMD:-}"
 PROBE_TIMEOUT="${ADVERSARIAL_PROBE_TIMEOUT:-30}"
+PROBE_SET=0
 NO_SWEEP=0
 SCRATCH_SET=0
 while [ $# -gt 0 ]; do
@@ -169,7 +170,7 @@ while [ $# -gt 0 ]; do
         --agent-cmd) AGENT_CMD="$2" ;;
         --timeout) TIMEOUT="$2" ;;
         --model) MODEL="$2"; MODEL_SET=1 ;;
-        --probe-cmd) PROBE_CMD="$2" ;;
+        --probe-cmd) PROBE_CMD="$2"; PROBE_SET=1 ;;
         --probe-timeout) PROBE_TIMEOUT="$2" ;;
       esac
       shift 2 ;;
@@ -188,14 +189,21 @@ fi
 [[ "$TIMEOUT" =~ ^[1-9][0-9]*$ ]] || die 2 "--timeout must be a whole number of seconds, at least 1."
 [[ "$PROBE_TIMEOUT" =~ ^[1-9][0-9]*$ ]] || die 2 "--probe-timeout must be a whole number of seconds, at least 1."
 # A model id may be anything on one line; only `run` insists on a value when the flag is given.
+# An explicitly empty model id is a usage error on any command; an unset one is simply no model.
 if [ "$MODEL_SET" -eq 1 ] && [ -z "$MODEL" ]; then
   die 2 "--model needs a non-empty model id"
 fi
-case "$PROBE_CMD" in
-  "") ;;
-  *"{model}"*) ;;
-  *) die 2 "--probe-cmd must carry the {model} placeholder; a template without it checks nothing about the model" ;;
-esac
+# Only `run` probes, so only `run` insists on a probe template that names the model it checks.
+if [ "$PROBE_SET" -eq 1 ] && [ -z "$PROBE_CMD" ]; then
+  die 2 "--probe-cmd needs a non-empty template"
+fi
+if [ "$cmd" = "run" ]; then
+  case "$PROBE_CMD" in
+    "") ;;
+    *"{model}"*) ;;
+    *) die 2 "--probe-cmd must carry the {model} placeholder; a template without it checks nothing about the model" ;;
+  esac
+fi
 case "$MODEL" in
   *[[:cntrl:]]*) die 2 "--model must not contain control characters; pass the model id on one line" ;;
 esac
@@ -489,7 +497,7 @@ run_guarded() {
   RUN_TIMED_OUT=0
   RUN_ELAPSED=0
   rcfile="$(mktemp -p "$RUN_DIR" run-status.XXXXXX)" \
-    || fail_phase 2 "could not create a status file in the run directory ($RUN_DIR); the phase never started"
+    || fail_phase 2 "could not create a status file for the phase's guard in the run directory ($RUN_DIR)"
   rm -f -- "$rcfile"
   if [ "$stderr_path" = "--combined" ]; then rc_extra="2>&1"; fi
   start="$SECONDS"
