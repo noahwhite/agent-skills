@@ -566,7 +566,7 @@ on_run_exit() {  # a run attempt's single exit path: report completion, then cle
   local rc=$?
   set +e
   trap - EXIT
-  trap '' INT TERM HUP   # the status is reported; a second interrupt must not rewrite it
+  trap '' INT TERM HUP QUIT USR1 USR2 PIPE   # the status is reported; a later signal must not rewrite it
   if [ "$COMPLETION_EMITTED" -eq 0 ] && [ -n "${phase:-}" ]; then
     COMPLETION_EMITTED=1
     completion_line "$phase" "$(( SECONDS - PHASE_START ))" "$rc"
@@ -945,6 +945,10 @@ case "$cmd" in
     trap 'on_signal 130' INT
     trap 'on_signal 143' TERM
     trap 'on_signal 129' HUP
+    trap 'on_signal 131' QUIT
+    trap 'on_signal 138' USR1
+    trap 'on_signal 140' USR2
+    trap 'on_signal 141' PIPE
     # From here the phase attempt is real, so every exit reports completion; a missing predecessor is
     # one of those failures, not a refusal before the attempt starts. The scratch directory is made
     # only once the phase may actually run, so a refused attempt leaves no run directory behind.
