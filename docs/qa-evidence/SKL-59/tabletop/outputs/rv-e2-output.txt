@@ -1,0 +1,2 @@
+ACCEPTED: {2}
+RATIONALE: The admitted driver is the risk of breaking existing behaviour: AC2 requires the default dry-run output to remain byte-identical, so the new filter must be introduced without altering the existing output path. The only interacting constraint is comparing each candidate's content against the last committed state.

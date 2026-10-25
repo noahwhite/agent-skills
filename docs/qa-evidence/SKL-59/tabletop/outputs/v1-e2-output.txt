@@ -1,0 +1,2 @@
+VALUE: 5
+RATIONALE: Coverage is thin - no test reaches the new filter path - so a silent regression there would go unnoticed.

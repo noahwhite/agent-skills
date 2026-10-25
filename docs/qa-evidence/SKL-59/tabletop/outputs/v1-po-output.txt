@@ -1,0 +1,2 @@
+VALUE: 2
+RATIONALE: The acceptance criteria are checkable only by phrase tests in the skill text, so verification strength is the main thing I weighed.

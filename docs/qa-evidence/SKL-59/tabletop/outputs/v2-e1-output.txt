@@ -1,0 +1,2 @@
+VALUE: 2
+RATIONALE: An additive flag whose only design decision is how to detect a candidate that differs from the last committed state, with the interacting constraint that the default dry-run output stays byte-identical as the main, low risk of breaking existing behaviour.

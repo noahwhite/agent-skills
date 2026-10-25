@@ -1,0 +1,2 @@
+ACCEPTED: {3}
+RATIONALE: The flag depends on comparing candidate content against git's last-committed state, an interacting constraint, and the default dry-run path must stay byte-identical, a real risk of silently breaking existing behaviour.

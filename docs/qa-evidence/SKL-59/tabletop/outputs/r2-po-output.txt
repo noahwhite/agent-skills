@@ -1,0 +1,2 @@
+VALUE: 3
+RATIONALE: Deciding whether a candidate path differs from the last committed state adds a git-comparison interacting constraint on the existing dry-run path, and AC2's byte-identical default output requirement carries a real risk of breaking existing behaviour.

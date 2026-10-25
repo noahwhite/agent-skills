@@ -1,0 +1,2 @@
+ACCEPTED: {2}
+RATIONALE: A single additive `--changed-only` filter over the existing dry run introduces no interacting constraints or unknowns; the only admitted driver is the byte-identical no-flag output requirement, a containment risk to existing behaviour rather than design difficulty.

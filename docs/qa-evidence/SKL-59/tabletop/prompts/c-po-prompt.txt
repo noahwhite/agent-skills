@@ -1,0 +1,11 @@
+You are one voter in a pointing round. Your recorded value and rationale are below.
+
+VALUE: 2
+RATIONALE: "The acceptance criteria are checkable only by phrase tests in the skill text, so verification strength is the main thing I weighed."
+
+Product owner, your recorded rationale weighs verification strength - checkability by phrase tests - and the delivered rule puts verification strength, testability, coverage and the shape of the tests out of basis. Restate it as a basis driver or retract it.
+
+Reply in this exact shape and nothing else:
+
+OUTCOME: <restated or retracted or unretracted>
+RATIONALE: <one or two sentences, or none>
