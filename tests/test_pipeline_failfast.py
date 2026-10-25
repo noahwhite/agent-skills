@@ -929,3 +929,39 @@ def test_an_early_interrupt_gets_the_signal_status_in_the_process_and_the_line(g
     completion = [line for line in stderr.splitlines() if "phase=sweep complete elapsed=" in line]
     assert len(completion) == 1, stderr
     assert completion[0].endswith("exit=143"), completion[0]
+
+
+def test_a_probe_may_name_the_model_through_the_exported_variable(gate):
+    """The exported value is a supported channel, so a real call using it is accepted."""
+    repo, scratch, env = gate
+    result = run_sweep(
+        repo, scratch, env, "--model", "kimi/kimi-k3",
+        "--probe-cmd", 'test -n "$ADVERSARIAL_PROBE_MODEL"',
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "availability check: probe ok" in result.stderr, result.stderr
+
+
+def test_an_undeliverable_arbitration_report_has_its_own_exit_code(gate):
+    """A 21 tells a driver the phase is accepted, so it must not re-run the model call."""
+    repo, scratch, env = gate
+    sweep = run_sweep(repo, scratch, env, "--model", "m")
+    assert sweep.returncode == 0, sweep.stdout + sweep.stderr
+    hunt = run_script(
+        "run", "hunt", "--repo", str(repo), "--base", "HEAD", "--scratch", str(scratch),
+        "--model", "m", "--agent-cmd", SWEEP_AGENT, env=env,
+    )
+    assert hunt.returncode == 0, hunt.stdout + hunt.stderr
+    with open("/dev/full", "w") as full:
+        arbitrate = subprocess.run(
+            ["bash", str(SCRIPT), "run", "arbitrate", "--repo", str(repo), "--base", "HEAD",
+             "--scratch", str(scratch), "--model", "m", "--agent-cmd",
+             '{ printf "REVIEW-RAN: yes\\n%s\\n" "$(head -c 70000 /dev/zero | tr \'\\\\0\' x)"; } > {output_file}'],
+            env=env, cwd=str(ROOT), stdout=full, stderr=subprocess.PIPE, text=True, timeout=120,
+        )
+    assert arbitrate.returncode == 21, arbitrate.stderr
+    paths = artifacts(repo, env)
+    assert Path(f"{paths['arbitrate']}.stamp").exists(), "the accepted phase lost its stamp"
+    completion = [line for line in arbitrate.stderr.splitlines()
+                  if "phase=arbitrate complete elapsed=" in line]
+    assert len(completion) == 1 and completion[0].endswith("exit=21"), completion

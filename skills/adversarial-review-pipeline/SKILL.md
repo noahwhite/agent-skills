@@ -118,15 +118,15 @@ The script never resolves one: it echoes the id it was handed, and names it in i
 
 `--probe-cmd TEMPLATE` (`ADVERSARIAL_PROBE_CMD`) is an optional availability check spent before any agent budget.
 `run` performs it; `dossier` and `record` say they do not, and never pretend to have probed.
-Its only placeholder is `{model}`, which expands to `"$ADVERSARIAL_PROBE_MODEL"` (the model id exported to the probe), so do not quote the placeholder inside the template; a template without `{model}` is refused with exit 2 when `run` uses it.
-The model is also exported to the probe as `ADVERSARIAL_PROBE_MODEL`, which is the authoritative channel, so a template that comments or quotes the placeholder still receives the model to check.
+Its only placeholder is `{model}`, which expands to `"$ADVERSARIAL_PROBE_MODEL"` (the model id exported to the probe), so do not quote the placeholder inside the template; a `run` template that names the model through neither `{model}` nor `ADVERSARIAL_PROBE_MODEL` is refused with exit 2.
+The value always arrives as one word; whether the template actually exercises the provider is the template's job, so keep the probe a real call.
 It runs with stdin from `/dev/null` in a fresh empty directory under the run's scratch directory, never in the checkout under review, under its own `--probe-timeout` (`ADVERSARIAL_PROBE_TIMEOUT`, default 30 seconds).
 A probe that exits non-zero, prints a provider error (rate limit, authentication, quota exhaustion, unavailable or unknown model), or outlives its own `--probe-timeout` fails the phase with exit 20 before the dossier is built and before any agent command runs; when the phase deadline is what expired first the phase exits 19 instead, as a timeout kill.
 The message names the phase, the model id supplied, the probe's exit code (or the timeout) and the probe's output tail.
 With no probe configured the phase writes `availability check: not configured`, so the absence is visible rather than silent; a configured probe is never silently skipped.
 A passing probe is not proof that the real call will run: the observed cause is account state on a listed model, so a phase can still fail after a clean check.
 
-One deadline bounds the phase's model work: `--timeout` (`ADVERSARIAL_TIMEOUT`, default 900, at least 1) covers the availability check and the agent command, not the local dossier and worktree work around them.
+One deadline bounds the phase: `--timeout` (`ADVERSARIAL_TIMEOUT`, default 900, at least 1) covers the availability check, the agent command and the throwaway checkout; only the dossier write and teardown fall outside it.
 The agent command runs in its own process group under one SIGKILL deadline of that whole group, and the group is killed when the command returns too, so a child the CLI leaves retrying after the main call failed neither keeps the phase alive nor keeps running past it.
 A phase killed by `--timeout` exits 19 and names the phase, the model id when supplied and the timeout in seconds; no other failure path changes its exit code.
 An interrupted gate (SIGINT, SIGTERM, SIGHUP) kills the in-flight process group before it exits, so an interruption never orphans an agent.

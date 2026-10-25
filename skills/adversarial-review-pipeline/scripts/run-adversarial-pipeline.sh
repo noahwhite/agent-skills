@@ -54,9 +54,9 @@
 # record say so and never probe): a shell command template whose {model} placeholder expands to
 # "$ADVERSARIAL_PROBE_MODEL", the model id exported to the probe, so do not quote the placeholder
 # inside the template and an id containing a space, an ampersand or a quote still stays one word. A template
-# without {model} is refused (exit 2), and the model is also exported to the probe as
-# ADVERSARIAL_PROBE_MODEL, which is the authoritative channel: a template that comments or quotes the
-# placeholder still receives the model there. It runs under
+# without {model} or ADVERSARIAL_PROBE_MODEL is refused (exit 2). The model is exported to the probe
+# as ADVERSARIAL_PROBE_MODEL and {model} expands to it, so the value always arrives as one word; a
+# template must still use it in a call that reaches the provider. It runs under
 # its own --probe-timeout (ADVERSARIAL_PROBE_TIMEOUT, 30 seconds, never past the phase deadline),
 # with stdin from /dev/null, in a fresh empty directory under the run's scratch directory - never
 # inside the checkout under review. A configured probe that exits non-zero, prints a provider error (rate
@@ -122,12 +122,12 @@
 # Read the prompt from stdin (for codex: `codex exec ... -`) or from {prompt_file}; never expand
 # its contents into argv (argv is visible to other processes and one argument is capped at 128 KiB).
 #
-# Exit codes: 0 ok / PASS, 1 preflight FAIL (also: an accepted arbitration report could not be
-# written to stdout), 2 usage, 3 preflight INCOMPLETE, 11 not a git repo,
+# Exit codes: 0 ok / PASS, 1 preflight FAIL, 2 usage, 3 preflight INCOMPLETE, 11 not a git repo,
 # 12 bad base, 13 missing or invalid prior artifact, 14 cleanup refused, 15 agent command failed
 # or wrote no fresh report, 17 agent ran blind (sandbox error on its stderr, or no `REVIEW-RAN: yes`
 # first line), 18 the agent changed the primary checkout, 19 the phase was killed by --timeout,
-# 20 the phase's availability check failed before any agent ran.
+# 20 the phase's availability check failed before any agent ran, 21 the phase was accepted and
+# stamped but its arbitration report could not be written to stdout (do not re-run the model call).
 set -euo pipefail
 
 usage() { awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0" >&2; exit 2; }
@@ -203,8 +203,8 @@ fi
 if [ "$cmd" = "run" ]; then
   case "$PROBE_CMD" in
     "") ;;
-    *"{model}"*) ;;
-    *) die 2 "--probe-cmd must carry the {model} placeholder; a template without it checks nothing about the model" ;;
+    *"{model}"*|*'ADVERSARIAL_PROBE_MODEL'*) ;;
+    *) die 2 "--probe-cmd must name the model, through the {model} placeholder or ADVERSARIAL_PROBE_MODEL; a template that names neither checks nothing about the model" ;;
   esac
 fi
 case "$MODEL" in
@@ -670,8 +670,9 @@ availability_probe() {  # $1 phase, $2 phase deadline ($SECONDS at expiry): sets
   # scratch directory - never the checkout under review.
   line="cd $(printf '%q' "$probedir") && ${line}"
   availability_state="availability check: running"
-  # The environment is the authoritative channel: a template that puts {model} in a comment or a
-  # string still receives the model here, so a check can never silently test nothing.
+  # The model reaches the probe through this variable, and {model} expands to it. Whether the
+  # template actually exercises the provider is the template's job; this only guarantees the value
+  # arrives as one word, whatever the id contains.
   ADVERSARIAL_PROBE_MODEL="$MODEL" \
     run_guarded "$line" "$limit" /dev/null "$out" --combined "$phase_name"
   tail_text="$(tail -n "$PROBE_TAIL_LINES" -- "$out" 2>/dev/null || true)"
@@ -811,7 +812,11 @@ write_dossier() {  # $1 = phase, $2 = dossier path
 }
 
 make_checkout() {  # prints the path of a registered throwaway detached worktree at HEAD
-  local container dir
+  local container dir bounded=""
+  if [ -n "${CHECKOUT_DEADLINE:-}" ]; then
+    bounded="$(( CHECKOUT_DEADLINE - SECONDS ))"
+    [ "$bounded" -ge 1 ] || return 1
+  fi
   if [ -n "$SCRATCH" ]; then
     mkdir -p -- "$SCRATCH"
     container="$(mktemp -d -p "$SCRATCH" adversarial-checkout.XXXXXX)"
@@ -820,7 +825,11 @@ make_checkout() {  # prints the path of a registered throwaway detached worktree
   fi
   dir="$(abspath "$container/head-${HEAD_SHA:0:12}")"
   git worktree prune
-  git worktree add -q --detach "$dir" "$HEAD_SHA"
+  if [ -n "$bounded" ]; then
+    timeout -s KILL "${bounded}s" git worktree add -q --detach "$dir" "$HEAD_SHA" || return 1
+  else
+    git worktree add -q --detach "$dir" "$HEAD_SHA" || return 1
+  fi
   printf '%s\n' "$dir" >> "$REGISTRY"
   printf '%s\n' "$dir"
 }
@@ -995,7 +1004,12 @@ case "$cmd" in
     printf 'adversarial-pipeline: phase=%s model=%s; %s\n' "$phase" "$MODEL_LABEL" "$availability_state" >&2
     write_dossier "$phase" "$dossier"
     # Every phase gets its own throwaway checkout; no agent ever runs in the primary checkout.
-    checkout="$(make_checkout)"
+    CHECKOUT_DEADLINE="$phase_deadline"
+    checkout="$(make_checkout)" || {
+      unset CHECKOUT_DEADLINE
+      fail_phase 19 "the $phase phase was killed by --timeout: the ${TIMEOUT}s phase deadline expired while creating the throwaway checkout (model=$MODEL_LABEL); the phase is a failure, not a clean one."
+    }
+    unset CHECKOUT_DEADLINE
     CHECKOUT_PATH="$checkout"
     q_prompt="$(printf '%q' "$dossier")"
     q_out="$(printf '%q' "$out")"
@@ -1044,8 +1058,8 @@ case "$cmd" in
     echo "Phase $phase -> $out" >&2
     if [ "$phase" = "arbitrate" ]; then
       cat -- "$out" || {
-        echo "ERROR: could not deliver the arbitration report (see the error above); the phase is accepted and stamped, but its report did not reach stdout" >&2
-        exit 1
+        echo "ERROR: could not deliver the arbitration report (see the error above); the phase is accepted and stamped at $out, but its report did not reach stdout" >&2
+        exit 21
       }
     fi
     ;;
