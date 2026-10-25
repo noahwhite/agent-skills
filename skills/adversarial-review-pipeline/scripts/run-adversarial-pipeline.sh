@@ -826,9 +826,9 @@ make_checkout() {  # prints the path of a registered throwaway detached worktree
     container="$(mktemp -d -t adversarial-checkout.XXXXXX)"
   fi
   dir="$(abspath "$container/head-${HEAD_SHA:0:12}")"
-  git worktree prune
   if [ -n "$bounded" ]; then
-    timeout -s KILL "${bounded}s" git worktree add -q --detach "$dir" "$HEAD_SHA"
+    # The prune is part of the checkout work and is charged to the same budget.
+    timeout -s KILL "${bounded}s" bash -c "git worktree prune && git worktree add -q --detach $(printf '%q' "$dir") $(printf '%q' "$HEAD_SHA")"
     rc=$?
     case "$rc" in
       0) ;;
@@ -836,6 +836,7 @@ make_checkout() {  # prints the path of a registered throwaway detached worktree
       *) rmdir -- "$container" 2>/dev/null || true; return 2 ;;
     esac
   else
+    git worktree prune
     git worktree add -q --detach "$dir" "$HEAD_SHA" || return 2
   fi
   printf '%s\n' "$dir" >> "$REGISTRY"
