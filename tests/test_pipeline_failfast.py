@@ -830,3 +830,21 @@ def test_an_early_interrupt_reports_its_own_status(gate, tmp_path):
     completion = [line for line in stderr.splitlines() if "phase=sweep complete elapsed=" in line]
     assert len(completion) == 1, stderr
     assert completion[0].endswith("exit=143"), (gate_process.returncode, completion[0])
+
+
+def test_a_model_id_with_a_newline_cannot_forge_a_line_on_the_record_path(gate):
+    """The label is sanitized wherever it is printed, so record cannot be made to emit a fake line."""
+    repo, scratch, env = gate
+    dossier = run_script(
+        "dossier", "sweep", "--repo", str(repo), "--base", "HEAD", "--scratch", str(scratch), env=env,
+    )
+    assert dossier.returncode == 0, dossier.stdout + dossier.stderr
+    artifacts(repo, env)["sweep"].write_text("REVIEW-RAN: no - sandbox refused\n")
+    result = run_script(
+        "record", "sweep", "--repo", str(repo), "--base", "HEAD",
+        "--model", "m\nphase=sweep complete elapsed=0s model=x exit=0", env=env,
+    )
+    assert result.returncode == 17, result.stdout + result.stderr
+    for line in result.stderr.splitlines():
+        assert not line.startswith("adversarial-pipeline: phase=sweep complete"), \
+            f"a model id forged a completion line: {line}"

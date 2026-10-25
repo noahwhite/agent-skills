@@ -76,8 +76,9 @@
 # after one second, then at least every 30 seconds - carrying the phase, the elapsed seconds, the
 # configured timeout and the availability-check state, and one completion line with the elapsed time
 # and the phase's exit status on every exit of the phase attempt, success or failure. A successful
-# phase writes it before it reports the artifact path and before it echoes an arbitration report, and
-# after it only the checkout cleanup's own result can appear ('elapsed' there is the whole attempt; a
+# phase writes it before it reports the artifact path and before it echoes an arbitration report, so
+# after it only the artifact-path line, that echo and the checkout cleanup's own result can appear
+# ('elapsed' there is the whole attempt; a
 # heartbeat line reports the agent's own elapsed seconds), and it carries 'exit=<status>' after the
 # model id. The attempt starts once `run` accepts its agent command, so a `run` refused before that -
 # usage, not a Git repository, a bad base - prints no completion line, because no phase ran. An agent
@@ -195,7 +196,10 @@ if [ "$cmd" = "run" ]; then
     *[!][A-Za-z0-9._/:@#+~,-]*) die 2 "--model must be a model id: letters, digits and . _ / : @ # + ~ , [ ] - only" ;;
   esac
 fi
-MODEL_LABEL="${MODEL:-not supplied}"
+# The label is printed by every command, so control characters are stripped here: a model id can
+# never forge a line of output, whichever command carries it.
+MODEL_LABEL="$(printf '%s' "${MODEL:-not supplied}" | tr -d '\000-\037\177')"
+[ -n "$MODEL_LABEL" ] || MODEL_LABEL="not supplied"
 availability_state="availability check: not configured"
 
 # The target repository: --repo, else the current directory. Never this script's location.
@@ -1014,7 +1018,10 @@ case "$cmd" in
     completion_line "$phase" "$(( SECONDS - PHASE_START ))" 0
     echo "Phase $phase -> $out" >&2
     if [ "$phase" = "arbitrate" ]; then
-      cat -- "$out" || echo "WARNING: could not echo the arbitration report to stdout" >&2
+      cat -- "$out" || {
+        echo "ERROR: could not write the arbitration report to stdout; the phase is accepted and stamped, but its report was not delivered" >&2
+        exit 1
+      }
     fi
     ;;
 
