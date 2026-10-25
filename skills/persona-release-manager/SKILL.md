@@ -40,13 +40,16 @@ Cite `qa-verification` and `persona-platform-sre` as owning skills; do not resta
 Read `profile.git.promotion` first.
 A step that needs a value the profile does not set stops and asks for it.
 
-- `whole-branch` and `per-story`: this skill enumerates the issues included in the promotion before opening anything.
-  Derive the set from merged feature PRs on the integration branch that are not on the release branch, mapped to their issue keys, and reconcile it with the issues awaiting promotion in the tracker.
+- `whole-branch` and `per-story`: this skill enumerates the issues included in the promotion; under `whole-branch` it does so before opening anything, and under `per-story` the set is the single story, whose evidence check runs once the Promotion step has cut its story-scoped branch and before that promotion merges.
+  Under `whole-branch`, derive the set from merged feature PRs on the integration branch that are not on the release branch, mapped to their issue keys, and reconcile it with the issues awaiting promotion in the tracker.
   For each issue, confirm passing pre-production verification evidence from the last environment in `profile.environments` whose `production` is not true.
   That evidence is produced per `qa-verification`; a build check alone is not verification evidence.
-  Bind the evidence to the promotion head: record the build SHA or commit it was taken against, and re-check that it matches the head the promotion will carry.
-  Evidence for an earlier build, or for a head that a later merge or review fix changed, is stale and stops the promotion.
-  A promotion whose tree is identical to the verified build satisfies this check even when its commit SHA differs.
+  Under `whole-branch`, bind the evidence to the promotion head: record the build SHA or commit it was taken against, and re-check that it matches the head the promotion will carry.
+  Under `per-story`, that head is the head of the story-scoped promotion branch the Promotion step builds, rather than the integration branch head, and this check runs once that branch exists: the branch must carry only the story's change, which its story-scoped diff against the release branch shows as the same patch ids as the story's merged feature PRs, and the evidence must be for that branch head or for a build whose tree, for the files the story changes, is identical to that branch's.
+  A build that predates or omits that change does not cover it, so stop and request evidence for that head per `qa-verification`.
+  Under `per-story`, a review fix that changes the branch's content after the evidence was taken makes that evidence stale.
+  Under `whole-branch`, evidence for an earlier build, or for a head that a later merge or review fix changed, is stale and stops the promotion.
+  Under `whole-branch`, a promotion whose tree is identical to the verified build satisfies this check even when its commit SHA differs.
   Evidence-only commits under `profile.qa.evidence_dir` do not invalidate readiness; compare the code tree, not the evidence directory.
   Missing evidence stops the promotion and names the issue.
 - `none`: the integration branch is the release branch, so readiness is each story's own deploy verification in the environment that branch deploys to.
@@ -64,8 +67,9 @@ Never promote a subset of the enumerated issues under `whole-branch`; re-run rea
   Keep the promotion PR's field separate from quoted or copied story excerpts; those excerpts are not additional release-type fields.
 - In the body of the promotion PR this skill opens, write one `Release-Type: major|minor|patch` line with the requested component selected.
   Under `whole-branch`, select the highest component any promoted story requests (`major` above `minor` above `patch`); absent requests default to `patch`.
-- `per-story`: promote only the single story's change, using the mechanism the Promotion section defines; never open a promotion PR that carries another story.
-  When the Promotion section does not define a story-scoped mechanism, stop and ask for it; do not invent one or fall back to a whole-branch PR.
+- `per-story`: promote only the single story's change with the `per-story` promotion mechanism that [references/github.md](references/github.md) Promotion defines.
+  Never open a promotion PR that carries another story.
+  This skill cites that mechanism and does not redefine it; stop and ask only for a profile value the profile does not set, never for a mechanism the Promotion section defines.
 - Inspect the promotion with a fresh three-dot diff, per the Promotion section.
 - Never update-branch a promotion PR and never merge the release branch into the integration branch; no back-merges.
 - Resolve promotion conflicts on a separate branch, per the Promotion section.
@@ -77,7 +81,8 @@ Never promote a subset of the enumerated issues under `whole-branch`; re-run rea
 - Launch the configured reviewer and then the separate clean, neutral adjudicator; never reuse the author's context or supply either one a verdict.
   If the runtime cannot launch a configured role, stop and say the review is unavailable.
 - Triage each finding by owning story: name the issue whose change introduced it, using the diff and the promotion's issue map.
-- Route every valid fix through the integration branch on a new feature branch, then let the promotion PR carry it, per the Promotion section of [references/github.md](references/github.md); this section cites that rule and does not redefine it.
+- Under `whole-branch`, route every valid fix through the integration branch on a new feature branch, then let the promotion PR carry it, per the Promotion section of [references/github.md](references/github.md); this section cites that rule and does not redefine it.
+- Under `per-story`, route every valid fix per that section's review-fix flow, with the story's pre-production evidence refreshed before the merge.
   Never fix on the release branch, and never update the promotion branch outside that flow.
 - Re-run the review at the new head after any change, then post the review of record on the PR as a `--comment` PR review before the merge.
 - When a valid fix changes the promotion head, request fresh pre-production verification for the affected story before the merge; the earlier evidence no longer covers that head.

@@ -20,6 +20,19 @@ def section(text: str, heading: str) -> str:
     return rest[: following.start()] if following else rest
 
 
+def per_story_readiness_line(body: str) -> str:
+    """The single Release readiness binding for per-story evidence, with its continuation lines."""
+    lines = body.splitlines()
+    starts = [i for i, line in enumerate(lines) if "under `per-story`, that head is" in line]
+    assert len(starts) == 1, f"expected one per-story readiness binding, found {len(starts)}"
+    block = [lines[starts[0]]]
+    for follow in lines[starts[0] + 1:]:
+        if not follow.startswith("  "):
+            break
+        block.append(follow)
+    return "\n".join(block)
+
+
 def test_skill_file_exists() -> None:
     assert SKILL.is_file(), f"missing {SKILL.relative_to(ROOT)}"
 
@@ -96,14 +109,31 @@ def test_readiness_section_covers_each_promotion_mode() -> None:
         "evidence-only commits",
         "compare the code tree",
         "evidence for an earlier build, or for a head that a later merge or review fix changed, is stale and stops the promotion",
+        "story-scoped promotion branch",
+        "rather than the integration branch head",
     ):
         assert phrase in body, f"readiness missing: {phrase}"
+    binding = per_story_readiness_line(body).splitlines()
+    for phrase in ("story-scoped promotion branch", "rather than the integration branch head",
+                   "this check runs once that branch exists",
+                   "must carry only the story's change",
+                   "the same patch ids as the story's merged feature prs",
+                   "for a build whose tree, for the files the story changes, is identical to that branch's"):
+        assert phrase in binding[0], f"per-story readiness binding missing: {phrase}"
+    assert "a build that predates or omits that change does not cover it" in binding[1]
+    stale = [line for line in body.splitlines() if "evidence for an earlier build" in line]
+    assert len(stale) == 1, stale
+    assert stale[0].startswith("  under `whole-branch`,"), stale[0]
     whole = SKILL.read_text().lower()
-    for forbidden in ("promotion set under `none`", "promotion set for `none`", "stale evidence is accepted", "accept stale evidence"):
+    for forbidden in ("promotion set under `none`", "promotion set for `none`", "stale evidence is accepted", "accept stale evidence",
+                      "skip this check", "promote without evidence", "do not require evidence",
+                      "may be deferred", "deferred until after merge", "accepted when stale",
+                      "evidence is optional"):
         assert forbidden not in whole, f"readiness contradicts itself: {forbidden}"
 
 
 def test_promotion_section_cites_and_does_not_redefine() -> None:
+    skill_text = SKILL.read_text().lower()
     body = section(SKILL.read_text(), "Promotion").lower()
     for phrase in (
         "follows `profile.git.promotion` exactly",
@@ -115,12 +145,31 @@ def test_promotion_section_cites_and_does_not_redefine() -> None:
         "per-story",
         "single story's change",
         "never open a promotion pr that carries another story",
-        "story-scoped mechanism",
-        "stop and ask for it",
+        "`per-story` promotion mechanism",
+        "cites",
+        "stop and ask only for a profile value the profile does not set",
+        "never for a mechanism the promotion section defines",
         "three-dot diff",
         "no back-merges",
     ):
         assert phrase in body, f"promotion missing: {phrase}"
+    for removed in ("story-scoped mechanism", "stop and ask for it"):
+        assert removed not in body, f"promotion still asks for a defined mechanism: {removed}"
+    lines = body.splitlines()
+    prohibition = "never open a promotion pr that carries another story."
+    matches = [line for line in lines if line.strip().startswith(prohibition)]
+    assert len(matches) == 1, "the no-other-story prohibition must appear exactly once"
+    assert matches[0].strip() == prohibition, "the prohibition must not carry an exception"
+    assert "unless" not in body, "the Promotion section must not qualify a prohibition"
+    mechanism = [line for line in lines if line.startswith("- `per-story`: promote only")]
+    assert len(mechanism) == 1, mechanism
+    assert "[references/github.md](references/github.md)" in mechanism[0], "the mechanism link must resolve"
+    assert "`per-story` promotion mechanism" in mechanism[0], "the mechanism must be cited by name"
+    assert "cites that mechanism" in mechanism[0] or "cites that mechanism" in body, "the skill must cite it"
+    assert "cites nothing" not in body
+    for forbidden in ("stale per-story evidence is accepted", "per-story evidence may be stale",
+                      "accept stale evidence for per-story"):
+        assert forbidden not in skill_text, f"readiness accepts stale per-story evidence: {forbidden}"
     whole = SKILL.read_text().lower()
     for forbidden in ("batch all pending stories", "batch the promotion", "batch stories into",
                       "include every pending story", "every pending story in one promotion"):
@@ -142,6 +191,12 @@ def test_review_section_covers_the_cumulative_diff_and_ownership() -> None:
         "post the review of record on the pr as a `--comment` pr review before the merge",
     ):
         assert phrase in body, f"review missing: {phrase}"
+    fix_bullets = [line for line in body.splitlines() if "route every valid fix" in line]
+    assert len(fix_bullets) == 2, fix_bullets
+    assert fix_bullets[0].startswith("- under `whole-branch`,"), fix_bullets[0]
+    assert fix_bullets[1].startswith("- under `per-story`,"), fix_bullets[1]
+    assert "review-fix flow" in fix_bullets[1], fix_bullets[1]
+    assert "pre-production evidence refreshed before the merge" in fix_bullets[1], fix_bullets[1]
 
 
 def test_release_profile_contract() -> None:
