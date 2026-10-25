@@ -130,6 +130,12 @@ else:
     outcome = (HERE / "outputs" / "chal-e2-output.txt").read_text().splitlines()[0].split(":", 1)[1].strip()
     if f"Outcome: {outcome}" not in challenges.group(1):
         problems.append(f"challenges line does not record the outcome {outcome!r}")
+    prompt_text = (HERE / "prompts" / "chal-prompt.txt").read_text()
+    match = re.search(r"The facilitator has challenged that ground: (.*?)\n\nReply in this exact shape", prompt_text, re.S)
+    if not match:
+        problems.append("could not read the captured challenge text")
+    elif match.group(1).strip() not in challenges.group(1):
+        problems.append("challenges line does not quote the captured challenge verbatim")
 
 # 8. Re-vote prompts state the discussion that was held.
 for prompt in sorted((HERE / "prompts").glob("v3-*-prompt.txt")):

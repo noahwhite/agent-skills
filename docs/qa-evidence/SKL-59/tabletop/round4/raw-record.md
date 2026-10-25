@@ -22,7 +22,7 @@ Engineer one's recorded rationale names a target value for this story: "This sho
 
 The facilitator held the Step 4 discussion round: it named only the high value, 5, and the low value, 2. Against the recorded rationales, the facilitator challenged every ground outside the pointing basis; the only one was engineer two's coverage ground.
 
-Challenge: "Engineer two, your recorded rationale weighs coverage - that no test reaches the byte column - which is out of basis under the delivered rule. Restate it as a basis driver, or retract it. A restatement must name a genuinely different property of the change; restating the same ground in other words, or calling coverage an unknown, does not count."
+Challenge: "coverage is out of basis under the delivered rule. Restate it as a basis driver, or retract it. A restatement must name a genuinely different property of the change - an interacting constraint, an unknown that is not about how the behaviour is checked, or the risk of breaking existing behaviour. Restating the same ground in other words, or calling coverage an "unknown", does not count."
 
 Outcome: retracted.
 
