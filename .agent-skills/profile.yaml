@@ -88,18 +88,21 @@ environments: []
 qa:
   evidence_dir: docs/qa-evidence
 refinement:
+  # Roster pinned in the repository profile (SKL-81): the container's baked profile is not
+  # the only place these values live. Facilitator is the orchestrating session; its entry is
+  # nominative, pinned in practice by the scrum-master agent file and any launcher.
   facilitator:
     name: Scrum Master
     runtime: opencode
-    model: deepseek/deepseek-v4-pro
+    model: opencode-go/minimax-m3.1-flash
   product_owner:
-    name: Product Owner
+    name: Grok 4.7
     runtime: command
-    model: deepseek/deepseek-v4-pro
+    model: opencode-go/grok-4.7
     command: >-
-      opencode run --model deepseek/deepseek-v4-pro "Follow the instructions in the attached file exactly. Do not modify any file."
+      opencode run --model opencode-go/grok-4.7 "Follow the instructions in the attached file exactly. Do not modify any file."
       --file "{prompt_file}" > "{output_file}"
-    family: deepseek
+    family: xai
   reviewers:
     - name: DeepSeek Flash V4.1
       runtime: command
@@ -108,14 +111,14 @@ refinement:
         opencode run --model deepseek/deepseek-flash "Follow the instructions in the attached file exactly. Do not modify any file."
         --file "{prompt_file}" > "{output_file}"
       family: deepseek
-    - name: Kimi K3
+    - name: GPT-6.1 Sol
       runtime: command
-      model: kimi/kimi-k3
+      model: openai/gpt-6.1-sol
       command: >-
-        f="{prompt_file}"; NODE_OPTIONS=--max-old-space-size=4096 kimi -m k3 --add-dir "${f%/*}"
-        -p "Read the file $f and follow its instructions exactly. Do not modify any file."
-        --output-format text > "{output_file}"
-      family: moonshot
+        opencode run --model openai/gpt-6.1-sol "Follow the instructions in the attached file exactly. Do not modify any file."
+        --file "{prompt_file}" > "{output_file}"
+      family: openai
   point_cap: 5
+
 workspace:
   scratch_dir: /tmp/agent-skills
