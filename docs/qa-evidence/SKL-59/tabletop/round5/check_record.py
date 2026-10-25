@@ -55,6 +55,7 @@ THIS_STORY_REF = re.compile(r"(?i)\bthis (?:one|story)\b|\bit\b")
 COMPARATIVE = re.compile(r"(?i)\b(?:unlike|than|from|versus|vs\.?)\s+$")
 RELATIVE = re.compile(r"(?i)\b(?:which|who|that)\b")
 COPULA = re.compile(r"(?i)\b(?:is|are|was|were|remains|seems)\s+$")
+SUBJECT_INTRO = re.compile(r"(?i)(?:,|\bthat|\bwhich|\bwho|\band|\bbut|\bwhile|\bso|\byet)\s+$")
 # A coordinated clause inherits the subject of the clause it follows, so a second sizing verb in the same
 # sentence is still attributed, and a comparison clause that scores the comparable is not.
 # Only a comma-marked coordination starts a new clause; an unmarked "and" may sit inside a relative clause.
@@ -101,14 +102,16 @@ def story_is_sized(sentence: str) -> bool:
                     return True
                 continue
             nearest = refs[preceding[-1]]
-            if is_this_story(clause, refs, preceding[-1]):
+            if is_subject(clause, nearest) and is_this_story(clause, refs, preceding[-1]):
                 return True
-            # the nearest reference is another item's; a relative clause binds the verb to it
+            # otherwise a relative clause binds the verb to the item it modifies
             if RELATIVE.search(clause[nearest.end():verb.start()]):
                 continue
             owner = None
             for index in reversed(preceding):
-                if COMPARATIVE.search(clause[:refs[index].start()]):
+                ref = refs[index]
+                # an item that is not in subject position is an object, so the clause subject still owns the verb
+                if not is_subject(clause, ref) or COMPARATIVE.search(clause[: ref.start()]):
                     continue
                 owner = "this" if is_this_story(clause, refs, index) else "other"
                 break
@@ -117,13 +120,25 @@ def story_is_sized(sentence: str) -> bool:
     return False
 
 
+def is_subject(clause: str, ref: re.Match) -> bool:
+    """A reference opens a clause or follows a comma, relative pronoun or coordination; otherwise it is an object."""
+    before = clause[: ref.start()]
+    if not before.strip():
+        return True
+    return bool(SUBJECT_INTRO.search(before) or COPULA.search(before))
+
+
 def is_this_story(clause: str, refs: list, index: int) -> bool:
     """A reference is this story, except a bare "the story" that names another item."""
     token = refs[index].group(0)
     if token.lower() != "the story":
         return bool(THIS_STORY_REF.fullmatch(token))
-    before = clause[: refs[index].start()]
-    return index == 0 or bool(COPULA.search(before))
+    if index == 0:
+        return True
+    # a predicate "the story" still names this story only when this story is the clause subject
+    if not COPULA.search(clause[: refs[index].start()]):
+        return False
+    return refs[0].group(0).lower() != "the story" and bool(THIS_STORY_REF.fullmatch(refs[0].group(0)))
 
 
 def prescriptions(text: str) -> list[str]:
@@ -280,7 +295,7 @@ for stage, expected_count in (("v1", 3), ("v2", 3), ("v3", 3), ("v4", 3), ("disc
         problems.append(f"{stage}: expected {expected_count} captures, found {found}")
 
 # The committed matrix must not shrink: adding cases means updating this count deliberately.
-MATRIX_COUNTS = (21, 12)
+MATRIX_COUNTS = (22, 12)
 cases_file = HERE / "prescription-cases.md"
 section = None
 must_fail, must_pass = [], []

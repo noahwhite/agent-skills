@@ -24,6 +24,7 @@ The checker re-runs this matrix on every invocation and fails if any case moves 
 - This story, given its extra constraint, scores 8 points.
 - This story, unlike SKL-53, scores 8 points.
 - This story scores 5 in my view.
+- This story uses SKL-53 as a benchmark and sizes at 8 points.
 - This story is the story that scores 8 points.
 - This story differs from the story that scores 5 points, and scores 8 points.
 - This story differs from SKL-53, the story that scores 5 points, and scores 8 points.
