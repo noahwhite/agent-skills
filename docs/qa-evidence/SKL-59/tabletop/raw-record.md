@@ -26,8 +26,22 @@ The 2026-10-24 owner amendment permits naming an already-estimated item's record
 - Engineer one, value 3:
   > Engineer one, your recorded rationale weighs testability - confirming the behaviour only by reading the skill text - which is out of basis. Restate it as a basis driver or retract it.
   First outcome: restated - "The change's behaviour can only be confirmed by reading the skill text, not by running or observing it, which raises the story's uncertainty and risk; that is the basis driver I weighed."
-  The facilitator did not accept that restatement, because it describes how well the behaviour is checked, which is the same ground the delivered rule puts out of basis, and re-challenged:
-  > The facilitator does not accept your restatement: it describes how well the behaviour is checked, which is the same ground the delivered rule puts out of basis. A restatement must name a genuinely different property of the change.
+  Exact re-challenge text sent to engineer one:
+
+```text
+You are one voter in a pointing round. Your recorded value and rationale are below.
+
+VALUE: 3
+RATIONALE: "Testability is weak here: the flag's behaviour can only be confirmed by reading the skill text, and that is what I weighed."
+
+The facilitator does not accept your restatement: "The change's behaviour can only be confirmed by reading the skill text, not by running or observing it, which raises the story's uncertainty and risk" describes how well the behaviour is checked, which is the same ground the delivered rule puts out of basis. A restatement must name a genuinely different property of the change - an interacting constraint, an unknown that is not about how the behaviour is checked, or the risk of breaking existing behaviour.
+
+Reply in this exact shape and nothing else:
+
+OUTCOME: <restated or retracted>
+RATIONALE: <one or two sentences, or none>
+```
+
   Final outcome: retracted - "My recorded value rested entirely on testability, which is out of basis. I have no other property of the change to weigh, so I withdraw the value."
 - Engineer two, value 5:
   > Engineer two, your recorded rationale weighs coverage - that no test reaches the new filter path - which is out of basis. Restate it as a basis driver or retract it.
@@ -87,3 +101,16 @@ The first attempt at this re-vote produced rationales that named a target value 
 - Product owner: accepts {3} - "The flag depends on comparing candidate content against git's last-committed state, an interacting constraint, and the default dry-run path must stay byte-identical, a real risk of silently breaking existing behaviour."
 - Engineer one: accepts {2} - "A single additive filter on the existing dry run; the only real complexity is the interacting constraint that the default output must stay byte-identical and the change must distinguish changed candidate paths from the last committed state, a modest risk of breaking existing behaviour."
 - Engineer two: accepts {2} - "The admitted driver is the risk of breaking existing behaviour: AC2 requires the default dry-run output to remain byte-identical, so the new filter must be introduced without altering the existing output path. The only interacting constraint is comparing each candidate's content against the last committed state."
+
+## Round 2, the no-consensus decision
+
+The three accepted sets were 3, 2 and 2, so the intersection is empty. Each voter then recorded the paths it accepts:
+
+- Product owner: PATHS: {leave unpointed}
+AMENDMENTS: none
+- Engineer one: PATHS: {re-refine}
+AMENDMENTS: clarify the scope boundary between the {3} and {2} estimates, and pin the acceptance criteria so the remaining size ambiguity resolves.
+- Engineer two: PATHS: {re-refine}
+AMENDMENTS: clarify acceptance criteria so the 2-vs-3 complexity difference is testable; define explicit boundaries and dependencies before re-pointing
+
+The intersection of the three accepted path sets is empty, so the story is left unpointed, which is the default when no path is in all three sets.
