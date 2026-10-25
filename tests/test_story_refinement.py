@@ -343,6 +343,12 @@ def test_records_names_the_no_consensus_decision() -> None:
     assert "any no-consensus decision with each voter's accepted paths and the decision rationale" in body
 
 
+
+def test_records_requires_every_challenge_with_its_outcome() -> None:
+    body = flat(section(SKILL.read_text(), "Records"))
+    assert "every challenge with its outcome" in body
+
+
 def test_skill_links_every_required_reference() -> None:
     text = SKILL.read_text()
     for name in GENERATED_REFERENCES:
@@ -707,18 +713,46 @@ def test_pointing_basis_is_its_own_item_right_after_the_launch_item() -> None:
 
 def test_step_three_requires_the_basis_in_every_pointing_prompt() -> None:
     assert process_items(STEP_THREE)[2] == (
-        "The sentence above is the pointing basis. Every pointing prompt or prompt file carries it verbatim, "
-        "including the re-run after a Step 4 re-refine and each slice estimate under the Split rule."
+        "The sentence above is the pointing basis. Every pointing prompt or prompt file carries it verbatim, and "
+        "carries the item 4 rationale rule, including the re-run after a Step 4 re-refine and each slice estimate "
+        "under the Split rule."
     )
 
 
 def test_step_three_rationale_names_complexity_drivers_and_no_duration() -> None:
     body = process_item(STEP_THREE, "Each voter submits one point value")
-    assert "plus a short complexity rationale." in body
+    assert "plus a short rationale under the pointing basis in item 2." in body
     assert (
-        "The rationale names the complexity driver or drivers the voter weighed "
-        "and cites no duration, effort or run-cost measure."
+        "The rationale names drivers the pointing basis admits and nothing else, so verification strength, "
+        "testability, coverage, the shape of the tests, a duration, effort or run-cost measure are out of basis."
     ) in body
+    assert (
+        "Verification strength is how well a behaviour is checked and the risk of breaking existing behaviour is "
+        "what can silently change, so the first is out of basis while the second is a driver the basis admits, "
+        "distinct from an interacting constraint the change carries."
+    ) in body
+    assert (
+        "The rationale names no target value for this story, never treats another voter's revealed value as its "
+        "answer, and names no point value before the reveal."
+    ) in body
+    assert "the complexity driver or drivers the voter weighed" not in body
+    assert "design difficulty, an interacting constraint, an unknown" not in body
+
+
+def test_step_three_does_not_restate_the_pointing_basis() -> None:
+    items = process_items(STEP_THREE)
+    assert squash(POINTING_BASIS) in squash(items[1]), "Step 3 item 2 carries the basis and belongs to SKL-60"
+    without_basis_item = " ".join(items[:1] + items[2:])
+    assert squash(POINTING_BASIS) not in squash(without_basis_item)
+    for fragment in (
+        "A point or size measures",
+        "A point measures",
+        "measures design difficulty",
+        "design difficulty",
+        "the amount of work or elapsed time",
+        "amount of work",
+    ):
+        assert fragment not in without_basis_item, fragment
 
 
 def test_step_four_re_vote_carries_the_basis_by_reference_to_step_three() -> None:
@@ -726,6 +760,26 @@ def test_step_four_re_vote_carries_the_basis_by_reference_to_step_three() -> Non
     assert item.startswith("Run one re-vote.")
     assert "The re-vote prompt carries the pointing basis from Step 3." in item
     assert squash(POINTING_BASIS) not in squash(operative_step(STEP_FOUR))
+
+
+def test_step_three_defines_the_reveal() -> None:
+    items = process_items(STEP_THREE)
+    assert (
+        "The reveal is the moment the facilitator has recorded all three values, after which the SM/EM may "
+        "comment on sizing and the discussion opens."
+    ) in items[4]
+
+
+def test_step_four_re_vote_prompt_carries_the_rationale_rule() -> None:
+    item = process_items(STEP_FOUR)[1]
+    assert "It also carries the Step 3 item 4 rationale rule." in item
+
+
+def test_pointing_template_states_the_standing_consensus() -> None:
+    assert (
+        "- Consensus: <highest value in the intersection of the vote that stands, or none when the intersection is empty>"
+        in pointing_template()
+    )
 
 
 def test_step_four_re_vote_requires_a_complexity_rationale() -> None:
@@ -746,6 +800,150 @@ def test_step_three_sizing_context_is_in_complexity_terms() -> None:
         "comparable unknowns and constraints, and relevant scope differences."
     ) in body
     assert "historical sizing" not in squash(SKILL.read_text())
+    assert "Before the reveal it must not name any point value." in body
+    assert (
+        "After the reveal it may compare this story with an already-estimated item and name that item's recorded "
+        "value, but it must not name or imply a target value for this story, including one implied by a split "
+        "status, and such a statement is an anchoring event under the Anchoring guardrail."
+    ) in body
+
+
+STEP_FOUR_ITEM_PREFIXES = [
+    "Hold one discussion round that names only the high and the low.",
+    "Run one re-vote.",
+    "Consensus is the highest value in the intersection of the three accepted sets.",
+    "Never average and never take a value silently.",
+    "The facilitator records the consensus; it does not declare it.",
+    "If the split trigger is met",
+    "No-consensus decision:",
+    "Split applies the split rule as a group-decided split.",
+    "Re-refine returns to Step 2.",
+]
+
+
+def test_step_four_process_items_keep_their_count_and_order() -> None:
+    items = process_items(STEP_FOUR)
+    assert len(items) == len(STEP_FOUR_ITEM_PREFIXES)
+    for index, prefix in enumerate(STEP_FOUR_ITEM_PREFIXES):
+        assert items[index].startswith(prefix), (index, prefix)
+
+
+def test_step_four_facilitator_challenges_every_off_basis_ground() -> None:
+    item = process_items(STEP_FOUR)[0]
+    assert (
+        "In that round, and against the rationales recorded in Step 3, the facilitator challenges every ground "
+        "outside the pointing basis, whether it is heard in the discussion or read in a recorded rationale, "
+        "except a target value for this story and, from the SM/EM, a statement of elapsed time, effort or run "
+        "cost, which are anchoring events the moment they are seen."
+    ) in item
+    assert (
+        "Challenging a ground is not comparing values or singling out a voter: in the discussion the facilitator "
+        "names the ground's kind, never its verbatim text, its author or the author's value, and the pointing "
+        "record carries the author; a ground that embeds a point value is named by its kind alone."
+    ) in item
+    assert (
+        "A challenged ground must be restated as a basis driver or retracted, except a target value named or "
+        "implied for this story, which is an anchoring event as soon as it is seen; a voter whose basis does not "
+        "support its recorded value records that in the re-vote."
+    ) in item
+    assert (
+        "The SM/EM withdraws or restates its own sizing comment on the same terms, except a point value named "
+        "before the reveal, a target value named or implied for this story, including one implied by a split "
+        "status, treating another voter's revealed value as the answer, or a statement of elapsed time, effort "
+        "or run cost, each of which is an anchoring event as soon as the facilitator sees it."
+    ) in item
+    assert "A ground that is neither is an anchoring event under the Anchoring guardrail." in item
+
+
+def test_step_four_re_vote_challenges_an_off_basis_rationale() -> None:
+    item = process_items(STEP_FOUR)[1]
+    assert (
+        "Recording an accepted set is not treating another voter's revealed value as the answer: the rationale "
+        "for the set is about the basis, never about which value another voter recorded."
+    ) in item
+    assert (
+        "A re-vote rationale outside the pointing basis is challenged before the consensus is recorded, under "
+        "the same restate-or-retract rule as item 1, and a voter that retracts its re-vote rationale records a "
+        "replacement accepted set within that same re-vote, with a basis-driver rationale, or records no "
+        "consensus."
+    ) in item
+
+
+def test_anchoring_guardrail_makes_a_point_value_sizing_note_an_event_on_challenge() -> None:
+    body = flat(section(SKILL.read_text(), GUARDRAIL))
+    assert (
+        "an anchoring trigger is an off-basis ground step 4 challenges, so it becomes an anchoring event only "
+        "when it is neither restated as a basis driver nor retracted" in body
+    )
+    assert (
+        "every prohibited behaviour above, a target value named or implied for this story by any participant, "
+        "and an sm/em sizing comment that names a point value before the reveal or states elapsed time, effort "
+        "or run cost, are anchoring events as soon as they are seen, with no challenge, restatement or "
+        "retraction path" in body
+    )
+    assert (
+        "any other challenged ground that is neither restated as a basis driver nor retracted, or a sizing "
+        "comment the sm/em neither withdraws nor restates, is an anchoring event, and the recovery below is the "
+        "single void rule: it voids the consensus and every vote recorded after the anchor, and for a ground read "
+        "in a recorded rationale the anchor precedes that rationale, so the vote it grounds and every later vote "
+        "are void, and the independent vote from step 3 is re-run in newly created voter contexts that exclude "
+        "the tainted discussion and sizing comment" in body
+    )
+
+
+GUARDRAIL = "Anchoring guardrail"
+
+
+def test_anchoring_guardrail_bans_the_sm_em_value_behaviours() -> None:
+    body = flat(section(SKILL.read_text(), GUARDRAIL))
+    assert (
+        "for the sm/em, naming a point value before the reveal, naming or implying a target value for this "
+        "story, including one implied by a split status, or treating another voter's revealed value as the "
+        "answer" in body
+    )
+    assert "naming a target number" not in body
+
+
+def test_anchoring_guardrail_names_off_basis_grounds_as_a_trigger() -> None:
+    body = flat(section(SKILL.read_text(), GUARDRAIL))
+    assert (
+        "an anchoring trigger is an off-basis ground step 4 challenges, so it becomes an anchoring event only "
+        "when it is neither restated as a basis driver nor retracted" in body
+    )
+    assert (
+        "a ground that weighs verification strength, testability, coverage, the shape of the tests, or a "
+        "duration, effort or run cost is such a trigger when a voter weighs it in a rationale or raises it in "
+        "the discussion" in body
+    )
+    assert "verification strength, testability, coverage, the shape of the tests" in body
+
+
+def test_anchoring_guardrail_explains_why_context_cannot_exclude_a_recorded_value() -> None:
+    body = flat(section(SKILL.read_text(), GUARDRAIL))
+    assert (
+        "fresh voter contexts exclude the tainted discussion and the sizing comment, but they cannot exclude a "
+        "value recorded on the story surface that step 1 hands every voter with the story, so the step 3 "
+        "rationale rule is what keeps such a value from becoming the rationale's answer" in body
+    )
+
+
+def test_anchoring_guardrail_places_the_anchor_and_the_single_void_rule() -> None:
+    body = flat(section(SKILL.read_text(), GUARDRAIL))
+    assert (
+        "and the recovery below is the single void rule: it voids the consensus and every vote recorded after "
+        "the anchor, and for a ground read in a recorded rationale the anchor precedes that rationale, so the "
+        "vote it grounds and every later vote are void, and the independent vote from step 3 is re-run in newly "
+        "created voter contexts that exclude the tainted discussion and sizing comment" in body
+    )
+
+
+def test_anchoring_guardrail_recovery_mechanics_are_unchanged() -> None:
+    body = spaced(section(SKILL.read_text(), GUARDRAIL))
+    assert (
+        "On anchoring: stop the round, record the comment verbatim, void the consensus and any vote recorded "
+        "after the anchor, and re-run the independent vote with newly created voter contexts that exclude the "
+        "tainted discussion and sizing comment. Never reuse the sessions that saw the anchor. Record the recovery."
+    ) in body
 
 
 def test_step_three_time_or_effort_statement_is_an_anchoring_event() -> None:
@@ -755,14 +953,46 @@ def test_step_three_time_or_effort_statement_is_an_anchoring_event() -> None:
 
 def phrasing_rows() -> list[tuple[str, str]]:
     body = section(RECORD.read_text(), "Permitted and forbidden phrasing")
-    lines = [line.strip() for line in body.splitlines() if line.strip().startswith("|")]
-    assert lines[1] == "|---|---|", "the phrasing table has no separator row"
+    lines = [line.strip() for line in body.splitlines() if line.strip()]
+    start = next(index for index, line in enumerate(lines) if line.startswith("|"))
+    end = max(index for index, line in enumerate(lines) if line.startswith("|"))
+    table = lines[start : end + 1]
+    assert table[1] == "|---|---|", "the phrasing table has no separator row"
     rows = []
-    for line in lines[2:]:
+    for line in table:
+        assert line.startswith("|") and line.endswith("|"), f"a line inside the table is not a table row: {line}"
         cells = [cell.strip() for cell in line.strip("|").split("|")]
         assert len(cells) == 2, line
         rows.append((cells[0], cells[1]))
-    return rows
+    return rows[2:]
+
+
+PHRASING_INTRO = [
+    "The SM/EM may give factual, reference-only sizing context after all three values are recorded.",
+    "Everything in the forbidden column breaks independence or anchors the discussion.",
+    "A permitted comparison names at most one comparable story and at most one basis difference; "
+    "it never names a range, an average, elapsed time, effort, a target value for the story under estimate, "
+    "or a preferred value, and it names a point value only after all three values are recorded.",
+]
+PHRASING_TRAILER = (
+    "Record every SM/EM sizing comment with the pointing record, even when it stays inside the permitted column."
+)
+
+
+def test_phrasing_section_holds_only_the_intro_the_table_and_the_trailer() -> None:
+    body = section(RECORD.read_text(), "Permitted and forbidden phrasing")
+    lines = [line.strip() for line in body.splitlines() if line.strip()]
+    assert lines[:3] == PHRASING_INTRO
+    rows = len(phrasing_rows())
+    assert lines[3 : 3 + rows + 2] == [line for line in lines[3 : 3 + rows + 2] if line.startswith("|")]
+    assert lines[3 + rows + 2 :] == [PHRASING_TRAILER]
+
+
+def test_phrasing_table_header_names_both_columns() -> None:
+    body = section(RECORD.read_text(), "Permitted and forbidden phrasing")
+    lines = [line.strip() for line in body.splitlines() if line.strip()]
+    header = next(line for line in lines if line.startswith("|"))
+    assert header == "| Permitted (factual, reference-only) | Forbidden (leading or anchoring) |"
 
 
 def test_phrasing_table_permits_the_three_complexity_comparisons() -> None:
@@ -798,22 +1028,96 @@ def test_phrasing_intro_is_unchanged_and_adds_the_comparison_principle() -> None
     assert intro == [
         "The SM/EM may give factual, reference-only sizing context after all three values are recorded.",
         "Everything in the forbidden column breaks independence or anchors the discussion.",
-        "A permitted comparison names at most one comparable story and at most one complexity difference; "
-        "it never names a range, an average, elapsed time, effort, or a preferred value.",
+        "A permitted comparison names at most one comparable story and at most one basis difference; "
+        "it never names a range, an average, elapsed time, effort, a target value for the story under estimate, "
+        "or a preferred value, and it names a point value only after all three values are recorded.",
     ]
     assert RECORD.read_text().count(intro[2]) == 1
 
 
+PERMITTED_CELLS = [
+    '"The comparable story was 5 points."',
+    '"The named story had three interacting constraints; this one has four."',
+    '"This story has one more integration than that one."',
+    '"The prior story also changed the schema."',
+    '"That story carried no migration."',
+    '"The scope differs in the deploy leg."',
+    '"This story has one more unknown than that one."',
+    '"The comparable story had the same interacting constraints."',
+    '"The earlier story was split once."',
+    '"No comparable story exists."',
+    '"The named story had one fewer external dependency."',
+]
+
+
+def test_phrasing_table_permitted_column_is_the_exact_curated_list() -> None:
+    assert [row[0] for row in phrasing_rows()] == PERMITTED_CELLS
+
+
+TARGET_VALUE_IN_PERMITTED = re.compile(
+    r"\bthis (?:story|one) (?:is|was|scores?|scored|sits?|lands?|should be)\b"
+    r"|\btarget\b|\bwe should\b|\bgo higher\b|\bgo lower\b"
+    r"|\bmatch\b|\bsame as\b|\btreat(?:ed|s)? the same\b|\bpoint it at\b",
+    re.IGNORECASE,
+)
+
+
+def test_phrasing_table_permitted_cells_state_no_target_value() -> None:
+    permitted = [row[0] for row in phrasing_rows()]
+    for cell in permitted:
+        assert not TARGET_VALUE_IN_PERMITTED.search(cell), cell
+
+
+def test_pointing_template_records_each_challenge_and_outcome() -> None:
+    assert (
+        "- Challenges: <none, or each ground challenged by kind, its author (a voter, or the SM/EM for a sizing "
+        "comment), the restatement, withdrawal or retraction, or the void; elide a pre-reveal value or a target "
+        "value>" in pointing_template()
+    )
+    assert (
+        "- Anchoring events: <none, or the comment and the recovery, including the newly created voter contexts, "
+        "with the verbatim comment in the raw session record and its base name cited here>" in pointing_template()
+    )
+    assert (
+        "- Superseded values after a void: <none, or the voided values, the voided consensus and the blind vote that replaced them>"
+        in pointing_template()
+    )
+    body = spaced(section(RECORD.read_text(), "Pointing record"))
+    assert (
+        "Outside the recorded numeric values and the superseded-values line, no line of the posted record carries "
+        "a point value named before the reveal or a target value for this story: the Challenges and Anchoring events "
+        "lines record a ground by its kind, its author (a voter, or "
+        "the SM/EM for a sizing comment) and its outcome or recovery, and every field that could quote a "
+        "participant elides those two classes permanently, because the posted record stays on the story surface "
+        "that later voters read; the verbatim quote lives in the session's raw record, cited by its base name."
+    ) in body
+    assert (
+        "A sizing comment that names a point value before the reveal, names or implies a target value for this "
+        "story, or states elapsed time, effort or run cost voids the round under the Anchoring guardrail recovery "
+        "as soon as the facilitator sees it, as does any ground that is neither restated nor retracted, and the "
+        "void records the voided consensus under Superseded values after a void, so the Consensus field always "
+        "carries the vote that stands."
+    ) in body
+
+
+def test_pointing_template_places_challenges_before_anchoring_events() -> None:
+    lines = pointing_template()
+    challenges = [index for index, line in enumerate(lines) if line.startswith("- Challenges:")]
+    anchoring = [index for index, line in enumerate(lines) if line.startswith("- Anchoring events:")]
+    assert len(challenges) == 1 and len(anchoring) == 1
+    assert challenges[0] < anchoring[0]
+
+
 def test_pointing_template_asks_for_complexity_rationales() -> None:
     lines = pointing_template()
-    values = lines.index("- Values, recorded before the discussion:")
+    values = next(index for index, line in enumerate(lines) if line.startswith("- Values, recorded before the discussion:"))
     assert lines[values + 1 : values + 4] == [
-        "  - Product owner: <value> - <short complexity rationale>",
-        "  - Engineer one: <value> - <short complexity rationale>",
-        "  - Engineer two: <value> - <short complexity rationale>",
+        "  - Product owner: <value, or not recorded> - <short complexity rationale, or none when the value is not recorded>",
+        "  - Engineer one: <value, or not recorded> - <short complexity rationale, or none when the value is not recorded>",
+        "  - Engineer two: <value, or not recorded> - <short complexity rationale, or none when the value is not recorded>",
     ]
     assert [line for line in lines if line.startswith("- Re-vote:")] == [
-        "- Re-vote: <accepted set per voter, with complexity rationale>"
+        "- Re-vote: <accepted set per voter, with complexity rationale, or none>"
     ]
     assert not any("<short rationale>" in line for line in lines)
 
@@ -927,7 +1231,7 @@ def test_record_intro_excludes_local_paths_and_includes_needed_content() -> None
         ("Refinement comment", "- Engineer one (<family or model>): <file base name>"),
         ("Refinement comment", "- Engineer two (<family or model>): <file base name>"),
         ("Refinement comment", "- SM/EM contribution (not a vote): <file base name>"),
-        ("Pointing record", "- SM/EM sizing context, after all three values: <file base name> or verbatim"),
+        ("Pointing record", "- SM/EM sizing context, after all three values: <file base name> or verbatim, eliding a pre-reveal value or a target value, or none"),
     ],
 )
 def test_record_templates_cite_file_base_names(heading: str, line: str) -> None:
