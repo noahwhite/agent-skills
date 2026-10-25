@@ -1,6 +1,6 @@
 # SKL-59 AC2 tabletop at 702f53c9
 
-This directory holds the inspectable artefacts of the AC2 behavioural round: twenty-two voter prompts, the twenty-two raw outputs of those voter processes, the raw session record with the verbatim target quotation, and the pointing record posted on the fixture.
+This directory holds the inspectable artefacts of the AC2 behavioural round: twenty-two voter prompts, the twenty-two outputs of those voter processes, the raw session record with the verbatim target quotation, and the pointing record posted on the fixture.
 
 ## Run statement
 
@@ -8,7 +8,7 @@ This directory holds the inspectable artefacts of the AC2 behavioural round: twe
 - Fixture: [SKL-72](https://linear.app/officina-pub/issue/SKL-72/tabletop-fixture-add-a-changed-only-filter-to-the-cleanup-dry-run-skl) `[Tabletop fixture] Add a --changed-only filter to the cleanup dry run (SKL-59 AC2 rerun)`, priority none, no implementation, canceled after the run, with a tracker-write preflight comment `be040dec`.
 - One durable pointing record was posted on SKL-72 as comment `1de27e80` (superseding `3c822ac7`); `pointing-record.md` is that record. The fixture was canceled after the run.
 - Contexts: twenty-two voter processes, each launched in its own directory holding only that process's own prompt file, so no voter could see another voter's prompt, value or rationale. `prompts/` and `outputs/` are `.txt` because they are captured artefacts kept byte-for-byte, not repository prose.
-- Raw record: `raw-record.md` holds every value and rationale for both rounds, the round-two target quotation verbatim, and the exact challenge text each voter received.
+- Raw record: `raw-record.md` holds the values, rationales, the round-two target quotation verbatim, and the challenge text. `PROVENANCE.md` states which captures are original, which were reconstructed and which were replaced, with the commit that holds each surviving capture.
 
 ## Round one - the voter grounds
 

@@ -94,7 +94,7 @@ Ground 4 is not treated as a permitted post-reveal comparison: the ruling establ
 
 ### AC2 - the behavioural round, inspectable
 
-The whole run is a single ceremony on the fixture, and all of it is in `tabletop/`: twenty-two voter prompts, their raw outputs, the raw session record and the elided pointing record.
+The whole run is a single ceremony on the fixture, and all of it is in `tabletop/`: twenty-two voter prompts, their outputs, with provenance, the raw session record and the elided pointing record.
 
 - `tabletop/README.md` - the run statement: the loaded commit `702f53c9ab6fe4209fd4600ad2224c6e0431671a`, the fixture SKL-72, the per-voter process and directory isolation, and the chronology of the ceremony's two rounds.
 - `tabletop/raw-record.md` - the verbatim sizing comment (the target quotation), every value and every rationale, cited by base name from the posted record.
