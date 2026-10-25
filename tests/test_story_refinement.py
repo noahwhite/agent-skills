@@ -791,11 +791,6 @@ def test_step_three_sizing_context_is_in_complexity_terms() -> None:
         "comparable unknowns and constraints, and relevant scope differences."
     ) in body
     assert "historical sizing" not in squash(SKILL.read_text())
-    assert "historical sizing" not in squash(SKILL.read_text())
-
-
-def test_step_three_sizing_context_permits_a_reference_after_the_reveal_and_bans_a_target() -> None:
-    body = process_item(STEP_THREE, SIZING_ITEM)
     assert "Before the reveal it must not name any point value." in body
     assert (
         "After the reveal it may compare this story with an already-estimated item and name that item's recorded "
@@ -874,11 +869,10 @@ def test_anchoring_guardrail_makes_a_point_value_sizing_note_an_event_on_challen
     )
     assert (
         "any other challenged ground that is neither restated as a basis driver nor retracted, or a sizing "
-        "comment the sm/em neither withdraws nor restates, is an anchoring event; because a ground read in a "
-        "recorded rationale was recorded with the vote it grounds, every value recorded in the round is a vote "
-        "recorded after the anchor, so the recovery voids the consensus and all three recorded values and "
-        "re-runs the independent vote from step 3 in newly created voter contexts that exclude the tainted "
-        "discussion and sizing comment" in body
+        "comment the sm/em neither withdraws nor restates, is an anchoring event, and the recovery below is the "
+        "single void rule: it voids the consensus and every vote recorded after the anchor, where a ground read "
+        "in a recorded rationale anchors at the vote whose rationale carries it, and it re-runs the independent "
+        "vote from step 3 in newly created voter contexts that exclude the tainted discussion and sizing comment" in body
     )
 
 
@@ -1065,8 +1059,9 @@ def test_pointing_template_records_each_challenge_and_outcome() -> None:
     )
     body = spaced(section(RECORD.read_text(), "Pointing record"))
     assert (
-        "No line of the posted record carries a point value named before the reveal or a target value for this "
-        "story: the Challenges and Anchoring events lines record a ground by its kind, its author (a voter, or "
+        "Outside the recorded values and the superseded-values line, no line of the posted record carries a point "
+        "value named before the reveal or a target value for this story: the Challenges and Anchoring events "
+        "lines record a ground by its kind, its author (a voter, or "
         "the SM/EM for a sizing comment) and its outcome or recovery, and every field that could quote a "
         "participant elides those two classes permanently, because the posted record stays on the story surface "
         "that later voters read; the verbatim quote lives in the session's raw record, cited by its base name."
