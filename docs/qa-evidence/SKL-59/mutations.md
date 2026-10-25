@@ -143,7 +143,7 @@ File: `SKILL.md`
 Removed or matched text:
 
 ```text
-     A challenged ground must be restated as a basis driver or retracted, and a voter whose basis does not support its recorded value records that in the re-vote.
+     A challenged ground must be restated as a basis driver or retracted, except a target value named or implied for this story, which is an anchoring event as soon as it is seen; a voter whose basis does not support its recorded value records that in the re-vote.
 ```
 
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_step_four_facilitator_challenges_every_off_basis_ground`

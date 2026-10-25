@@ -831,7 +831,8 @@ def test_step_four_facilitator_challenges_every_off_basis_ground() -> None:
         "by its kind alone."
     ) in item
     assert (
-        "A challenged ground must be restated as a basis driver or retracted, and a voter whose basis does not "
+        "A challenged ground must be restated as a basis driver or retracted, except a target value named or "
+        "implied for this story, which is an anchoring event as soon as it is seen; a voter whose basis does not "
         "support its recorded value records that in the re-vote."
     ) in item
     assert (
