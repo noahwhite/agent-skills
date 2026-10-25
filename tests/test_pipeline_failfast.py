@@ -344,7 +344,8 @@ def test_a_healthy_probe_that_merely_says_unavailable_does_not_fail_the_phase(ga
     repo, scratch, env = gate
     result = run_sweep(
         repo, scratch, env, "--model", "gpt-6-sol",
-        "--probe-cmd", "echo 'unavailable'; echo 'latency 403ms'; echo 'quota tier active'; exit 0",
+        "--probe-cmd",
+        "echo 'unavailable'; echo 'latency 403ms'; echo 'quota tier active'; echo '429 tokens left'; exit 0",
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert "availability check: probe ok" in result.stderr, result.stderr
