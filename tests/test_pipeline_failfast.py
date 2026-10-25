@@ -117,7 +117,7 @@ def test_a_passing_probe_runs_in_a_fresh_empty_directory_outside_the_checkout(ga
     repo, scratch, env = gate
     observed = tmp_path / "probe-observed.txt"
     probe = (
-        f'{{ pwd; printf "entries=%s\\n" "$(ls -A | wc -l)"; '
+        f'{{ : {{model}}; pwd; printf "entries=%s\\n" "$(ls -A | wc -l)"; '
         f'printf "stdin=%s\\n" "$(readlink /proc/self/fd/0 2>/dev/null || echo unknown)"; '
         f'[ -e .git ] && echo in-checkout; true; }} > {shlex.quote(str(observed))}'
     )
@@ -141,7 +141,7 @@ def test_a_probe_that_exits_non_zero_fails_the_phase_before_the_agent_runs(gate,
     repo, scratch, env = gate
     ran = tmp_path / "agent-ran.txt"
     probe = (
-        "echo 'AI_APICallError: This request would exceed your account rate limit' >&2; exit 7"
+        ": {model}; echo 'AI_APICallError: This request would exceed your account rate limit' >&2; exit 7"
     )
     agent = f"{SWEEP_AGENT}; touch {shlex.quote(str(ran))}"
     result = run_sweep(
@@ -160,7 +160,7 @@ def test_a_probe_that_exits_non_zero_fails_the_phase_before_the_agent_runs(gate,
 
 def test_a_probe_output_carrying_an_authentication_error_fails_the_phase(gate):
     repo, scratch, env = gate
-    probe = "echo 'authentication failed: invalid api key'; exit 0"
+    probe = ": {model}; echo 'authentication failed: invalid api key'; exit 0"
     result = run_sweep(
         repo, scratch, env, "--model", "kimi/kimi-k3", "--probe-cmd", probe,
     )
@@ -175,19 +175,22 @@ def test_a_probe_that_outlives_its_own_timeout_fails_the_phase_and_names_the_tim
     repo, scratch, env = gate
     result = run_sweep(
         repo, scratch, env,
-        "--model", "deepseek/deepseek-flash", "--probe-cmd", "sleep 30",
+        "--model", "deepseek/deepseek-flash", "--probe-cmd", ": {model}; sleep 30",
         "--probe-timeout", "1",
     )
     assert result.returncode == 20, result.stdout + result.stderr
     assert "timed out" in result.stderr, result.stderr
     assert "1s" in result.stderr, result.stderr
     assert "deepseek/deepseek-flash" in result.stderr, result.stderr
+    completion = [line for line in result.stderr.splitlines()
+                  if "phase=sweep complete elapsed=" in line]
+    assert len(completion) == 1 and completion[0].endswith("exit=20"), completion
     assert_no_artifact(artifacts(repo, env), "sweep")
 
 
 def test_a_probe_without_a_model_says_the_model_was_not_supplied(gate):
     repo, scratch, env = gate
-    result = run_sweep(repo, scratch, env, "--probe-cmd", "true")
+    result = run_sweep(repo, scratch, env, "--probe-cmd", ": {model}")
     assert result.returncode == 20, result.stdout + result.stderr
     assert "no model was supplied" in result.stderr, result.stderr
     assert_no_artifact(artifacts(repo, env), "sweep")
@@ -262,6 +265,9 @@ def test_an_agent_that_changes_the_primary_checkout_still_exits_18(gate):
     assert "primary checkout" in result.stderr, result.stderr
     assert "phase=sweep" in result.stderr, result.stderr
     assert "exit=18" in result.stderr, result.stderr
+    completion = [line for line in result.stderr.splitlines()
+                  if "phase=sweep complete elapsed=" in line]
+    assert len(completion) == 1 and completion[0].endswith("exit=18"), completion
     assert_not_stamped(artifacts(repo, env), "sweep")
 
 
@@ -304,6 +310,7 @@ def test_progress_lines_and_one_completion_line_go_to_stderr_without_touching_th
     completion = [line for line in result.stderr.splitlines() if "phase=sweep complete elapsed=" in line]
     assert len(completion) == 1, completion
     assert "elapsed=" in completion[0], completion[0]
+    assert completion[0].endswith("exit=0"), completion[0]
     artifact = artifacts(repo, env)["sweep"]
     assert artifact.read_text().splitlines()[0] == "REVIEW-RAN: yes", artifact.read_text()
     assert "elapsed=" not in artifact.read_text(), "progress leaked into the artifact"
@@ -313,7 +320,7 @@ def test_a_heartbeat_carries_the_probe_state_when_a_probe_ran(gate):
     repo, scratch, env = gate
     agent = 'sleep 3; { printf "REVIEW-RAN: yes\\n"; } > {output_file}'
     result = run_sweep(
-        repo, scratch, env, "--model", "gpt-6-sol", "--probe-cmd", "true", agent=agent,
+        repo, scratch, env, "--model", "gpt-6-sol", "--probe-cmd", ": {model}", agent=agent,
     )
     assert result.returncode == 0, result.stdout + result.stderr
     beats = [line for line in result.stderr.splitlines() if "phase=sweep elapsed=" in line]
@@ -343,7 +350,7 @@ def test_the_probe_receives_the_model_id_and_honours_the_env_equivalents(gate, t
 def test_an_http_status_line_in_the_probe_output_fails_the_phase(gate):
     repo, scratch, env = gate
     result = run_sweep(
-        repo, scratch, env, "--model", "gpt-6-sol", "--probe-cmd", "echo 'HTTP/2 429'; exit 0",
+        repo, scratch, env, "--model", "gpt-6-sol", "--probe-cmd", ": {model}; echo 'HTTP/2 429'; exit 0",
     )
     assert result.returncode == 20, result.stdout + result.stderr
     assert "HTTP/2 429" in result.stderr, result.stderr
@@ -352,10 +359,10 @@ def test_an_http_status_line_in_the_probe_output_fails_the_phase(gate):
 def test_a_probe_reporting_quota_exhaustion_fails_the_phase(gate):
     repo, scratch, env = gate
     for probe in (
-        "printf 'RESOURCE_EXHAUSTED\\n'; exit 0",
-        "echo 'quota reached'; exit 0",
-        "echo 'Your credit balance is too low to access the API'; exit 0",
-        "echo 'credit balance: $0'; exit 0",
+        ": {model}; printf 'RESOURCE_EXHAUSTED\\n'; exit 0",
+        ": {model}; echo 'quota reached'; exit 0",
+        ": {model}; echo 'Your credit balance is too low to access the API'; exit 0",
+        ": {model}; echo 'credit balance: $0'; exit 0",
     ):
         result = run_sweep(repo, scratch, env, "--model", "gpt-6-sol", "--probe-cmd", probe)
         assert result.returncode == 20, (probe, result.stdout + result.stderr)
@@ -368,8 +375,9 @@ def test_a_healthy_probe_that_merely_says_unavailable_does_not_fail_the_phase(ga
     result = run_sweep(
         repo, scratch, env, "--model", "gpt-6-sol",
         "--probe-cmd",
-        "echo 'unavailable'; echo 'latency 403ms'; echo 'quota tier active'; echo '429 tokens left'; "
-        "echo 'credit balance: $100; model available'; echo 'credit balance: $100; low latency'; exit 0",
+        ": {model}; echo 'unavailable'; echo 'latency 403ms'; echo 'quota tier active'; "
+        "echo '429 tokens left'; echo 'credit balance: $100; model available'; "
+        "echo 'credit balance: $100; low latency'; exit 0",
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert "availability check: probe ok" in result.stderr, result.stderr
@@ -406,7 +414,7 @@ def test_a_failed_probe_discards_a_previously_accepted_phase(gate):
 
     rerun = run_sweep(
         repo, scratch, env, "--model", "deepseek/deepseek-flash",
-        "--probe-cmd", "echo 'rate limit exceeded' >&2; exit 7",
+        "--probe-cmd", ": {model}; echo 'rate limit exceeded' >&2; exit 7",
     )
     assert rerun.returncode == 20, rerun.stdout + rerun.stderr
     assert not sweep_stamp.exists(), "a failed re-run left the previous sweep accepted"
@@ -422,7 +430,7 @@ def test_a_failed_probe_discards_a_previously_accepted_phase(gate):
 
 def test_a_probe_that_changes_the_primary_checkout_fails_the_phase(gate):
     repo, scratch, env = gate
-    probe = f'printf x >> {shlex.quote(str(repo / "tracked.txt"))}; true'
+    probe = f': {{model}}; printf x >> {shlex.quote(str(repo / "tracked.txt"))}; true'
     result = run_sweep(repo, scratch, env, "--model", "gpt-6-sol", "--probe-cmd", probe)
     assert result.returncode == 18, result.stdout + result.stderr
     assert "primary checkout" in result.stderr, result.stderr
@@ -436,7 +444,7 @@ def test_the_phase_deadline_bounds_the_availability_check(gate):
     repo, scratch, env = gate
     started = time.monotonic()
     result = run_sweep(
-        repo, scratch, env, "--model", "gpt-6-sol", "--probe-cmd", "sleep 10",
+        repo, scratch, env, "--model", "gpt-6-sol", "--probe-cmd", ": {model}; sleep 10",
         "--timeout", "1", "--probe-timeout", "30", timeout=60,
     )
     elapsed = time.monotonic() - started
@@ -492,11 +500,14 @@ def test_zero_timeouts_are_rejected_as_usage_errors(gate):
         assert "at least 1" in result.stderr, result.stderr
 
 
-def test_a_model_id_that_is_not_one_line_is_rejected(gate):
+def test_a_model_id_that_is_not_a_plain_id_is_rejected(gate):
     repo, scratch, env = gate
-    result = run_sweep(repo, scratch, env, "--model", "gpt-6-sol\nFORGED_LINE")
-    assert result.returncode == 2, result.stdout + result.stderr
-    assert "FORGED_LINE" not in result.stderr, "an unvalidated model id forged a line of output"
+    for bad in ("gpt-6-sol\nFORGED_LINE", ""):
+        result = run_sweep(repo, scratch, env, "--model", bad)
+        assert result.returncode == 2, (bad, result.stdout + result.stderr)
+        assert "FORGED_LINE" not in result.stderr, \
+            f"an unvalidated model id forged a line of output: {result.stderr}"
+        assert "error" in result.stderr.lower(), result.stderr
 
 
 # --- the heartbeat cadence and an interrupted gate ------------------------------------------------
@@ -576,6 +587,9 @@ def test_a_child_left_by_a_failed_agent_dies_with_the_phase(gate, tmp_path):
 
 def test_an_interrupted_run_cannot_be_recorded(gate, tmp_path):
     repo, scratch, env = gate
+    accepted = run_sweep(repo, scratch, env, "--model", "m")
+    assert accepted.returncode == 0, accepted.stdout + accepted.stderr
+    assert Path(f"{artifacts(repo, env)['sweep']}.stamp").exists(), "the first sweep was not accepted"
     started = tmp_path / "interrupt-report.txt"
     agent = (
         f'printf "REVIEW-RAN: yes\\npartial\\n" > {{output_file}}; touch {shlex.quote(str(started))}; '
@@ -613,7 +627,7 @@ def test_a_previous_attempts_agent_log_is_not_used_as_this_attempts_diagnosis(ga
     assert first.returncode == 15, first.stdout + first.stderr
     second = run_sweep(
         repo, scratch, env, "--model", "gpt-6-sol",
-        "--probe-cmd", "echo 'provider error: rate limit exceeded' >&2; exit 7",
+        "--probe-cmd", ": {model}; echo 'provider error: rate limit exceeded' >&2; exit 7",
     )
     assert second.returncode == 20, second.stdout + second.stderr
     assert "STALE_ATTEMPT_ONE_ERROR" not in second.stderr, \
@@ -633,15 +647,17 @@ def test_a_timeout_kill_is_reported_as_19_even_when_the_checkout_changed(gate):
     assert_not_stamped(artifacts(repo, env), "sweep")
 
 
-def test_a_model_id_with_a_space_reaches_the_probe_as_one_argument(gate, tmp_path):
+def test_the_probe_receives_a_plain_model_id_verbatim(gate, tmp_path):
     repo, scratch, env = gate
     seen = tmp_path / "probe-argv.txt"
     probe = f'printf "[%s]\\n" {{model}} > {shlex.quote(str(seen))}'
-    result = run_sweep(
-        repo, scratch, env, "--model", "provider/model with space", "--probe-cmd", probe,
-    )
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert seen.read_text().splitlines() == ["[provider/model with space]"], seen.read_text()
+    for model in (
+        "provider/model#variant-1", "claude-opus-5-5[1m]", "provider/model with space",
+        "a&b", "quote'd", 'double"q',
+    ):
+        result = run_sweep(repo, scratch, env, "--model", model, "--probe-cmd", probe)
+        assert result.returncode == 0, (model, result.stdout + result.stderr)
+        assert seen.read_text().splitlines() == [f"[{model}]"], seen.read_text()
 
 
 def test_a_refused_checkout_cleanup_does_not_replace_the_phase_exit_code(gate, tmp_path):
@@ -661,3 +677,386 @@ def test_a_refused_checkout_cleanup_does_not_replace_the_phase_exit_code(gate, t
     )
     assert result.returncode == 19, result.stdout + result.stderr
     assert "could not remove checkout" in result.stderr, result.stderr
+
+
+# --- AC4: a failed phase still ends with its one completion line ---------------------------------
+
+def test_a_failed_phase_still_prints_one_completion_line_with_its_elapsed_time(gate):
+    """QA round 1, AC4: a delayed authentication failure must still report completion."""
+    repo, scratch, env = gate
+    agent = "sleep 2; printf 'authentication failed QA completion check\\n' >&2; exit 1"
+    result = run_sweep(repo, scratch, env, "--model", "qa/failure-completion", agent=agent)
+    assert result.returncode == 15, result.stdout + result.stderr
+    completion = [line for line in result.stderr.splitlines() if "phase=sweep complete elapsed=" in line]
+    assert len(completion) == 1, f"a failed phase printed {len(completion)} completion lines: {result.stderr}"
+    assert re.search(r"elapsed=[1-9][0-9]*s", completion[0]), completion[0]
+    assert "model=qa/failure-completion" in completion[0], completion[0]
+    assert completion[0].endswith("exit=15"), completion[0]
+    assert "authentication failed QA completion check" in result.stderr, result.stderr
+    artifact = artifacts(repo, env)["sweep"]
+    artifact_text = artifact.read_text() if artifact.exists() else ""
+    assert "complete elapsed=" not in artifact_text, "the completion line leaked into the artifact"
+    assert_not_stamped(artifacts(repo, env), "sweep")
+
+
+def test_every_failed_phase_prints_one_completion_line_and_keeps_its_exit_code(gate):
+    repo, scratch, env = gate
+    cases = [
+        (15, ["--model", "m"], "sleep 1; exit 1"),
+        (17, ["--model", "m"], '{ printf "sweep ok\\n"; } > {output_file}'),
+        (19, ["--model", "m", "--timeout", "1"], "sleep 30"),
+        (20, ["--model", "m", "--probe-cmd", ": {model}; exit 7"],
+         '{ printf "REVIEW-RAN: yes\\n"; } > {output_file}'),
+    ]
+    for expected, flags, agent in cases:
+        result = run_sweep(repo, scratch, env, *flags, agent=agent, timeout=60)
+        assert result.returncode == expected, (expected, result.stdout + result.stderr)
+        completion = [line for line in result.stderr.splitlines()
+                      if "phase=sweep complete elapsed=" in line]
+        assert len(completion) == 1, (expected, completion, result.stderr)
+        assert completion[0].endswith(f"exit={expected}"), completion[0]
+        artifact = artifacts(repo, env)["sweep"]
+        artifact_text = artifact.read_text() if artifact.exists() else ""
+        assert "complete elapsed=" not in artifact_text, (expected, artifact_text)
+        assert_not_stamped(artifacts(repo, env), "sweep")
+
+
+def test_a_phase_refused_for_a_missing_predecessor_still_reports_completion(tmp_path):
+    """The attempt starts at the scratch directory, so a missing predecessor is a failed phase."""
+    repo = make_repo(tmp_path)
+    scratch = tmp_path / "session-scratch"
+    scratch.mkdir()
+    env = clean_env({"TMPDIR": str(tmp_path / "runtime-tmp")})
+    (tmp_path / "runtime-tmp").mkdir()
+    result = run_script(
+        "run", "sweep", "--repo", str(repo), "--base", "HEAD", "--scratch", str(scratch),
+        "--model", "gpt-6-sol", "--agent-cmd", SWEEP_AGENT, env=env,
+    )
+    assert result.returncode == 13, result.stdout + result.stderr
+    completion = [line for line in result.stderr.splitlines()
+                  if "phase=sweep complete elapsed=" in line]
+    assert len(completion) == 1, result.stderr
+    assert completion[0].endswith("exit=13"), completion[0]
+    assert_not_stamped(artifacts(repo, env), "sweep")
+    assert not list(scratch.glob("run.*")), "a refused attempt left a run directory behind"
+
+
+def test_a_run_refused_before_the_attempt_starts_prints_no_completion_line(gate):
+    """A usage refusal is not a phase, so the documented refusal is no completion line."""
+    repo, scratch, env = gate
+    result = run_script(
+        "run", "sweep", "--repo", str(repo), "--base", "HEAD", "--scratch", str(scratch),
+        env=env,
+    )
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "complete elapsed=" not in result.stderr, result.stderr
+
+
+def test_an_interrupted_phase_reports_completion_with_its_signal_status(gate, tmp_path):
+    """AC4 covers every exit of the attempt, including an operator interrupt."""
+    repo, scratch, env = gate
+    started = tmp_path / "interrupt-completion.txt"
+    agent = f'touch {shlex.quote(str(started))}; sleep 60'
+    gate_process = subprocess.Popen(
+        ["bash", str(SCRIPT), "run", "sweep", "--repo", str(repo), "--base", "HEAD",
+         "--scratch", str(scratch), "--model", "gpt-6-sol", "--agent-cmd", agent],
+        env=env, cwd=str(ROOT), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+    )
+    try:
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline and not started.exists():
+            time.sleep(0.1)
+        assert started.exists(), "the agent never started"
+        gate_process.terminate()
+        _, stderr = gate_process.communicate(timeout=30)
+    finally:
+        if gate_process.poll() is None:
+            gate_process.kill()
+    assert gate_process.returncode == 143, gate_process.returncode
+    completion = [line for line in stderr.splitlines() if "phase=sweep complete elapsed=" in line]
+    assert len(completion) == 1, stderr
+    assert completion[0].endswith("exit=143"), completion[0]
+
+
+def test_arbitration_ends_with_the_completion_line_after_the_report_echo(gate):
+    """AC4 ordering: the report is echoed, then the artifact line, then the completion line."""
+    repo, scratch, env = gate
+    sweep = run_sweep(repo, scratch, env, "--model", "m")
+    assert sweep.returncode == 0, sweep.stdout + sweep.stderr
+    hunt = run_script(
+        "run", "hunt", "--repo", str(repo), "--base", "HEAD", "--scratch", str(scratch),
+        "--model", "m", "--agent-cmd", SWEEP_AGENT, env=env,
+    )
+    assert hunt.returncode == 0, hunt.stdout + hunt.stderr
+    arbitrate = run_script(
+        "run", "arbitrate", "--repo", str(repo), "--base", "HEAD", "--scratch", str(scratch),
+        "--model", "m", "--agent-cmd",
+        '{ printf "REVIEW-RAN: yes\\nARBITRATION-BODY\\n"; } > {output_file}', env=env,
+    )
+    assert arbitrate.returncode == 0, arbitrate.stdout + arbitrate.stderr
+    assert "ARBITRATION-BODY" in arbitrate.stdout, arbitrate.stdout
+    lines = arbitrate.stderr.splitlines()
+    completion = next(i for i, line in enumerate(lines) if "phase=arbitrate complete elapsed=" in line)
+    artifact = next(i for i, line in enumerate(lines) if line.startswith("Phase arbitrate -> "))
+    assert artifact < completion, f"the completion line must be the last phase line: {lines}"
+    assert completion == len(lines) - 1 or lines[completion + 1].startswith("WARNING:"), lines
+
+
+def test_a_stale_invalid_model_in_the_environment_does_not_refuse_other_commands(gate):
+    """Only run and record use a model, so a leftover ADVERSARIAL_MODEL cannot block a preflight."""
+    repo, scratch, env = gate
+    env = {**env, "ADVERSARIAL_MODEL": "provider/model with space"}
+    preflight = run_script(
+        "preflight", "--repo", str(repo), "--base", "HEAD", "--test-cmd", "true",
+        "--scratch", str(scratch), env=env,
+    )
+    assert preflight.returncode == 0, preflight.stdout + preflight.stderr
+    paths = run_script("paths", "--repo", str(repo), "--base", "HEAD", env=env)
+    assert paths.returncode == 0, paths.stdout + paths.stderr
+
+
+def test_an_early_interrupt_reports_its_own_status(gate, tmp_path):
+    """A signal in the window just after the attempt starts is reported as that signal, not exit 0."""
+    repo, scratch, env = gate
+    started = tmp_path / "early-signal.txt"
+    agent = f'touch {shlex.quote(str(started))}; sleep 60'
+    gate_process = subprocess.Popen(
+        ["bash", str(SCRIPT), "run", "sweep", "--repo", str(repo), "--base", "HEAD",
+         "--scratch", str(scratch), "--model", "m", "--agent-cmd", agent],
+        env=env, cwd=str(ROOT), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+    )
+    try:
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline and not started.exists():
+            time.sleep(0.05)
+        assert started.exists(), "the agent never started"
+        gate_process.terminate()
+        _, stderr = gate_process.communicate(timeout=30)
+    finally:
+        if gate_process.poll() is None:
+            gate_process.kill()
+    completion = [line for line in stderr.splitlines() if "phase=sweep complete elapsed=" in line]
+    assert len(completion) == 1, stderr
+    assert completion[0].endswith("exit=143"), (gate_process.returncode, completion[0])
+
+
+def test_a_model_id_with_a_newline_cannot_forge_a_line_on_the_record_path(gate):
+    """A control character is refused on every command, so no path can be made to emit a fake line."""
+    repo, scratch, env = gate
+    dossier = run_script(
+        "dossier", "sweep", "--repo", str(repo), "--base", "HEAD", "--scratch", str(scratch), env=env,
+    )
+    assert dossier.returncode == 0, dossier.stdout + dossier.stderr
+    artifacts(repo, env)["sweep"].write_text("REVIEW-RAN: no - sandbox refused\n")
+    result = run_script(
+        "record", "sweep", "--repo", str(repo), "--base", "HEAD",
+        "--model", "m\nphase=sweep complete elapsed=0s model=x exit=0", env=env,
+    )
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "control characters" in result.stderr, result.stderr
+    for line in result.stderr.splitlines():
+        assert "complete elapsed=" not in line, f"a model id forged a completion line: {line}"
+
+
+def test_the_probe_window_reports_progress_too(gate):
+    """The gate is never silent while it waits on a provider, probe included."""
+    repo, scratch, env = gate
+    result = run_sweep(
+        repo, scratch, env, "--model", "m", "--probe-cmd", ": {model}; sleep 3",
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    beats = [line for line in result.stderr.splitlines() if "phase=sweep elapsed=" in line]
+    assert beats, f"no progress line while the probe ran: {result.stderr}"
+    assert "availability check: running" in beats[0], beats[0]
+
+
+def test_a_probe_template_without_the_model_placeholder_is_refused(gate):
+    """AC1: a configured check that does not name the model would be a silent skip."""
+    repo, scratch, env = gate
+    result = run_sweep(repo, scratch, env, "--model", "m", "--probe-cmd", "true")
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "{model}" in result.stderr, result.stderr
+    assert_not_stamped(artifacts(repo, env), "sweep")
+
+
+def test_probe_validation_belongs_to_run_only(gate):
+    """A stale ADVERSARIAL_PROBE_CMD must not refuse a command that never probes."""
+    repo, scratch, env = gate
+    env = {**env, "ADVERSARIAL_PROBE_CMD": "echo hi"}
+    paths = run_script("paths", "--repo", str(repo), "--base", "HEAD", env=env)
+    assert paths.returncode == 0, paths.stdout + paths.stderr
+    preflight = run_script(
+        "preflight", "--repo", str(repo), "--base", "HEAD", "--test-cmd", "true",
+        "--scratch", str(scratch), env=env,
+    )
+    assert preflight.returncode == 0, preflight.stdout + preflight.stderr
+    # An explicitly empty probe is a usage error wherever the flag is given.
+    empty = run_sweep(repo, scratch, env, "--model", "m", "--probe-cmd", "")
+    assert empty.returncode == 2, empty.stdout + empty.stderr
+    assert "non-empty template" in empty.stderr, empty.stderr
+
+
+def test_the_probe_receives_the_model_in_its_environment(gate, tmp_path):
+    """The model reaches the probe even when the template only quotes or comments {model}."""
+    repo, scratch, env = gate
+    seen = tmp_path / "probe-env.txt"
+    probe = f': {{model}}; printf "%s\\n" "$ADVERSARIAL_PROBE_MODEL" > {shlex.quote(str(seen))}'
+    result = run_sweep(repo, scratch, env, "--model", "kimi/kimi-k3", "--probe-cmd", probe)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert seen.read_text().strip() == "kimi/kimi-k3", seen.read_text()
+
+
+def test_an_early_interrupt_gets_the_signal_status_in_the_process_and_the_line(gate, tmp_path):
+    repo, scratch, env = gate
+    started = tmp_path / "early-signal-rc.txt"
+    agent = f'touch {shlex.quote(str(started))}; sleep 60'
+    gate_process = subprocess.Popen(
+        ["bash", str(SCRIPT), "run", "sweep", "--repo", str(repo), "--base", "HEAD",
+         "--scratch", str(scratch), "--model", "m", "--agent-cmd", agent],
+        env=env, cwd=str(ROOT), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+    )
+    try:
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline and not started.exists():
+            time.sleep(0.05)
+        assert started.exists(), "the agent never started"
+        gate_process.terminate()
+        _, stderr = gate_process.communicate(timeout=30)
+    finally:
+        if gate_process.poll() is None:
+            gate_process.kill()
+    assert gate_process.returncode == 143, gate_process.returncode
+    completion = [line for line in stderr.splitlines() if "phase=sweep complete elapsed=" in line]
+    assert len(completion) == 1, stderr
+    assert completion[0].endswith("exit=143"), completion[0]
+
+
+def test_a_probe_may_name_the_model_through_the_exported_variable(gate):
+    """The exported value is a supported channel, so a real call using it is accepted."""
+    repo, scratch, env = gate
+    result = run_sweep(
+        repo, scratch, env, "--model", "kimi/kimi-k3",
+        "--probe-cmd", 'test -n "$ADVERSARIAL_PROBE_MODEL"',
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "availability check: probe ok" in result.stderr, result.stderr
+
+
+def test_an_undeliverable_arbitration_report_keeps_its_exit_code(gate):
+    """The delivery path keeps exit 1, the status it had before the completion-line work."""
+    repo, scratch, env = gate
+    sweep = run_sweep(repo, scratch, env, "--model", "m")
+    assert sweep.returncode == 0, sweep.stdout + sweep.stderr
+    hunt = run_script(
+        "run", "hunt", "--repo", str(repo), "--base", "HEAD", "--scratch", str(scratch),
+        "--model", "m", "--agent-cmd", SWEEP_AGENT, env=env,
+    )
+    assert hunt.returncode == 0, hunt.stdout + hunt.stderr
+    with open("/dev/full", "w") as full:
+        arbitrate = subprocess.run(
+            ["bash", str(SCRIPT), "run", "arbitrate", "--repo", str(repo), "--base", "HEAD",
+             "--scratch", str(scratch), "--model", "m", "--agent-cmd",
+             '{ printf "REVIEW-RAN: yes\\n%s\\n" "$(head -c 70000 /dev/zero | tr \'\\\\0\' x)"; } > {output_file}'],
+            env=env, cwd=str(ROOT), stdout=full, stderr=subprocess.PIPE, text=True, timeout=120,
+        )
+    assert arbitrate.returncode == 1, arbitrate.stderr
+    paths = artifacts(repo, env)
+    assert Path(f"{paths['arbitrate']}.stamp").exists(), "the accepted phase lost its stamp"
+    completion = [line for line in arbitrate.stderr.splitlines()
+                  if "phase=arbitrate complete elapsed=" in line]
+    assert len(completion) == 1 and completion[0].endswith("exit=1"), completion
+
+
+def test_a_failed_checkout_is_not_reported_as_a_timeout(gate, tmp_path):
+    """A git failure is its own failure, not an expired deadline."""
+    repo, scratch, env = gate
+    fakebin = tmp_path / "fakebin"
+    fakebin.mkdir()
+    git_wrapper = fakebin / "git"
+    git_wrapper.write_text(
+        "#!/usr/bin/env bash\n"
+        'if [ "$1" = worktree ] && [ "$2" = add ]; then echo "cannot add worktree" >&2; exit 128; fi\n'
+        'exec /usr/bin/git "$@"\n'
+    )
+    git_wrapper.chmod(0o755)
+    env = {**env, "PATH": f"{fakebin}:{env['PATH']}"}
+    result = run_sweep(repo, scratch, env, "--model", "m")
+    # git's own status is preserved, as it was before the checkout became deadline-bounded
+    assert result.returncode == 128, result.stdout + result.stderr
+    assert "could not create the throwaway checkout" in result.stderr, result.stderr
+    assert "timeout" not in result.stderr.lower(), result.stderr
+    assert_not_stamped(artifacts(repo, env), "sweep")
+
+
+def test_a_probe_placeholder_that_cannot_take_effect_is_refused(gate):
+    """A single-quoted or commented placeholder would reach the probe as dead text."""
+    repo, scratch, env = gate
+    for probe in (
+        "printf '%s\\n' '{model}'", "true # {model}", "true #{model}",
+        "'x{model}y'", "false # $ADVERSARIAL_PROBE_MODEL",
+    ):
+        result = run_sweep(repo, scratch, env, "--model", "m", "--probe-cmd", probe)
+        assert result.returncode == 2, (probe, result.stdout + result.stderr)
+        assert "where the shell expands it" in result.stderr, result.stderr
+    # and a doubled-quoted reference, which the shell does expand, is accepted
+    ok = run_sweep(
+        repo, scratch, env, "--model", "m",
+        "--probe-cmd", 'test -n "$ADVERSARIAL_PROBE_MODEL"',
+    )
+    assert ok.returncode == 0, ok.stdout + ok.stderr
+
+
+def test_a_checkout_that_kills_itself_is_not_a_deadline_expiry(gate, tmp_path):
+    """A fast 137 is git's own failure, not an exhausted deadline."""
+    repo, scratch, env = gate
+    fakebin = tmp_path / "fakebin"
+    fakebin.mkdir()
+    git_wrapper = fakebin / "git"
+    git_wrapper.write_text(
+        "#!/usr/bin/env bash\n"
+        'if [ "$1" = worktree ] && [ "$2" = add ]; then exit 137; fi\n'
+        'exec /usr/bin/git "$@"\n'
+    )
+    git_wrapper.chmod(0o755)
+    env = {**env, "PATH": f"{fakebin}:{env['PATH']}"}
+    result = run_sweep(repo, scratch, env, "--model", "m", "--timeout", "30")
+    assert result.returncode == 137, result.stdout + result.stderr
+    assert "could not create the throwaway checkout" in result.stderr, result.stderr
+    assert "deadline expired" not in result.stderr, result.stderr
+
+
+
+def test_the_checkout_is_bounded_without_timeout_on_the_host(gate, tmp_path):
+    """The guarded deadline is the script's own, so a host without timeout(1) is still bounded."""
+    repo, scratch, env = gate
+    fakebin = tmp_path / "fakebin"
+    fakebin.mkdir()
+    for name in ("timeout",):
+        stub = fakebin / name
+        stub.write_text("#!/usr/bin/env bash\necho 'timeout: not installed' >&2\nexit 127\n")
+        stub.chmod(0o755)
+    env = {**env, "PATH": f"{fakebin}:{env['PATH']}"}
+    result = run_sweep(repo, scratch, env, "--model", "m")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "WARNING" not in result.stderr, result.stderr
+    assert "complete elapsed=" in result.stderr, result.stderr
+
+
+def test_a_timed_out_checkout_leaves_no_registration(gate, tmp_path):
+    """A checkout that stalls past the deadline is killed and pruned."""
+    repo, scratch, env = gate
+    fakebin = tmp_path / "fakebin"
+    fakebin.mkdir()
+    git_wrapper = fakebin / "git"
+    git_wrapper.write_text(
+        "#!/usr/bin/env bash\n"
+        'if [ "$1" = worktree ] && [ "$2" = add ]; then sleep 30; fi\n'
+        'if [ "$1" = worktree ] && [ "$2" = prune ]; then exit 0; fi\n'
+        'if [ "$1" = worktree ] && [ "$2" = list ]; then exec /usr/bin/git "$@"; fi\n'
+        'exec /usr/bin/git "$@"\n'
+    )
+    git_wrapper.chmod(0o755)
+    env = {**env, "PATH": f"{fakebin}:{env['PATH']}"}
+    result = run_sweep(repo, scratch, env, "--model", "m", "--timeout", "2", timeout=60)
+    assert result.returncode == 19, result.stdout + result.stderr
+    assert "deadline" in result.stderr, result.stderr

@@ -84,7 +84,7 @@ Common inputs:
 - `--scratch <dir>`: the absolute path of the session's scratch directory (`references/runtimes.md`, Scratch files), passed to every command so the dossiers and throwaway checkouts stay in it; the script gives each run its own directory inside it and hands the session directory to the phase agent as `ADVERSARIAL_SESSION_SCRATCH`.
   Never pass the profile's base directory; omitted, the script creates a standalone directory per invocation, so two commands no longer share one.
   The script keeps its own run state (accepted phases, logs, stamps) under the repository's git dir (`git rev-parse --git-path adversarial-pipeline`), keyed by base and head: that is the script's state, not a session scratch artefact.
-- `--model ID` (`ADVERSARIAL_MODEL`), `--probe-cmd TEMPLATE` (`ADVERSARIAL_PROBE_CMD`), `--probe-timeout SECONDS` and `--timeout SECONDS`: the model id the phase was given, the optional availability check and the phase deadline.
+- `--model ID` (`ADVERSARIAL_MODEL`), `--probe-cmd TEMPLATE` (`ADVERSARIAL_PROBE_CMD`), `--probe-timeout SECONDS` and `--timeout SECONDS`: the model id the phase was given (printed as a label in which anything outside letters, digits and `.` `_` `/` `:` `@` `#` `+` `~` `,` `[` `]` `-` becomes `_`, and rejected only when it contains control characters), the optional availability check and the phase deadline.
   See "Availability, timeout, progress and diagnosis" below; the script never resolves a model.
 
 Launching a phase depends on the profile agent's `runtime`:
@@ -118,26 +118,36 @@ The script never resolves one: it echoes the id it was handed, and names it in i
 
 `--probe-cmd TEMPLATE` (`ADVERSARIAL_PROBE_CMD`) is an optional availability check spent before any agent budget.
 `run` performs it; `dossier` and `record` say they do not, and never pretend to have probed.
-Its only placeholder is `{model}`, substituted shell-quoted, so do not quote the placeholder inside the template.
+Its only placeholder is `{model}`, which expands to `"$ADVERSARIAL_PROBE_MODEL"` (the model id exported to the probe), so do not quote the placeholder inside the template; a `run` template that names the model through neither `{model}` nor `ADVERSARIAL_PROBE_MODEL` is refused with exit 2.
+An unquoted placeholder always arrives as one word; quoting it again can split an id that contains a space, and a commented-out placeholder is not detected. Whether the template actually exercises the provider is the template's job, so keep the probe a real call.
 It runs with stdin from `/dev/null` in a fresh empty directory under the run's scratch directory, never in the checkout under review, under its own `--probe-timeout` (`ADVERSARIAL_PROBE_TIMEOUT`, default 30 seconds).
 A probe that exits non-zero, prints a provider error (rate limit, authentication, quota exhaustion, unavailable or unknown model), or outlives its own `--probe-timeout` fails the phase with exit 20 before the dossier is built and before any agent command runs; when the phase deadline is what expired first the phase exits 19 instead, as a timeout kill.
 The message names the phase, the model id supplied, the probe's exit code (or the timeout) and the probe's output tail.
 With no probe configured the phase writes `availability check: not configured`, so the absence is visible rather than silent; a configured probe is never silently skipped.
 A passing probe is not proof that the real call will run: the observed cause is account state on a listed model, so a phase can still fail after a clean check.
 
-One deadline bounds the phase's model work: `--timeout` (`ADVERSARIAL_TIMEOUT`, default 900, at least 1) covers the availability check and the agent command, not the local dossier and worktree work around them.
+One deadline bounds the phase's work against a provider: `--timeout` (`ADVERSARIAL_TIMEOUT`, default 900, at least 1) covers the availability check, the throwaway checkout and the agent command with its whole process group.
+The local bookkeeping after the agent (the tripwire fingerprint and the acceptance checks) and the dossier write are not model work and are not bounded by it.
 The agent command runs in its own process group under one SIGKILL deadline of that whole group, and the group is killed when the command returns too, so a child the CLI leaves retrying after the main call failed neither keeps the phase alive nor keeps running past it.
 A phase killed by `--timeout` exits 19 and names the phase, the model id when supplied and the timeout in seconds; no other failure path changes its exit code.
 An interrupted gate (SIGINT, SIGTERM, SIGHUP) kills the in-flight process group before it exits, so an interruption never orphans an agent.
 The probe's own `--probe-timeout` is still honoured, bounded by whatever is left of the phase deadline at that moment.
 
-While the agent runs, `run` writes an elapsed-time line to its own stderr, the first after one second and then at least every 30 seconds (a `run`-only feature: a `dossier` plus `record` subagent flow has no heartbeat), carrying the phase, the elapsed seconds, the configured timeout and the availability-check state, plus one completion line with the elapsed time when the phase succeeds.
+While the agent runs, `run` writes an elapsed-time line to its own stderr, the first after one second and then at least every 30 seconds (a `run`-only feature: a `dossier` plus `record` subagent flow has no heartbeat), carrying the phase, the elapsed seconds, the configured timeout and the availability-check state, plus one completion line with the elapsed time and the phase's exit status on every exit of the phase attempt, success or failure.
+It is the last line the phase itself writes, after the artifact-path line and after an arbitration report has been echoed, so the status it reports is the process's; only teardown's own output (a checkout-cleanup warning) can follow it; its `elapsed` is the whole attempt (a heartbeat line reports the agent's own seconds) and it carries `exit=<status>` after the model id.
+An agent can write anything to its own stderr, including a look-alike line, so the phase's completion line is the last such line the phase writes.
+A report the gate cannot write to stdout is an error, not a silent success: the process exits 1 (unchanged from before the completion line), the message names the stamped artifact, and the completion line names that status.
+That is a delivery failure, not a phase failure: the model's work succeeded, so the phase stays accepted and stamped.
+Teardown ignores a second interrupt so the reported status stays final.
+A SIGKILL leaves no line at all, and neither does a gate whose stderr is closed mid-phase: the shell dies by SIGPIPE before it can write one.
+The phase attempt starts once `run` accepts its agent command, so a `run` refused before that (usage, not a Git repository, a bad base) prints no completion line, because no phase ran.
+Stdout carries the artifact alone (arbitration's report), never progress, so do not merge the two streams and read the last line.
 Progress never reaches the artifact or the agent's stdout, so a report's first line stays `REVIEW-RAN: yes`.
 
 On a non-zero agent exit, a timeout, or a report `accept_phase` rejects, `run` prints the phase, the exit code, the model id when supplied, and the last 40 lines of `${phase}-agent.err` and `${phase}-agent.log`, plus every provider-error line it detects in the full stderr log, so one is never lost past the tail window; `record` prints the phase, the model id when supplied, the reason and the report tail.
 The script cannot read a runtime's own session or event stream: a runtime that reports provider errors only there must surface them on the phase's stderr in its `--agent-cmd` template (`references/runtimes.md`, Models).
 
-A failed `run` is never acceptable.
+A failed phase is never acceptable.
 It removes its own launch and binding, so a later `record` of the leftover report fails instead of stamping a report the run declared failed, an interrupt does the same, and a re-run that fails before the agent starts still discards this phase's previous acceptance and every later phase.
 
 ## Phase 0: preflight (deterministic)
