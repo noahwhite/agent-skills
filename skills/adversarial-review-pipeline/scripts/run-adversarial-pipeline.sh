@@ -51,8 +51,9 @@
 # never substituted with another model, provider or reviewer.
 #
 # --probe-cmd (ADVERSARIAL_PROBE_CMD) is an optional availability check for `run` (dossier and
-# record say so and never probe): a shell command template whose {model} placeholder is replaced
-# with the shell-quoted model id, so do not quote the placeholder inside the template. A template
+# record say so and never probe): a shell command template whose {model} placeholder expands to
+# "$ADVERSARIAL_PROBE_MODEL", the model id exported to the probe, so do not quote the placeholder
+# inside the template and an id containing a space, an ampersand or a quote still stays one word. A template
 # without {model} is refused (exit 2), and the model is also exported to the probe as
 # ADVERSARIAL_PROBE_MODEL, which is the authoritative channel: a template that comments or quotes the
 # placeholder still receives the model there. It runs under
@@ -649,7 +650,7 @@ remove_probe_dir() {  # $1 directory: only a probe directory this function's cal
 # before any agent command. The script never resolves a model; it substitutes the id it was given.
 # Its own --probe-timeout bounds it, and it never runs past the phase deadline shared with the agent.
 availability_probe() {  # $1 phase, $2 phase deadline ($SECONDS at expiry): sets availability_state
-  local phase_name="$1" deadline="$2" probedir out line q_model tail_text provider_hit
+  local phase_name="$1" deadline="$2" probedir out line tail_text provider_hit
   local remaining limit phase_bound=0
   if [ -z "$MODEL" ]; then
     fail_phase 20 "a probe is configured but no model was supplied; pass --model ID (or ADVERSARIAL_MODEL) so the probe has a model to check"
@@ -662,8 +663,9 @@ availability_probe() {  # $1 phase, $2 phase deadline ($SECONDS at expiry): sets
     || fail_phase 2 "could not create a probe directory under the run's scratch directory ($SCRATCH)"
   out="$RUN_DIR/$phase_name-probe.log"
   : > "$out"
-  q_model="$(printf '%q' "$MODEL")"
-  line="${PROBE_CMD//\{model\}/$q_model}"
+  # {model} expands to the model's value through its environment variable, so no quoting of the id
+  # can be lost in the substitution and any id (a space, an ampersand, a quote) stays one word.
+  line="${PROBE_CMD//\{model\}/\"\$ADVERSARIAL_PROBE_MODEL\"}"
   # stdin is /dev/null, and the working directory is a fresh empty directory under the run's
   # scratch directory - never the checkout under review.
   line="cd $(printf '%q' "$probedir") && ${line}"
@@ -1042,7 +1044,7 @@ case "$cmd" in
     echo "Phase $phase -> $out" >&2
     if [ "$phase" = "arbitrate" ]; then
       cat -- "$out" || {
-        echo "ERROR: could not write the arbitration report to stdout; the phase is accepted and stamped, but its report was not delivered" >&2
+        echo "ERROR: could not deliver the arbitration report (see the error above); the phase is accepted and stamped, but its report did not reach stdout" >&2
         exit 1
       }
     fi

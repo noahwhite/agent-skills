@@ -651,7 +651,10 @@ def test_the_probe_receives_a_plain_model_id_verbatim(gate, tmp_path):
     repo, scratch, env = gate
     seen = tmp_path / "probe-argv.txt"
     probe = f'printf "[%s]\\n" {{model}} > {shlex.quote(str(seen))}'
-    for model in ("provider/model#variant-1", "claude-opus-5-5[1m]", "provider/model with space"):
+    for model in (
+        "provider/model#variant-1", "claude-opus-5-5[1m]", "provider/model with space",
+        "a&b", "quote'd", 'double"q',
+    ):
         result = run_sweep(repo, scratch, env, "--model", model, "--probe-cmd", probe)
         assert result.returncode == 0, (model, result.stdout + result.stderr)
         assert seen.read_text().splitlines() == [f"[{model}]"], seen.read_text()
