@@ -1,10 +1,9 @@
 # SKL-78 pointing record
 
-This file is the exact text posted on SKL-78 as its only pointing record, comment `e0bcb6f8`.
+This file is the exact text posted on SKL-78 as its only pointing record, comment `e0bcb6f8`, updated in place to drop a non-template field; the run has no earlier record for that fixture, which is why the record carries no supersession line.
 
 ## Pointing record
 
-- Supersession: this is the only pointing record for this run; no earlier record for SKL-78 exists.
 - Tracker-write preflight: comment `c671f2cd` on SKL-78.
 - Refined story identifier: the fixture description as filed; no refinement round was run on a disposable tabletop.
 - Estimate scale: fibonacci

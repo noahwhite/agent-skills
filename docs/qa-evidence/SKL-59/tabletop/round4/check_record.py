@@ -20,7 +20,6 @@ RAW = (HERE / "raw-record.md").read_text()
 
 ROLES = {"po": "Product owner", "e1": "Engineer one", "e2": "Engineer two"}
 FIELDS = [
-    "- Supersession:",
     "- Tracker-write preflight:",
     "- Refined story identifier:",
     "- Estimate scale:",
@@ -109,6 +108,16 @@ else:
     for number, line in enumerate(BODY.splitlines(), 1):
         if target in line and not line.startswith("- Superseded values after a void:"):
             problems.append(f"target sentence leaks at record line {number}")
+
+# 6b. The Anchoring events line certifies the stop, the void and the blind re-run.
+anchoring = re.search(r"^- Anchoring events: (.*)$", BODY, re.M)
+if not anchoring:
+    problems.append("anchoring events line missing")
+else:
+    claim = anchoring.group(1)
+    for fragment in ("target value", "raw-record.md", "voided", "re-run blind in newly created voter contexts"):
+        if fragment not in claim:
+            problems.append(f"anchoring events line lacks {fragment!r}")
 
 # 7. The challenged ground and its outcome are recorded.
 challenges = re.search(r"^- Challenges: (.*)$", BODY, re.M)
