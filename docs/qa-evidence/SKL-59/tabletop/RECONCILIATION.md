@@ -68,14 +68,18 @@ The 2026-10-25 owner amendments (tracker comment `9e5b9868`) resolved the confli
 - The behavioural evidence is a fresh run on the canceled priority-none fixture SKL-79, with one durable record, comment `466d7155`. It shows the permitted reference present and the round continuing past it, a prescription stopping the round on sight, an injected ground left unretracted that voids the consensus and is followed by a blind re-vote in newly created contexts, the recovered discussion naming only the high and the low, and surviving rationales that name only basis drivers.
 - The comparable is the real, already-estimated SKL-53, whose pointing record fixed its consensus at 5 points; it is cited as 5 everywhere in the record and this provenance, replacing the invented comparable the 2026-10-25 evidence cited inconsistently.
 
-## 8. Round five corrections in place (same PR, after review)
+## 8. Round five corrections in place and facilitator judgement
 
-Review of this round found three defects in its evidence, each corrected rather than argued:
+The record formerly quoted an SM/EM sizing context that was not the captured one.
+The SM/EM event is now a captured prompt and output (`round5/prompts/sm-em-prompt.txt`, `round5/outputs/sm-em-output.txt`), and the record quotes it exactly.
+The same tracker comment `466d7155` is updated in place rather than superseded.
 
-- The record quoted an SM/EM sizing context that was not the captured one, so the SM/EM event is now a captured prompt and output (`round5/prompts/sm-em-prompt.txt`, `round5/outputs/sm-em-output.txt`), the record quotes it exactly, and the pointer comment `466d7155` was updated in place rather than superseded.
-- The checker's prescription test matched one hardcoded string, so it was replaced by a phrasing-agnostic detector: any sentence pairing a number with a reference to the story under estimate and a sizing verb is a prescription, and ten distinct phrasings are confirmed to fail the check.
-- The discussion-disclosure check could not see a prompt that named another voter's value, so it now fails any discussion prompt that carries another voter's role at all, and the probe that injects `Engineer one. Their value: 3.` fails as it should.
-
-The prescription detector is held to the case matrix in `round5/prescription-cases.md`: twenty-two sentences that must trip it, each a different prescription phrasing (value, first person, target, answer, settlement, non-numeric, and the mixed forms the review found), and twelve that must not, each a permitted reference or ordinary record sentence (another story's score or target, a constraint count, a basis-driver rationale).
-`check_record.py` re-runs that matrix on every invocation and reports its counts, so the claim is checkable rather than asserted.
-Attribution is clause by clause with subject inheritance: a coordinated clause keeps the subject of the clause it follows, so a second sizing verb in a sentence is still attributed while a comparison clause that scores the comparable is not. It is still a lint, not a proof: a prescription phrased outside these forms would pass, and the record is also read by a human reviewer for exactly that reason.
+The owner rejected automated classification of reference versus prescription in comment `efe464ca`.
+This cleanup removes the round-five classifier and its case matrix, without replacing them or changing any capture.
+No scripted compliance claim is retained for this round.
+`round5/pointing-record.md` and its matching tracker comment quote each injected ground and the facilitator response already recorded in `round5/raw-record.md`, with the facilitator's deciding reason.
+The reference reports SKL-53's recorded value and a basis difference without prescribing this story's value, so the round continues.
+The next sizing sentence expressly assigns this story a value, so it stops the round immediately.
+The coverage ground concerns how well behaviour is checked rather than a property of the change, so it is challenged; the refusal to restate or retract then voids the round.
+Both recoveries use newly created blind voter contexts; after the second recovery, the required endpoint-only shared discussion and Step 4 re-vote are held.
+These are the facilitator's judgements for independent QA to verify against the retained prompts, outputs and raw record, not conclusions certified by a script.
