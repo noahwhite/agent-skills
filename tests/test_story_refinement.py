@@ -815,6 +815,10 @@ def test_step_three_sizing_context_is_in_complexity_terms() -> None:
         "never stops the round."
     ) in body
     assert (
+        "It must not prescribe this story's value - no value to score, no target, no preferred direction - and "
+        "must not reveal or compare individual votes before the discussion." in body
+    )
+    assert (
         "A prescription of this story's value, from the SM/EM or from a voter, is an anchoring event under the "
         "Anchoring guardrail."
     ) in body
@@ -1089,8 +1093,8 @@ def test_phrasing_table_permitted_cells_state_no_target_value() -> None:
 def test_pointing_template_records_each_challenge_and_outcome() -> None:
     assert (
         "- Challenges: <none, or each ground challenged by kind, its author (a voter, or the SM/EM for a sizing "
-        "comment), the restatement, withdrawal or retraction, or the void; elide a pre-reveal value or a target "
-        "value>" in pointing_template()
+        "comment), the restatement, withdrawal or retraction, or the void; elide a pre-reveal value or a "
+        "prescription>" in pointing_template()
     )
     assert (
         "- Anchoring events: <none, or the comment and the recovery, including the newly created voter contexts, "
@@ -1103,15 +1107,15 @@ def test_pointing_template_records_each_challenge_and_outcome() -> None:
     body = spaced(section(RECORD.read_text(), "Pointing record"))
     assert (
         "Outside the recorded numeric values and the superseded-values line, no line of the posted record carries "
-        "a point value named before the reveal or a target value for this story: the Challenges and Anchoring events "
+        "a point value named before the reveal or a prescription of this story's value: the Challenges and Anchoring events "
         "lines record a ground by its kind, its author (a voter, or "
         "the SM/EM for a sizing comment) and its outcome or recovery, and every field that could quote a "
         "participant elides those two classes permanently, because the posted record stays on the story surface "
         "that later voters read; the verbatim quote lives in the session's raw record, cited by its base name."
     ) in body
     assert (
-        "A sizing comment that names a point value before the reveal, names or implies a target value for this "
-        "story, or states elapsed time, effort or run cost voids the round under the Anchoring guardrail recovery "
+        "A sizing comment that names a point value before the reveal, prescribes this story's value, or states "
+        "elapsed time, effort or run cost voids the round under the Anchoring guardrail recovery "
         "as soon as the facilitator sees it, as does any ground that is neither restated nor retracted, and the "
         "void records the voided consensus under Superseded values after a void, so the Consensus field always "
         "carries the vote that stands."
@@ -1249,7 +1253,7 @@ def test_record_intro_excludes_local_paths_and_includes_needed_content() -> None
         ("Refinement comment", "- Engineer one (<family or model>): <file base name>"),
         ("Refinement comment", "- Engineer two (<family or model>): <file base name>"),
         ("Refinement comment", "- SM/EM contribution (not a vote): <file base name>"),
-        ("Pointing record", "- SM/EM sizing context, after all three values: <file base name> or verbatim, eliding a pre-reveal value or a target value, or none"),
+        ("Pointing record", "- SM/EM sizing context, after all three values: <file base name> or verbatim, eliding a pre-reveal value or a prescription, or none"),
     ],
 )
 def test_record_templates_cite_file_base_names(heading: str, line: str) -> None:
