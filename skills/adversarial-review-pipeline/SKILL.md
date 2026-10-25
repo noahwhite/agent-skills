@@ -126,7 +126,7 @@ The message names the phase, the model id supplied, the probe's exit code (or th
 With no probe configured the phase writes `availability check: not configured`, so the absence is visible rather than silent; a configured probe is never silently skipped.
 A passing probe is not proof that the real call will run: the observed cause is account state on a listed model, so a phase can still fail after a clean check.
 
-One deadline bounds the phase: `--timeout` (`ADVERSARIAL_TIMEOUT`, default 900, at least 1) covers the availability check, the agent command and the throwaway checkout; only the dossier write and teardown fall outside it.
+One deadline bounds the phase: `--timeout` (`ADVERSARIAL_TIMEOUT`, default 900, at least 1) covers the availability check, the throwaway checkout and the agent command; only the dossier write and the teardown after the completion line fall outside it.
 The agent command runs in its own process group under one SIGKILL deadline of that whole group, and the group is killed when the command returns too, so a child the CLI leaves retrying after the main call failed neither keeps the phase alive nor keeps running past it.
 A phase killed by `--timeout` exits 19 and names the phase, the model id when supplied and the timeout in seconds; no other failure path changes its exit code.
 An interrupted gate (SIGINT, SIGTERM, SIGHUP) kills the in-flight process group before it exits, so an interruption never orphans an agent.
@@ -135,7 +135,7 @@ The probe's own `--probe-timeout` is still honoured, bounded by whatever is left
 While the agent runs, `run` writes an elapsed-time line to its own stderr, the first after one second and then at least every 30 seconds (a `run`-only feature: a `dossier` plus `record` subagent flow has no heartbeat), carrying the phase, the elapsed seconds, the configured timeout and the availability-check state, plus one completion line with the elapsed time and the phase's exit status on every exit of the phase attempt, success or failure.
 It is the last line the phase itself writes, after the artifact-path line and after an arbitration report has been echoed, so the status it reports is the process's; only teardown's own output (a checkout-cleanup warning) can follow it; its `elapsed` is the whole attempt (a heartbeat line reports the agent's own seconds) and it carries `exit=<status>` after the model id.
 An agent can write anything to its own stderr, including a look-alike line, so the phase's completion line is the last such line the phase writes.
-A report the gate cannot write to stdout is an error, not a silent success: the process exits 1 and the completion line names that status.
+A report the gate cannot write to stdout is an error, not a silent success: the process exits 21, the message names the stamped artifact, and the completion line names that status.
 That is a delivery failure, not a phase failure: the model's work succeeded, so the phase stays accepted and stamped.
 Teardown ignores a second interrupt so the reported status stays final.
 A SIGKILL leaves no line at all, and neither does a gate whose stderr is closed mid-phase: the shell dies by SIGPIPE before it can write one.

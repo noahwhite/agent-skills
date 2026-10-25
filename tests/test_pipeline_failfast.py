@@ -981,7 +981,7 @@ def test_a_failed_checkout_is_not_reported_as_a_timeout(gate, tmp_path):
     git_wrapper.chmod(0o755)
     env = {**env, "PATH": f"{fakebin}:{env['PATH']}"}
     result = run_sweep(repo, scratch, env, "--model", "m")
-    assert result.returncode == 2, result.stdout + result.stderr
+    assert result.returncode == 15, result.stdout + result.stderr
     assert "could not create the throwaway checkout" in result.stderr, result.stderr
     assert "timeout" not in result.stderr.lower(), result.stderr
     assert_not_stamped(artifacts(repo, env), "sweep")

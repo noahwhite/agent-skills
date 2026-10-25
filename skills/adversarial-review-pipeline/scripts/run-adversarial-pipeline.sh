@@ -67,9 +67,9 @@
 # records 'availability check: not configured' on stderr, so the absence is visible rather than
 # silent.
 #
-# One deadline bounds the phase's model work: the availability check and the agent command share
-# --timeout (ADVERSARIAL_TIMEOUT, default 900, at least 1). The local work around them (dossier,
-# throwaway worktree) is not model work and is not bounded by it. The agent command runs in its own
+# One deadline bounds the phase: the availability check, the throwaway checkout and the agent
+# command all share --timeout (ADVERSARIAL_TIMEOUT, default 900, at least 1). Only the dossier write
+# and the teardown after the completion line fall outside it. The agent command runs in its own
 # process group under one SIGKILL deadline of that whole group, and the group is killed when the
 # command returns too, so a child the CLI leaves retrying after the main call failed cannot keep
 # running past the phase. A phase killed by
@@ -1018,7 +1018,7 @@ case "$cmd" in
       fail_phase 19 "the $phase phase was killed by --timeout: the ${TIMEOUT}s phase deadline expired while creating the throwaway checkout (model=$MODEL_LABEL); the phase is a failure, not a clean one."
     fi
     if [ "$checkout_rc" -ne 0 ]; then
-      fail_phase 2 "could not create the throwaway checkout for the $phase phase (git worktree add failed); the phase never started."
+      fail_phase 15 "could not create the throwaway checkout for the $phase phase (git worktree add failed); the phase never started."
     fi
     CHECKOUT_PATH="$checkout"
     q_prompt="$(printf '%q' "$dossier")"

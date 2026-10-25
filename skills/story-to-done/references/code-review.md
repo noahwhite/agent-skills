@@ -158,7 +158,7 @@ The `adversarial-review-pipeline` skill defines the pre-PR gate; these rules app
 - Surface provider errors on the phase's stderr in the `--agent-cmd` template when the runtime reports them only in its own session or event stream; the gate cannot read that stream.
 - A passing availability probe is one minimal provider call, not proof that the real phase will run: keep the phase's own failure diagnosis in the evidence.
 - A gate phase launched by the gate script keeps progress visible while it spends model budget: an elapsed-time line on stderr (first after a second, then at least every 30 seconds) and one completion line with the elapsed time and the phase's own exit status at the end, which a failed phase prints too and the line is the last one the phase itself writes, so its status is the process's (teardown output can follow it, and a SIGKILL leaves no line).
-  When a phase cannot deliver its report, the process fails but the phase stays accepted, because the model's work succeeded and only its delivery failed.
+  When a phase cannot deliver its report, the process exits 21 but the phase stays accepted, because the model's work succeeded and only its delivery failed; do not re-run that model call.
   A subagent-driven phase (the dossier and record flow) has neither, so watch it through the tracker and the report it writes.
   A silent gate is a stuck gate, and a phase that ends without a completion line has left no evidence of how long it took.
   A `run` refused before its phase attempt starts (usage, no repository, a bad base) prints none, because no phase ran, and neither a SIGKILL nor a gate whose stderr is closed mid-phase produces one.
