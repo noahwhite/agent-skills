@@ -647,11 +647,10 @@ def test_the_probe_receives_a_plain_model_id_verbatim(gate, tmp_path):
     repo, scratch, env = gate
     seen = tmp_path / "probe-argv.txt"
     probe = f'printf "[%s]\\n" {{model}} > {shlex.quote(str(seen))}'
-    result = run_sweep(
-        repo, scratch, env, "--model", "provider/model#variant-1", "--probe-cmd", probe,
-    )
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert seen.read_text().splitlines() == ["[provider/model#variant-1]"], seen.read_text()
+    for model in ("provider/model#variant-1", "claude-opus-5-5[1m]"):
+        result = run_sweep(repo, scratch, env, "--model", model, "--probe-cmd", probe)
+        assert result.returncode == 0, (model, result.stdout + result.stderr)
+        assert seen.read_text().splitlines() == [f"[{model}]"], seen.read_text()
 
 
 def test_a_refused_checkout_cleanup_does_not_replace_the_phase_exit_code(gate, tmp_path):
@@ -709,6 +708,9 @@ def test_every_failed_phase_prints_one_completion_line_and_keeps_its_exit_code(g
                       if "phase=sweep complete elapsed=" in line]
         assert len(completion) == 1, (expected, completion, result.stderr)
         assert completion[0].endswith(f"exit={expected}"), completion[0]
+        artifact = artifacts(repo, env)["sweep"]
+        artifact_text = artifact.read_text() if artifact.exists() else ""
+        assert "complete elapsed=" not in artifact_text, (expected, artifact_text)
         assert_not_stamped(artifacts(repo, env), "sweep")
 
 
@@ -790,3 +792,16 @@ def test_arbitration_reports_completion_before_the_artifact_and_its_report(gate)
     completion = next(i for i, line in enumerate(lines) if "phase=arbitrate complete elapsed=" in line)
     artifact = next(i for i, line in enumerate(lines) if line.startswith("Phase arbitrate -> "))
     assert completion < artifact, f"the completion line followed the artifact line: {lines}"
+
+
+def test_a_stale_invalid_model_in_the_environment_does_not_refuse_other_commands(gate):
+    """Only run and record use a model, so a leftover ADVERSARIAL_MODEL cannot block a preflight."""
+    repo, scratch, env = gate
+    env = {**env, "ADVERSARIAL_MODEL": "provider/model with space"}
+    preflight = run_script(
+        "preflight", "--repo", str(repo), "--base", "HEAD", "--test-cmd", "true",
+        "--scratch", str(scratch), env=env,
+    )
+    assert preflight.returncode == 0, preflight.stdout + preflight.stderr
+    paths = run_script("paths", "--repo", str(repo), "--base", "HEAD", env=env)
+    assert paths.returncode == 0, paths.stdout + paths.stderr

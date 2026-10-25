@@ -81,7 +81,10 @@
 # model id. The attempt starts once `run` accepts its agent command, so a `run` refused before that -
 # usage, not a Git repository, a bad base - prints no completion line, because no phase ran. An agent
 # can write anything to its own stderr, including a line shaped like this one: the phase's completion
-# line is the last such line the phase writes. Progress never reaches the artifact or the agent's stdout, so the artifact's first
+# line is the last such line the phase writes. The line reports the phase: a failure while the report
+# is echoed to stdout, or an interrupt during that echo or during teardown, can still change the
+# process's own exit status afterwards (teardown ignores a second interrupt so the reported status
+# stays final). Progress never reaches the artifact or the agent's stdout, so the artifact's first
 # line stays 'REVIEW-RAN: yes'; stdout carries the artifact alone (arbitration's report), never
 # progress, so do not merge the two streams and read the last line.
 #
@@ -179,13 +182,18 @@ if [ -n "$SPEC_FILE" ]; then
 fi
 [[ "$TIMEOUT" =~ ^[1-9][0-9]*$ ]] || die 2 "--timeout must be a whole number of seconds, at least 1."
 [[ "$PROBE_TIMEOUT" =~ ^[1-9][0-9]*$ ]] || die 2 "--probe-timeout must be a whole number of seconds, at least 1."
-if [ "$MODEL_SET" -eq 1 ] && [ -z "$MODEL" ]; then
-  die 2 "--model needs a non-empty model id"
+# Only the commands that use a model validate one, so a stale ADVERSARIAL_MODEL cannot refuse a
+# preflight or a dossier. A model id may carry punctuation, never whitespace or '=' (which is how a
+# progress line states its exit status).
+if [ "$cmd" = "run" ] || [ "$cmd" = "record" ]; then
+  if [ "$MODEL_SET" -eq 1 ] && [ -z "$MODEL" ]; then
+    die 2 "--model needs a non-empty model id"
+  fi
+  case "$MODEL" in
+    "") ;;
+    *[!][A-Za-z0-9._/:@#+~,-]*) die 2 "--model must be a model id: letters, digits and . _ / : @ # + ~ , [ ] - only" ;;
+  esac
 fi
-case "$MODEL" in
-  "") ;;
-  *[!A-Za-z0-9._/:@#+~-]*) die 2 "--model must be a plain model id: letters, digits and . _ / : @ # + ~ - only" ;;
-esac
 MODEL_LABEL="${MODEL:-not supplied}"
 availability_state="availability check: not configured"
 
@@ -906,8 +914,8 @@ case "$cmd" in
     fi
     require_predecessors "$phase"
     rc_accept=0
-    reason_file="$(mktemp -p "$RUN_DIR" record-reason.XXXXXX)" \
-      || die 2 "could not create a status file in the run directory"
+    reason_file="$RUN_DIR/$phase-record.err"
+    : > "$reason_file" || die 2 "could not write a status file in the run directory"
     ( accept_phase "$phase" "" ) 2> "$reason_file" || rc_accept=$?
     if [ "$rc_accept" -ne 0 ]; then
       diagnose_phase "$phase" "$rc_accept" "$(cat -- "$reason_file" 2>/dev/null || true)" "$(artifact_for "$phase")"
@@ -994,8 +1002,8 @@ case "$cmd" in
       fail_phase 18 "the primary checkout ($ROOT) changed while the $phase agent ran; this phase is not accepted. Inspect 'git status' there."
     fi
     rc_accept=0
-    reason_file="$(mktemp -p "$RUN_DIR" accept-reason.XXXXXX)" \
-      || fail_phase 2 "could not create a status file in the run directory"
+    reason_file="$RUN_DIR/$phase-accept.err"
+    : > "$reason_file" || fail_phase 2 "could not write a status file in the run directory"
     ( accept_phase "$phase" "$errlog" ) 2> "$reason_file" || rc_accept=$?
     if [ "$rc_accept" -ne 0 ]; then
       fail_phase "$rc_accept" "$(cat -- "$reason_file" 2>/dev/null || true)"
