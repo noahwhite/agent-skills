@@ -41,11 +41,11 @@ Read `profile.git.promotion` first.
 A step that needs a value the profile does not set stops and asks for it.
 
 - `whole-branch` and `per-story`: this skill enumerates the issues included in the promotion; under `whole-branch` it does so before opening anything, and under `per-story` the set is the single story, whose evidence check runs once the Promotion step has cut its story-scoped branch and before that promotion merges.
-  Derive the set from merged feature PRs on the integration branch that are not on the release branch, mapped to their issue keys, and reconcile it with the issues awaiting promotion in the tracker.
+  Under `whole-branch`, derive the set from merged feature PRs on the integration branch that are not on the release branch, mapped to their issue keys, and reconcile it with the issues awaiting promotion in the tracker.
   For each issue, confirm passing pre-production verification evidence from the last environment in `profile.environments` whose `production` is not true.
   That evidence is produced per `qa-verification`; a build check alone is not verification evidence.
   Bind the evidence to the promotion head: record the build SHA or commit it was taken against, and re-check that it matches the head the promotion will carry.
-  Under `per-story`, that head is the head of the story-scoped promotion branch the Promotion step builds, rather than the integration branch head, and this check runs once that branch exists: the branch must carry only the story's recorded commits, which `git log --oneline origin/<release>..<promotion-branch>` lists, and the evidence must have been taken against a build that included the story's change.
+  Under `per-story`, that head is the head of the story-scoped promotion branch the Promotion step builds, rather than the integration branch head, and this check runs once that branch exists: the branch must carry only the story's change, which its story-scoped diff against the release branch shows the same files and hunks as the story's merged feature PRs, and the evidence must have been taken against a build that included that change.
   A build that predates or omits that change does not cover it, so stop and request evidence for that head per `qa-verification`.
   Evidence for an earlier build, or for a head that a later merge or review fix changed, is stale and stops the promotion.
   Under `whole-branch`, a promotion whose tree is identical to the verified build satisfies this check even when its commit SHA differs, and `per-story` takes the story-only change above instead of that tree rule.

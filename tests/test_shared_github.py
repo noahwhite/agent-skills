@@ -25,6 +25,7 @@ PER_STORY_SENTENCES = (
     "With `profile.git.merge_method` `rebase`, select the integration-branch commits whose `git patch-id --stable` id matches one of the PR's own commits fetched with `git fetch origin refs/pull/<number>/head`, stopping when the match count differs from the PR's commit count.",
     "With `profile.git.merge_method` `merge`, select that PR's merge commit.",
     "Record the PR number and the selected commit SHAs in the promotion PR body.",
+    "Before carrying them, confirm the selected change is still live on `origin/<profile.git.integration_branch>` by its patch id, and stop and report the story as reverted when it is not.",
     # Carrying the selected commits onto the promotion branch.
     "Carry the selected commits onto the promotion branch by cherry-picking them in their original order, with `-m 1` when a selected commit is a merge commit, or by squash-applying non-merge selections with `git cherry-pick -n` and one commit.",
     # The promotion PR, and the explicit refusal of a whole-branch PR under per-story.
@@ -42,7 +43,7 @@ PER_STORY_SENTENCES = (
     "Never inspect the whole integration branch for a `per-story` promotion.",
     # The per-story review-fix flow.
     "Under `per-story`, a valid review fix lands on a new feature branch to `profile.git.integration_branch` and merges there before its commit is carried.",
-    "The stale promotion PR is then closed unmerged, and the fix is carried in this order: cut a fresh story-scoped promotion branch from the release branch under a new branch name, carry the selection recorded in the closed PR body, and cherry-pick the fix commit onto it with `-m 1` when that commit is a merge commit.",
+    "The stale promotion PR is then closed unmerged, and the fix is carried in this order: cut a fresh story-scoped promotion branch from the release branch under a new branch name, carry the selection recorded in the closed PR body, then replay step 2 against the fix PR, identifying it by the same issue key and selecting its commits by `profile.git.merge_method`, and cherry-pick those commits onto the branch in their original order with `-m 1` when one is a merge commit.",
     "The story's updated commits, the original selection plus the fix commit, are what the branch carries, and no discovery runs again after the fix PR merges, which would match a second feature PR and stop.",
     "Open a fresh promotion PR from that branch to `profile.git.release_branch`, carrying the story's updated commits.",
     "Refresh the story's pre-production evidence against that promotion head before the merge.",
@@ -183,6 +184,7 @@ EXPECTED_PROMOTION_SECTION = (
     "   With `profile.git.merge_method` `rebase`, select the integration-branch commits whose `git patch-id --stable` id matches one of the PR's own commits fetched with `git fetch origin refs/pull/<number>/head`, stopping when the match count differs from the PR's commit count.\n"
     "   With `profile.git.merge_method` `merge`, select that PR's merge commit.\n"
     '   Record the PR number and the selected commit SHAs in the promotion PR body.\n'
+    '   Before carrying them, confirm the selected change is still live on `origin/<profile.git.integration_branch>` by its patch id, and stop and report the story as reverted when it is not.\n'
     '3. Carry the selected commits onto the promotion branch by cherry-picking them in their original order, with `-m 1` when a selected commit is a merge commit, or by squash-applying non-merge selections with `git cherry-pick -n` and one commit.\n'
     "4. Run the promotion branch's checks, then push it and open the promotion PR from it to `profile.git.release_branch`.\n"
     '   A whole-branch integration-to-release PR is not used under `per-story`.\n'
@@ -192,7 +194,7 @@ EXPECTED_PROMOTION_SECTION = (
     "   A check that fails only because another story's change is absent is that stop as well.\n"
     '\n'
     'Under `per-story`, a valid review fix lands on a new feature branch to `profile.git.integration_branch` and merges there before its commit is carried.\n'
-    'The stale promotion PR is then closed unmerged, and the fix is carried in this order: cut a fresh story-scoped promotion branch from the release branch under a new branch name, carry the selection recorded in the closed PR body, and cherry-pick the fix commit onto it with `-m 1` when that commit is a merge commit.\n'
+    'The stale promotion PR is then closed unmerged, and the fix is carried in this order: cut a fresh story-scoped promotion branch from the release branch under a new branch name, carry the selection recorded in the closed PR body, then replay step 2 against the fix PR, identifying it by the same issue key and selecting its commits by `profile.git.merge_method`, and cherry-pick those commits onto the branch in their original order with `-m 1` when one is a merge commit.\n'
     "The story's updated commits, the original selection plus the fix commit, are what the branch carries, and no discovery runs again after the fix PR merges, which would match a second feature PR and stop.\n"
     "Open a fresh promotion PR from that branch to `profile.git.release_branch`, carrying the story's updated commits.\n"
     "Refresh the story's pre-production evidence against that promotion head before the merge.\n"
