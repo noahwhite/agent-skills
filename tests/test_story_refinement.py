@@ -768,7 +768,7 @@ def test_step_four_re_vote_prompt_carries_the_rationale_rule() -> None:
 
 def test_pointing_template_states_the_standing_consensus() -> None:
     assert (
-        "- Consensus: <highest value in the intersection of the vote that stands>"
+        "- Consensus: <highest value in the intersection of the vote that stands, or none when the intersection is empty>"
         in pointing_template()
     )
 
@@ -1059,8 +1059,8 @@ def test_pointing_template_records_each_challenge_and_outcome() -> None:
     )
     body = spaced(section(RECORD.read_text(), "Pointing record"))
     assert (
-        "Outside the recorded values and the superseded-values line, no line of the posted record carries a point "
-        "value named before the reveal or a target value for this story: the Challenges and Anchoring events "
+        "Outside the recorded numeric values and the superseded-values line, no line of the posted record carries "
+        "a point value named before the reveal or a target value for this story: the Challenges and Anchoring events "
         "lines record a ground by its kind, its author (a voter, or "
         "the SM/EM for a sizing comment) and its outcome or recovery, and every field that could quote a "
         "participant elides those two classes permanently, because the posted record stays on the story surface "
@@ -1086,9 +1086,9 @@ def test_pointing_template_asks_for_complexity_rationales() -> None:
     lines = pointing_template()
     values = lines.index("- Values, recorded before the discussion:")
     assert lines[values + 1 : values + 4] == [
-        "  - Product owner: <value> - <short complexity rationale>",
-        "  - Engineer one: <value> - <short complexity rationale>",
-        "  - Engineer two: <value> - <short complexity rationale>",
+        "  - Product owner: <value> - <short complexity rationale, eliding a pre-reveal value or a target value>",
+        "  - Engineer one: <value> - <short complexity rationale, eliding a pre-reveal value or a target value>",
+        "  - Engineer two: <value> - <short complexity rationale, eliding a pre-reveal value or a target value>",
     ]
     assert [line for line in lines if line.startswith("- Re-vote:")] == [
         "- Re-vote: <accepted set per voter, with complexity rationale>"
