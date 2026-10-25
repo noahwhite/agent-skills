@@ -234,7 +234,7 @@ File: `SKILL.md`
 Removed or matched text:
 
 ```text
-Every prohibited behaviour above, a target value named or implied for this story by any participant, and a sizing comment that names a point value before the reveal or states elapsed time, effort or run cost, are anchoring events as soon as they are seen, with no challenge, restatement or retraction path.
+Every prohibited behaviour above, a target value named or implied for this story by any participant, and an SM/EM sizing comment that names a point value before the reveal or states elapsed time, effort or run cost, are anchoring events as soon as they are seen, with no challenge, restatement or retraction path.
 ```
 
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_anchoring_guardrail_makes_a_point_value_sizing_note_an_event_on_challenge`
@@ -430,7 +430,7 @@ Written instead:
 ```
 
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_record_templates_cite_file_base_names`
-Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_record_templates_cite_file_base_names[Pointing record-- SM/EM sizing context, after all three values: <file base name> or verbatim, eliding a pre-reveal value or a target value]`.
+Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_record_templates_cite_file_base_names[Pointing record-- SM/EM sizing context, after all three values: <file base name> or verbatim, eliding a pre-reveal value or a target value, or none]`.
 
 ## 30. Drop the reveal condition from the phrasing principle sentence
 

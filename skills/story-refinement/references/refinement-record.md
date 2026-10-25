@@ -73,9 +73,9 @@ A sizing comment that names a point value before the reveal, names or implies a 
   - Product owner: <value> - <short complexity rationale, eliding a pre-reveal value or a target value>
   - Engineer one: <value> - <short complexity rationale, eliding a pre-reveal value or a target value>
   - Engineer two: <value> - <short complexity rationale, eliding a pre-reveal value or a target value>
-- SM/EM sizing context, after all three values: <file base name> or verbatim, eliding a pre-reveal value or a target value
-- Discussion: high <value>, low <value>
-- Re-vote: <accepted set per voter, with complexity rationale>
+- SM/EM sizing context, after all three values: <file base name> or verbatim, eliding a pre-reveal value or a target value, or none
+- Discussion: <high <value>, low <value>, or none>
+- Re-vote: <accepted set per voter, with complexity rationale, or none>
 - Consensus: <highest value in the intersection of the vote that stands, or none when the intersection is empty>
 - No-consensus decision: <split, re-refine, or leave unpointed; n/a when there is a consensus>
 - Paths accepted: <set per voter, or n/a>

@@ -869,8 +869,9 @@ def test_anchoring_guardrail_makes_a_point_value_sizing_note_an_event_on_challen
     )
     assert (
         "every prohibited behaviour above, a target value named or implied for this story by any participant, "
-        "and a sizing comment that names a point value before the reveal or states elapsed time, effort or run "
-        "cost, are anchoring events as soon as they are seen, with no challenge, restatement or retraction path" in body
+        "and an sm/em sizing comment that names a point value before the reveal or states elapsed time, effort "
+        "or run cost, are anchoring events as soon as they are seen, with no challenge, restatement or "
+        "retraction path" in body
     )
     assert (
         "any other challenged ground that is neither restated as a basis driver nor retracted, or a sizing "
@@ -915,6 +916,16 @@ def test_anchoring_guardrail_explains_why_context_cannot_exclude_a_recorded_valu
         "fresh voter contexts exclude the tainted discussion and the sizing comment, but they cannot exclude a "
         "value recorded on the story surface that step 1 hands every voter with the story, so the step 3 "
         "rationale rule is what keeps such a value from becoming the rationale's answer" in body
+    )
+
+
+def test_anchoring_guardrail_places_the_anchor_and_the_single_void_rule() -> None:
+    body = flat(section(SKILL.read_text(), GUARDRAIL))
+    assert (
+        "and the recovery below is the single void rule: it voids the consensus and every vote recorded after "
+        "the anchor, and for a ground read in a recorded rationale the anchor precedes that rationale, so the "
+        "vote it grounds and every later vote are void, and the independent vote from step 3 is re-run in newly "
+        "created voter contexts that exclude the tainted discussion and sizing comment" in body
     )
 
 
@@ -1098,7 +1109,7 @@ def test_pointing_template_asks_for_complexity_rationales() -> None:
         "  - Engineer two: <value> - <short complexity rationale, eliding a pre-reveal value or a target value>",
     ]
     assert [line for line in lines if line.startswith("- Re-vote:")] == [
-        "- Re-vote: <accepted set per voter, with complexity rationale>"
+        "- Re-vote: <accepted set per voter, with complexity rationale, or none>"
     ]
     assert not any("<short rationale>" in line for line in lines)
 
@@ -1212,7 +1223,7 @@ def test_record_intro_excludes_local_paths_and_includes_needed_content() -> None
         ("Refinement comment", "- Engineer one (<family or model>): <file base name>"),
         ("Refinement comment", "- Engineer two (<family or model>): <file base name>"),
         ("Refinement comment", "- SM/EM contribution (not a vote): <file base name>"),
-        ("Pointing record", "- SM/EM sizing context, after all three values: <file base name> or verbatim, eliding a pre-reveal value or a target value"),
+        ("Pointing record", "- SM/EM sizing context, after all three values: <file base name> or verbatim, eliding a pre-reveal value or a target value, or none"),
     ],
 )
 def test_record_templates_cite_file_base_names(heading: str, line: str) -> None:
