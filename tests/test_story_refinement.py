@@ -870,9 +870,10 @@ def test_anchoring_guardrail_makes_a_point_value_sizing_note_an_event_on_challen
     assert (
         "any other challenged ground that is neither restated as a basis driver nor retracted, or a sizing "
         "comment the sm/em neither withdraws nor restates, is an anchoring event, and the recovery below is the "
-        "single void rule: it voids the consensus and every vote recorded after the anchor, where a ground read "
-        "in a recorded rationale anchors at the vote whose rationale carries it, and it re-runs the independent "
-        "vote from step 3 in newly created voter contexts that exclude the tainted discussion and sizing comment" in body
+        "single void rule: it voids the consensus and every vote recorded after the anchor, and for a ground read "
+        "in a recorded rationale the anchor precedes that rationale, so the vote it grounds and every later vote "
+        "are void, and the independent vote from step 3 is re-run in newly created voter contexts that exclude "
+        "the tainted discussion and sizing comment" in body
     )
 
 
