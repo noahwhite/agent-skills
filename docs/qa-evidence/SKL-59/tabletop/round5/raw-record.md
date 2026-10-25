@@ -12,13 +12,13 @@ The comparable cited throughout is the real, already-estimated SKL-53, whose poi
 
 ### The permitted factual reference, and the round continuing
 
-SM/EM sizing context: "SKL-53's pointing record fixed its consensus at 5 points, and unlike that story this one is a narrower cleanup dry-run enhancement whose only hard constraint is keeping the ungrouped output byte-identical."
+SM/EM sizing context: "SKL-53's pointing record fixed its consensus at 5 points, and this story carries one more interacting constraint than it - that a path matched by several rules must appear once under the first documented rule."
 
 A factual reference naming an already-estimated item's recorded value together with one basis difference. Under the delivered rule it is permitted, it is information the voters weigh, and it did not stop the round.
 
 ### The prescription, and the stop on sight
 
-SM/EM, immediately after: "I would size this story at 3 points as a well-bounded dry-run grouping change with a verifiable byte-identical output invariant."
+SM/EM, immediately after: "With one more interacting constraint layered onto a recorded 5-point story, this story sizes at 8 points."
 
 That prescribes this story's value. It is an anchoring event as soon as the facilitator sees it, with no challenge, restatement or retraction path. The facilitator stopped the round there: no discussion was opened, no sizing context followed, and the three recorded values and the consensus position were voided.
 
@@ -28,7 +28,7 @@ That prescribes this story's value. It is an anchoring event as soon as the faci
 - Engineer one: 3 - "The change carries an interacting constraint - a path matched by several rules must collapse to a single entry under the first documented rule - and a regression risk in the byte-identical requirement when grouping is off."
 - Engineer two: 3 - "Coverage is thin - no test reaches the grouping path - so a silent regression there would go unnoticed."
 
-SM/EM sizing context: "SKL-53's pointing record fixed its consensus at 5 points, and unlike that story this one is a narrower cleanup dry-run enhancement whose only hard constraint is keeping the ungrouped output byte-identical." - the same permitted factual reference, and again the round continued past it.
+SM/EM sizing context: "SKL-53's pointing record fixed its consensus at 5 points, and this story carries one more interacting constraint than it - that a path matched by several rules must appear once under the first documented rule." - the same permitted factual reference, and again the round continued past it.
 
 ### The discussion round, and the challenged ground left unresolved
 

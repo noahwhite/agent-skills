@@ -151,8 +151,8 @@ for prompt in sorted((HERE / "prompts").glob("disc3-*-prompt.txt")):
         problems.append(f"{prompt.name} reports how another voter voted")
     own = prompt.name.split("-")[1]
     for other_key, other_role in ROLES.items():
-        if other_key != own and re.search(rf"(?i)\b{other_role.lower()}\b[^.\n]*\d", text):
-            problems.append(f"{prompt.name} carries another voter's role with a value")
+        if other_key != own and re.search(rf"(?i)\b{other_role.lower()}\b", text):
+            problems.append(f"{prompt.name} names another voter's role, which can disclose its value")
 
 anchoring = re.search(r"^- Anchoring events: (.*)$", BODY, re.M)
 if not anchoring:
