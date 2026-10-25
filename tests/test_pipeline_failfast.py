@@ -674,8 +674,13 @@ def test_a_failed_phase_still_prints_one_completion_line_with_its_elapsed_time(g
     assert result.returncode == 15, result.stdout + result.stderr
     completion = [line for line in result.stderr.splitlines() if "phase=sweep complete elapsed=" in line]
     assert len(completion) == 1, f"a failed phase printed {len(completion)} completion lines: {result.stderr}"
-    assert re.search(r"elapsed=[0-9]+s", completion[0]), completion[0]
+    assert re.search(r"elapsed=[1-9][0-9]*s", completion[0]), completion[0]
+    assert "model=qa/failure-completion" in completion[0], completion[0]
+    assert completion[0].endswith("exit=15"), completion[0]
     assert "authentication failed QA completion check" in result.stderr, result.stderr
+    artifact = artifacts(repo, env)["sweep"]
+    artifact_text = artifact.read_text() if artifact.exists() else ""
+    assert "complete elapsed=" not in artifact_text, "the completion line leaked into the artifact"
     assert_not_stamped(artifacts(repo, env), "sweep")
 
 
@@ -726,3 +731,28 @@ def test_a_run_refused_before_the_attempt_starts_prints_no_completion_line(gate)
     )
     assert result.returncode == 2, result.stdout + result.stderr
     assert "complete elapsed=" not in result.stderr, result.stderr
+
+
+def test_an_interrupted_phase_reports_completion_with_its_signal_status(gate, tmp_path):
+    """AC4 covers every exit of the attempt, including an operator interrupt."""
+    repo, scratch, env = gate
+    started = tmp_path / "interrupt-completion.txt"
+    agent = f'touch {shlex.quote(str(started))}; sleep 60'
+    gate_process = subprocess.Popen(
+        ["bash", str(SCRIPT), "run", "sweep", "--repo", str(repo), "--base", "HEAD",
+         "--scratch", str(scratch), "--model", "gpt-6-sol", "--agent-cmd", agent],
+        env=env, cwd=str(ROOT), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+    )
+    try:
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline and not started.exists():
+            time.sleep(0.1)
+        assert started.exists(), "the agent never started"
+        gate_process.terminate()
+        _, stderr = gate_process.communicate(timeout=30)
+    finally:
+        if gate_process.poll() is None:
+            gate_process.kill()
+    completion = [line for line in stderr.splitlines() if "phase=sweep complete elapsed=" in line]
+    assert len(completion) == 1, stderr
+    assert completion[0].endswith("exit=143"), completion[0]

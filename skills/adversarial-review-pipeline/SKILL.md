@@ -132,8 +132,9 @@ An interrupted gate (SIGINT, SIGTERM, SIGHUP) kills the in-flight process group 
 The probe's own `--probe-timeout` is still honoured, bounded by whatever is left of the phase deadline at that moment.
 
 While the agent runs, `run` writes an elapsed-time line to its own stderr, the first after one second and then at least every 30 seconds (a `run`-only feature: a `dossier` plus `record` subagent flow has no heartbeat), carrying the phase, the elapsed seconds, the configured timeout and the availability-check state, plus one completion line with the elapsed time and the phase's exit status on every exit of the phase attempt, success or failure.
-The completion line is the last line the attempt writes, and its `elapsed` is the whole attempt (a heartbeat line reports the agent's own seconds); it carries `exit=<status>` after the model id.
-A `run` refused before the attempt starts (usage, not a Git repository, a bad base) prints no completion line, because no phase ran.
+It is written before the checkout cleanup, so only a cleanup warning can follow it; its `elapsed` is the whole attempt (a heartbeat line reports the agent's own seconds) and it carries `exit=<status>` after the model id.
+The phase attempt starts when the run directory is made, so a `run` refused before that (usage, not a Git repository, a bad base) prints no completion line, because no phase ran.
+Stdout carries the artifact alone (arbitration's report), never progress, so do not merge the two streams and read the last line.
 Progress never reaches the artifact or the agent's stdout, so a report's first line stays `REVIEW-RAN: yes`.
 
 On a non-zero agent exit, a timeout, or a report `accept_phase` rejects, `run` prints the phase, the exit code, the model id when supplied, and the last 40 lines of `${phase}-agent.err` and `${phase}-agent.log`, plus every provider-error line it detects in the full stderr log, so one is never lost past the tail window; `record` prints the phase, the model id when supplied, the reason and the report tail.

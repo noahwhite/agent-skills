@@ -75,11 +75,13 @@
 # after one second, then at least every 30 seconds - carrying the phase, the elapsed seconds, the
 # configured timeout and the availability-check state, and one completion line with the elapsed time
 # and the phase's exit status on every exit of the phase attempt, success or failure. That line is
-# the last thing the attempt writes ('elapsed' there is the whole attempt; a heartbeat line reports
-# the agent's own elapsed seconds), and it carries 'exit=<status>' after the model id. A `run`
-# refused before the attempt starts - usage, not a Git repository, a bad base - prints no completion
-# line, because no phase ran. Progress never reaches the artifact or the agent's stdout, so the
-# artifact's first line stays 'REVIEW-RAN: yes'.
+# written before the checkout cleanup, so only a cleanup warning can follow it ('elapsed' there is
+# the whole attempt; a heartbeat line reports the agent's own elapsed seconds), and it carries
+# 'exit=<status>' after the model id. The attempt starts when the run directory is made, so a `run`
+# refused before that - usage, not a Git repository, a bad base - prints no completion line, because
+# no phase ran. Progress never reaches the artifact or the agent's stdout, so the artifact's first
+# line stays 'REVIEW-RAN: yes'; stdout carries the artifact alone (arbitration's report), never
+# progress, so do not merge the two streams and read the last line.
 #
 # Diagnosis: a non-zero agent exit, a timeout kill, and a report `accept_phase` rejects all print the
 # phase, the exit code, the model id when supplied, and the last 40 lines of ${phase}-agent.err and
@@ -529,27 +531,20 @@ completion_line() {  # $1 phase, $2 elapsed seconds, $3 the phase's exit status
     "$1" "$2" "${MODEL_LABEL:-not supplied}" "$3" >&2
 }
 
-# One completion line per phase invocation, whatever the path out of it: a failed phase reports
-# completion with its exit status too, so the elapsed time is never missing from the evidence.
+# A phase attempt reports completion however it ends, so the elapsed time and the exit status are
+# never missing from the evidence. The attempt starts at init_scratch, so a refusal before it (usage,
+# not a Git repository, a bad base) is the only path with no completion line.
 PHASE_START=0
-COMPLETION_EMITTED=0
 CHECKOUT_PATH=""
-completion_once() {  # $1 phase, $2 exit status
-  if [ "$COMPLETION_EMITTED" -eq 0 ] && [ -n "${1:-}" ]; then
-    COMPLETION_EMITTED=1
-    completion_line "$1" "$(( SECONDS - PHASE_START ))" "$2"
-  fi
-}
-
-on_run_exit() {  # a run attempt's single exit path: clean up, then report completion, keeping the status
+on_run_exit() {  # a run attempt's single exit path: report completion, then clean up, keeping the status
   local rc=$?
   set +e
-  trap - EXIT INT TERM HUP
+  trap - EXIT
+  completion_line "${phase:-}" "$(( SECONDS - PHASE_START ))" "$rc"
   if [ -n "${CHECKOUT_PATH:-}" ]; then
     ( remove_checkout "$CHECKOUT_PATH" ) >/dev/null \
       || echo "WARNING: could not remove checkout $CHECKOUT_PATH (see above)" >&2
   fi
-  completion_once "${phase:-}" "$rc"
   exit "$rc"
 }
 
@@ -580,7 +575,7 @@ provider_lines() {  # $1 file: every provider-error line, verbatim, even past th
 
 diagnose_phase() {  # $1 phase, $2 exit code, $3 reason (already captured), $4 report path when applicable
   local phase_name="$1" code="$2" reason="${3:-}" report="${4:-}"
-  printf 'adversarial-pipeline: phase=%s exit=%s model=%s\n' "$phase_name" "$code" "$MODEL_LABEL" >&2
+  printf 'adversarial-pipeline: phase=%s exit=%s model=%s\n' "$phase_name" "$code" "${MODEL_LABEL:-not supplied}" >&2
   if [ -n "$reason" ]; then
     printf 'adversarial-pipeline: reason: %s\n' "${reason#ERROR: }" >&2
   fi
@@ -915,7 +910,6 @@ case "$cmd" in
     [ -n "$AGENT_CMD" ] || die 2 "--agent-cmd (or ADVERSARIAL_AGENT_CMD) is required; build it from the profile agent for this phase."
     init_scratch
     PHASE_START=$SECONDS
-    COMPLETION_EMITTED=0
     CHECKOUT_PATH=""
     trap on_run_exit EXIT
     # From here the phase attempt is real, so every exit reports completion; a missing predecessor is

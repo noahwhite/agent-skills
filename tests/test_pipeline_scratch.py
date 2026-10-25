@@ -182,11 +182,13 @@ def test_the_phase_agent_receives_the_session_scratch_directory(tmp_path):
         "--scratch", str(scratch), "--agent-cmd", agent, env=env,
     )
     assert sweep.returncode == 0, sweep.stdout + sweep.stderr
-    # A phase ends with its completion line (SKL-20 AC4), so pick the artifact line explicitly
-    # instead of assuming it is last.
-    artifact_lines = [line for line in sweep.stderr.splitlines() if line.startswith("Phase sweep -> ")]
-    assert artifact_lines, f"no artifact line in the phase output: {sweep.stderr}"
-    report = Path(artifact_lines[-1].split(" -> ")[-1])
+    # A phase ends with its completion line (SKL-20 AC4), so read the artifact path from `paths`
+    # rather than from the last stderr line.
+    paths = run_script("paths", "--repo", str(repo), "--base", "HEAD", env=env)
+    assert paths.returncode == 0, paths.stdout + paths.stderr
+    report = Path(next(line.split(" ", 1)[1] for line in paths.stdout.splitlines()
+                       if line.startswith("sweep ")))
+    assert report.is_file(), f"the sweep artifact is missing: {report}"
     lines = report.read_text().splitlines()
     assert f"scratch={scratch}" in lines, f"the agent did not get the session directory: {lines}"
     cwd = next(line for line in lines if line.startswith("cwd=")).removeprefix("cwd=")

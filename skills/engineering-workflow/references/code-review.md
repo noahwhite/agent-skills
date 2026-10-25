@@ -159,3 +159,4 @@ The `adversarial-review-pipeline` skill defines the pre-PR gate; these rules app
 - A passing availability probe is one minimal provider call, not proof that the real phase will run: keep the phase's own failure diagnosis in the evidence.
 - A gate phase keeps progress visible while it spends model budget: an elapsed-time line on stderr (first after a second, then at least every 30 seconds) and one completion line with the elapsed time and the phase's exit status at the end, which a failed phase prints too.
   A silent gate is a stuck gate, and a phase that ends without a completion line has left no evidence of how long it took.
+  A `run` refused before its phase attempt starts (usage, no repository, a bad base) prints none, because no phase ran.
