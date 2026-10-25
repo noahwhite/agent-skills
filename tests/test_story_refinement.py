@@ -770,7 +770,7 @@ def test_step_four_re_vote_prompt_carries_the_rationale_rule() -> None:
 
 def test_pointing_template_states_the_standing_consensus() -> None:
     assert (
-        "- Consensus: <highest value in the intersection of the vote that stands, or none when the intersection is empty, or void when the round was voided>"
+        "- Consensus: <highest value in the intersection of the vote that stands, or none when the intersection is empty>"
         in pointing_template()
     )
 
@@ -826,13 +826,13 @@ def test_step_four_facilitator_challenges_every_off_basis_ground() -> None:
     assert (
         "In that round, and against the rationales recorded in Step 3, the facilitator challenges every ground "
         "outside the pointing basis, whether it is heard in the discussion or read in a recorded rationale, "
-        "except a target value for this story and a statement of elapsed time, effort or run cost, which are "
-        "anchoring events the moment they are seen."
+        "except a target value for this story and, from the SM/EM, a statement of elapsed time, effort or run "
+        "cost, which are anchoring events the moment they are seen."
     ) in item
     assert (
-        "Challenging a ground is not comparing values or singling out a voter: the facilitator names the ground's "
-        "kind and its author, never the ground's verbatim text, and a ground that embeds a point value is named "
-        "by its kind alone."
+        "Challenging a ground is not comparing values or singling out a voter: in the discussion the facilitator "
+        "names the ground's kind, never its verbatim text, its author or the author's value, and the pointing "
+        "record carries the author; a ground that embeds a point value is named by its kind alone."
     ) in item
     assert (
         "A challenged ground must be restated as a basis driver or retracted, except a target value named or "
@@ -1060,7 +1060,7 @@ def test_pointing_template_records_each_challenge_and_outcome() -> None:
         "quoted verbatim in the session record and elided here>" in pointing_template()
     )
     assert (
-        "- Superseded values after a void: <none, or the voided values and the blind vote that replaced them>"
+        "- Superseded values after a void: <none, or the voided values, the voided consensus and the blind vote that replaced them>"
         in pointing_template()
     )
     body = spaced(section(RECORD.read_text(), "Pointing record"))
@@ -1091,7 +1091,7 @@ def test_pointing_template_places_challenges_before_anchoring_events() -> None:
 
 def test_pointing_template_asks_for_complexity_rationales() -> None:
     lines = pointing_template()
-    values = lines.index("- Values, recorded before the discussion:")
+    values = next(index for index, line in enumerate(lines) if line.startswith("- Values, recorded before the discussion:"))
     assert lines[values + 1 : values + 4] == [
         "  - Product owner: <value> - <short complexity rationale, eliding a pre-reveal value or a target value>",
         "  - Engineer one: <value> - <short complexity rationale, eliding a pre-reveal value or a target value>",
