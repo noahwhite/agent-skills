@@ -129,6 +129,7 @@
 # first line), 18 the agent changed the primary checkout, 19 the phase was killed by --timeout,
 # 20 the phase's availability check failed before any agent ran, 21 the phase was accepted and
 # stamped but its arbitration report could not be written to stdout (do not re-run the model call).
+# A checkout that cannot be created still exits 15, the code that path had before this change.
 set -euo pipefail
 
 usage() { awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0" >&2; exit 2; }
@@ -216,7 +217,7 @@ esac
 if [ -z "$MODEL" ]; then
   MODEL_LABEL="not-supplied"
 else
-  MODEL_LABEL="$(printf '%s' "$MODEL" | tr -c 'A-Za-z0-9._/:@#+~,][-' '_')" || MODEL_LABEL="not supplied"
+  MODEL_LABEL="$(printf '%s' "$MODEL" | tr -c 'A-Za-z0-9._/:@#+~,][-' '_')" || MODEL_LABEL="not-supplied"
 fi
 
 availability_state="availability check: not configured"
@@ -828,11 +829,16 @@ make_checkout() {  # prints the path of a registered throwaway detached worktree
   dir="$(abspath "$container/head-${HEAD_SHA:0:12}")"
   if [ -n "$bounded" ]; then
     # The prune is part of the checkout work and is charged to the same budget.
-    timeout -s KILL "${bounded}s" bash -c "git worktree prune && git worktree add -q --detach $(printf '%q' "$dir") $(printf '%q' "$HEAD_SHA")"
+    if command -v timeout >/dev/null 2>&1; then
+      timeout -s KILL "${bounded}s" bash -c "git worktree prune && git worktree add -q --detach $(printf '%q' "$dir") $(printf '%q' "$HEAD_SHA")"
+    else
+      echo "WARNING: timeout(1) is not installed, so the throwaway checkout is not bounded by --timeout" >&2
+      bash -c "git worktree prune && git worktree add -q --detach $(printf '%q' "$dir") $(printf '%q' "$HEAD_SHA")"
+    fi
     rc=$?
     case "$rc" in
       0) ;;
-      124|137) rmdir -- "$container" 2>/dev/null || true; return 1 ;;
+      124|137) git worktree prune >/dev/null 2>&1 || true; rmdir -- "$container" 2>/dev/null || true; return 1 ;;
       *) rmdir -- "$container" 2>/dev/null || true; return 2 ;;
     esac
   else
