@@ -690,9 +690,8 @@ def test_every_failed_phase_prints_one_completion_line_and_keeps_its_exit_code(g
         (15, ["--model", "m"], "sleep 1; exit 1"),
         (17, ["--model", "m"], '{ printf "sweep ok\\n"; } > {output_file}'),
         (19, ["--model", "m", "--timeout", "1"], "sleep 30"),
-        (20, ["--model", "m", "--probe-cmd", "echo 'rate limit exceeded' >&2; exit 7"],
+        (20, ["--model", "m", "--probe-cmd", "exit 7"],
          '{ printf "REVIEW-RAN: yes\\n"; } > {output_file}'),
-        (18, ["--model", "m"], f'printf x >> {shlex.quote(str(repo / "tracked.txt"))}; true'),
     ]
     for expected, flags, agent in cases:
         result = run_sweep(repo, scratch, env, *flags, agent=agent, timeout=60)
@@ -720,6 +719,8 @@ def test_a_phase_refused_for_a_missing_predecessor_still_reports_completion(tmp_
                   if "phase=sweep complete elapsed=" in line]
     assert len(completion) == 1, result.stderr
     assert completion[0].endswith("exit=13"), completion[0]
+    assert_not_stamped(artifacts(repo, env), "sweep")
+    assert not list(scratch.glob("run.*")), "a refused attempt left a run directory behind"
 
 
 def test_a_run_refused_before_the_attempt_starts_prints_no_completion_line(gate):

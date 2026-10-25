@@ -540,6 +540,7 @@ on_run_exit() {  # a run attempt's single exit path: report completion, then cle
   local rc=$?
   set +e
   trap - EXIT
+  trap '' INT TERM HUP   # the status is reported; a second interrupt must not rewrite it
   completion_line "${phase:-}" "$(( SECONDS - PHASE_START ))" "$rc"
   if [ -n "${CHECKOUT_PATH:-}" ]; then
     ( remove_checkout "$CHECKOUT_PATH" ) >/dev/null \
@@ -908,13 +909,14 @@ case "$cmd" in
 
   run)
     [ -n "$AGENT_CMD" ] || die 2 "--agent-cmd (or ADVERSARIAL_AGENT_CMD) is required; build it from the profile agent for this phase."
-    init_scratch
     PHASE_START=$SECONDS
     CHECKOUT_PATH=""
     trap on_run_exit EXIT
     # From here the phase attempt is real, so every exit reports completion; a missing predecessor is
-    # one of those failures, not a refusal before the attempt starts.
+    # one of those failures, not a refusal before the attempt starts. The scratch directory is made
+    # only once the phase may actually run, so a refused attempt leaves no run directory behind.
     require_predecessors "$phase"
+    init_scratch
     out="$(artifact_for "$phase")"
     dossier="$SCRATCH/${phase}-dossier.md"
     errlog="$RUN_DIR/${phase}-agent.err"
