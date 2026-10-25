@@ -26,6 +26,7 @@ PER_STORY_SENTENCES = (
     "With `profile.git.merge_method` `merge`, select that PR's merge commit.",
     "Confirm the selection reproduces that PR's own diff, by patch id: for `squash` the squash commit against `gh pr diff <number>`, for `rebase` the selected commits against the PR's commits, and for `merge` `git diff <merge>^1 <merge>` against `gh pr diff <number>`.",
     "Stop and report when any commit of that PR, from its `commits` list, has a subject that does not carry the story's issue key, because another story's change is riding along inside that PR and a squash or merge commit would carry it unnoticed.",
+    "Stop and report as well when that list holds 100 commits or more, because the list is truncated there and cannot be checked whole.",
     "Record the PR number and the selected commit SHAs in the promotion PR body.",
     "Before carrying them, confirm the story's change is still present on `origin/<profile.git.integration_branch>`: the lines the selection adds are present in that branch's version of each file and the lines it removes are absent, checked as whole lines with `git grep --fixed-strings -x` against `origin/<profile.git.integration_branch>`, and stop and report the story as reverted when they are not.",
     # Carrying the selected commits onto the promotion branch.
@@ -188,6 +189,7 @@ EXPECTED_PROMOTION_SECTION = (
     "   With `profile.git.merge_method` `merge`, select that PR's merge commit.\n"
     "   Confirm the selection reproduces that PR's own diff, by patch id: for `squash` the squash commit against `gh pr diff <number>`, for `rebase` the selected commits against the PR's commits, and for `merge` `git diff <merge>^1 <merge>` against `gh pr diff <number>`.\n"
     "   Stop and report when any commit of that PR, from its `commits` list, has a subject that does not carry the story's issue key, because another story's change is riding along inside that PR and a squash or merge commit would carry it unnoticed.\n"
+    '   Stop and report as well when that list holds 100 commits or more, because the list is truncated there and cannot be checked whole.\n'
     '   Record the PR number and the selected commit SHAs in the promotion PR body.\n'
     "   Before carrying them, confirm the story's change is still present on `origin/<profile.git.integration_branch>`: the lines the selection adds are present in that branch's version of each file and the lines it removes are absent, checked as whole lines with `git grep --fixed-strings -x` against `origin/<profile.git.integration_branch>`, and stop and report the story as reverted when they are not.\n"
     '3. Carry the selected commits onto the promotion branch by cherry-picking them one at a time in their original order, with `-m 1` when a selected commit is a merge commit, or by applying non-merge selections with `git cherry-pick -n` in order and making one commit.\n'
