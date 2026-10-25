@@ -36,7 +36,7 @@ A new canceled priority-none fixture was used because SKL-72 already carried sev
 
 ### Matching check
 
-`round3/check_record.py` compares the record body against every capture: each `VALUE:`/`ACCEPTED:` token and each `RATIONALE:` line must appear verbatim, the four header fields must be present, and each stage must have exactly three captures. Its committed output is `round3/check_record.out`.
+`round3/check_record.py` compares the record against every capture per voter and per stage: the values block, the re-vote line and the superseded line must each carry that voter's exact value or accepted set and exact rationale, all seventeen template fields must be present in the delivered order, the fixed header values must match, and each stage must hold exactly three captures. A mutation probe that changed a captured `VALUE:` failed the check, which the earlier substring form had missed. Its committed output is `round3/check_record.out`.
 
 ## 4. What is new, what is unchanged
 
