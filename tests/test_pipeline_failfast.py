@@ -771,8 +771,8 @@ def test_an_interrupted_phase_reports_completion_with_its_signal_status(gate, tm
     assert completion[0].endswith("exit=143"), completion[0]
 
 
-def test_arbitration_reports_completion_before_the_artifact_and_its_report(gate):
-    """AC4 ordering: the completion line precedes the artifact line and the echoed report."""
+def test_arbitration_ends_with_the_completion_line_after_the_report_echo(gate):
+    """AC4 ordering: the report is echoed, then the artifact line, then the completion line."""
     repo, scratch, env = gate
     sweep = run_sweep(repo, scratch, env, "--model", "m")
     assert sweep.returncode == 0, sweep.stdout + sweep.stderr
@@ -791,7 +791,8 @@ def test_arbitration_reports_completion_before_the_artifact_and_its_report(gate)
     lines = arbitrate.stderr.splitlines()
     completion = next(i for i, line in enumerate(lines) if "phase=arbitrate complete elapsed=" in line)
     artifact = next(i for i, line in enumerate(lines) if line.startswith("Phase arbitrate -> "))
-    assert completion < artifact, f"the completion line followed the artifact line: {lines}"
+    assert artifact < completion, f"the completion line must be the last phase line: {lines}"
+    assert completion == len(lines) - 1 or lines[completion + 1].startswith("WARNING:"), lines
 
 
 def test_a_stale_invalid_model_in_the_environment_does_not_refuse_other_commands(gate):

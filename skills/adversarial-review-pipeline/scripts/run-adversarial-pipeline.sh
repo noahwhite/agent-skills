@@ -75,20 +75,18 @@
 # Progress: while the agent runs, `run` writes an elapsed-time line to its own stderr - the first
 # after one second, then at least every 30 seconds - carrying the phase, the elapsed seconds, the
 # configured timeout and the availability-check state, and one completion line with the elapsed time
-# and the phase's exit status on every exit of the phase attempt, success or failure. A successful
-# phase writes it before it reports the artifact path and before it echoes an arbitration report, so
-# after it only the artifact-path line, that echo and the checkout cleanup's own result can appear
-# ('elapsed' there is the whole attempt; a
-# heartbeat line reports the agent's own elapsed seconds), and it carries 'exit=<status>' after the
-# model id. The attempt starts once `run` accepts its agent command, so a `run` refused before that -
-# usage, not a Git repository, a bad base - prints no completion line, because no phase ran. An agent
-# can write anything to its own stderr, including a line shaped like this one: the phase's completion
-# line is the last such line the phase writes. The line reports the phase: a failure while the report
-# is echoed to stdout, or an interrupt during that echo or during teardown, can still change the
-# process's own exit status afterwards (teardown ignores a second interrupt so the reported status
-# stays final). Progress never reaches the artifact or the agent's stdout, so the artifact's first
-# line stays 'REVIEW-RAN: yes'; stdout carries the artifact alone (arbitration's report), never
-# progress, so do not merge the two streams and read the last line.
+# and the phase's exit status on every exit of the phase attempt, success or failure. It is the last
+# line the phase writes, after the artifact-path line and after an arbitration report has been
+# echoed, so the status it reports is the status the process exits with (only teardown's own output
+# can follow it). Its 'elapsed' is the whole attempt, where a heartbeat line reports the agent's own
+# elapsed seconds, and it carries 'exit=<status>' after the model id. The attempt starts once `run`
+# accepts its agent command, so a `run` refused before that - usage, not a Git repository, a bad base
+# - prints no completion line, because no phase ran. An agent can write anything to its own stderr,
+# including a line shaped like this one: the phase's completion line is the last such line the phase
+# writes. Progress never reaches the artifact or the agent's stdout, so the artifact's first line
+# stays 'REVIEW-RAN: yes'; stdout carries the artifact alone (arbitration's report), never progress,
+# so do not merge the two streams and read the last line. A report the gate cannot write to stdout
+# exits 1 through the same path, so its completion line names that failure.
 #
 # Diagnosis: a non-zero agent exit, a timeout kill, and a report `accept_phase` rejects all print the
 # phase, the exit code, the model id when supplied, and the last 40 lines of ${phase}-agent.err and
@@ -197,11 +195,13 @@ if [ "$cmd" = "run" ]; then
     *[!][A-Za-z0-9._/:@#+~,-]*) die 2 "--model must be a model id: letters, digits and . _ / : @ # + ~ , [ ] - only" ;;
   esac
 fi
-# The label is printed by every command, so anything outside the model-id character set is mangled
-# here: no value can forge a line or a field of the progress lines, whichever command carries it.
-MODEL_LABEL="$(printf '%s' "${MODEL:-not supplied}" | tr -c 'A-Za-z0-9._/:@#+~,-' '_')"
-MODEL_LABEL="${MODEL_LABEL%_}"
-[ -n "$MODEL_LABEL" ] || MODEL_LABEL="not supplied"
+# The label is printed by every command, so a value outside the model-id character set is replaced
+# wholesale: no value can forge a line or a field of the progress lines, and a valid id is exact.
+case "$MODEL" in
+  "") MODEL_LABEL="not supplied" ;;
+  *[!][A-Za-z0-9._/:@#+~,-]*) MODEL_LABEL="<invalid model id>" ;;
+  *) MODEL_LABEL="$MODEL" ;;
+esac
 availability_state="availability check: not configured"
 
 # The target repository: --repo, else the current directory. Never this script's location.
@@ -1016,8 +1016,6 @@ case "$cmd" in
       fail_phase "$rc_accept" "$(cat -- "$reason_file" 2>/dev/null || true)"
     fi
     rm -f -- "$reason_file"
-    COMPLETION_EMITTED=1
-    completion_line "$phase" "$(( SECONDS - PHASE_START ))" 0
     echo "Phase $phase -> $out" >&2
     if [ "$phase" = "arbitrate" ]; then
       cat -- "$out" || {
