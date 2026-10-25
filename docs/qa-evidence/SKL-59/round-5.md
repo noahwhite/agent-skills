@@ -31,11 +31,11 @@ All four replay verdicts and required actions are determinate; an ordinary post-
 
 ## Behavioural evidence: established facts and deciding failure
 
-[SKL-79](https://linear.app/officina-pub/issue/SKL-79) is Canceled, priority `0`, explicitly a disposable fixture with no implementation, and contains exactly one pointing-record comment `466d7155` plus its preflight.
+SKL-79 is Canceled, priority `0`, explicitly a disposable fixture with no implementation, and contains exactly one pointing-record comment `466d7155` plus its preflight.
 Its complete comment equals [the repository record](tabletop/round5/pointing-record.md), including the appended judgement section and final newline.
 All seventeen prompt/output pairs are present; all twelve voting prompts carry the exact delivered basis and full rationale rule; every captured rationale and facilitator response matches the retained raw record.
 The provenance names worktree-loaded amendment commit `b73ed09`; the entire skill is byte-identical to this build, while the record reference later synchronizes target/prescription terminology and grammar; the cleanup left every prompt, output and raw capture unchanged.
-The real [SKL-53 record](https://linear.app/officina-pub/issue/SKL-53) confirms consensus 5, consistently cited by the round-5 comparison.
+The real SKL-53 record confirms consensus 5, consistently cited by the round-5 comparison.
 The comparison reports that recorded value and a basis difference without assigning this story a value or direction, so permitting it and continuing the round is correct under the owner amendment.
 The separate SM/EM prescription assigns this story 8 and correctly triggers an immediate void followed by fresh blind `v2-*` prompts.
 Engineer two's “Coverage is thin - no test reaches the grouping path - so a silent regression there would go unnoticed.” concerns verification strength rather than a property of the change, so the coverage challenge is correct.
