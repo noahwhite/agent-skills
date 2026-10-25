@@ -60,7 +60,7 @@ Never edit the refinement comment to add the result; its id keeps identifying on
 
 Post this after the re-vote, or record it as an unpointed result.
 The three values are recorded before any SM/EM sizing comment or discussion.
-While any round is open, the Challenges and Anchoring events lines record a ground by its kind, its author (a voter, or the SM/EM for a sizing comment) and its outcome or recovery, with a point value named before the reveal or a target value for this story elided, because a verbatim quote of one in an open record names it again; the verbatim quote is carried once the round closes and no further round can be anchored by it.
+The Challenges and Anchoring events lines record a ground by its kind, its author (a voter, or the SM/EM for a sizing comment) and its outcome or recovery, and they elide a point value named before the reveal or a target value for this story permanently, because the posted record stays on the story surface that later voters read; the verbatim quote lives in the session's raw record, cited by its base name.
 A sizing comment that names a point value before the reveal, names or implies a target value for this story, or states elapsed time, effort or run cost voids the round under the Anchoring guardrail recovery as soon as the facilitator sees it, as does any ground that is neither restated nor retracted, and the void records the consensus as void and is recorded under Anchoring events.
 
 ```markdown
@@ -82,9 +82,9 @@ A sizing comment that names a point value before the reveal, names or implies a 
 - Decision rationale: <one line, or n/a>
 - Effective maximum: <profile.refinement.point_cap; the 8-point rule still triggers at 8 or more>
 - Split: <none, or the slice mapping and sibling issue keys>
-- Challenges: <none, or each ground challenged by kind, its author (a voter, or the SM/EM for a sizing comment), the restatement, withdrawal or retraction, or the void; elide a pre-reveal value or a target value while the round is open>
+- Challenges: <none, or each ground challenged by kind, its author (a voter, or the SM/EM for a sizing comment), the restatement, withdrawal or retraction, or the void; elide a pre-reveal value or a target value>
 - Superseded values after a void: <none, or the voided values and the blind vote that replaced them>
-- Anchoring events: <none, or the comment and the recovery, including the newly created voter contexts, quoted verbatim once the round closes>
+- Anchoring events: <none, or the comment and the recovery, including the newly created voter contexts, quoted verbatim in the session record and elided here>
 - Tracker writes: product owner
 ```
 

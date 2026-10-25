@@ -791,14 +791,7 @@ def test_step_three_sizing_context_is_in_complexity_terms() -> None:
         "comparable unknowns and constraints, and relevant scope differences."
     ) in body
     assert "historical sizing" not in squash(SKILL.read_text())
-    assert (
-        "Before the reveal it must not name any point value."
-    ) in body
-    assert (
-        "After the reveal it may compare this story with an already-estimated item and name that item's recorded "
-        "value, but it must not name or imply a target value for this story, including one implied by a split "
-        "status, and such a statement is an anchoring event under the Anchoring guardrail."
-    ) in body
+    assert "historical sizing" not in squash(SKILL.read_text())
 
 
 def test_step_three_sizing_context_permits_a_reference_after_the_reveal_and_bans_a_target() -> None:
@@ -848,8 +841,9 @@ def test_step_four_facilitator_challenges_every_off_basis_ground() -> None:
     ) in item
     assert (
         "The SM/EM withdraws or restates its own sizing comment on the same terms, except a point value named "
-        "before the reveal, a target value for this story, or a statement of elapsed time, effort or run cost, "
-        "each of which is an anchoring event as soon as the facilitator sees it."
+        "before the reveal, a target value named or implied for this story, including one implied by a split "
+        "status, treating another voter's revealed value as the answer, or a statement of elapsed time, effort "
+        "or run cost, each of which is an anchoring event as soon as the facilitator sees it."
     ) in item
     assert "A ground that is neither is an anchoring event under the Anchoring guardrail." in item
 
@@ -1041,7 +1035,8 @@ def test_phrasing_table_permitted_column_is_the_exact_curated_list() -> None:
 
 TARGET_VALUE_IN_PERMITTED = re.compile(
     r"\bthis (?:story|one) (?:is|was|scores?|scored|sits?|lands?|should be)\b"
-    r"|\btarget\b|\bwe should\b|\bgo higher\b|\bgo lower\b",
+    r"|\btarget\b|\bwe should\b|\bgo higher\b|\bgo lower\b"
+    r"|\bmatch\b|\bsame as\b|\btreat(?:ed|s)? the same\b|\bpoint it at\b",
     re.IGNORECASE,
 )
 
@@ -1056,7 +1051,11 @@ def test_pointing_template_records_each_challenge_and_outcome() -> None:
     assert (
         "- Challenges: <none, or each ground challenged by kind, its author (a voter, or the SM/EM for a sizing "
         "comment), the restatement, withdrawal or retraction, or the void; elide a pre-reveal value or a target "
-        "value while the round is open>" in pointing_template()
+        "value>" in pointing_template()
+    )
+    assert (
+        "- Anchoring events: <none, or the comment and the recovery, including the newly created voter contexts, "
+        "quoted verbatim in the session record and elided here>" in pointing_template()
     )
     assert (
         "- Superseded values after a void: <none, or the voided values and the blind vote that replaced them>"
@@ -1064,11 +1063,11 @@ def test_pointing_template_records_each_challenge_and_outcome() -> None:
     )
     body = spaced(section(RECORD.read_text(), "Pointing record"))
     assert (
-        "While any round is open, the Challenges and Anchoring events lines record a ground by its kind, its "
-        "author (a voter, or the SM/EM for a sizing comment) and its outcome or recovery, with a point value "
-        "named before the reveal or a target value for this story elided, because a verbatim quote of one in an "
-        "open record names it again; the verbatim quote is carried once the round closes and no further round "
-        "can be anchored by it."
+        "The Challenges and Anchoring events lines record a ground by its kind, its author (a voter, or the "
+        "SM/EM for a sizing comment) and its outcome or recovery, and they elide a point value named before the "
+        "reveal or a target value for this story permanently, because the posted record stays on the story "
+        "surface that later voters read; the verbatim quote lives in the session's raw record, cited by its "
+        "base name."
     ) in body
     assert (
         "A sizing comment that names a point value before the reveal, names or implies a target value for this "

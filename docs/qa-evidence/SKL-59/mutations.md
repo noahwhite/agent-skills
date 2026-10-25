@@ -1,11 +1,11 @@
 # SKL-59 mutation evidence
 
 Measured on the delivered text of this change with CPython 3.12.3 and locked dependencies, with every command run from the repository root.
-The modified files are `skills/story-refinement/SKILL.md` and `skills/story-refinement/references/refinement-record.md`.
+The modified files are `skills/story-refinement/SKILL.md`, `skills/story-refinement/references/refinement-record.md`, `tests/test_story_refinement.py` (the pins) and this evidence file.
 Before each check the document bytes were saved, the edit shown below was made once, the quoted command ran, and the saved bytes were restored even when the command failed; the final source matched the saved bytes, and the only tracked changes were then the files this change delivers.
 Each entry shows the exact matched text, and the exact replacement text where the edit substitutes or inserts one, so a re-runner can reproduce it from the delivered text.
-33 regression proofs failed as designed and 1 control passed.
-Entries 1 to 33 are the regression proofs; entry 34 is the control.
+35 regression proofs failed as designed and 1 control passed.
+Entries 1 to 35 are the regression proofs; entry 36 is the control.
 
 ## 1. Remove the basis-by-reference and out-of-basis sentence from Step 3 item 4
 
@@ -145,7 +145,7 @@ Matched text:
 
 ```text
 A challenged ground must be restated as a basis driver or retracted, and a voter whose basis does not support its recorded value records that in the re-vote.
-     The SM/EM withdraws or restates its own sizing comment on the same terms, except a point value named before the reveal, a target value for this story, or a statement of elapsed time, effort or run cost, each of which is an anchoring event as soon as the facilitator sees it.
+     The SM/EM withdraws or restates its own sizing comment on the same terms, except a point value named before the reveal, a target value named or implied for this story, including one implied by a split status, treating another voter's revealed value as the answer, or a statement of elapsed time, effort or run cost, each of which is an anchoring event as soon as the facilitator sees it.
 ```
 
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_step_four_facilitator_challenges_every_off_basis_ground`
@@ -314,7 +314,7 @@ File: `refinement-record.md`
 Matched text:
 
 ```text
-While any round is open, the Challenges and Anchoring events lines record a ground by its kind, its author (a voter, or the SM/EM for a sizing comment) and its outcome or recovery, with a point value named before the reveal or a target value for this story elided, because a verbatim quote of one in an open record names it again; the verbatim quote is carried once the round closes and no further round can be anchored by it.
+The Challenges and Anchoring events lines record a ground by its kind, its author (a voter, or the SM/EM for a sizing comment) and its outcome or recovery, and they elide a point value named before the reveal or a target value for this story permanently, because the posted record stays on the story surface that later voters read; the verbatim quote lives in the session's raw record, cited by its base name.
 ```
 
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_pointing_template_records_each_challenge_and_outcome`
@@ -340,13 +340,39 @@ File: `refinement-record.md`
 Matched text:
 
 ```text
-- Challenges: <none, or each ground challenged by kind, its author (a voter, or the SM/EM for a sizing comment), the restatement, withdrawal or retraction, or the void; elide a pre-reveal value or a target value while the round is open>
+- Challenges: <none, or each ground challenged by kind, its author (a voter, or the SM/EM for a sizing comment), the restatement, withdrawal or retraction, or the void; elide a pre-reveal value or a target value>
 ```
 
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_pointing_template_records_each_challenge_and_outcome`
 Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_pointing_template_records_each_challenge_and_outcome`.
 
-## 25. Remove the superseded-values line from the pointing-record template
+## 25. Remove the revealed-value clause from the accepted-set rule
+
+File: `SKILL.md`
+
+Matched text:
+
+```text
+never treats another voter's revealed value as its answer,
+```
+
+Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_step_three_rationale_names_complexity_drivers_and_no_duration`
+Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_step_three_rationale_names_complexity_drivers_and_no_duration`.
+
+## 26. Remove the verbatim-in-session-record clause from the Anchoring events template line
+
+File: `refinement-record.md`
+
+Matched text:
+
+```text
+, quoted verbatim in the session record and elided here
+```
+
+Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_pointing_template_records_each_challenge_and_outcome`
+Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_pointing_template_records_each_challenge_and_outcome`.
+
+## 27. Remove the superseded-values line from the pointing-record template
 
 File: `refinement-record.md`
 
@@ -359,7 +385,7 @@ Matched text:
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_pointing_template_records_each_challenge_and_outcome`
 Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_pointing_template_records_each_challenge_and_outcome`.
 
-## 26. Remove the reveal condition from the phrasing principle sentence
+## 28. Remove the reveal condition from the phrasing principle sentence
 
 File: `refinement-record.md`
 
@@ -372,7 +398,7 @@ Matched text:
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_phrasing_intro_is_unchanged_and_adds_the_comparison_principle`
 Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_phrasing_intro_is_unchanged_and_adds_the_comparison_principle`.
 
-## 27. Put a target-value permitted cell in a row the curated list pins
+## 29. Put a target-value permitted cell in an unpinned row
 
 File: `refinement-record.md`
 
@@ -391,7 +417,7 @@ Replaced with:
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_phrasing_table_permitted_cells_state_no_target_value`
 Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_phrasing_table_permitted_cells_state_no_target_value`.
 
-## 28. Put a preferred-direction permitted cell in a row the curated list pins
+## 30. Put a preferred-direction permitted cell in an unpinned row
 
 File: `refinement-record.md`
 
@@ -410,7 +436,7 @@ Replaced with:
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_phrasing_table_permitted_cells_state_no_target_value`
 Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_phrasing_table_permitted_cells_state_no_target_value`.
 
-## 29. Delete one permitted row, leaving ten
+## 31. Delete one permitted row, leaving ten
 
 File: `refinement-record.md`
 
@@ -423,7 +449,7 @@ Matched text:
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_phrasing_table_permitted_column_is_the_exact_curated_list`
 Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_phrasing_table_permitted_column_is_the_exact_curated_list`.
 
-## 30. Insert a non-row line between two table rows
+## 32. Insert a non-row line between two table rows
 
 File: `refinement-record.md`
 
@@ -443,7 +469,7 @@ This story is a 5.
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_phrasing_section_holds_only_the_intro_the_table_and_the_trailer`
 Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_phrasing_section_holds_only_the_intro_the_table_and_the_trailer`.
 
-## 31. Remove the reveal definition from Step 3 item 5
+## 33. Remove the reveal definition from Step 3 item 5
 
 File: `SKILL.md`
 
@@ -456,7 +482,7 @@ The reveal is the moment the facilitator has recorded all three values, after wh
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_step_three_defines_the_reveal`
 Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_step_three_defines_the_reveal - a...`.
 
-## 32. Remove the rationale rule from the re-vote prompt sentence
+## 34. Remove the rationale rule from the re-vote prompt sentence
 
 File: `SKILL.md`
 
@@ -469,7 +495,7 @@ Matched text:
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_step_four_re_vote_prompt_carries_the_rationale_rule`
 Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_step_four_re_vote_prompt_carries_the_rationale_rule`.
 
-## 33. Make a voided consensus look like an untouched field
+## 35. Make a voided consensus look like an untouched field
 
 File: `refinement-record.md`
 
@@ -488,7 +514,7 @@ Replaced with:
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_pointing_template_marks_a_voided_consensus`
 Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_pointing_template_marks_a_voided_consensus`.
 
-## 34. Control: add a blank line after the table
+## 36. Control: add a blank line after the table
 
 File: `refinement-record.md`
 
@@ -507,7 +533,5 @@ Record every SM/EM sizing comment with the pointing record, even when it stays i
 
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_phrasing_section_holds_only_the_intro_the_table_and_the_trailer`
 Result: PASSED (control).
-
-Pins this file does not mutate, because they guard structure rather than one sentence: the phrasing table header labels, the Challenges-before-Anchoring-events ordering, the Step 4 item count and order, and the clause that another voter's revealed value is never the answer.
 
 The facilitator's challenge duty has no automated guard over a live round: a phrase test can pin the duty's text, and the mutations above prove that pin, but only a run can show a facilitator applying it, which is what the tabletop pointing round on the canceled fixture records.
