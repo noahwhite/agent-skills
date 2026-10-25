@@ -74,8 +74,12 @@
 # Progress: while the agent runs, `run` writes an elapsed-time line to its own stderr - the first
 # after one second, then at least every 30 seconds - carrying the phase, the elapsed seconds, the
 # configured timeout and the availability-check state, and one completion line with the elapsed time
-# and the phase's exit status on every exit path, success or failure. Progress never reaches the
-# artifact or the agent's stdout, so the artifact's first line stays 'REVIEW-RAN: yes'.
+# and the phase's exit status on every exit of the phase attempt, success or failure. That line is
+# the last thing the attempt writes ('elapsed' there is the whole attempt; a heartbeat line reports
+# the agent's own elapsed seconds), and it carries 'exit=<status>' after the model id. A `run`
+# refused before the attempt starts - usage, not a Git repository, a bad base - prints no completion
+# line, because no phase ran. Progress never reaches the artifact or the agent's stdout, so the
+# artifact's first line stays 'REVIEW-RAN: yes'.
 #
 # Diagnosis: a non-zero agent exit, a timeout kill, and a report `accept_phase` rejects all print the
 # phase, the exit code, the model id when supplied, and the last 40 lines of ${phase}-agent.err and
@@ -522,7 +526,7 @@ progress_line() {  # $1 phase, $2 elapsed seconds: stderr only, never the artifa
 
 completion_line() {  # $1 phase, $2 elapsed seconds, $3 the phase's exit status
   printf 'adversarial-pipeline: phase=%s complete elapsed=%ss model=%s exit=%s\n' \
-    "$1" "$2" "$MODEL_LABEL" "$3" >&2
+    "$1" "$2" "${MODEL_LABEL:-not supplied}" "$3" >&2
 }
 
 # One completion line per phase invocation, whatever the path out of it: a failed phase reports
@@ -531,20 +535,21 @@ PHASE_START=0
 COMPLETION_EMITTED=0
 CHECKOUT_PATH=""
 completion_once() {  # $1 phase, $2 exit status
-  if [ "$COMPLETION_EMITTED" -eq 0 ]; then
+  if [ "$COMPLETION_EMITTED" -eq 0 ] && [ -n "${1:-}" ]; then
     COMPLETION_EMITTED=1
     completion_line "$1" "$(( SECONDS - PHASE_START ))" "$2"
   fi
 }
 
-on_run_exit() {  # the run branch's single exit path: report completion, then clean up, keeping the status
+on_run_exit() {  # a run attempt's single exit path: clean up, then report completion, keeping the status
   local rc=$?
-  trap - EXIT
-  completion_once "$phase" "$rc"
-  if [ -n "$CHECKOUT_PATH" ]; then
+  set +e
+  trap - EXIT INT TERM HUP
+  if [ -n "${CHECKOUT_PATH:-}" ]; then
     ( remove_checkout "$CHECKOUT_PATH" ) >/dev/null \
       || echo "WARNING: could not remove checkout $CHECKOUT_PATH (see above)" >&2
   fi
+  completion_once "${phase:-}" "$rc"
   exit "$rc"
 }
 
@@ -908,12 +913,14 @@ case "$cmd" in
 
   run)
     [ -n "$AGENT_CMD" ] || die 2 "--agent-cmd (or ADVERSARIAL_AGENT_CMD) is required; build it from the profile agent for this phase."
-    require_predecessors "$phase"
     init_scratch
-    phase_start=$SECONDS
-    PHASE_START="$phase_start"
+    PHASE_START=$SECONDS
     COMPLETION_EMITTED=0
     CHECKOUT_PATH=""
+    trap on_run_exit EXIT
+    # From here the phase attempt is real, so every exit reports completion; a missing predecessor is
+    # one of those failures, not a refusal before the attempt starts.
+    require_predecessors "$phase"
     out="$(artifact_for "$phase")"
     dossier="$SCRATCH/${phase}-dossier.md"
     errlog="$RUN_DIR/${phase}-agent.err"
@@ -925,7 +932,6 @@ case "$cmd" in
     begin_phase "$phase"
     bind_phase "$phase"
     rm -f -- "$errlog" "$agentlog"
-    trap on_run_exit EXIT
     trap 'on_signal 130' INT
     trap 'on_signal 143' TERM
     trap 'on_signal 129' HUP

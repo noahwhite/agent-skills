@@ -304,6 +304,7 @@ def test_progress_lines_and_one_completion_line_go_to_stderr_without_touching_th
     completion = [line for line in result.stderr.splitlines() if "phase=sweep complete elapsed=" in line]
     assert len(completion) == 1, completion
     assert "elapsed=" in completion[0], completion[0]
+    assert completion[0].endswith("exit=0"), completion[0]
     artifact = artifacts(repo, env)["sweep"]
     assert artifact.read_text().splitlines()[0] == "REVIEW-RAN: yes", artifact.read_text()
     assert "elapsed=" not in artifact.read_text(), "progress leaked into the artifact"
@@ -694,4 +695,34 @@ def test_every_failed_phase_prints_one_completion_line_and_keeps_its_exit_code(g
         completion = [line for line in result.stderr.splitlines()
                       if "phase=sweep complete elapsed=" in line]
         assert len(completion) == 1, (expected, completion, result.stderr)
-        assert f"exit={expected}" in completion[0], completion[0]
+        assert completion[0].endswith(f"exit={expected}"), completion[0]
+        assert_not_stamped(artifacts(repo, env), "sweep")
+
+
+def test_a_phase_refused_for_a_missing_predecessor_still_reports_completion(tmp_path):
+    """The attempt starts at the scratch directory, so a missing predecessor is a failed phase."""
+    repo = make_repo(tmp_path)
+    scratch = tmp_path / "session-scratch"
+    scratch.mkdir()
+    env = clean_env({"TMPDIR": str(tmp_path / "runtime-tmp")})
+    (tmp_path / "runtime-tmp").mkdir()
+    result = run_script(
+        "run", "sweep", "--repo", str(repo), "--base", "HEAD", "--scratch", str(scratch),
+        "--model", "gpt-6-sol", "--agent-cmd", SWEEP_AGENT, env=env,
+    )
+    assert result.returncode == 13, result.stdout + result.stderr
+    completion = [line for line in result.stderr.splitlines()
+                  if "phase=sweep complete elapsed=" in line]
+    assert len(completion) == 1, result.stderr
+    assert completion[0].endswith("exit=13"), completion[0]
+
+
+def test_a_run_refused_before_the_attempt_starts_prints_no_completion_line(gate):
+    """A usage refusal is not a phase, so the documented refusal is no completion line."""
+    repo, scratch, env = gate
+    result = run_script(
+        "run", "sweep", "--repo", str(repo), "--base", "HEAD", "--scratch", str(scratch),
+        env=env,
+    )
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "complete elapsed=" not in result.stderr, result.stderr

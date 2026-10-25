@@ -131,7 +131,9 @@ A phase killed by `--timeout` exits 19 and names the phase, the model id when su
 An interrupted gate (SIGINT, SIGTERM, SIGHUP) kills the in-flight process group before it exits, so an interruption never orphans an agent.
 The probe's own `--probe-timeout` is still honoured, bounded by whatever is left of the phase deadline at that moment.
 
-While the agent runs, `run` writes an elapsed-time line to its own stderr, the first after one second and then at least every 30 seconds (a `run`-only feature: a `dossier` plus `record` subagent flow has no heartbeat), carrying the phase, the elapsed seconds, the configured timeout and the availability-check state, plus one completion line with the elapsed time and the phase's exit status on every exit path, success or failure.
+While the agent runs, `run` writes an elapsed-time line to its own stderr, the first after one second and then at least every 30 seconds (a `run`-only feature: a `dossier` plus `record` subagent flow has no heartbeat), carrying the phase, the elapsed seconds, the configured timeout and the availability-check state, plus one completion line with the elapsed time and the phase's exit status on every exit of the phase attempt, success or failure.
+The completion line is the last line the attempt writes, and its `elapsed` is the whole attempt (a heartbeat line reports the agent's own seconds); it carries `exit=<status>` after the model id.
+A `run` refused before the attempt starts (usage, not a Git repository, a bad base) prints no completion line, because no phase ran.
 Progress never reaches the artifact or the agent's stdout, so a report's first line stays `REVIEW-RAN: yes`.
 
 On a non-zero agent exit, a timeout, or a report `accept_phase` rejects, `run` prints the phase, the exit code, the model id when supplied, and the last 40 lines of `${phase}-agent.err` and `${phase}-agent.log`, plus every provider-error line it detects in the full stderr log, so one is never lost past the tail window; `record` prints the phase, the model id when supplied, the reason and the report tail.
