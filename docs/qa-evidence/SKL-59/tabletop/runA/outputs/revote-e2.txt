@@ -1,2 +1,0 @@
-ACCEPTED: {2}
-RATIONALE: The change carries a small but real risk of breaking the existing dry-run output, which AC2 pins to byte-identical, and must distinguish candidate paths whose content differs from the last committed state. Design difficulty and unknowns are otherwise low.

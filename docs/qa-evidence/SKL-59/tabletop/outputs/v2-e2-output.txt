@@ -1,0 +1,2 @@
+VALUE: 3
+RATIONALE: The flag adds one interacting constraint - determining which candidate paths differ from the last committed state - and carries a regression risk that the unfiltered dry run must remain byte-identical.

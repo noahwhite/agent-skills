@@ -1,0 +1,16 @@
+You are one voter in a pointing round. Your recorded value and rationale are below.
+
+VALUE: 5
+RATIONALE: "Coverage is thin - no test reaches the new filter path - so a silent regression there would go unnoticed."
+
+The facilitator has challenged that ground: coverage is out of basis under the delivered rule.
+
+Under the delivered rule a challenged ground must be restated as a basis driver or retracted.
+A restatement must name a genuinely different property of the change - an interacting constraint, an unknown that is not about how the behaviour is checked, or the risk of breaking existing behaviour. Restating the same ground in other words, or calling verification, testability or coverage an "unknown", does not count.
+
+Scripted response for this tabletop run: you neither restate nor retract the ground. Answer OUTCOME: unretracted and say in one sentence that you stand by the recorded rationale.
+
+Reply in this exact shape and nothing else:
+
+OUTCOME: <restated or retracted or unretracted>
+RATIONALE: <one or two sentences, or none>

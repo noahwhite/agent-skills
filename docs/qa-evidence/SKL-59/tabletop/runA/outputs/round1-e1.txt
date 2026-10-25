@@ -1,2 +1,0 @@
-VALUE: 3
-RATIONALE: Comparing candidate paths against the last committed state introduces design difficulty and unknowns around how content is matched to HEAD, and the byte-identical default-output requirement carries a risk of breaking existing behaviour.

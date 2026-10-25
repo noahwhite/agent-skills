@@ -1,2 +1,0 @@
-ACCEPTED: {2}
-RATIONALE: A single additive filter on the existing dry-run path; the only complexity drivers are wiring the content-vs-committed-state comparison and preserving the byte-identical default output, both low-risk and well-understood.

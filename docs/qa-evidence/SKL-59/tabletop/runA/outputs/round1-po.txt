@@ -1,2 +1,0 @@
-VALUE: 2
-RATIONALE: The flag is an additive filter over the last-committed state, so design difficulty is low; the only admitted drivers are the byte-identical default-output constraint and the accompanying risk of altering the existing dry-run path.

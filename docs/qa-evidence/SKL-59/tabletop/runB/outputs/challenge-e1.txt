@@ -1,2 +1,0 @@
-OUTCOME: restated
-RATIONALE: The change's actual effect is an unknown: the flag's behaviour cannot be observed directly and can only be inferred by reading the skill text, so its true behaviour carries uncertainty.

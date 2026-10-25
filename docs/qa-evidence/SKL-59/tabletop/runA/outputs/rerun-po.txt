@@ -1,2 +1,0 @@
-VALUE: 3
-RATIONALE: Adding a filter that compares candidate paths against the last committed state carries an interacting constraint (mapping each candidate to its committed content) and a real risk of breaking existing behaviour, since the default dry-run output must stay byte-identical (AC2).

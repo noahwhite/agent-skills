@@ -1,0 +1,2 @@
+VALUE: 2
+RATIONALE: The main driver is the regression risk the change carries - AC2 pins the existing dry-run output byte-identical, so the flag must be purely additive without disturbing current behaviour - plus the mild design unknown of how "content differs from the last committed state" is determined against git state.

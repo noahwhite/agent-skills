@@ -94,15 +94,14 @@ Ground 4 is not treated as a permitted post-reveal comparison: the ruling establ
 
 ### AC2 - the behavioural round, inspectable
 
-The whole run is in `tabletop/`: twelve voter prompts, their raw outputs, the two challenge-reply prompts and outputs, the raw session record and the elided pointing record.
+The whole run is a single ceremony on the fixture, and all of it is in `tabletop/`: twelve voter prompts, their raw outputs, the raw session record and the elided pointing record.
 
-- `tabletop/README.md` - the run statement: the loaded commit `702f53c9ab6fe4209fd4600ad2224c6e0431671a`, the fixture SKL-72, the per-voter process and directory isolation, and both runs in order.
+- `tabletop/README.md` - the run statement: the loaded commit `702f53c9ab6fe4209fd4600ad2224c6e0431671a`, the fixture SKL-72, the per-voter process and directory isolation, and the chronology of the one round.
 - `tabletop/raw-record.md` - the verbatim sizing comment (the target quotation), every value and every rationale, cited by base name from the posted record.
-- `tabletop/pointing-record.md` - the record posted on SKL-72, with the target quotation elided, standing values in the values block and voided values under the superseded line.
-- `tabletop/runA/` - the immediate target-value stop: three blind values, the SM/EM sizing comment, the stop before any discussion, the blind re-run and the re-vote.
-- `tabletop/runB/` - the voter grounds: a verification-strength ground and a testability ground challenged and retracted, a coverage ground challenged and left unretracted, the void, the blind re-run in newly created contexts and the re-vote.
+- `tabletop/pointing-record.md` - the record posted on SKL-72: standing re-run values in the values block, the voided values and the voided consensus under the superseded line, each voter ground and the facilitator's challenge quoted verbatim, and the target quotation elided.
+- `tabletop/prompts/` and `tabletop/outputs/` - the twelve prompt files and the twelve raw voter outputs.
 
-Each voter prompt carries the pointing basis from Step 3 item 2 verbatim and the Step 3 item 4 rationale rule; each voter ran as its own process in a directory containing only its own prompt.
+The one round carries all three injected grounds: a product-owner rationale weighing verification strength and an engineer-one rationale weighing testability, both challenged and retracted; an SM/EM sizing comment naming the inherited split pointing, which the product owner's ruling makes a target value for this story and therefore an anchoring event on sight; and an engineer-two coverage ground, challenged and deliberately left unretracted. The round voided, the consensus and the three recorded values were superseded, and the independent vote was re-run blind in newly created contexts that exclude the tainted discussion and the sizing comment.
 
 ### DoD4 - review-policy qualification
 

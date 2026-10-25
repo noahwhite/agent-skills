@@ -1,2 +1,0 @@
-VALUE: 2
-RATIONALE: The change carries one interacting constraint - the default dry-run output must stay byte-identical, so the filter must be strictly opt-in - and a small design decision in determining which candidate paths differ from the last committed state, with low risk of breaking existing behaviour.

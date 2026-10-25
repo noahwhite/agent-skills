@@ -1,0 +1,2 @@
+ACCEPTED: {2}
+RATIONALE: The change is a purely additive flag on the dry-run output, so the risk of breaking existing behaviour is low and constrained by AC2's byte-identical requirement; the only real design decision is what "differs from the last committed state" covers, a small contained unknown.

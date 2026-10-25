@@ -1,2 +1,0 @@
-VALUE: 2
-RATIONALE: Testability is weak here: the flag's behaviour can only be confirmed by reading the skill text, and that is what I weighed.
