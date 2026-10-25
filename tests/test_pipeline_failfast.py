@@ -981,7 +981,17 @@ def test_a_failed_checkout_is_not_reported_as_a_timeout(gate, tmp_path):
     git_wrapper.chmod(0o755)
     env = {**env, "PATH": f"{fakebin}:{env['PATH']}"}
     result = run_sweep(repo, scratch, env, "--model", "m")
-    assert result.returncode == 15, result.stdout + result.stderr
+    # git's own status is preserved, as it was before the checkout became deadline-bounded
+    assert result.returncode == 128, result.stdout + result.stderr
     assert "could not create the throwaway checkout" in result.stderr, result.stderr
     assert "timeout" not in result.stderr.lower(), result.stderr
     assert_not_stamped(artifacts(repo, env), "sweep")
+
+
+def test_a_probe_placeholder_that_cannot_take_effect_is_refused(gate):
+    """A single-quoted or commented placeholder would reach the probe as dead text."""
+    repo, scratch, env = gate
+    for probe in ("printf '%s\\n' '{model}'", "true # {model}", "true #{model}"):
+        result = run_sweep(repo, scratch, env, "--model", "m", "--probe-cmd", probe)
+        assert result.returncode == 2, (probe, result.stdout + result.stderr)
+        assert "{model}" in result.stderr or "comment" in result.stderr, result.stderr

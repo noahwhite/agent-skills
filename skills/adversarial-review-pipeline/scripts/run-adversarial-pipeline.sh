@@ -93,7 +93,7 @@
 # Progress never reaches the artifact or the agent's stdout, so the artifact's first line
 # stays 'REVIEW-RAN: yes'; stdout carries the artifact alone (arbitration's report), never progress,
 # so do not merge the two streams and read the last line. A report the gate cannot write to stdout
-# exits 1 through the same path, so its completion line names that failure; the phase itself stays
+# exits 21 through the same path, so its completion line names that failure; the phase itself stays
 # accepted and stamped, because the model's work succeeded and only its delivery failed.
 #
 # Diagnosis: a non-zero agent exit, a timeout kill, and a report `accept_phase` rejects all print the
@@ -129,7 +129,8 @@
 # first line), 18 the agent changed the primary checkout, 19 the phase was killed by --timeout,
 # 20 the phase's availability check failed before any agent ran, 21 the phase was accepted and
 # stamped but its arbitration report could not be written to stdout (do not re-run the model call).
-# A checkout that cannot be created still exits 15, the code that path had before this change.
+# A checkout that cannot be created exits with git's own status, which is what that path did before
+# the checkout became deadline-bounded.
 set -euo pipefail
 
 usage() { awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0" >&2; exit 2; }
@@ -194,12 +195,12 @@ fi
 [[ "$TIMEOUT" =~ ^[1-9][0-9]*$ ]] || die 2 "--timeout must be a whole number of seconds, at least 1."
 [[ "$PROBE_TIMEOUT" =~ ^[1-9][0-9]*$ ]] || die 2 "--probe-timeout must be a whole number of seconds, at least 1."
 # A model id may be anything on one line; only `run` insists on a value when the flag is given.
-# An explicitly empty model id is a usage error on any command; an unset one is simply no model.
-if [ "$MODEL_SET" -eq 1 ] && [ -z "$MODEL" ]; then
+# An explicitly empty model id is a usage error where the model is used; elsewhere it is unset.
+if [ "$MODEL_SET" -eq 1 ] && [ -z "$MODEL" ] && [ "$cmd" = "run" ]; then
   die 2 "--model needs a non-empty model id"
 fi
 # Only `run` probes, so only `run` insists on a probe template that names the model it checks.
-if [ "$PROBE_SET" -eq 1 ] && [ -z "$PROBE_CMD" ]; then
+if [ "$PROBE_SET" -eq 1 ] && [ -z "$PROBE_CMD" ] && [ "$cmd" = "run" ]; then
   die 2 "--probe-cmd needs a non-empty template"
 fi
 if [ "$cmd" = "run" ]; then
@@ -207,6 +208,18 @@ if [ "$cmd" = "run" ]; then
     "") ;;
     *"{model}"*|*'ADVERSARIAL_PROBE_MODEL'*) ;;
     *) die 2 "--probe-cmd must reference the supplied model, through {model} or ADVERSARIAL_PROBE_MODEL; this is a lint, not proof that the template queries the provider" ;;
+  esac
+  # The placeholder has to be able to take effect: not single-quoted, not commented out.
+  case "$PROBE_CMD" in
+    *"'{model}'"*) die 2 "--probe-cmd must not single-quote the {model} placeholder; it would reach the probe as literal text" ;;
+  esac
+  case "$PROBE_CMD" in
+    *"# "*"{model}"*|*"#"*"{model}"*)
+      case "${PROBE_CMD%%#*}" in
+        *"{model}"*|*'ADVERSARIAL_PROBE_MODEL'*) ;;
+        *) die 2 "--probe-cmd refers to the model only after a '#', so the shell would treat it as a comment" ;;
+      esac
+      ;;
   esac
 fi
 case "$MODEL" in
@@ -818,7 +831,7 @@ make_checkout() {  # prints the path of a registered throwaway detached worktree
   local container dir bounded=""
   if [ -n "${CHECKOUT_DEADLINE:-}" ]; then
     bounded="$(( CHECKOUT_DEADLINE - SECONDS ))"
-    [ "$bounded" -ge 1 ] || return 1   # 1 = the phase deadline left no time
+    [ "$bounded" -ge 1 ] || return 124   # 124 = the phase deadline left no time (timeout's own code)
   fi
   if [ -n "$SCRATCH" ]; then
     mkdir -p -- "$SCRATCH"
@@ -838,12 +851,14 @@ make_checkout() {  # prints the path of a registered throwaway detached worktree
     rc=$?
     case "$rc" in
       0) ;;
-      124|137) git worktree prune >/dev/null 2>&1 || true; rmdir -- "$container" 2>/dev/null || true; return 1 ;;
-      *) rmdir -- "$container" 2>/dev/null || true; return 2 ;;
+      124|137) git worktree prune >/dev/null 2>&1 || true; rmdir -- "$container" 2>/dev/null || true; return 124 ;;
+      *) rmdir -- "$container" 2>/dev/null || true; return "$rc" ;;
     esac
   else
     git worktree prune
-    git worktree add -q --detach "$dir" "$HEAD_SHA" || return 2
+    git worktree add -q --detach "$dir" "$HEAD_SHA"
+    rc=$?
+    [ "$rc" -eq 0 ] || return "$rc"
   fi
   printf '%s\n' "$dir" >> "$REGISTRY"
   printf '%s\n' "$dir"
@@ -952,9 +967,6 @@ case "$cmd" in
     fi
     require_predecessors "$phase"
     init_scratch
-    if [ "$SECONDS" -ge "$(( PHASE_START + TIMEOUT ))" ]; then
-      fail_phase 19 "the $phase phase was killed by --timeout: the ${TIMEOUT}s phase deadline expired while preparing the run directory (model=$MODEL_LABEL); the phase is a failure, not a clean one."
-    fi
     begin_phase "$phase"
     dossier="$SCRATCH/${phase}-dossier.md"
     write_dossier "$phase" "$dossier"
@@ -1030,11 +1042,11 @@ case "$cmd" in
     checkout_rc=0
     checkout="$(make_checkout)" || checkout_rc=$?
     unset CHECKOUT_DEADLINE
-    if [ "$checkout_rc" -eq 1 ]; then
+    if [ "$checkout_rc" -eq 124 ]; then
       fail_phase 19 "the $phase phase was killed by --timeout: the ${TIMEOUT}s phase deadline expired while creating the throwaway checkout (model=$MODEL_LABEL); the phase is a failure, not a clean one."
     fi
     if [ "$checkout_rc" -ne 0 ]; then
-      fail_phase 15 "could not create the throwaway checkout for the $phase phase (git worktree add failed); the phase never started."
+      fail_phase "$checkout_rc" "could not create the throwaway checkout for the $phase phase (git worktree add failed with status $checkout_rc); the phase never started."
     fi
     CHECKOUT_PATH="$checkout"
     q_prompt="$(printf '%q' "$dossier")"
