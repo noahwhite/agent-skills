@@ -1,13 +1,13 @@
 # SKL-59 AC2 tabletop at 702f53c9
 
-This directory holds the inspectable artefacts of the AC2 behavioural round: twenty-five prompt files, the twenty-five outputs of those processes, the raw session record with the verbatim target quotation, and the pointing record posted on the fixture.
+This directory holds the inspectable artefacts of the AC2 behavioural round: twenty-five prompt files and outputs for the SKL-72 ceremony, plus nine of each for the SKL-77 round in `round3/`, the raw session record with the verbatim target quotation, and the pointing record posted on the fixture.
 
 ## Run statement
 
 - Delivered text loaded: **`702f53c9ab6fe4209fd4600ad2224c6e0431671a`**, the squash merge of implementation PR #49 on `main`, read from a detached worktree checkout of that commit.
 - Fixture: SKL-72 `[Tabletop fixture] Add a --changed-only filter to the cleanup dry run (SKL-59 AC2 rerun)`, priority none, no implementation, canceled after the run, with a tracker-write preflight comment `be040dec`.
 - The SKL-72 record was corrected in the tracker as comment `c2121700`, which carries `pointing-record.md` verbatim and supersedes `7698722f`, `1de27e80` and `3c822ac7`. The fixture was canceled after the run.
-- Contexts: twenty-one voter processes plus four challenge processes, each launched in its own directory holding only that process's own prompt file, so no voter could see another voter's prompt, value or rationale. `prompts/` and `outputs/` are `.txt` because they are captured artefacts kept byte-for-byte, not repository prose.
+- Contexts for the SKL-72 ceremony: twenty-one voter processes plus four challenge processes; for the SKL-77 round, nine voter processes in `round3/prompts/`, where each post-void prompt is identical across roles and the role is carried by the prompt's directory name, each launched in its own directory holding only that process's own prompt file, so no voter could see another voter's prompt, value or rationale. `prompts/` and `outputs/` are `.txt` because they are captured artefacts kept byte-for-byte, not repository prose.
 - Raw record: `raw-record.md` holds the values, rationales, the round-two target quotation verbatim, and the challenge text. `PROVENANCE.md` states which captures are original, which were reconstructed and which were replaced, with the commit that holds each surviving capture.
 
 ## Round one - the voter grounds
@@ -49,6 +49,6 @@ A phrase test pins the facilitator's challenge duty and the mutation evidence pr
 QA round 2 ruled the earlier run's target-value handling short of the delivered rule and its live record out of step with the captures. `RECONCILIATION.md` states what was corrected and what was run; `round3/` holds the artefacts.
 
 - Fixture: SKL-77, priority none, no implementation, canceled after the run, tracker-write preflight comment `19253345`.
-- One durable record: SKL-77 comment `077378a0` (superseding `04540f95` and `1dd2bb8c`), reproduced exactly by `round3/pointing-record.md`. The two-posting sequence is a deviation from the one-record precedent: the first post omitted the voided rationales, and the second elides the target from the Anchoring events line.
+- One durable record: SKL-77 comment `077378a0`, reproduced exactly by `round3/pointing-record.md`. Three posts were needed, which is a deviation from the one-record precedent: `04540f95` omitted the voided rationales, `1dd2bb8c` added them but quoted the target sentence in its Anchoring events line, and `077378a0` is the durable record.
 - The round: three blind voters; engineer one's recorded rationale named a target value; the facilitator stopped on sight, voided the recorded values and the consensus position, never opened the discussion and offered no sizing context; the independent vote was re-run blind in newly created contexts; the re-vote recorded `{2}`, `{2}`, `{2}` and consensus 2.
 - Every rationale in the record, standing and voided, is generated from its capture in `round3/outputs/`.

@@ -24,7 +24,7 @@ A new canceled priority-none fixture was used because SKL-72 already carried sev
 
 - Fixture: SKL-77, `[Tabletop fixture] Show candidate path age in the cleanup dry run (SKL-59 AC2 round 3)`, priority none, no implementation, canceled after the run, tracker-write preflight comment `19253345`.
 - Delivered text loaded: `662c84b21e6aea973b41f2a2981b30b18af4118f`.
-- One durable pointing record: SKL-77 comment `04540f95`, superseding `1dd2bb8c`, which had omitted the voided rationales.
+- One durable pointing record: SKL-77 comment `077378a0`. The chain is `04540f95` (first post, omitted the voided rationales), then `1dd2bb8c` (added them but quoted the target sentence in its Anchoring events line), then `077378a0`, which names the event by kind, cites `raw-record.md` for the verbatim sentence and keeps the voided rationales only in the superseded-values line, which the delivered template exempts.
 - Artefacts: `tabletop/round3/prompts/` (nine prompts) and `tabletop/round3/outputs/` (nine captures), `tabletop/round3/raw-record.md`, and `tabletop/round3/pointing-record.md`, whose body is the exact text posted on the fixture.
 
 ### What the round shows
@@ -36,7 +36,7 @@ A new canceled priority-none fixture was used because SKL-72 already carried sev
 
 ### Matching check
 
-Every rationale in the record - the three voided round-one rationales, the three standing re-run rationales and the three re-vote rationales - is generated from its capture; a check that every captured `RATIONALE:` line appears verbatim in the posted record body returns no misses.
+`round3/check_record.py` compares the record body against every capture: each `VALUE:`/`ACCEPTED:` token and each `RATIONALE:` line must appear verbatim, the four header fields must be present, and each stage must have exactly three captures. Its committed output is `round3/check_record.out`.
 
 ## 4. What is new, what is unchanged
 
