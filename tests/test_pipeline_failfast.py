@@ -965,3 +965,23 @@ def test_an_undeliverable_arbitration_report_has_its_own_exit_code(gate):
     completion = [line for line in arbitrate.stderr.splitlines()
                   if "phase=arbitrate complete elapsed=" in line]
     assert len(completion) == 1 and completion[0].endswith("exit=21"), completion
+
+
+def test_a_failed_checkout_is_not_reported_as_a_timeout(gate, tmp_path):
+    """A git failure is its own failure, not an expired deadline."""
+    repo, scratch, env = gate
+    fakebin = tmp_path / "fakebin"
+    fakebin.mkdir()
+    git_wrapper = fakebin / "git"
+    git_wrapper.write_text(
+        "#!/usr/bin/env bash\n"
+        'if [ "$1" = worktree ] && [ "$2" = add ]; then echo "cannot add worktree" >&2; exit 128; fi\n'
+        'exec /usr/bin/git "$@"\n'
+    )
+    git_wrapper.chmod(0o755)
+    env = {**env, "PATH": f"{fakebin}:{env['PATH']}"}
+    result = run_sweep(repo, scratch, env, "--model", "m")
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "could not create the throwaway checkout" in result.stderr, result.stderr
+    assert "timeout" not in result.stderr.lower(), result.stderr
+    assert_not_stamped(artifacts(repo, env), "sweep")

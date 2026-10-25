@@ -204,7 +204,7 @@ if [ "$cmd" = "run" ]; then
   case "$PROBE_CMD" in
     "") ;;
     *"{model}"*|*'ADVERSARIAL_PROBE_MODEL'*) ;;
-    *) die 2 "--probe-cmd must name the model, through the {model} placeholder or ADVERSARIAL_PROBE_MODEL; a template that names neither checks nothing about the model" ;;
+    *) die 2 "--probe-cmd must reference the supplied model, through {model} or ADVERSARIAL_PROBE_MODEL; this is a lint, not proof that the template queries the provider" ;;
   esac
 fi
 case "$MODEL" in
@@ -815,7 +815,7 @@ make_checkout() {  # prints the path of a registered throwaway detached worktree
   local container dir bounded=""
   if [ -n "${CHECKOUT_DEADLINE:-}" ]; then
     bounded="$(( CHECKOUT_DEADLINE - SECONDS ))"
-    [ "$bounded" -ge 1 ] || return 1
+    [ "$bounded" -ge 1 ] || return 1   # 1 = the phase deadline left no time
   fi
   if [ -n "$SCRATCH" ]; then
     mkdir -p -- "$SCRATCH"
@@ -826,9 +826,15 @@ make_checkout() {  # prints the path of a registered throwaway detached worktree
   dir="$(abspath "$container/head-${HEAD_SHA:0:12}")"
   git worktree prune
   if [ -n "$bounded" ]; then
-    timeout -s KILL "${bounded}s" git worktree add -q --detach "$dir" "$HEAD_SHA" || return 1
+    timeout -s KILL "${bounded}s" git worktree add -q --detach "$dir" "$HEAD_SHA"
+    rc=$?
+    case "$rc" in
+      0) ;;
+      124|137) rmdir -- "$container" 2>/dev/null || true; return 1 ;;
+      *) rmdir -- "$container" 2>/dev/null || true; return 2 ;;
+    esac
   else
-    git worktree add -q --detach "$dir" "$HEAD_SHA" || return 1
+    git worktree add -q --detach "$dir" "$HEAD_SHA" || return 2
   fi
   printf '%s\n' "$dir" >> "$REGISTRY"
   printf '%s\n' "$dir"
@@ -1005,11 +1011,15 @@ case "$cmd" in
     write_dossier "$phase" "$dossier"
     # Every phase gets its own throwaway checkout; no agent ever runs in the primary checkout.
     CHECKOUT_DEADLINE="$phase_deadline"
-    checkout="$(make_checkout)" || {
-      unset CHECKOUT_DEADLINE
-      fail_phase 19 "the $phase phase was killed by --timeout: the ${TIMEOUT}s phase deadline expired while creating the throwaway checkout (model=$MODEL_LABEL); the phase is a failure, not a clean one."
-    }
+    checkout_rc=0
+    checkout="$(make_checkout)" || checkout_rc=$?
     unset CHECKOUT_DEADLINE
+    if [ "$checkout_rc" -eq 1 ]; then
+      fail_phase 19 "the $phase phase was killed by --timeout: the ${TIMEOUT}s phase deadline expired while creating the throwaway checkout (model=$MODEL_LABEL); the phase is a failure, not a clean one."
+    fi
+    if [ "$checkout_rc" -ne 0 ]; then
+      fail_phase 2 "could not create the throwaway checkout for the $phase phase (git worktree add failed); the phase never started."
+    fi
     CHECKOUT_PATH="$checkout"
     q_prompt="$(printf '%q' "$dossier")"
     q_out="$(printf '%q' "$out")"
