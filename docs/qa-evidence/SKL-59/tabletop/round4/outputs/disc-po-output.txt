@@ -1,0 +1,1 @@
+REMARK: The byte-identical dry-run output is the behaviour that silently breaks if the size edge case is mishandled, so my 3 hinges on that risk being absorbed without failing the run.

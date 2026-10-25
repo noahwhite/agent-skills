@@ -120,3 +120,12 @@ QA round 2 (tracker comment `89a12de3`) left AC2 outstanding on two points: the 
 - `tabletop/RECONCILIATION.md` records the deviation in the earlier handling and the artefacts that replace it; `tabletop/PROVENANCE.md` is extended to cover round 3.
 - AC4, DoD2 and DoD3 depend on AC2 and are submitted with it for QA's re-verification; no skill text or test changed.
 - What is not claimed here: the earlier SKL-72 handling of its rejected target-value rationales is recorded as a deviation, and the recovery mechanism is demonstrated on SKL-77 rather than retro-applied to SKL-72. QA decides whether that satisfies AC2.
+
+## Round 4, 2026-10-25 - the discussion round and one record (QA round 3)
+
+QA round 3 left AC2 open on two points: the recovered run skipped the Step 4 discussion round, and six records had been posted where one was required.
+
+- The required discussion round is now held after the blind re-vote, in the newly created voter contexts, naming only the high and the low and challenging the one off-basis ground, which was retracted; the Step 4 re-vote then recorded `{2, 3}`, `{2}` and `{2}` with consensus 2.
+- The run is on the new canceled priority-none fixture SKL-78 and carries exactly one pointing record, comment `e0bcb6f8`, identical to `tabletop/round4/pointing-record.md`.
+- `tabletop/round4/check_record.py` recomputes the record from the ten captures, including the discussion's high and low and the challenged ground's outcome, and its output is committed beside it.
+- AC4, DoD2 and DoD3 remain submitted with AC2 for QA's re-verification.

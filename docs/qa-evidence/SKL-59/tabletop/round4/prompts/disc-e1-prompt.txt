@@ -1,0 +1,14 @@
+You are one voter in the required discussion round of a pointing ceremony. This round is held in a newly created context, after the blind re-vote, and it names only the high value, 5, and the low value, 2. No other value is named and no voter is singled out.
+
+Your own recorded value and rationale are below.
+
+VALUE: 2
+RATIONALE: "The change is additive and low-design, but AC2 imposes an interacting constraint - the byte column must be added without altering the byte-identical legacy output - and the unknown-size edge case (AC3) is a small further constraint. The risk of silently changing existing output is the main complexity driver."
+
+The facilitator has challenged every ground outside the pointing basis against the recorded rationales. No ground of yours was out of basis.
+
+You may add one short remark about your own ground, or reply NONE if you have nothing to add.
+
+Reply in this exact shape and nothing else:
+
+REMARK: <one sentence, or NONE>

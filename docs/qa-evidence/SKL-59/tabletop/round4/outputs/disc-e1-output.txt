@@ -1,0 +1,1 @@
+REMARK: The value hinges on the byte-identical legacy-output constraint, which makes a nominally additive change carry real regression risk, so 2 reflects that hidden complexity rather than the change's surface size.

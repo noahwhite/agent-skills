@@ -27,3 +27,9 @@ Where a file is a reconstruction or a replacement, this file says so and names t
 - `round3/pointing-record.md` is the record generated from those captures and posted on SKL-77 as comment `264d0a47`, superseding `45e5ecac`, `077378a0`, `04540f95` and `1dd2bb8c`; the first omitted the voided rationales, the second quoted the target on the story surface in its Anchoring events line, the third used a non-template tracker-writes form, and the fourth still claimed a discussion that was never held.
 - The SKL-72 record was corrected in the tracker, not in the captures: comment `c2121700` carries the committed record verbatim and names the comments it supersedes.
 - No capture from an earlier round was removed or rewritten in this round; the earlier labels above stand, including the one recording that the first round-two re-vote was rejected and that one intervening clean run was replaced. Two index files were edited: the SKL-72 record id in `tabletop/README.md` and `pointing-record.md`, and the counts in both READMEs.
+
+## Round 4 (SKL-59 AC2 round 4, after QA round 3)
+
+- `round4/prompts/` and `round4/outputs/` are original captures from ten voter processes against the delivered text at `ee605fcdf1d3355bb5da7152f06c87f2ed18da14`, committed unchanged.
+- `round4/pointing-record.md` is the record generated from those captures and posted on SKL-78 as its only pointing record, comment `e0bcb6f8`. No correction post was needed, so the run holds one record.
+- No capture from an earlier round was removed or rewritten in this round; the earlier labels above stand.
