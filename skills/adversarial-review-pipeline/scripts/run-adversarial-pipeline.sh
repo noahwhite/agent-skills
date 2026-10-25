@@ -830,7 +830,7 @@ write_dossier() {  # $1 = phase, $2 = dossier path
 }
 
 make_checkout() {  # prints the path of a registered throwaway detached worktree at HEAD
-  local container dir bounded=""
+  local container dir bounded="" rc=0 started add_cmd
   if [ -n "${CHECKOUT_DEADLINE:-}" ]; then
     bounded="$(( CHECKOUT_DEADLINE - SECONDS ))"
     [ "$bounded" -ge 1 ] || return 124   # 124 = the phase deadline left no time (timeout's own code)
@@ -842,25 +842,29 @@ make_checkout() {  # prints the path of a registered throwaway detached worktree
     container="$(mktemp -d -t adversarial-checkout.XXXXXX)"
   fi
   dir="$(abspath "$container/head-${HEAD_SHA:0:12}")"
-  if [ -n "$bounded" ]; then
-    # The prune is part of the checkout work and is charged to the same budget.
-    if command -v timeout >/dev/null 2>&1; then
-      timeout -s KILL "${bounded}s" bash -c "git worktree prune && git worktree add -q --detach $(printf '%q' "$dir") $(printf '%q' "$HEAD_SHA")"
-    else
-      echo "WARNING: timeout(1) is not installed, so the throwaway checkout is not bounded by --timeout" >&2
-      bash -c "git worktree prune && git worktree add -q --detach $(printf '%q' "$dir") $(printf '%q' "$HEAD_SHA")"
+  add_cmd="git worktree prune && git worktree add -q --detach $(printf '%q' "$dir") $(printf '%q' "$HEAD_SHA")"
+  if [ -n "$bounded" ] && command -v timeout >/dev/null 2>&1; then
+    started="$SECONDS"
+    timeout -s KILL "${bounded}s" bash -c "$add_cmd"
+    rc=$?
+    # 137 is a deadline kill only when the budget was actually spent; a git that kills itself is a
+    # git failure carrying its own status.
+    if [ "$rc" -eq 124 ] || { [ "$rc" -eq 137 ] && [ "$(( SECONDS - started ))" -ge "$bounded" ]; }; then
+      git worktree prune >/dev/null 2>&1 || true
+      rmdir -- "$container" 2>/dev/null || true
+      return 124
     fi
+  elif [ -n "$bounded" ]; then
+    echo "WARNING: timeout(1) is not installed, so the throwaway checkout is not bounded by --timeout" >&2
+    bash -c "$add_cmd"
     rc=$?
-    case "$rc" in
-      0) ;;
-      124|137) git worktree prune >/dev/null 2>&1 || true; rmdir -- "$container" 2>/dev/null || true; return 124 ;;
-      *) rmdir -- "$container" 2>/dev/null || true; return "$rc" ;;
-    esac
   else
-    git worktree prune
-    git worktree add -q --detach "$dir" "$HEAD_SHA"
+    bash -c "$add_cmd"
     rc=$?
-    [ "$rc" -eq 0 ] || return "$rc"
+  fi
+  if [ "$rc" -ne 0 ]; then
+    rmdir -- "$container" 2>/dev/null || true
+    return "$rc"
   fi
   printf '%s\n' "$dir" >> "$REGISTRY"
   printf '%s\n' "$dir"

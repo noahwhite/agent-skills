@@ -995,3 +995,22 @@ def test_a_probe_placeholder_that_cannot_take_effect_is_refused(gate):
         result = run_sweep(repo, scratch, env, "--model", "m", "--probe-cmd", probe)
         assert result.returncode == 2, (probe, result.stdout + result.stderr)
         assert "{model}" in result.stderr or "comment" in result.stderr, result.stderr
+
+
+def test_a_checkout_that_kills_itself_is_not_a_deadline_expiry(gate, tmp_path):
+    """A fast 137 is git's own failure, not an exhausted deadline."""
+    repo, scratch, env = gate
+    fakebin = tmp_path / "fakebin"
+    fakebin.mkdir()
+    git_wrapper = fakebin / "git"
+    git_wrapper.write_text(
+        "#!/usr/bin/env bash\n"
+        'if [ "$1" = worktree ] && [ "$2" = add ]; then exit 137; fi\n'
+        'exec /usr/bin/git "$@"\n'
+    )
+    git_wrapper.chmod(0o755)
+    env = {**env, "PATH": f"{fakebin}:{env['PATH']}"}
+    result = run_sweep(repo, scratch, env, "--model", "m", "--timeout", "30")
+    assert result.returncode == 137, result.stdout + result.stderr
+    assert "could not create the throwaway checkout" in result.stderr, result.stderr
+    assert "deadline expired" not in result.stderr, result.stderr
