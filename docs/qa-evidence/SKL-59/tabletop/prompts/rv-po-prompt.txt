@@ -27,11 +27,11 @@ As a maintainer running the cleanup skill, I want a `--changed-only` filter on i
 
 This is a disposable tabletop fixture for exercising the story-refinement pointing round; do not implement it. It is canceled after the run. Out of scope: changing the cleanup rules, and any flag other than `--changed-only`.
 
-The discussion named only the high value, 3, and the low value, 3. No other value was compared and no voter was singled out.
+The discussion named only the high value, 3, and the low value, 2. No other value was compared and no voter was singled out.
 
 Record the set of values you accept for this story (one or more), or record no consensus, with a short rationale under the rationale rule.
 
 Reply in this exact shape and nothing else:
 
-ACCEPTED: <the set, for example {3} or {2, 3}>
+ACCEPTED: <the set, for example {2} or {2, 3}>
 RATIONALE: <one or two sentences>

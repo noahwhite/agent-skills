@@ -1,2 +1,0 @@
-ACCEPTED: {3}
-RATIONALE: The filter is additive and opt-in, so design difficulty is low and the default dry-run path's output is preserved by construction; the only substantive driver is the risk of breaking existing behaviour that the byte-identical guarantee pins down, and the diff-against-committed-state check is a well-understood operation with no interacting constraints or unknowns.

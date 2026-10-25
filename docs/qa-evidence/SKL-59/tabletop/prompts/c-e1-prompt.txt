@@ -1,0 +1,11 @@
+You are one voter in a pointing round. Your recorded value and rationale are below.
+
+VALUE: 3
+RATIONALE: "Testability is weak here: the flag's behaviour can only be confirmed by reading the skill text, and that is what I weighed."
+
+Engineer one, your recorded rationale weighs testability - confirming the behaviour only by reading the skill text - which is out of basis. Restate it as a basis driver or retract it.
+
+Reply in this exact shape and nothing else:
+
+OUTCOME: <restated or retracted or unretracted>
+RATIONALE: <one or two sentences, or none>

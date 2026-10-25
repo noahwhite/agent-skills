@@ -1,2 +1,0 @@
-ACCEPTED: {2, 3}
-RATIONALE: The only non-routine driver is the risk of breaking existing behaviour, since the flag must leave the default dry-run output byte-identical; determining which paths differ from the last committed state is otherwise a small, well-understood comparison with no meaningful unknowns or additional interacting constraints.

@@ -1,2 +1,0 @@
-OUTCOME: retracted
-RATIONALE: Verification strength is out of basis and I have no independent basis driver to substitute for it.

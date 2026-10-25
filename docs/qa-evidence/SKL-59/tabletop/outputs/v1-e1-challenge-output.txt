@@ -1,4 +1,0 @@
-OUTCOME: retracted
-RATIONALE: none
-
-My original ground was purely about testability (the behaviour only being confirmable by reading the skill text), which is out of basis under the delivered rule. I have no genuinely different basis driver to restate it as, so I retract it.

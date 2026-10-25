@@ -1,2 +1,0 @@
-ACCEPTED: {2}
-RATIONALE: A single, well-understood filter flag whose only interacting constraint is preserving the default dry-run output byte-for-byte, with no real unknowns; detecting a path's difference from the last committed state is a standard comparison, so complexity stays low.

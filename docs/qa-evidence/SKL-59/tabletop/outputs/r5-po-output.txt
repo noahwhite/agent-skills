@@ -1,2 +1,0 @@
-PATHS: {re-refine, leave unpointed}
-AMENDMENTS: clarify the acceptance criteria that separate a 2-point from a 3-point scope, and confirm whether the extra point reflects a distinct slice that should be split out.
