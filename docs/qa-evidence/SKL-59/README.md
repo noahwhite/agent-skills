@@ -10,13 +10,13 @@ No implementation or test file was changed, and the pre-existing `mutations.md` 
 
 | Item | Verdict | Independently observed evidence |
 |---|---|---|
-| AC1, original grounds | Partial at QA; closed by the 2026-10-25 remediation round below | Replay rejects testability and verification grounds with restate-or-retract challenges, and rejects adoption of the inherited value as this story's target immediately; the original SM/EM note is only paraphrased, so its implication cannot be resolved under the amended post-reveal permission. |
+| AC1, original grounds | Partial at QA; closed by owner ruling and replay, verified in QA round 2 | Replay rejects testability and verification grounds with restate-or-retract challenges, and rejects adoption of the inherited value as this story's target immediately; the original SM/EM note is only paraphrased, so its implication cannot be resolved under the amended post-reveal permission. |
 | AC2, behavioural round | Not met at QA; closed by the 2026-10-25 remediation round below | SKL-71 is canceled, priority none, and has one pointing record, but no attached or quoted voter prompt bodies; the record names an earlier head and violates the final record rule by publishing its target value. |
 | AC3, delivered text | Verified as amended | 33 independent text/structure checks pass, including rationale restrictions, reveal discipline, challenge duty, guardrail, template fields and unchanged recovery sentence. |
-| AC4, adjacent cases and tests | Partial at QA; closed by the 2026-10-25 remediation round below | All named test edits and five unchanged test bodies are verified by AST comparison; table parsing, nine Step 4 process prefixes, full suite and vendor check pass; the AC2 behavioural precedent requirement remains incomplete. |
+| AC4, adjacent cases and tests | Partial at QA; remediation submitted, awaiting QA re-verification | All named test edits and five unchanged test bodies are verified by AST comparison; table parsing, nine Step 4 process prefixes, full suite and vendor check pass; the AC2 behavioural precedent requirement remains incomplete. |
 | DoD1, root cause | Verified | Parent diff exposes the former driver-set gap, absent sizing prohibition and challenge duty; the final text adds those rules and explains the story-surface limitation. |
-| DoD2, original-case and live evidence | Partial at QA; closed by the 2026-10-25 remediation round below | Original-case replay is explicitly the substitute for the round that cannot be re-run; the fourth-ground ambiguity and AC2 behavioural gaps remain. |
-| DoD3, regression protection | Partial at QA; closed by the 2026-10-25 remediation round below | All 34 documented regression mutations fail at their named assertions, the control passes, and two additional sentence removals fail; the live facilitator-duty evidence remains incomplete. |
+| DoD2, original-case and live evidence | Partial at QA; remediation submitted, awaiting QA re-verification | Original-case replay is explicitly the substitute for the round that cannot be re-run; the fourth-ground ambiguity and AC2 behavioural gaps remain. |
+| DoD3, regression protection | Partial at QA; remediation submitted, awaiting QA re-verification | All 34 documented regression mutations fail at their named assertions, the control passes, and two additional sentence removals fail; the live facilitator-duty evidence remains incomplete. |
 | DoD4, independent review policy | Qualified at QA; resolved by the product owner's 2026-10-25 ruling recorded below | A separate reviewer/adjudicator record is COMMENTED at the exact reviewed head before merge, but accepts one valid Low without fixing it, so strict compliance with the loaded all-valid-findings-fixed policy is not established. |
 | DoD5, non-obvious documentation | Verified | Step 3 item 4 distinguishes verification from breakage risk; the guardrail explains why new contexts cannot hide a value on the story surface. |
 | DoD6, adjacent regressions | Verified | Full suite passes; independent assertions preserve recovery, re-refine's blind Step 3 re-run, the Split rule, point cap, item order and unchanged AC5 test bodies. |
@@ -98,7 +98,7 @@ The whole run is a single ceremony on the fixture, and all of it is in `tabletop
 
 - `tabletop/README.md` - the run statement: the loaded commit `702f53c9ab6fe4209fd4600ad2224c6e0431671a`, the fixture SKL-72, the per-voter process and directory isolation, and the chronology of the ceremony's two rounds.
 - `tabletop/raw-record.md` - the verbatim sizing comment (the target quotation), every value and every rationale, cited by base name from the posted record.
-- `tabletop/pointing-record.md` - the record posted on SKL-72 as comment `7698722f` (superseding `1de27e80` and `3c822ac7`), in the template's field order: the standing values in the values block, the voided values, the voided consensus positions and the replacement blind votes under the superseded line, each injected ground and each facilitator challenge quoted verbatim, and the round-two target value elided.
+- `tabletop/pointing-record.md` - the record posted on SKL-72 as comment `c2121700` (superseding `7698722f`, `1de27e80` and `3c822ac7`), in the template's field order: the standing values in the values block, the voided values, the voided consensus positions and the replacement blind votes under the superseded line, each injected ground and each facilitator challenge quoted verbatim, and the round-two target value elided.
 - `tabletop/prompts/` and `tabletop/outputs/` - the twenty-five prompt files and their twenty-five outputs.
 
 The ceremony's rounds carry all three injected grounds: a product-owner rationale weighing verification strength and an engineer-one rationale weighing testability, both challenged and retracted, and an engineer-two coverage ground, challenged and deliberately left unretracted. Round one's sizing context was a permitted post-reveal comparison and its stopper was engineer two's unretracted ground; round two's sizing note named a target value for this story and stopped that round on sight before any discussion. Each voided the consensus position and the affected votes, and each was recovered by a blind re-run in newly created contexts that exclude the tainted discussion and sizing material.
@@ -110,3 +110,13 @@ The product owner ruled on 2026-10-25 (tracker comment `4a2485a2`) that the acce
 ### DoD3 - why the duty has no automated guard
 
 Retained from the QA round and unchanged: a phrase test pins the challenge duty's text and the mutation evidence proves that pin, but a live round is the only evidence that a facilitator performs the challenge. The tabletop run above is that evidence.
+
+## Round 3, 2026-10-25 - AC2 recovery evidence submitted for QA
+
+QA round 2 (tracker comment `89a12de3`) left AC2 outstanding on two points: the live SKL-72 record did not reproduce the committed captures, and the rejected target-value rationales lacked the fresh blind recovery the rule requires.
+
+- The record is corrected to the captures: SKL-72 comment `c2121700` carries the committed record verbatim.
+- The missing recovery is supplied by a fresh run on the canceled priority-none fixture SKL-77, with one durable record (comment `264d0a47`), nine captured prompts and outputs in `tabletop/round3/`, an on-sight stop at a target value, and an independent blind re-run in newly created voter contexts.
+- `tabletop/RECONCILIATION.md` records the deviation in the earlier handling and the artefacts that replace it; `tabletop/PROVENANCE.md` is extended to cover round 3.
+- AC4, DoD2 and DoD3 depend on AC2 and are submitted with it for QA's re-verification; no skill text or test changed.
+- What is not claimed here: the earlier SKL-72 handling of its rejected target-value rationales is recorded as a deviation, and the recovery mechanism is demonstrated on SKL-77 rather than retro-applied to SKL-72. QA decides whether that satisfies AC2.

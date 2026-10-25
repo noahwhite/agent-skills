@@ -1,0 +1,2 @@
+PATHS: {re-refine}
+AMENDMENTS: Clarify scope boundaries so 1 vs 2 is decidable - specifically whether the story includes error/edge-case handling and tests (2) or only the happy path (1).

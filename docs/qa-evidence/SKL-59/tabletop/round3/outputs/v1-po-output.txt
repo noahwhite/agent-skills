@@ -1,0 +1,2 @@
+VALUE: 2
+RATIONALE: A single additive column over an existing dry-run output. The admitted drivers are the interacting constraint that legacy output must stay byte-identical and the mild unknown of reading an out-of-scope age source whose value may be undeterminable.

@@ -1,0 +1,2 @@
+ACCEPTED: {2}
+RATIONALE: The change reads an existing age source and prints one additional column, so design difficulty and unknowns are minimal; the only admitted driver is the risk of breaking existing behaviour, which the byte-identical-output constraint bounds and adds a modest interacting constraint.

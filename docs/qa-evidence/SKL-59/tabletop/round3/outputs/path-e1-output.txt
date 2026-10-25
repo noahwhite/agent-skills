@@ -1,0 +1,2 @@
+PATHS: {re-refine, leave unpointed}
+AMENDMENTS: clarify the scope boundary between 1 and 2 points - specifically whether it includes integration/edge-case handling that pushed the {2} voter up; restate acceptance criteria so the delta between a 1-point and 2-point interpretation is explicit, then re-point.

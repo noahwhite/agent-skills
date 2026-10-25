@@ -1,0 +1,2 @@
+VALUE: 2
+RATIONALE: The change interacts with the existing dry-run output, which must stay byte-identical when the new column is absent, and it introduces an edge case where a path's age cannot be determined and must degrade to `unknown` without failing the run.

@@ -1,0 +1,2 @@
+VALUE: 2
+RATIONALE: The change adds an age column to existing dry-run output under a byte-identity compatibility constraint (AC2), and must handle paths whose age source is unavailable without failing (AC3), so it carries one interacting backward-compatibility constraint plus an unknown edge case.
