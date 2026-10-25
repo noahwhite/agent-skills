@@ -53,7 +53,7 @@
 # --probe-cmd (ADVERSARIAL_PROBE_CMD) is an optional availability check for `run` (dossier and
 # record say so and never probe): a shell command template whose {model} placeholder is replaced
 # with the shell-quoted model id, so do not quote the placeholder inside the template. A template
-# without {model} checks nothing about the model, so always carry it. It runs under
+# without {model} is refused (exit 2): it would check nothing about the model. It runs under
 # its own --probe-timeout (ADVERSARIAL_PROBE_TIMEOUT, 30 seconds, never past the phase deadline),
 # with stdin from /dev/null, in a fresh empty directory under the run's scratch directory - never
 # inside the checkout under review. A configured probe that exits non-zero, prints a provider error (rate
@@ -188,9 +188,14 @@ fi
 [[ "$TIMEOUT" =~ ^[1-9][0-9]*$ ]] || die 2 "--timeout must be a whole number of seconds, at least 1."
 [[ "$PROBE_TIMEOUT" =~ ^[1-9][0-9]*$ ]] || die 2 "--probe-timeout must be a whole number of seconds, at least 1."
 # A model id may be anything on one line; only `run` insists on a value when the flag is given.
-if [ "$cmd" = "run" ] && [ "$MODEL_SET" -eq 1 ] && [ -z "$MODEL" ]; then
+if [ "$MODEL_SET" -eq 1 ] && [ -z "$MODEL" ]; then
   die 2 "--model needs a non-empty model id"
 fi
+case "$PROBE_CMD" in
+  "") ;;
+  *"{model}"*) ;;
+  *) die 2 "--probe-cmd must carry the {model} placeholder; a template without it checks nothing about the model" ;;
+esac
 case "$MODEL" in
   *[[:cntrl:]]*) die 2 "--model must not contain control characters; pass the model id on one line" ;;
 esac
@@ -199,7 +204,7 @@ esac
 if [ -z "$MODEL" ]; then
   MODEL_LABEL="not supplied"
 else
-  MODEL_LABEL="$(printf '%s' "$MODEL" | tr -c 'A-Za-z0-9._/:@#+~,][-' '_')"
+  MODEL_LABEL="$(printf '%s' "$MODEL" | tr -c 'A-Za-z0-9._/:@#+~,][-' '_')" || MODEL_LABEL="not supplied"
 fi
 
 availability_state="availability check: not configured"
@@ -483,13 +488,8 @@ run_guarded() {
   RUN_RC=0
   RUN_TIMED_OUT=0
   RUN_ELAPSED=0
-  rcfile="$(mktemp -p "$RUN_DIR" run-status.XXXXXX)" || {
-    # An environment failure here is the phase's failure, not a die that would leave acceptable state.
-    RUN_RC=1
-    RUN_TIMED_OUT=0
-    RUN_ELAPSED=0
-    return 0
-  }
+  rcfile="$(mktemp -p "$RUN_DIR" run-status.XXXXXX)" \
+    || fail_phase 2 "could not create a status file in the run directory ($RUN_DIR); the phase never started"
   rm -f -- "$rcfile"
   if [ "$stderr_path" = "--combined" ]; then rc_extra="2>&1"; fi
   start="$SECONDS"
@@ -945,13 +945,13 @@ case "$cmd" in
     PHASE_START=$SECONDS
     CHECKOUT_PATH=""
     COMPLETION_EMITTED=0
-    trap on_run_exit EXIT
     trap 'on_signal 130' INT
     trap 'on_signal 143' TERM
     trap 'on_signal 129' HUP
     trap 'on_signal 131' QUIT
     trap 'on_signal 138' USR1
     trap 'on_signal 140' USR2
+    trap on_run_exit EXIT
     # From here the phase attempt is real, so every exit reports completion; a missing predecessor is
     # one of those failures, not a refusal before the attempt starts. The scratch directory is made
     # only once the phase may actually run, so a refused attempt leaves no run directory behind.

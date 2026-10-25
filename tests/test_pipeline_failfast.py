@@ -117,7 +117,7 @@ def test_a_passing_probe_runs_in_a_fresh_empty_directory_outside_the_checkout(ga
     repo, scratch, env = gate
     observed = tmp_path / "probe-observed.txt"
     probe = (
-        f'{{ pwd; printf "entries=%s\\n" "$(ls -A | wc -l)"; '
+        f'{{ : {{model}}; pwd; printf "entries=%s\\n" "$(ls -A | wc -l)"; '
         f'printf "stdin=%s\\n" "$(readlink /proc/self/fd/0 2>/dev/null || echo unknown)"; '
         f'[ -e .git ] && echo in-checkout; true; }} > {shlex.quote(str(observed))}'
     )
@@ -141,7 +141,7 @@ def test_a_probe_that_exits_non_zero_fails_the_phase_before_the_agent_runs(gate,
     repo, scratch, env = gate
     ran = tmp_path / "agent-ran.txt"
     probe = (
-        "echo 'AI_APICallError: This request would exceed your account rate limit' >&2; exit 7"
+        ": {model}; echo 'AI_APICallError: This request would exceed your account rate limit' >&2; exit 7"
     )
     agent = f"{SWEEP_AGENT}; touch {shlex.quote(str(ran))}"
     result = run_sweep(
@@ -160,7 +160,7 @@ def test_a_probe_that_exits_non_zero_fails_the_phase_before_the_agent_runs(gate,
 
 def test_a_probe_output_carrying_an_authentication_error_fails_the_phase(gate):
     repo, scratch, env = gate
-    probe = "echo 'authentication failed: invalid api key'; exit 0"
+    probe = ": {model}; echo 'authentication failed: invalid api key'; exit 0"
     result = run_sweep(
         repo, scratch, env, "--model", "kimi/kimi-k3", "--probe-cmd", probe,
     )
@@ -175,7 +175,7 @@ def test_a_probe_that_outlives_its_own_timeout_fails_the_phase_and_names_the_tim
     repo, scratch, env = gate
     result = run_sweep(
         repo, scratch, env,
-        "--model", "deepseek/deepseek-flash", "--probe-cmd", "sleep 30",
+        "--model", "deepseek/deepseek-flash", "--probe-cmd", ": {model}; sleep 30",
         "--probe-timeout", "1",
     )
     assert result.returncode == 20, result.stdout + result.stderr
@@ -190,7 +190,7 @@ def test_a_probe_that_outlives_its_own_timeout_fails_the_phase_and_names_the_tim
 
 def test_a_probe_without_a_model_says_the_model_was_not_supplied(gate):
     repo, scratch, env = gate
-    result = run_sweep(repo, scratch, env, "--probe-cmd", "true")
+    result = run_sweep(repo, scratch, env, "--probe-cmd", ": {model}")
     assert result.returncode == 20, result.stdout + result.stderr
     assert "no model was supplied" in result.stderr, result.stderr
     assert_no_artifact(artifacts(repo, env), "sweep")
@@ -320,7 +320,7 @@ def test_a_heartbeat_carries_the_probe_state_when_a_probe_ran(gate):
     repo, scratch, env = gate
     agent = 'sleep 3; { printf "REVIEW-RAN: yes\\n"; } > {output_file}'
     result = run_sweep(
-        repo, scratch, env, "--model", "gpt-6-sol", "--probe-cmd", "true", agent=agent,
+        repo, scratch, env, "--model", "gpt-6-sol", "--probe-cmd", ": {model}", agent=agent,
     )
     assert result.returncode == 0, result.stdout + result.stderr
     beats = [line for line in result.stderr.splitlines() if "phase=sweep elapsed=" in line]
@@ -350,7 +350,7 @@ def test_the_probe_receives_the_model_id_and_honours_the_env_equivalents(gate, t
 def test_an_http_status_line_in_the_probe_output_fails_the_phase(gate):
     repo, scratch, env = gate
     result = run_sweep(
-        repo, scratch, env, "--model", "gpt-6-sol", "--probe-cmd", "echo 'HTTP/2 429'; exit 0",
+        repo, scratch, env, "--model", "gpt-6-sol", "--probe-cmd", ": {model}; echo 'HTTP/2 429'; exit 0",
     )
     assert result.returncode == 20, result.stdout + result.stderr
     assert "HTTP/2 429" in result.stderr, result.stderr
@@ -359,10 +359,10 @@ def test_an_http_status_line_in_the_probe_output_fails_the_phase(gate):
 def test_a_probe_reporting_quota_exhaustion_fails_the_phase(gate):
     repo, scratch, env = gate
     for probe in (
-        "printf 'RESOURCE_EXHAUSTED\\n'; exit 0",
-        "echo 'quota reached'; exit 0",
-        "echo 'Your credit balance is too low to access the API'; exit 0",
-        "echo 'credit balance: $0'; exit 0",
+        ": {model}; printf 'RESOURCE_EXHAUSTED\\n'; exit 0",
+        ": {model}; echo 'quota reached'; exit 0",
+        ": {model}; echo 'Your credit balance is too low to access the API'; exit 0",
+        ": {model}; echo 'credit balance: $0'; exit 0",
     ):
         result = run_sweep(repo, scratch, env, "--model", "gpt-6-sol", "--probe-cmd", probe)
         assert result.returncode == 20, (probe, result.stdout + result.stderr)
@@ -375,8 +375,9 @@ def test_a_healthy_probe_that_merely_says_unavailable_does_not_fail_the_phase(ga
     result = run_sweep(
         repo, scratch, env, "--model", "gpt-6-sol",
         "--probe-cmd",
-        "echo 'unavailable'; echo 'latency 403ms'; echo 'quota tier active'; echo '429 tokens left'; "
-        "echo 'credit balance: $100; model available'; echo 'credit balance: $100; low latency'; exit 0",
+        ": {model}; echo 'unavailable'; echo 'latency 403ms'; echo 'quota tier active'; "
+        "echo '429 tokens left'; echo 'credit balance: $100; model available'; "
+        "echo 'credit balance: $100; low latency'; exit 0",
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert "availability check: probe ok" in result.stderr, result.stderr
@@ -413,7 +414,7 @@ def test_a_failed_probe_discards_a_previously_accepted_phase(gate):
 
     rerun = run_sweep(
         repo, scratch, env, "--model", "deepseek/deepseek-flash",
-        "--probe-cmd", "echo 'rate limit exceeded' >&2; exit 7",
+        "--probe-cmd", ": {model}; echo 'rate limit exceeded' >&2; exit 7",
     )
     assert rerun.returncode == 20, rerun.stdout + rerun.stderr
     assert not sweep_stamp.exists(), "a failed re-run left the previous sweep accepted"
@@ -429,7 +430,7 @@ def test_a_failed_probe_discards_a_previously_accepted_phase(gate):
 
 def test_a_probe_that_changes_the_primary_checkout_fails_the_phase(gate):
     repo, scratch, env = gate
-    probe = f'printf x >> {shlex.quote(str(repo / "tracked.txt"))}; true'
+    probe = f': {{model}}; printf x >> {shlex.quote(str(repo / "tracked.txt"))}; true'
     result = run_sweep(repo, scratch, env, "--model", "gpt-6-sol", "--probe-cmd", probe)
     assert result.returncode == 18, result.stdout + result.stderr
     assert "primary checkout" in result.stderr, result.stderr
@@ -443,7 +444,7 @@ def test_the_phase_deadline_bounds_the_availability_check(gate):
     repo, scratch, env = gate
     started = time.monotonic()
     result = run_sweep(
-        repo, scratch, env, "--model", "gpt-6-sol", "--probe-cmd", "sleep 10",
+        repo, scratch, env, "--model", "gpt-6-sol", "--probe-cmd", ": {model}; sleep 10",
         "--timeout", "1", "--probe-timeout", "30", timeout=60,
     )
     elapsed = time.monotonic() - started
@@ -626,7 +627,7 @@ def test_a_previous_attempts_agent_log_is_not_used_as_this_attempts_diagnosis(ga
     assert first.returncode == 15, first.stdout + first.stderr
     second = run_sweep(
         repo, scratch, env, "--model", "gpt-6-sol",
-        "--probe-cmd", "echo 'provider error: rate limit exceeded' >&2; exit 7",
+        "--probe-cmd", ": {model}; echo 'provider error: rate limit exceeded' >&2; exit 7",
     )
     assert second.returncode == 20, second.stdout + second.stderr
     assert "STALE_ATTEMPT_ONE_ERROR" not in second.stderr, \
@@ -701,7 +702,7 @@ def test_every_failed_phase_prints_one_completion_line_and_keeps_its_exit_code(g
         (15, ["--model", "m"], "sleep 1; exit 1"),
         (17, ["--model", "m"], '{ printf "sweep ok\\n"; } > {output_file}'),
         (19, ["--model", "m", "--timeout", "1"], "sleep 30"),
-        (20, ["--model", "m", "--probe-cmd", "exit 7"],
+        (20, ["--model", "m", "--probe-cmd", ": {model}; exit 7"],
          '{ printf "REVIEW-RAN: yes\\n"; } > {output_file}'),
     ]
     for expected, flags, agent in cases:
@@ -858,9 +859,18 @@ def test_the_probe_window_reports_progress_too(gate):
     """The gate is never silent while it waits on a provider, probe included."""
     repo, scratch, env = gate
     result = run_sweep(
-        repo, scratch, env, "--model", "m", "--probe-cmd", "sleep 3; true",
+        repo, scratch, env, "--model", "m", "--probe-cmd", ": {model}; sleep 3",
     )
     assert result.returncode == 0, result.stdout + result.stderr
     beats = [line for line in result.stderr.splitlines() if "phase=sweep elapsed=" in line]
     assert beats, f"no progress line while the probe ran: {result.stderr}"
     assert "availability check: running" in beats[0], beats[0]
+
+
+def test_a_probe_template_without_the_model_placeholder_is_refused(gate):
+    """AC1: a configured check that does not name the model would be a silent skip."""
+    repo, scratch, env = gate
+    result = run_sweep(repo, scratch, env, "--model", "m", "--probe-cmd", "true")
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "{model}" in result.stderr, result.stderr
+    assert_not_stamped(artifacts(repo, env), "sweep")
