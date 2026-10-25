@@ -144,19 +144,22 @@ for prompt in sorted((HERE / "prompts").glob("v3-*-prompt.txt")):
         problems.append(f"{prompt.name} does not state the held discussion round")
     if f"high value, {max(standing.values())}, and the low value, {min(standing.values())}" not in text:
         problems.append(f"{prompt.name} does not state the standing high and low")
-middle = sorted(standing.values())[1] if len(set(standing.values())) > 2 else None
 for prompt in sorted(list((HERE / "prompts").glob("disc-*-prompt.txt")) + list((HERE / "prompts").glob("v3-*-prompt.txt"))):
     text = prompt.read_text()
     if f"high value, {max(standing.values())}, and the low value, {min(standing.values())}" not in text:
         problems.append(f"{prompt.name} does not state the standing high and low")
-    if middle is not None and f"value, {middle}" in text:
-        problems.append(f"{prompt.name} names a middle value, which the discussion round forbids")
-# the discussion responses are quoted in the raw record
-raw = RAW
+    named = {int(n) for n in re.findall(r"(?:value,?|points?)\s*(\d+)", text, re.I)}
+    allowed = {max(standing.values()), min(standing.values())}
+    if not named <= allowed:
+        problems.append(f"{prompt.name} names a value outside the high and the low: {sorted(named - allowed)}")
+
+# The discussion responses are quoted in the raw record under their own voter's label.
 for key in ROLES:
     remark = (HERE / "outputs" / f"disc-{key}-output.txt").read_text().split(":", 1)[1].strip()
-    if remark.upper() != "NONE" and remark not in raw:
-        problems.append(f"raw record does not quote the {ROLES[key]} discussion remark")
+    if remark.upper() == "NONE":
+        continue
+    if f'- {ROLES[key]}: "{remark}"' not in RAW:
+        problems.append(f"raw record does not attribute the {ROLES[key]} remark to that voter")
 
 # 9. Fixed header values and capture inventory.
 for field in ("- Tracker-write preflight: comment `c671f2cd` on SKL-78.",
@@ -172,7 +175,7 @@ for stage, expected in (("v1", 3), ("v2", 3), ("v3", 3), ("chal", 1), ("disc", 3
         problems.append(f"{stage}: expected {expected} captures, found {found}")
 
 print(f"template fields checked: {len(FIELDS)}")
-print("captures compared: 10")
+print(f"captures compared: {sum(1 for _ in (HERE / 'outputs').glob('*-output.txt'))}")
 if problems:
     print("MISMATCHES:")
     for problem in problems:
