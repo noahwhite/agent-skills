@@ -20,3 +20,10 @@ This file states exactly how each file in `prompts/` and `outputs/` came to exis
 ## What this means for a reader
 
 Where a file is a reconstruction or a replacement, this file says so and names the commit that holds the surviving capture. The posted record on SKL-72 cites this file, so the tracker and the repository agree on what is original and what was corrected.
+
+## Round 3 (SKL-59 AC2 round 3, after QA round 2)
+
+- `round3/prompts/` and `round3/outputs/` are original captures from nine voter processes, taken after the delivered text at `662c84b21e6aea973b41f2a2981b30b18af4118f`, and committed unchanged.
+- `round3/pointing-record.md` is the record generated from those captures and posted on SKL-77 as comment `04540f95`; comment `1dd2bb8c` is superseded because it omitted the voided rationales.
+- The SKL-72 record was corrected in the tracker, not in the captures: comment `c2121700` carries the committed record verbatim and names the comments it supersedes.
+- Nothing from earlier rounds was removed or rewritten in this round; the earlier labels above stand, including the one recording that the first round-two re-vote was rejected and that one intervening clean run was replaced.

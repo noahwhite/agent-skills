@@ -1,0 +1,2 @@
+ACCEPTED: {2}
+RATIONALE: The change adds a single informational column to an existing dry-run output, so design difficulty is low; the only admitted driver is the constraint that output must stay byte-identical without the new column and that an undeterminable age must not fail the run.

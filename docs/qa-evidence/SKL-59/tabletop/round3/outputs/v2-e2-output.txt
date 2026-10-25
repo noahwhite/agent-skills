@@ -1,0 +1,2 @@
+VALUE: 2
+RATIONALE: The change carries an interacting constraint - preserving byte-identical dry-run output when the new column is absent - and the risk of silently altering existing output when the age column is added. Handling the unknown-age case without failing the run adds a small amount of design uncertainty.

@@ -110,3 +110,12 @@ The product owner ruled on 2026-10-25 (tracker comment `4a2485a2`) that the acce
 ### DoD3 - why the duty has no automated guard
 
 Retained from the QA round and unchanged: a phrase test pins the challenge duty's text and the mutation evidence proves that pin, but a live round is the only evidence that a facilitator performs the challenge. The tabletop run above is that evidence.
+
+## Round 3, 2026-10-25 - AC2 closed by a compliant run
+
+QA round 2 (tracker comment `89a12de3`) left AC2 outstanding on two points: the live SKL-72 record did not reproduce the committed captures, and the rejected target-value rationales lacked the fresh blind recovery the rule requires.
+
+- The record is corrected to the captures: SKL-72 comment `c2121700` carries the committed record verbatim.
+- The missing recovery is supplied by a fresh run on the canceled priority-none fixture SKL-77, with one durable record (comment `04540f95`), nine captured prompts and outputs in `tabletop/round3/`, an on-sight stop at a target value, and an independent blind re-run in newly created voter contexts.
+- `tabletop/RECONCILIATION.md` records the deviation in the earlier handling and the artefacts that replace it; `tabletop/PROVENANCE.md` is extended to cover round 3.
+- AC4, DoD2 and DoD3 follow from AC2: the behavioural precedent is now inspectable end to end, and no skill text or test changed.

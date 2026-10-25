@@ -1,0 +1,2 @@
+ACCEPTED: {2}
+RATIONALE: The change adds a small age column whose complexity sits in the risk of breaking existing output (the byte-identical dry-run requirement) and in handling candidate paths whose age cannot be determined.

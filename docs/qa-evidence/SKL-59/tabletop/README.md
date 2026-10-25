@@ -43,3 +43,12 @@ Order as it happened:
 ## Why no automated guard covers the duty
 
 A phrase test pins the facilitator's challenge duty and the mutation evidence proves that pin, but only a run can show a facilitator performing it. This directory is that run: the prompts show what each voter was asked, the outputs show what each voter answered, and the record shows each challenge with its outcome.
+
+## Round three - the compliant run on SKL-77 (after QA round 2)
+
+QA round 2 ruled the earlier run's target-value handling short of the delivered rule and its live record out of step with the captures. `RECONCILIATION.md` states what was corrected and what was run; `round3/` holds the artefacts.
+
+- Fixture: SKL-77, priority none, no implementation, canceled after the run, tracker-write preflight comment `19253345`.
+- One durable record: SKL-77 comment `04540f95` (superseding `1dd2bb8c`), reproduced exactly by `round3/pointing-record.md`.
+- The round: three blind voters; engineer one's recorded rationale named a target value; the facilitator stopped on sight, voided the recorded values and the consensus position, never opened the discussion and offered no sizing context; the independent vote was re-run blind in newly created contexts; the re-vote recorded `{2}`, `{2}`, `{2}` and consensus 2.
+- Every rationale in the record, standing and voided, is generated from its capture in `round3/outputs/`.
