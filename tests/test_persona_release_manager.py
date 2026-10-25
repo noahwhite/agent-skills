@@ -4,6 +4,9 @@ import json
 import re
 from pathlib import Path
 
+import jsonschema
+import yaml
+
 ROOT = Path(__file__).resolve().parent.parent
 SKILL = ROOT / "skills" / "persona-release-manager" / "SKILL.md"
 MANIFEST = json.loads((ROOT / "skills.json").read_text())
@@ -15,6 +18,19 @@ def section(text: str, heading: str) -> str:
     rest = text[match.end():]
     following = re.search(r"^## ", rest, re.MULTILINE)
     return rest[: following.start()] if following else rest
+
+
+def per_story_readiness_line(body: str) -> str:
+    """The single Release readiness binding for per-story evidence, with its continuation lines."""
+    lines = body.splitlines()
+    starts = [i for i, line in enumerate(lines) if "under `per-story`, that head is" in line]
+    assert len(starts) == 1, f"expected one per-story readiness binding, found {len(starts)}"
+    block = [lines[starts[0]]]
+    for follow in lines[starts[0] + 1:]:
+        if not follow.startswith("  "):
+            break
+        block.append(follow)
+    return "\n".join(block)
 
 
 def test_skill_file_exists() -> None:
@@ -93,14 +109,31 @@ def test_readiness_section_covers_each_promotion_mode() -> None:
         "evidence-only commits",
         "compare the code tree",
         "evidence for an earlier build, or for a head that a later merge or review fix changed, is stale and stops the promotion",
+        "story-scoped promotion branch",
+        "rather than the integration branch head",
     ):
         assert phrase in body, f"readiness missing: {phrase}"
+    binding = per_story_readiness_line(body).splitlines()
+    for phrase in ("story-scoped promotion branch", "rather than the integration branch head",
+                   "this check runs once that branch exists",
+                   "must carry only the story's change",
+                   "the same patch ids as the story's merged feature prs",
+                   "for a build whose tree, for the files the story changes, is identical to that branch's"):
+        assert phrase in binding[0], f"per-story readiness binding missing: {phrase}"
+    assert "a build that predates or omits that change does not cover it" in binding[1]
+    stale = [line for line in body.splitlines() if "evidence for an earlier build" in line]
+    assert len(stale) == 1, stale
+    assert stale[0].startswith("  under `whole-branch`,"), stale[0]
     whole = SKILL.read_text().lower()
-    for forbidden in ("promotion set under `none`", "promotion set for `none`", "stale evidence is accepted", "accept stale evidence"):
+    for forbidden in ("promotion set under `none`", "promotion set for `none`", "stale evidence is accepted", "accept stale evidence",
+                      "skip this check", "promote without evidence", "do not require evidence",
+                      "may be deferred", "deferred until after merge", "accepted when stale",
+                      "evidence is optional"):
         assert forbidden not in whole, f"readiness contradicts itself: {forbidden}"
 
 
 def test_promotion_section_cites_and_does_not_redefine() -> None:
+    skill_text = SKILL.read_text().lower()
     body = section(SKILL.read_text(), "Promotion").lower()
     for phrase in (
         "follows `profile.git.promotion` exactly",
@@ -112,12 +145,31 @@ def test_promotion_section_cites_and_does_not_redefine() -> None:
         "per-story",
         "single story's change",
         "never open a promotion pr that carries another story",
-        "story-scoped mechanism",
-        "stop and ask for it",
+        "`per-story` promotion mechanism",
+        "cites",
+        "stop and ask only for a profile value the profile does not set",
+        "never for a mechanism the promotion section defines",
         "three-dot diff",
         "no back-merges",
     ):
         assert phrase in body, f"promotion missing: {phrase}"
+    for removed in ("story-scoped mechanism", "stop and ask for it"):
+        assert removed not in body, f"promotion still asks for a defined mechanism: {removed}"
+    lines = body.splitlines()
+    prohibition = "never open a promotion pr that carries another story."
+    matches = [line for line in lines if line.strip().startswith(prohibition)]
+    assert len(matches) == 1, "the no-other-story prohibition must appear exactly once"
+    assert matches[0].strip() == prohibition, "the prohibition must not carry an exception"
+    assert "unless" not in body, "the Promotion section must not qualify a prohibition"
+    mechanism = [line for line in lines if line.startswith("- `per-story`: promote only")]
+    assert len(mechanism) == 1, mechanism
+    assert "[references/github.md](references/github.md)" in mechanism[0], "the mechanism link must resolve"
+    assert "`per-story` promotion mechanism" in mechanism[0], "the mechanism must be cited by name"
+    assert "cites that mechanism" in mechanism[0] or "cites that mechanism" in body, "the skill must cite it"
+    assert "cites nothing" not in body
+    for forbidden in ("stale per-story evidence is accepted", "per-story evidence may be stale",
+                      "accept stale evidence for per-story"):
+        assert forbidden not in skill_text, f"readiness accepts stale per-story evidence: {forbidden}"
     whole = SKILL.read_text().lower()
     for forbidden in ("batch all pending stories", "batch the promotion", "batch stories into",
                       "include every pending story", "every pending story in one promotion"):
@@ -139,6 +191,121 @@ def test_review_section_covers_the_cumulative_diff_and_ownership() -> None:
         "post the review of record on the pr as a `--comment` pr review before the merge",
     ):
         assert phrase in body, f"review missing: {phrase}"
+    fix_bullets = [line for line in body.splitlines() if "route every valid fix" in line]
+    assert len(fix_bullets) == 2, fix_bullets
+    assert fix_bullets[0].startswith("- under `whole-branch`,"), fix_bullets[0]
+    assert fix_bullets[1].startswith("- under `per-story`,"), fix_bullets[1]
+    assert "review-fix flow" in fix_bullets[1], fix_bullets[1]
+    assert "pre-production evidence refreshed before the merge" in fix_bullets[1], fix_bullets[1]
+
+
+def test_release_profile_contract() -> None:
+    schema = json.loads((ROOT / "profile" / "schema.json").read_text())
+    release = schema["properties"]["release"]
+    assert schema["additionalProperties"] is False
+    assert "release" not in schema["required"]
+    assert release["type"] == "object"
+    assert release["additionalProperties"] is False
+    assert not release.get("required")
+    expected = {
+        "versioning": {"semver", "calver"},
+        "notes": {"github-release", "tracker-comment"},
+    }
+    assert set(release["properties"]) == set(expected)
+    example = yaml.safe_load((ROOT / "profile" / "example.yaml").read_text())
+    for key, values in expected.items():
+        prop = release["properties"][key]
+        assert sorted(prop["enum"]) == sorted(values)
+        assert prop["description"].strip()
+        assert example["release"][key] in values
+    jsonschema.validate(example["release"], release)
+
+
+def test_promotion_release_type_has_a_validated_request_source() -> None:
+    body = section(SKILL.read_text(), "Promotion")
+    for phrase in (
+        "tracker description",
+        "Release-Type: major|minor|patch",
+        "highest component any promoted story requests",
+        "exact lowercase",
+        "malformed or duplicate",
+        "stop and ask",
+    ):
+        assert phrase in body, f"release type missing: {phrase}"
+
+
+def test_versioning_section_covers_release_schemes() -> None:
+    body = section(SKILL.read_text(), "Versioning")
+    for phrase in (
+        "profile.release.versioning",
+        "v0.1.0",
+        "Release-Type",
+        "major",
+        "minor",
+        "patch",
+        "YYYY.MM.DD",
+        "Use the bare date when it is free",
+        "Only when the bare date tag is taken",
+        "lowest integer N at or above 1 whose tag is free",
+        "untagged",
+        "profile.git.release_branch",
+        "highest of those tags by numeric semantic version",
+        "increment the selected component",
+        "reset every component to its right to zero",
+        "v3.0.0",
+        "v2.4.0",
+        "v2.3.5",
+        "already carries",
+        "reuse that tag",
+        "annotated",
+        "signed when `profile.git.signed_commits` is true",
+        "push that tag to `origin`",
+        "If it already exists, stop and report the collision",
+        "never move or force-update a tag",
+        "If signing fails, stop and report",
+    ):
+        assert phrase in body, f"versioning missing: {phrase}"
+    for forbidden in (
+        "force-update the tag when the commit matches",
+        "create an unsigned tag if signing fails",
+    ):
+        assert forbidden not in body.lower(), f"unsafe versioning: {forbidden}"
+
+
+def test_release_notes_section_covers_destinations_and_safety() -> None:
+    body = section(SKILL.read_text(), "Release notes")
+    for phrase in (
+        "profile.release.notes",
+        "github-release",
+        "tracker-comment",
+        "requires a tag",
+        "auto-generated",
+        "issue set enumerated in Release readiness",
+        "each issue's merged PRs",
+        "immediately after the tag is confirmed on `origin` and before the deployment hand-off",
+        "report the published URL",
+        "If versioning did not produce and confirm a tag, stop publication",
+        "reuse the already confirmed tag",
+        "existing per-issue tracker comment",
+        "retry only missing entries",
+    ):
+        assert phrase in body, f"release notes missing: {phrase}"
+
+
+def test_release_sections_follow_promotion_review_before_production() -> None:
+    text = SKILL.read_text()
+    headings = (
+        "Promotion review",
+        "Versioning",
+        "Release notes",
+        "Production verification",
+    )
+    positions = []
+    for heading in headings:
+        matches = list(re.finditer(rf"^## {re.escape(heading)}\s*$", text, re.MULTILINE))
+        assert len(matches) == 1, f"expected one section: {heading}"
+        positions.append(matches[0].start())
+    assert positions == sorted(positions)
 
 
 def test_production_verification_section_covers_evidence_and_failure() -> None:

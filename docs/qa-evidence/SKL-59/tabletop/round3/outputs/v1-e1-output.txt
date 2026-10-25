@@ -1,0 +1,2 @@
+VALUE: 2
+RATIONALE: This should be 2 rather than 3, because the earlier cleanup flag landed at two.

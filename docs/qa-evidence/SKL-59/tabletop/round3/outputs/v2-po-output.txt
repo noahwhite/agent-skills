@@ -1,0 +1,2 @@
+VALUE: 2
+RATIONALE: The new age column must coexist with the existing dry-run output, which carries the interacting constraint of staying byte-identical when the column is absent, and reading the age from a source adds an unknown-age edge case that must not fail the run.

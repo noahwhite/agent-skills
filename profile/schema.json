@@ -278,6 +278,26 @@
         }
       }
     },
+    "release": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "versioning": {
+          "enum": [
+            "semver",
+            "calver"
+          ],
+          "description": "Release tag scheme; when unset, versioning stops and the release is reported untagged."
+        },
+        "notes": {
+          "enum": [
+            "github-release",
+            "tracker-comment"
+          ],
+          "description": "Destination for release notes; when unset, release-notes publication stops."
+        }
+      }
+    },
     "review": {
       "type": "object",
       "additionalProperties": false,

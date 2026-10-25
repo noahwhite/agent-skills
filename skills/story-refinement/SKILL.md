@@ -130,15 +130,21 @@ Only the PO and the two engineers count toward the agreement.
   1. Launch the PO and both engineers again in separate contexts on the same refined version.
   2. A point or size measures complexity - design difficulty, interacting constraints, unknowns, and the risk of breaking existing behaviour - and never the amount of work or elapsed time; routine, well-understood work such as writing tests, opening a PR, review, running a fixture, or regenerating copies adds no points however long it takes.
   3. The sentence above is the pointing basis.
-     Every pointing prompt or prompt file carries it verbatim, including the re-run after a Step 4 re-refine and each slice estimate under the Split rule.
-  4. Each voter submits one point value valid for `profile.tracker.estimate_scale` plus a short complexity rationale.
-     The rationale names the complexity driver or drivers the voter weighed and cites no duration, effort or run-cost measure.
+     Every pointing prompt or prompt file carries it verbatim, and carries the item 4 rationale rule, including the re-run after a Step 4 re-refine and each slice estimate under the Split rule.
+  4. Each voter submits one point value valid for `profile.tracker.estimate_scale` plus a short rationale under the pointing basis in item 2.
+     The rationale names drivers the pointing basis admits and nothing else, so verification strength, testability, coverage, the shape of the tests, a duration, effort or run-cost measure are out of basis.
+     Verification strength is how well a behaviour is checked and the risk of breaking existing behaviour is what can silently change, so the first is out of basis while the second is a driver the basis admits, distinct from an interacting constraint the change carries.
+     The rationale names no target value for this story, never treats another voter's revealed value as its answer, and names no point value before the reveal.
      The value is written only to that voter's own file in the session's scratch directory.
   5. No voter sees another voter's point value before its own value is recorded.
+     The reveal is the moment the facilitator has recorded all three values, after which the SM/EM may comment on sizing and the discussion opens.
   6. The facilitator records all three values before the SM/EM comments on sizing or the discussion opens.
      The SM/EM submits no point value.
-  7. After all three values are recorded, the SM/EM may provide factual, reference-only sizing context: comparable stories in complexity terms, comparable unknowns and constraints, and relevant scope differences.
-     It must not state or imply a preferred value, recommend a direction, reveal or compare individual votes before the discussion, or use leading language.
+  7. After all three values are recorded, the SM/EM may provide factual, reference-only sizing context: comparable stories in complexity terms, their recorded values, comparable unknowns and constraints, and relevant scope differences.
+     A factual reference is not a prescription: naming an already-estimated item's recorded value, alone or together with a basis difference, is permitted, and such a reference is information the voters weigh and never stops the round.
+     It must not prescribe this story's value - no value to score, no target, no preferred direction - and must not reveal or compare individual votes before the discussion.
+     Before the reveal it must not name any point value.
+     A prescription of this story's value, from the SM/EM or from a voter, is an anchoring event under the Anchoring guardrail.
      A statement of elapsed time or effort is an anchoring event under the Anchoring guardrail.
   8. A `tshirt` scale stops the cap step with a clear message.
      Pointing still records the three values; the split rule's numeric cap does not apply.
@@ -151,9 +157,18 @@ Only the PO and the two engineers count toward the agreement.
 - **Process:**
   1. Hold one discussion round that names only the high and the low.
      Do not compare the other values or single out a voter.
+     In that round, and against the rationales recorded in Step 3, the facilitator challenges every ground outside the pointing basis, whether it is heard in the discussion or read in a recorded rationale, except a prescription of this story's value and, from the SM/EM, a statement of elapsed time, effort or run cost, which are anchoring events the moment they are seen.
+     That rule governs the shared discussion content and other voters' values; a voter's own recorded value and rationale may be carried privately in that voter's own prompt, so it can speak to its own ground.
+     Challenging a ground is not comparing values or singling out a voter: the facilitator names the ground's kind, never its verbatim text; the facilitator never names another voter's value in the shared discussion, nor a voter's value to other voters, and the pointing record carries the author; a ground that embeds a point value is named by its kind alone.
+     A challenged ground must be restated as a basis driver or retracted, except a prescription of this story's value, which is an anchoring event as soon as it is seen; a voter whose basis does not support its recorded value records that in the re-vote.
+     The SM/EM withdraws or restates its own sizing comment on the same terms, except a point value named before the reveal, a prescription of this story's value, treating another voter's revealed value as the answer, or a statement of elapsed time, effort or run cost, each of which is an anchoring event as soon as the facilitator sees it.
+     A ground that is neither is an anchoring event under the Anchoring guardrail.
   2. Run one re-vote.
      The re-vote prompt carries the pointing basis from Step 3.
+     It also carries the Step 3 item 4 rationale rule.
      Each voter records the set of values it accepts for this story (one or more) or records no consensus, with a short complexity rationale under the Step 3 rationale rule.
+     Recording an accepted set is not treating another voter's revealed value as the answer: the rationale for the set is about the basis, never about which value another voter recorded.
+     A re-vote rationale outside the pointing basis is challenged before the consensus is recorded, under the same restate-or-retract rule as item 1, and a voter that retracts its re-vote rationale records a replacement accepted set within that same re-vote, with a basis-driver rationale, or records no consensus.
   3. Consensus is the highest value in the intersection of the three accepted sets.
      If the intersection is empty, record no consensus and run the no-consensus decision (item 7).
   4. Never average and never take a value silently.
@@ -184,11 +199,18 @@ The SM/EM's sizing comments are logged with the consensus record.
 
 The prohibited behaviours are:
 
-- naming a target number;
+- for the SM/EM, naming a point value before the reveal, prescribing a value for this story - a value to score, a target, a preferred direction, or a claim that one vote is the realistic one - or treating another voter's revealed value as the answer;
 - saying "I would go higher" or "I would go lower";
 - singling out the highest or lowest vote as the realistic one;
 - asking for a revote after stating a view;
 - comparing individual votes.
+
+An anchoring trigger is an off-basis ground Step 4 challenges, so it becomes an anchoring event only when it is neither restated as a basis driver nor retracted: a ground that weighs verification strength, testability, coverage, the shape of the tests, or a duration, effort or run cost is such a trigger when a voter weighs it in a rationale or raises it in the discussion.
+Every prohibited behaviour above, a prescription of this story's value by any participant, and an SM/EM sizing comment that names a point value before the reveal or states elapsed time, effort or run cost, are anchoring events as soon as they are seen, with no challenge, restatement or retraction path.
+A factual reference is never such an event: naming an already-estimated item's recorded value, alone or together with a basis difference, is information the voters weigh, and the round continues.
+Any other challenged ground that is neither restated as a basis driver nor retracted, or a sizing comment the SM/EM neither withdraws nor restates, is an anchoring event, and the recovery below is the single void rule: it voids the consensus and every vote recorded after the anchor, and for a ground read in a recorded rationale the anchor precedes that rationale, so the vote it grounds and every later vote are void, and the independent vote from Step 3 is re-run in newly created voter contexts that exclude the tainted discussion and sizing comment.
+
+Fresh voter contexts exclude the tainted discussion and the sizing comment, but they cannot exclude a value recorded on the story surface that Step 1 hands every voter with the story, so the Step 3 rationale rule is what keeps such a value from becoming the rationale's answer.
 
 On anchoring: stop the round, record the comment verbatim, void the consensus and any vote recorded after the anchor, and re-run the independent vote with newly created voter contexts that exclude the tainted discussion and sizing comment. Never reuse the sessions that saw the anchor. Record the recovery.
 Do not resume the tainted discussion.
@@ -227,7 +249,7 @@ The SM/EM posts only its own comments, and applies the PO's writes only under th
 Use [references/refinement-record.md](references/refinement-record.md) for the refinement-comment template, the Accept round result template, the pointing-record template, and the permitted and forbidden phrasing table.
 Keep the raw voter files in the session's scratch directory and cite each file by its base name only (never a directory path) in the record.
 Quote or attach any file content a reader needs in the record.
-Record the refinement comment id, every accept round, all three point values, the SM/EM sizing context, the discussion result, the consensus, any no-consensus decision with each voter's accepted paths and the decision rationale, and any split.
+Record the refinement comment id, every accept round, all three point values, the SM/EM sizing context, the discussion result, every challenge with its outcome, the consensus, any no-consensus decision with each voter's accepted paths and the decision rationale, and any split.
 
 ## Runtime portability
 

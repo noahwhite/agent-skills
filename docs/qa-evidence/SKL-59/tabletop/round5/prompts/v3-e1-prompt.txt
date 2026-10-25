@@ -1,0 +1,41 @@
+You are one voter in a fresh, blind pointing round on a fixture story. The estimate scale is the Fibonacci scale (1, 2, 3, 5, 8).
+
+This is a newly created voter context for the independent vote after a void. You have not seen any earlier value, rationale, discussion or sizing comment, and none is reproduced here.
+
+Delivered text loaded: the `story-refinement` skill at the head of the branch under review, read from a worktree checkout.
+
+The pointing basis is:
+A point or size measures complexity - design difficulty, interacting constraints, unknowns, and the risk of breaking existing behaviour - and never the amount of work or elapsed time; routine, well-understood work such as writing tests, opening a PR, review, running a fixture, or regenerating copies adds no points however long it takes.
+
+The rationale rule is:
+Each voter submits one point value valid for `profile.tracker.estimate_scale` plus a short rationale under the pointing basis in item 2.
+The rationale names drivers the pointing basis admits and nothing else, so verification strength, testability, coverage, the shape of the tests, a duration, effort or run-cost measure are out of basis.
+Verification strength is how well a behaviour is checked and the risk of breaking existing behaviour is what can silently change, so the first is out of basis while the second is a driver the basis admits, distinct from an interacting constraint the change carries.
+The rationale names no target value for this story, never treats another voter's revealed value as its answer, and names no point value before the reveal.
+The value is written only to that voter's own file in the session's scratch directory.
+
+Reveal rule: no voter sees another voter's value or rationale before its own is recorded. This directory holds only your own prompt.
+
+The story under estimate:
+**Story Summary**
+
+As a maintainer running the cleanup skill, I want the dry run to group candidate paths by the rule that matched them, so that I can review one rule's findings at a time.
+
+**Acceptance Criteria**
+
+- AC1: `skills/cleanup/SKILL.md` documents that the dry run groups its per-path lines by the matching rule.
+- AC2: The dry-run output without grouping is byte-identical to the previous release.
+- AC3: A path matched by more than one rule appears once, under the first rule in the documented order.
+
+**Additional Context**
+
+This is a disposable tabletop fixture for exercising the story-refinement pointing round; do not implement it. It is canceled after the run. Out of scope: changing the cleanup rules, and any change to the documented rule order.
+
+Your role: engineer one voter.
+
+Give a rationale naming only a driver the pointing basis admits. Do not prescribe a value for this story.
+
+Reply in this exact shape and nothing else:
+
+VALUE: <the number>
+RATIONALE: <one or two sentences>

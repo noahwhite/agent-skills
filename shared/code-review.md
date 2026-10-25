@@ -148,3 +148,16 @@ The `adversarial-review-pipeline` skill defines the pre-PR gate; these rules app
 - After an automated fixer runs, read its commits (`git log origin/<base>..HEAD`) and drop any that touch files outside the story's scope; never push a fixer's work unread.
 - Adjudicate residual findings against your diff's scope and pick the proportionate fix.
 - A deleted file in `origin/<base>..HEAD` can be a branch-behind artifact; rebase before judging deletions.
+- Pass the gate the model id each phase must use (`--model`) and, when the consumer configures one, an availability probe (`--probe-cmd`); the gate script never resolves a model and never substitutes one.
+- A phase whose model is rate limited, unauthorized or unavailable fails fast with a distinct exit code, 20 for a failed availability check (including a probe configured with no model supplied) and 19 for a `--timeout` kill, naming the phase, the model and the output tail it printed; never retry it as a different model and never read it as a clean phase.
+  When the phase deadline expires while the availability check is still running, the phase exits 19, because a timeout kill is what happened.
+- A failed phase is never acceptable: a failed run and an interrupt both discard the phase's launch and binding, so never re-accept a leftover report with the gate's record step, and never build a later phase on an acceptance the failed re-run should have invalidated.
+- An interrupted gate must kill the phase's process group before it exits; a gate that leaves an agent retrying keeps spending model budget with nothing left to stop it.
+- Surface provider errors on the phase's stderr in the `--agent-cmd` template when the runtime reports them only in its own session or event stream; the gate cannot read that stream.
+- A passing availability probe is one minimal provider call, not proof that the real phase will run: keep the phase's own failure diagnosis in the evidence.
+- A gate phase's deadline bounds its work against a provider: the availability check, the throwaway checkout and the agent command all share it; the local bookkeeping around them does not.
+- A gate phase launched by the gate script keeps progress visible while it spends model budget: an elapsed-time line on stderr (first after a second, then at least every 30 seconds) and one completion line with the elapsed time and the phase's own exit status at the end, which a failed phase prints too and the line is the last one the phase itself writes, so its status is the process's (teardown output can follow it, and a SIGKILL leaves no line).
+  When a phase cannot deliver its report, the process exits 1 but the phase stays accepted, because the model's work succeeded and only its delivery failed; the message names the artifact, so do not re-run that model call.
+  A subagent-driven phase (the dossier and record flow) has neither, so watch it through the tracker and the report it writes.
+  A silent gate is a stuck gate, and a phase that ends without a completion line has left no evidence of how long it took.
+  A `run` refused before its phase attempt starts (usage, no repository, a bad base) prints none, because no phase ran, and neither a SIGKILL nor a gate whose stderr is closed mid-phase produces one.

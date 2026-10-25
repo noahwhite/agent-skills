@@ -1,0 +1,2 @@
+ACCEPTED: {3}
+RATIONALE: Grouping each path under its first matching rule in documented order and deduplicating multi-matched paths is an interacting constraint between rules, and the byte-identical ungrouped output carries risk of breaking existing behaviour.

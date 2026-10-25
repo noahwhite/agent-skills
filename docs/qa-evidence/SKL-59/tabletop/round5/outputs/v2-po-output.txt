@@ -1,0 +1,2 @@
+VALUE: 2
+RATIONALE: The grouping adds an interacting constraint between overlapping rule matches and the documented rule order (first-match de-duplication), and carries a risk of breaking existing behaviour in that the ungrouped output must remain byte-identical.

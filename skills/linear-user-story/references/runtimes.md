@@ -20,6 +20,7 @@ If your runtime is not listed, map each capability to its closest equivalent and
 | Wake the manager (merge approval) | `SendMessage` | no push capability; the approvals file plus the manager's watcher is the delivery path |
 | Run a shell command | `Bash` | V2: `shell`; V1: `bash` |
 | Fetch a URL | `WebFetch` | `webfetch` |
+| Hosted evidence (the artefacts a session published for itself) | reachable where the session published artifacts from its own conversation on `claude.ai`: list and download them in that conversation's artifact view, and delete a single artifact with that product's per-artifact delete action; where no per-artifact delete action is exposed, the map gives none and the copy stays | none: an OpenCode session publishes no hosted artefacts, so there is nothing to list, download, or delete |
 | Scratch base directory | `$CLAUDE_JOB_DIR/tmp` in background jobs, else `profile.workspace.scratch_dir` | `profile.workspace.scratch_dir` |
 | Session label (for agent stamps) | the session or job name if set, else the session id | the session title if set, else the session id |
 | Tracker writes from a subagent | a subagent's write can be denied by the auto-mode permission check; only the owner grants it | V2: agent `permissions` rules for `shell`; V1: `permission.bash`; probe the actual write path |
@@ -72,10 +73,17 @@ If your runtime is not listed, map each capability to its closest equivalent and
   The preflight probe in Step 1 of `story-refinement` is the deciding check; an allow rule alone was not sufficient.
   On OpenCode V2, use the agent's ordered `permissions` rules with action `shell` for CLI writes; V1 uses the agent file's `permission.bash` setting.
   MCP writes have their own permission path; the real preflight probe remains decisive, not the presence of a shell allow rule.
+- **Hosted evidence.** A skill that touches hosted evidence reads this row and names no host itself.
+  A capability the row gives but the session cannot reach is a failure the skill reports loudly, with a non-zero exit and an error line naming it, never a silent skip and never a pass.
 - **Todo availability.** The record of work is required in every runtime; only its storage differs.
   OpenCode V2 ships todos off by default (`experimental.todo: true` opts in, and the harness must still expose the tool), so the checklist file is what every session falls back to when no todo tool is exposed (see `references/todo-tracking.md`).
 - **Models.** A skill that asks for a specific model role (reviewer, adjudicator) takes the model from the profile.
   If the runtime cannot run that model, stop and say so; do not silently substitute another model for a review of record.
+  A gate phase launched through `run-adversarial-pipeline.sh` takes the model id with `--model` and, when the consumer configures one, an availability probe with `--probe-cmd`; the script never resolves or substitutes a model.
+  The script reads only a phase's own stderr, its stdout log and its artifact, never a runtime's session log or event stream: a runtime that reports provider errors only there must surface them on the phase's stderr in its `--agent-cmd` template, or a rate-limited or unauthorized model cannot be diagnosed.
+  A phase killed by its `--timeout` exits 19, and a failed availability check exits 20 unless the phase deadline expired during the check, in which case the timeout-kill rule (19) applies; report either as a failed phase, never as a clean one.
+  A gate-script phase's `--timeout` bounds its work against a provider (the availability check, the checkout, the agent command); the local bookkeeping around them is not bounded.
+  While it spends model budget it reports progress on stderr (first after a second, then at least every 30 seconds) and ends with one completion line carrying the elapsed time and the phase's own exit status, on failure as well as success and that line is the last one the phase itself writes, so its status is the process's (teardown output can follow it, and a SIGKILL leaves no line); a phase that cannot deliver its report fails the process while staying accepted; a dossier and record subagent flow has no such lines.
   The same holds for a reasoning effort a skill asks for: if the runtime or model does not offer that level, stop and say so; never substitute another level.
   On Claude Code, `CLAUDE_CODE_EFFORT_LEVEL` overrides every subagent's effort and removes the `effort` parameter; if it differs from the effort a skill asks for, stop and say so.
   `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` is an on/off flag: when it is on, the `model` parameter is removed and a subagent runs on `CLAUDE_CODE_SUBAGENT_MODEL`, or on the main session's model when that is unset or `inherit`; if that model differs from the one a skill asks for, stop and say so.

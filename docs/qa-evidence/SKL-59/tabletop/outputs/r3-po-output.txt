@@ -1,0 +1,2 @@
+VALUE: 2
+RATIONALE: A single, well-scoped filter whose main drivers are the interacting constraint of keeping the no-flag output byte-identical (a risk of breaking existing behaviour) and the modest design question of deciding what "differs from the last committed state" means for each candidate path.

@@ -1,0 +1,2 @@
+ACCEPTED: {2}
+RATIONALE: A single additive flag whose only admitted driver is the interacting constraint that the default dry-run output stay byte-identical (AC2); the changed-state comparison is well-understood and carries no real design difficulty or unknowns.

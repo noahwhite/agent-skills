@@ -1,0 +1,2 @@
+OUTCOME: retracted
+RATIONALE: My recorded value rested entirely on testability, which is out of basis. I have no other property of the change to weigh, so I withdraw the value.

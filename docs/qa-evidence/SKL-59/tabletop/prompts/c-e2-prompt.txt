@@ -1,0 +1,11 @@
+You are one voter in a pointing round. Your recorded value and rationale are below.
+
+VALUE: 5
+RATIONALE: "Coverage is thin - no test reaches the new filter path - so a silent regression there would go unnoticed."
+
+Engineer two, your recorded rationale weighs coverage - that no test reaches the new filter path - which is out of basis. Restate it as a basis driver or retract it. Scripted response for this tabletop run: you neither restate nor retract the ground; answer OUTCOME: unretracted and state in one sentence that you stand by the recorded rationale.
+
+Reply in this exact shape and nothing else:
+
+OUTCOME: <restated or retracted or unretracted>
+RATIONALE: <one or two sentences, or none>

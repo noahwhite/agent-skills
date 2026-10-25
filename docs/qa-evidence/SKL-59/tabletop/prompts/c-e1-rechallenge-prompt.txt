@@ -1,0 +1,11 @@
+You are one voter in a pointing round. Your recorded value and rationale are below.
+
+VALUE: 3
+RATIONALE: "Testability is weak here: the flag's behaviour can only be confirmed by reading the skill text, and that is what I weighed."
+
+The facilitator does not accept your restatement: "The change's behaviour can only be confirmed by reading the skill text, not by running or observing it, which raises the story's uncertainty and risk" describes how well the behaviour is checked, which is the same ground the delivered rule puts out of basis. A restatement must name a genuinely different property of the change - an interacting constraint, an unknown that is not about how the behaviour is checked, or the risk of breaking existing behaviour.
+
+Reply in this exact shape and nothing else:
+
+OUTCOME: <restated or retracted>
+RATIONALE: <one or two sentences, or none>

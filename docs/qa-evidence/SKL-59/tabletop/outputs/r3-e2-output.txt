@@ -1,0 +1,2 @@
+VALUE: 2
+RATIONALE: A single well-understood flag, but it must compare each candidate path against the last committed state (a git-comparison design detail) while keeping the default dry-run output byte-identical, which is the main risk of breaking existing behaviour.

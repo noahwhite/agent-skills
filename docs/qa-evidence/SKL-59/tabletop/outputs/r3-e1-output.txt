@@ -1,0 +1,2 @@
+VALUE: 3
+RATIONALE: The change must leave the default dry-run output byte-identical, so it carries a real risk of breaking existing behaviour, and "differs from the last committed state" introduces unknowns over which candidate paths (new, modified, deleted) qualify.

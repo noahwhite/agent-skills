@@ -1,0 +1,2 @@
+REFERENCE: SKL-53's pointing record fixed its consensus at 5 points, and this story carries one more interacting constraint than it - that a path matched by several rules must appear once under the first documented rule.
+PRESCRIPTION: With one more interacting constraint layered onto a recorded 5-point story, this story sizes at 8 points.

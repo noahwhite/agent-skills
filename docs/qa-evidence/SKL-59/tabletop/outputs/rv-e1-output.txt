@@ -1,0 +1,2 @@
+ACCEPTED: {2}
+RATIONALE: A single additive filter on the existing dry run; the only real complexity is the interacting constraint that the default output must stay byte-identical and the change must distinguish changed candidate paths from the last committed state, a modest risk of breaking existing behaviour.

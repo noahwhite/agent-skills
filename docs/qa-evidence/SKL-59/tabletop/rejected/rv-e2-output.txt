@@ -1,0 +1,2 @@
+ACCEPTED: {2}
+RATIONALE: The only admitted drivers are the interacting constraint that the default dry-run output must stay byte-identical - a bounded risk of breaking existing behaviour, explicitly guarded by AC2 - and the modest design detail of detecting which candidate paths differ from the last committed state. Both are small and well-understood for a single additive opt-in flag, so the change sizes at 2 rather than 3.

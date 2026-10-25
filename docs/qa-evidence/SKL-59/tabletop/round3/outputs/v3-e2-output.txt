@@ -1,0 +1,2 @@
+ACCEPTED: {1, 2}
+RATIONALE: Design difficulty is low (an additive column reading a path's age). The admitted drivers are the single interacting constraint of the age source and the risk of breaking existing behaviour from the byte-identical backward-compatibility requirement.

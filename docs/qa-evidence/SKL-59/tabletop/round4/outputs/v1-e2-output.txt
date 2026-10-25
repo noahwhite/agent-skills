@@ -1,0 +1,2 @@
+VALUE: 2
+RATIONALE: The change is an additive display column, but it carries a real backward-compatibility constraint (AC2's byte-identical requirement when the column is absent) and an unknown-size edge case (AC3), both of which the basis admits as complexity drivers; the design itself remains simple.

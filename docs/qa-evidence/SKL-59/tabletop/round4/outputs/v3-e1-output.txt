@@ -1,0 +1,2 @@
+ACCEPTED: {2}
+RATIONALE: The only complexity is an interacting constraint - the byte column must be purely additive so the output without it stays byte-identical, plus a fallback for undeterminable sizes. That is a small, well-scoped risk of changing existing output behaviour, with no meaningful design difficulty or unknowns.

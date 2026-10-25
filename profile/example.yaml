@@ -59,6 +59,9 @@ git:
     feature: feat/
     fix: fix/
     docs: docs/
+release:
+  versioning: semver
+  notes: github-release
 review:
   reviewer:
     name: Codex

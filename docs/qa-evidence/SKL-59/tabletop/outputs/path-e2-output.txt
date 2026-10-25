@@ -1,0 +1,2 @@
+PATHS: {re-refine}
+AMENDMENTS: clarify acceptance criteria so the 2-vs-3 complexity difference is testable; define explicit boundaries and dependencies before re-pointing

@@ -1,0 +1,2 @@
+ACCEPTED: {2}
+RATIONALE: The only admitted drivers are the interacting constraint that default dry-run output must stay byte-identical (risk of breaking existing behaviour) and the design detail of detecting the last committed state; both are modest and well-bounded for a single filter flag, so it sizes at 2 rather than 3.

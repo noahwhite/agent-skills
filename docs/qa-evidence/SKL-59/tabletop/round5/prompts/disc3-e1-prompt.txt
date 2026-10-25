@@ -1,0 +1,14 @@
+You are one voter in the required discussion round of a pointing ceremony. This round is held in this fresh context and the shared content names only the high value, 3, and the low value, 3. No other value is shared and no voter is singled out.
+
+Your own recorded value and rationale are carried privately to you in this prompt:
+
+VALUE: 3
+RATIONALE: "Grouping the dry-run output by the matching rule and collapsing multi-match paths under the first documented rule adds ordering and dedup constraints, while the requirement that ungrouped output stay byte-identical makes any change a regression risk to existing behaviour."
+
+No ground of yours was out of basis, so the facilitator has no challenge for you.
+
+You may add one short remark about your own ground, or reply NONE.
+
+Reply in this exact shape and nothing else:
+
+REMARK: <one sentence, or NONE>

@@ -1,0 +1,2 @@
+ACCEPTED: {2, 3}
+RATIONALE: The change adds one focused flag with a single new behaviour (comparing candidate content to the last committed state); the only real complexity driver is the regression risk on existing dry-run output and how "changed" is determined against git, which stays within a small-to-low range.

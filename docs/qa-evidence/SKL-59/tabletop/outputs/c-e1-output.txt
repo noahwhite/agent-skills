@@ -1,0 +1,2 @@
+OUTCOME: restated
+RATIONALE: The change's behaviour can only be confirmed by reading the skill text, not by running or observing it, which raises the story's uncertainty and risk; that is the basis driver I weighed.
