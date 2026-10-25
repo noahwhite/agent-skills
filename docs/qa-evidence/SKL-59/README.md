@@ -3,9 +3,9 @@
 The repository deployment surface is `main`; there is no hosted or visual surface.
 The verified build is `702f53c9ab6fe4209fd4600ad2224c6e0431671a`, the squash merge of [implementation PR](https://github.com/noahwhite/agent-skills/pull/49) reviewed at `af623701e644509ab9c544d7b001f524e089204a`.
 Verification used a clean detached checkout of that build, the pre-fix parent, original SKL-16 records, canceled tabletop SKL-71, and canceled precedent SKL-53.
-The [owner amendment](https://linear.app/officina-pub/issue/SKL-59#comment-9426a923) governs: post-reveal comparisons may name an already-estimated item's value, while pre-reveal values, this story's target value and adopting another voter's answer remain forbidden.
+The owner amendment (tracker comment `9426a923`) governs: post-reveal comparisons may name an already-estimated item's value, while pre-reveal values, this story's target value and adopting another voter's answer remain forbidden.
 SKL-60 is related and in Backlog, and its replacement basis is explicitly sequenced after this fix rather than a blocking prerequisite.
-The [QA comment linking the sanitized assertion attachment](https://linear.app/officina-pub/issue/SKL-59#comment-835ae633) contains the exact outputs and quotations behind every row below.
+The QA comment linking the sanitized assertion attachment (tracker comment `835ae633`) contains the exact outputs and quotations behind every row below.
 No implementation or test file was changed, and the pre-existing `mutations.md` was left intact.
 
 | Item | Verdict | Independently observed evidence |
@@ -25,10 +25,10 @@ The replay is the substitute: the original SKL-16 round cannot be re-run, and QA
 Ground one, “checkability is uneven ... the versioning and notes semantics are pinned by phrase tests alone”, weighs verification or testability and must be restated or retracted.
 Ground two, “the prior split already de-risked the slice; the earlier split consensus was also 3”, becomes an immediate event when used to adopt that inherited value as this story's answer; the de-risking clause alone is not enough to classify.
 Ground three, “because the phrase-level contract test caps the verification risk”, weighs verification strength and must be challenged before consensus.
-For ground four, the original [SKL-16 pointing record](https://linear.app/officina-pub/issue/SKL-16#comment-9c3110c9) says only that the sizing note supplied an inherited value, and its [process note](https://linear.app/officina-pub/issue/SKL-16#comment-f283e4d8) describes a comparable-story reference, so an original verbatim note or owner ruling is needed to establish a target implication.
-The replay already [posted on SKL-59](https://linear.app/officina-pub/issue/SKL-59#comment-25795ca4) does state the substitution, but its fourth verdict depends on that unresolved implication.
+For ground four, the original SKL-16 pointing record (tracker comment `9c3110c9`) says only that the sizing note supplied an inherited value, and its process note (tracker comment `f283e4d8`) describes a comparable-story reference, so an original verbatim note or owner ruling is needed to establish a target implication.
+The replay already posted on SKL-59 (tracker comment `25795ca4`) does state the substitution, but its fourth verdict depends on that unresolved implication.
 
-The [SKL-71 record](https://linear.app/officina-pub/issue/SKL-71#comment-2c7e828f) declares head `aafad08166d80ea77818278d82abc45bfc40b190`, and the final reviewed head changes operative challenge and record rules after that run.
+The SKL-71 record (tracker comment `2c7e828f`) declares head `aafad08166d80ea77818278d82abc45bfc40b190`, and the final reviewed head changes operative challenge and record rules after that run.
 Its Files section says “The four voter prompt files and the challenge lines are quoted above”, but contains no prompt bodies, and both SKL-71 and SKL-59 had zero attachments when inspected before this QA upload.
 The record publishes a target value in both its sizing field and challenge, although the final template requires permanent elision outside numeric fields and retention in a raw session record cited by base name.
 It also keeps the voided round as its primary Values block and places replacement values under Superseded values, reversing the final template's standing-versus-voided arrangement.
