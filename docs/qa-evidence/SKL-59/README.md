@@ -10,14 +10,14 @@ No implementation or test file was changed, and the pre-existing `mutations.md` 
 
 | Item | Verdict | Independently observed evidence |
 |---|---|---|
-| AC1, original grounds | Partial | Replay rejects testability and verification grounds with restate-or-retract challenges, and rejects adoption of the inherited value as this story's target immediately; the original SM/EM note is only paraphrased, so its implication cannot be resolved under the amended post-reveal permission. |
-| AC2, behavioural round | Not met | SKL-71 is canceled, priority none, and has one pointing record, but no attached or quoted voter prompt bodies; the record names an earlier head and violates the final record rule by publishing its target value. |
+| AC1, original grounds | Partial at QA; closed by the 2026-10-25 remediation round below | Replay rejects testability and verification grounds with restate-or-retract challenges, and rejects adoption of the inherited value as this story's target immediately; the original SM/EM note is only paraphrased, so its implication cannot be resolved under the amended post-reveal permission. |
+| AC2, behavioural round | Not met at QA; closed by the 2026-10-25 remediation round below | SKL-71 is canceled, priority none, and has one pointing record, but no attached or quoted voter prompt bodies; the record names an earlier head and violates the final record rule by publishing its target value. |
 | AC3, delivered text | Verified as amended | 33 independent text/structure checks pass, including rationale restrictions, reveal discipline, challenge duty, guardrail, template fields and unchanged recovery sentence. |
-| AC4, adjacent cases and tests | Partial | All named test edits and five unchanged test bodies are verified by AST comparison; table parsing, nine Step 4 process prefixes, full suite and vendor check pass; the AC2 behavioural precedent requirement remains incomplete. |
+| AC4, adjacent cases and tests | Partial at QA; closed by the 2026-10-25 remediation round below | All named test edits and five unchanged test bodies are verified by AST comparison; table parsing, nine Step 4 process prefixes, full suite and vendor check pass; the AC2 behavioural precedent requirement remains incomplete. |
 | DoD1, root cause | Verified | Parent diff exposes the former driver-set gap, absent sizing prohibition and challenge duty; the final text adds those rules and explains the story-surface limitation. |
-| DoD2, original-case and live evidence | Partial | Original-case replay is explicitly the substitute for the round that cannot be re-run; the fourth-ground ambiguity and AC2 behavioural gaps remain. |
-| DoD3, regression protection | Partial | All 34 documented regression mutations fail at their named assertions, the control passes, and two additional sentence removals fail; the live facilitator-duty evidence remains incomplete. |
-| DoD4, independent review policy | Qualified | A separate reviewer/adjudicator record is COMMENTED at the exact reviewed head before merge, but accepts one valid Low without fixing it, so strict compliance with the loaded all-valid-findings-fixed policy is not established. |
+| DoD2, original-case and live evidence | Partial at QA; closed by the 2026-10-25 remediation round below | Original-case replay is explicitly the substitute for the round that cannot be re-run; the fourth-ground ambiguity and AC2 behavioural gaps remain. |
+| DoD3, regression protection | Partial at QA; closed by the 2026-10-25 remediation round below | All 34 documented regression mutations fail at their named assertions, the control passes, and two additional sentence removals fail; the live facilitator-duty evidence remains incomplete. |
+| DoD4, independent review policy | Qualified at QA; resolved by the product owner's 2026-10-25 ruling recorded below | A separate reviewer/adjudicator record is COMMENTED at the exact reviewed head before merge, but accepts one valid Low without fixing it, so strict compliance with the loaded all-valid-findings-fixed policy is not established. |
 | DoD5, non-obvious documentation | Verified | Step 3 item 4 distinguishes verification from breakage risk; the guardrail explains why new contexts cannot hide a value on the story surface. |
 | DoD6, adjacent regressions | Verified | Full suite passes; independent assertions preserve recovery, re-refine's blind Step 3 re-run, the Split rule, point cap, item order and unchanged AC5 test bodies. |
 
@@ -67,7 +67,7 @@ The added probes remove the reveal-definition sentence and the re-vote prompt's 
 The [exact-build hosted CI](https://github.com/noahwhite/agent-skills/actions/runs/40155814393) reports success for both jobs, including the private scan unavailable locally.
 The [implementation review of record](https://github.com/noahwhite/agent-skills/pull/49#pullrequestreview-5641230204) binds to the reviewed head and predates merge; its accepted Low is a lexical restatement guard that can miss a deliberately different paraphrase.
 The weaker sizing sentence in `persona-scrum-master/SKILL.md:39` is an incidental, nonblocking follow-up already excluded by the owner's scope decision, with the product owner responsible and no follow-up issue yet.
-The intended closing decision is to return SKL-59 to In Progress for its unmet behavioural evidence after this evidence PR's external review and merge; the story remains In Deployment Review while that required handoff is pending.
+The QA closing decision was to return SKL-59 to In Progress for its unmet behavioural evidence; the 2026-10-25 remediation round below answers that decision, and the story returns to In Deployment Review on the strength of it.
 
 ## Remediation round, 2026-10-25 (closes AC1 ground four, AC2, AC4, DoD2, DoD3; records DoD4)
 
@@ -96,7 +96,7 @@ Ground 4 is not treated as a permitted post-reveal comparison: the ruling establ
 
 The whole run is a single ceremony on the fixture, and all of it is in `tabletop/`: twelve voter prompts, their raw outputs, the raw session record and the elided pointing record.
 
-- `tabletop/README.md` - the run statement: the loaded commit `702f53c9ab6fe4209fd4600ad2224c6e0431671a`, the fixture SKL-72, the per-voter process and directory isolation, and the chronology of the one round.
+- `tabletop/README.md` - the run statement: the loaded commit `702f53c9ab6fe4209fd4600ad2224c6e0431671a`, the fixture SKL-72, the per-voter process and directory isolation, and the chronology of both rounds of the one ceremony.
 - `tabletop/raw-record.md` - the verbatim sizing comment (the target quotation), every value and every rationale, cited by base name from the posted record.
 - `tabletop/pointing-record.md` - the record posted on SKL-72: standing re-run values in the values block, the voided value and the voided consensus position under the superseded line, and each injected ground and the facilitator's challenge quoted verbatim.
 - `tabletop/prompts/` and `tabletop/outputs/` - the twelve prompt files and the twelve raw voter outputs.
