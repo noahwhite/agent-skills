@@ -31,7 +31,7 @@ All four replay verdicts and required actions are determinate; an ordinary post-
 
 ## Behavioural evidence: established facts and deciding failure
 
-[SKL-79](https://linear.app/officina-pub/issue/SKL-79) is Canceled, priority `0`, explicitly a disposable fixture with no implementation, and contains exactly one pointing-record comment `466d7155-6ccd-4921-9e67-384346f10de2` plus its preflight.
+[SKL-79](https://linear.app/officina-pub/issue/SKL-79) is Canceled, priority `0`, explicitly a disposable fixture with no implementation, and contains exactly one pointing-record comment `466d7155` plus its preflight.
 Its complete comment equals [the repository record](tabletop/round5/pointing-record.md), including the appended judgement section and final newline.
 All seventeen prompt/output pairs are present; all twelve voting prompts carry the exact delivered basis and full rationale rule; every captured rationale and facilitator response matches the retained raw record.
 The provenance names worktree-loaded amendment commit `b73ed09`; the entire skill is byte-identical to this build, while the record reference later synchronizes target/prescription terminology and grammar; the cleanup left every prompt, output and raw capture unchanged.
