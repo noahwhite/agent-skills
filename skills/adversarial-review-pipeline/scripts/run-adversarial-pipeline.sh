@@ -73,9 +73,9 @@
 #
 # Progress: while the agent runs, `run` writes an elapsed-time line to its own stderr - the first
 # after one second, then at least every 30 seconds - carrying the phase, the elapsed seconds, the
-# configured timeout and the availability-check state, and, on success, one completion line with the
-# elapsed time. Progress never reaches the artifact or the agent's stdout, so the artifact's first
-# line stays 'REVIEW-RAN: yes'.
+# configured timeout and the availability-check state, and one completion line with the elapsed time
+# and the phase's exit status on every exit path, success or failure. Progress never reaches the
+# artifact or the agent's stdout, so the artifact's first line stays 'REVIEW-RAN: yes'.
 #
 # Diagnosis: a non-zero agent exit, a timeout kill, and a report `accept_phase` rejects all print the
 # phase, the exit code, the model id when supplied, and the last 40 lines of ${phase}-agent.err and
@@ -520,8 +520,32 @@ progress_line() {  # $1 phase, $2 elapsed seconds: stderr only, never the artifa
     "$1" "$2" "$TIMEOUT" "$MODEL_LABEL" "$availability_state" >&2
 }
 
-completion_line() {  # $1 phase, $2 elapsed seconds
-  printf 'adversarial-pipeline: phase=%s complete elapsed=%ss model=%s\n' "$1" "$2" "$MODEL_LABEL" >&2
+completion_line() {  # $1 phase, $2 elapsed seconds, $3 the phase's exit status
+  printf 'adversarial-pipeline: phase=%s complete elapsed=%ss exit=%s model=%s\n' \
+    "$1" "$2" "$3" "$MODEL_LABEL" >&2
+}
+
+# One completion line per phase invocation, whatever the path out of it: a failed phase reports
+# completion with its exit status too, so the elapsed time is never missing from the evidence.
+PHASE_START=0
+COMPLETION_EMITTED=0
+CHECKOUT_PATH=""
+completion_once() {  # $1 phase, $2 exit status
+  if [ "$COMPLETION_EMITTED" -eq 0 ]; then
+    COMPLETION_EMITTED=1
+    completion_line "$1" "$(( SECONDS - PHASE_START ))" "$2"
+  fi
+}
+
+on_run_exit() {  # the run branch's single exit path: report completion, then clean up, keeping the status
+  local rc=$?
+  trap - EXIT
+  completion_once "$phase" "$rc"
+  if [ -n "$CHECKOUT_PATH" ]; then
+    ( remove_checkout "$CHECKOUT_PATH" ) >/dev/null \
+      || echo "WARNING: could not remove checkout $CHECKOUT_PATH (see above)" >&2
+  fi
+  exit "$rc"
 }
 
 emit_tail() {  # $1 label, $2 file: the last DIAGNOSIS_LINES lines, verbatim, or a note that it is absent
@@ -887,6 +911,9 @@ case "$cmd" in
     require_predecessors "$phase"
     init_scratch
     phase_start=$SECONDS
+    PHASE_START="$phase_start"
+    COMPLETION_EMITTED=0
+    CHECKOUT_PATH=""
     out="$(artifact_for "$phase")"
     dossier="$SCRATCH/${phase}-dossier.md"
     errlog="$RUN_DIR/${phase}-agent.err"
@@ -898,6 +925,7 @@ case "$cmd" in
     begin_phase "$phase"
     bind_phase "$phase"
     rm -f -- "$errlog" "$agentlog"
+    trap on_run_exit EXIT
     trap 'on_signal 130' INT
     trap 'on_signal 143' TERM
     trap 'on_signal 129' HUP
@@ -914,7 +942,7 @@ case "$cmd" in
     write_dossier "$phase" "$dossier"
     # Every phase gets its own throwaway checkout; no agent ever runs in the primary checkout.
     checkout="$(make_checkout)"
-    trap 'rc=$?; trap - EXIT; ( remove_checkout "$checkout" ) >/dev/null || echo "WARNING: could not remove checkout $checkout (see above)" >&2; exit $rc' EXIT
+    CHECKOUT_PATH="$checkout"
     q_prompt="$(printf '%q' "$dossier")"
     q_out="$(printf '%q' "$out")"
     q_checkout="$(printf '%q' "$checkout")"
@@ -959,7 +987,6 @@ case "$cmd" in
       fail_phase "$rc_accept" "$(cat -- "$reason_file" 2>/dev/null || true)"
     fi
     rm -f -- "$reason_file"
-    completion_line "$phase" "$(( SECONDS - phase_start ))"
     echo "Phase $phase -> $out" >&2
     if [ "$phase" = "arbitrate" ]; then cat -- "$out"; fi
     ;;

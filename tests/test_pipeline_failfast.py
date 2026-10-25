@@ -661,3 +661,37 @@ def test_a_refused_checkout_cleanup_does_not_replace_the_phase_exit_code(gate, t
     )
     assert result.returncode == 19, result.stdout + result.stderr
     assert "could not remove checkout" in result.stderr, result.stderr
+
+
+# --- AC4: a failed phase still ends with its one completion line ---------------------------------
+
+def test_a_failed_phase_still_prints_one_completion_line_with_its_elapsed_time(gate):
+    """QA round 1, AC4: a delayed authentication failure must still report completion."""
+    repo, scratch, env = gate
+    agent = "sleep 2; printf 'authentication failed QA completion check\\n' >&2; exit 1"
+    result = run_sweep(repo, scratch, env, "--model", "qa/failure-completion", agent=agent)
+    assert result.returncode == 15, result.stdout + result.stderr
+    completion = [line for line in result.stderr.splitlines() if "phase=sweep complete elapsed=" in line]
+    assert len(completion) == 1, f"a failed phase printed {len(completion)} completion lines: {result.stderr}"
+    assert re.search(r"elapsed=[0-9]+s", completion[0]), completion[0]
+    assert "authentication failed QA completion check" in result.stderr, result.stderr
+    assert_not_stamped(artifacts(repo, env), "sweep")
+
+
+def test_every_failed_phase_prints_one_completion_line_and_keeps_its_exit_code(gate):
+    repo, scratch, env = gate
+    cases = [
+        (15, ["--model", "m"], "sleep 1; exit 1"),
+        (17, ["--model", "m"], '{ printf "sweep ok\\n"; } > {output_file}'),
+        (19, ["--model", "m", "--timeout", "1"], "sleep 30"),
+        (20, ["--model", "m", "--probe-cmd", "echo 'rate limit exceeded' >&2; exit 7"],
+         '{ printf "REVIEW-RAN: yes\\n"; } > {output_file}'),
+        (18, ["--model", "m"], f'printf x >> {shlex.quote(str(repo / "tracked.txt"))}; true'),
+    ]
+    for expected, flags, agent in cases:
+        result = run_sweep(repo, scratch, env, *flags, agent=agent, timeout=60)
+        assert result.returncode == expected, (expected, result.stdout + result.stderr)
+        completion = [line for line in result.stderr.splitlines()
+                      if "phase=sweep complete elapsed=" in line]
+        assert len(completion) == 1, (expected, completion, result.stderr)
+        assert f"exit={expected}" in completion[0], completion[0]
