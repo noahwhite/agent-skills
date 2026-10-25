@@ -340,6 +340,15 @@ def test_the_probe_receives_the_model_id_and_honours_the_env_equivalents(gate, t
     assert "availability check: probe ok" in result.stderr, result.stderr
 
 
+def test_an_http_status_line_in_the_probe_output_fails_the_phase(gate):
+    repo, scratch, env = gate
+    result = run_sweep(
+        repo, scratch, env, "--model", "gpt-6-sol", "--probe-cmd", "echo 'HTTP/2 429'; exit 0",
+    )
+    assert result.returncode == 20, result.stdout + result.stderr
+    assert "HTTP/2 429" in result.stderr, result.stderr
+
+
 def test_a_healthy_probe_that_merely_says_unavailable_does_not_fail_the_phase(gate):
     repo, scratch, env = gate
     result = run_sweep(

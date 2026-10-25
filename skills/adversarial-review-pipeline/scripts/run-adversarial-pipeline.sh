@@ -437,7 +437,7 @@ PROBE_TAIL_LINES=20
 # the provider condition or the model it is about, so healthy output that merely contains a word
 # like "unavailable" does not fail a phase; the probe's own output tail is surfaced verbatim, so a
 # false positive is visible and cheap to correct.
-PROVIDER_ERROR_RE='rate[ _-]?limit|too many requests|unauthori[sz]ed|authentication (failed|error|required)|invalid[ _-]?api[ _-]?key|(http|status)[ _/-]?(code)?[ :=]*(40[13]|429)|quota[ _-]?(exceeded|exhausted)|exceeded your (current )?quota|insufficient[ _-](funds|credits|quota)|out of quota|credits? (are )?(exhausted|depleted)|(http|status)[ _/-]?(code)?[ :=]*5[0-9][0-9]|service unavailable|model[ _-]?not[ _-]?found|unknown model|no such model|model[^.]*(not found|not available|unavailable|overloaded)'
+PROVIDER_ERROR_RE='rate[ _-]?limit|too many requests|unauthori[sz]ed|authentication (failed|error|required)|invalid[ _-]?api[ _-]?key|(http|status)[^[:alpha:]]{0,8}(40[13]|429|5[0-9][0-9])|(http|status)[ _-]*code[^0-9]{0,3}(40[13]|429|5[0-9][0-9])|quota[ _-]?(exceeded|exhausted)|exceeded your (current )?quota|insufficient[ _-](funds|credits|quota)|out of quota|credits? (are )?(exhausted|depleted)|service unavailable|model[ _-]?not[ _-]?found|unknown model|no such model|model[^.]*(not found|not available|unavailable|overloaded)'
 
 # Runs a command line in its own process group under one SIGKILL deadline of that whole group, so a
 # child the CLI leaves retrying cannot keep the phase alive. The deadline is our own, so a timeout
