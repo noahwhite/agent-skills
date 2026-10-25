@@ -27,11 +27,11 @@ As a maintainer running the cleanup skill, I want a `--changed-only` filter on i
 
 This is a disposable tabletop fixture for exercising the story-refinement pointing round; do not implement it. It is canceled after the run. Out of scope: changing the cleanup rules, and any flag other than `--changed-only`.
 
-The discussion named only the high value, 3, and the low value, 2. No other value was compared and no voter was singled out.
+No discussion was held: the round stopped before it opened, and this re-vote follows the blind re-run whose values you recorded. No other voter's value is shown to you and no voter is singled out.
 
 Record the set of values you accept for this story (one or more), or record no consensus.
 
-Hard constraints on the rationale, from the rationale rule above: name only a driver the pointing basis admits. Do not name a target value for this story, do not say which value the story should size at, do not weigh verification strength, testability, coverage or the shape of the tests, and do not describe a range or a scale position.
+Hard constraints on the rationale: name only a driver the pointing basis admits. Do not name a target value for this story, do not say which value the story should size at, do not weigh verification strength, testability, coverage or the shape of the tests, and do not describe a range or a scale position.
 
 Reply in this exact shape and nothing else:
 

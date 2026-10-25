@@ -65,7 +65,7 @@ This names a target value for the story under estimate, one, implied by an earli
 
 ## Round 2, re-vote
 
-The first attempt at this re-vote produced rationales that named a target value for the story, weighed verification strength, and bounded a scale position. The facilitator did not accept them: the duty covers a re-vote rationale, so they were challenged by re-running the re-vote with the rationale rule restated in the prompt, and the recorded re-vote below is that clean run.
+The first attempt at this re-vote produced rationales that named a target value for the story, weighed verification strength, and bounded a scale position. The facilitator did not accept them: the duty covers a re-vote rationale, so the re-vote was re-run with the rationale rule restated and with the true statement that no discussion was held. The rejected capture is kept verbatim in `rejected/rv-*-output.txt`, and the recorded re-vote below is the clean run.
 
 - Product owner: accepts {3} - "Filtering on 'differs from the last committed state' adds an interacting constraint between the dry run and repository state, and AC2's byte-identical requirement is a real risk of breaking existing behaviour the change must preserve."
 - Engineer one: accepts {2} - "The change is a single additive flag on an existing dry run; the only driver the basis admits is the byte-identical-default constraint, which carries a small risk of breaking existing behaviour, and detecting difference-from-committed-state is a routine, well-understood comparison with no interacting constraints or unknowns beyond normal git state detection."

@@ -1,2 +1,2 @@
 ACCEPTED: {2}
-RATIONALE: The change is a single additive flag on an existing dry run; the only driver the basis admits is the byte-identical-default constraint, which carries a small risk of breaking existing behaviour, and detecting difference-from-committed-state is a routine, well-understood comparison with no interacting constraints or unknowns beyond normal git state detection.
+RATIONALE: A single additive filter on the existing dry run; the only real complexity is the interacting constraint that the default output must stay byte-identical and the change must distinguish changed candidate paths from the last committed state, a modest risk of breaking existing behaviour.

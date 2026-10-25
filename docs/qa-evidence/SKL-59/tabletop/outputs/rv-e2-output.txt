@@ -1,2 +1,2 @@
 ACCEPTED: {2}
-RATIONALE: The change is a single additive flag that filters candidate paths against the last committed state, so it carries little design difficulty, and the one real interacting constraint is keeping the default dry-run output byte-identical, which is also the only meaningful risk of breaking existing behaviour. Comparing content to HEAD is a small, well-understood unknown.
+RATIONALE: The admitted driver is the risk of breaking existing behaviour: AC2 requires the default dry-run output to remain byte-identical, so the new filter must be introduced without altering the existing output path. The only interacting constraint is comparing each candidate's content against the last committed state.
