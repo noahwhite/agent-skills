@@ -78,15 +78,17 @@
 # and the phase's exit status on every exit of the phase attempt, success or failure. It is the last
 # line the phase writes, after the artifact-path line and after an arbitration report has been
 # echoed, so the status it reports is the status the process exits with (only teardown's own output
-# can follow it). Its 'elapsed' is the whole attempt, where a heartbeat line reports the agent's own
+# can follow it). Its 'elapsed' covers everything up to that line, where a heartbeat line reports the agent's own
 # elapsed seconds, and it carries 'exit=<status>' after the model id. The attempt starts once `run`
 # accepts its agent command, so a `run` refused before that - usage, not a Git repository, a bad base
 # - prints no completion line, because no phase ran. An agent can write anything to its own stderr,
 # including a line shaped like this one: the phase's completion line is the last such line the phase
-# writes. Progress never reaches the artifact or the agent's stdout, so the artifact's first line
+# writes (the phase's own last line: teardown and a checkout-cleanup warning can still follow it).
+# Progress never reaches the artifact or the agent's stdout, so the artifact's first line
 # stays 'REVIEW-RAN: yes'; stdout carries the artifact alone (arbitration's report), never progress,
 # so do not merge the two streams and read the last line. A report the gate cannot write to stdout
-# exits 1 through the same path, so its completion line names that failure.
+# exits 1 through the same path, so its completion line names that failure; the phase itself stays
+# accepted and stamped, because the model's work succeeded and only its delivery failed.
 #
 # Diagnosis: a non-zero agent exit, a timeout kill, and a report `accept_phase` rejects all print the
 # phase, the exit code, the model id when supplied, and the last 40 lines of ${phase}-agent.err and
@@ -202,6 +204,7 @@ case "$MODEL" in
   *[!][A-Za-z0-9._/:@#+~,-]*) MODEL_LABEL="<invalid model id>" ;;
   *) MODEL_LABEL="$MODEL" ;;
 esac
+
 availability_state="availability check: not configured"
 
 # The target repository: --repo, else the current directory. Never this script's location.

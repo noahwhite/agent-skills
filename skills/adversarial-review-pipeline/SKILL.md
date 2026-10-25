@@ -132,9 +132,10 @@ An interrupted gate (SIGINT, SIGTERM, SIGHUP) kills the in-flight process group 
 The probe's own `--probe-timeout` is still honoured, bounded by whatever is left of the phase deadline at that moment.
 
 While the agent runs, `run` writes an elapsed-time line to its own stderr, the first after one second and then at least every 30 seconds (a `run`-only feature: a `dossier` plus `record` subagent flow has no heartbeat), carrying the phase, the elapsed seconds, the configured timeout and the availability-check state, plus one completion line with the elapsed time and the phase's exit status on every exit of the phase attempt, success or failure.
-It is the last line a phase writes, after the artifact-path line and after an arbitration report has been echoed, so the status it reports is the status the process exits with and only teardown's own output can follow it; its `elapsed` is the whole attempt (a heartbeat line reports the agent's own seconds) and it carries `exit=<status>` after the model id.
+It is the last line the phase itself writes, after the artifact-path line and after an arbitration report has been echoed, so the status it reports is the process's; only teardown's own output (a checkout-cleanup warning) can follow it; its `elapsed` is the whole attempt (a heartbeat line reports the agent's own seconds) and it carries `exit=<status>` after the model id.
 An agent can write anything to its own stderr, including a look-alike line, so the phase's completion line is the last such line the phase writes.
-A report the gate cannot write to stdout is an error, not a silent success: the phase stays accepted and stamped, the process exits 1, and the completion line names that status.
+A report the gate cannot write to stdout is an error, not a silent success: the process exits 1 and the completion line names that status.
+That is a delivery failure, not a phase failure: the model's work succeeded, so the phase stays accepted and stamped.
 Teardown ignores a second interrupt so the reported status stays final; a SIGKILL leaves no line at all.
 The phase attempt starts once `run` accepts its agent command, so a `run` refused before that (usage, not a Git repository, a bad base) prints no completion line, because no phase ran.
 Stdout carries the artifact alone (arbitration's report), never progress, so do not merge the two streams and read the last line.
@@ -143,7 +144,7 @@ Progress never reaches the artifact or the agent's stdout, so a report's first l
 On a non-zero agent exit, a timeout, or a report `accept_phase` rejects, `run` prints the phase, the exit code, the model id when supplied, and the last 40 lines of `${phase}-agent.err` and `${phase}-agent.log`, plus every provider-error line it detects in the full stderr log, so one is never lost past the tail window; `record` prints the phase, the model id when supplied, the reason and the report tail.
 The script cannot read a runtime's own session or event stream: a runtime that reports provider errors only there must surface them on the phase's stderr in its `--agent-cmd` template (`references/runtimes.md`, Models).
 
-A failed `run` is never acceptable.
+A failed phase is never acceptable.
 It removes its own launch and binding, so a later `record` of the leftover report fails instead of stamping a report the run declared failed, an interrupt does the same, and a re-run that fails before the agent starts still discards this phase's previous acceptance and every later phase.
 
 ## Phase 0: preflight (deterministic)

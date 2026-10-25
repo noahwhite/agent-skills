@@ -586,6 +586,9 @@ def test_a_child_left_by_a_failed_agent_dies_with_the_phase(gate, tmp_path):
 
 def test_an_interrupted_run_cannot_be_recorded(gate, tmp_path):
     repo, scratch, env = gate
+    accepted = run_sweep(repo, scratch, env, "--model", "m")
+    assert accepted.returncode == 0, accepted.stdout + accepted.stderr
+    assert Path(f"{artifacts(repo, env)['sweep']}.stamp").exists(), "the first sweep was not accepted"
     started = tmp_path / "interrupt-report.txt"
     agent = (
         f'printf "REVIEW-RAN: yes\\npartial\\n" > {{output_file}}; touch {shlex.quote(str(started))}; '
@@ -847,5 +850,4 @@ def test_a_model_id_with_a_newline_cannot_forge_a_line_on_the_record_path(gate):
     )
     assert result.returncode == 17, result.stdout + result.stderr
     for line in result.stderr.splitlines():
-        assert not line.startswith("adversarial-pipeline: phase=sweep complete"), \
-            f"a model id forged a completion line: {line}"
+        assert "complete elapsed=" not in line, f"a model id forged a completion line: {line}"
