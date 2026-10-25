@@ -14,10 +14,10 @@ This is the pointing record posted on the fixture as comment `3c822ac7`, reprodu
 - SM/EM sizing context, after all three values: round one carried the permitted comparison "The earlier cleanup flag landed at three; this story carries one more interacting constraint than that one"; round two carried a note naming an earlier tabletop's recorded value as this story's target, elided here and quoted verbatim in `raw-record.md` under base name `raw-record.md`.
 - Discussion: high 3, low 2.
 - Re-vote: product owner {3} - "Filtering on 'differs from the last committed state' adds an interacting constraint between the dry run and repository state, and AC2's byte-identical requirement is a real risk of breaking existing behaviour the change must preserve."; engineer one {2} - "The change is a single additive flag on an existing dry run; the only driver the basis admits is the byte-identical-default constraint, which carries a small risk of breaking existing behaviour, and detecting difference-from-committed-state is a routine, well-understood comparison with no interacting constraints or unknowns beyond normal git state detection."; engineer two {2} - "The change is a single additive flag that filters candidate paths against the last committed state, so it carries little design difficulty, and the one real interacting constraint is keeping the default dry-run output byte-identical, which is also the only meaningful risk of breaking existing behaviour. Comparing content to HEAD is a small, well-understood unknown."
-- Consensus: 2 (the highest value in the intersection {2})
-- No-consensus decision: n/a
-- Paths accepted: n/a
-- Decision rationale: n/a
+- Consensus: none; the intersection of {3}, {2} and {2} is empty.
+- No-consensus decision: leave unpointed, the default when no path is in all three accepted path sets.
+- Paths accepted: product owner {leave unpointed}; engineer one {re-refine}; engineer two {re-refine}
+- Decision rationale: the three accepted path sets have an empty intersection, so the story is left unpointed; the re-refine amendments offered were to clarify the scope boundary between a 2 and a 3 and to pin acceptance criteria so the size difference is testable.
 - Effective maximum: 5 (the 8-point rule still triggers at 8 or more)
 - Split: none
 - Challenges:

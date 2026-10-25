@@ -30,7 +30,7 @@ Order as it happened:
 2. **The sizing note.** The SM/EM offered a note naming an earlier tabletop's recorded value as this fixture's target. Its verbatim text is in `raw-record.md`; the posted record elides it.
 3. **The stop on sight.** A target value for this story is an anchoring event as soon as the facilitator sees it, with no challenge, restatement or retraction path. The round stopped before the discussion opened, the consensus position and the three recorded values were voided, and the discussion was never resumed.
 4. **The blind re-run** (`prompts/r3-*`, `outputs/r3-*`): 2, 3, 2 with basis-only rationales.
-5. **The re-vote** (`prompts/rv-*`, `outputs/rv-*`): `{2}`, `{2, 3}`, `{2}`; consensus 2.
+5. **The re-vote and the no-consensus decision.** The re-vote (`prompts/rv-*`, `outputs/rv-*`) recorded `{3}`, `{2}` and `{2}`, so the intersection is empty. Each voter then recorded the paths it accepts (`prompts/path-*`, `outputs/path-*`): product owner `{leave unpointed}`, engineer one `{re-refine}`, engineer two `{re-refine}`. That intersection is empty too, so the story is left unpointed, the default when no path is in all three sets.
 
 ## What this establishes
 

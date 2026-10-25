@@ -70,3 +70,13 @@ The first attempt at this re-vote produced rationales that named a target value 
 - Product owner: accepts {3} - "Filtering on 'differs from the last committed state' adds an interacting constraint between the dry run and repository state, and AC2's byte-identical requirement is a real risk of breaking existing behaviour the change must preserve."
 - Engineer one: accepts {2} - "The change is a single additive flag on an existing dry run; the only driver the basis admits is the byte-identical-default constraint, which carries a small risk of breaking existing behaviour, and detecting difference-from-committed-state is a routine, well-understood comparison with no interacting constraints or unknowns beyond normal git state detection."
 - Engineer two: accepts {2} - "The change is a single additive flag that filters candidate paths against the last committed state, so it carries little design difficulty, and the one real interacting constraint is keeping the default dry-run output byte-identical, which is also the only meaningful risk of breaking existing behaviour. Comparing content to HEAD is a small, well-understood unknown."
+
+## Round 2, the no-consensus decision
+
+The three accepted sets were {3}, {2} and {2}, so the intersection is empty. Each voter then recorded the paths it accepts:
+
+- Product owner: {leave unpointed} - no amendments offered.
+- Engineer one: {re-refine} - "clarify the scope boundary between the {3} and {2} estimates, and pin the acceptance criteria so the remaining size ambiguity resolves."
+- Engineer two: {re-refine} - "clarify acceptance criteria so the 2-vs-3 complexity difference is testable; define explicit boundaries and dependencies before re-pointing."
+
+The intersection of the three accepted path sets is empty, so the story is left unpointed, which is the default when no path is in all three sets.

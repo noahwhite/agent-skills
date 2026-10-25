@@ -1,0 +1,2 @@
+PATHS: {re-refine}
+AMENDMENTS: clarify the scope boundary between the {3} and {2} estimates, and pin the acceptance criteria so the remaining size ambiguity resolves.
