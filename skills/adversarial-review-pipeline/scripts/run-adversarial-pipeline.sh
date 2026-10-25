@@ -140,9 +140,8 @@ usage() { awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' 
 die() { local code="$1"; shift; echo "ERROR: $*" >&2; exit "$code"; }
 
 # Does a probe template reference the model somewhere the shell actually expands it? Walks the text
-# with shell quoting state: {model} or ADVERSARIAL_PROBE_MODEL in normal text, and
-# ADVERSARIAL_PROBE_MODEL inside double quotes (which expand), but never inside single quotes or a
-# comment.
+# with shell quoting state: {model} or ADVERSARIAL_PROBE_MODEL in normal text and inside double
+# quotes (both expand there), but never inside single quotes or a comment.
 probe_names_model() {
   local t="$1" i=0 n=${#1} c state=normal
   while [ "$i" -lt "$n" ]; do
@@ -1142,7 +1141,7 @@ case "$cmd" in
     fi
     ;;
 
-  checkout) make_checkout ;;
+  checkout) make_checkout || die 2 "could not create the throwaway checkout" ;;
   paths)
     printf 'run %s\npreflight %s\nsuite_log %s\nsweep %s\nhunt %s\narbitrate %s\n' \
       "$RUN_DIR" "$PHASE0" "$SUITE_LOG" "$PHASE1" "$PHASE2" "$PHASE3"
