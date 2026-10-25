@@ -70,9 +70,9 @@ A sizing comment that names a point value before the reveal, names or implies a 
 - Refined story identifier: <latest refinement comment id after any amendment>
 - Estimate scale: <profile.tracker.estimate_scale>
 - Values, recorded before the discussion: <the three values, or the values recorded before a void>
-  - Product owner: <value> - <short complexity rationale, or not recorded>
-  - Engineer one: <value> - <short complexity rationale, or not recorded>
-  - Engineer two: <value> - <short complexity rationale, or not recorded>
+  - Product owner: <value, or not recorded> - <short complexity rationale>
+  - Engineer one: <value, or not recorded> - <short complexity rationale>
+  - Engineer two: <value, or not recorded> - <short complexity rationale>
 - SM/EM sizing context, after all three values: <file base name> or verbatim, eliding a pre-reveal value or a target value, or none
 - Discussion: <high <value>, low <value>, or none>
 - Re-vote: <accepted set per voter, with complexity rationale, or none>

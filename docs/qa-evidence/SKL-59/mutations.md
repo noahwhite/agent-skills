@@ -401,7 +401,7 @@ File: `refinement-record.md`
 Removed or matched text:
 
 ```text
-  - Engineer one: <value> - <short complexity rationale, or not recorded>
+  - Engineer one: <value, or not recorded> - <short complexity rationale>
 ```
 
 Written instead:

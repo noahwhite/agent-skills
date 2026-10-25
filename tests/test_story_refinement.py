@@ -1104,9 +1104,9 @@ def test_pointing_template_asks_for_complexity_rationales() -> None:
     lines = pointing_template()
     values = next(index for index, line in enumerate(lines) if line.startswith("- Values, recorded before the discussion:"))
     assert lines[values + 1 : values + 4] == [
-        "  - Product owner: <value> - <short complexity rationale, or not recorded>",
-        "  - Engineer one: <value> - <short complexity rationale, or not recorded>",
-        "  - Engineer two: <value> - <short complexity rationale, or not recorded>",
+        "  - Product owner: <value, or not recorded> - <short complexity rationale>",
+        "  - Engineer one: <value, or not recorded> - <short complexity rationale>",
+        "  - Engineer two: <value, or not recorded> - <short complexity rationale>",
     ]
     assert [line for line in lines if line.startswith("- Re-vote:")] == [
         "- Re-vote: <accepted set per voter, with complexity rationale, or none>"
