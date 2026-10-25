@@ -119,7 +119,7 @@ The script never resolves one: it echoes the id it was handed, and names it in i
 `--probe-cmd TEMPLATE` (`ADVERSARIAL_PROBE_CMD`) is an optional availability check spent before any agent budget.
 `run` performs it; `dossier` and `record` say they do not, and never pretend to have probed.
 Its only placeholder is `{model}`, which expands to `"$ADVERSARIAL_PROBE_MODEL"` (the model id exported to the probe), so do not quote the placeholder inside the template; a `run` template that names the model through neither `{model}` nor `ADVERSARIAL_PROBE_MODEL` is refused with exit 2.
-The value always arrives as one word; whether the template actually exercises the provider is the template's job, so keep the probe a real call.
+The value always arrives as one word; whether the template actually exercises the provider is the template's job, so keep the probe a real call (the `{model}` check is a lint on the text: a placeholder inside quotes or after an unquoted `#` is not expanded).
 It runs with stdin from `/dev/null` in a fresh empty directory under the run's scratch directory, never in the checkout under review, under its own `--probe-timeout` (`ADVERSARIAL_PROBE_TIMEOUT`, default 30 seconds).
 A probe that exits non-zero, prints a provider error (rate limit, authentication, quota exhaustion, unavailable or unknown model), or outlives its own `--probe-timeout` fails the phase with exit 20 before the dossier is built and before any agent command runs; when the phase deadline is what expired first the phase exits 19 instead, as a timeout kill.
 The message names the phase, the model id supplied, the probe's exit code (or the timeout) and the probe's output tail.

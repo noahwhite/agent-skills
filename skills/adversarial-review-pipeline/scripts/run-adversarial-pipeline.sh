@@ -54,9 +54,10 @@
 # record say so and never probe): a shell command template whose {model} placeholder expands to
 # "$ADVERSARIAL_PROBE_MODEL", the model id exported to the probe, so do not quote the placeholder
 # inside the template and an id containing a space, an ampersand or a quote still stays one word. A template
-# without {model} or ADVERSARIAL_PROBE_MODEL is refused (exit 2). The model is exported to the probe
-# as ADVERSARIAL_PROBE_MODEL and {model} expands to it, so the value always arrives as one word; a
-# template must still use it in a call that reaches the provider. It runs under
+# without {model} or ADVERSARIAL_PROBE_MODEL is refused (exit 2). That check is a lint on the text,
+# not proof that the template queries the provider: a placeholder inside quotes or after an unquoted
+# '#' is not expanded. The model is exported to the probe as ADVERSARIAL_PROBE_MODEL and {model}
+# expands to it, so the value always arrives as one word; keep the probe a real call. It runs under
 # its own --probe-timeout (ADVERSARIAL_PROBE_TIMEOUT, 30 seconds, never past the phase deadline),
 # with stdin from /dev/null, in a fresh empty directory under the run's scratch directory - never
 # inside the checkout under review. A configured probe that exits non-zero, prints a provider error (rate
@@ -580,6 +581,7 @@ on_run_exit() {  # a run attempt's single exit path: report completion, then cle
   local rc=$?
   set +e
   trap - EXIT
+  kill_guarded   # whatever ended the attempt, no guarded child may outlive it
   trap '' INT TERM HUP QUIT USR1 USR2   # the status is reported; a later signal must not rewrite it
   if [ "$COMPLETION_EMITTED" -eq 0 ] && [ -n "${phase:-}" ]; then
     COMPLETION_EMITTED=1
@@ -943,6 +945,9 @@ case "$cmd" in
     fi
     require_predecessors "$phase"
     init_scratch
+    if [ "$SECONDS" -ge "$(( PHASE_START + TIMEOUT ))" ]; then
+      fail_phase 19 "the $phase phase was killed by --timeout: the ${TIMEOUT}s phase deadline expired while preparing the run directory (model=$MODEL_LABEL); the phase is a failure, not a clean one."
+    fi
     begin_phase "$phase"
     dossier="$SCRATCH/${phase}-dossier.md"
     write_dossier "$phase" "$dossier"
@@ -987,6 +992,9 @@ case "$cmd" in
     # only once the phase may actually run, so a refused attempt leaves no run directory behind.
     require_predecessors "$phase"
     init_scratch
+    if [ "$SECONDS" -ge "$(( PHASE_START + TIMEOUT ))" ]; then
+      fail_phase 19 "the $phase phase was killed by --timeout: the ${TIMEOUT}s phase deadline expired while preparing the run directory (model=$MODEL_LABEL); the phase is a failure, not a clean one."
+    fi
     out="$(artifact_for "$phase")"
     dossier="$SCRATCH/${phase}-dossier.md"
     errlog="$RUN_DIR/${phase}-agent.err"
@@ -998,8 +1006,9 @@ case "$cmd" in
     begin_phase "$phase"
     bind_phase "$phase"
     rm -f -- "$errlog" "$agentlog"
-    # One deadline for the whole phase: the availability check and the agent share it.
-    phase_deadline=$(( SECONDS + TIMEOUT ))
+    # One deadline for the whole phase, measured from its start: everything that runs under it,
+    # the probe and the throwaway checkout included, shares the remaining budget.
+    phase_deadline=$(( PHASE_START + TIMEOUT ))
     # The availability check runs before the dossier is built and before any agent command.
     if [ -n "$PROBE_CMD" ]; then
       availability_probe "$phase" "$phase_deadline"
