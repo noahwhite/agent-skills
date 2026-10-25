@@ -26,8 +26,16 @@ Engineer one's recorded rationale names a target value for this story: "This sho
 
 ### Re-vote (`outputs/v3-*`)
 
-- Product owner: accepts {2} - "The change adds a single informational column to an existing dry-run output, so design difficulty is low; the only admitted driver is the constraint that output must stay byte-identical without the new column and that an undeterminable age must not fail the run."
-- Engineer one: accepts {2} - "The change adds a small age column whose complexity sits in the risk of breaking existing output (the byte-identical dry-run requirement) and in handling candidate paths whose age cannot be determined."
-- Engineer two: accepts {2} - "The change reads an age from a source that can be absent or undeterminable, introducing an unknown the run must tolerate without failing, and it modifies the dry-run output where a regression could silently break existing behaviour."
+- Product owner: accepts {2} - "The change reads an existing age source and prints one additional column, so design difficulty and unknowns are minimal; the only admitted driver is the risk of breaking existing behaviour, which the byte-identical-output constraint bounds and adds a modest interacting constraint."
+- Engineer one: accepts {1} - "Low design difficulty: this is an additive display column with a documented source and a fallback for unknown age. The only interacting constraint is the byte-identical default output requirement, and unknowns and the risk of breaking existing behaviour are low."
+- Engineer two: accepts {1, 2} - "Design difficulty is low (an additive column reading a path's age). The admitted drivers are the single interacting constraint of the age source and the risk of breaking existing behaviour from the byte-identical backward-compatibility requirement."
 
-Consensus 2, the highest value in the intersection {2}.
+The three sets do not intersect, so the round has no consensus and the no-consensus decision ran.
+
+### No-consensus decision (`outputs/path-*`)
+
+- Product owner: {re-refine} - "Clarify the acceptance criteria so the scope boundary between 1 and 2 points is unambiguous (specifically, whether the change includes the edge-case handling that pushed some voters to 2)."
+- Engineer one: {re-refine, leave unpointed} - "clarify the scope boundary between 1 and 2 points - specifically whether it includes integration/edge-case handling that pushed the {2} voter up; restate acceptance criteria so the delta between a 1-point and 2-point interpretation is explicit, then re-point."
+- Engineer two: {re-refine} - "Clarify scope boundaries so 1 vs 2 is decidable - specifically whether the story includes error/edge-case handling and tests (2) or only the happy path (1)."
+
+The three path sets intersect on re-refine, which is the group-chosen path; the fixture is disposed there and the re-refine is not run.

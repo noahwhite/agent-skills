@@ -107,6 +107,16 @@ else:
             match = re.search(rf"^{re.escape(field)} (.*)$", BODY, re.M)
             if not match or match.group(1).strip().startswith("n/a"):
                 problems.append(f"{field} must record the no-consensus decision")
+        # the chosen path must be one every voter accepted
+        path_sets = []
+        for key in ROLES:
+            captured = (HERE / "outputs" / f"path-{key}-output.txt").read_text()
+            accepted_paths = re.search(r"^PATHS: \{([^}]*)\}", captured, re.M).group(1)
+            path_sets.append({p.strip() for p in accepted_paths.split(",") if p.strip()})
+        shared = set.intersection(*path_sets)
+        chosen = re.search(r"^- No-consensus decision: ([a-z-]+)", BODY, re.M).group(1)
+        if chosen not in shared:
+            problems.append(f"chosen path {chosen!r} is not in the shared path set {sorted(shared)}")
 
 # 4. Discussion agrees with the standing values.
 discussion = re.search(r"^- Discussion: (.*)$", BODY, re.M)
@@ -156,6 +166,12 @@ for field in ("- Tracker-write preflight: comment `19253345` on SKL-77.",
               "- Tracker writes: product owner"):
     if field not in BODY:
         problems.append(f"header value absent: {field!r}")
+
+# 7b. The re-vote prompts must not assert a discussion that the record says did not happen.
+for prompt in sorted((HERE / "prompts").glob("v3-*-prompt.txt")):
+    text = prompt.read_text()
+    if "discussion named" in text.lower():
+        problems.append(f"{prompt.name} claims a discussion that was not held")
 
 # 8. Capture inventory.
 for stage, expected in (("v1", 3), ("v2", 3), ("v3", 3)):
