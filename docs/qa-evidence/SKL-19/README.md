@@ -3,7 +3,7 @@
 Verified on 2026-10-25 against `noahwhite/agent-skills` `main` build `d6e5980d44eda89b7284740efb15a808442df0c1`, the squash merge of [PR #46](https://github.com/noahwhite/agent-skills/pull/46).
 The repository ships no runtime deploy unit; the push-triggered [CI run 40150794535](https://github.com/noahwhite/agent-skills/actions/runs/40150794535) is the delivered build and passed `checks` and `discovery` at that exact SHA.
 Fixtures were the merged commit and its parent, `shared/github.md`, the release-manager skill, schema, contract tests, 13 vendored references, PR diff, CI run, and implementation review.
-The [Linear raw-assertion attachment](https://linear.app/officina-pub/issue/SKL-19/user-story-define-per-story-promotion-mechanics-in-sharedgithubmd#comment-e55198a8) records the per-item probes; no screenshot applies to these repository and tracker surfaces.
+The raw-assertion attachment on SKL-19 records the per-item probes; no screenshot applies to these repository and tracker surfaces.
 
 | Item | Verdict | Evidence |
 | --- | --- | --- |
