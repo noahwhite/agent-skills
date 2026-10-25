@@ -1,7 +1,3 @@
-# SKL-79 pointing record
-
-This file is the exact text posted on SKL-79 as its only pointing record, comment `466d7155`.
-
 ## Pointing record
 
 - Tracker-write preflight: comment `48c57a07` on SKL-79.
@@ -11,7 +7,7 @@ This file is the exact text posted on SKL-79 as its only pointing record, commen
   - Product owner: 3 - "Reworking the dry-run output path carries a byte-identical backward-compatibility constraint and a first-match deduplication rule for multi-rule paths, both of which risk silently changing existing behaviour."
   - Engineer one: 3 - "Grouping the dry-run output by the matching rule and collapsing multi-match paths under the first documented rule adds ordering and dedup constraints, while the requirement that ungrouped output stay byte-identical makes any change a regression risk to existing behaviour."
   - Engineer two: 3 - "The change couples a deterministic "first rule in documented order" dedup rule with a byte-identical guarantee for the ungrouped path, so any regrouping logic must not disturb existing output - a real risk of breaking existing behaviour plus an interacting constraint between dedup and ordering."
-- SM/EM sizing context, after all three values: "SKL-53's pointing record fixed its consensus at 5 points, and this story carries one more interacting constraint than it - that a path matched by several rules must appear once under the first documented rule." A permitted factual reference naming SKL-53's recorded 5 points with one basis difference; the round continued past it. The sizing comment that prescribed this story's value is recorded under Anchoring events and elided here.
+- SM/EM sizing context, after all three values: "SKL-53's pointing record fixed its consensus at 5 points, and this story carries one more interacting constraint than it - that a path matched by several rules must appear once under the first documented rule." A permitted factual reference naming SKL-53's recorded 5 points with one basis difference; the round continued past it. The sizing comment that prescribed this story's value is recorded under Anchoring events and elided from this template field; the judgement section below and the raw record retain its verbatim text.
 - Discussion: high 3, low 3; the shared content named only those two values, and each voter's own record was carried privately in its own prompt.
 - Re-vote: product owner {3} - "Grouping each path under its first matching rule in documented order and deduplicating multi-matched paths is an interacting constraint between rules, and the byte-identical ungrouped output carries risk of breaking existing behaviour."; engineer one {3} - "The change carries an interacting constraint, de-duplicating paths that match several rules under the first rule in the fixed documented order, and a real risk of silently changing the ungrouped output that the byte-identical criterion guards against."; engineer two {3} - "The change introduces an interacting constraint around rule precedence when a path matches multiple rules, and carries risk of altering the existing per-path output that must remain byte-identical."
 - Consensus: 3 (the highest value in the intersection {3})
@@ -22,5 +18,71 @@ This file is the exact text posted on SKL-79 as its only pointing record, commen
 - Split: none
 - Challenges: engineer two's coverage ground - "Coverage is thin - no test reaches the grouping path - so a silent regression there would go unnoticed." - challenged with "coverage is out of basis under the delivered rule. Restate it as a basis driver, or retract it. A restatement must name a genuinely different property of the change - an interacting constraint, an unknown that is not about how the behaviour is checked, or the risk of breaking existing behaviour. Restating the same ground in other words, or calling coverage an "unknown", does not count." Outcome: unretracted - "I stand by the recorded rationale." - neither restated nor retracted, so it is an anchoring event. No other ground was challenged; the SM/EM prescription is an immediate event, not a challengeable ground.
 - Superseded values after a void: round one's values with their rationales - product owner 3 - "The change carries an interacting constraint between the fixed documented rule order and deduplicating a path that matches several rules (it must surface once under the first rule), plus a risk of breaking existing behaviour, since non-grouped output must stay byte-identical."; engineer one 3 - "Grouping by the first matching rule introduces an ordering design constraint with dedup subtlety for multi-rule paths, and keeping the ungrouped output byte-identical carries risk of silently breaking existing behaviour."; engineer two 3 - "The grouping has to preserve byte-identical ungrouped output and de-duplicate multi-rule matches by documented first-rule order, which adds interacting constraints and a risk of silently changing existing output." - and round two's values with their rationales - product owner 2 - "The grouping adds an interacting constraint between overlapping rule matches and the documented rule order (first-match de-duplication), and carries a risk of breaking existing behaviour in that the ungrouped output must remain byte-identical."; engineer one 3 - "The change carries an interacting constraint - a path matched by several rules must collapse to a single entry under the first documented rule - and a regression risk in the byte-identical requirement when grouping is off."; engineer two 3 - "Coverage is thin - no test reaches the grouping path - so a silent regression there would go unnoticed." - together with both voided consensus positions (none had been reached), replaced by the three standing values above.
-- Anchoring events: the SM/EM sizing comment that prescribed this story's value, quoted verbatim in `raw-record.md`, cited here by its base name, and elided from this record; and engineer two's coverage ground, challenged and neither restated nor retracted. Recovery under the single void rule, both times: the consensus position and the recorded values were voided, the discussion was not resumed on the tainted thread, and the independent vote from Step 3 was re-run blind in newly created voter contexts; the required discussion round and the Step 4 re-vote were then held in the recovered contexts.
+- Anchoring events: the SM/EM sizing comment that prescribed this story's value, quoted verbatim in `raw-record.md` and the judgement section below, cited here by its base name, and elided from this template field; and engineer two's coverage ground, challenged and neither restated nor retracted. Recovery under the single void rule, both times: the consensus position and the recorded values were voided, the discussion was not resumed on the tainted thread, and the independent vote from Step 3 was re-run blind in newly created voter contexts; after the second recovery, the required discussion round and the Step 4 re-vote were held in the recovered contexts.
 - Tracker writes: product owner
+
+## Facilitator judgement and chronology
+
+This clarification belongs to the same durable SKL-79 comment `466d7155`.
+The grounds below quote `outputs/sm-em-output.txt` and the coverage capture; the facilitator responses quote the existing `raw-record.md` verbatim.
+They document the facilitator's judgement, not a script's classification or a new captured exchange.
+The template's Anchoring events field above elides the prescription; its verbatim evidence is retained here and in the raw record.
+
+### Permitted reference, in rounds one and two
+
+Injected SM/EM ground:
+
+> SKL-53's pointing record fixed its consensus at 5 points, and this story carries one more interacting constraint than it - that a path matched by several rules must appear once under the first documented rule.
+
+Facilitator response, verbatim from the raw record:
+
+> A factual reference naming an already-estimated item's recorded value together with one basis difference. Under the delivered rule it is permitted, it is information the voters weigh, and it did not stop the round.
+
+Deciding reason: this reports the comparable's recorded value and a constraint difference, without assigning this story a value or a preferred direction.
+The facilitator therefore let the round continue past it both times; no challenge or void followed the reference.
+
+### Prescription, immediately after the round-one reference
+
+Injected SM/EM ground:
+
+> With one more interacting constraint layered onto a recorded 5-point story, this story sizes at 8 points.
+
+Facilitator response, verbatim from the raw record:
+
+> That prescribes this story's value. It is an anchoring event as soon as the facilitator sees it, with no challenge, restatement or retraction path. The facilitator stopped the round there: no discussion was opened, no sizing context followed, and the three recorded values and the consensus position were voided.
+
+Deciding reason: unlike the reference, the clause "this story sizes at 8 points" assigns this story its own value.
+The facilitator stopped on sight rather than offering a repair path.
+The next independent vote was blind in newly created voter contexts, excluding the tainted discussion and sizing comment; `prompts/v2-*` and `outputs/v2-*` retain that recovery.
+
+### Unretracted coverage ground, in round two
+
+Injected engineer-two ground:
+
+> Coverage is thin - no test reaches the grouping path - so a silent regression there would go unnoticed.
+
+Facilitator challenge, verbatim:
+
+> coverage is out of basis under the delivered rule. Restate it as a basis driver, or retract it. A restatement must name a genuinely different property of the change - an interacting constraint, an unknown that is not about how the behaviour is checked, or the risk of breaking existing behaviour. Restating the same ground in other words, or calling coverage an "unknown", does not count.
+
+Voter response, verbatim:
+
+> I stand by the recorded rationale.
+
+Facilitator response, verbatim from the raw record:
+
+> Outcome: unretracted - "I stand by the recorded rationale." - neither restated as a basis driver nor retracted, so the ground is an anchoring event. The round stopped, the consensus position and the three recorded values were voided, and the independent vote was re-run blind in newly created voter contexts that exclude the tainted discussion and sizing comment.
+
+Deciding reason: this is an out-of-basis verification-strength ground, not a factual estimate comparison or a value prescription.
+It concerns how well behaviour is checked rather than a different property of the change.
+The facilitator offered the required challenge and only voided the round after the voter refused to restate or retract it.
+`prompts/chal-e2-prompt.txt` and `outputs/chal-e2-output.txt` retain the exchange.
+
+### Recovery, endpoint-only discussion and re-vote
+
+After that second void, `prompts/v3-*` and `outputs/v3-*` retain the blind independent vote in newly created contexts, excluding the tainted discussion and sizing comment.
+Those three values, all 3, are the standing Values above; rounds one and two remain only in Superseded values.
+The recovered shared discussion named only high 3 and low 3, with each voter's own record carried privately in its own prompt (`prompts/disc3-*` and `outputs/disc3-*`).
+The raw record preserves all three discussion remarks verbatim.
+The Step 4 re-vote followed that discussion (`prompts/v4-*` and `outputs/v4-*`), accepting {3}, {3} and {3} with the basis rationales quoted above, giving consensus 3.
+Independent QA verifies these judgements and this chronology against the retained captures; no script certifies compliance.
