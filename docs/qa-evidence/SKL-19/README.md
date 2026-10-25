@@ -17,7 +17,7 @@ The raw-assertion attachment on SKL-19 records the per-item probes; no screensho
 | AC8: other modes | Verified | The old `none` and `whole-branch` rules remain, with only the named mode qualifications and new `per-story` text; the contract test pins the section. |
 | DoD1: all AC met | Verified | AC1–AC8 above. |
 | DoD2: tests written and passing | Verified | New shared contract tests, updated persona tests, 511 local passes, and green CI `checks`. |
-| DoD3: independent review | Verified | [Review of record 5640935039](https://github.com/noahwhite/agent-skills/pull/46#pullrequestreview-5640935039) was `COMMENTED` at reviewed head `c964b58659319bbd8dd8bfe191ef1310331fd528` before merge, with separate reviewer and adjudicator. |
+| DoD3: independent review | Verified | [Review of record 5640935039](https://github.com/noahwhite/agent-skills/pull/46#pullrequestreview-5640935039) was `COMMENTED` at reviewed head `c964b58659319bbd8dd8bfe191ef1310331fd528` before merge; per its own body it records a Codex GPT-6 Sol review and a Kimi K3 adjudication. |
 | DoD4: docs updated | Verified | The merged PR updated the shared guide and all 13 vendored references. |
 | DoD5: staging, if needed | Correct by design | No staging or deploy unit exists for this library; the merged `main` CI build is its delivery surface. |
 | DoD6: no critical regressions | Verified within tested surface | The suite, vendor check, CI jobs, and implementation review passed; no critical defect was observed. |
