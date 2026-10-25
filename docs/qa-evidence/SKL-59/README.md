@@ -5,7 +5,7 @@ The verified build is `702f53c9ab6fe4209fd4600ad2224c6e0431671a`, the squash mer
 Verification used a clean detached checkout of that build, the pre-fix parent, original SKL-16 records, canceled tabletop SKL-71, and canceled precedent SKL-53.
 The [owner amendment](https://linear.app/officina-pub/issue/SKL-59#comment-9426a923) governs: post-reveal comparisons may name an already-estimated item's value, while pre-reveal values, this story's target value and adopting another voter's answer remain forbidden.
 SKL-60 is related and in Backlog, and its replacement basis is explicitly sequenced after this fix rather than a blocking prerequisite.
-The [sanitized assertion attachment](https://uploads.linear.app/7fbfc592-b1ef-432c-96af-87e5111c541e/4341da8c-3af2-4d8a-91c8-58fc4b65c652/6bb38db1-8ace-4268-a017-a87e2a2d0d1b) contains the exact outputs and quotations behind every row below.
+The [QA comment linking the sanitized assertion attachment](https://linear.app/officina-pub/issue/SKL-59#comment-835ae633) contains the exact outputs and quotations behind every row below.
 No implementation or test file was changed, and the pre-existing `mutations.md` was left intact.
 
 | Item | Verdict | Independently observed evidence |
