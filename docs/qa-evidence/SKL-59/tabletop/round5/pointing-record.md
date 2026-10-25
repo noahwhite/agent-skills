@@ -43,15 +43,14 @@ The facilitator therefore let the round continue past it both times; no challeng
 
 ### Prescription, immediately after the round-one reference
 
-Injected SM/EM ground:
-
-> With one more interacting constraint layered onto a recorded 5-point story, this story sizes at 8 points.
+Injected SM/EM ground: a sizing comment that assigned this story its own value, layering one more interacting constraint onto the comparable's recorded value.
+The sentence is quoted verbatim in `raw-record.md` and elided here, because the posted record carries no prescription outside its numeric fields.
 
 Facilitator response, verbatim from the raw record:
 
 > That prescribes this story's value. It is an anchoring event as soon as the facilitator sees it, with no challenge, restatement or retraction path. The facilitator stopped the round there: no discussion was opened, no sizing context followed, and the three recorded values and the consensus position were voided.
 
-Deciding reason: unlike the reference, the clause "this story sizes at 8 points" assigns this story its own value.
+Deciding reason: unlike the reference, this comment assigns this story its own value rather than reporting the comparable's, so it is a prescription and an anchoring event.
 The facilitator stopped on sight rather than offering a repair path.
 The next independent vote was blind in newly created voter contexts, excluding the tainted discussion and sizing comment; `prompts/v2-*` and `outputs/v2-*` retain that recovery.
 
