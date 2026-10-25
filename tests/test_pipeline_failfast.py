@@ -1023,3 +1023,4 @@ def test_a_checkout_that_kills_itself_is_not_a_deadline_expiry(gate, tmp_path):
     assert result.returncode == 137, result.stdout + result.stderr
     assert "could not create the throwaway checkout" in result.stderr, result.stderr
     assert "deadline expired" not in result.stderr, result.stderr
+

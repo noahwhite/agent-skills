@@ -1035,24 +1035,23 @@ case "$cmd" in
     trap 'on_signal 140' USR2
     trap on_run_exit EXIT
     # From here the phase attempt is real, so every exit reports completion; a missing predecessor is
-    # one of those failures, not a refusal before the attempt starts. The scratch directory is made
-    # only once the phase may actually run, so a refused attempt leaves no run directory behind.
+    # one of those failures, not a refusal before the attempt starts. A re-run discards this phase's
+    # previous acceptance and every later phase before anything can fail, so no early failure can
+    # leave an older report acceptable. The primary-checkout baseline is taken before the probe, so a
+    # probe that writes into the checkout cannot hide inside it, and stale logs go first: a diagnosis
+    # must never show a previous attempt's streams as this attempt's.
+    begin_phase "$phase"
+    bind_phase "$phase"
+    out="$(artifact_for "$phase")"
+    errlog="$RUN_DIR/${phase}-agent.err"
+    agentlog="$RUN_DIR/${phase}-agent.log"
+    rm -f -- "$errlog" "$agentlog"
     require_predecessors "$phase"
     init_scratch
+    dossier="$SCRATCH/${phase}-dossier.md"
     if [ "$SECONDS" -ge "$(( PHASE_START + TIMEOUT ))" ]; then
       fail_phase 19 "the $phase phase was killed by --timeout: the ${TIMEOUT}s phase deadline expired while preparing the run directory (model=$MODEL_LABEL); the phase is a failure, not a clean one."
     fi
-    out="$(artifact_for "$phase")"
-    dossier="$SCRATCH/${phase}-dossier.md"
-    errlog="$RUN_DIR/${phase}-agent.err"
-    agentlog="$RUN_DIR/${phase}-agent.log"
-    # A re-run that fails at any point, even before the agent starts, discards this phase's previous
-    # acceptance and every later phase. The primary-checkout baseline is taken before the probe, so a
-    # probe that writes into the checkout cannot hide inside it. Stale logs go first: a diagnosis must
-    # never show a previous attempt's streams as this attempt's.
-    begin_phase "$phase"
-    bind_phase "$phase"
-    rm -f -- "$errlog" "$agentlog"
     # One deadline for the whole phase, measured from its start: everything that runs under it,
     # the probe and the throwaway checkout included, shares the remaining budget.
     phase_deadline=$(( PHASE_START + TIMEOUT ))
