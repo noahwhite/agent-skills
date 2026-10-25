@@ -57,7 +57,8 @@ RELATIVE = re.compile(r"(?i)\b(?:which|who|that)\b")
 COPULA = re.compile(r"(?i)\b(?:is|are|was|were|remains|seems)\s+$")
 # A coordinated clause inherits the subject of the clause it follows, so a second sizing verb in the same
 # sentence is still attributed, and a comparison clause that scores the comparable is not.
-CLAUSE_SPLIT = re.compile(r"(?i);\s*|,\s*(?:and|but|while|yet|so)\s+|\s+(?:and|but|while|yet|so)\s+")
+# Only a comma-marked coordination starts a new clause; an unmarked "and" may sit inside a relative clause.
+CLAUSE_SPLIT = re.compile(r"(?i);\s*|,\s*(?:and|but|while|yet|so)\s+")
 STORY_AT_VALUE = re.compile(r"(?i)\bthis (?:one|story)\b[^.\n]{0,25}?\bat\s+\d")
 FIRST_PERSON = re.compile(
     r"(?i)\b(?:i would|i'd|i have)\b[^.\n]{0,30}\b(?:size|score|point|estimate|pick|choose|say|go with|put)\b"
@@ -279,7 +280,7 @@ for stage, expected_count in (("v1", 3), ("v2", 3), ("v3", 3), ("v4", 3), ("disc
         problems.append(f"{stage}: expected {expected_count} captures, found {found}")
 
 # The committed matrix must not shrink: adding cases means updating this count deliberately.
-MATRIX_COUNTS = (21, 11)
+MATRIX_COUNTS = (21, 12)
 cases_file = HERE / "prescription-cases.md"
 section = None
 must_fail, must_pass = [], []
