@@ -132,7 +132,8 @@ An interrupted gate (SIGINT, SIGTERM, SIGHUP) kills the in-flight process group 
 The probe's own `--probe-timeout` is still honoured, bounded by whatever is left of the phase deadline at that moment.
 
 While the agent runs, `run` writes an elapsed-time line to its own stderr, the first after one second and then at least every 30 seconds (a `run`-only feature: a `dossier` plus `record` subagent flow has no heartbeat), carrying the phase, the elapsed seconds, the configured timeout and the availability-check state, plus one completion line with the elapsed time and the phase's exit status on every exit of the phase attempt, success or failure.
-A successful phase writes it before echoing an arbitration report to stdout, and on every path only the checkout cleanup's own result can follow it; its `elapsed` is the whole attempt (a heartbeat line reports the agent's own seconds) and it carries `exit=<status>` after the model id.
+A successful phase writes it before it reports the artifact path and before it echoes an arbitration report, and after it only the checkout cleanup's own result can appear; its `elapsed` is the whole attempt (a heartbeat line reports the agent's own seconds) and it carries `exit=<status>` after the model id.
+An agent can write anything to its own stderr, including a look-alike line, so the phase's completion line is the last such line the phase writes.
 The phase attempt starts once `run` accepts its agent command, so a `run` refused before that (usage, not a Git repository, a bad base) prints no completion line, because no phase ran.
 Stdout carries the artifact alone (arbitration's report), never progress, so do not merge the two streams and read the last line.
 Progress never reaches the artifact or the agent's stdout, so a report's first line stays `REVIEW-RAN: yes`.

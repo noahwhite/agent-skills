@@ -501,11 +501,12 @@ def test_zero_timeouts_are_rejected_as_usage_errors(gate):
 
 def test_a_model_id_that_is_not_a_plain_id_is_rejected(gate):
     repo, scratch, env = gate
-    for bad in ("gpt-6-sol\nFORGED_LINE", "provider/model with space", "model;exit=0"):
+    for bad in ("gpt-6-sol\nFORGED_LINE", "provider/model with space", "model;exit=0", ""):
         result = run_sweep(repo, scratch, env, "--model", bad)
         assert result.returncode == 2, (bad, result.stdout + result.stderr)
-        assert "must be a plain model id" in result.stderr, result.stderr
-    assert "FORGED_LINE" not in result.stderr, "an unvalidated model id forged a line of output"
+        assert "FORGED_LINE" not in result.stderr, \
+            f"an unvalidated model id forged a line of output: {result.stderr}"
+        assert "error" in result.stderr.lower(), result.stderr
 
 
 # --- the heartbeat cadence and an interrupted gate ------------------------------------------------
@@ -766,3 +767,26 @@ def test_an_interrupted_phase_reports_completion_with_its_signal_status(gate, tm
     completion = [line for line in stderr.splitlines() if "phase=sweep complete elapsed=" in line]
     assert len(completion) == 1, stderr
     assert completion[0].endswith("exit=143"), completion[0]
+
+
+def test_arbitration_reports_completion_before_the_artifact_and_its_report(gate):
+    """AC4 ordering: the completion line precedes the artifact line and the echoed report."""
+    repo, scratch, env = gate
+    sweep = run_sweep(repo, scratch, env, "--model", "m")
+    assert sweep.returncode == 0, sweep.stdout + sweep.stderr
+    hunt = run_script(
+        "run", "hunt", "--repo", str(repo), "--base", "HEAD", "--scratch", str(scratch),
+        "--model", "m", "--agent-cmd", SWEEP_AGENT, env=env,
+    )
+    assert hunt.returncode == 0, hunt.stdout + hunt.stderr
+    arbitrate = run_script(
+        "run", "arbitrate", "--repo", str(repo), "--base", "HEAD", "--scratch", str(scratch),
+        "--model", "m", "--agent-cmd",
+        '{ printf "REVIEW-RAN: yes\\nARBITRATION-BODY\\n"; } > {output_file}', env=env,
+    )
+    assert arbitrate.returncode == 0, arbitrate.stdout + arbitrate.stderr
+    assert "ARBITRATION-BODY" in arbitrate.stdout, arbitrate.stdout
+    lines = arbitrate.stderr.splitlines()
+    completion = next(i for i, line in enumerate(lines) if "phase=arbitrate complete elapsed=" in line)
+    artifact = next(i for i, line in enumerate(lines) if line.startswith("Phase arbitrate -> "))
+    assert completion < artifact, f"the completion line followed the artifact line: {lines}"

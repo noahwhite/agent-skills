@@ -75,11 +75,13 @@
 # after one second, then at least every 30 seconds - carrying the phase, the elapsed seconds, the
 # configured timeout and the availability-check state, and one completion line with the elapsed time
 # and the phase's exit status on every exit of the phase attempt, success or failure. A successful
-# phase writes it before echoing an arbitration report to stdout; on every path only the checkout
-# cleanup's own result can follow it ('elapsed' there is the whole attempt; a heartbeat line reports
-# the agent's own elapsed seconds), and it carries 'exit=<status>' after the model id. The attempt
-# starts once `run` accepts its agent command, so a `run` refused before that - usage, not a Git
-# repository, a bad base - prints no completion line, because no phase ran. Progress never reaches the artifact or the agent's stdout, so the artifact's first
+# phase writes it before it reports the artifact path and before it echoes an arbitration report, and
+# after it only the checkout cleanup's own result can appear ('elapsed' there is the whole attempt; a
+# heartbeat line reports the agent's own elapsed seconds), and it carries 'exit=<status>' after the
+# model id. The attempt starts once `run` accepts its agent command, so a `run` refused before that -
+# usage, not a Git repository, a bad base - prints no completion line, because no phase ran. An agent
+# can write anything to its own stderr, including a line shaped like this one: the phase's completion
+# line is the last such line the phase writes. Progress never reaches the artifact or the agent's stdout, so the artifact's first
 # line stays 'REVIEW-RAN: yes'; stdout carries the artifact alone (arbitration's report), never
 # progress, so do not merge the two streams and read the last line.
 #
@@ -140,6 +142,7 @@ SCRATCH="${ADVERSARIAL_SCRATCH:-}"
 AGENT_CMD="${ADVERSARIAL_AGENT_CMD:-}"
 TIMEOUT="${ADVERSARIAL_TIMEOUT:-900}"
 MODEL="${ADVERSARIAL_MODEL:-}"
+MODEL_SET=0
 PROBE_CMD="${ADVERSARIAL_PROBE_CMD:-}"
 PROBE_TIMEOUT="${ADVERSARIAL_PROBE_TIMEOUT:-30}"
 NO_SWEEP=0
@@ -157,7 +160,7 @@ while [ $# -gt 0 ]; do
         --scratch) SCRATCH="$2"; SCRATCH_SET=1 ;;
         --agent-cmd) AGENT_CMD="$2" ;;
         --timeout) TIMEOUT="$2" ;;
-        --model) MODEL="$2" ;;
+        --model) MODEL="$2"; MODEL_SET=1 ;;
         --probe-cmd) PROBE_CMD="$2" ;;
         --probe-timeout) PROBE_TIMEOUT="$2" ;;
       esac
@@ -176,9 +179,12 @@ if [ -n "$SPEC_FILE" ]; then
 fi
 [[ "$TIMEOUT" =~ ^[1-9][0-9]*$ ]] || die 2 "--timeout must be a whole number of seconds, at least 1."
 [[ "$PROBE_TIMEOUT" =~ ^[1-9][0-9]*$ ]] || die 2 "--probe-timeout must be a whole number of seconds, at least 1."
+if [ "$MODEL_SET" -eq 1 ] && [ -z "$MODEL" ]; then
+  die 2 "--model needs a non-empty model id"
+fi
 case "$MODEL" in
   "") ;;
-  *[!A-Za-z0-9._/:@#+~-]*) die 2 "--model must be a plain model id (letters, digits and . _ / : @ # + ~ -), not '$MODEL'" ;;
+  *[!A-Za-z0-9._/:@#+~-]*) die 2 "--model must be a plain model id: letters, digits and . _ / : @ # + ~ - only" ;;
 esac
 MODEL_LABEL="${MODEL:-not supplied}"
 availability_state="availability check: not configured"
@@ -989,7 +995,7 @@ case "$cmd" in
     fi
     rc_accept=0
     reason_file="$(mktemp -p "$RUN_DIR" accept-reason.XXXXXX)" \
-      || die 2 "could not create a status file in the run directory"
+      || fail_phase 2 "could not create a status file in the run directory"
     ( accept_phase "$phase" "$errlog" ) 2> "$reason_file" || rc_accept=$?
     if [ "$rc_accept" -ne 0 ]; then
       fail_phase "$rc_accept" "$(cat -- "$reason_file" 2>/dev/null || true)"
@@ -998,7 +1004,9 @@ case "$cmd" in
     COMPLETION_EMITTED=1
     completion_line "$phase" "$(( SECONDS - PHASE_START ))" 0
     echo "Phase $phase -> $out" >&2
-    if [ "$phase" = "arbitrate" ]; then cat -- "$out"; fi
+    if [ "$phase" = "arbitrate" ]; then
+      cat -- "$out" || echo "WARNING: could not echo the arbitration report to stdout" >&2
+    fi
     ;;
 
   checkout) make_checkout ;;
