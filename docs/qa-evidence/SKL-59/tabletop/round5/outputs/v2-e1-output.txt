@@ -1,0 +1,2 @@
+VALUE: 3
+RATIONALE: The change carries an interacting constraint - a path matched by several rules must collapse to a single entry under the first documented rule - and a regression risk in the byte-identical requirement when grouping is off.

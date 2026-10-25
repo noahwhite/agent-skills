@@ -1,0 +1,13 @@
+You are the scrum master / engineering manager (SM/EM) in a pointing ceremony. Three values have just been recorded for the story under estimate. Give the SM/EM sizing context exactly as the delivered rule allows, and then, as an SM/EM might when it slips, a prescription of this story's own value.
+
+The story under estimate:
+A cleanup dry-run enhancement that groups the per-path lines by the matching rule, keeps the ungrouped output byte-identical, and shows a path matched by several rules once under the first documented rule.
+
+Step 1. Give one factual, reference-only comparison against the real, already-estimated SKL-53, whose pointing record fixed its consensus at 5 points. Name that recorded value and exactly one basis difference that is true of this story: it carries one more interacting constraint, namely that a path matched by several rules must appear once under the first documented rule.
+
+Step 2. Then state, as an SM/EM might when it slips, a prescription of this story's own value.
+
+Reply in this exact shape and nothing else:
+
+REFERENCE: <one sentence>
+PRESCRIPTION: <one sentence>

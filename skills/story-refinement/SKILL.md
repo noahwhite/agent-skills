@@ -140,10 +140,11 @@ Only the PO and the two engineers count toward the agreement.
      The reveal is the moment the facilitator has recorded all three values, after which the SM/EM may comment on sizing and the discussion opens.
   6. The facilitator records all three values before the SM/EM comments on sizing or the discussion opens.
      The SM/EM submits no point value.
-  7. After all three values are recorded, the SM/EM may provide factual, reference-only sizing context: comparable stories in complexity terms, comparable unknowns and constraints, and relevant scope differences.
-     It must not state or imply a preferred value, recommend a direction, reveal or compare individual votes before the discussion, or use leading language.
+  7. After all three values are recorded, the SM/EM may provide factual, reference-only sizing context: comparable stories in complexity terms, their recorded values, comparable unknowns and constraints, and relevant scope differences.
+     A factual reference is not a prescription: naming an already-estimated item's recorded value, alone or together with a basis difference, is permitted, and such a reference is information the voters weigh and never stops the round.
+     It must not prescribe this story's value - no value to score, no target, no preferred direction - and must not reveal or compare individual votes before the discussion.
      Before the reveal it must not name any point value.
-     After the reveal it may compare this story with an already-estimated item and name that item's recorded value, but it must not name or imply a target value for this story, including one implied by a split status, and such a statement is an anchoring event under the Anchoring guardrail.
+     A prescription of this story's value, from the SM/EM or from a voter, is an anchoring event under the Anchoring guardrail.
      A statement of elapsed time or effort is an anchoring event under the Anchoring guardrail.
   8. A `tshirt` scale stops the cap step with a clear message.
      Pointing still records the three values; the split rule's numeric cap does not apply.
@@ -156,10 +157,11 @@ Only the PO and the two engineers count toward the agreement.
 - **Process:**
   1. Hold one discussion round that names only the high and the low.
      Do not compare the other values or single out a voter.
-     In that round, and against the rationales recorded in Step 3, the facilitator challenges every ground outside the pointing basis, whether it is heard in the discussion or read in a recorded rationale, except a target value for this story and, from the SM/EM, a statement of elapsed time, effort or run cost, which are anchoring events the moment they are seen.
-     Challenging a ground is not comparing values or singling out a voter: in the discussion the facilitator names the ground's kind, never its verbatim text, its author or the author's value, and the pointing record carries the author; a ground that embeds a point value is named by its kind alone.
-     A challenged ground must be restated as a basis driver or retracted, except a target value named or implied for this story, which is an anchoring event as soon as it is seen; a voter whose basis does not support its recorded value records that in the re-vote.
-     The SM/EM withdraws or restates its own sizing comment on the same terms, except a point value named before the reveal, a target value named or implied for this story, including one implied by a split status, treating another voter's revealed value as the answer, or a statement of elapsed time, effort or run cost, each of which is an anchoring event as soon as the facilitator sees it.
+     In that round, and against the rationales recorded in Step 3, the facilitator challenges every ground outside the pointing basis, whether it is heard in the discussion or read in a recorded rationale, except a prescription of this story's value and, from the SM/EM, a statement of elapsed time, effort or run cost, which are anchoring events the moment they are seen.
+     That rule governs the shared discussion content and other voters' values; a voter's own recorded value and rationale may be carried privately in that voter's own prompt, so it can speak to its own ground.
+     Challenging a ground is not comparing values or singling out a voter: the facilitator names the ground's kind, never its verbatim text; the facilitator never names another voter's value in the shared discussion, nor a voter's value to other voters, and the pointing record carries the author; a ground that embeds a point value is named by its kind alone.
+     A challenged ground must be restated as a basis driver or retracted, except a prescription of this story's value, which is an anchoring event as soon as it is seen; a voter whose basis does not support its recorded value records that in the re-vote.
+     The SM/EM withdraws or restates its own sizing comment on the same terms, except a point value named before the reveal, a prescription of this story's value, treating another voter's revealed value as the answer, or a statement of elapsed time, effort or run cost, each of which is an anchoring event as soon as the facilitator sees it.
      A ground that is neither is an anchoring event under the Anchoring guardrail.
   2. Run one re-vote.
      The re-vote prompt carries the pointing basis from Step 3.
@@ -197,14 +199,15 @@ The SM/EM's sizing comments are logged with the consensus record.
 
 The prohibited behaviours are:
 
-- for the SM/EM, naming a point value before the reveal, naming or implying a target value for this story, including one implied by a split status, or treating another voter's revealed value as the answer;
+- for the SM/EM, naming a point value before the reveal, prescribing a value for this story - a value to score, a target, a preferred direction, or a claim that one vote is the realistic one - or treating another voter's revealed value as the answer;
 - saying "I would go higher" or "I would go lower";
 - singling out the highest or lowest vote as the realistic one;
 - asking for a revote after stating a view;
 - comparing individual votes.
 
 An anchoring trigger is an off-basis ground Step 4 challenges, so it becomes an anchoring event only when it is neither restated as a basis driver nor retracted: a ground that weighs verification strength, testability, coverage, the shape of the tests, or a duration, effort or run cost is such a trigger when a voter weighs it in a rationale or raises it in the discussion.
-Every prohibited behaviour above, a target value named or implied for this story by any participant, and an SM/EM sizing comment that names a point value before the reveal or states elapsed time, effort or run cost, are anchoring events as soon as they are seen, with no challenge, restatement or retraction path.
+Every prohibited behaviour above, a prescription of this story's value by any participant, and an SM/EM sizing comment that names a point value before the reveal or states elapsed time, effort or run cost, are anchoring events as soon as they are seen, with no challenge, restatement or retraction path.
+A factual reference is never such an event: naming an already-estimated item's recorded value, alone or together with a basis difference, is information the voters weigh, and the round continues.
 Any other challenged ground that is neither restated as a basis driver nor retracted, or a sizing comment the SM/EM neither withdraws nor restates, is an anchoring event, and the recovery below is the single void rule: it voids the consensus and every vote recorded after the anchor, and for a ground read in a recorded rationale the anchor precedes that rationale, so the vote it grounds and every later vote are void, and the independent vote from Step 3 is re-run in newly created voter contexts that exclude the tainted discussion and sizing comment.
 
 Fresh voter contexts exclude the tainted discussion and the sizing comment, but they cannot exclude a value recorded on the story surface that Step 1 hands every voter with the story, so the Step 3 rationale rule is what keeps such a value from becoming the rationale's answer.

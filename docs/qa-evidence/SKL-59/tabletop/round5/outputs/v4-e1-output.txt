@@ -1,0 +1,2 @@
+ACCEPTED: {3}
+RATIONALE: The change carries an interacting constraint, de-duplicating paths that match several rules under the first rule in the fixed documented order, and a real risk of silently changing the ungrouped output that the byte-identical criterion guards against.

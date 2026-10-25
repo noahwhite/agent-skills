@@ -1,0 +1,2 @@
+VALUE: 3
+RATIONALE: Grouping by the first matching rule introduces an ordering design constraint with dedup subtlety for multi-rule paths, and keeping the ungrouped output byte-identical carries risk of silently breaking existing behaviour.

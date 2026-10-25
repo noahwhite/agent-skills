@@ -1,0 +1,2 @@
+ACCEPTED: {3}
+RATIONALE: The change introduces an interacting constraint around rule precedence when a path matches multiple rules, and carries risk of altering the existing per-path output that must remain byte-identical.

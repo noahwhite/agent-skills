@@ -1,0 +1,2 @@
+VALUE: 3
+RATIONALE: Grouping the dry-run output by the matching rule and collapsing multi-match paths under the first documented rule adds ordering and dedup constraints, while the requirement that ungrouped output stay byte-identical makes any change a regression risk to existing behaviour.

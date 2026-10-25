@@ -129,3 +129,12 @@ QA round 3 left AC2 open on two points: the recovered run skipped the Step 4 dis
 - The run is on the new canceled priority-none fixture SKL-78 and carries exactly one pointing record, comment `e0bcb6f8`, identical to `tabletop/round4/pointing-record.md`.
 - `tabletop/round4/check_record.py` recomputes the record from the ten captures, including the discussion's high and low and the challenged ground's outcome, and its output is committed beside it.
 - AC4, DoD2 and DoD3 remain submitted with AC2 for QA's re-verification.
+
+## Round 5, 2026-10-25 - the amended reading, delivered and exercised
+
+The owner amendments (tracker comment `9e5b9868`) settled the reference-versus-prescription reading and the private self-context rule. This round delivers both in the skill text and exercises them in one compliant run.
+
+- Text: `skills/story-refinement/SKILL.md` Step 3 item 7, Step 4 item 1 and the Anchoring guardrail, and `skills/story-refinement/references/refinement-record.md`'s phrasing prose and Discussion field, now state that a factual reference naming an already-estimated item's recorded value is permitted and never stops the round, that a prescription of this story's value is an anchoring event, and that a voter's own record may be carried privately in its own prompt.
+- Run: the canceled priority-none fixture SKL-79, one durable record (comment `466d7155`), sixteen voter prompts and one SM/EM prompt with their seventeen captured outputs in `tabletop/round5/`, the real SKL-53 as the comparable at its recorded 5 points throughout, the permitted reference surviving and the round continuing, a prescription stopping the round on sight, an unretracted ground voiding a round and forcing a blind re-vote, the recovered discussion naming only the high and the low, and consensus 3.
+- `tabletop/round5/check_record.py` recomputes the record from the captures, including the reference-not-prescription distinction and the unretracted outcome; its output is committed beside it.
+- AC4, DoD2 and DoD3 remain submitted with AC2 for QA's re-verification.
