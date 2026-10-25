@@ -351,7 +351,12 @@ def test_an_http_status_line_in_the_probe_output_fails_the_phase(gate):
 
 def test_a_probe_reporting_quota_exhaustion_fails_the_phase(gate):
     repo, scratch, env = gate
-    for probe in ("printf 'RESOURCE_EXHAUSTED\\n'; exit 0", "echo 'quota reached'; exit 0"):
+    for probe in (
+        "printf 'RESOURCE_EXHAUSTED\\n'; exit 0",
+        "echo 'quota reached'; exit 0",
+        "echo 'Your credit balance is too low to access the API'; exit 0",
+        "echo 'credit balance: $0'; exit 0",
+    ):
         result = run_sweep(repo, scratch, env, "--model", "gpt-6-sol", "--probe-cmd", probe)
         assert result.returncode == 20, (probe, result.stdout + result.stderr)
         assert "provider error" in result.stderr, result.stderr
@@ -364,7 +369,7 @@ def test_a_healthy_probe_that_merely_says_unavailable_does_not_fail_the_phase(ga
         repo, scratch, env, "--model", "gpt-6-sol",
         "--probe-cmd",
         "echo 'unavailable'; echo 'latency 403ms'; echo 'quota tier active'; echo '429 tokens left'; "
-        "echo 'credit balance: \$100; model available'; exit 0",
+        "echo 'credit balance: $100; model available'; echo 'credit balance: $100; low latency'; exit 0",
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert "availability check: probe ok" in result.stderr, result.stderr
