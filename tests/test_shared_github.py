@@ -22,15 +22,15 @@ PER_STORY_SENTENCES = (
     "Keep the PR whose head branch carries the issue key as a whole token, delimited by a non-alphanumeric character or the end of the name, and stop when that leaves zero or more than one.",
     "Select, from `origin/<profile.git.integration_branch>`, only the commits that PR added:",
     "With `profile.git.merge_method` `squash`, select that PR's squash commit.",
-    "With `profile.git.merge_method` `rebase`, select the PR's recorded commits that are still ancestors of `origin/<profile.git.integration_branch>`, checked with `git merge-base --is-ancestor`, and stop when that set is empty.",
+    "With `profile.git.merge_method` `rebase`, select the commits in `origin/<profile.git.release_branch>..origin/<profile.git.integration_branch>` whose `git patch-id --stable` id matches one of the PR's own commits, and stop when the match count differs from the PR's commit count.",
     "With `profile.git.merge_method` `merge`, select that PR's merge commit.",
-    "Confirm the selected commits' patch ids equal the patch ids of that PR's own commits, and stop when they differ, because another story's change is riding along.",
+    "Confirm the selection reproduces that PR's own diff, by patch id: for `squash` the squash commit against `gh pr diff <number>`, for `rebase` the selected commits against the PR's commits, and for `merge` `git diff <merge>^1 <merge>` against `gh pr diff <number>`; stop when they differ, because another story's change is riding along.",
     "Record the PR number and the selected commit SHAs in the promotion PR body.",
     "Before carrying them, confirm the story's change is still present on `origin/<profile.git.integration_branch>` by finding its added lines with `git log -S`, and stop and report the story as reverted when they are absent.",
     # Carrying the selected commits onto the promotion branch.
-    "Carry the selected commits onto the promotion branch by cherry-picking them in their original order, with `-m 1` when a selected commit is a merge commit, or by squash-applying non-merge selections with `git cherry-pick -n` and one commit.",
+    "Carry the selected commits onto the promotion branch by cherry-picking them one at a time in their original order, with `-m 1` when a selected commit is a merge commit, or by applying non-merge selections with `git cherry-pick -n` in order and making one commit.",
     # The promotion PR, and the explicit refusal of a whole-branch PR under per-story.
-    "Run the promotion branch's checks, then push it and open the promotion PR from it to `profile.git.release_branch`.",
+    "Run the promotion branch's local checks, push it, then open the promotion PR from it to `profile.git.release_branch` and let its CI run.",
     "A whole-branch integration-to-release PR is not used under `per-story`.",
     # Fail-closed stop, including the un-promoted-story cases.
     "Stop and report instead of carrying another story's commit or merging the integration branch into the promotion when the selection finds no commit, matches more than one feature PR, or cannot apply without an un-promoted story.",
@@ -183,13 +183,13 @@ EXPECTED_PROMOTION_SECTION = (
     '   Keep the PR whose head branch carries the issue key as a whole token, delimited by a non-alphanumeric character or the end of the name, and stop when that leaves zero or more than one.\n'
     '   Select, from `origin/<profile.git.integration_branch>`, only the commits that PR added:\n'
     "   With `profile.git.merge_method` `squash`, select that PR's squash commit.\n"
-    "   With `profile.git.merge_method` `rebase`, select the PR's recorded commits that are still ancestors of `origin/<profile.git.integration_branch>`, checked with `git merge-base --is-ancestor`, and stop when that set is empty.\n"
+    "   With `profile.git.merge_method` `rebase`, select the commits in `origin/<profile.git.release_branch>..origin/<profile.git.integration_branch>` whose `git patch-id --stable` id matches one of the PR's own commits, and stop when the match count differs from the PR's commit count.\n"
     "   With `profile.git.merge_method` `merge`, select that PR's merge commit.\n"
-    "   Confirm the selected commits' patch ids equal the patch ids of that PR's own commits, and stop when they differ, because another story's change is riding along.\n"
+    "   Confirm the selection reproduces that PR's own diff, by patch id: for `squash` the squash commit against `gh pr diff <number>`, for `rebase` the selected commits against the PR's commits, and for `merge` `git diff <merge>^1 <merge>` against `gh pr diff <number>`; stop when they differ, because another story's change is riding along.\n"
     '   Record the PR number and the selected commit SHAs in the promotion PR body.\n'
     "   Before carrying them, confirm the story's change is still present on `origin/<profile.git.integration_branch>` by finding its added lines with `git log -S`, and stop and report the story as reverted when they are absent.\n"
-    '3. Carry the selected commits onto the promotion branch by cherry-picking them in their original order, with `-m 1` when a selected commit is a merge commit, or by squash-applying non-merge selections with `git cherry-pick -n` and one commit.\n'
-    "4. Run the promotion branch's checks, then push it and open the promotion PR from it to `profile.git.release_branch`.\n"
+    '3. Carry the selected commits onto the promotion branch by cherry-picking them one at a time in their original order, with `-m 1` when a selected commit is a merge commit, or by applying non-merge selections with `git cherry-pick -n` in order and making one commit.\n'
+    "4. Run the promotion branch's local checks, push it, then open the promotion PR from it to `profile.git.release_branch` and let its CI run.\n"
     '   A whole-branch integration-to-release PR is not used under `per-story`.\n'
     "5. Stop and report instead of carrying another story's commit or merging the integration branch into the promotion when the selection finds no commit, matches more than one feature PR, or cannot apply without an un-promoted story.\n"
     "   A cherry-pick conflict that needs another story's commits is that stop: report the conflicting commit and the story it needs, and do not pull that story in to clear the conflict.\n"
