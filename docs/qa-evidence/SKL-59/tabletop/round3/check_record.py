@@ -87,14 +87,14 @@ if not revote or not consensus:
 else:
     line = revote.group(1)
     sets = []
-    for key, role in ROLES.items():
-        accepted, rationale = capture("v3", key)
-        expected = f'{role.lower()} {accepted} - "{rationale}"'
-        if expected not in line:
-            problems.append(f"re-vote line does not carry the {role} capture")
+    expected_line = "- Re-vote: " + "; ".join(
+        f'{ROLES[k].lower()} {capture("v3", k)[0]} - "{capture("v3", k)[1]}"' for k in ROLES
+    )
+    if revote.group(0).strip() != expected_line:
+        problems.append("re-vote line is not exactly the three captures in order")
+    for key in ROLES:
+        accepted, _ = capture("v3", key)
         sets.append({int(n) for n in re.findall(r"\d+", accepted)})
-    if not line.startswith(f"product owner {{"): 
-        problems.append("re-vote line does not start with the product-owner entry")
     intersection = set.intersection(*sets)
     if intersection:
         want = f"2 (the highest value in the intersection {{2}})" if max(intersection) == 2 else str(max(intersection))
@@ -103,6 +103,10 @@ else:
     else:
         if not consensus.group(1).strip().startswith("none"):
             problems.append(f"empty intersection {sets} but consensus says {consensus.group(1).strip()!r}")
+        for field in ("- No-consensus decision:", "- Paths accepted:", "- Decision rationale:"):
+            match = re.search(rf"^{re.escape(field)} (.*)$", BODY, re.M)
+            if not match or match.group(1).strip().startswith("n/a"):
+                problems.append(f"{field} must record the no-consensus decision")
 
 # 4. Discussion agrees with the standing values.
 discussion = re.search(r"^- Discussion: (.*)$", BODY, re.M)

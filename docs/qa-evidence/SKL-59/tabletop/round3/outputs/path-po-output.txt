@@ -1,0 +1,2 @@
+PATHS: {re-refine}
+AMENDMENTS: Clarify the acceptance criteria so the scope boundary between 1 and 2 points is unambiguous (specifically, whether the change includes the edge-case handling that pushed some voters to 2).

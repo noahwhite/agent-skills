@@ -1,2 +1,2 @@
-ACCEPTED: {2}
-RATIONALE: The change adds a small age column whose complexity sits in the risk of breaking existing output (the byte-identical dry-run requirement) and in handling candidate paths whose age cannot be determined.
+ACCEPTED: {1}
+RATIONALE: Low design difficulty: this is an additive display column with a documented source and a fallback for unknown age. The only interacting constraint is the byte-identical default output requirement, and unknowns and the risk of breaking existing behaviour are low.

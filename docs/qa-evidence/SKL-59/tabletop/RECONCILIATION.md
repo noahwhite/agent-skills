@@ -46,8 +46,9 @@ A new canceled priority-none fixture was used because SKL-72 already carried sev
 
 ## 5. Record defects found and corrected while preparing this round
 
-Two defects in earlier drafts of the SKL-77 record were caught before this PR and are recorded here for completeness.
+Three defects in earlier drafts of the SKL-77 record and its prompts were caught before this PR and are recorded here for completeness.
 
 - The first posted record quoted the target sentence in its Anchoring events line; the durable record names the event by kind and cites `raw-record.md` instead.
-- The discussion field asserted a high and a low of the standing values. No discussion was held, and the durable record says so. The re-vote prompt's preamble nevertheless described a high and a low, which is a defect in that prompt: the voters' accepted sets are their own and unaffected, but the preamble should have said no discussion was held. The record does not repeat the claim.
+- The discussion field asserted a high and a low of the standing values, and the first re-vote prompts described that non-existent discussion to the voters. Both were wrong: no discussion was held. The re-vote was run again with a prompt that says so, and the record now records `Discussion: none`. The captures from the first re-vote are not kept as the record's basis; they are superseded by the truthful run, and this note is the record of that replacement.
+- The re-vote sets from that truthful run do not intersect, so the no-consensus decision ran on the same fixture: the three path votes intersect on re-refine, which the record carries.
 

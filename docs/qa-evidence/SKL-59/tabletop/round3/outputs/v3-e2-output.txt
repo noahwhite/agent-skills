@@ -1,2 +1,2 @@
-ACCEPTED: {2}
-RATIONALE: The change reads an age from a source that can be absent or undeterminable, introducing an unknown the run must tolerate without failing, and it modifies the dry-run output where a regression could silently break existing behaviour.
+ACCEPTED: {1, 2}
+RATIONALE: Design difficulty is low (an additive column reading a path's age). The admitted drivers are the single interacting constraint of the age source and the risk of breaking existing behaviour from the byte-identical backward-compatibility requirement.

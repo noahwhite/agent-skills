@@ -13,11 +13,11 @@ This file is the exact text posted on SKL-77 as comment `2b11599e`, superseding 
   - Engineer two: 2 - "The change carries an interacting constraint - preserving byte-identical dry-run output when the new column is absent - and the risk of silently altering existing output when the age column is added. Handling the unknown-age case without failing the run adds a small amount of design uncertainty."
 - SM/EM sizing context, after all three values: none. The round stopped on a recorded rationale before any sizing context was offered.
 - Discussion: none; the round stopped on sight at the target value and no discussion was opened, before or after the re-run.
-- Re-vote: product owner {2} - "The change adds a single informational column to an existing dry-run output, so design difficulty is low; the only admitted driver is the constraint that output must stay byte-identical without the new column and that an undeterminable age must not fail the run."; engineer one {2} - "The change adds a small age column whose complexity sits in the risk of breaking existing output (the byte-identical dry-run requirement) and in handling candidate paths whose age cannot be determined."; engineer two {2} - "The change reads an age from a source that can be absent or undeterminable, introducing an unknown the run must tolerate without failing, and it modifies the dry-run output where a regression could silently break existing behaviour."
-- Consensus: 2 (the highest value in the intersection {2})
-- No-consensus decision: n/a
-- Paths accepted: n/a
-- Decision rationale: n/a
+- Re-vote: product owner {2} - "The change reads an existing age source and prints one additional column, so design difficulty and unknowns are minimal; the only admitted driver is the risk of breaking existing behaviour, which the byte-identical-output constraint bounds and adds a modest interacting constraint."; engineer one {1} - "Low design difficulty: this is an additive display column with a documented source and a fallback for unknown age. The only interacting constraint is the byte-identical default output requirement, and unknowns and the risk of breaking existing behaviour are low."; engineer two {1, 2} - "Design difficulty is low (an additive column reading a path's age). The admitted drivers are the single interacting constraint of the age source and the risk of breaking existing behaviour from the byte-identical backward-compatibility requirement."
+- Consensus: none; the intersection of {2}, {1}, {1, 2} is empty
+- No-consensus decision: re-refine, the only path in all three accepted path sets.
+- Paths accepted: product owner {re-refine}; engineer one {re-refine, leave unpointed}; engineer two {re-refine}
+- Decision rationale: the three accepted path sets intersect on re-refine, and the voters' amendments ask for the acceptance criteria to make the 1-versus-2 boundary decidable, including whether the edge-case handling is in scope.
 - Effective maximum: 5 (the 8-point rule still triggers at 8 or more)
 - Split: none
 - Challenges: none recorded. The immediate event below is not a challengeable ground, so no challenge was issued; the facilitator named it by kind and stopped the round.
