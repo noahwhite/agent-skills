@@ -44,7 +44,7 @@ A step that needs a value the profile does not set stops and asks for it.
   Under `whole-branch`, derive the set from merged feature PRs on the integration branch that are not on the release branch, mapped to their issue keys, and reconcile it with the issues awaiting promotion in the tracker.
   For each issue, confirm passing pre-production verification evidence from the last environment in `profile.environments` whose `production` is not true.
   That evidence is produced per `qa-verification`; a build check alone is not verification evidence.
-  Bind the evidence to the promotion head: record the build SHA or commit it was taken against, and re-check that it matches the head the promotion will carry.
+  Under `whole-branch`, bind the evidence to the promotion head: record the build SHA or commit it was taken against, and re-check that it matches the head the promotion will carry.
   Under `per-story`, that head is the head of the story-scoped promotion branch the Promotion step builds, rather than the integration branch head, and this check runs once that branch exists: the branch must carry only the story's change, which its story-scoped diff against the release branch shows the same files and hunks as the story's merged feature PRs, and the evidence must have been taken against a build that included that change.
   A build that predates or omits that change does not cover it, so stop and request evidence for that head per `qa-verification`.
   Evidence for an earlier build, or for a head that a later merge or review fix changed, is stale and stops the promotion.
