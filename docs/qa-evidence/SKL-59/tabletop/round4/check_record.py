@@ -144,10 +144,19 @@ for prompt in sorted((HERE / "prompts").glob("v3-*-prompt.txt")):
         problems.append(f"{prompt.name} does not state the held discussion round")
     if f"high value, {max(standing.values())}, and the low value, {min(standing.values())}" not in text:
         problems.append(f"{prompt.name} does not state the standing high and low")
-for prompt in sorted((HERE / "prompts").glob("disc-*-prompt.txt")):
+middle = sorted(standing.values())[1] if len(set(standing.values())) > 2 else None
+for prompt in sorted(list((HERE / "prompts").glob("disc-*-prompt.txt")) + list((HERE / "prompts").glob("v3-*-prompt.txt"))):
     text = prompt.read_text()
     if f"high value, {max(standing.values())}, and the low value, {min(standing.values())}" not in text:
         problems.append(f"{prompt.name} does not state the standing high and low")
+    if middle is not None and f"value, {middle}" in text:
+        problems.append(f"{prompt.name} names a middle value, which the discussion round forbids")
+# the discussion responses are quoted in the raw record
+raw = RAW
+for key in ROLES:
+    remark = (HERE / "outputs" / f"disc-{key}-output.txt").read_text().split(":", 1)[1].strip()
+    if remark.upper() != "NONE" and remark not in raw:
+        problems.append(f"raw record does not quote the {ROLES[key]} discussion remark")
 
 # 9. Fixed header values and capture inventory.
 for field in ("- Tracker-write preflight: comment `c671f2cd` on SKL-78.",

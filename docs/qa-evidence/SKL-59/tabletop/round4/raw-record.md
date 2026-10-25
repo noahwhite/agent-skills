@@ -1,6 +1,6 @@
 # SKL-78 raw session record (SKL-59 AC2 round 4)
 
-The captured prompts and outputs are in `prompts/` and `outputs/`. Delivered text loaded: `ee605fcdf1d3355bb5da7152f06c87f2ed18da14`. Fixture: SKL-78, priority none, no implementation, canceled after the run. Ten voter processes, each launched in its own directory holding only its own prompt.
+The captured prompts and outputs are in `prompts/` and `outputs/`. Delivered text loaded: `ee605fcdf1d3355bb5da7152f06c87f2ed18da14`. Fixture: SKL-78, priority none, no implementation, canceled after the run. Thirteen voter processes, each launched in its own directory holding only its own prompt.
 
 ## Round one, the blind values
 
