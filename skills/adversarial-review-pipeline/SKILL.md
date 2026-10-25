@@ -84,7 +84,7 @@ Common inputs:
 - `--scratch <dir>`: the absolute path of the session's scratch directory (`references/runtimes.md`, Scratch files), passed to every command so the dossiers and throwaway checkouts stay in it; the script gives each run its own directory inside it and hands the session directory to the phase agent as `ADVERSARIAL_SESSION_SCRATCH`.
   Never pass the profile's base directory; omitted, the script creates a standalone directory per invocation, so two commands no longer share one.
   The script keeps its own run state (accepted phases, logs, stamps) under the repository's git dir (`git rev-parse --git-path adversarial-pipeline`), keyed by base and head: that is the script's state, not a session scratch artefact.
-- `--model ID` (`ADVERSARIAL_MODEL`), `--probe-cmd TEMPLATE` (`ADVERSARIAL_PROBE_CMD`), `--probe-timeout SECONDS` and `--timeout SECONDS`: the model id the phase was given (for `run`, letters, digits and `.` `_` `/` `:` `@` `#` `+` `~` `,` `[` `]` `-`; the other commands only print it, mangling anything outside that set), the optional availability check and the phase deadline.
+- `--model ID` (`ADVERSARIAL_MODEL`), `--probe-cmd TEMPLATE` (`ADVERSARIAL_PROBE_CMD`), `--probe-timeout SECONDS` and `--timeout SECONDS`: the model id the phase was given (printed as a label in which anything outside letters, digits and `.` `_` `/` `:` `@` `#` `+` `~` `,` `[` `]` `-` becomes `_`, and rejected only when it contains control characters), the optional availability check and the phase deadline.
   See "Availability, timeout, progress and diagnosis" below; the script never resolves a model.
 
 Launching a phase depends on the profile agent's `runtime`:

@@ -44,9 +44,10 @@
 # ADVERSARIAL_SPEC_FILE, ADVERSARIAL_SCRATCH, ADVERSARIAL_AGENT_CMD, ADVERSARIAL_MODEL,
 # ADVERSARIAL_PROBE_CMD, ADVERSARIAL_PROBE_TIMEOUT (30), ADVERSARIAL_TIMEOUT (900).
 #
-# --model ID (ADVERSARIAL_MODEL) is the model id this phase was given: letters, digits and
-# . _ / : @ # + ~ , [ ] - only, so no id can forge a field of a progress line. The script never
-# resolves a model: it echoes back the id it was handed. A phase that cannot run is failed, never skipped and
+# --model ID (ADVERSARIAL_MODEL) is the model id this phase was given, quoted whole into the probe
+# and echoed on every line as a label in which anything outside letters, digits and . _ / : @ # + ~
+# , [ ] - becomes '_' (so no id can forge a field of a progress line). It must not contain control
+# characters. The script never resolves a model: it echoes back the id it was handed. A phase that cannot run is failed, never skipped and
 # never substituted with another model, provider or reviewer.
 #
 # --probe-cmd (ADVERSARIAL_PROBE_CMD) is an optional availability check for `run` (dossier and
@@ -185,25 +186,20 @@ if [ -n "$SPEC_FILE" ]; then
 fi
 [[ "$TIMEOUT" =~ ^[1-9][0-9]*$ ]] || die 2 "--timeout must be a whole number of seconds, at least 1."
 [[ "$PROBE_TIMEOUT" =~ ^[1-9][0-9]*$ ]] || die 2 "--probe-timeout must be a whole number of seconds, at least 1."
-# Only the commands that use a model validate one, so a stale ADVERSARIAL_MODEL cannot refuse a
-# preflight or a dossier. A model id may carry punctuation, never whitespace or '=' (which is how a
-# progress line states its exit status).
-if [ "$cmd" = "run" ]; then
-  if [ "$MODEL_SET" -eq 1 ] && [ -z "$MODEL" ]; then
-    die 2 "--model needs a non-empty model id"
-  fi
-  case "$MODEL" in
-    "") ;;
-    *[!][A-Za-z0-9._/:@#+~,-]*) die 2 "--model must be a model id: letters, digits and . _ / : @ # + ~ , [ ] - only" ;;
-  esac
+# A model id may be anything on one line; only `run` insists on a value when the flag is given.
+if [ "$cmd" = "run" ] && [ "$MODEL_SET" -eq 1 ] && [ -z "$MODEL" ]; then
+  die 2 "--model needs a non-empty model id"
 fi
-# The label is printed by every command, so a value outside the model-id character set is replaced
-# wholesale: no value can forge a line or a field of the progress lines, and a valid id is exact.
 case "$MODEL" in
-  "") MODEL_LABEL="not supplied" ;;
-  *[!][A-Za-z0-9._/:@#+~,-]*) MODEL_LABEL="<invalid model id>" ;;
-  *) MODEL_LABEL="$MODEL" ;;
+  *[[:cntrl:]]*) die 2 "--model must not contain control characters; pass the model id on one line" ;;
 esac
+# The label is printed by every command, so any character that could forge a field or a line is
+# mapped to '_' here; the model id's own shell metacharacters are still quoted whole into the probe.
+if [ -z "$MODEL" ]; then
+  MODEL_LABEL="not supplied"
+else
+  MODEL_LABEL="$(printf '%s' "$MODEL" | tr -c 'A-Za-z0-9._/:@#+~,][-' '_')"
+fi
 
 availability_state="availability check: not configured"
 
@@ -566,7 +562,7 @@ on_run_exit() {  # a run attempt's single exit path: report completion, then cle
   local rc=$?
   set +e
   trap - EXIT
-  trap '' INT TERM HUP QUIT USR1 USR2 PIPE   # the status is reported; a later signal must not rewrite it
+  trap '' INT TERM HUP QUIT USR1 USR2   # the status is reported; a later signal must not rewrite it
   if [ "$COMPLETION_EMITTED" -eq 0 ] && [ -n "${phase:-}" ]; then
     COMPLETION_EMITTED=1
     completion_line "$phase" "$(( SECONDS - PHASE_START ))" "$rc"
@@ -948,7 +944,6 @@ case "$cmd" in
     trap 'on_signal 131' QUIT
     trap 'on_signal 138' USR1
     trap 'on_signal 140' USR2
-    trap 'on_signal 141' PIPE
     # From here the phase attempt is real, so every exit reports completion; a missing predecessor is
     # one of those failures, not a refusal before the attempt starts. The scratch directory is made
     # only once the phase may actually run, so a refused attempt leaves no run directory behind.

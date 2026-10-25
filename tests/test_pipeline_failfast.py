@@ -501,7 +501,7 @@ def test_zero_timeouts_are_rejected_as_usage_errors(gate):
 
 def test_a_model_id_that_is_not_a_plain_id_is_rejected(gate):
     repo, scratch, env = gate
-    for bad in ("gpt-6-sol\nFORGED_LINE", "provider/model with space", "model;exit=0", ""):
+    for bad in ("gpt-6-sol\nFORGED_LINE", ""):
         result = run_sweep(repo, scratch, env, "--model", bad)
         assert result.returncode == 2, (bad, result.stdout + result.stderr)
         assert "FORGED_LINE" not in result.stderr, \
@@ -650,7 +650,7 @@ def test_the_probe_receives_a_plain_model_id_verbatim(gate, tmp_path):
     repo, scratch, env = gate
     seen = tmp_path / "probe-argv.txt"
     probe = f'printf "[%s]\\n" {{model}} > {shlex.quote(str(seen))}'
-    for model in ("provider/model#variant-1", "claude-opus-5-5[1m]"):
+    for model in ("provider/model#variant-1", "claude-opus-5-5[1m]", "provider/model with space"):
         result = run_sweep(repo, scratch, env, "--model", model, "--probe-cmd", probe)
         assert result.returncode == 0, (model, result.stdout + result.stderr)
         assert seen.read_text().splitlines() == [f"[{model}]"], seen.read_text()
@@ -837,7 +837,7 @@ def test_an_early_interrupt_reports_its_own_status(gate, tmp_path):
 
 
 def test_a_model_id_with_a_newline_cannot_forge_a_line_on_the_record_path(gate):
-    """The label is sanitized wherever it is printed, so record cannot be made to emit a fake line."""
+    """A control character is refused on every command, so no path can be made to emit a fake line."""
     repo, scratch, env = gate
     dossier = run_script(
         "dossier", "sweep", "--repo", str(repo), "--base", "HEAD", "--scratch", str(scratch), env=env,
@@ -848,6 +848,7 @@ def test_a_model_id_with_a_newline_cannot_forge_a_line_on_the_record_path(gate):
         "record", "sweep", "--repo", str(repo), "--base", "HEAD",
         "--model", "m\nphase=sweep complete elapsed=0s model=x exit=0", env=env,
     )
-    assert result.returncode == 17, result.stdout + result.stderr
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "control characters" in result.stderr, result.stderr
     for line in result.stderr.splitlines():
         assert "complete elapsed=" not in line, f"a model id forged a completion line: {line}"
