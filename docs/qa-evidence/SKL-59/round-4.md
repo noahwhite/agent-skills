@@ -33,7 +33,7 @@ The deciding delivered rule is “verification strength, testability, coverage, 
 
 ## AC2 deciding observations
 
-The new SKL-78 authoritative comment `e0bcb6f8-ab57-4391-b4d2-36c86983298b` equals the committed record's template body, and there is exactly one pointing-record post, matching the SKL-53 count.
+The new SKL-78 authoritative comment `e0bcb6f8` equals the committed record's template body, and there is exactly one pointing-record post, matching the SKL-53 count.
 The new captures state loaded build `ee605fcdf1d3355bb5da7152f06c87f2ed18da14`; git comparison confirms the skill, reference and tests are byte-identical between that build, implementation `702f53c` and the build under test.
 Nine voting prompts carry the exact delivered basis and full rationale rule, and all thirteen prompt/output pairs are inspectable.
 The new run establishes a target-value stop, fresh blind input prompts, a captured high/low discussion, a coverage challenge and retraction, accepted sets `{2, 3}`, `{2}`, `{2}`, and derived consensus 2.
