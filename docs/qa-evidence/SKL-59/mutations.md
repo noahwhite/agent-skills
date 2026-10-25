@@ -144,7 +144,8 @@ File: `SKILL.md`
 Matched text:
 
 ```text
-A challenged ground must be restated as a basis driver or retracted, and a voter whose basis does not support its recorded value records that in the re-vote; the SM/EM withdraws or restates its own sizing comment on the same terms, except a point value named before the reveal, a target value for this story, or a statement of elapsed time, effort or run cost, each of which is an anchoring event as soon as the facilitator sees it.
+A challenged ground must be restated as a basis driver or retracted, and a voter whose basis does not support its recorded value records that in the re-vote.
+     The SM/EM withdraws or restates its own sizing comment on the same terms, except a point value named before the reveal, a target value for this story, or a statement of elapsed time, effort or run cost, each of which is an anchoring event as soon as the facilitator sees it.
 ```
 
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_step_four_facilitator_challenges_every_off_basis_ground`
@@ -219,8 +220,8 @@ Matched text:
 - for the SM/EM, naming a point value before the reveal, naming or implying a target value for this story, including one implied by a split status, or treating another voter's revealed value as the answer;
 ```
 
-Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_anchoring_guardrail_bans_naming_bounding_or_implying_a_point_value`
-Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_anchoring_guardrail_bans_naming_bounding_or_implying_a_point_value`.
+Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_anchoring_guardrail_bans_the_sm_em_value_behaviours`
+Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_anchoring_guardrail_bans_the_sm_em_value_behaviours`.
 
 ## 16. Remove the anchoring-trigger definition from the Anchoring guardrail
 
@@ -242,7 +243,7 @@ File: `SKILL.md`
 Matched text:
 
 ```text
-Every prohibited behaviour above, and a sizing comment that names a point value before the reveal, names or implies a target value for this story, or states elapsed time, effort or run cost, is an anchoring event as soon as it is seen, with no challenge, restatement or retraction path.
+The SM/EM's prohibited behaviours above, and a sizing comment that names a point value before the reveal, names or implies a target value for this story, or states elapsed time, effort or run cost, are anchoring events as soon as they are seen, with no challenge, restatement or retraction path.
 ```
 
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_anchoring_guardrail_makes_a_point_value_sizing_note_an_event_on_challenge`
@@ -313,7 +314,7 @@ File: `refinement-record.md`
 Matched text:
 
 ```text
-While a round is open, the Challenges line records a challenged ground by its kind, its author (a voter, or the SM/EM for a sizing comment) and its outcome, with a point value named before the reveal or a target value for this story elided, because a verbatim quote of one in an open record names it again; the Anchoring events line is the one place that carries an anchoring comment verbatim, and both lines may carry the grounds verbatim once the round closes.
+While any round is open, the Challenges and Anchoring events lines record a ground by its kind, its author (a voter, or the SM/EM for a sizing comment) and its outcome or recovery, with a point value named before the reveal or a target value for this story elided, because a verbatim quote of one in an open record names it again; the verbatim quote is carried once the round closes and no further round can be anchored by it.
 ```
 
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_pointing_template_records_each_challenge_and_outcome`
@@ -371,7 +372,7 @@ Matched text:
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_phrasing_intro_is_unchanged_and_adds_the_comparison_principle`
 Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_phrasing_intro_is_unchanged_and_adds_the_comparison_principle`.
 
-## 27. Put a target-value permitted cell in an unpinned row
+## 27. Put a target-value permitted cell in a row the curated list pins
 
 File: `refinement-record.md`
 
@@ -390,7 +391,7 @@ Replaced with:
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_phrasing_table_permitted_cells_state_no_target_value`
 Result: FAILED (as designed); `FAILED tests/test_story_refinement.py::test_phrasing_table_permitted_cells_state_no_target_value`.
 
-## 28. Put a preferred-direction permitted cell in an unpinned row
+## 28. Put a preferred-direction permitted cell in a row the curated list pins
 
 File: `refinement-record.md`
 
@@ -462,7 +463,7 @@ File: `SKILL.md`
 Matched text:
 
 ```text
-     It also carries the item 4 rationale rule.
+     It also carries the Step 3 item 4 rationale rule.
 ```
 
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_step_four_re_vote_prompt_carries_the_rationale_rule`
@@ -506,5 +507,7 @@ Record every SM/EM sizing comment with the pointing record, even when it stays i
 
 Command: `uv run --locked pytest -q tests/test_story_refinement.py -k test_phrasing_section_holds_only_the_intro_the_table_and_the_trailer`
 Result: PASSED (control).
+
+Pins this file does not mutate, because they guard structure rather than one sentence: the phrasing table header labels, the Challenges-before-Anchoring-events ordering, the Step 4 item count and order, and the clause that another voter's revealed value is never the answer.
 
 The facilitator's challenge duty has no automated guard over a live round: a phrase test can pin the duty's text, and the mutations above prove that pin, but only a run can show a facilitator applying it, which is what the tabletop pointing round on the canceled fixture records.

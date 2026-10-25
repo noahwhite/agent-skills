@@ -742,7 +742,8 @@ def test_step_three_rationale_names_complexity_drivers_and_no_duration() -> None
 def test_step_three_does_not_restate_the_pointing_basis() -> None:
     item = process_item(STEP_THREE, "Each voter submits one point value")
     assert squash(POINTING_BASIS) not in squash(item)
-    assert "A point or size measures" not in item
+    for fragment in ("A point or size measures", "A point measures", "design difficulty", "the amount of work or elapsed time"):
+        assert fragment not in item, fragment
 
 
 def test_step_four_re_vote_carries_the_basis_by_reference_to_step_three() -> None:
@@ -762,7 +763,7 @@ def test_step_three_defines_the_reveal() -> None:
 
 def test_step_four_re_vote_prompt_carries_the_rationale_rule() -> None:
     item = process_items(STEP_FOUR)[1]
-    assert "It also carries the item 4 rationale rule." in item
+    assert "It also carries the Step 3 item 4 rationale rule." in item
 
 
 def test_pointing_template_marks_a_voided_consensus() -> None:
@@ -843,10 +844,12 @@ def test_step_four_facilitator_challenges_every_off_basis_ground() -> None:
     ) in item
     assert (
         "A challenged ground must be restated as a basis driver or retracted, and a voter whose basis does not "
-        "support its recorded value records that in the re-vote; the SM/EM withdraws or restates its own sizing "
-        "comment on the same terms, except a point value named before the reveal, a target value for this story, "
-        "or a statement of elapsed time, effort or run cost, each of which is an anchoring event as soon as the "
-        "facilitator sees it."
+        "support its recorded value records that in the re-vote."
+    ) in item
+    assert (
+        "The SM/EM withdraws or restates its own sizing comment on the same terms, except a point value named "
+        "before the reveal, a target value for this story, or a statement of elapsed time, effort or run cost, "
+        "each of which is an anchoring event as soon as the facilitator sees it."
     ) in item
     assert "A ground that is neither is an anchoring event under the Anchoring guardrail." in item
 
@@ -870,9 +873,9 @@ def test_anchoring_guardrail_makes_a_point_value_sizing_note_an_event_on_challen
         "when it is neither restated as a basis driver nor retracted" in body
     )
     assert (
-        "every prohibited behaviour above, and a sizing comment that names a point value before the reveal, "
-        "names or implies a target value for this story, or states elapsed time, effort or run cost, is an "
-        "anchoring event as soon as it is seen, with no challenge, restatement or retraction path" in body
+        "the sm/em's prohibited behaviours above, and a sizing comment that names a point value before the "
+        "reveal, names or implies a target value for this story, or states elapsed time, effort or run cost, are "
+        "anchoring events as soon as they are seen, with no challenge, restatement or retraction path" in body
     )
     assert (
         "any other challenged ground that is neither restated as a basis driver nor retracted, or a sizing "
@@ -886,13 +889,14 @@ def test_anchoring_guardrail_makes_a_point_value_sizing_note_an_event_on_challen
 GUARDRAIL = "Anchoring guardrail"
 
 
-def test_anchoring_guardrail_bans_naming_bounding_or_implying_a_point_value() -> None:
+def test_anchoring_guardrail_bans_the_sm_em_value_behaviours() -> None:
     body = flat(section(SKILL.read_text(), GUARDRAIL))
     assert (
         "for the sm/em, naming a point value before the reveal, naming or implying a target value for this "
         "story, including one implied by a split status, or treating another voter's revealed value as the "
         "answer" in body
     )
+    assert "naming a target number" not in body
 
 
 def test_anchoring_guardrail_names_off_basis_grounds_as_a_trigger() -> None:
@@ -902,9 +906,9 @@ def test_anchoring_guardrail_names_off_basis_grounds_as_a_trigger() -> None:
         "when it is neither restated as a basis driver nor retracted" in body
     )
     assert (
-        "a ground that weighs verification strength, testability, coverage, the shape of the tests, or a "
-        "duration, effort or run cost is such a trigger when a voter weighs it in a rationale or raises it in "
-        "the discussion" in body
+        "a ground that weighs verification strength, testability, coverage, the shape of the tests, a duration, "
+        "effort or run cost, or a target value for this story is such a trigger when a voter weighs it in a "
+        "rationale or raises it in the discussion" in body
     )
     assert "verification strength, testability, coverage, the shape of the tests" in body
 
@@ -1060,11 +1064,11 @@ def test_pointing_template_records_each_challenge_and_outcome() -> None:
     )
     body = spaced(section(RECORD.read_text(), "Pointing record"))
     assert (
-        "While a round is open, the Challenges line records a challenged ground by its kind, its author (a voter, "
-        "or the SM/EM for a sizing comment) and its outcome, with a point value named before the reveal or a "
-        "target value for this story elided, because a verbatim quote of one in an open record names it again; "
-        "the Anchoring events line is the one place that carries an anchoring comment verbatim, and both lines "
-        "may carry the grounds verbatim once the round closes."
+        "While any round is open, the Challenges and Anchoring events lines record a ground by its kind, its "
+        "author (a voter, or the SM/EM for a sizing comment) and its outcome or recovery, with a point value "
+        "named before the reveal or a target value for this story elided, because a verbatim quote of one in an "
+        "open record names it again; the verbatim quote is carried once the round closes and no further round "
+        "can be anchored by it."
     ) in body
     assert (
         "A sizing comment that names a point value before the reveal, names or implies a target value for this "
