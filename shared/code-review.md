@@ -159,4 +159,4 @@ The `adversarial-review-pipeline` skill defines the pre-PR gate; these rules app
   When a phase cannot deliver its report, the process fails but the phase stays accepted, because the model's work succeeded and only its delivery failed.
   A subagent-driven phase (the dossier and record flow) has neither, so watch it through the tracker and the report it writes.
   A silent gate is a stuck gate, and a phase that ends without a completion line has left no evidence of how long it took.
-  A `run` refused before its phase attempt starts (usage, no repository, a bad base) prints none, because no phase ran.
+  A `run` refused before its phase attempt starts (usage, no repository, a bad base) prints none, because no phase ran, and neither a SIGKILL nor a gate whose stderr is closed mid-phase produces one.

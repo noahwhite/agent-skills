@@ -52,7 +52,8 @@
 #
 # --probe-cmd (ADVERSARIAL_PROBE_CMD) is an optional availability check for `run` (dossier and
 # record say so and never probe): a shell command template whose {model} placeholder is replaced
-# with the shell-quoted model id, so do not quote the placeholder inside the template. It runs under
+# with the shell-quoted model id, so do not quote the placeholder inside the template. A template
+# without {model} checks nothing about the model, so always carry it. It runs under
 # its own --probe-timeout (ADVERSARIAL_PROBE_TIMEOUT, 30 seconds, never past the phase deadline),
 # with stdin from /dev/null, in a fresh empty directory under the run's scratch directory - never
 # inside the checkout under review. A configured probe that exits non-zero, prints a provider error (rate
@@ -482,7 +483,13 @@ run_guarded() {
   RUN_RC=0
   RUN_TIMED_OUT=0
   RUN_ELAPSED=0
-  rcfile="$(mktemp -p "$RUN_DIR" run-status.XXXXXX)" || die 2 "could not create a status file in the run directory"
+  rcfile="$(mktemp -p "$RUN_DIR" run-status.XXXXXX)" || {
+    # An environment failure here is the phase's failure, not a die that would leave acceptable state.
+    RUN_RC=1
+    RUN_TIMED_OUT=0
+    RUN_ELAPSED=0
+    return 0
+  }
   rm -f -- "$rcfile"
   if [ "$stderr_path" = "--combined" ]; then rc_extra="2>&1"; fi
   start="$SECONDS"
@@ -650,7 +657,8 @@ availability_probe() {  # $1 phase, $2 phase deadline ($SECONDS at expiry): sets
   # stdin is /dev/null, and the working directory is a fresh empty directory under the run's
   # scratch directory - never the checkout under review.
   line="cd $(printf '%q' "$probedir") && ${line}"
-  run_guarded "$line" "$limit" /dev/null "$out" --combined ""
+  availability_state="availability check: running"
+  run_guarded "$line" "$limit" /dev/null "$out" --combined "$phase_name"
   tail_text="$(tail -n "$PROBE_TAIL_LINES" -- "$out" 2>/dev/null || true)"
   provider_hit="$(grep -aiE -- "$PROVIDER_ERROR_RE" "$out" 2>/dev/null | head -n 1 || true)"
   if [ "$RUN_TIMED_OUT" -eq 1 ]; then

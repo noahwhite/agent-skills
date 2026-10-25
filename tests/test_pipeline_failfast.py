@@ -852,3 +852,15 @@ def test_a_model_id_with_a_newline_cannot_forge_a_line_on_the_record_path(gate):
     assert "control characters" in result.stderr, result.stderr
     for line in result.stderr.splitlines():
         assert "complete elapsed=" not in line, f"a model id forged a completion line: {line}"
+
+
+def test_the_probe_window_reports_progress_too(gate):
+    """The gate is never silent while it waits on a provider, probe included."""
+    repo, scratch, env = gate
+    result = run_sweep(
+        repo, scratch, env, "--model", "m", "--probe-cmd", "sleep 3; true",
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    beats = [line for line in result.stderr.splitlines() if "phase=sweep elapsed=" in line]
+    assert beats, f"no progress line while the probe ran: {result.stderr}"
+    assert "availability check: running" in beats[0], beats[0]

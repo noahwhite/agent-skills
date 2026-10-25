@@ -118,7 +118,7 @@ The script never resolves one: it echoes the id it was handed, and names it in i
 
 `--probe-cmd TEMPLATE` (`ADVERSARIAL_PROBE_CMD`) is an optional availability check spent before any agent budget.
 `run` performs it; `dossier` and `record` say they do not, and never pretend to have probed.
-Its only placeholder is `{model}`, substituted shell-quoted, so do not quote the placeholder inside the template.
+Its only placeholder is `{model}`, substituted shell-quoted, so do not quote the placeholder inside the template; a template without `{model}` checks nothing about the model.
 It runs with stdin from `/dev/null` in a fresh empty directory under the run's scratch directory, never in the checkout under review, under its own `--probe-timeout` (`ADVERSARIAL_PROBE_TIMEOUT`, default 30 seconds).
 A probe that exits non-zero, prints a provider error (rate limit, authentication, quota exhaustion, unavailable or unknown model), or outlives its own `--probe-timeout` fails the phase with exit 20 before the dossier is built and before any agent command runs; when the phase deadline is what expired first the phase exits 19 instead, as a timeout kill.
 The message names the phase, the model id supplied, the probe's exit code (or the timeout) and the probe's output tail.
@@ -136,7 +136,8 @@ It is the last line the phase itself writes, after the artifact-path line and af
 An agent can write anything to its own stderr, including a look-alike line, so the phase's completion line is the last such line the phase writes.
 A report the gate cannot write to stdout is an error, not a silent success: the process exits 1 and the completion line names that status.
 That is a delivery failure, not a phase failure: the model's work succeeded, so the phase stays accepted and stamped.
-Teardown ignores a second interrupt so the reported status stays final; a SIGKILL leaves no line at all.
+Teardown ignores a second interrupt so the reported status stays final.
+A SIGKILL leaves no line at all, and neither does a gate whose stderr is closed mid-phase: the shell dies by SIGPIPE before it can write one.
 The phase attempt starts once `run` accepts its agent command, so a `run` refused before that (usage, not a Git repository, a bad base) prints no completion line, because no phase ran.
 Stdout carries the artifact alone (arbitration's report), never progress, so do not merge the two streams and read the last line.
 Progress never reaches the artifact or the agent's stdout, so a report's first line stays `REVIEW-RAN: yes`.
