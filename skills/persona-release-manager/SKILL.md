@@ -48,7 +48,7 @@ A step that needs a value the profile does not set stops and asks for it.
   Under `per-story`, that head is the head of the story-scoped promotion branch the Promotion step builds, rather than the integration branch head, and this check runs once that branch exists: the branch must carry only the story's change, which its story-scoped diff against the release branch shows as the same patch ids as the story's merged feature PRs, and the evidence must be for that branch head or for a build whose tree, for the files the story changes, is identical to that branch's.
   A build that predates or omits that change does not cover it, so stop and request evidence for that head per `qa-verification`.
   Under `per-story`, a review fix that changes the branch's content after the evidence was taken makes that evidence stale.
-  Evidence for an earlier build, or for a head that a later merge or review fix changed, is stale and stops the promotion.
+  Under `whole-branch`, evidence for an earlier build, or for a head that a later merge or review fix changed, is stale and stops the promotion.
   Under `whole-branch`, a promotion whose tree is identical to the verified build satisfies this check even when its commit SHA differs.
   Evidence-only commits under `profile.qa.evidence_dir` do not invalidate readiness; compare the code tree, not the evidence directory.
   Missing evidence stops the promotion and names the issue.

@@ -104,16 +104,16 @@ Always:
 Under `per-story`, build the promotion branch and its PR like this:
 
 1. Cut the promotion branch from `origin/<profile.git.release_branch>` with that explicit base ref, after `git fetch --prune origin`.
-2. Identify the story's merged feature PR, by its issue key, with `gh pr list --state merged --base <profile.git.integration_branch> --limit 1000 --json number,headRefName,mergeCommit,commits`.
+2. Identify the story's merged feature PR, by its issue key, with `gh pr list --state merged --base <profile.git.integration_branch> --limit 1000 --json number,headRefName,mergeCommit,commits`, and stop when the result count reaches that limit, because the list may be truncated.
    Keep the PR whose head branch carries the issue key as a whole token, delimited by a non-alphanumeric character or the end of the name, and stop when that leaves zero or more than one.
    Select, from `origin/<profile.git.integration_branch>`, only the commits that PR added:
    With `profile.git.merge_method` `squash`, select that PR's squash commit.
    With `profile.git.merge_method` `rebase`, select the commits in `origin/<profile.git.release_branch>..origin/<profile.git.integration_branch>` whose `git patch-id --stable` id matches one of the PR's own commits, and stop when the match count differs from the PR's commit count.
    With `profile.git.merge_method` `merge`, select that PR's merge commit.
    Confirm the selection reproduces that PR's own diff, by patch id: for `squash` the squash commit against `gh pr diff <number>`, for `rebase` the selected commits against the PR's commits, and for `merge` `git diff <merge>^1 <merge>` against `gh pr diff <number>`.
-   Stop and report when a selected commit's subject names a different issue key, because another story's change is riding along inside that PR.
+   The promoted change is that PR's change: a PR that itself carried another story's commits is a PR-scope defect this mechanism cannot separate, so report what the selected commits carry rather than presenting it as this story's alone.
    Record the PR number and the selected commit SHAs in the promotion PR body.
-   Before carrying them, confirm the story's change is still present on `origin/<profile.git.integration_branch>`: the lines the selection adds are present in that branch's version of each file and the lines it removes are absent, checked with `git grep --fixed-strings` against `origin/<profile.git.integration_branch>`, and stop and report the story as reverted when they are not.
+   Before carrying them, confirm the story's change is still present on `origin/<profile.git.integration_branch>`: the lines the selection adds are present in that branch's version of each file and the lines it removes are absent, checked as whole lines with `git grep --fixed-strings -x` against `origin/<profile.git.integration_branch>`, and stop and report the story as reverted when they are not.
 3. Carry the selected commits onto the promotion branch by cherry-picking them one at a time in their original order, with `-m 1` when a selected commit is a merge commit, or by applying non-merge selections with `git cherry-pick -n` in order and making one commit.
 4. Run the promotion branch's local checks, push it, then open the promotion PR from it to `profile.git.release_branch` and let its CI run.
    A whole-branch integration-to-release PR is not used under `per-story`.
