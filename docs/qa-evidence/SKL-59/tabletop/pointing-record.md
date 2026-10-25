@@ -1,6 +1,6 @@
 # SKL-59 AC2 pointing record (posted on SKL-72)
 
-This is the pointing record posted on the fixture as comment `3c822ac7`, reproduced here unchanged so the repository holds the same artefact the tracker does. It follows the delivered pointing-record template and its single field order, and it records the final state of a ceremony that ran two rounds: round one stopped on an unretracted voter ground, and round two stopped on sight at an off-basis sizing note. Each injected ground and each facilitator challenge is quoted verbatim, without the pre-reveal values, which live in the superseded field. The round-two target value is elided and quoted verbatim in `raw-record.md`, cited by base name.
+This is the pointing record posted on the fixture as comment `1de27e80`, the corrected and durable record; comment `3c822ac7` is superseded because it mis-stated the round-two consensus. The text below is reproduced here unchanged so the repository holds the same artefact the tracker does. It follows the delivered pointing-record template and its single field order, and it records the final state of a ceremony that ran two rounds: round one stopped on an unretracted voter ground, and round two stopped on sight at an off-basis sizing note. Each injected ground and each facilitator challenge is quoted verbatim, without the pre-reveal values, which live in the superseded field. The round-two target value is elided and quoted verbatim in `raw-record.md`, cited by base name.
 
 ## Pointing record
 
