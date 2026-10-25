@@ -521,8 +521,8 @@ progress_line() {  # $1 phase, $2 elapsed seconds: stderr only, never the artifa
 }
 
 completion_line() {  # $1 phase, $2 elapsed seconds, $3 the phase's exit status
-  printf 'adversarial-pipeline: phase=%s complete elapsed=%ss exit=%s model=%s\n' \
-    "$1" "$2" "$3" "$MODEL_LABEL" >&2
+  printf 'adversarial-pipeline: phase=%s complete elapsed=%ss model=%s exit=%s\n' \
+    "$1" "$2" "$MODEL_LABEL" "$3" >&2
 }
 
 # One completion line per phase invocation, whatever the path out of it: a failed phase reports
