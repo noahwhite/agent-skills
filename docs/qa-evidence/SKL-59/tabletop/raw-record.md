@@ -12,11 +12,11 @@ This is the raw session record that the posted pointing record cites by its base
 - Engineer one: 3 - "Testability is weak here: the flag's behaviour can only be confirmed by reading the skill text, and that is what I weighed."
 - Engineer two: 5 - "Coverage is thin - no test reaches the new filter path - so a silent regression there would go unnoticed."
 
-## The SM/EM sizing comment, verbatim (elided in the posted record)
+## The SM/EM sizing comment, verbatim (a permitted comparison, quoted in the posted record)
 
-> The inherited 3-point split pointing is the only comparable number here, so this should land at 3.
+> The earlier cleanup flag landed at three; this story carries one more interacting constraint than that one.
 
-Under the product owner's 2026-10-25 ruling the inherited 3-point split pointing is this story's own inherited value, so this comment implies a target value for the story under estimate. It is therefore an anchoring event as soon as the facilitator sees it, with no challenge, restatement or retraction path.
+The comment names an already-estimated item's recorded value with one basis difference. The 2026-10-24 owner amendment permits that comparison after the reveal, so it raises no anchoring event and the round continues. It is not a target value for the story under estimate.
 
 ## Challenges and outcomes, before the sizing comment was seen
 
