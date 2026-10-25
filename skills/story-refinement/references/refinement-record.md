@@ -74,7 +74,7 @@ A sizing comment that names a point value before the reveal, names or implies a 
   - Engineer one: <value, or not recorded> - <short complexity rationale, or none when the value is not recorded>
   - Engineer two: <value, or not recorded> - <short complexity rationale, or none when the value is not recorded>
 - SM/EM sizing context, after all three values: <file base name> or verbatim, eliding a pre-reveal value or a target value, or none
-- Discussion: <high <value>, low <value>, or none>
+- Discussion: <high <value>, low <value>, or none; the shared content names only the high and the low, while a voter's own recorded value and rationale is carried privately in that voter's prompt>
 - Re-vote: <accepted set per voter, with complexity rationale, or none>
 - Consensus: <highest value in the intersection of the vote that stands, or none when the intersection is empty>
 - No-consensus decision: <split, re-refine, or leave unpointed; n/a when there is a consensus>
@@ -98,7 +98,8 @@ Under the denied tracker writes fallback in `SKILL.md`, replace the tracker-writ
 
 The SM/EM may give factual, reference-only sizing context after all three values are recorded.
 Everything in the forbidden column breaks independence or anchors the discussion.
-A permitted comparison names at most one comparable story and at most one basis difference; it never names a range, an average, elapsed time, effort, a target value for the story under estimate, or a preferred value, and it names a point value only after all three values are recorded.
+A factual reference is permitted and a prescription is not: naming an already-estimated item's recorded value, alone or together with a basis difference, is a reference the voters weigh, while a value to score, a target or a preferred direction for the story under estimate is a prescription that anchors the round.
+A permitted comparison names at most one comparable story and at most one basis difference; it never prescribes a value for the story under estimate, names a range, an average, elapsed time or effort, and it names another story's point value only after all three values are recorded.
 
 | Permitted (factual, reference-only) | Forbidden (leading or anchoring) |
 |---|---|

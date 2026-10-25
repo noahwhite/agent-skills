@@ -775,6 +775,14 @@ def test_step_four_re_vote_prompt_carries_the_rationale_rule() -> None:
     assert "It also carries the Step 3 item 4 rationale rule." in item
 
 
+def test_pointing_template_notes_the_private_self_context_rule() -> None:
+    assert (
+        "- Discussion: <high <value>, low <value>, or none; the shared content names only the high and the low, "
+        "while a voter's own recorded value and rationale is carried privately in that voter's prompt>"
+        in pointing_template()
+    )
+
+
 def test_pointing_template_states_the_standing_consensus() -> None:
     assert (
         "- Consensus: <highest value in the intersection of the vote that stands, or none when the intersection is empty>"
@@ -797,14 +805,18 @@ def test_step_three_sizing_context_is_in_complexity_terms() -> None:
     body = process_item(STEP_THREE, SIZING_ITEM)
     assert (
         "the SM/EM may provide factual, reference-only sizing context: comparable stories in complexity terms, "
-        "comparable unknowns and constraints, and relevant scope differences."
+        "their recorded values, comparable unknowns and constraints, and relevant scope differences."
     ) in body
     assert "historical sizing" not in squash(SKILL.read_text())
     assert "Before the reveal it must not name any point value." in body
     assert (
-        "After the reveal it may compare this story with an already-estimated item and name that item's recorded "
-        "value, but it must not name or imply a target value for this story, including one implied by a split "
-        "status, and such a statement is an anchoring event under the Anchoring guardrail."
+        "A factual reference is not a prescription: naming an already-estimated item's recorded value, alone or "
+        "together with a basis difference, is permitted, and such a reference is information the voters weigh and "
+        "never stops the round."
+    ) in body
+    assert (
+        "A prescription of this story's value, from the SM/EM or from a voter, is an anchoring event under the "
+        "Anchoring guardrail."
     ) in body
 
 
@@ -833,24 +845,29 @@ def test_step_four_facilitator_challenges_every_off_basis_ground() -> None:
     assert (
         "In that round, and against the rationales recorded in Step 3, the facilitator challenges every ground "
         "outside the pointing basis, whether it is heard in the discussion or read in a recorded rationale, "
-        "except a target value for this story and, from the SM/EM, a statement of elapsed time, effort or run "
-        "cost, which are anchoring events the moment they are seen."
+        "except a prescription of this story's value and, from the SM/EM, a statement of elapsed time, effort or "
+        "run cost, which are anchoring events the moment they are seen."
     ) in item
     assert (
-        "Challenging a ground is not comparing values or singling out a voter: in the discussion the facilitator "
-        "names the ground's kind, never its verbatim text, its author or the author's value, and the pointing "
-        "record carries the author; a ground that embeds a point value is named by its kind alone."
+        "That rule governs the shared discussion content and other voters' values; a voter's own recorded value "
+        "and rationale may be carried privately in that voter's own prompt, so it can speak to its own ground."
     ) in item
     assert (
-        "A challenged ground must be restated as a basis driver or retracted, except a target value named or "
-        "implied for this story, which is an anchoring event as soon as it is seen; a voter whose basis does not "
-        "support its recorded value records that in the re-vote."
+        "Challenging a ground is not comparing values or singling out a voter: the facilitator names the ground's "
+        "kind, never its verbatim text; the facilitator never names another voter's value in the shared "
+        "discussion, nor a voter's value to other voters, and the pointing record carries the author; a ground "
+        "that embeds a point value is named by its kind alone."
+    ) in item
+    assert (
+        "A challenged ground must be restated as a basis driver or retracted, except a prescription of this "
+        "story's value, which is an anchoring event as soon as it is seen; a voter whose basis does not support "
+        "its recorded value records that in the re-vote."
     ) in item
     assert (
         "The SM/EM withdraws or restates its own sizing comment on the same terms, except a point value named "
-        "before the reveal, a target value named or implied for this story, including one implied by a split "
-        "status, treating another voter's revealed value as the answer, or a statement of elapsed time, effort "
-        "or run cost, each of which is an anchoring event as soon as the facilitator sees it."
+        "before the reveal, a prescription of this story's value, treating another voter's revealed value as the "
+        "answer, or a statement of elapsed time, effort or run cost, each of which is an anchoring event as soon "
+        "as the facilitator sees it."
     ) in item
     assert "A ground that is neither is an anchoring event under the Anchoring guardrail." in item
 
@@ -876,10 +893,13 @@ def test_anchoring_guardrail_makes_a_point_value_sizing_note_an_event_on_challen
         "when it is neither restated as a basis driver nor retracted" in body
     )
     assert (
-        "every prohibited behaviour above, a target value named or implied for this story by any participant, "
-        "and an sm/em sizing comment that names a point value before the reveal or states elapsed time, effort "
-        "or run cost, are anchoring events as soon as they are seen, with no challenge, restatement or "
-        "retraction path" in body
+        "every prohibited behaviour above, a prescription of this story's value by any participant, and an sm/em "
+        "sizing comment that names a point value before the reveal or states elapsed time, effort or run cost, are "
+        "anchoring events as soon as they are seen, with no challenge, restatement or retraction path" in body
+    )
+    assert (
+        "a factual reference is never such an event: naming an already-estimated item's recorded value, alone or "
+        "together with a basis difference, is information the voters weigh, and the round continues." in body
     )
     assert (
         "any other challenged ground that is neither restated as a basis driver nor retracted, or a sizing "
@@ -897,9 +917,9 @@ GUARDRAIL = "Anchoring guardrail"
 def test_anchoring_guardrail_bans_the_sm_em_value_behaviours() -> None:
     body = flat(section(SKILL.read_text(), GUARDRAIL))
     assert (
-        "for the sm/em, naming a point value before the reveal, naming or implying a target value for this "
-        "story, including one implied by a split status, or treating another voter's revealed value as the "
-        "answer" in body
+        "for the sm/em, naming a point value before the reveal, prescribing a value for this story - a value to "
+        "score, a target, a preferred direction, or a claim that one vote is the realistic one - or treating "
+        "another voter's revealed value as the answer" in body
     )
     assert "naming a target number" not in body
 
@@ -970,9 +990,12 @@ def phrasing_rows() -> list[tuple[str, str]]:
 PHRASING_INTRO = [
     "The SM/EM may give factual, reference-only sizing context after all three values are recorded.",
     "Everything in the forbidden column breaks independence or anchors the discussion.",
+    "A factual reference is permitted and a prescription is not: naming an already-estimated item's recorded "
+    "value, alone or together with a basis difference, is a reference the voters weigh, while a value to score, "
+    "a target or a preferred direction for the story under estimate is a prescription that anchors the round.",
     "A permitted comparison names at most one comparable story and at most one basis difference; "
-    "it never names a range, an average, elapsed time, effort, a target value for the story under estimate, "
-    "or a preferred value, and it names a point value only after all three values are recorded.",
+    "it never prescribes a value for the story under estimate, names a range, an average, elapsed time or "
+    "effort, and it names another story's point value only after all three values are recorded.",
 ]
 PHRASING_TRAILER = (
     "Record every SM/EM sizing comment with the pointing record, even when it stays inside the permitted column."
@@ -982,10 +1005,11 @@ PHRASING_TRAILER = (
 def test_phrasing_section_holds_only_the_intro_the_table_and_the_trailer() -> None:
     body = section(RECORD.read_text(), "Permitted and forbidden phrasing")
     lines = [line.strip() for line in body.splitlines() if line.strip()]
-    assert lines[:3] == PHRASING_INTRO
+    assert lines[: len(PHRASING_INTRO)] == PHRASING_INTRO
     rows = len(phrasing_rows())
-    assert lines[3 : 3 + rows + 2] == [line for line in lines[3 : 3 + rows + 2] if line.startswith("|")]
-    assert lines[3 + rows + 2 :] == [PHRASING_TRAILER]
+    start = len(PHRASING_INTRO)
+    assert lines[start : start + rows + 2] == [line for line in lines[start : start + rows + 2] if line.startswith("|")]
+    assert lines[start + rows + 2 :] == [PHRASING_TRAILER]
 
 
 def test_phrasing_table_header_names_both_columns() -> None:
@@ -1024,15 +1048,9 @@ def test_phrasing_table_drops_the_time_and_range_comparisons() -> None:
 
 def test_phrasing_intro_is_unchanged_and_adds_the_comparison_principle() -> None:
     body = section(RECORD.read_text(), "Permitted and forbidden phrasing")
-    intro = [line for line in body.splitlines() if line.strip()][:3]
-    assert intro == [
-        "The SM/EM may give factual, reference-only sizing context after all three values are recorded.",
-        "Everything in the forbidden column breaks independence or anchors the discussion.",
-        "A permitted comparison names at most one comparable story and at most one basis difference; "
-        "it never names a range, an average, elapsed time, effort, a target value for the story under estimate, "
-        "or a preferred value, and it names a point value only after all three values are recorded.",
-    ]
-    assert RECORD.read_text().count(intro[2]) == 1
+    intro = [line for line in body.splitlines() if line.strip()][: len(PHRASING_INTRO)]
+    assert intro == PHRASING_INTRO
+    assert RECORD.read_text().count(intro[3]) == 1
 
 
 PERMITTED_CELLS = [
