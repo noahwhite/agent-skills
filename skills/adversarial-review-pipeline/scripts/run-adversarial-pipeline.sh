@@ -117,7 +117,8 @@
 # Read the prompt from stdin (for codex: `codex exec ... -`) or from {prompt_file}; never expand
 # its contents into argv (argv is visible to other processes and one argument is capped at 128 KiB).
 #
-# Exit codes: 0 ok / PASS, 1 preflight FAIL, 2 usage, 3 preflight INCOMPLETE, 11 not a git repo,
+# Exit codes: 0 ok / PASS, 1 preflight FAIL (also: an accepted arbitration report could not be
+# written to stdout), 2 usage, 3 preflight INCOMPLETE, 11 not a git repo,
 # 12 bad base, 13 missing or invalid prior artifact, 14 cleanup refused, 15 agent command failed
 # or wrote no fresh report, 17 agent ran blind (sandbox error on its stderr, or no `REVIEW-RAN: yes`
 # first line), 18 the agent changed the primary checkout, 19 the phase was killed by --timeout,
@@ -196,9 +197,10 @@ if [ "$cmd" = "run" ]; then
     *[!][A-Za-z0-9._/:@#+~,-]*) die 2 "--model must be a model id: letters, digits and . _ / : @ # + ~ , [ ] - only" ;;
   esac
 fi
-# The label is printed by every command, so control characters are stripped here: a model id can
-# never forge a line of output, whichever command carries it.
-MODEL_LABEL="$(printf '%s' "${MODEL:-not supplied}" | tr -d '\000-\037\177')"
+# The label is printed by every command, so anything outside the model-id character set is mangled
+# here: no value can forge a line or a field of the progress lines, whichever command carries it.
+MODEL_LABEL="$(printf '%s' "${MODEL:-not supplied}" | tr -c 'A-Za-z0-9._/:@#+~,-' '_')"
+MODEL_LABEL="${MODEL_LABEL%_}"
 [ -n "$MODEL_LABEL" ] || MODEL_LABEL="not supplied"
 availability_state="availability check: not configured"
 
