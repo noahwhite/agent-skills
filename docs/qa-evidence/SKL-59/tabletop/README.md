@@ -18,13 +18,12 @@ The AC2 round is a single ceremony on one fixture, in this order.
    - product owner 2, weighing verification strength;
    - engineer one 3, weighing testability;
    - engineer two 5, weighing coverage.
-2. **The SM/EM sizing comment.** After all three values were recorded, the sizing comment was authored. Its verbatim text is in `raw-record.md`; under the product owner's 2026-10-25 ruling it names a target value for this story implied by the inherited 3-point split pointing.
-3. **The facilitator's challenges.** Every injected ground was challenged in the same round, and the challenge text is reproduced verbatim in `pointing-record.md`:
+2. **The facilitator's challenges to the recorded voter grounds.** Every recorded ground was challenged in the same round, before any sizing context was offered, and the challenge text is reproduced verbatim in `pointing-record.md`:
    - the product owner's verification-strength ground, challenged and **retracted** (`prompts/v1-po-challenge-prompt.txt`, `outputs/v1-po-challenge-output.txt`);
    - engineer one's testability ground, challenged and **retracted** (`prompts/v1-e1-challenge-prompt.txt`, `outputs/v1-e1-challenge-output.txt`);
-   - engineer two's coverage ground, challenged and left **unretracted** (`prompts/v1-e2-challenge-prompt.txt`, `outputs/v1-e2-challenge-output.txt`);
-   - the SM/EM sizing comment, named by kind as an anchoring event on sight.
-4. **The void.** The sizing comment is an anchoring event as soon as the facilitator sees it, and engineer two's coverage ground is neither restated nor retracted; both are anchoring events. The round stopped: the consensus and the three recorded values were voided.
+   - engineer two's coverage ground, challenged and left **unretracted** (`prompts/v1-e2-challenge-prompt.txt`, `outputs/v1-e2-challenge-output.txt`).
+3. **The SM/EM sizing comment, seen after the challenges.** The sizing comment was then authored and seen by the facilitator. Its verbatim text is in `raw-record.md`; under the product owner's 2026-10-25 ruling it names a target value for this story implied by the inherited 3-point split pointing, so it is an anchoring event as soon as it is seen and has no restatement or retraction path.
+4. **The void, on sight.** Seeing that comment is what stopped the round: the discussion was never opened, the consensus and the three recorded values were voided, and engineer two's unretracted coverage ground stands as a second anchoring event.
 5. **The blind re-run.** The independent vote was re-run in newly created voter contexts that exclude the tainted discussion and the sizing comment (`prompts/v2-*-prompt.txt`, `outputs/v2-*-output.txt`): product owner 2, engineer one 2, engineer two 3, all with basis-only rationales.
 6. **The re-vote.** The discussion named high 3 and low 2 only; the re-vote recorded `{2}`, `{2}`, `{2}` (`prompts/v3-*-prompt.txt`, `outputs/v3-*-output.txt`); consensus 2, the highest value in the intersection.
 

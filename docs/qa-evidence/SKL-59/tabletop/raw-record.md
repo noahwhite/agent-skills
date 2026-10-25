@@ -18,7 +18,7 @@ This is the raw session record that the posted pointing record cites by its base
 
 Under the product owner's 2026-10-25 ruling the inherited 3-point split pointing is this story's own inherited value, so this comment implies a target value for the story under estimate. It is therefore an anchoring event as soon as the facilitator sees it, with no challenge, restatement or retraction path.
 
-## Challenges and outcomes, in the same round
+## Challenges and outcomes, before the sizing comment was seen
 
 - Product owner, challenged on verification strength: "OUTCOME: retracted", "Verification strength is out of basis and I have no independent basis driver to substitute for it."
 - Engineer one, challenged on testability: "OUTCOME: retracted", no rationale offered.
