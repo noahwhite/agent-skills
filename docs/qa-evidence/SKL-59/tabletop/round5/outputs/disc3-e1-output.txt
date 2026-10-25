@@ -1,0 +1,1 @@
+REMARK: Ordering and dedup changes to the dry-run output risk regressions because the requirement that ungrouped output stay byte-identical constrains any grouped rendering.

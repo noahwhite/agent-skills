@@ -1,0 +1,2 @@
+VALUE: 3
+RATIONALE: The grouping has to preserve byte-identical ungrouped output and de-duplicate multi-rule matches by documented first-rule order, which adds interacting constraints and a risk of silently changing existing output.

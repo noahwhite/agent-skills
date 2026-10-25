@@ -1,0 +1,2 @@
+VALUE: 3
+RATIONALE: The change carries an interacting constraint between the fixed documented rule order and deduplicating a path that matches several rules (it must surface once under the first rule), plus a risk of breaking existing behaviour, since non-grouped output must stay byte-identical.

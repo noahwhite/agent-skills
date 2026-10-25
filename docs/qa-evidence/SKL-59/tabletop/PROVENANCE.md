@@ -33,3 +33,9 @@ Where a file is a reconstruction or a replacement, this file says so and names t
 - `round4/prompts/` and `round4/outputs/` are original captures from ten voter processes against the delivered text at `ee605fcdf1d3355bb5da7152f06c87f2ed18da14`, committed unchanged.
 - `round4/pointing-record.md` is the record generated from those captures and posted on SKL-78 as its only pointing record, comment `e0bcb6f8`. No correction post was needed, so the run holds one record.
 - No capture from an earlier round was removed or rewritten in this round; the earlier labels above stand.
+
+## Round 5 (SKL-59 AC2 round 5, after QA round 4 and the owner amendments)
+
+- `round5/prompts/` and `round5/outputs/` are original captures from sixteen voter processes against the delivered text at this PR's head, committed unchanged.
+- `round5/pointing-record.md` is the record generated from those captures and posted on SKL-79 as its only pointing record, comment `466d7155`. No correction post was needed, so the run holds one record.
+- No capture from an earlier round was removed or rewritten in this round; the earlier labels above stand.

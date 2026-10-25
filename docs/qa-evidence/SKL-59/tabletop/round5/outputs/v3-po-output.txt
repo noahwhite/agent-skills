@@ -1,0 +1,2 @@
+VALUE: 3
+RATIONALE: Reworking the dry-run output path carries a byte-identical backward-compatibility constraint and a first-match deduplication rule for multi-rule paths, both of which risk silently changing existing behaviour.

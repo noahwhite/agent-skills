@@ -1,0 +1,2 @@
+VALUE: 3
+RATIONALE: The change couples a deterministic "first rule in documented order" dedup rule with a byte-identical guarantee for the ungrouped path, so any regrouping logic must not disturb existing output - a real risk of breaking existing behaviour plus an interacting constraint between dedup and ordering.

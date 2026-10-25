@@ -1,0 +1,1 @@
+REMARK: The interacting dedup/ordering constraint is my main concern - any regrouping must preserve the documented "first rule" dedup order without disturbing the byte-identical ungrouped output.
