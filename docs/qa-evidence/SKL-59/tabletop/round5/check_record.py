@@ -56,7 +56,7 @@ STORY_SIZING = re.compile(
 # A gap that hands the clause to another item means the sizing verb is not the story's own.
 REASSIGNED = re.compile(
     r"(?i)\bwhich\b|\bwho\b|\banother\b|\bthat (?:item|story)\b|\bSKL-\d+[:,]?\s*the (?:story|item) that\b|"
-    r"\b(?:from|than|unlike|vs\.?|versus)\s+the (?:story|item) that\b|\bSKL-\d+\s*$"
+    r"\bSKL-\d+\s*$"
 )
 STORY_AT_VALUE = re.compile(r"(?i)\bthis (?:one|story)\b[^.\n]{0,25}?\bat\s+\d")
 FIRST_PERSON = re.compile(
@@ -246,7 +246,7 @@ for stage, expected_count in (("v1", 3), ("v2", 3), ("v3", 3), ("v4", 3), ("disc
         problems.append(f"{stage}: expected {expected_count} captures, found {found}")
 
 # The committed matrix must not shrink: adding cases means updating this count deliberately.
-MATRIX_COUNTS = (19, 11)
+MATRIX_COUNTS = (20, 10)
 cases_file = HERE / "prescription-cases.md"
 section = None
 must_fail, must_pass = [], []

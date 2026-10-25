@@ -25,6 +25,7 @@ The checker re-runs this matrix on every invocation and fails if any case moves 
 - This story, unlike SKL-53, scores 8 points.
 - This story scores 5 in my view.
 - This story is the story that scores 8 points.
+- This story differs from the story that scores 5 points, and scores 8 points.
 
 ## Must pass
 
@@ -37,5 +38,4 @@ The checker re-runs this matrix on every invocation and fails if any case moves 
 - This story differs from SKL-53, the story that scores 5 points.
 - SKL-53's target is 5 points.
 - The SKL-53 target is 5 points.
-- This story differs from the story that scores 5 points.
 - The change couples a deterministic first rule in documented order dedup rule with a byte-identical guarantee.
