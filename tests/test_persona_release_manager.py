@@ -121,6 +121,9 @@ def test_readiness_section_covers_each_promotion_mode() -> None:
                    "for a build whose tree, for the files the story changes, is identical to that branch's"):
         assert phrase in binding[0], f"per-story readiness binding missing: {phrase}"
     assert "a build that predates or omits that change does not cover it" in binding[1]
+    stale = [line for line in body.splitlines() if "evidence for an earlier build" in line]
+    assert len(stale) == 1, stale
+    assert stale[0].startswith("  under `whole-branch`,"), stale[0]
     whole = SKILL.read_text().lower()
     for forbidden in ("promotion set under `none`", "promotion set for `none`", "stale evidence is accepted", "accept stale evidence",
                       "skip this check", "promote without evidence", "do not require evidence",
