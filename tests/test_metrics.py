@@ -293,3 +293,18 @@ def test_independence_and_posting_rule(phrase):
 def test_template_has_no_path_placeholder():
     template = metrics_text().split("```text", 1)[1].split("```", 1)[0]
     assert "path" not in template.lower() and "dir" not in template.lower(), template
+
+
+# A3: registered in the shared index only.
+README = ROOT / "shared" / "README.md"
+README_ROW = "| `metrics.md` | Run metrics: what a run collects, the summary template, and the independence and posting rules. |"
+README_INTRO = "A capability listed here may wait for a later slice to compose it."
+
+
+def test_shared_readme_lists_metrics():
+    assert README_ROW in README.read_text().splitlines()
+
+
+def test_shared_readme_intro_allows_an_uncomposed_capability():
+    assert_states(README.read_text(), README_INTRO)
+
