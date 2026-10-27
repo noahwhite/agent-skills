@@ -56,10 +56,11 @@ review:
     name: Codex GPT-6 Sol
     runtime: codex
     model: gpt-6-sol
+  # Interim: the owner will change this again once opencode 2.x is in the agent container.
   adjudicator:
-    name: Kimi K3
+    name: MiMo V2.6 Flash
     runtime: opencode
-    model: kimi/kimi-k3
+    model: opencode/mimo-v2.6-flash-free
   shadow_adjudicators: []
   merge_owner: agent
   pre_pr:
@@ -71,10 +72,11 @@ review:
       name: Codex GPT-6 Sol
       runtime: codex
       model: gpt-6-sol
+    # Interim: the owner will change this again once opencode 2.x is in the agent container.
     arbiter:
-      name: Kimi K3
+      name: GLM 5.3 Flash
       runtime: opencode
-      model: kimi/kimi-k3
+      model: opencode/glm-5.3-flash-free
     simplicity_reviewer:
       name: DeepSeek V4 Pro
       runtime: opencode
