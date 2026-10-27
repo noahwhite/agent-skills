@@ -22,6 +22,7 @@ If your runtime is not listed, map each capability to its closest equivalent and
 | Scratch base directory | `$CLAUDE_JOB_DIR/tmp` in background jobs, else `profile.workspace.scratch_dir` | `profile.workspace.scratch_dir` |
 | Session label (for agent stamps) | the session or job name if set, else the session id | the session title if set, else the session id |
 | Tracker writes from a subagent | a subagent's write can be denied by the auto-mode permission check; only the owner grants it | V2: agent `permissions` rules for `shell`; V1: `permission.bash`; probe the actual write path |
+| Read a subagent's usage (duration, tokens, tool calls) | Observed on 2.1.312: a background subagent's completion notice carries a usage block with `subagent_tokens` (one total), `tool_uses` and `duration_ms`, with `tool_uses` 2 for a launch asked to run one command; no input, output or cache token breakdown. The run metrics reference records each figure as returned | V2 (2.1.2): `not observed`, not run. V1 (legacy, not V2 guidance), observed on 1.19.3: default `opencode run` output carries no usage figure (`not reported`); `opencode run --format json` emits one `step_finish` event per model step with `part.tokens` (`total`, `input`, `output`, `reasoning`, `cache`) and one `tool_use` event per tool call, each event with a millisecond `timestamp`, and no run total or tool-call count field; a `task` subagent's result carries its text, session id, model and start and end times, and its tokens and tool calls are `not reported`. The run metrics reference records each figure as returned |
 
 ## Rules that follow from the map
 
@@ -97,6 +98,11 @@ If your runtime is not listed, map each capability to its closest equivalent and
   `-s danger-full-access` is acceptable only when the operator has confirmed that the whole session already runs inside an outer sandbox they control, such as a disposable container or VM holding no credentials beyond what the review needs; the profile or an overlay records that confirmation, and an agent never assumes it.
   A worktree is not that boundary: it only keeps edits out of the main checkout, while the process can still read credentials, reach the network, and write anywhere the user can.
   Under that flag, run every phase against a throwaway detached worktree, never the primary checkout, and afterwards confirm that `git status --porcelain` of the primary checkout is unchanged.
+- **Usage from shell-launched agents.** The run metrics reference records what each launch returns; this bullet states what was observed.
+  For `runtime: codex`, observed on codex-cli 0.163.0: `codex exec` prints `tokens used` and one total on stderr; with `--json`, the `turn.completed` event carries `usage` (`input_tokens`, `cached_input_tokens`, `cache_write_input_tokens`, `output_tokens`, `reasoning_output_tokens`) and each tool call is a `command_execution` item, with no tool-call count or duration field (`not reported`).
+  Any other codex version is `not observed` until it is run.
+  For `runtime: command`, arbitrary `command` programs have no common usage contract.
+  `not observed` means the runtime or version line was not run; `not reported` means it ran and returned no figure.
 
 ## OpenCode V2 configuration and invocation
 

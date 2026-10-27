@@ -308,3 +308,67 @@ def test_shared_readme_lists_metrics():
 def test_shared_readme_intro_allows_an_uncomposed_capability():
     assert_states(README.read_text(), README_INTRO)
 
+
+
+# A4: the runtime usage map.
+RUNTIMES = ROOT / "shared" / "runtimes.md"
+USAGE_ROW = "| Read a subagent's usage (duration, tokens, tool calls) |"
+USAGE_BULLET = "- **Usage from shell-launched agents.**"
+
+
+def usage_row() -> str:
+    rows = [line for line in RUNTIMES.read_text().splitlines() if line.startswith(USAGE_ROW)]
+    assert len(rows) == 1, rows
+    return rows[0]
+
+
+def usage_bullet() -> str:
+    text = RUNTIMES.read_text()
+    assert text.count(USAGE_BULLET) == 1, "expected exactly one usage bullet"
+    rest = text[text.index(USAGE_BULLET):]
+    end = len(rest)
+    for marker in ("\n- **", "\n## "):
+        found = rest.find(marker, 1)
+        if found != -1:
+            end = min(end, found)
+    return rest[:end]
+
+
+def test_runtime_map_has_one_usage_row_with_two_cells():
+    assert usage_row().count("|") == 4, "the row needs a Claude Code cell and an OpenCode cell"
+
+
+def test_usage_row_claude_code_cell_is_version_qualified():
+    claude_cell = usage_row().split("|")[2]
+    assert_states(claude_cell, "Observed on 2.1.312:")
+
+
+def test_usage_row_opencode_cell_names_each_version_line():
+    opencode_cell = usage_row().split("|")[3]
+    assert_states(opencode_cell, "V2 (2.1.2): `not observed`, not run.")
+    assert_states(opencode_cell, "V1 (legacy, not V2 guidance), observed on 1.19.3:")
+
+
+def test_usage_bullet_states_codex_observations_with_version():
+    assert_states(usage_bullet(), "For `runtime: codex`, observed on codex-cli 0.163.0:")
+
+
+def test_usage_bullet_states_command_has_no_common_contract():
+    assert_states(
+        usage_bullet(),
+        "For `runtime: command`, arbitrary `command` programs have no common usage contract.",
+    )
+
+
+def test_usage_bullet_distinguishes_not_observed_from_not_reported():
+    assert_states(
+        usage_bullet(),
+        "`not observed` means the runtime or version line was not run; `not reported` means it "
+        "ran and returned no figure.",
+    )
+
+
+def test_usage_row_and_bullet_name_the_metrics_reference_in_prose_only():
+    for text in (usage_row(), usage_bullet()):
+        assert "metrics.md" not in text, text
+        assert "the run metrics reference" in text.lower(), text
