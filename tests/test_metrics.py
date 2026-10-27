@@ -203,3 +203,93 @@ def test_story_to_done_extra(phrase):
 @pytest.mark.parametrize("phrase", TEMPLATE)
 def test_summary_template(phrase):
     assert_states(metrics_text(), phrase)
+
+
+# A2: independence and posting rules.
+INDEPENDENCE_AND_POSTING = [
+    pytest.param(
+        "Collected figures live only in one metrics file inside the session's one scratch "
+        "directory (the Scratch files rule in `references/runtimes.md`), outside every per-story "
+        "or per-role subdirectory a voter, engineer, or QA writes into.",
+        id="scratch-location",
+    ),
+    pytest.param(
+        "The poster the consuming skill names writes the metrics file and posts the summary: the "
+        "facilitator for `story-refinement`, the coordinator for `story-to-done`.",
+        id="writer-and-poster",
+    ),
+    pytest.param("The metrics file is never named in any brief.", id="never-named-in-a-brief"),
+    pytest.param(
+        "No brief and no voter-visible record contains this invocation's metrics or another "
+        "role's figures from this invocation, other than the summary comment this invocation "
+        "posts at its end.",
+        id="independence-exclusion",
+    ),
+    pytest.param(
+        "A summary comment an earlier invocation posted on the story is not a breach.",
+        id="earlier-summary-not-a-breach",
+    ),
+    pytest.param(
+        "Subject to the ordering below, the summary is posted at the end of every invocation that "
+        "reaches a permitted post, as one comment on the story, read back, and repeated in the "
+        "closing report (the facilitator's closing message where the skill has no report).",
+        id="posting-and-read-back",
+    ),
+    pytest.param(
+        "A resumed run is a new invocation and posts its own comment, except a resume in the same "
+        "session after the owner authorizes the denied tracker writes fallback, which is the same "
+        "invocation.",
+        id="resumed-run",
+    ),
+    pytest.param(
+        "Whenever the invocation ends before a post is permitted, the totals and the stop reason "
+        "go in the closing report and no post is attempted.",
+        id="closing-report",
+    ),
+    pytest.param(
+        "If the post is denied or unavailable, the summary goes in the closing report with the "
+        "denied write named, and no other tool or server is tried.",
+        id="denied-write",
+    ),
+    pytest.param(
+        "While a tracker write is denied and the owner has not authorized the denied tracker "
+        "writes fallback, no post is attempted.",
+        id="fallback-condition",
+    ),
+    pytest.param(
+        "The comment contains no secrets and no local or scratch paths.", id="no-path-no-secret"
+    ),
+    pytest.param("The template has no placeholder for a path.", id="template-no-path"),
+    pytest.param(
+        "The comment is posted only when no further voter round will run in this invocation, "
+        "after the pointing, unpointed, or split record and every slice re-estimate.",
+        id="refinement-order-after-record",
+    ),
+    pytest.param(
+        "On a stop before such a record exists, the comment is posted only after the three Stage 1 "
+        "voter inputs are recorded and every voter context launched in the round that stopped "
+        "has finished or stopped.",
+        id="refinement-order-early-stop",
+    ),
+    pytest.param(
+        "The comment is never posted while an anchoring recovery re-vote is still to run in this "
+        "invocation.",
+        id="refinement-order-anchoring",
+    ),
+    pytest.param(
+        "The coordinator posts its own comment as the coordinator's only tracker write of the "
+        "invocation; the delegated engineer and QA make their own writes.",
+        id="story-to-done-only-tracker-write",
+    ),
+    pytest.param("The coordinator never sets the story state.", id="story-to-done-never-sets-state"),
+]
+
+
+@pytest.mark.parametrize("phrase", INDEPENDENCE_AND_POSTING)
+def test_independence_and_posting_rule(phrase):
+    assert_states(metrics_text(), phrase)
+
+
+def test_template_has_no_path_placeholder():
+    template = metrics_text().split("```text", 1)[1].split("```", 1)[0]
+    assert "path" not in template.lower() and "dir" not in template.lower(), template

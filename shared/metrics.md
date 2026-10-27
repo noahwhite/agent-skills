@@ -80,3 +80,33 @@ The heading line names the skill, the story key, and the invocation's end state 
 Each launch gets one table row with the fields in the order above; a figure cell holds the number, `not reported`, or the number followed by `cumulative`.
 The bracketed `partial` note appears only under the condition in Run totals.
 With no launches, the table is replaced by the line `no launches` and each total reads `not applicable`.
+
+## Independence
+
+- Collected figures live only in one metrics file inside the session's one scratch directory (the Scratch files rule in `references/runtimes.md`), outside every per-story or per-role subdirectory a voter, engineer, or QA writes into.
+- The metrics file is never named in any brief.
+- The poster the consuming skill names writes the metrics file and posts the summary: the facilitator for `story-refinement`, the coordinator for `story-to-done`.
+- No brief and no voter-visible record contains this invocation's metrics or another role's figures from this invocation, other than the summary comment this invocation posts at its end.
+  A summary comment an earlier invocation posted on the story is not a breach.
+
+## Posting
+
+- Subject to the ordering below, the summary is posted at the end of every invocation that reaches a permitted post, as one comment on the story, read back, and repeated in the closing report (the facilitator's closing message where the skill has no report).
+- A resumed run is a new invocation and posts its own comment, except a resume in the same session after the owner authorizes the denied tracker writes fallback, which is the same invocation.
+- If the post is denied or unavailable, the summary goes in the closing report with the denied write named, and no other tool or server is tried.
+- The comment contains no secrets and no local or scratch paths.
+  The template has no placeholder for a path.
+- Whenever the invocation ends before a post is permitted, the totals and the stop reason go in the closing report and no post is attempted.
+
+### `story-refinement` order
+
+- The comment is posted only when no further voter round will run in this invocation, after the pointing, unpointed, or split record and every slice re-estimate.
+- On a stop before such a record exists, the comment is posted only after the three Stage 1 voter inputs are recorded and every voter context launched in the round that stopped has finished or stopped.
+- Both are subject to the denied tracker writes fallback.
+  While a tracker write is denied and the owner has not authorized the denied tracker writes fallback, no post is attempted.
+- The comment is never posted while an anchoring recovery re-vote is still to run in this invocation.
+
+### `story-to-done`
+
+- The coordinator posts its own comment as the coordinator's only tracker write of the invocation; the delegated engineer and QA make their own writes.
+- The coordinator never sets the story state.
