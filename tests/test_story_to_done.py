@@ -3,10 +3,14 @@
 import json
 import os
 import re
+import shutil
 import signal
 import subprocess
 import time
+from decimal import Decimal
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 SKILL = ROOT / "skills" / "story-to-done" / "SKILL.md"
@@ -334,7 +338,7 @@ METRICS_COMMAND_ROWS = (
 )
 METRICS_WRAPPER_INTRO = (
     "Launch every later command in this wrapper, with the command's own lines in place of "
-    "`<command>`, a label unique within the invocation and without a single quote or a line break in place of "
+    "`<command>`, a label unique within the invocation and without a single quote, a `|`, or a line break in place of "
     "`<row label>`, and the absolute path of that `metrics.txt` in place of `<metrics file>`:"
 )
 METRICS_WRAPPER_BLOCK = [
@@ -375,18 +379,41 @@ METRICS_END_INTRO = (
 )
 METRICS_END_BLOCK = [
     "```sh",
-    "s=$(date -u +%s.%N); cat '<metrics file>' && e=$(date -u +%s.%N) && "
-    "printf 'start %s end\\nend %s end\\n' \"$s\" \"$e\" | tee -a '<metrics file>'",
+    "s=$(date -u +%s.%N); e=$(date -u +%s.%N); printf 'start %s end\\nend %s end\\n' \"$s\" \"$e\" >> '<metrics file>' && awk '",
+    'function span(a, b,  x, y, d) { split(a, x, "."); split(b, y, "."); d = (y[1] - x[1]) * 1000000000 + substr(y[2] "000000000", 1, 9) - substr(x[2] "000000000", 1, 9); '
+    'return (d < 0 ? "-" : "") sprintf("%d.%09d", int((d < 0 ? -d : d) / 1000000000), (d < 0 ? -d : d) % 1000000000) "s" }',
+    "{ k = substr($0, length($1) + length($2) + 3); if (!(k in seen)) { seen[k]; order[++n] = k }; at[$1, k] = $2 }",
+    "END {",
+    '  print "| Role | Runtime | Model | Effort | Duration | Tokens | Tool calls |"',
+    '  print "|---|---|---|---|---|---|---|"',
+    '  for (i = 1; i <= n; i++) { k = order[i]; d = ((("start", k) in at) && (("end", k) in at)) ? '
+    'span(at["start", k], at["end", k]) : "lost"; '
+    'printf "| %s | command | not set | not set | %s | not reported | not reported |\\n", k, d }',
+    '  a = (("start", "start") in at) ? at["start", "start"] : "not recorded"; z = at["end", "end"]',
+    '  print ""',
+    '  print "Totals"',
+    '  printf "- Elapsed wall-clock: %s (%s to %s)\\n", (a == "not recorded" ? "not reported" : span(a, z)), a, z',
+    '  printf "- Tokens: not reported [partial: %d not reported, 0 cumulative]\\n", n',
+    '  printf "- Tool calls: not reported [partial: %d not reported, 0 cumulative]\\n", n',
+    "}' '<metrics file>'",
     "```",
 ]
 METRICS_END_RULE = (
-    "Its `end` timestamp is recorded as `invocation_end`, the elapsed wall-clock runs from `invocation_start` to "
-    "`invocation_end`, and the closing report's rows are read from its output, where its own row, labelled `end`, "
-    "is the last."
+    "Its `end` timestamp is recorded as `invocation_end`, and from the metrics file it prints the summary's table, "
+    "one row per label in the order the labels first appear, with its own row, labelled `end`, last, and then the "
+    "Totals lines, with each duration and the elapsed wall-clock from `invocation_start` to `invocation_end` worked "
+    "out exactly from the recorded timestamps, each timestamp given as recorded, and every row counted as "
+    "`not reported` in the `partial` note."
 )
 METRICS_LOST_ROW = (
-    "A launch whose label lacks a `start` or an `end` line in that output, or an end form that exits non-zero, has "
-    "lost its row, and the closing report names each lost row and gives it no duration."
+    "A launch whose label lacks a `start` or an `end` line in the metrics file has lost its row, and the end form "
+    "gives that row `lost` in place of a duration; an end form that exits non-zero has printed no summary, so the "
+    "closing report gives the heading line and then `summary lost: the end form exited non-zero` in its place."
+)
+METRICS_END_VERBATIM = (
+    "The summary in the closing report is the template's heading line, a blank line, and then the end form's output "
+    "copied verbatim: no line is added, reworded, or left out, and no duration, timestamp, or total is recomputed or "
+    "converted, so the summary has no extras line."
 )
 METRICS_CLOSING_REPORT = (
     "Give the summary, in the template `references/metrics.md` defines, in the closing report of every end "
@@ -459,6 +486,7 @@ METRICS_LINES = [
     *[line for line in METRICS_END_BLOCK if METRICS_WORDS.search(line)],
     METRICS_END_RULE,
     METRICS_LOST_ROW,
+    METRICS_END_VERBATIM,
     METRICS_CLOSING_REPORT,
     METRICS_NO_LAUNCHES,
     METRICS_ON_SCOPE,
@@ -584,6 +612,7 @@ def test_every_launch_runs_in_the_start_form_or_the_timing_wrapper() -> None:
     assert METRICS_END_INTRO in body
     assert METRICS_END_RULE in body
     assert METRICS_LOST_ROW in body
+    assert METRICS_END_VERBATIM in body
 
 
 def skill_wrapper() -> str:
@@ -672,32 +701,104 @@ def test_a_failed_metrics_write_shows_an_error_and_keeps_the_exit_status(tmp_pat
         assert len(errors) == 2, f"{command}: the failed start and end writes each show an error naming the file"
 
 
+def test_the_end_form_is_the_last_pinned_block() -> None:
+    assert metrics_blocks()[2] == METRICS_END_BLOCK, "the end form must be the last pinned block"
+
+
 def end_form(record: Path) -> str:
-    blocks = metrics_blocks()
-    assert blocks[2] == METRICS_END_BLOCK, "the end form must be the last pinned block"
-    return "\n".join(blocks[2][1:-1]).replace("<metrics file>", quoted(record))
+    return "\n".join(metrics_blocks()[2][1:-1]).replace("<metrics file>", quoted(record))
 
 
-def test_the_end_form_times_itself_last_and_prints_every_row(tmp_path: Path) -> None:
+AWKS = sorted({os.path.realpath(path) for name in ("awk", "gawk", "mawk", "nawk") if (path := shutil.which(name))})
+
+
+def run_end_form(record: Path, awk: str, tmp_path: Path) -> subprocess.CompletedProcess[str]:
+    bin_dir = tmp_path / "awk-bin"
+    bin_dir.mkdir(exist_ok=True)
+    link = bin_dir / "awk"
+    link.unlink(missing_ok=True)
+    link.symlink_to(awk)
+    env = {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
+    return subprocess.run(["bash", "-c", end_form(record)], capture_output=True, text=True, env=env)
+
+
+def recorded(record: Path) -> dict[tuple[str, str], str]:
+    return {(kind, label): stamp for kind, stamp, label in (line.split(" ", 2) for line in record.read_text().splitlines())}
+
+
+def seconds(start: str, end: str) -> str:
+    return f"{Decimal(end) - Decimal(start):.9f}s"
+
+
+def expected_summary(rows: list[tuple[str, str]], start: str, end: str, elapsed: str) -> str:
+    table = [
+        "| Role | Runtime | Model | Effort | Duration | Tokens | Tool calls |",
+        "|---|---|---|---|---|---|---|",
+        *[f"| {label} | command | not set | not set | {duration} | not reported | not reported |" for label, duration in rows],
+    ]
+    totals = [
+        "Totals",
+        f"- Elapsed wall-clock: {elapsed} ({start} to {end})",
+        f"- Tokens: not reported [partial: {len(rows)} not reported, 0 cumulative]",
+        f"- Tool calls: not reported [partial: {len(rows)} not reported, 0 cumulative]",
+    ]
+    return "\n".join([*table, "", *totals]) + "\n"
+
+
+@pytest.mark.parametrize("awk", AWKS)
+def test_the_end_form_times_itself_last_and_prints_the_summary(tmp_path: Path, awk: str) -> None:
     handed = tmp_path / "team's session"
     handed.mkdir()
     subprocess.run(["bash", "-c", start_form(f"scratch='{quoted(handed)}'")], check=True)
     record = handed / "metrics.txt"
-    assert subprocess.run(["bash", "-c", wrapper_script(record, "sleep 0.1", "probe", quote=True)]).returncode == 0
-    result = subprocess.run(["bash", "-c", end_form(record)], capture_output=True, text=True, check=True)
-    assert result.stdout == record.read_text(), "the end form prints the whole metrics file after its own row"
-    rows = read_rows(record)
-    assert [(kind, label) for kind, _, label in rows] == [
-        ("start", "start"), ("end", "start"), ("start", "probe"), ("end", "probe"), ("start", "end"), ("end", "end")
-    ]
-    assert rows[5][1] >= rows[4][1] >= rows[3][1], "invocation_end is the last timestamp, after its own start"
+    for label in ("read story state", "probe"):
+        assert subprocess.run(["bash", "-c", wrapper_script(record, "sleep 0.1", label, quote=True)]).returncode == 0
+    result = run_end_form(record, awk, tmp_path)
+    assert result.returncode == 0 and result.stderr == ""
+    stamps = recorded(record)
+    assert [(kind, label) for kind, _, label in read_rows(record)][-2:] == [("start", "end"), ("end", "end")]
+    labels = ("start", "read story state", "probe", "end")
+    rows = [(label, seconds(stamps["start", label], stamps["end", label])) for label in labels]
+    assert all(Decimal(duration[:-1]) > 0 for _, duration in rows), "every row has distinct start and end timestamps"
+    start, end = stamps["start", "start"], stamps["end", "end"]
+    assert result.stdout == expected_summary(rows, start, end, seconds(start, end)), (
+        "the end form prints every row, the exact elapsed, the recorded timestamps, and the partial note"
+    )
+
+
+@pytest.mark.parametrize("awk", AWKS)
+def test_the_end_form_names_lost_rows_and_a_missing_start(tmp_path: Path, awk: str) -> None:
+    record = tmp_path / "metrics.txt"
+    record.write_text(
+        "start 1793218210.722929459 killed\n"
+        "start 1793218211.000000001 orphan end\n"
+        "end 1793218212.999999999 orphan end\n"
+        "end 1793218213.5 only an end\n"
+    )
+    result = run_end_form(record, awk, tmp_path)
+    assert result.returncode == 0
+    end = recorded(record)["end", "end"]
+    rows = [("killed", "lost"), ("orphan end", "1.999999998s"), ("only an end", "lost"),
+            ("end", seconds(recorded(record)["start", "end"], end))]
+    assert result.stdout == expected_summary(rows, "not recorded", end, "not reported")
+
+
+def test_the_end_form_works_out_durations_exactly() -> None:
+    script = "\n".join(metrics_blocks()[2][1:-1])
+    program = script[script.index("awk '") + 5 : script.rindex("' '<metrics file>'")]
+    assert AWKS, "no awk to run the end form with"
+    stamps = "start 1793218198.999999999 start\nend 1793218200.000000001 start\nstart 1793218225.1 end\nend 1793218225.2 end\n"
+    for awk in AWKS:
+        result = subprocess.run([awk, program], input=stamps, capture_output=True, text=True, check=True)
+        assert "| start | command | not set | not set | 1.000000002s |" in result.stdout, awk
+        assert "- Elapsed wall-clock: 26.200000001s (1793218198.999999999 to 1793218225.2)" in result.stdout, awk
 
 
 def test_an_end_form_that_cannot_record_its_row_fails(tmp_path: Path) -> None:
     blocker = tmp_path / "not a directory"
     blocker.write_text("")
     result = subprocess.run(["bash", "-c", end_form(blocker / "metrics.txt")], capture_output=True, text=True)
-    assert "metrics.txt" in result.stderr and result.stdout == ""
+    assert "metrics.txt" in result.stderr and result.stdout == "", "a failed end form prints no summary"
     assert result.returncode != 0, "an end form that writes no row must exit non-zero"
 
 
