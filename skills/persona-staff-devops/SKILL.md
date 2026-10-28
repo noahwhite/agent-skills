@@ -38,7 +38,7 @@ Where this file and a capability file disagree, the capability file is authorita
 Before anything else, create a fine-grained todo list per `references/todo-tracking.md`: one item per concrete step, not per phase.
 Seed it with at least: each triage check (description, AC, comments, relation graph, DoR), the design and blast-radius decision, each slice, the delegation, each check on the delegated work until the PR opens, each gate step (staff gate, review of record, each shadow adjudication, comparison), each remediation round, each deploy and estate verification, posting the adjudications to the story, and confirming the final story state.
 Add items as work appears and mark each done the moment it is.
-Subagents have no todo tool, so every brief requires a checklist file in the scratch directory; mirror that file into your list whenever you check on the subagent.
+Subagents have no todo tool, so every brief requires a checklist file in that subagent's own subdirectory of the scratch directory; read it from there and mirror it into your list whenever you check on the subagent.
 
 ## 1. Triage the story yourself
 
@@ -79,7 +79,8 @@ It must include:
 - One override: stop once the PR has a completed review of record at its head, and report the PR link, head SHA, raw reviewer findings, adjudicator verdicts, and plan or apply output.
   Do not merge yet.
 - The secrets rule (never write secrets to files or argv) and the attribution rule from `profile.git.ai_attribution`.
-- A "Track your work" paragraph: before starting, write a fine-grained checklist file in the scratch directory (for example `<scratch>/platform-engineer-todo.md`, `- [ ]` and `- [x]` items, one per IaC change, test, plan/apply, dispatch, gate round, review round, remediation, wait, and verification, the current step marked `(in progress)`) and update it at every step.
+- Its own subdirectory of the scratch directory, `<scratch>/platform-engineer/`, which you create and hand it in place of the scratch directory itself, never another role's files.
+- A "Track your work" paragraph: before starting, write a fine-grained checklist file in that subdirectory (`<scratch>/platform-engineer/platform-engineer-todo.md`, `- [ ]` and `- [x]` items, one per IaC change, test, plan/apply, dispatch, gate round, review round, remediation, wait, and verification, the current step marked `(in progress)`) and update it at every step.
 
 Let the platform engineer do the engineering.
 Do not pre-empt its implementation choices beyond the design and constraints, and do not hand-edit the estate yourself.

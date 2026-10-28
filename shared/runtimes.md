@@ -34,6 +34,7 @@ If your runtime is not listed, map each capability to its closest equivalent and
   The base directory is the runtime's own scratch directory when the runtime provides one (the capability row above), else `profile.workspace.scratch_dir`; it is a base only, never the directory a session works in, and the runtime's base wins when both exist.
   A skill passes each voter, engineer, or QA only its own subdirectory of the session directory, never the session directory itself and never another role's files, so that no voter is handed another voter's votes or inputs.
   Pass every other subagent and shell-launched agent you start the session's directory or a directory inside it.
+  A subagent or agent handed a directory uses it as its own session's scratch directory instead of creating another.
   When neither the runtime nor `profile.workspace.scratch_dir` gives a directory, create one with a standalone `mktemp -d` and use it for the whole task.
   A base that cannot be created or written falls back the same way.
   Keep the base outside every repository under review: a session directory inside a checkout shows up as untracked work and fails the clean-tree preflight.
