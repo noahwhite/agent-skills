@@ -439,3 +439,16 @@ def test_closing_report_carries_no_secrets_or_paths() -> None:
 def test_readme_row_says_the_summary_is_given_in_the_closing_report() -> None:
     row = readme_row()
     assert "a `metrics` switch, `off` by default, turns on run metrics, with the run summary given in the closing report" in row
+
+
+POST_WORDS = re.compile(r"\bpost(?:s|ed|ing)?\b|\bcomments?\b", re.IGNORECASE)
+
+
+def test_no_line_tells_the_coordinator_to_post_or_comment() -> None:
+    body = SKILL.read_text().split("\n---\n", 1)[1]
+    allowed = {"- " + OFF_PATH, METRICS_ON_SCOPE}
+    for line in body.splitlines():
+        if POST_WORDS.search(line):
+            assert line in allowed or "needs a delta review posted before merging" in line, (
+                f"a line tells the coordinator to post or comment: {line}"
+            )
