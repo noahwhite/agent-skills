@@ -60,7 +60,8 @@ Where this file and a capability file disagree, the capability file is authorita
 
 Only when `metrics` is on, read [references/metrics.md](references/metrics.md) once the story ID is known: it is the single home for what a `story-to-done` run collects and reports, and this file does not restate it.
 With `metrics` on, timestamp the invocation's start when `metrics` resolves to on, before step 0; the elapsed wall-clock runs from it to the closing report.
-Record a row for each command the coordinator launches, in launch order, timestamped immediately before and after the launch, with its usage figures recorded under `references/metrics.md` and `not reported` for any usage the runtime does not return.
+From the start timestamp on, record a row for each command the coordinator launches, in launch order, timestamped immediately before and after the launch, with its usage figures recorded under `references/metrics.md` and `not reported` for any usage the runtime does not return.
+Taking a timestamp is not a launch and gets no row.
 Give the summary, in the template `references/metrics.md` defines, in the closing report of every end state: Done, or any stop, including a stop before step 0 or before any senior engineer or QA agent is spawned.
 The summary reads `no launches` only when the coordinator launched no role and no command; otherwise it has a row for each coordinator-launched command in launch order, the elapsed wall-clock, and the end state or stop reason.
 With `metrics` on, this skill does not yet record a row for a senior engineer or QA launch or record the `story-to-done` extras, and it posts no summary comment; this sentence overrides the reference's collection rules for those rows and extras and all of its posting rules.
