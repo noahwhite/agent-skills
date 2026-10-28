@@ -21,6 +21,17 @@ review 5688872022 commit_id 0129b410fafe99eaffc461812d21f53be6271beb submitted 2
 review 5688992331 commit_id 116218f209385fd710483592c78469678a653fd5 submitted 2026-10-28T20:07:25Z first line: Review of record 116218f209385fd710483592c78469678a653fd5
 review 5689017268 commit_id c47ae61c958c5143df219e7721469f6d22ea1f1f submitted 2026-10-28T20:09:34Z first line: Review of record c47ae61c958c5143df219e7721469f6d22ea1f1f
 
+## PR #78 reviews of record: reviewer and adjudicator lines, as written in each review body
+review 5688477403 Reviewer: Codex GPT-6 Sol (`codex`, `gpt-6-sol`), read-only, detached worktree at the head. ; Adjudicator: DeepSeek V4 Pro (`opencode`, `deepseek/deepseek-v4-pro`), clean and neutral, read-only.
+review 5688535563 Reviewer: Codex GPT-6 Sol (`codex`, `gpt-6-sol`), read-only, detached worktree at the head. ; Adjudicator: DeepSeek V4 Pro (`opencode`, `deepseek/deepseek-v4-pro`), clean and neutral, read-only.
+review 5688547014 Reviewer: Codex GPT-6 Sol (`codex`, `gpt-6-sol`), read-only, detached worktree at the head. ; Adjudicator: DeepSeek V4 Pro (`opencode`, `deepseek/deepseek-v4-pro`): no findings to adjudicate.
+review 5688678199 Reviewer: Codex GPT-6 Sol (`codex`, `gpt-6-sol`), read-only, detached worktree at the head. ; Adjudicator: DeepSeek V4 Pro (`opencode`, `deepseek/deepseek-v4-pro`), clean and neutral, read-only.
+review 5688748258 Reviewer: Codex GPT-6 Sol (`codex`, `gpt-6-sol`), read-only, detached worktree at the head. ; Adjudicator: DeepSeek V4 Pro (`opencode`, `deepseek/deepseek-v4-pro`), clean and neutral, read-only.
+review 5688836993 Reviewer: Codex GPT-6 Sol (`codex`, `gpt-6-sol`), read-only, detached worktree at the head. ; Adjudicator: DeepSeek V4 Pro (`opencode`, `deepseek/deepseek-v4-pro`), clean and neutral, read-only.
+review 5688872022 Reviewer: Codex GPT-6 Sol (`codex`, `gpt-6-sol`), read-only, detached worktree at the head. ; Adjudicator: DeepSeek V4 Pro (`opencode`, `deepseek/deepseek-v4-pro`), clean and neutral, read-only.
+review 5688992331 Reviewer: Codex GPT-6 Sol (`codex`, `gpt-6-sol`), read-only, detached worktree at the head. ; Adjudicator: DeepSeek V4 Pro (`opencode`, `deepseek/deepseek-v4-pro`), clean and neutral, read-only.
+review 5689017268 Reviewer: Codex GPT-6 Sol (`codex`, `gpt-6-sol`), read-only, detached worktree at the head. ; Adjudicator: DeepSeek V4 Pro (`opencode`, `deepseek/deepseek-v4-pro`), clean and neutral, read-only.
+
 ## Files changed by PR #78
 caba7b7fbc00f801cfcf3628b7f2a02ddeba8b92 SKL-95: time every metrics command with distinct start and end timestamps (#78)
 
@@ -84,7 +95,7 @@ Bash	Print metrics file and record the end row
 Edit	<scratch>/5f730594-todo.md
 SubagentHandback	
 
-## C4 QA run: the four shell commands, verbatim
+## C4 QA run: the four shell commands, sanitized (verbatim except local paths replaced by <scratch>)
 ----
 s=$(date -u +%s.%N)
 scratch_base="${CLAUDE_JOB_DIR:+$CLAUDE_JOB_DIR/tmp}"

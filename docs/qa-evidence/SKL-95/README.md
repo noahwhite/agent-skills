@@ -51,7 +51,7 @@ Outcome: the round 1 timing defect is fixed, but C1 and C4 are not met, so the s
 | C4 verified end to end | Not met | QA ran `story-to-done SKL-117 metrics=on` with a clean coordinator loading the skill from the clone. It stopped at step 1 before any role. Its closing report has the heading line, four rows in launch order matching the four shell commands in its transcript, an elapsed wall-clock of 36.625 s equal to the recorded `invocation_end` minus `invocation_start`, and the `metrics: on` line, with no path or secret and no tracker write. Its totals block lacks the required `partial` note (see C1). |
 | DoD all acceptance criteria met | Not met | C1 and C4 above. |
 | DoD tests written and passing | Verified | The C3 row. |
-| DoD independently reviewed | Verified | PR #78 has reviews of record on nine heads, each a Codex GPT-6 Sol review with a DeepSeek V4 Pro adjudication as the repository profile configures, and the last covers the merged head `c47ae61`. |
+| DoD independently reviewed | Verified | PR #78 has reviews of record on nine heads, each naming Codex GPT-6 Sol as reviewer and DeepSeek V4 Pro as adjudicator, as the repository profile configures (the round 3 review had no findings to adjudicate), and the last covers the merged head `c47ae61`. |
 | DoD docs updated | Verified | The C2 row. |
 | DoD verified in staging | Not applicable | No environment exists; C4 stands in, as the story states. |
 | DoD no critical bugs or regressions | Verified | The suite and CI pass at `main`. |
@@ -60,8 +60,9 @@ Outcome: the round 1 timing defect is fixed, but C1 and C4 are not met, so the s
 
 C1 and C4: with launches `not reported` for tokens and tool calls, the Totals lines must carry the `partial` note the template defines; both runs at `c47ae61` omit it.
 C1 and C4: the Elapsed line must give the recorded `invocation_end`; the QA run gave a value one second earlier than the one it recorded.
+Advisory, not a verdict driver: the Metrics sentence that the skill does not yet record the `story-to-done` extras was added by this story's PR #73, yet the two runs at `c47ae61` disagree on it (SKL-116 printed no extras lines, SKL-117 printed eight).
 
 ## Incidental findings, round 2
 
-The QA run printed eight `story-to-done` extras lines, although the Metrics section says the skill does not yet record them; SKL-96 adds them.
+The QA run printed eight `story-to-done` extras lines, although the Metrics section says the skill does not yet record them; SKL-96 adds them, and the template has a slot for them, so this is not ruled a C1 or C4 failure (see the advisory above).
 The AC clarification proposed in tracker comment `1115a862` is now in the C1 text.
