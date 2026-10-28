@@ -22,6 +22,8 @@ Each row has these fields, in this order:
 6. **Tokens:** the token count the runtime's usage report returns for that launch.
 7. **Tool calls:** the tool-call count the runtime's usage report returns for that launch.
 
+For a command launch, the role names what the command does (for example `tracker-write preflight`), the runtime is `command`, and the model and the effort are `not set`.
+
 What each runtime's usage report returns is in the "Read a subagent's usage (duration, tokens, tool calls)" row of `references/runtimes.md`, and for a shell-launched agent in its "Usage from shell-launched agents" rule.
 
 ### Figures
@@ -35,6 +37,7 @@ What each runtime's usage report returns is in the "Read a subagent's usage (dur
 
 - The elapsed wall-clock from the invocation's start to its end.
 - Per figure (tokens and tool calls), the sum of the launch-scoped figures that were reported.
+- A per-figure total with no reported launch-scoped figure reads `not reported`, never `0`.
 - A total is labelled `partial`, with the count of launches not reported and the count excluded as `cumulative`, only when either count is non-zero.
 - An invocation that performs no launch states `no launches`, the end state or stop reason, and `not applicable` for every per-figure total.
 
@@ -66,7 +69,7 @@ Run metrics: <skill> <story key> - <end state or stop reason>
 
 | Role | Runtime | Model | Effort | Duration | Tokens | Tool calls |
 |---|---|---|---|---|---|---|
-| <role> | <runtime> | <model> | <effort or not set> | <duration> | <tokens> | <tool calls> |
+| <role> | <runtime> | <model or not set> | <effort or not set> | <duration> | <tokens> | <tool calls> |
 
 <one line per extra of this skill: name: value>
 
@@ -79,6 +82,7 @@ Totals
 The heading line names the skill, the story key, and the invocation's end state or stop reason.
 Each launch gets one table row with the fields in the order above; a figure cell holds the number, `not reported`, or the number followed by `cumulative`.
 Rows are listed in launch order, so the n-th row for a role is that role's n-th launch.
+An extra with one value per QA round lists the values on its one line in round order, as `round 1: <value>; round 2: <value>`.
 In a cell value, a `|` is written as `\|` and a line break as a space.
 The bracketed `partial` note appears only under the condition in Run totals.
 With no launches, the table is replaced by the line `no launches`, the elapsed wall-clock is still given, and each per-figure total reads `not applicable`.

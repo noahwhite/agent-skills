@@ -70,7 +70,7 @@ It must include:
 - The merge-approval handshake: name `references/merge-approval.md`, name yourself as the manager, give the engagement's approvals-file path and the wake address the runtime needs, and require the senior engineer to record a `REQUEST` and deliver it through the wake capability before merging, to wait for an `APPROVE` bound to the request ID and the current full head SHA, and to hand back blocked with the request ID, the PR, and the head SHA if it must stop.
 - The secrets rule (never write secrets to files or argv) and the attribution rule from `profile.git.ai_attribution`.
 - Its own subdirectory of the scratch directory, `<scratch>/senior-engineer/`, which you create and hand it in place of the scratch directory itself, never another role's files.
-- A "Track your work" paragraph: before starting, write a fine-grained checklist file in that subdirectory (`<scratch>/senior-engineer/senior-engineer-todo.md`, `- [ ]` and `- [x]` items, one per slice step, test, gate round, review round, remediation, deploy, verification, and wait, the current step marked `(in progress)`) and update it at every step.
+- A "Track your work" paragraph: before starting, write a fine-grained checklist file at the full path you give it in that subdirectory (`<scratch>/senior-engineer/senior-engineer-todo.md`, `- [ ]` and `- [x]` items, one per slice step, test, gate round, review round, remediation, deploy, verification, and wait, the current step marked `(in progress)`) and update it at every step.
 
 Let the senior engineer do the engineering.
 Do not pre-empt its implementation choices beyond the plan and constraints, and do not implement the fix yourself.

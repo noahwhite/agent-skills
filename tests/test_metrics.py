@@ -79,6 +79,12 @@ ROW_FIELDS = [
         "7. **Tool calls:** the tool-call count the runtime's usage report returns for that launch.",
         id="tool-call-count",
     ),
+    pytest.param(
+        "For a command launch, the role names what the command does (for example "
+        "`tracker-write preflight`), the runtime is `command`, and the model and the effort are "
+        "`not set`.",
+        id="command-launch-values",
+    ),
 ]
 FIGURE_RULES = [
     pytest.param(
@@ -102,6 +108,10 @@ FIGURE_RULES = [
     pytest.param(
         "Per figure (tokens and tool calls), the sum of the launch-scoped figures that were reported.",
         id="total-sum",
+    ),
+    pytest.param(
+        "A per-figure total with no reported launch-scoped figure reads `not reported`, never `0`.",
+        id="total-none-reported",
     ),
     pytest.param(
         "A total is labelled `partial`, with the count of launches not reported and the count "
@@ -166,16 +176,22 @@ TEMPLATE_BLOCK = [
     pytest.param(
         "| Role | Runtime | Model | Effort | Duration | Tokens | Tool calls |", id="row-header"
     ),
+    pytest.param("|---|---|---|---|---|---|---|", id="row-separator"),
+    pytest.param(
+        "| <role> | <runtime> | <model or not set> | <effort or not set> | <duration> | <tokens> "
+        "| <tool calls> |",
+        id="row-placeholder",
+    ),
     pytest.param("<one line per extra of this skill: name: value>", id="extra-lines"),
+    pytest.param("Totals", id="totals-heading"),
     pytest.param("- Elapsed wall-clock: <elapsed>", id="totals-elapsed"),
     pytest.param("- Tokens: <sum> [partial: <n> not reported, <n> cumulative]", id="totals-tokens"),
     pytest.param(
         "- Tool calls: <sum> [partial: <n> not reported, <n> cumulative]", id="totals-tool-calls"
     ),
-    pytest.param("Totals", id="totals-heading"),
 ]
 TEMPLATE_PLACEHOLDERS = {
-    "<skill>", "<story key>", "<end state or stop reason>", "<role>", "<runtime>", "<model>",
+    "<skill>", "<story key>", "<end state or stop reason>", "<role>", "<runtime>", "<model or not set>",
     "<effort or not set>", "<duration>", "<tokens>", "<tool calls>",
     "<one line per extra of this skill: name: value>", "<elapsed>", "<sum>", "<n>",
 }
@@ -193,6 +209,11 @@ TEMPLATE_PROSE = [
     pytest.param(
         "Rows are listed in launch order, so the n-th row for a role is that role's n-th launch.",
         id="template-launch-order",
+    ),
+    pytest.param(
+        "An extra with one value per QA round lists the values on its one line in round order, "
+        "as `round 1: <value>; round 2: <value>`.",
+        id="template-per-round-extra",
     ),
     pytest.param(
         "In a cell value, a `|` is written as `\\|` and a line break as a space.",
@@ -255,6 +276,13 @@ def test_story_to_done_extra(phrase):
 @pytest.mark.parametrize("phrase", TEMPLATE_BLOCK)
 def test_summary_template(phrase):
     assert phrase in template_block().splitlines(), f"missing template line: {phrase}"
+
+
+def test_summary_template_lines_are_in_order():
+    """TEMPLATE_BLOCK lists the template's lines in order; each appears once, in that order."""
+    lines = template_block().splitlines()
+    expected = [param.values[0] for param in TEMPLATE_BLOCK]
+    assert [line for line in lines if line in expected] == expected
 
 
 def test_summary_template_uses_only_the_listed_placeholders():

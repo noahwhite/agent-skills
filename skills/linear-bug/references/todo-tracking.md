@@ -32,6 +32,7 @@ Subagents use checklist files whether or not a runtime exposes a todo tool to th
 Every brief you hand a subagent includes a "Track your work" paragraph requiring a checklist file at `<scratch directory>/<agent-label>/<agent-label>-todo.md`.
 `<scratch directory>` is the one scratch directory the session created for its lifetime (`references/runtimes.md`, Scratch files), never a fixed path under the base directory, and `<agent-label>/` is the subdirectory you create inside it for that subagent.
 Hand a voter, engineer, or QA agent only its own subdirectory, never the session's scratch directory or another role's files (`references/runtimes.md`, Scratch files); its checklist lives in that subdirectory.
+The brief gives the checklist's full path, and the subagent writes it exactly there, without adding `<agent-label>/` to the directory it was handed.
 The checklist file has:
 
 - `- [ ]` and `- [x]` items, one per concrete step, with the current step marked `(in progress)`.

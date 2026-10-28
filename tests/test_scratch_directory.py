@@ -242,23 +242,27 @@ def test_todo_tracking_hands_each_delegated_role_only_its_own_subdirectory():
         "its checklist lives in that subdirectory."
     ) in section
     assert "read that file from the subagent's subdirectory and mirror it into your own todo list" in section
+    assert (
+        "The brief gives the checklist's full path, and the subagent writes it exactly there, "
+        "without adding `<agent-label>/` to the directory it was handed."
+    ) in section, "a handed subagent could nest its checklist one level deeper than the coordinator reads"
     assert "`<scratch directory>/<agent-label>-todo.md`" not in section, "the checklist moved into the subagent's subdirectory"
 
 
 # (skill, its delegation section, the delegated role's label). The coordinator creates the
 # role's subdirectory, hands it only that, and reads the checklist from inside it (SKL-44 A6).
 DELEGATED_ROLES = [
-    ("story-to-done", "## 2. Senior engineer", "senior-engineer"),
-    ("story-to-done", "## 3. QA agent", "qa-agent-round-<n>"),
-    ("persona-staff-engineer", "## 3. Delegate implementation", "senior-engineer"),
-    ("persona-staff-devops", "## 3. Delegate execution", "platform-engineer"),
+    ("story-to-done", "## 2. Senior engineer: implement to deployment review", "senior-engineer"),
+    ("story-to-done", "## 3. QA agent: verify the deployed story", "qa-agent-round-<n>"),
+    ("persona-staff-engineer", "## 3. Delegate implementation to a senior engineer", "senior-engineer"),
+    ("persona-staff-devops", "## 3. Delegate execution to a platform/SRE engineer", "platform-engineer"),
 ]
 
 
 def skill_section(skill: str, heading: str) -> str:
     text = (ROOT / "skills" / skill / "SKILL.md").read_text()
-    assert f"\n{heading}" in text, f"{skill} lost its section {heading!r}"
-    return text.split(f"\n{heading}", 1)[1].split("\n## ", 1)[0]
+    assert text.count(f"\n{heading}\n") == 1, f"{skill} lost its section {heading!r}"
+    return text.split(f"\n{heading}\n", 1)[1].split("\n## ", 1)[0]
 
 
 @pytest.mark.parametrize("skill,heading,label", DELEGATED_ROLES, ids=lambda v: str(v))
@@ -270,6 +274,9 @@ def test_delegation_briefs_hand_each_role_only_its_own_subdirectory(skill, headi
     )
     assert brief_item in section.splitlines(), f"{skill} {heading} does not hand {label} only its own subdirectory"
     assert f"`<scratch>/{label}/{label}-todo.md`" in section, f"{skill} {heading} keeps the checklist outside the subdirectory"
+    assert re.search(rf"checklist file at the full path you give it[^`]*`<scratch>/{re.escape(label)}/{re.escape(label)}-todo\.md`", section), (
+        f"{skill} {heading} does not give {label} the checklist's full path"
+    )
     assert f"`<scratch>/{label}-todo.md`" not in section, f"{skill} {heading} still names the session-level checklist"
 
 

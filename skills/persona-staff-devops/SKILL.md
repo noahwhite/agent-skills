@@ -80,7 +80,7 @@ It must include:
   Do not merge yet.
 - The secrets rule (never write secrets to files or argv) and the attribution rule from `profile.git.ai_attribution`.
 - Its own subdirectory of the scratch directory, `<scratch>/platform-engineer/`, which you create and hand it in place of the scratch directory itself, never another role's files.
-- A "Track your work" paragraph: before starting, write a fine-grained checklist file in that subdirectory (`<scratch>/platform-engineer/platform-engineer-todo.md`, `- [ ]` and `- [x]` items, one per IaC change, test, plan/apply, dispatch, gate round, review round, remediation, wait, and verification, the current step marked `(in progress)`) and update it at every step.
+- A "Track your work" paragraph: before starting, write a fine-grained checklist file at the full path you give it in that subdirectory (`<scratch>/platform-engineer/platform-engineer-todo.md`, `- [ ]` and `- [x]` items, one per IaC change, test, plan/apply, dispatch, gate round, review round, remediation, wait, and verification, the current step marked `(in progress)`) and update it at every step.
 
 Let the platform engineer do the engineering.
 Do not pre-empt its implementation choices beyond the design and constraints, and do not hand-edit the estate yourself.
