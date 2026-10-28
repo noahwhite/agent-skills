@@ -59,7 +59,7 @@ Where this file and a capability file disagree, the capability file is authorita
 ## Metrics
 
 Only when `metrics` is on, read [references/metrics.md](references/metrics.md) once the story ID is known: it is the single home for what a `story-to-done` run collects and reports, and this file does not restate it.
-With `metrics` on, timestamp the invocation's start when `metrics` resolves to on, before step 0; the elapsed wall-clock runs from it to the closing report.
+With `metrics` on, timestamp the invocation's start when `metrics` resolves to on, before step 0, and record it as `invocation_start`; the elapsed wall-clock runs from it to the closing report.
 From the start timestamp on, record a row for each command the coordinator launches, in launch order, timestamped immediately before and after the launch, with its usage figures recorded under `references/metrics.md` and `not reported` for any usage the runtime does not return.
 Take each timestamp inside the command it times; a start timestamp taken by a command of its own is that command's row, the first in the table.
 Give the summary, in the template `references/metrics.md` defines, in the closing report of every end state: Done, or any stop, including a stop before step 0 or before any senior engineer or QA agent is spawned.
