@@ -1,0 +1,177 @@
+# SKL-95 QA round 1 raw output (2026-10-28)
+
+## Build
+main HEAD: 90be48f92a93b4ac7cd2f1be4a6bc878b6c7653c
+PR #73 reviewed head: f78452e70fe498ae99d326ed1e5586bab6ff3396
+git diff --stat f78452e 90be48f (empty = same tree):
+
+## Files changed by PR #73 (7ecd8b6..90be48f)
+ README.md                     |   2 +-
+ skills/story-to-done/SKILL.md |  11 ++++-
+ tests/test_story_to_done.py   | 107 ++++++++++++++++++++++++++++++++++++++----
+ 3 files changed, 107 insertions(+), 13 deletions(-)
+
+## shared/, skills.json, scripts/, references/, test_scratch_directory.py changed by PR #73 (empty = none)
+
+## Guard tests unchanged: test_orchestrator_never_sets_the_story_state in diff?
+0
+
+## README row
+42:| [`story-to-done`](skills/story-to-done/SKILL.md) | Implement a story to deployment review with a senior engineer, QA it, and loop fixes until Done; a `metrics` switch, `off` by default, turns on run metrics, with the run summary given in the closing report. |
+
+## Metrics section (skills/story-to-done/SKILL.md)
+## Metrics
+
+Only when `metrics` is on, read [references/metrics.md](references/metrics.md) once the story ID is known: it is the single home for what a `story-to-done` run collects and reports, and this file does not restate it.
+With `metrics` on, timestamp the invocation's start when `metrics` resolves to on, before step 0; the elapsed wall-clock runs from it to the closing report.
+From the start timestamp on, record a row for each command the coordinator launches, in launch order, timestamped immediately before and after the launch, with its usage figures recorded under `references/metrics.md` and `not reported` for any usage the runtime does not return.
+Take each timestamp inside the command it times; a start timestamp taken by a command of its own is that command's row, the first in the table.
+Give the summary, in the template `references/metrics.md` defines, in the closing report of every end state: Done, or any stop, including a stop before step 0 or before any senior engineer or QA agent is spawned.
+The summary reads `no launches` only when the coordinator launched no role and no command; otherwise it has a row for each coordinator-launched command in launch order, the elapsed wall-clock, and the end state or stop reason.
+With `metrics` on, this skill does not yet record a row for a senior engineer or QA launch or record the `story-to-done` extras, and it posts no summary comment; this sentence overrides the reference's collection rules for those rows and extras and all of its posting rules.
+The coordinator makes no tracker write and never sets the story state.
+The closing report contains no secrets and no local or scratch paths.
+
+## uv run --locked pytest -q (at main 90be48f)
+.....................                                                    [100%]
+669 passed in 87.94s (0:01:27)
+
+## uv run --locked python scripts/vendor_shared.py --check
+exit=0
+
+## pytest tests/test_story_to_done.py tests/test_scratch_directory.py -v (SKL-95 tests and guards)
+tests/test_story_to_done.py::test_orchestrator_never_sets_the_story_state PASSED
+tests/test_story_to_done.py::test_arguments_table_adds_the_metrics_switch_off_by_default PASSED
+tests/test_story_to_done.py::test_metrics_switch_plain_words_are_mapped_or_asked PASSED
+tests/test_story_to_done.py::test_metrics_line_goes_in_the_todo_list_and_every_closing_report PASSED
+tests/test_story_to_done.py::test_manifest_appends_metrics_to_story_to_done PASSED
+tests/test_story_to_done.py::test_vendored_metrics_reference_carries_the_not_reported_rule PASSED
+tests/test_story_to_done.py::test_metrics_section_opens_on_only_and_links_the_reference PASSED
+tests/test_story_to_done.py::test_metrics_off_changes_nothing_but_the_metrics_line PASSED
+tests/test_story_to_done.py::test_readme_row_names_the_metrics_switch_and_its_default PASSED
+tests/test_story_to_done.py::test_metrics_start_is_timestamped_when_the_switch_resolves PASSED
+tests/test_story_to_done.py::test_closing_report_of_every_end_state_gives_the_summary_in_the_template PASSED
+tests/test_story_to_done.py::test_metrics_make_no_tracker_write PASSED
+tests/test_story_to_done.py::test_closing_report_carries_no_secrets_or_paths PASSED
+tests/test_story_to_done.py::test_readme_row_says_the_summary_is_given_in_the_closing_report PASSED
+tests/test_story_to_done.py::test_no_line_tells_the_coordinator_to_post_or_comment PASSED
+tests/test_scratch_directory.py::test_the_published_snippet_parses PASSED
+tests/test_scratch_directory.py::test_a_relative_base_falls_back_instead_of_escaping PASSED
+tests/test_scratch_directory.py::test_the_snippet_falls_back_when_mktemp_inside_the_base_fails PASSED
+tests/test_scratch_directory.py::test_the_snippet_fails_loudly_when_no_directory_can_be_created PASSED
+tests/test_scratch_directory.py::test_the_rule_no_longer_forbids_only_fixed_paths_under_tmp PASSED
+tests/test_scratch_directory.py::test_the_snippet_prints_the_directory_it_chose PASSED
+tests/test_scratch_directory.py::test_the_snippet_runs_with_scratch_base_unset_under_set_u PASSED
+tests/test_scratch_directory.py::test_snippet_creates_a_distinct_dir_inside_the_base PASSED
+tests/test_scratch_directory.py::test_snippet_creates_a_missing_base_instead_of_failing PASSED
+tests/test_scratch_directory.py::test_snippet_falls_back_to_a_standalone_dir_when_the_base_is_unset PASSED
+tests/test_scratch_directory.py::test_runtimes_rule_is_the_per_session_directory PASSED
+tests/test_scratch_directory.py::test_runtimes_rule_lets_a_handed_directory_serve_as_the_session_directory PASSED
+tests/test_scratch_directory.py::test_runtimes_rule_keeps_the_documented_fallback PASSED
+tests/test_scratch_directory.py::test_capability_row_calls_the_value_a_base_directory PASSED
+tests/test_scratch_directory.py::test_todo_tracking_routes_every_checklist_through_the_session_directory PASSED
+tests/test_scratch_directory.py::test_todo_tracking_hands_each_delegated_role_only_its_own_subdirectory PASSED
+tests/test_scratch_directory.py::test_delegation_briefs_hand_each_role_only_its_own_subdirectory[story-to-done-## 2. Senior engineer: implement to deployment review-senior-engineer] PASSED
+tests/test_scratch_directory.py::test_delegation_briefs_hand_each_role_only_its_own_subdirectory[story-to-done-## 3. QA agent: verify the deployed story-qa-agent-round-<n>] PASSED
+tests/test_scratch_directory.py::test_delegation_briefs_hand_each_role_only_its_own_subdirectory[persona-staff-engineer-## 3. Delegate implementation to a senior engineer-senior-engineer] PASSED
+tests/test_scratch_directory.py::test_delegation_briefs_hand_each_role_only_its_own_subdirectory[persona-staff-devops-## 3. Delegate execution to a platform/SRE engineer-platform-engineer] PASSED
+tests/test_scratch_directory.py::test_coordinators_read_each_checklist_from_the_subagent_subdirectory[story-to-done] PASSED
+tests/test_scratch_directory.py::test_coordinators_read_each_checklist_from_the_subagent_subdirectory[persona-staff-engineer] PASSED
+tests/test_scratch_directory.py::test_coordinators_read_each_checklist_from_the_subagent_subdirectory[persona-staff-devops] PASSED
+tests/test_scratch_directory.py::test_profile_reference_documents_the_scratch_base PASSED
+tests/test_scratch_directory.py::test_schema_calls_scratch_dir_a_base_and_keeps_it_optional PASSED
+tests/test_scratch_directory.py::test_no_doc_states_the_profile_must_set_the_scratch_dir PASSED
+tests/test_scratch_directory.py::test_no_doc_names_a_fixed_scratch_path_under_the_base PASSED
+tests/test_scratch_directory.py::test_vendored_runtimes_copies_carry_the_rule[adversarial-review-pipeline] PASSED
+tests/test_scratch_directory.py::test_vendored_runtimes_copies_carry_the_rule[cleanup] PASSED
+tests/test_scratch_directory.py::test_vendored_runtimes_copies_carry_the_rule[engineering-workflow] PASSED
+tests/test_scratch_directory.py::test_vendored_runtimes_copies_carry_the_rule[linear-bug] PASSED
+tests/test_scratch_directory.py::test_vendored_runtimes_copies_carry_the_rule[linear-epic] PASSED
+tests/test_scratch_directory.py::test_vendored_runtimes_copies_carry_the_rule[linear-investigation] PASSED
+tests/test_scratch_directory.py::test_vendored_runtimes_copies_carry_the_rule[linear-spike] PASSED
+tests/test_scratch_directory.py::test_vendored_runtimes_copies_carry_the_rule[linear-user-story] PASSED
+tests/test_scratch_directory.py::test_vendored_runtimes_copies_carry_the_rule[persona-architect] PASSED
+tests/test_scratch_directory.py::test_vendored_runtimes_copies_carry_the_rule[persona-platform-sre] PASSED
+tests/test_scratch_directory.py::test_vendored_runtimes_copies_carry_the_rule[persona-product-owner] PASSED
+tests/test_scratch_directory.py::test_vendored_runtimes_copies_carry_the_rule[persona-release-manager] PASSED
+tests/test_scratch_directory.py::test_vendored_runtimes_copies_carry_the_rule[persona-scrum-master] PASSED
+tests/test_scratch_directory.py::test_vendored_runtimes_copies_carry_the_rule[persona-staff-devops] PASSED
+tests/test_scratch_directory.py::test_vendored_runtimes_copies_carry_the_rule[persona-staff-engineer] PASSED
+tests/test_scratch_directory.py::test_vendored_runtimes_copies_carry_the_rule[qa-verification] PASSED
+tests/test_scratch_directory.py::test_vendored_runtimes_copies_carry_the_rule[story-refinement] PASSED
+tests/test_scratch_directory.py::test_vendored_runtimes_copies_carry_the_rule[story-to-done] PASSED
+tests/test_scratch_directory.py::test_vendor_check_passes PASSED
+tests/test_scratch_directory.py::test_snippet_falls_back_when_the_base_cannot_be_used PASSED
+
+## CI
+PR head f78452e:
+  checks success
+  discovery success
+  run 40730452808 success
+main 90be48f:
+  run 40731383320 push success
+
+## PR #73 reviews of record (head SHA, submitted)
+  review 5686348219 commit 0233d6e75642558a5a0f872d6268a6e397d1d80e at 2026-10-28T16:44:20Z
+  review 5686426494 commit 93a4cfb2c180a01222d68040557a7330ca3289eb at 2026-10-28T16:50:07Z
+  review 5686478167 commit e603b7475e07f2081691f78e57d312099a848a82 at 2026-10-28T16:53:57Z
+  review 5686526750 commit f78452e70fe498ae99d326ed1e5586bab6ff3396 at 2026-10-28T16:57:37Z
+  merged 2026-10-28T16:59:37Z head f78452e70fe498ae99d326ed1e5586bab6ff3396 merge 90be48f92a93b4ac7cd2f1be4a6bc878b6c7653c
+
+## C4 QA run (independent of the engineer's SKL-110 run)
+Fixture: SKL-111 "[Tabletop fixture] SKL-95 QA metrics=on stop before any role", created by QA in Blocked.
+Skill loaded from a detached checkout at f78452e70fe498ae99d326ed1e5586bab6ff3396 (PR #73 reviewed head; same tree as main 90be48f).
+Coordinator: a fresh, clean-context Claude Opus 5.5 agent, invoked as `/story-to-done SKL-111 metrics=on`, told only to load the skill from that checkout and follow it.
+
+Shell commands the coordinator launched (from its transcript, in order; paths removed):
+  1. date -u +%Y-%m-%dT%H:%M:%S.%3NZ                       (start timestamp)
+  2. timestamped env-override check + create scratch subdirectories
+  3. echo start $(date ...); linear issue view SKL-111; echo end $(date ...)
+  4. echo start $(date ...); echo end $(date ...)            (end timestamp)
+No other shell command and no tracker write; file reads and writes used the agent's file tools.
+
+Coordinator metrics file (per-row start/end timestamps):
+| # | Role | Start | End | Duration |
+| 1 | record run start timestamp | 2026-10-28T17:04:14.686Z | 2026-10-28T17:04:14.686Z | 0.000 s |
+| 2 | check runtime overrides and create scratch subdirectories | 2026-10-28T17:04:39.695Z | 2026-10-28T17:04:39.698Z | 0.003 s |
+| 3 | read story state with the linear CLI | 2026-10-28T17:04:45.111Z | 2026-10-28T17:04:45.618Z | 0.507 s |
+| 4 | record run end timestamp | 2026-10-28T17:05:00.045Z | 2026-10-28T17:05:00.046Z | 0.001 s |
+Invocation start 2026-10-28T17:04:14.686Z, end 2026-10-28T17:05:00.046Z, elapsed 45.360 s.
+
+Closing report, verbatim:
+-----
+SKL-111 stopped at step 1: the story is in Blocked, so no senior engineer or QA agent was spawned.
+
+- Story: SKL-111
+- Final state: Blocked (read with `linear issue view SKL-111`; I made no tracker write)
+- engineer-model: Sonnet 5.5 (claude-sonnet-5-5)
+- engineer-effort: high
+- qa-model: Opus 5.5 (claude-opus-5-5)
+- qa-effort: high
+- metrics: on
+- Stop reason: step 1 found the story in `profile.tracker.states.blocked` (Blocked). The skill says to report that state and stop.
+- PRs: none
+- QA rounds: 0, and no items were fixed
+- QA evidence: none recorded
+- Incidental defects: none
+
+Run metrics: story-to-done SKL-111 - stopped at step 1, story in Blocked
+
+| Role | Runtime | Model | Effort | Duration | Tokens | Tool calls |
+|---|---|---|---|---|---|---|
+| record run start timestamp | command | not set | not set | 0.000 s | not reported | not reported |
+| check runtime overrides and create scratch subdirectories | command | not set | not set | 0.003 s | not reported | not reported |
+| read story state with the linear CLI | command | not set | not set | 0.507 s | not reported | not reported |
+| record run end timestamp | command | not set | not set | 0.001 s | not reported | not reported |
+
+Totals
+- Elapsed wall-clock: 45.360 s
+- Tokens: not reported [partial: 4 not reported, 0 cumulative]
+- Tool calls: not reported [partial: 4 not reported, 0 cumulative]
+-----
+
+Fixture SKL-111 after the run, before cancel: state Blocked, 0 comments.
+Fixture SKL-111 after cancel (linear issue view SKL-111):
+**State:** Canceled | **Priority:** --- | **Assignee:** Unassigned | **Cycle:** #2 (now)
+Fixture SKL-110 (engineer's C4 run) (linear issue view SKL-110):
+**State:** Canceled | **Priority:** --- | **Assignee:** Unassigned | **Cycle:** #2 (now)
