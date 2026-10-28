@@ -26,7 +26,7 @@ The QA comment on SKL-44 (tracker comment `40a5b606`) cites the sanitized attach
 QA re-ran each A4 claim on the same versions.
 A Claude Code background subagent asked to run one command returned a usage block with `subagent_tokens`, `tool_uses` 2, and `duration_ms`, and no token breakdown.
 `codex exec --json` ended with `turn.completed` carrying `usage` with the five fields the bullet names, and no tool-call count or duration field.
-`opencode run --format json` emitted one `step_finish` per model step with `part.tokens` and one `tool_use` per tool call with millisecond start and end times, and no run total or tool-call count.
+`opencode run --format json` emitted one `step_finish` per model step with `part.tokens` and one `tool_use` per tool call, each event with a millisecond `timestamp`, and no run total or tool-call count.
 OpenCode V2 is not installed, which matches the cell's `not observed`.
 
 QA applied 13 spot mutants across `shared/metrics.md`, `shared/runtimes.md`, `shared/README.md`, `shared/todo-tracking.md`, and the three A6 skills, and each failed at least one named test.
