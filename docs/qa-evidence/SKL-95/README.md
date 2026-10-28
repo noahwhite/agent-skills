@@ -64,5 +64,5 @@ Advisory, not a verdict driver: the Metrics sentence that the skill does not yet
 
 ## Incidental findings, round 2
 
-The QA run printed eight `story-to-done` extras lines, although the Metrics section says the skill does not yet record them; SKL-96 adds them, and the template has a slot for them, so this is not ruled a C1 or C4 failure (see the advisory above).
+The QA run printed eight `story-to-done` extras lines, although the Metrics section says the skill does not yet record them; C1 says the extras are added by SKL-96, and the template has a slot for them, so this is not ruled a C1 or C4 failure (see the advisory above).
 The AC clarification proposed in tracker comment `1115a862` is now in the C1 text.

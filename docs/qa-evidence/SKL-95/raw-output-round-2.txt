@@ -200,11 +200,22 @@ Does not hold:
 - Elapsed line: the report gives invocation_end as 2026-10-28 20:18:31.469 UTC; the recorded invocation_end is 1793218712.469115491 = 2026-10-28T20:18:32.469Z (one second later). The stated end timestamp is not the recorded one.
 - Also observed: the report lists eight `story-to-done` extras lines, while SKILL.md line 97 says "With `metrics` on, this skill does not yet record ... the `story-to-done` extras".
 
-## Engineer's C4 re-run at c47ae61 (SKL-116, tracker comment 7d8889f1), Totals as recorded there
+## Engineer's C4 re-run at c47ae61 (SKL-116), closing report summary as quoted verbatim in tracker comment 7d8889f1
+Run metrics: story-to-done SKL-116 - stopped at step 1: story is Blocked
+
+| Role | Runtime | Model | Effort | Duration | Tokens | Tool calls |
+|---|---|---|---|---|---|---|
+| start (record invocation start) | command | not set | not set | 0.000879s | not reported | not reported |
+| check-runtime-overrides | command | not set | not set | 0.001525s | not reported | not reported |
+| read-story-state | command | not set | not set | 0.374288s | not reported | not reported |
+| end (record invocation end) | command | not set | not set | 0.001444s | not reported | not reported |
+
+Totals
 - Elapsed wall-clock: 26.886s (1793218198.428506630 to 1793218225.314579937, UTC epoch seconds)
 - Tokens: not reported
 - Tool calls: not reported
-(4 rows, every one `not reported` for tokens and tool calls; the partial note is absent here too. The engineer's comment itself notes the omission as a deviation from the template.)
+
+(4 rows, every one `not reported` for tokens and tool calls; the partial note is absent here too, and no extras lines appear between the table and Totals. The engineer's comment itself notes the partial-note omission as a deviation from the template.)
 For comparison, both round 1 runs at f78452e (SKL-110, SKL-111) gave "not reported [partial: 4 not reported, 0 cumulative]".
 
 ## Fixture read-back after the run
