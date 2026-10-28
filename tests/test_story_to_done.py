@@ -309,14 +309,22 @@ METRICS_COMMAND_ROWS = (
     "From then on, record a row for each command the coordinator launches, in launch order, with its usage "
     "figures recorded under `references/metrics.md` and `not reported` for any usage the runtime does not return."
 )
-METRICS_WRAPPER_FORM = (
-    's=$(date -u +%s.%N); { <command>; }; rc=$?; e=$(date -u +%s.%N); echo "$s $e <row label>" >> <metrics file>; '
-    "(exit $rc)"
+METRICS_WRAPPER_INTRO = (
+    "Launch every such command, the first included, in this wrapper, with the command's own lines in place of "
+    "`<command>`, a label without a single quote in place of `<row label>`, and the absolute path of one metrics "
+    "file kept for this invocation in its scratch directory in place of `<metrics file>`:"
 )
-METRICS_WRAPPER = (
-    "Launch every such command, the first included, as `" + METRICS_WRAPPER_FORM + "`, so it carries its own "
-    "start and end timestamps, taken immediately before and after its work, and keeps the command's exit status; "
-    "its duration is the end timestamp minus the start timestamp."
+METRICS_WRAPPER_BLOCK = [
+    "```sh",
+    "s=$(date -u +%s.%N); (",
+    "<command>",
+    "); rc=$?; e=$(date -u +%s.%N); printf '%s %s %s\\n' \"$s\" \"$e\" '<row label>' >> '<metrics file>'; (exit $rc)",
+    "```",
+]
+METRICS_WRAPPER_RULE = (
+    "The command runs in a subshell, so nothing it does can move or overwrite the wrapper's timestamps, and the "
+    "wrapper keeps its exit status; a command's duration is its end timestamp minus its start timestamp, and the "
+    "rows are reported in start-timestamp order."
 )
 METRICS_NEVER_UNTIMED = (
     "Never launch such a command unwrapped, never reuse one timestamp as both its start and its end, and never "
@@ -380,7 +388,9 @@ METRICS_LINES = [
     "collects and reports, and this file does not restate it.",
     METRICS_START,
     METRICS_COMMAND_ROWS,
-    METRICS_WRAPPER,
+    METRICS_WRAPPER_INTRO,
+    METRICS_WRAPPER_BLOCK[3],
+    METRICS_WRAPPER_RULE,
     METRICS_NEVER_UNTIMED,
     METRICS_CLOSING_REPORT,
     METRICS_NO_LAUNCHES,
@@ -437,40 +447,62 @@ def test_each_coordinator_command_gets_a_row_with_its_usage() -> None:
 
 def test_every_command_the_start_command_included_runs_in_the_timing_wrapper() -> None:
     body = metrics_body()
-    assert METRICS_WRAPPER in body
+    assert METRICS_WRAPPER_INTRO in body
+    assert METRICS_WRAPPER_RULE in body
     assert METRICS_NEVER_UNTIMED in body
 
 
 def skill_wrapper() -> str:
-    forms = re.findall(r"`(s=\$\(date[^`]*)`", metrics_body())
-    assert forms == [METRICS_WRAPPER_FORM], "the Metrics section must give exactly one timing wrapper"
-    return forms[0]
+    lines = section(SKILL.read_text(), "Metrics").splitlines()
+    starts = [i for i, line in enumerate(lines) if line.startswith("```")][::2]
+    assert len(starts) == 1, "the Metrics section must give exactly one timing wrapper"
+    block = lines[starts[0] : starts[0] + len(METRICS_WRAPPER_BLOCK)]
+    assert block == METRICS_WRAPPER_BLOCK, "the timing wrapper must be the pinned block"
+    return "\n".join(block[1:-1])
+
+
+def run_wrapper(tmp_path: Path, command: str, label: str = "probe") -> tuple[int, list[list[str]]]:
+    record = tmp_path / "a b" / "metrics.txt"
+    record.parent.mkdir(exist_ok=True)
+    script = skill_wrapper().replace("<command>", command).replace("<row label>", label)
+    script = script.replace("<metrics file>", str(record))
+    status = subprocess.run(["bash", "-c", script]).returncode
+    rows = [line.split(" ", 2) for line in record.read_text().splitlines()] if record.exists() else []
+    return status, rows
 
 
 def test_the_timing_wrapper_takes_distinct_start_and_end_timestamps_around_the_command(tmp_path: Path) -> None:
-    forms = [skill_wrapper()]
-    record = tmp_path / "metrics.txt"
     for label in ("start", "probe"):
-        script = (
-            forms[0]
-            .replace("<command>", "sleep 0.2")
-            .replace("<row label>", label)
-            .replace("<metrics file>", shlex.quote(str(record)))
-        )
-        subprocess.run(["bash", "-c", script], check=True)
-    rows = [line.split(" ", 2) for line in record.read_text().splitlines()]
-    assert [row[2] for row in rows] == ["start", "probe"], "each launch appends one row with its label"
-    for start, end, _ in rows:
+        assert run_wrapper(tmp_path, "sleep 0.2", label)[0] == 0
+    rows = run_wrapper(tmp_path, "true", "last")[1]
+    assert [row[2] for row in rows] == ["start", "probe", "last"], "each launch appends one row with its label"
+    for start, end, _ in rows[:2]:
         assert float(end) - float(start) >= 0.2, "the start and end timestamps must bracket the command"
 
 
 def test_the_timing_wrapper_keeps_the_command_exit_status(tmp_path: Path) -> None:
-    record = shlex.quote(str(tmp_path / "metrics.txt"))
-    for command, status in (("true", 0), ("false", 1), ("sh -c 'exit 7'", 7)):
-        script = skill_wrapper().replace("<command>", command).replace("<row label>", "probe")
-        result = subprocess.run(["bash", "-c", script.replace("<metrics file>", record) + "; echo status=$?"],
-                                capture_output=True, text=True, check=True)
-        assert result.stdout.strip() == f"status={status}", f"{command} must keep exit status {status}"
+    for command, status in (("true", 0), ("false", 1), ("sh -c 'exit 7'", 7), ("exit 3", 3), ("set -e; false; true", 1)):
+        assert run_wrapper(tmp_path, command)[0] == status, f"{command} must keep exit status {status}"
+
+
+def test_no_command_can_lose_or_corrupt_its_row(tmp_path: Path) -> None:
+    commands = [
+        "true # a trailing comment",
+        "true;",
+        "sleep 0.1 &",
+        "s=0; e=0; rc=0",
+        "date() { printf 0; }; printf() { :; }",
+        "PATH=/nonexistent",
+        "exec true",
+        "cd /",
+        "trap 'exit 9' EXIT",
+    ]
+    for command in commands:
+        status, rows = run_wrapper(tmp_path, command, "row $(printf injected)")
+        start, end, label = rows[-1]
+        assert label == "row $(printf injected)", f"{command}: the label is written literally"
+        assert float(end) >= float(start) > 1_000_000_000, f"{command}: both timestamps are real and ordered"
+    assert len(rows) == len(commands), "every launch writes exactly one row"
 
 
 def test_closing_report_of_every_end_state_gives_the_summary_in_the_template() -> None:
