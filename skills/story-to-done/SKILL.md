@@ -64,12 +64,14 @@ With `metrics` on, once `metrics` resolves to on and before step 0, the first la
 ```sh
 s=$(date -u +%s.%N)
 <scratch creation>
-printf 'start %s start\nend %s start\n' "$s" "$(date -u +%s.%N)" >> "$scratch/metrics.txt"; echo "$scratch"
+printf 'start %s start\nend %s start\n' "$s" "$(date -u +%s.%N)" >> "$scratch/metrics.txt"
 ```
 
 Its start timestamp is the invocation's start, its row, labelled `start`, is the first in the table, the elapsed wall-clock runs from that timestamp to the closing report, and `metrics.txt` in that directory is the `<metrics file>` of every later launch.
+A start form that exits non-zero has not recorded the `start` row, so the coordinator stops with that as the stop reason.
+Every path placed inside single quotes in the start form, the wrapper, or the recovery command has each of its own single quotes written as `'\''`.
 From then on, record a row for each command the coordinator launches, in launch order, with its usage figures recorded under `references/metrics.md` and `not reported` for any usage the runtime does not return.
-Launch every later command in this wrapper, with the command's own lines in place of `<command>`, a label unique within the invocation and without a single quote or a line break in place of `<row label>`, and the absolute path of that `metrics.txt`, without a single quote, in place of `<metrics file>`:
+Launch every later command in this wrapper, with the command's own lines in place of `<command>`, a label unique within the invocation and without a single quote or a line break in place of `<row label>`, and the absolute path of that `metrics.txt` in place of `<metrics file>`:
 
 ```sh
 f='<metrics file>'; o=$-; set +e; s=$(date -u +%s.%N); printf 'start %s %s\n' "$s" '<row label>' >> "$f"; ( case $o in *e*) set -e;; esac

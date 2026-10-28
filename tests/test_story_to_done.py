@@ -311,13 +311,21 @@ METRICS_START_BLOCK = [
     "```sh",
     "s=$(date -u +%s.%N)",
     "<scratch creation>",
-    "printf 'start %s start\\nend %s start\\n' \"$s\" \"$(date -u +%s.%N)\" >> \"$scratch/metrics.txt\"; echo \"$scratch\"",
+    "printf 'start %s start\\nend %s start\\n' \"$s\" \"$(date -u +%s.%N)\" >> \"$scratch/metrics.txt\"",
     "```",
 ]
 METRICS_START_RULE = (
     "Its start timestamp is the invocation's start, its row, labelled `start`, is the first in the table, the "
     "elapsed wall-clock runs from that timestamp to the closing report, and `metrics.txt` in that directory is "
     "the `<metrics file>` of every later launch."
+)
+METRICS_START_FAILED = (
+    "A start form that exits non-zero has not recorded the `start` row, so the coordinator stops with that as the "
+    "stop reason."
+)
+METRICS_QUOTED_PATHS = (
+    "Every path placed inside single quotes in the start form, the wrapper, or the recovery command has each of "
+    "its own single quotes written as `'\\''`."
 )
 METRICS_COMMAND_ROWS = (
     "From then on, record a row for each command the coordinator launches, in launch order, with its usage "
@@ -326,8 +334,7 @@ METRICS_COMMAND_ROWS = (
 METRICS_WRAPPER_INTRO = (
     "Launch every later command in this wrapper, with the command's own lines in place of "
     "`<command>`, a label unique within the invocation and without a single quote or a line break in place of "
-    "`<row label>`, and the absolute path of that `metrics.txt`, without a single quote, in place of "
-    "`<metrics file>`:"
+    "`<row label>`, and the absolute path of that `metrics.txt` in place of `<metrics file>`:"
 )
 METRICS_WRAPPER_BLOCK = [
     "```sh",
@@ -479,17 +486,59 @@ def metrics_blocks() -> list[list[str]]:
     return [lines[a : b + 1] for a, b in zip(fences[::2], fences[1::2])]
 
 
-def test_the_start_form_creates_the_scratch_directory_and_times_itself(tmp_path: Path) -> None:
+def runtimes_scratch_creation() -> str:
+    text = (ROOT / "skills" / "story-to-done" / "references" / "runtimes.md").read_text()
+    blocks = re.findall(r"```bash\n(.*?)```", text, re.DOTALL)
+    creation = [block for block in blocks if 'scratch="$(mktemp -d' in block]
+    assert len(creation) == 1, "references/runtimes.md must give exactly one scratch-directory creation"
+    return "\n".join(line.strip() for line in creation[0].splitlines())
+
+
+def start_form(creation: str) -> str:
     blocks = metrics_blocks()
     assert blocks[0] == METRICS_START_BLOCK, "the start form must be the first pinned block"
-    creation = f"scratch=$(mktemp -d -- '{tmp_path}/session.XXXXXX')"
-    script = "\n".join(blocks[0][1:-1]).replace("<scratch creation>", creation)
+    return "\n".join(blocks[0][1:-1]).replace("<scratch creation>", creation)
+
+
+def test_the_start_form_creates_the_scratch_directory_and_times_itself(tmp_path: Path) -> None:
+    body = metrics_body()
+    assert METRICS_START_FAILED in body
+    assert METRICS_QUOTED_PATHS in body
+    base = tmp_path / "base"
+    script = f"scratch_base='{base}'\n" + start_form(runtimes_scratch_creation())
     result = subprocess.run(["bash", "-c", script], capture_output=True, text=True, check=True)
+    assert len(result.stdout.splitlines()) == 1, "the start form prints the scratch path once"
     scratch = Path(result.stdout.strip())
-    assert scratch.parent == tmp_path and scratch.is_dir(), "the start form creates and prints the scratch directory"
+    assert scratch.parent == base and scratch.is_dir(), "the start form creates the scratch directory"
     rows = read_rows(scratch / "metrics.txt")
     assert [(kind, label) for kind, _, label in rows] == [("start", "start"), ("end", "start")]
     assert rows[1][1] >= rows[0][1] > 1_000_000_000, "the start row has its own ordered start and end timestamps"
+
+
+def quoted(path: Path) -> str:
+    return str(path).replace("'", "'\\''")
+
+
+def test_a_handed_directory_with_a_single_quote_is_timed(tmp_path: Path) -> None:
+    handed = tmp_path / "team's work"
+    handed.mkdir()
+    subprocess.run(["bash", "-c", start_form(f"scratch='{quoted(handed)}'")], check=True)
+    record = handed / "metrics.txt"
+    assert subprocess.run(["bash", "-c", wrapper_script(record, "true", "probe", quote=True)]).returncode == 0
+    assert [(kind, label) for kind, _, label in read_rows(record)] == [
+        ("start", "start"), ("end", "start"), ("start", "probe"), ("end", "probe")
+    ]
+
+
+def test_a_start_form_that_cannot_record_its_row_fails(tmp_path: Path) -> None:
+    handed = tmp_path / "read-only"
+    handed.mkdir()
+    handed.chmod(0o500)
+    try:
+        result = subprocess.run(["bash", "-c", start_form(f"scratch='{handed}'")], capture_output=True)
+    finally:
+        handed.chmod(0o700)
+    assert result.returncode != 0, "a start form that writes no start row must exit non-zero"
 
 
 def test_each_coordinator_command_gets_a_row_with_its_usage() -> None:
@@ -512,9 +561,9 @@ def skill_wrapper() -> str:
     return "\n".join(blocks[1][1:-1])
 
 
-def wrapper_script(record: Path, command: str, label: str) -> str:
+def wrapper_script(record: Path, command: str, label: str, quote: bool = False) -> str:
     script = skill_wrapper().replace("<command>", command, 1)
-    return script.replace("<row label>", label).replace("<metrics file>", str(record))
+    return script.replace("<row label>", label).replace("<metrics file>", quoted(record) if quote else str(record))
 
 
 def run_wrapper(record: Path, command: str, label: str = "probe", errexit: bool = False) -> int:
