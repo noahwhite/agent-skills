@@ -199,7 +199,11 @@ def test_runtimes_rule_is_the_per_session_directory():
 
 def test_runtimes_rule_lets_a_handed_directory_serve_as_the_session_directory():
     """SKL-44 A6: an engineer handed only its subdirectory keeps its gate dossiers inside it."""
-    assert "A subagent or agent handed a directory uses it as its own session's scratch directory instead of creating another." in rule_paragraph()
+    assert (
+        "A subagent or agent handed the session's directory or a subdirectory of it uses that as its own "
+        "session's scratch directory instead of creating another; a checkout or worktree it is handed to "
+        "work in is never its scratch directory."
+    ) in " ".join(rule_paragraph().split())
 
 
 def test_runtimes_rule_keeps_the_documented_fallback():
@@ -272,7 +276,7 @@ def test_delegation_briefs_hand_each_role_only_its_own_subdirectory(skill, headi
         f"- Its own subdirectory of the scratch directory, `<scratch>/{label}/`, which you create "
         "and hand it in place of the scratch directory itself, never another role's files."
     )
-    assert brief_item in section.splitlines(), f"{skill} {heading} does not hand {label} only its own subdirectory"
+    assert brief_item in " ".join(section.split()), f"{skill} {heading} does not hand {label} only its own subdirectory"
     assert f"`<scratch>/{label}/{label}-todo.md`" in section, f"{skill} {heading} keeps the checklist outside the subdirectory"
     assert re.search(rf"checklist file at the full path you give it[^`]*`<scratch>/{re.escape(label)}/{re.escape(label)}-todo\.md`", section), (
         f"{skill} {heading} does not give {label} the checklist's full path"

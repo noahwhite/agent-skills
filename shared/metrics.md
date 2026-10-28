@@ -22,7 +22,7 @@ Each row has these fields, in this order:
 6. **Tokens:** the token count the runtime's usage report returns for that launch.
 7. **Tool calls:** the tool-call count the runtime's usage report returns for that launch.
 
-For a command launch, the role names what the command does (for example `tracker-write preflight`), the runtime is `command`, and the model and the effort are `not set`.
+A launch of a shell command that fills no configured role names what the command does as its role, records `command` as its runtime, and records `not set` for its model and effort; a spawned role, including one that runs a tracker-write preflight, records its own configured runtime, model, and effort.
 
 What each runtime's usage report returns is in the "Read a subagent's usage (duration, tokens, tool calls)" row of `references/runtimes.md`, and for a shell-launched agent in its "Usage from shell-launched agents" rule.
 
@@ -30,6 +30,7 @@ What each runtime's usage report returns is in the "Read a subagent's usage (dur
 
 - Roles spawned inside a delegated role get no row; their usage counts only if the parent's figure is stated to include it.
 - A figure the runtime does not return is `not reported`; it is never estimated or inferred.
+- A figure the runtime returns only per step or per event, never as one figure for the launch, is `not reported`; summing the steps would infer it.
 - A resumed role's figures are recorded as returned.
   A figure that is cumulative over earlier launches is marked `cumulative` in its row and is excluded from the run total unless the runtime separately reports a launch-scoped figure.
 
@@ -82,7 +83,7 @@ Totals
 The heading line names the skill, the story key, and the invocation's end state or stop reason.
 Each launch gets one table row with the fields in the order above; a figure cell holds the number, `not reported`, or the number followed by `cumulative`.
 Rows are listed in launch order, so the n-th row for a role is that role's n-th launch.
-An extra with one value per QA round lists the values on its one line in round order, as `round 1: <value>; round 2: <value>`.
+An extra with one value per QA round lists the values on its one line in round order, as `round 1: <value>; round 2: <value>`, with a `;` inside a value written as `\;`.
 In a cell value, a `|` is written as `\|` and a line break as a space.
 The bracketed `partial` note appears only under the condition in Run totals.
 With no launches, the table is replaced by the line `no launches`, the elapsed wall-clock is still given, and each per-figure total reads `not applicable`.

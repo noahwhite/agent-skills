@@ -80,9 +80,10 @@ ROW_FIELDS = [
         id="tool-call-count",
     ),
     pytest.param(
-        "For a command launch, the role names what the command does (for example "
-        "`tracker-write preflight`), the runtime is `command`, and the model and the effort are "
-        "`not set`.",
+        "A launch of a shell command that fills no configured role names what the command does as "
+        "its role, records `command` as its runtime, and records `not set` for its model and effort; "
+        "a spawned role, including one that runs a tracker-write preflight, records its own "
+        "configured runtime, model, and effort.",
         id="command-launch-values",
     ),
 ]
@@ -95,6 +96,11 @@ FIGURE_RULES = [
     pytest.param(
         "A figure the runtime does not return is `not reported`; it is never estimated or inferred.",
         id="not-reported",
+    ),
+    pytest.param(
+        "A figure the runtime returns only per step or per event, never as one figure for the "
+        "launch, is `not reported`; summing the steps would infer it.",
+        id="per-step-not-reported",
     ),
     pytest.param("A resumed role's figures are recorded as returned.", id="resumed-as-returned"),
     pytest.param(
@@ -212,7 +218,7 @@ TEMPLATE_PROSE = [
     ),
     pytest.param(
         "An extra with one value per QA round lists the values on its one line in round order, "
-        "as `round 1: <value>; round 2: <value>`.",
+        "as `round 1: <value>; round 2: <value>`, with a `;` inside a value written as `\\;`.",
         id="template-per-round-extra",
     ),
     pytest.param(
@@ -493,6 +499,12 @@ def test_scratch_files_rule_no_longer_passes_the_session_directory():
         "pass the printed path to every subagent",
     ):
         assert removed not in bullet, removed
+    # Any rewording that hands the session directory to every subagent, agent, or voter.
+    handoff = re.compile(
+        r"\b(?:pass|hand|give)\w*\s+(?:the\s+)?(?:session(?:'s)?\s+(?:scratch\s+)?directory|printed\s+path)"
+        r"\s+to\s+(?:every|each|all)\s+(?!other\b)\w*\s*(?:subagent|agent|voter|engineer|qa)"
+    )
+    assert not handoff.search(bullet), handoff.search(bullet)
 
 
 def test_scratch_files_rule_passes_every_other_agent_the_session_directory():
@@ -520,16 +532,22 @@ def test_runtime_map_has_one_usage_row_with_two_cells():
 def test_usage_row_claude_code_cell_is_version_qualified():
     claude_cell = row_cells(usage_row())[1]
     assert_states(claude_cell, "Observed on 2.1.312:")
+    for field in ("`subagent_tokens`", "`tool_uses`", "`duration_ms`"):
+        assert field in claude_cell, f"the Claude Code observation lost {field}"
 
 
 def test_usage_row_opencode_cell_names_each_version_line():
     opencode_cell = row_cells(usage_row())[2]
     assert_states(opencode_cell, "V2 (2.1.2): `not observed`, not run.")
     assert_states(opencode_cell, "V1 (legacy, not V2 guidance), observed on 1.19.3:")
+    for field in ("`step_finish`", "`part.tokens`", "`tool_use`", "`timestamp`"):
+        assert field in opencode_cell, f"the OpenCode V1 observation lost {field}"
 
 
 def test_usage_bullet_states_codex_observations_with_version():
     assert_states(usage_bullet(), "For `runtime: codex`, observed on codex-cli 0.163.0:")
+    for field in ("`tokens used`", "`turn.completed`", "`usage`", "`command_execution`"):
+        assert field in usage_bullet(), f"the codex observation lost {field}"
 
 
 def test_usage_bullet_marks_other_codex_versions_not_observed():
