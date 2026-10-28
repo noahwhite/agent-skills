@@ -85,14 +85,14 @@ Read	<checkout>/skills/story-to-done/references/profile.md
 Read	<checkout>/skills/story-to-done/references/runtimes.md
 Bash	Create session scratch directory and record metrics start row
 Read	<checkout>/skills/story-to-done/references/todo-tracking.md
-Write	<scratch>/5f730594-todo.md
+Write	<scratch>/<todo>.md
 Bash	Check runtime model/effort overrides and available CLIs
-Edit	<scratch>/5f730594-todo.md
+Edit	<scratch>/<todo>.md
 Bash	Read Linear story SKL-117 and its state
 Read	<checkout>/skills/story-to-done/references/linear.md
-Edit	<scratch>/5f730594-todo.md
+Edit	<scratch>/<todo>.md
 Bash	Print metrics file and record the end row
-Edit	<scratch>/5f730594-todo.md
+Edit	<scratch>/<todo>.md
 SubagentHandback	
 
 ## C4 QA run: the four shell commands, sanitized (verbatim except local paths replaced by <scratch>)
