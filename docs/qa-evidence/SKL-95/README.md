@@ -66,3 +66,32 @@ Advisory, not a verdict driver: the Metrics sentence that the skill does not yet
 
 The QA run printed eight `story-to-done` extras lines, although the Metrics section says the skill does not yet record them; C1 says the extras are added by SKL-96, and the template has a slot for them, so this is not ruled a C1 or C4 failure (see the advisory above).
 The AC clarification proposed in tracker comment `1115a862` is now in the C1 text.
+
+# SKL-95 QA evidence, round 3, 2026-10-28
+
+The verified build is `a8e357d27fa1a4a5f24519aa08b18dc12f3a4846`, the squash merge of [PR #80](https://github.com/noahwhite/agent-skills/pull/80).
+Its head `d8bccfd256f3534fe386b8c8a58b64c38e01f57a` has the same tree as that build and carries the review of record (review 5690151662, posted before the merge).
+Verification used a clean clone of `main` at that build.
+The fixture is the disposable issue SKL-119, created Blocked and read back as Canceled after the run.
+The engineer's re-run on SKL-118 at `d8bccfd` (tracker comment `199eb1b7`) was also read, and its durations and elapsed recompute exactly from its posted metrics file.
+The full sanitized raw output is attached to the story as "SKL-95 QA round 3 raw output".
+
+Outcome: both round 2 items are fixed, and every acceptance criterion and Definition of Done item is met.
+
+| Item | Verdict | Evidence |
+|---|---|---|
+| C1 closing report | Verified | The end form now prints the table and the Totals lines from the metrics file, and the closing report copies that output verbatim under the heading line. In the QA run every row's duration and the elapsed `35.874609045s` equal the recorded end minus start, both timestamps are printed as recorded (`1793224672.119005048` to `1793224707.993614093`), and both Totals lines read `not reported [partial: 4 not reported, 0 cumulative]`. No extras line is printed, as the Metrics section defers the extras to SKL-96. |
+| C2 docs | Verified | No change to `README.md`, `shared/`, or any vendored reference since round 2; the README row verified in rounds 1 and 2 stands. |
+| C3 tests | Verified | `uv run --locked pytest -q` passes 736 tests and the vendor check exits 0. CI is green on the PR head (run 40774721399) and on `main` (run 40775498686). A QA spot-check of four mutations to the new end form and its rules failed named tests each time. |
+| C4 verified end to end | Verified | QA ran `story-to-done SKL-119 metrics=on` with a clean coordinator loading the skill from the clone. It read every file with a file tool, launched the start form first, and stopped at step 1 before any role. Its closing report has the heading line `Run metrics: story-to-done SKL-119 - stopped: story is in Blocked`, four rows in launch order matching its four shell commands, the exact elapsed, the totals block with the `partial` note, and the `metrics: on` line, with no path, no secret, and no tracker write. |
+| DoD all acceptance criteria met | Verified | C1 to C4 above. |
+| DoD tests written and passing | Verified | The C3 row. |
+| DoD independently reviewed | Verified | Review of record 5690151662 on the merged head `d8bccfd`: Codex GPT-6 Sol reviewer and DeepSeek V4 Pro adjudicator, as the repository profile configures; no blocking finding. |
+| DoD docs updated | Verified | The C2 row. |
+| DoD verified in staging | Not applicable | No environment exists; C4 stands in, as the story states. |
+| DoD no critical bugs or regressions | Verified | The suite and CI pass at `main`. |
+
+## Incidental findings, round 3
+
+The PR #80 review of record quotes the reviewer's links verbatim, so it carries local scratch paths in a public repository.
+The five non-blocking review findings recorded in the PR #80 body (nanosecond exactness past about 104 days, the undeclared `awk` dependency, two test gaps, and the start-timestamp versus first-appearance order wording) remain open.
