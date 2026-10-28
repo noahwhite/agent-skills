@@ -71,7 +71,7 @@ Its start timestamp is the invocation's start, recorded as `invocation_start`, i
 A start form that exits non-zero has not recorded the `start` row, so the coordinator stops with that as the stop reason.
 Every path placed inside single quotes in the start form, the wrapper, the recovery command, or the end form has each of its own single quotes written as `'\''`.
 From then on, record a row for each command the coordinator launches, in launch order, with its usage figures recorded under `references/metrics.md` and `not reported` for any usage the runtime does not return.
-Launch every later command in this wrapper, with the command's own lines in place of `<command>`, a label unique within the invocation and without a single quote, a `|`, or a line break in place of `<row label>`, and the absolute path of that `metrics.txt` in place of `<metrics file>`:
+Launch every later command in this wrapper, with the command's own lines in place of `<command>`, a label unique within the invocation, other than `start` and `end`, and without a single quote, a `|`, or a line break in place of `<row label>`, and the absolute path of that `metrics.txt` in place of `<metrics file>`:
 
 ```sh
 f='<metrics file>'; o=$-; set +e; s=$(date -u +%s.%N); printf 'start %s %s\n' "$s" '<row label>' >> "$f"; ( case $o in *e*) set -e;; esac
@@ -94,17 +94,17 @@ END {
   print "| Role | Runtime | Model | Effort | Duration | Tokens | Tool calls |"
   print "|---|---|---|---|---|---|---|"
   for (i = 1; i <= n; i++) { k = order[i]; d = ((("start", k) in at) && (("end", k) in at)) ? span(at["start", k], at["end", k]) : "lost"; printf "| %s | command | not set | not set | %s | not reported | not reported |\n", k, d }
-  a = (("start", "start") in at) ? at["start", "start"] : "not recorded"; z = at["end", "end"]
+  a = (("start", "start") in at) ? at["start", "start"] : "not recorded"; z = (("end", "end") in at) ? at["end", "end"] : "not recorded"
   print ""
   print "Totals"
-  printf "- Elapsed wall-clock: %s (%s to %s)\n", (a == "not recorded" ? "not reported" : span(a, z)), a, z
+  printf "- Elapsed wall-clock: %s (%s to %s)\n", (a == "not recorded" || z == "not recorded" ? "not reported" : span(a, z)), a, z
   printf "- Tokens: not reported [partial: %d not reported, 0 cumulative]\n", n
   printf "- Tool calls: not reported [partial: %d not reported, 0 cumulative]\n", n
 }' '<metrics file>'
 ```
 
 Its `end` timestamp is recorded as `invocation_end`, and from the metrics file it prints the summary's table, one row per label in the order the labels first appear, with its own row, labelled `end`, last, and then the Totals lines, with each duration and the elapsed wall-clock from `invocation_start` to `invocation_end` worked out exactly from the recorded timestamps, each timestamp given as recorded, and every row counted as `not reported` in the `partial` note.
-A launch whose label lacks a `start` or an `end` line in the metrics file has lost its row, and the end form gives that row `lost` in place of a duration; an end form that exits non-zero has printed no summary, so the closing report gives the heading line and then `summary lost: the end form exited non-zero` in its place.
+A launch whose label lacks a `start` or an `end` line in the metrics file has lost its row, and the end form gives that row `lost` in place of a duration; the output of an end form that exits non-zero is discarded, and the closing report gives the heading line and then `summary lost: the end form exited non-zero` in place of the summary.
 The summary in the closing report is the template's heading line, a blank line, and then the end form's output copied verbatim: no line is added, reworded, or left out, and no duration, timestamp, or total is recomputed or converted, so the summary has no extras line.
 Give the summary, in the template `references/metrics.md` defines, in the closing report of every end state: Done, or any stop, including a stop before step 0 or before any senior engineer or QA agent is spawned.
 The summary reads `no launches` only when the coordinator launched no role and no command; otherwise it has a row for each coordinator-launched command in launch order, the elapsed wall-clock, and the end state or stop reason.

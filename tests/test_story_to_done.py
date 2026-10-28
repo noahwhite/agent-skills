@@ -338,8 +338,8 @@ METRICS_COMMAND_ROWS = (
 )
 METRICS_WRAPPER_INTRO = (
     "Launch every later command in this wrapper, with the command's own lines in place of "
-    "`<command>`, a label unique within the invocation and without a single quote, a `|`, or a line break in place of "
-    "`<row label>`, and the absolute path of that `metrics.txt` in place of `<metrics file>`:"
+    "`<command>`, a label unique within the invocation, other than `start` and `end`, and without a single quote, a `|`, "
+    "or a line break in place of `<row label>`, and the absolute path of that `metrics.txt` in place of `<metrics file>`:"
 )
 METRICS_WRAPPER_BLOCK = [
     "```sh",
@@ -389,10 +389,10 @@ METRICS_END_BLOCK = [
     '  for (i = 1; i <= n; i++) { k = order[i]; d = ((("start", k) in at) && (("end", k) in at)) ? '
     'span(at["start", k], at["end", k]) : "lost"; '
     'printf "| %s | command | not set | not set | %s | not reported | not reported |\\n", k, d }',
-    '  a = (("start", "start") in at) ? at["start", "start"] : "not recorded"; z = at["end", "end"]',
+    '  a = (("start", "start") in at) ? at["start", "start"] : "not recorded"; z = (("end", "end") in at) ? at["end", "end"] : "not recorded"',
     '  print ""',
     '  print "Totals"',
-    '  printf "- Elapsed wall-clock: %s (%s to %s)\\n", (a == "not recorded" ? "not reported" : span(a, z)), a, z',
+    '  printf "- Elapsed wall-clock: %s (%s to %s)\\n", (a == "not recorded" || z == "not recorded" ? "not reported" : span(a, z)), a, z',
     '  printf "- Tokens: not reported [partial: %d not reported, 0 cumulative]\\n", n',
     '  printf "- Tool calls: not reported [partial: %d not reported, 0 cumulative]\\n", n',
     "}' '<metrics file>'",
@@ -407,8 +407,9 @@ METRICS_END_RULE = (
 )
 METRICS_LOST_ROW = (
     "A launch whose label lacks a `start` or an `end` line in the metrics file has lost its row, and the end form "
-    "gives that row `lost` in place of a duration; an end form that exits non-zero has printed no summary, so the "
-    "closing report gives the heading line and then `summary lost: the end form exited non-zero` in its place."
+    "gives that row `lost` in place of a duration; the output of an end form that exits non-zero is discarded, and the "
+    "closing report gives the heading line and then `summary lost: the end form exited non-zero` in place of the "
+    "summary."
 )
 METRICS_END_VERBATIM = (
     "The summary in the closing report is the template's heading line, a blank line, and then the end form's output "
@@ -702,7 +703,8 @@ def test_a_failed_metrics_write_shows_an_error_and_keeps_the_exit_status(tmp_pat
 
 
 def test_the_end_form_is_the_last_pinned_block() -> None:
-    assert metrics_blocks()[2] == METRICS_END_BLOCK, "the end form must be the last pinned block"
+    blocks = metrics_blocks()
+    assert len(blocks) == 3 and blocks[2] == METRICS_END_BLOCK, "the end form must be the last pinned block"
 
 
 def end_form(record: Path) -> str:
@@ -776,22 +778,47 @@ def test_the_end_form_names_lost_rows_and_a_missing_start(tmp_path: Path, awk: s
         "end 1793218213.5 only an end\n"
     )
     result = run_end_form(record, awk, tmp_path)
-    assert result.returncode == 0
+    assert result.returncode == 0 and result.stderr == ""
     end = recorded(record)["end", "end"]
     rows = [("killed", "lost"), ("orphan end", "1.999999998s"), ("only an end", "lost"),
             ("end", seconds(recorded(record)["start", "end"], end))]
     assert result.stdout == expected_summary(rows, "not recorded", end, "not reported")
 
 
-def test_the_end_form_works_out_durations_exactly() -> None:
+@pytest.mark.parametrize("awk", AWKS)
+def test_a_run_that_stops_after_the_start_form_has_two_rows(tmp_path: Path, awk: str) -> None:
+    subprocess.run(["bash", "-c", start_form(f"scratch='{quoted(tmp_path)}'")], check=True)
+    record = tmp_path / "metrics.txt"
+    result = run_end_form(record, awk, tmp_path)
+    assert result.returncode == 0 and result.stderr == ""
+    stamps = recorded(record)
+    rows = [(label, seconds(stamps["start", label], stamps["end", label])) for label in ("start", "end")]
+    start, end = stamps["start", "start"], stamps["end", "end"]
+    assert result.stdout == expected_summary(rows, start, end, seconds(start, end))
+
+
+def end_form_program() -> str:
     script = "\n".join(metrics_blocks()[2][1:-1])
-    program = script[script.index("awk '") + 5 : script.rindex("' '<metrics file>'")]
+    return script[script.index("awk '") + 5 : script.rindex("' '<metrics file>'")]
+
+
+def test_the_end_form_works_out_durations_exactly() -> None:
     assert AWKS, "no awk to run the end form with"
     stamps = "start 1793218198.999999999 start\nend 1793218200.000000001 start\nstart 1793218225.1 end\nend 1793218225.2 end\n"
+    rows = [("start", "1.000000002s"), ("end", "0.100000000s")]
+    expected = expected_summary(rows, "1793218198.999999999", "1793218225.2", "26.200000001s")
     for awk in AWKS:
-        result = subprocess.run([awk, program], input=stamps, capture_output=True, text=True, check=True)
-        assert "| start | command | not set | not set | 1.000000002s |" in result.stdout, awk
-        assert "- Elapsed wall-clock: 26.200000001s (1793218198.999999999 to 1793218225.2)" in result.stdout, awk
+        result = subprocess.run([awk, end_form_program()], input=stamps, capture_output=True, text=True, check=True)
+        assert result.stdout == expected, awk
+
+
+def test_a_missing_end_row_leaves_the_elapsed_not_reported() -> None:
+    stamps = "start 1793218198.000000000 start\nend 1793218199.000000000 start\n"
+    rows = [("start", "1.000000000s")]
+    expected = expected_summary(rows, "1793218198.000000000", "not recorded", "not reported")
+    for awk in AWKS:
+        result = subprocess.run([awk, end_form_program()], input=stamps, capture_output=True, text=True, check=True)
+        assert result.stdout == expected, awk
 
 
 def test_an_end_form_that_cannot_record_its_row_fails(tmp_path: Path) -> None:
