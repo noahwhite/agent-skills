@@ -70,7 +70,7 @@ Checkout restored; git status clean.
 
 ## C4 QA run: fixture
 $ linear issue create --team SKL --state Blocked --title "[Tabletop fixture] SKL-95 QA round 2 metrics=on stop before any role"
-https://linear.app/officina-pub/issue/SKL-117/tabletop-fixture-skl-95-qa-round-2-metricson-stop-before-any-role
+Created SKL-117 (issue URL omitted: it names the tracker workspace)
 $ linear issue view SKL-117   (before the run)
 **State:** Blocked
 
