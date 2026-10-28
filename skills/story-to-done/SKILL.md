@@ -82,9 +82,16 @@ f='<metrics file>'; o=$-; set +e; s=$(date -u +%s.%N); printf 'start %s %s\n' "$
 The command runs in a subshell, so its assignments, function definitions, `cd`, `exec`, traps and `PATH` changes cannot move the wrapper's timestamps, and the wrapper keeps both the command's exit status and an inherited `set -e`; apart from the recovery command below, a command never writes to the metrics file.
 A command's duration is its `end` timestamp minus its `start` timestamp, and the rows are reported in start-timestamp order.
 If a command is killed before it writes its `end` line, the coordinator's very next launch, made as soon as the kill is reported and even when no other launch would follow, is a wrapped command whose `<command>` is `printf 'end %s %s\n' "$(date -u +%s.%N)" '<killed row label>' >> '<metrics file>'`, for a label that has a `start` line and no `end` line; that end timestamp is taken after the killed launch returned, and the recovery command gets a row of its own.
-Never launch a command outside the start form or the wrapper, never reuse one timestamp as both its start and its end, and never report a command's duration as `not reported`.
+Never launch a command outside the start form, the wrapper, or the end form below, never reuse one timestamp as both its start and its end, and never report a command's duration as `not reported`.
 A wrapped launch whose output shows an error writing the metrics file has lost its row, so the coordinator stops with that as the stop reason.
-Immediately before the closing report, the last launch is a wrapped command labelled `end` whose `<command>` is `true`; its `end` timestamp is recorded as `invocation_end`, and the elapsed wall-clock runs from `invocation_start` to `invocation_end`.
+Immediately before the closing report, the last launch is this end form, with the absolute path of that `metrics.txt` in place of `<metrics file>`:
+
+```sh
+s=$(date -u +%s.%N); printf 'start %s end\nend %s end\n' "$s" "$(date -u +%s.%N)" >> '<metrics file>' && cat '<metrics file>'
+```
+
+Its `end` timestamp is recorded as `invocation_end`, the elapsed wall-clock runs from `invocation_start` to `invocation_end`, and the closing report's rows are read from its output, where its own row, labelled `end`, is the last.
+A launch whose label lacks a `start` or an `end` line in that output, or an end form that exits non-zero, has lost its row, and the closing report names each lost row and gives it no duration.
 Give the summary, in the template `references/metrics.md` defines, in the closing report of every end state: Done, or any stop, including a stop before step 0 or before any senior engineer or QA agent is spawned.
 The summary reads `no launches` only when the coordinator launched no role and no command; otherwise it has a row for each coordinator-launched command in launch order, the elapsed wall-clock, and the end state or stop reason.
 With `metrics` on, this skill does not yet record a row for a senior engineer or QA launch or record the `story-to-done` extras, and it posts no summary comment; this sentence overrides the reference's collection rules for those rows and extras and all of its posting rules.

@@ -359,17 +359,32 @@ METRICS_KILLED = (
     "recovery command gets a row of its own."
 )
 METRICS_NEVER_UNTIMED = (
-    "Never launch a command outside the start form or the wrapper, never reuse one timestamp as both its start and its end, and never "
+    "Never launch a command outside the start form, the wrapper, or the end form below, never reuse one timestamp "
+    "as both its start and its end, and never "
     "report a command's duration as `not reported`."
 )
 METRICS_WRITE_FAILED = (
     "A wrapped launch whose output shows an error writing the metrics file has lost its row, so the coordinator "
     "stops with that as the stop reason."
 )
-METRICS_INVOCATION_END = (
-    "Immediately before the closing report, the last launch is a wrapped command labelled `end` whose `<command>` "
-    "is `true`; its `end` timestamp is recorded as `invocation_end`, and the elapsed wall-clock runs from "
-    "`invocation_start` to `invocation_end`."
+METRICS_END_INTRO = (
+    "Immediately before the closing report, the last launch is this end form, with the absolute path of that "
+    "`metrics.txt` in place of `<metrics file>`:"
+)
+METRICS_END_BLOCK = [
+    "```sh",
+    "s=$(date -u +%s.%N); printf 'start %s end\\nend %s end\\n' \"$s\" \"$(date -u +%s.%N)\" >> '<metrics file>' "
+    "&& cat '<metrics file>'",
+    "```",
+]
+METRICS_END_RULE = (
+    "Its `end` timestamp is recorded as `invocation_end`, the elapsed wall-clock runs from `invocation_start` to "
+    "`invocation_end`, and the closing report's rows are read from its output, where its own row, labelled `end`, "
+    "is the last."
+)
+METRICS_LOST_ROW = (
+    "A launch whose label lacks a `start` or an `end` line in that output, or an end form that exits non-zero, has "
+    "lost its row, and the closing report names each lost row and gives it no duration."
 )
 METRICS_CLOSING_REPORT = (
     "Give the summary, in the template `references/metrics.md` defines, in the closing report of every end "
@@ -438,7 +453,10 @@ METRICS_LINES = [
     METRICS_KILLED,
     METRICS_NEVER_UNTIMED,
     METRICS_WRITE_FAILED,
-    METRICS_INVOCATION_END,
+    METRICS_END_INTRO,
+    *[line for line in METRICS_END_BLOCK if METRICS_WORDS.search(line)],
+    METRICS_END_RULE,
+    METRICS_LOST_ROW,
     METRICS_CLOSING_REPORT,
     METRICS_NO_LAUNCHES,
     METRICS_ON_SCOPE,
@@ -561,12 +579,14 @@ def test_every_launch_runs_in_the_start_form_or_the_timing_wrapper() -> None:
     assert METRICS_KILLED in body
     assert METRICS_NEVER_UNTIMED in body
     assert METRICS_WRITE_FAILED in body
-    assert METRICS_INVOCATION_END in body
+    assert METRICS_END_INTRO in body
+    assert METRICS_END_RULE in body
+    assert METRICS_LOST_ROW in body
 
 
 def skill_wrapper() -> str:
     blocks = metrics_blocks()
-    assert len(blocks) == 2, "the Metrics section must give exactly the start form and one timing wrapper"
+    assert len(blocks) == 3, "the Metrics section gives exactly the start form, one wrapper and the end form"
     assert blocks[1] == METRICS_WRAPPER_BLOCK, "the timing wrapper must be the pinned block"
     return "\n".join(blocks[1][1:-1])
 
@@ -648,6 +668,35 @@ def test_a_failed_metrics_write_shows_an_error_and_keeps_the_exit_status(tmp_pat
         assert result.returncode == status, f"{command}: the wrapper keeps the command's exit status"
         errors = [line for line in result.stderr.splitlines() if str(record) in line]
         assert len(errors) == 2, f"{command}: the failed start and end writes each show an error naming the file"
+
+
+def end_form(record: Path) -> str:
+    blocks = metrics_blocks()
+    assert blocks[2] == METRICS_END_BLOCK, "the end form must be the last pinned block"
+    return "\n".join(blocks[2][1:-1]).replace("<metrics file>", quoted(record))
+
+
+def test_the_end_form_times_itself_last_and_prints_every_row(tmp_path: Path) -> None:
+    handed = tmp_path / "session"
+    handed.mkdir()
+    subprocess.run(["bash", "-c", start_form(f"scratch='{quoted(handed)}'")], check=True)
+    record = handed / "metrics.txt"
+    assert run_wrapper(record, "sleep 0.1", "probe") == 0
+    result = subprocess.run(["bash", "-c", end_form(record)], capture_output=True, text=True, check=True)
+    assert result.stdout == record.read_text(), "the end form prints the whole metrics file after its own row"
+    rows = read_rows(record)
+    assert [(kind, label) for kind, _, label in rows] == [
+        ("start", "start"), ("end", "start"), ("start", "probe"), ("end", "probe"), ("start", "end"), ("end", "end")
+    ]
+    assert rows[5][1] >= rows[4][1] >= rows[3][1], "invocation_end is the last timestamp, after its own start"
+
+
+def test_an_end_form_that_cannot_record_its_row_fails(tmp_path: Path) -> None:
+    blocker = tmp_path / "not a directory"
+    blocker.write_text("")
+    result = subprocess.run(["bash", "-c", end_form(blocker / "metrics.txt")], capture_output=True, text=True)
+    assert "metrics.txt" in result.stderr and result.stdout == ""
+    assert result.returncode != 0, "an end form that writes no row must exit non-zero"
 
 
 def test_a_killed_command_keeps_its_start_line_and_the_recovery_writes_its_end(tmp_path: Path) -> None:
