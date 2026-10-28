@@ -303,9 +303,10 @@ METRICS_ON_SCOPE = (
     "rules for those rows and extras and all of its posting rules."
 )
 METRICS_START = (
-    "With `metrics` on, once `metrics` resolves to on and before step 0, the first launch creates the session's "
-    "scratch directory in this start form, with the scratch-directory creation from `references/runtimes.md`, or "
-    "`scratch='<directory you were handed>'` when you were handed one, in place of `<scratch creation>`:"
+    "With `metrics` on, once `metrics` resolves to on and before step 0 or any reference is read, the very next "
+    "launch creates the session's scratch directory in this start form, with the scratch-directory creation from "
+    "`references/runtimes.md`, or `scratch='<directory you were handed>'` when you were handed one, in place of "
+    "`<scratch creation>`:"
 )
 METRICS_START_BLOCK = [
     "```sh",
