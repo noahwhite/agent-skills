@@ -1384,3 +1384,22 @@ def test_read_first_authority_rule_is_unchanged() -> None:
         "Where this file and a capability file disagree, the capability file is authoritative, except the "
         "non-voting facilitator rule, the independence rules, and the anchoring guardrail here, which always override."
     ) in skill_section("Read first")
+
+
+@pytest.mark.parametrize(
+    "sentence",
+    [
+        "With `metrics` off or omitted, the facilitator does not open `references/metrics.md`, collects no figure, creates no metrics scratch file, posts no metrics comment, and adds no metrics content to any brief, record, report, todo list, closing message, or tracker write, other than the `metrics: off` line.",
+        "Every other metrics instruction in this skill applies only when `metrics` is on.",
+    ],
+)
+def test_arguments_section_states_the_off_path(sentence: str) -> None:
+    assert sentence in skill_section(ARGUMENTS)
+
+
+def test_metrics_mentions_outside_the_permitted_sections_are_absent() -> None:
+    """B2: outside Arguments, Metrics, and Closing message, the skill text never mentions metrics."""
+    text = re.sub(r"<!--.*?-->", "", SKILL.read_text(), flags=re.DOTALL)
+    for heading in (ARGUMENTS, METRICS, CLOSING):
+        text = text.replace(f"## {heading}\n" + section(SKILL.read_text(), heading), "")
+    assert "metric" not in text.lower()

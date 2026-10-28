@@ -34,6 +34,9 @@ Any other phrasing about metrics is asked about, never guessed.
 - Resolve both arguments, asking about any ambiguity, before the todo list is created.
 - Write the resolved value as one line `metrics: on` or `metrics: off` at the top of the todo list and in the closing message.
 
+With `metrics` off or omitted, the facilitator does not open `references/metrics.md`, collects no figure, creates no metrics scratch file, posts no metrics comment, and adds no metrics content to any brief, record, report, todo list, closing message, or tracker write, other than the `metrics: off` line.
+Every other metrics instruction in this skill applies only when `metrics` is on.
+
 ## Read first
 
 - [references/profile.md](references/profile.md) - find the profile and this skill's overlay before anything else.
