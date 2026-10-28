@@ -124,6 +124,10 @@ FIGURE_RULES = [
         id="total-elapsed-not-reported",
     ),
     pytest.param(
+        "When `invocation_end` was not recorded, the elapsed wall-clock also reads `not reported`.",
+        id="total-elapsed-no-end-not-reported",
+    ),
+    pytest.param(
         "Per figure (tokens and tool calls), the sum of the launch-scoped figures that were reported.",
         id="total-sum",
     ),
@@ -251,6 +255,20 @@ TEMPLATE_PROSE = [
         id="template-no-launches",
     ),
 ]
+
+
+NEVER_FROM_FILE_TIMES = (
+    "Elapsed is computed from those two recorded timestamps only, never from file, directory, "
+    "or log times, and is never estimated."
+)
+
+
+def test_run_totals_gives_elapsed_no_other_time_source():
+    section = flat(metrics_prose().split("### Run totals", 1)[1].split("\n### ", 1)[0])
+    assert flat(NEVER_FROM_FILE_TIMES) in section
+    rest = section.replace(flat(NEVER_FROM_FILE_TIMES), "").lower()
+    for source in ("file time", "file, directory", "directory time", "log time", "mtime", "modification time", "creation", "estimat", "infer"):
+        assert source not in rest, f"Run totals names another elapsed source: {source}"
 
 
 def test_metrics_reference_exists():

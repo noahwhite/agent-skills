@@ -1427,11 +1427,11 @@ def test_todo_tracking_seed_collects_metrics_only_when_the_switch_is_on() -> Non
 def test_todo_tracking_seed_lists_invocation_start_first_among_metrics_on_items() -> None:
     seed = next(line for line in (ROOT / "shared" / "todo-tracking.md").read_text().splitlines()
                 if line.startswith("- **story-refinement:**"))
-    metrics_on = seed[seed.index("only when the `metrics` switch is on"):]
-    assert metrics_on.index("record invocation start (metrics on)") < metrics_on.index("collect metrics")
+    metrics_on = seed[seed.index("only when the `metrics` switch is on, ") + len("only when the `metrics` switch is on, "):]
+    assert metrics_on.startswith("record invocation start (metrics on)")
 
 
 def test_invocation_start_is_the_first_action_after_the_switch_resolves() -> None:
-    section = skill_section(ARGUMENTS)
-    assert section.index("record it as `invocation_start`") > section.index("Resolve both arguments")
-    assert "before the todo list" in section[section.index("When `metrics` resolves on"):]
+    bullets = [line for line in section(SKILL.read_text(), ARGUMENTS).splitlines() if line.startswith("- ")]
+    resolve = next(i for i, line in enumerate(bullets) if line.startswith("- Resolve both arguments"))
+    assert bullets[resolve + 1].startswith("- When `metrics` resolves on, the facilitator's next action, before the todo list,")
