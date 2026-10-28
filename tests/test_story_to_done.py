@@ -505,7 +505,7 @@ def test_the_start_form_creates_the_scratch_directory_and_times_itself(tmp_path:
     assert METRICS_START_FAILED in body
     assert METRICS_QUOTED_PATHS in body
     base = tmp_path / "base"
-    script = f"scratch_base='{base}'\n" + start_form(runtimes_scratch_creation())
+    script = f"scratch_base='{quoted(base)}'\n" + start_form(runtimes_scratch_creation())
     result = subprocess.run(["bash", "-c", script], capture_output=True, text=True, check=True)
     assert len(result.stdout.splitlines()) == 1, "the start form prints the scratch path once"
     scratch = Path(result.stdout.strip())
@@ -531,13 +531,11 @@ def test_a_handed_directory_with_a_single_quote_is_timed(tmp_path: Path) -> None
 
 
 def test_a_start_form_that_cannot_record_its_row_fails(tmp_path: Path) -> None:
-    handed = tmp_path / "read-only"
-    handed.mkdir()
-    handed.chmod(0o500)
-    try:
-        result = subprocess.run(["bash", "-c", start_form(f"scratch='{handed}'")], capture_output=True)
-    finally:
-        handed.chmod(0o700)
+    handed = tmp_path / "not a directory"
+    handed.write_text("")
+    script = start_form(f"scratch='{quoted(handed)}'")
+    result = subprocess.run(["bash", "-c", script], capture_output=True, text=True)
+    assert "metrics.txt" in result.stderr, "the start row's write is what fails"
     assert result.returncode != 0, "a start form that writes no start row must exit non-zero"
 
 
