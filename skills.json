@@ -95,7 +95,8 @@
     "story-refinement": [
       "linear",
       "todo-tracking",
-      "engineering-practice"
+      "engineering-practice",
+      "metrics"
     ],
     "story-to-done": [
       "todo-tracking",

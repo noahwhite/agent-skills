@@ -14,7 +14,7 @@ RECORD = ROOT / "skills" / "story-refinement" / "references" / "refinement-recor
 SCHEMA = json.loads((ROOT / "profile" / "schema.json").read_text())
 MANIFEST = json.loads((ROOT / "skills.json").read_text())
 
-GENERATED_REFERENCES = ["profile", "runtimes", "linear", "todo-tracking", "engineering-practice"]
+GENERATED_REFERENCES = ["profile", "runtimes", "linear", "todo-tracking", "engineering-practice", "metrics"]
 
 REQUIRED_PHRASES = [
     "profile.refinement.facilitator",
@@ -137,6 +137,7 @@ def test_manifest_registers_skill() -> None:
         "linear",
         "todo-tracking",
         "engineering-practice",
+        "metrics",
     ]
 
 
@@ -1307,3 +1308,79 @@ def test_arguments_section_precedes_read_first() -> None:
 )
 def test_closing_message_is_defined_on_every_end_state_and_stop(sentence: str) -> None:
     assert sentence in skill_section(CLOSING)
+
+
+def test_vendored_metrics_reference_is_present() -> None:
+    copy = ROOT / "skills" / "story-refinement" / "references" / "metrics.md"
+    assert copy.is_file()
+    assert copy.read_text().endswith((ROOT / "shared" / "metrics.md").read_text())
+
+
+def test_no_other_skill_lists_metrics() -> None:
+    assert [name for name, caps in MANIFEST["skills"].items() if "metrics" in caps] == ["story-refinement"]
+
+
+def test_metrics_reference_is_linked_from_the_metrics_section_and_not_read_first() -> None:
+    assert "[references/metrics.md](references/metrics.md)" in section(SKILL.read_text(), METRICS)
+    assert "references/metrics.md" not in section(SKILL.read_text(), "Read first")
+
+
+def test_metrics_section_opens_with_the_on_only_condition() -> None:
+    assert skill_section(METRICS).startswith("This section applies only when `metrics` is on.")
+
+
+@pytest.mark.parametrize(
+    "sentence",
+    [
+        # B3: one line each, as the reference defines them.
+        "Figures live only in one metrics file in the session's scratch directory, outside every per-role subdirectory.",
+        "The metrics file is never named in any brief.",
+        "A figure the runtime does not return is `not reported`; it is never estimated or inferred.",
+        # B3: timing.
+        "Time every launch the facilitator spawns, including each re-launch.",
+        "Take the start timestamp immediately before the launch and the end timestamp when the launch returns.",
+        # B4: independence.
+        "Add no metrics of this invocation and no other role's figures from this invocation to any voter brief, voter input, SM/EM sizing context, refinement comment, Accept round result comment, or pointing, unpointed, or split record; story comments posted by an earlier invocation stay part of the story surface.",
+        # B4: the summary in the closing message.
+        "The closing message carries the run summary in the template `references/metrics.md` defines, on every end state and every stop, with every field filled or labelled as that reference defines (`not reported`, `cumulative`, `partial`, or, when the invocation performed no launch, `no launches` with `not applicable` totals), and the stop reason where the run stopped.",
+        "The summary contains no secrets and no local or scratch paths.",
+        # B4: no post, as an exception to "Read first".
+        "This skill does not post the summary on the story, and the posting steps in `references/metrics.md` (its Posting section and its `story-refinement` order) do not apply to it.",
+        'This is an exception to the "Read first" rule that a capability file is authoritative.',
+    ],
+)
+def test_metrics_section_states_the_bindings(sentence: str) -> None:
+    assert sentence in skill_section(METRICS)
+
+
+@pytest.mark.parametrize(
+    "launch",
+    [
+        "the tracker-write preflight",
+        "each Step 1 voter launch",
+        "each PO launch that authors or applies a tracker write or record",
+        "each accept-round voter launch, including the re-refine accept round",
+        "each Step 3 pointing launch, including the re-run after a re-refine",
+        "each Step 4 discussion launch",
+        "each Step 4 re-vote launch",
+        "each Step 4 no-consensus path-decision launch",
+        "each anchoring recovery re-launch",
+        "each slice estimate launch",
+    ],
+)
+def test_metrics_section_names_each_timed_launch_kind(launch: str) -> None:
+    timed = bullet(section(SKILL.read_text(), METRICS), "Timed launches")
+    assert flat(launch) in timed
+
+
+def test_metrics_section_does_not_restate_the_reference() -> None:
+    body = section(SKILL.read_text(), METRICS)
+    for phrase in ("| Role | Runtime |", "Run metrics: <skill>", "Accept rounds:", "Pointing rounds:"):
+        assert phrase not in body, phrase
+
+
+def test_read_first_authority_rule_is_unchanged() -> None:
+    assert (
+        "Where this file and a capability file disagree, the capability file is authoritative, except the "
+        "non-voting facilitator rule, the independence rules, and the anchoring guardrail here, which always override."
+    ) in skill_section("Read first")
