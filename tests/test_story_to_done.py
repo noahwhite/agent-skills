@@ -2,6 +2,8 @@
 
 import json
 import re
+import shlex
+import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -299,15 +301,24 @@ METRICS_ON_SCOPE = (
     "rules for those rows and extras and all of its posting rules."
 )
 METRICS_START = (
-    "With `metrics` on, timestamp the invocation's start when `metrics` resolves to on, before step 0; the "
-    "elapsed wall-clock runs from it to the closing report."
+    "With `metrics` on, once `metrics` resolves to on and before step 0, launch a command that records the "
+    "invocation's start; its own start timestamp is the invocation's start, its row is the first in the table, "
+    "and the elapsed wall-clock runs from that timestamp to the closing report."
 )
 METRICS_COMMAND_ROWS = (
-    "From the start timestamp on, record a row for each command the coordinator launches, in launch order, "
-    "timestamped immediately before and after the launch, with its usage figures recorded under "
-    "`references/metrics.md` and `not reported` for any usage the runtime does not return."
+    "From then on, record a row for each command the coordinator launches, in launch order, with its usage "
+    "figures recorded under `references/metrics.md` and `not reported` for any usage the runtime does not return."
 )
-METRICS_TIMESTAMP_COMMANDS = "Take each timestamp inside the command it times; a start timestamp taken by a command of its own is that command's row, the first in the table."
+METRICS_WRAPPER_FORM = 's=$(date -u +%s.%N); { <command>; }; e=$(date -u +%s.%N); echo "$s $e <row label>" >> <metrics file>'
+METRICS_WRAPPER = (
+    "Launch every such command, the first included, as `" + METRICS_WRAPPER_FORM + "`, so it carries its own "
+    "start and end timestamps, taken immediately before and after its work; its duration is the end timestamp "
+    "minus the start timestamp."
+)
+METRICS_NEVER_UNTIMED = (
+    "Never launch such a command unwrapped, never reuse one timestamp as both its start and its end, and never "
+    "report a command's duration as `not reported`."
+)
 METRICS_CLOSING_REPORT = (
     "Give the summary, in the template `references/metrics.md` defines, in the closing report of every end "
     "state: Done, or any stop, including a stop before step 0 or before any senior engineer or QA agent is spawned."
@@ -366,7 +377,8 @@ METRICS_LINES = [
     "collects and reports, and this file does not restate it.",
     METRICS_START,
     METRICS_COMMAND_ROWS,
-    METRICS_TIMESTAMP_COMMANDS,
+    METRICS_WRAPPER,
+    METRICS_NEVER_UNTIMED,
     METRICS_CLOSING_REPORT,
     METRICS_NO_LAUNCHES,
     METRICS_ON_SCOPE,
@@ -416,10 +428,32 @@ def test_metrics_start_is_timestamped_when_the_switch_resolves() -> None:
     assert METRICS_START in metrics_body()
 
 
-def test_each_coordinator_command_gets_a_timed_row_with_its_usage() -> None:
+def test_each_coordinator_command_gets_a_row_with_its_usage() -> None:
+    assert METRICS_COMMAND_ROWS in metrics_body()
+
+
+def test_every_command_the_start_command_included_runs_in_the_timing_wrapper() -> None:
     body = metrics_body()
-    assert METRICS_COMMAND_ROWS in body
-    assert METRICS_TIMESTAMP_COMMANDS in body
+    assert METRICS_WRAPPER in body
+    assert METRICS_NEVER_UNTIMED in body
+
+
+def test_the_timing_wrapper_takes_distinct_start_and_end_timestamps_around_the_command(tmp_path: Path) -> None:
+    forms = re.findall(r"`(s=\$\(date[^`]*)`", metrics_body())
+    assert forms == [METRICS_WRAPPER_FORM], "the Metrics section must give exactly one timing wrapper"
+    record = tmp_path / "metrics.txt"
+    for label in ("start", "probe"):
+        script = (
+            forms[0]
+            .replace("<command>", "sleep 0.2")
+            .replace("<row label>", label)
+            .replace("<metrics file>", shlex.quote(str(record)))
+        )
+        subprocess.run(["bash", "-c", script], check=True)
+    rows = [line.split(" ", 2) for line in record.read_text().splitlines()]
+    assert [row[2] for row in rows] == ["start", "probe"], "each launch appends one row with its label"
+    for start, end, _ in rows:
+        assert float(end) - float(start) >= 0.2, "the start and end timestamps must bracket the command"
 
 
 def test_closing_report_of_every_end_state_gives_the_summary_in_the_template() -> None:
