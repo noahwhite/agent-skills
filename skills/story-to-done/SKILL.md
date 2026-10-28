@@ -57,7 +57,7 @@ Where this file and a capability file disagree, the capability file is authorita
 Once the story ID is known and the profile is read, before step 1, create a fine-grained todo list per `references/todo-tracking.md`.
 Seed it with at least: resolve the arguments, read the story state, spawn the senior engineer, each check on its checklist until it hands back, read back the deployment-review state, each QA round, each read-back of QA's resulting state, each failed item handed back, each fix round, and the final state read-back.
 Add an item for every new round the moment it starts, and mark each item done the moment its outcome is observed.
-Every subagent brief requires a checklist file in the scratch directory; mirror that file into your list whenever you check on the subagent.
+Every subagent brief requires a checklist file in that subagent's own subdirectory of the scratch directory; read it from there and mirror it into your list whenever you check on the subagent.
 If your own todo tool is unavailable, use the primary-session checklist fallback in `references/todo-tracking.md`; do not block on the missing tool.
 
 ## 1. Read the story and pick the starting point
@@ -86,7 +86,8 @@ It must include:
 - What to hand back: the story state, each PR link, the head SHA each PR's review of record covered, the merged commit, and the environment and deployed build it verified; or, if it stops, that it is blocked and why.
 - The merge rules: a review of record binds only to the exact head it reviewed, so any change to the head, including an update-branch, needs a delta review posted before merging; every merge must run the merge guard in `references/code-review.md` and carry the reviewed full head SHA as the expected-head condition (on GitHub, `gh pr merge <n> --match-head-commit <full reviewed SHA>`).
 - The secrets rule (never write secrets to files or argv) and the attribution rule from `profile.git.ai_attribution`.
-- A "Track your work" paragraph: before starting, write a fine-grained checklist file in the scratch directory (for example `<scratch>/senior-engineer-todo.md`, `- [ ]` and `- [x]` items, one per slice step, test, gate round, review round, remediation, deploy, verification, and wait, the current step marked `(in progress)`) and update it at every step.
+- Its own subdirectory of the scratch directory, `<scratch>/senior-engineer/`, which you create and hand it in place of the scratch directory itself, never another role's files.
+- A "Track your work" paragraph: before starting, write a fine-grained checklist file at the full path you give it in that subdirectory (`<scratch>/senior-engineer/senior-engineer-todo.md`, `- [ ]` and `- [x]` items, one per slice step, test, gate round, review round, remediation, deploy, verification, and wait, the current step marked `(in progress)`) and update it at every step.
 
 This skill assigns merge approval to no manager, so `engineering-workflow`'s own merge rules apply.
 Let the senior engineer do the engineering; do not pre-empt its choices.
@@ -109,7 +110,8 @@ Brief it as a QA agent, with only:
 - An instruction to load and follow `qa-verification` for the story, including its evidence and its closing status decision.
 - What to hand back: the story's final state, the verdict and evidence for each AC and DoD item, any item left outstanding with its owner, any incidental defect it noted, and each PR it merged with the head SHA its review of record covered.
 - The merge rules: a review of record binds only to the exact head it reviewed, so any change to the head, including an update-branch, needs a delta review posted before merging; every merge must run the merge guard in `references/code-review.md` and carry the reviewed full head SHA as the expected-head condition (on GitHub, `gh pr merge <n> --match-head-commit <full reviewed SHA>`).
-- The secrets rule and a "Track your work" paragraph (checklist file `<scratch>/qa-agent-round-<n>-todo.md`).
+- Its own subdirectory of the scratch directory, `<scratch>/qa-agent-round-<n>/`, which you create and hand it in place of the scratch directory itself, never another role's files.
+- The secrets rule and a "Track your work" paragraph (checklist file at the full path you give it, `<scratch>/qa-agent-round-<n>/qa-agent-round-<n>-todo.md`).
 
 Never give it the senior engineer's handback beyond the environment, the PR's rationale, the fixes made, an earlier round's verdicts, or the verdict you expect.
 

@@ -197,6 +197,15 @@ def test_runtimes_rule_is_the_per_session_directory():
     assert "a base only, never the directory a session works in" in body
 
 
+def test_runtimes_rule_lets_a_handed_directory_serve_as_the_session_directory():
+    """SKL-44 A6: an engineer handed only its subdirectory keeps its gate dossiers inside it."""
+    assert (
+        "A subagent or agent handed the session's directory or a subdirectory of it uses that as its own "
+        "session's scratch directory instead of creating another; a checkout or worktree it is handed to "
+        "work in is never its scratch directory."
+    ) in " ".join(rule_paragraph().split())
+
+
 def test_runtimes_rule_keeps_the_documented_fallback():
     """AC5: the fallback stands - no base directory means a standalone `mktemp -d`."""
     body = rule_paragraph()
@@ -211,12 +220,77 @@ def test_capability_row_calls_the_value_a_base_directory():
     assert "`$CLAUDE_JOB_DIR/tmp`" in row, "the claude background-job base entry stays"
 
 
+def subagents_section() -> str:
+    text = TODO_TRACKING.read_text()
+    assert "\n## Subagents\n" in text, "shared/todo-tracking.md lost its Subagents section"
+    return text.split("\n## Subagents\n", 1)[1].split("\n## ", 1)[0]
+
+
 def test_todo_tracking_routes_every_checklist_through_the_session_directory():
     text = TODO_TRACKING.read_text()
-    assert "`<scratch directory>/<agent-label>-todo.md`, where `<scratch directory>` is the one scratch directory the session created for its lifetime" in text
+    section = subagents_section()
+    assert "requiring a checklist file at `<scratch directory>/<agent-label>/<agent-label>-todo.md`." in section
+    assert "`<scratch directory>` is the one scratch directory the session created for its lifetime" in section
+    assert "`<agent-label>/` is the subdirectory you create inside it for that subagent." in section
     assert "`<scratch directory>/<session-label>-todo.md`" in text
     assert "never a fixed path under the base" in text
     assert "$CLAUDE_JOB_DIR" not in text
+
+
+def test_todo_tracking_hands_each_delegated_role_only_its_own_subdirectory():
+    """SKL-44 A6: a voter, engineer, or QA gets its own subdirectory, and its checklist lives there."""
+    section = subagents_section()
+    assert (
+        "Hand a voter, engineer, or QA agent only its own subdirectory, never the session's scratch "
+        "directory or another role's files (`references/runtimes.md`, Scratch files); "
+        "its checklist lives in that subdirectory."
+    ) in section
+    assert "read that file from the subagent's subdirectory and mirror it into your own todo list" in section
+    assert (
+        "The brief gives the checklist's full path, and the subagent writes it exactly there, "
+        "without adding `<agent-label>/` to the directory it was handed."
+    ) in section, "a handed subagent could nest its checklist one level deeper than the coordinator reads"
+    assert "`<scratch directory>/<agent-label>-todo.md`" not in section, "the checklist moved into the subagent's subdirectory"
+
+
+# (skill, its delegation section, the delegated role's label). The coordinator creates the
+# role's subdirectory, hands it only that, and reads the checklist from inside it (SKL-44 A6).
+DELEGATED_ROLES = [
+    ("story-to-done", "## 2. Senior engineer: implement to deployment review", "senior-engineer"),
+    ("story-to-done", "## 3. QA agent: verify the deployed story", "qa-agent-round-<n>"),
+    ("persona-staff-engineer", "## 3. Delegate implementation to a senior engineer", "senior-engineer"),
+    ("persona-staff-devops", "## 3. Delegate execution to a platform/SRE engineer", "platform-engineer"),
+]
+
+
+def skill_section(skill: str, heading: str) -> str:
+    text = (ROOT / "skills" / skill / "SKILL.md").read_text()
+    assert text.count(f"\n{heading}\n") == 1, f"{skill} lost its section {heading!r}"
+    return text.split(f"\n{heading}\n", 1)[1].split("\n## ", 1)[0]
+
+
+@pytest.mark.parametrize("skill,heading,label", DELEGATED_ROLES, ids=lambda v: str(v))
+def test_delegation_briefs_hand_each_role_only_its_own_subdirectory(skill, heading, label):
+    section = skill_section(skill, heading)
+    brief_item = (
+        f"- Its own subdirectory of the scratch directory, `<scratch>/{label}/`, which you create "
+        "and hand it in place of the scratch directory itself, never another role's files."
+    )
+    assert brief_item in " ".join(section.split()), f"{skill} {heading} does not hand {label} only its own subdirectory"
+    assert f"`<scratch>/{label}/{label}-todo.md`" in section, f"{skill} {heading} keeps the checklist outside the subdirectory"
+    assert re.search(rf"checklist file at the full path you give it[^`]*`<scratch>/{re.escape(label)}/{re.escape(label)}-todo\.md`", section), (
+        f"{skill} {heading} does not give {label} the checklist's full path"
+    )
+    assert f"`<scratch>/{label}-todo.md`" not in section, f"{skill} {heading} still names the session-level checklist"
+
+
+@pytest.mark.parametrize("skill", ["story-to-done", "persona-staff-engineer", "persona-staff-devops"])
+def test_coordinators_read_each_checklist_from_the_subagent_subdirectory(skill):
+    section = skill_section(skill, "## 0. Track everything on a todo list")
+    assert (
+        "requires a checklist file in that subagent's own subdirectory of the scratch directory; "
+        "read it from there and mirror it into your list whenever you check on the subagent."
+    ) in section, f"{skill} step 0 does not read the checklist from the subagent's subdirectory"
 
 
 def test_profile_reference_documents_the_scratch_base():
