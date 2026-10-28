@@ -59,7 +59,13 @@ Where this file and a capability file disagree, the capability file is authorita
 ## Metrics
 
 Only when `metrics` is on, read [references/metrics.md](references/metrics.md) once the story ID is known: it is the single home for what a `story-to-done` run collects and reports, and this file does not restate it.
-With `metrics` on, this skill does not yet take any figure, write a metrics file, add totals to a report, or post a summary, and this sentence overrides the reference's collection, totals, and posting rules: the run adds only the `metrics: on` line, and the coordinator makes no tracker write.
+With `metrics` on, timestamp the invocation's start when `metrics` resolves to on, before step 0; the elapsed wall-clock runs from it to the closing report.
+Record a row for each command the coordinator launches, in launch order, timestamped immediately before and after the launch, with its usage figures recorded under `references/metrics.md` and `not reported` for any usage the runtime does not return.
+Give the summary, in the template `references/metrics.md` defines, in the closing report of every end state: Done, or any stop in steps 1 to 4, including a stop before any senior engineer or QA agent is spawned.
+The summary reads `no launches` only when the coordinator launched no role and no command; otherwise it has a row for each coordinator-launched command in launch order, the elapsed wall-clock, and the end state or stop reason.
+With `metrics` on, this skill does not yet record a row for a senior engineer or QA launch, record the `story-to-done` extras, or post a summary, and this sentence overrides the reference's collection and posting rules for them.
+The coordinator makes no tracker write and never sets the story state.
+The closing report contains no secrets and no local or scratch paths.
 
 ## 0. Track everything on a todo list
 

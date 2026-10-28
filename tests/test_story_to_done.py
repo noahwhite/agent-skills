@@ -292,11 +292,32 @@ def test_metrics_line_goes_in_the_todo_list_and_every_closing_report() -> None:
 
 
 METRICS_OPENING = "Only when `metrics` is on, read [references/metrics.md](references/metrics.md)"
+# SKL-95: the closing-report summary; SKL-96 adds the engineer and QA launch rows and the extras.
 METRICS_ON_SCOPE = (
-    "With `metrics` on, this skill does not yet take any figure, write a metrics file, add totals to a report, "
-    "or post a summary, and this sentence overrides the reference's collection, totals, and posting rules: "
-    "the run adds only the `metrics: on` line, and the coordinator makes no tracker write."
+    "With `metrics` on, this skill does not yet record a row for a senior engineer or QA launch, record the "
+    "`story-to-done` extras, or post a summary, and this sentence overrides the reference's collection and "
+    "posting rules for them."
 )
+METRICS_START = (
+    "With `metrics` on, timestamp the invocation's start when `metrics` resolves to on, before step 0; the "
+    "elapsed wall-clock runs from it to the closing report."
+)
+METRICS_COMMAND_ROWS = (
+    "Record a row for each command the coordinator launches, in launch order, timestamped immediately before "
+    "and after the launch, with its usage figures recorded under `references/metrics.md` and `not reported` "
+    "for any usage the runtime does not return."
+)
+METRICS_CLOSING_REPORT = (
+    "Give the summary, in the template `references/metrics.md` defines, in the closing report of every end "
+    "state: Done, or any stop in steps 1 to 4, including a stop before any senior engineer or QA agent is spawned."
+)
+METRICS_NO_LAUNCHES = (
+    "The summary reads `no launches` only when the coordinator launched no role and no command; otherwise it "
+    "has a row for each coordinator-launched command in launch order, the elapsed wall-clock, and the end "
+    "state or stop reason."
+)
+METRICS_NO_TRACKER_WRITE = "The coordinator makes no tracker write and never sets the story state."
+METRICS_NO_SECRETS = "The closing report contains no secrets and no local or scratch paths."
 
 
 def test_manifest_appends_metrics_to_story_to_done() -> None:
@@ -342,6 +363,10 @@ METRICS_LINES = [
     "## Metrics",
     METRICS_OPENING + " once the story ID is known: it is the single home for what a `story-to-done` run "
     "collects and reports, and this file does not restate it.",
+    METRICS_START,
+    METRICS_COMMAND_ROWS,
+    METRICS_CLOSING_REPORT,
+    METRICS_NO_LAUNCHES,
     METRICS_ON_SCOPE,
     "Report the story identifier, its final state, the four resolved model and effort values and the "
     "`metrics: on|off` line, each PR, the number of QA rounds with the items fixed in each, where QA recorded "
@@ -371,3 +396,44 @@ def test_readme_row_names_the_metrics_switch_and_its_default() -> None:
         if line.startswith("| [`story-to-done`](skills/story-to-done/SKILL.md) |")
     )
     assert "a `metrics` switch, `off` by default" in row
+
+
+def metrics_body() -> str:
+    return " ".join(section(SKILL.read_text(), "Metrics").split())
+
+
+def test_metrics_start_is_timestamped_when_the_switch_resolves() -> None:
+    assert METRICS_START in metrics_body()
+
+
+def test_each_coordinator_command_gets_a_timed_row_with_its_usage() -> None:
+    assert METRICS_COMMAND_ROWS in metrics_body()
+
+
+def test_closing_report_of_every_end_state_gives_the_summary_in_the_template() -> None:
+    body = metrics_body()
+    assert METRICS_CLOSING_REPORT in body
+    assert "in the template `references/metrics.md` defines" in body
+
+
+def test_summary_reads_no_launches_only_without_any_launch() -> None:
+    assert METRICS_NO_LAUNCHES in metrics_body()
+
+
+def test_metrics_make_no_tracker_write() -> None:
+    body = metrics_body()
+    assert METRICS_NO_TRACKER_WRITE in body
+    assert "post a summary" in METRICS_ON_SCOPE and METRICS_ON_SCOPE in body
+
+
+def test_closing_report_carries_no_secrets_or_paths() -> None:
+    assert METRICS_NO_SECRETS in metrics_body()
+
+
+def test_readme_row_says_the_summary_is_given_in_the_closing_report() -> None:
+    row = next(
+        line
+        for line in (ROOT / "README.md").read_text().splitlines()
+        if line.startswith("| [`story-to-done`](skills/story-to-done/SKILL.md) |")
+    )
+    assert "a `metrics` switch, `off` by default, turns on run metrics, with the run summary given in the closing report" in row
