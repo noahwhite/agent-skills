@@ -309,11 +309,14 @@ METRICS_COMMAND_ROWS = (
     "From then on, record a row for each command the coordinator launches, in launch order, with its usage "
     "figures recorded under `references/metrics.md` and `not reported` for any usage the runtime does not return."
 )
-METRICS_WRAPPER_FORM = 's=$(date -u +%s.%N); { <command>; }; e=$(date -u +%s.%N); echo "$s $e <row label>" >> <metrics file>'
+METRICS_WRAPPER_FORM = (
+    's=$(date -u +%s.%N); { <command>; }; rc=$?; e=$(date -u +%s.%N); echo "$s $e <row label>" >> <metrics file>; '
+    "(exit $rc)"
+)
 METRICS_WRAPPER = (
     "Launch every such command, the first included, as `" + METRICS_WRAPPER_FORM + "`, so it carries its own "
-    "start and end timestamps, taken immediately before and after its work; its duration is the end timestamp "
-    "minus the start timestamp."
+    "start and end timestamps, taken immediately before and after its work, and keeps the command's exit status; "
+    "its duration is the end timestamp minus the start timestamp."
 )
 METRICS_NEVER_UNTIMED = (
     "Never launch such a command unwrapped, never reuse one timestamp as both its start and its end, and never "
@@ -438,9 +441,14 @@ def test_every_command_the_start_command_included_runs_in_the_timing_wrapper() -
     assert METRICS_NEVER_UNTIMED in body
 
 
-def test_the_timing_wrapper_takes_distinct_start_and_end_timestamps_around_the_command(tmp_path: Path) -> None:
+def skill_wrapper() -> str:
     forms = re.findall(r"`(s=\$\(date[^`]*)`", metrics_body())
     assert forms == [METRICS_WRAPPER_FORM], "the Metrics section must give exactly one timing wrapper"
+    return forms[0]
+
+
+def test_the_timing_wrapper_takes_distinct_start_and_end_timestamps_around_the_command(tmp_path: Path) -> None:
+    forms = [skill_wrapper()]
     record = tmp_path / "metrics.txt"
     for label in ("start", "probe"):
         script = (
@@ -454,6 +462,15 @@ def test_the_timing_wrapper_takes_distinct_start_and_end_timestamps_around_the_c
     assert [row[2] for row in rows] == ["start", "probe"], "each launch appends one row with its label"
     for start, end, _ in rows:
         assert float(end) - float(start) >= 0.2, "the start and end timestamps must bracket the command"
+
+
+def test_the_timing_wrapper_keeps_the_command_exit_status(tmp_path: Path) -> None:
+    record = shlex.quote(str(tmp_path / "metrics.txt"))
+    for command, status in (("true", 0), ("false", 1), ("sh -c 'exit 7'", 7)):
+        script = skill_wrapper().replace("<command>", command).replace("<row label>", "probe")
+        result = subprocess.run(["bash", "-c", script.replace("<metrics file>", record) + "; echo status=$?"],
+                                capture_output=True, text=True, check=True)
+        assert result.stdout.strip() == f"status={status}", f"{command} must keep exit status {status}"
 
 
 def test_closing_report_of_every_end_state_gives_the_summary_in_the_template() -> None:
