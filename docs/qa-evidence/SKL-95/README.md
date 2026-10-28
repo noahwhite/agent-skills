@@ -5,17 +5,17 @@ The verified build is `90be48f92a93b4ac7cd2f1be4a6bc878b6c7653c`, the squash mer
 Its head `f78452e70fe498ae99d326ed1e5586bab6ff3396` has the same tree as that build and carries the final review of record.
 Verification used a clean clone of `main` and a detached checkout of that head.
 The fixtures are the disposable issues SKL-110 (the engineer's run) and SKL-111 (the QA run), both read back as Canceled.
-[`raw-output.txt`](raw-output.txt) holds the sanitized raw output behind every row: the test suite, the vendor check, the diff scope, CI, the reviews of record, the QA run's commands, timestamps and closing report, and the fixture read-backs.
+[`raw-output.txt`](raw-output.txt) holds the sanitized raw output behind every row: the test suite, the vendor check, the diff scope, CI, the reviews of record, the QA run's commands, timestamps and closing report, the SKL-110 run's per-row timestamps and closing report, and the fixture read-backs.
 
-Outcome: C1 is not met, so the story returns to In Progress.
+Outcome: C1 and C4 are not met, so the story returns to In Progress.
 
 | Item | Verdict | Evidence |
 |---|---|---|
 | C1 closing report | Not met | The Metrics section states every C1 rule, but in the engineer's SKL-110 run at `f78452e` (tracker comment `70440152`) the third command row, "show story description from saved JSON", has `not reported` as its duration because the coordinator did not time that command. C1 requires each command row to be timestamped immediately before and after the launch, and `references/metrics.md` reserves `not reported` for figures the runtime does not return, while duration is measured by the coordinator. The QA SKL-111 run timed every command, so one of the two real runs at the reviewed head broke the rule. |
 | C2 docs | Verified | The README row adds "with the run summary given in the closing report", and PR #73 changes no file under `shared/` and no vendored reference. |
 | C3 tests | Verified | Eight new text-contract tests pin each C1 phrase, the PR body records a deletion mutant per phrase with the named failing tests, the orchestrator-state guard and scratch-directory tests are unchanged and pass, `uv run --locked pytest -q` passes 669 tests, the vendor check exits 0, and CI is green on the PR head (run 40730452808) and on `main` (run 40731383320). |
-| C4 verified end to end | Met at `f78452e`; re-run after the C1 fix | QA ran `story-to-done SKL-111 metrics=on` with a clean coordinator loading the skill from `f78452e`. It stopped at step 1 before any role, and its closing report has the heading line, four command rows in launch order matching the four shell commands in its transcript, the elapsed wall-clock from the start timestamp, the totals block, and the `metrics: on` line, with no path or secret and no tracker write. Rows 2 to 4 carry start and end timestamps taken inside each command; row 1 is the start-timestamp command, whose single timestamp gives `0.000 s`, as `SKILL.md` allows for a start timestamp taken by a command of its own. The C1 fix changes the skill, so C4 is re-run at the fix head. |
-| DoD all acceptance criteria met | Not met | C1 above. |
+| C4 verified end to end | Not met | QA ran `story-to-done SKL-111 metrics=on` with a clean coordinator loading the skill from `f78452e`. It stopped at step 1 before any role, and its closing report has the heading line, four command rows in launch order matching the four shell commands in its transcript, the elapsed wall-clock from the start timestamp, the totals block, and the `metrics: on` line, with no path or secret and no tracker write. Rows 2 to 4 carry start and end timestamps taken inside each command, but row 1, the start-timestamp command, is one `date` call whose single timestamp is repeated as start and end, so its `0.000 s` is derived and that row is not timestamped before and after the launch, which C4 requires of every row. The engineer's SKL-110 run has the same row 1. C4 is re-run at the fix head. |
+| DoD all acceptance criteria met | Not met | C1 and C4 above. |
 | DoD tests written and passing | Verified | The C3 row. |
 | DoD independently reviewed | Verified | Reviews of record at `0233d6e`, `93a4cfb`, `e603b74`, and `f78452e` (review 5686526750, the merged head), each a Codex GPT-6 Sol review with a DeepSeek V4 Pro adjudication, were posted before the merge. |
 | DoD docs updated | Verified | The C2 row. |
@@ -25,7 +25,8 @@ Outcome: C1 is not met, so the story returns to In Progress.
 ## Failed item for the engineer
 
 C1: with `metrics` on, a coordinator left a command it launched untimed and reported its duration as `not reported`.
-The skill text must make every coordinator-launched command carry its own before and after timestamps reliably, and C4 is re-run at the fix head.
+C4: in both runs the start-timestamp command's row has one timestamp, repeated as its start and end.
+The skill text must make every coordinator-launched command, the start-timestamp command included, carry its own before and after timestamps reliably, and C4 is re-run at the fix head.
 
 ## Incidental findings
 

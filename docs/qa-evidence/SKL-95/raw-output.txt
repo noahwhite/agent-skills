@@ -175,3 +175,37 @@ Fixture SKL-111 after cancel (linear issue view SKL-111):
 **State:** Canceled | **Priority:** --- | **Assignee:** Unassigned | **Cycle:** #2 (now)
 Fixture SKL-110 (engineer's C4 run) (linear issue view SKL-110):
 **State:** Canceled | **Priority:** --- | **Assignee:** Unassigned | **Cycle:** #2 (now)
+
+## C1 failure: the engineer's SKL-110 run at f78452e
+Source: SKL-95 tracker comment 70440152 (the engineer's C4 record) and the coordinator's raw metrics file from that run.
+
+Coordinator raw metrics file (per-row timestamps):
+  invocation_start=2026-10-28T16:58:08.300Z
+  row1 role=record invocation start timestamp start=2026-10-28T16:58:08.300Z end=2026-10-28T16:58:08.300Z
+  row2 role=read story SKL-110 start=2026-10-28T16:58:21.800Z end=2026-10-28T16:58:22.302Z rc=0
+  row3 role=show story description from saved JSON start=untimed end=untimed
+  row4 role=compute run metrics and end timestamp start=2026-10-28T16:58:34.885Z end=2026-10-28T16:58:34.886Z
+  invocation_end=2026-10-28T16:58:34.886Z
+
+Closing report table and note, verbatim from tracker comment 70440152:
+Run metrics: story-to-done SKL-110 - stopped at step 1: story is Blocked
+
+| Role | Runtime | Model | Effort | Duration | Tokens | Tool calls |
+|---|---|---|---|---|---|---|
+| record invocation start timestamp | command | not set | not set | 0.000s | not reported | not reported |
+| read story SKL-110 | command | not set | not set | 0.502s | not reported | not reported |
+| show story description from saved JSON | command | not set | not set | not reported | not reported | not reported |
+| compute run metrics and end timestamp | command | not set | not set | 0.001s | not reported | not reported |
+
+Totals
+- Elapsed wall-clock: 26.586s
+- Tokens: not reported [partial: 4 not reported, 0 cumulative]
+- Tool calls: not reported [partial: 4 not reported, 0 cumulative]
+
+Notes:
+- Row 3 shows `not reported` for duration because the coordinator did not time that command. It reported this instead of estimating.
+- Run 1, at 93a4cfb, left the rows before the start timestamp without a duration. That led to e603b74 and f78452e.
+- Fixture SKL-110 is canceled after this run.
+
+
+
