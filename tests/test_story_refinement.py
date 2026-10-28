@@ -1313,7 +1313,8 @@ def test_closing_message_is_defined_on_every_end_state_and_stop(sentence: str) -
 def test_vendored_metrics_reference_is_present() -> None:
     copy = ROOT / "skills" / "story-refinement" / "references" / "metrics.md"
     assert copy.is_file()
-    assert copy.read_text().endswith((ROOT / "shared" / "metrics.md").read_text())
+    header = "<!-- GENERATED from shared/metrics.md by scripts/vendor_shared.py. Edit the source, then rerun the script. -->\n\n"
+    assert copy.read_text() == header + (ROOT / "shared" / "metrics.md").read_text()
 
 
 def test_no_other_skill_lists_metrics() -> None:
@@ -1345,7 +1346,7 @@ def test_metrics_section_opens_with_the_on_only_condition() -> None:
         "The closing message carries the run summary in the template `references/metrics.md` defines, on every end state and every stop, with every field filled or labelled as that reference defines (`not reported`, `cumulative`, `partial`, or, when the invocation performed no launch, `no launches` with `not applicable` totals), and the stop reason where the run stopped.",
         "The summary contains no secrets and no local or scratch paths.",
         # B4: no post, as an exception to "Read first".
-        "This skill does not post the summary on the story, and the posting steps in `references/metrics.md` (its Posting section and its `story-refinement` order) do not apply to it.",
+        "This skill does not post the summary on the story, and no posting statement in `references/metrics.md` applies to it: neither its Independence rule that the facilitator posts the summary, nor that rule's exception for the summary comment posted at the end, nor its Posting section and its `story-refinement` order.",
         'This is an exception to the "Read first" rule that a capability file is authoritative.',
     ],
 )
@@ -1401,7 +1402,9 @@ def test_metrics_mentions_outside_the_permitted_sections_are_absent() -> None:
     """B2: outside Arguments, Metrics, and Closing message, the skill text never mentions metrics."""
     text = re.sub(r"<!--.*?-->", "", SKILL.read_text(), flags=re.DOTALL)
     for heading in (ARGUMENTS, METRICS, CLOSING):
-        text = text.replace(f"## {heading}\n" + section(SKILL.read_text(), heading), "")
+        text, count = re.subn(rf"^## {re.escape(heading)}\s*$.*?(?=^#{{1,2}} |\Z)", "", text,
+                              flags=re.MULTILINE | re.DOTALL)
+        assert count == 1, heading
     assert "metric" not in text.lower()
 
 

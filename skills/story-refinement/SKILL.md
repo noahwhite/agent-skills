@@ -280,7 +280,7 @@ This section applies only when `metrics` is on.
 - **Independence:** Add no metrics of this invocation and no other role's figures from this invocation to any voter brief, voter input, SM/EM sizing context, refinement comment, Accept round result comment, or pointing, unpointed, or split record; story comments posted by an earlier invocation stay part of the story surface.
 - **Summary:** The closing message carries the run summary in the template `references/metrics.md` defines, on every end state and every stop, with every field filled or labelled as that reference defines (`not reported`, `cumulative`, `partial`, or, when the invocation performed no launch, `no launches` with `not applicable` totals), and the stop reason where the run stopped.
   The summary contains no secrets and no local or scratch paths.
-- **No post:** This skill does not post the summary on the story, and the posting steps in `references/metrics.md` (its Posting section and its `story-refinement` order) do not apply to it.
+- **No post:** This skill does not post the summary on the story, and no posting statement in `references/metrics.md` applies to it: neither its Independence rule that the facilitator posts the summary, nor that rule's exception for the summary comment posted at the end, nor its Posting section and its `story-refinement` order.
   This is an exception to the "Read first" rule that a capability file is authoritative.
 
 ## Closing message
