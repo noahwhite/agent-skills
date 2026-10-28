@@ -34,8 +34,8 @@ If your runtime is not listed, map each capability to its closest equivalent and
   The handshake is defined once in the merge-approval capability.
 - **Scratch files.** Create exactly one scratch directory for the session's lifetime with `mktemp -d` inside the base directory the runtime or the profile gives, and use it for every scratch artefact of the session: gate dossiers, throwaway checkouts, agent config homes, checklist files, and subagent inputs.
   The base directory is the runtime's own scratch directory when the runtime provides one (the capability row above), else `profile.workspace.scratch_dir`; it is a base only, never the directory a session works in, and the runtime's base wins when both exist.
-  Pass every subagent and shell-launched agent you start a directory inside the session's directory.
   A skill passes each voter, engineer, or QA only its own subdirectory of the session directory, never the session directory itself and never another role's files, so that no voter is handed another voter's votes or inputs.
+  Pass every other subagent and shell-launched agent you start the session's directory or a directory inside it.
   When neither the runtime nor `profile.workspace.scratch_dir` gives a directory, create one with a standalone `mktemp -d` and use it for the whole task.
   A base that cannot be created or written falls back the same way.
   Keep the base outside every repository under review: a session directory inside a checkout shows up as untracked work and fails the clean-tree preflight.
@@ -44,7 +44,8 @@ If your runtime is not listed, map each capability to its closest equivalent and
 
   ```bash
   # One scratch directory per session: inside the base directory when there is one. Run it once
-  # per session and pass the printed path to every subagent and shell-launched agent.
+  # per session. Pass each voter, engineer, or QA only its own subdirectory of the printed path,
+  # and every other subagent and shell-launched agent the printed path or a directory inside it.
   # scratch_base is the runtime's scratch base when it gives one, else profile.workspace.scratch_dir,
   # and is empty when neither gives one. A relative base is refused, not resolved.
   case "${scratch_base:-}" in /*) ;; *) scratch_base="" ;; esac

@@ -191,6 +191,10 @@ TEMPLATE_PROSE = [
         id="template-row-per-launch",
     ),
     pytest.param(
+        "Rows are listed in launch order, so the n-th row for a role is that role's n-th launch.",
+        id="template-launch-order",
+    ),
+    pytest.param(
         "In a cell value, a `|` is written as `\\|` and a line break as a space.",
         id="template-cell-escaping",
     ),
@@ -255,6 +259,8 @@ def test_summary_template(phrase):
 
 def test_summary_template_uses_only_the_listed_placeholders():
     assert set(re.findall(r"<[^<>]+>", template_block())) == TEMPLATE_PLACEHOLDERS
+    for placeholder in TEMPLATE_PLACEHOLDERS:
+        assert not re.search(r"path|dir|scratch|session|file", placeholder), placeholder
 
 
 @pytest.mark.parametrize("phrase", TEMPLATE_PROSE)
@@ -353,28 +359,23 @@ def test_independence_and_posting_rule(phrase):
     assert_states(metrics_prose(), phrase)
 
 
-def test_template_has_no_path_placeholder():
-    placeholders = set(re.findall(r"<[^<>]+>", template_block()))
-    assert placeholders <= TEMPLATE_PLACEHOLDERS, placeholders - TEMPLATE_PLACEHOLDERS
-    for placeholder in placeholders:
-        assert not re.search(r"path|dir|scratch|session|file", placeholder), placeholder
-
-
 # A3: registered in the shared index only.
 README = ROOT / "shared" / "README.md"
 README_ROW_START = "| `metrics.md` |"
+README_ROW_DESCRIPTION = (
+    "Run metrics: what a run collects, the summary template, and the independence and posting rules."
+)
 README_INTRO = "A capability listed here may wait for a later slice to compose it."
 
 
 def test_shared_readme_lists_metrics():
     rows = [line for line in README.read_text().splitlines() if line.startswith(README_ROW_START)]
     assert len(rows) == 1, rows
-    assert rows[0].count("|") == 3 and rows[0].split("|")[2].strip(), rows[0]
+    assert rows[0].count("|") == 3 and rows[0].split("|")[2].strip() == README_ROW_DESCRIPTION, rows[0]
 
 
 def test_shared_readme_intro_allows_an_uncomposed_capability():
     assert_states(README.read_text(), README_INTRO)
-
 
 
 # A4: the runtime usage map.
@@ -382,6 +383,15 @@ RUNTIMES = ROOT / "shared" / "runtimes.md"
 USAGE_ROW = "| Read a subagent's usage (duration, tokens, tool calls) |"
 USAGE_BULLET = "- **Usage from shell-launched agents.**"
 SCRATCH_BULLET = "- **Scratch files.**"
+OTHER_AGENTS = (
+    "Pass every other subagent and shell-launched agent you start the session's directory or a "
+    "directory inside it."
+)
+EXAMPLE_HANDOFF = (
+    "# per session. Pass each voter, engineer, or QA only its own subdirectory of the printed path,\n"
+    "  # and every other subagent and shell-launched agent the printed path or a directory inside it."
+)
+RULES_HEADING = "## Rules that follow from the map\n"
 OWN_SUBDIRECTORY = (
     "A skill passes each voter, engineer, or QA only its own subdirectory of the session "
     "directory, never the session directory itself and never another role's files, so that no "
@@ -393,15 +403,33 @@ V1_INTRO = (
 )
 
 
+def capability_table() -> list[str]:
+    lines = RUNTIMES.read_text().splitlines()
+    start = lines.index("| Capability | Claude Code | OpenCode (version-qualified) |")
+    end = start
+    while end < len(lines) and lines[end].startswith("|"):
+        end += 1
+    return lines[start:end]
+
+
 def usage_row() -> str:
-    rows = [line for line in RUNTIMES.read_text().splitlines() if line.startswith(USAGE_ROW)]
-    assert len(rows) == 1, rows
+    assert RUNTIMES.read_text().count(USAGE_ROW) == 1, "expected exactly one usage row"
+    rows = [line for line in capability_table() if line.startswith(USAGE_ROW)]
+    assert len(rows) == 1, "the usage row is not in the capability table"
     return rows[0]
 
 
-def rule_bullet(start: str) -> str:
+def rules_section() -> str:
     text = RUNTIMES.read_text()
-    assert text.count(start) == 1, f"expected exactly one {start!r} bullet"
+    assert text.count(RULES_HEADING) == 1, RULES_HEADING
+    rest = text[text.index(RULES_HEADING) + len(RULES_HEADING):]
+    return rest[:rest.find("\n## ")] if "\n## " in rest else rest
+
+
+def rule_bullet(start: str) -> str:
+    assert RUNTIMES.read_text().count(start) == 1, f"expected exactly one {start!r} bullet"
+    text = rules_section()
+    assert start in text, f"{start!r} is not under {RULES_HEADING.strip()!r}"
     rest = text[text.index(start):]
     end = len(rest)
     for marker in ("\n- **", "\n## "):
@@ -420,7 +448,17 @@ def test_scratch_files_rule_passes_each_role_only_its_own_subdirectory():
 
 
 def test_scratch_files_rule_no_longer_passes_the_session_directory():
-    assert "Pass the session's directory to every subagent" not in rule_bullet(SCRATCH_BULLET)
+    bullet = rule_bullet(SCRATCH_BULLET)
+    assert "Pass the session's directory to every subagent" not in bullet
+    assert "pass the printed path to every subagent" not in bullet
+
+
+def test_scratch_files_rule_passes_every_other_agent_the_session_directory():
+    assert_states(rule_bullet(SCRATCH_BULLET), OTHER_AGENTS)
+
+
+def test_scratch_files_example_hands_each_role_only_its_own_subdirectory():
+    assert EXAMPLE_HANDOFF in rule_bullet(SCRATCH_BULLET)
 
 
 def test_runtime_map_intro_separates_v1_observations_from_v1_guidance():

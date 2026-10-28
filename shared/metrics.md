@@ -78,6 +78,7 @@ Totals
 
 The heading line names the skill, the story key, and the invocation's end state or stop reason.
 Each launch gets one table row with the fields in the order above; a figure cell holds the number, `not reported`, or the number followed by `cumulative`.
+Rows are listed in launch order, so the n-th row for a role is that role's n-th launch.
 In a cell value, a `|` is written as `\|` and a line break as a space.
 The bracketed `partial` note appears only under the condition in Run totals.
 With no launches, the table is replaced by the line `no launches`, the elapsed wall-clock is still given, and each per-figure total reads `not applicable`.
