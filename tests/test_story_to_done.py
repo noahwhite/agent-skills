@@ -316,8 +316,7 @@ METRICS_START_BLOCK = [
 ]
 METRICS_START_RULE = (
     "Its start timestamp is the invocation's start, recorded as `invocation_start`, its row, labelled `start`, is "
-    "the first in the table, the elapsed wall-clock runs from that timestamp to the closing report, and "
-    "`metrics.txt` in that directory is the `<metrics file>` of every later launch."
+    "the first in the table, and `metrics.txt` in that directory is the `<metrics file>` of every later launch."
 )
 METRICS_START_FAILED = (
     "A start form that exits non-zero has not recorded the `start` row, so the coordinator stops with that as the "
@@ -362,6 +361,15 @@ METRICS_KILLED = (
 METRICS_NEVER_UNTIMED = (
     "Never launch a command outside the start form or the wrapper, never reuse one timestamp as both its start and its end, and never "
     "report a command's duration as `not reported`."
+)
+METRICS_WRITE_FAILED = (
+    "A wrapped launch whose output shows an error writing the metrics file has lost its row, so the coordinator "
+    "stops with that as the stop reason."
+)
+METRICS_INVOCATION_END = (
+    "Immediately before the closing report, the last launch is a wrapped command labelled `end` whose `<command>` "
+    "is `true`; its `end` timestamp is recorded as `invocation_end`, and the elapsed wall-clock runs from "
+    "`invocation_start` to `invocation_end`."
 )
 METRICS_CLOSING_REPORT = (
     "Give the summary, in the template `references/metrics.md` defines, in the closing report of every end "
@@ -429,6 +437,8 @@ METRICS_LINES = [
     METRICS_DURATION,
     METRICS_KILLED,
     METRICS_NEVER_UNTIMED,
+    METRICS_WRITE_FAILED,
+    METRICS_INVOCATION_END,
     METRICS_CLOSING_REPORT,
     METRICS_NO_LAUNCHES,
     METRICS_ON_SCOPE,
@@ -550,6 +560,8 @@ def test_every_launch_runs_in_the_start_form_or_the_timing_wrapper() -> None:
     assert METRICS_DURATION in body
     assert METRICS_KILLED in body
     assert METRICS_NEVER_UNTIMED in body
+    assert METRICS_WRITE_FAILED in body
+    assert METRICS_INVOCATION_END in body
 
 
 def skill_wrapper() -> str:
@@ -624,6 +636,18 @@ def test_no_command_can_lose_or_corrupt_its_row(tmp_path: Path) -> None:
         assert (start_kind, end_kind) == ("start", "end"), f"{command}: start line, then end line"
         assert start_label == end_label == "row $(printf injected) <command>", f"{command}: the label is literal"
         assert end >= start > 1_000_000_000, f"{command}: both timestamps are real and ordered"
+
+
+def test_a_failed_metrics_write_shows_an_error_and_keeps_the_exit_status(tmp_path: Path) -> None:
+    blocker = tmp_path / "not a directory"
+    blocker.write_text("")
+    record = blocker / "metrics.txt"
+    for command, status in (("true", 0), ("exit 4", 4)):
+        script = wrapper_script(record, command, "probe")
+        result = subprocess.run(["bash", "-c", script], capture_output=True, text=True)
+        assert result.returncode == status, f"{command}: the wrapper keeps the command's exit status"
+        errors = [line for line in result.stderr.splitlines() if str(record) in line]
+        assert len(errors) == 2, f"{command}: the failed start and end writes each show an error naming the file"
 
 
 def test_a_killed_command_keeps_its_start_line_and_the_recovery_writes_its_end(tmp_path: Path) -> None:
