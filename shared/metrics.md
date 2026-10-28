@@ -36,7 +36,10 @@ What each runtime's usage report returns is in the "Read a subagent's usage (dur
 
 ### Run totals
 
-- The elapsed wall-clock from the invocation's start to its end.
+- The elapsed wall-clock runs from the recorded `invocation_start`, the UTC timestamp taken with a command the moment the `metrics` switch resolved on, to `invocation_end`, a UTC timestamp taken with a command immediately before the closing message or closing report.
+  Elapsed is computed from those two recorded timestamps only, never from file, directory, or log times, and is never estimated.
+  When `invocation_start` was not recorded, the elapsed wall-clock reads `not reported`.
+  When `invocation_end` was not recorded, the elapsed wall-clock also reads `not reported`.
 - Per figure (tokens and tool calls), the sum of the launch-scoped figures that were reported.
 - A per-figure total with no reported launch-scoped figure reads `not reported`, never `0`.
 - A total is labelled `partial`, with the count of launches not reported and the count excluded as `cumulative`, only when either count is non-zero.
@@ -75,7 +78,7 @@ Run metrics: <skill> <story key> - <end state or stop reason>
 <one line per extra of this skill: name: value>
 
 Totals
-- Elapsed wall-clock: <elapsed>
+- Elapsed wall-clock: <elapsed> (<invocation_start> to <invocation_end>)
 - Tokens: <sum> [partial: <n> not reported, <n> cumulative]
 - Tool calls: <sum> [partial: <n> not reported, <n> cumulative]
 ```
@@ -86,6 +89,7 @@ Rows are listed in launch order, so the n-th row for a role is that role's n-th 
 An extra with one value per QA round lists the values on its one line in round order, as `round 1: <value>; round 2: <value>`, with a `;` inside a value written as `\;`.
 In a cell value, a `|` is written as `\|` and a line break as a space.
 The bracketed `partial` note appears only under the condition in Run totals.
+When the elapsed wall-clock is `not reported`, a timestamp that was not recorded reads `not recorded` in its place.
 With no launches, the table is replaced by the line `no launches`, the elapsed wall-clock is still given, and each per-figure total reads `not applicable`.
 
 ## Independence

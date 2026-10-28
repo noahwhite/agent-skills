@@ -109,7 +109,23 @@ FIGURE_RULES = [
         id="cumulative",
     ),
     pytest.param(
-        "The elapsed wall-clock from the invocation's start to its end.", id="total-elapsed"
+        "The elapsed wall-clock runs from the recorded `invocation_start`, the UTC timestamp taken "
+        "with a command the moment the `metrics` switch resolved on, to `invocation_end`, a UTC "
+        "timestamp taken with a command immediately before the closing message or closing report.",
+        id="total-elapsed",
+    ),
+    pytest.param(
+        "Elapsed is computed from those two recorded timestamps only, never from file, directory, "
+        "or log times, and is never estimated.",
+        id="total-elapsed-recorded-only",
+    ),
+    pytest.param(
+        "When `invocation_start` was not recorded, the elapsed wall-clock reads `not reported`.",
+        id="total-elapsed-not-reported",
+    ),
+    pytest.param(
+        "When `invocation_end` was not recorded, the elapsed wall-clock also reads `not reported`.",
+        id="total-elapsed-no-end-not-reported",
     ),
     pytest.param(
         "Per figure (tokens and tool calls), the sum of the launch-scoped figures that were reported.",
@@ -190,7 +206,9 @@ TEMPLATE_BLOCK = [
     ),
     pytest.param("<one line per extra of this skill: name: value>", id="extra-lines"),
     pytest.param("Totals", id="totals-heading"),
-    pytest.param("- Elapsed wall-clock: <elapsed>", id="totals-elapsed"),
+    pytest.param(
+        "- Elapsed wall-clock: <elapsed> (<invocation_start> to <invocation_end>)", id="totals-elapsed"
+    ),
     pytest.param("- Tokens: <sum> [partial: <n> not reported, <n> cumulative]", id="totals-tokens"),
     pytest.param(
         "- Tool calls: <sum> [partial: <n> not reported, <n> cumulative]", id="totals-tool-calls"
@@ -199,7 +217,8 @@ TEMPLATE_BLOCK = [
 TEMPLATE_PLACEHOLDERS = {
     "<skill>", "<story key>", "<end state or stop reason>", "<role>", "<runtime>", "<model or not set>",
     "<effort or not set>", "<duration>", "<tokens>", "<tool calls>",
-    "<one line per extra of this skill: name: value>", "<elapsed>", "<sum>", "<n>",
+    "<one line per extra of this skill: name: value>", "<elapsed>", "<invocation_start>",
+    "<invocation_end>", "<sum>", "<n>",
 }
 TEMPLATE_PROSE = [
     pytest.param(
@@ -226,11 +245,30 @@ TEMPLATE_PROSE = [
         id="template-cell-escaping",
     ),
     pytest.param(
+        "When the elapsed wall-clock is `not reported`, a timestamp that was not recorded reads "
+        "`not recorded` in its place.",
+        id="template-elapsed-not-recorded",
+    ),
+    pytest.param(
         "With no launches, the table is replaced by the line `no launches`, the elapsed wall-clock "
         "is still given, and each per-figure total reads `not applicable`.",
         id="template-no-launches",
     ),
 ]
+
+
+NEVER_FROM_FILE_TIMES = (
+    "Elapsed is computed from those two recorded timestamps only, never from file, directory, "
+    "or log times, and is never estimated."
+)
+
+
+def test_run_totals_gives_elapsed_no_other_time_source():
+    section = flat(metrics_prose().split("### Run totals", 1)[1].split("\n### ", 1)[0])
+    assert flat(NEVER_FROM_FILE_TIMES) in section
+    rest = section.replace(flat(NEVER_FROM_FILE_TIMES), "").lower()
+    for source in ("file time", "file, directory", "directory time", "log time", "mtime", "modification time", "creation", "estimat", "infer"):
+        assert source not in rest, f"Run totals names another elapsed source: {source}"
 
 
 def test_metrics_reference_exists():

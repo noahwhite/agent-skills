@@ -67,7 +67,7 @@ s=$(date -u +%s.%N)
 printf 'start %s start\nend %s start\n' "$s" "$(date -u +%s.%N)" >> "$scratch/metrics.txt"
 ```
 
-Its start timestamp is the invocation's start, its row, labelled `start`, is the first in the table, the elapsed wall-clock runs from that timestamp to the closing report, and `metrics.txt` in that directory is the `<metrics file>` of every later launch.
+Its start timestamp is the invocation's start, recorded as `invocation_start`, its row, labelled `start`, is the first in the table, the elapsed wall-clock runs from that timestamp to the closing report, and `metrics.txt` in that directory is the `<metrics file>` of every later launch.
 A start form that exits non-zero has not recorded the `start` row, so the coordinator stops with that as the stop reason.
 Every path placed inside single quotes in the start form, the wrapper, or the recovery command has each of its own single quotes written as `'\''`.
 From then on, record a row for each command the coordinator launches, in launch order, with its usage figures recorded under `references/metrics.md` and `not reported` for any usage the runtime does not return.

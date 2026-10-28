@@ -315,9 +315,9 @@ METRICS_START_BLOCK = [
     "```",
 ]
 METRICS_START_RULE = (
-    "Its start timestamp is the invocation's start, its row, labelled `start`, is the first in the table, the "
-    "elapsed wall-clock runs from that timestamp to the closing report, and `metrics.txt` in that directory is "
-    "the `<metrics file>` of every later launch."
+    "Its start timestamp is the invocation's start, recorded as `invocation_start`, its row, labelled `start`, is "
+    "the first in the table, the elapsed wall-clock runs from that timestamp to the closing report, and "
+    "`metrics.txt` in that directory is the `<metrics file>` of every later launch."
 )
 METRICS_START_FAILED = (
     "A start form that exits non-zero has not recorded the `start` row, so the coordinator stops with that as the "
