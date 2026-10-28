@@ -22,6 +22,21 @@ Stage 1 is refinement: independent inputs, then reconciliation and the accept ro
 Stage 2 is pointing: secret votes, then the high/low discussion and consensus.
 Each step names its inputs, outputs, and stop conditions.
 
+## Arguments
+
+`STORY_ID` is required: a Linear issue key (for example `ABC-123`, with the team key `profile.tracker.team_key`).
+If none was given, ask the owner for one before doing anything else; never guess an issue key.
+
+`metrics` is optional, given as `metrics=on` or `metrics=off` or in plain words, and defaults to `off`.
+`with metrics` and `metrics on` mean on; `without metrics` and `metrics off` mean off.
+Any other phrasing about metrics is asked about, never guessed.
+
+- Resolve both arguments, asking about any ambiguity, before the todo list is created.
+- Write the resolved value as one line `metrics: on` or `metrics: off` at the top of the todo list and in the closing message.
+
+With `metrics` off or omitted, the facilitator does not open `references/metrics.md`, collects no figure, creates no metrics scratch file, posts no metrics comment, and adds no metrics content to any brief, record, report, todo list, closing message, or tracker write, other than the `metrics: off` line.
+Every other metrics instruction in this skill applies only when `metrics` is on.
+
 ## Read first
 
 - [references/profile.md](references/profile.md) - find the profile and this skill's overlay before anything else.
@@ -250,6 +265,29 @@ Use [references/refinement-record.md](references/refinement-record.md) for the r
 Keep the raw voter files in the session's scratch directory and cite each file by its base name only (never a directory path) in the record.
 Quote or attach any file content a reader needs in the record.
 Record the refinement comment id, every accept round, all three point values, the SM/EM sizing context, the discussion result, every challenge with its outcome, the consensus, any no-consensus decision with each voter's accepted paths and the decision rationale, and any split.
+
+## Metrics
+
+This section applies only when `metrics` is on.
+[references/metrics.md](references/metrics.md) defines what is collected, the summary template, and each label; this section binds it to this skill and does not restate it.
+
+- **Location:** Figures live only in one metrics file in the session's scratch directory, outside every per-role subdirectory.
+- **Never named:** The metrics file is never named in any brief.
+- **Not reported:** A figure the runtime does not return is `not reported`; it is never estimated or inferred.
+- **Timed launches:** Time every launch the facilitator spawns, including each re-launch.
+  That covers the tracker-write preflight; each Step 1 voter launch; each PO launch that authors or applies a tracker write or record; each accept-round voter launch, including the re-refine accept round; each Step 3 pointing launch, including the re-run after a re-refine; each Step 4 discussion launch; each Step 4 re-vote launch; each Step 4 no-consensus path-decision launch; each anchoring recovery re-launch; and each slice estimate launch.
+  Take the start timestamp immediately before the launch and the end timestamp when the launch returns.
+- **Independence:** Add no metrics of this invocation and no other role's figures from this invocation to any voter brief, voter input, SM/EM sizing context, refinement comment, Accept round result comment, or pointing, unpointed, or split record; story comments posted by an earlier invocation stay part of the story surface.
+- **Summary:** The closing message carries the run summary in the template `references/metrics.md` defines, on every end state and every stop, with every field filled or labelled as that reference defines (`not reported`, `cumulative`, `partial`, or, when the invocation performed no launch, `no launches` with `not applicable` totals), and the stop reason where the run stopped.
+  The summary contains no secrets and no local or scratch paths.
+- **No post:** This skill does not post the summary on the story, and no posting statement in `references/metrics.md` applies to it: neither its Independence rule that the facilitator posts the summary, nor that rule's exception for the summary comment posted at the end, nor its Posting section and its `story-refinement` order.
+  This is an exception to the "Read first" rule that a capability file is authoritative.
+
+## Closing message
+
+The closing message is the facilitator's final message to the owner when the invocation ends, on every end state and every stop.
+It names the outcome (the consensus value, unpointed, or split with the slice count) or the stop reason, including `needs input` on a denied tracker write.
+It carries the `metrics: on` or `metrics: off` line.
 
 ## Runtime portability
 

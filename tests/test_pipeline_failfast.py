@@ -680,8 +680,10 @@ def test_a_refused_checkout_cleanup_does_not_replace_the_phase_exit_code(gate, t
     )
     git_wrapper.chmod(0o755)
     env = {**env, "PATH": f"{fakebin}:{env['PATH']}"}
+    # The deadline is counted in whole $SECONDS, so a 1s deadline can expire within milliseconds of
+    # the phase start, before the checkout exists to be removed; 5s leaves the checkout time to land.
     result = run_sweep(
-        repo, scratch, env, "--model", "gpt-6-sol", "--timeout", "1", agent="sleep 30", timeout=60,
+        repo, scratch, env, "--model", "gpt-6-sol", "--timeout", "5", agent="sleep 30", timeout=60,
     )
     assert result.returncode == 19, result.stdout + result.stderr
     assert "could not remove checkout" in result.stderr, result.stderr

@@ -14,7 +14,7 @@ RECORD = ROOT / "skills" / "story-refinement" / "references" / "refinement-recor
 SCHEMA = json.loads((ROOT / "profile" / "schema.json").read_text())
 MANIFEST = json.loads((ROOT / "skills.json").read_text())
 
-GENERATED_REFERENCES = ["profile", "runtimes", "linear", "todo-tracking", "engineering-practice"]
+GENERATED_REFERENCES = ["profile", "runtimes", "linear", "todo-tracking", "engineering-practice", "metrics"]
 
 REQUIRED_PHRASES = [
     "profile.refinement.facilitator",
@@ -137,6 +137,7 @@ def test_manifest_registers_skill() -> None:
         "linear",
         "todo-tracking",
         "engineering-practice",
+        "metrics",
     ]
 
 
@@ -1263,3 +1264,160 @@ def test_record_templates_cite_file_base_names(heading: str, line: str) -> None:
 @pytest.mark.parametrize("phrase", ["<scratch path>", "cite their paths"])
 def test_record_templates_never_request_local_paths(phrase: str) -> None:
     assert phrase not in RECORD.read_text()
+
+
+# --- SKL-47: the metrics switch, the closing message, and the run summary --------------------------
+
+ARGUMENTS = "Arguments"
+CLOSING = "Closing message"
+METRICS = "Metrics"
+
+
+def skill_section(heading: str) -> str:
+    return spaced(section(SKILL.read_text(), heading))
+
+
+@pytest.mark.parametrize(
+    "sentence",
+    [
+        "`STORY_ID` is required: a Linear issue key (for example `ABC-123`, with the team key `profile.tracker.team_key`).",
+        "If none was given, ask the owner for one before doing anything else; never guess an issue key.",
+        "`metrics` is optional, given as `metrics=on` or `metrics=off` or in plain words, and defaults to `off`.",
+        "`with metrics` and `metrics on` mean on; `without metrics` and `metrics off` mean off.",
+        "Any other phrasing about metrics is asked about, never guessed.",
+        "Resolve both arguments, asking about any ambiguity, before the todo list is created.",
+        "Write the resolved value as one line `metrics: on` or `metrics: off` at the top of the todo list and in the closing message.",
+    ],
+)
+def test_arguments_section_defines_the_story_identifier_and_the_metrics_switch(sentence: str) -> None:
+    assert sentence in skill_section(ARGUMENTS)
+
+
+def test_arguments_section_precedes_read_first() -> None:
+    text = SKILL.read_text()
+    assert text.index("\n## Arguments\n") < text.index("\n## Read first\n")
+
+
+@pytest.mark.parametrize(
+    "sentence",
+    [
+        "The closing message is the facilitator's final message to the owner when the invocation ends, on every end state and every stop.",
+        "It names the outcome (the consensus value, unpointed, or split with the slice count) or the stop reason, including `needs input` on a denied tracker write.",
+        "It carries the `metrics: on` or `metrics: off` line.",
+    ],
+)
+def test_closing_message_is_defined_on_every_end_state_and_stop(sentence: str) -> None:
+    assert sentence in skill_section(CLOSING)
+
+
+def test_vendored_metrics_reference_is_present() -> None:
+    copy = ROOT / "skills" / "story-refinement" / "references" / "metrics.md"
+    assert copy.is_file()
+    header = "<!-- GENERATED from shared/metrics.md by scripts/vendor_shared.py. Edit the source, then rerun the script. -->\n\n"
+    assert copy.read_text() == header + (ROOT / "shared" / "metrics.md").read_text()
+
+
+def test_only_the_metrics_consumers_list_metrics() -> None:
+    """B3: only the two consumers `shared/metrics.md` names (this skill and story-to-done, SKL-48) vendor it."""
+    assert sorted(name for name, caps in MANIFEST["skills"].items() if "metrics" in caps) == [
+        "story-refinement", "story-to-done"]
+
+
+def test_metrics_reference_is_linked_from_the_metrics_section_and_not_read_first() -> None:
+    assert "[references/metrics.md](references/metrics.md)" in section(SKILL.read_text(), METRICS)
+    assert "references/metrics.md" not in section(SKILL.read_text(), "Read first")
+
+
+def test_metrics_section_opens_with_the_on_only_condition() -> None:
+    assert skill_section(METRICS).startswith("This section applies only when `metrics` is on.")
+
+
+@pytest.mark.parametrize(
+    "sentence",
+    [
+        # B3: one line each, as the reference defines them.
+        "Figures live only in one metrics file in the session's scratch directory, outside every per-role subdirectory.",
+        "The metrics file is never named in any brief.",
+        "A figure the runtime does not return is `not reported`; it is never estimated or inferred.",
+        # B3: timing.
+        "Time every launch the facilitator spawns, including each re-launch.",
+        "Take the start timestamp immediately before the launch and the end timestamp when the launch returns.",
+        # B4: independence.
+        "Add no metrics of this invocation and no other role's figures from this invocation to any voter brief, voter input, SM/EM sizing context, refinement comment, Accept round result comment, or pointing, unpointed, or split record; story comments posted by an earlier invocation stay part of the story surface.",
+        # B4: the summary in the closing message.
+        "The closing message carries the run summary in the template `references/metrics.md` defines, on every end state and every stop, with every field filled or labelled as that reference defines (`not reported`, `cumulative`, `partial`, or, when the invocation performed no launch, `no launches` with `not applicable` totals), and the stop reason where the run stopped.",
+        "The summary contains no secrets and no local or scratch paths.",
+        # B4: no post, as an exception to "Read first".
+        "This skill does not post the summary on the story, and no posting statement in `references/metrics.md` applies to it: neither its Independence rule that the facilitator posts the summary, nor that rule's exception for the summary comment posted at the end, nor its Posting section and its `story-refinement` order.",
+        'This is an exception to the "Read first" rule that a capability file is authoritative.',
+    ],
+)
+def test_metrics_section_states_the_bindings(sentence: str) -> None:
+    assert sentence in skill_section(METRICS)
+
+
+@pytest.mark.parametrize(
+    "launch",
+    [
+        "the tracker-write preflight",
+        "each Step 1 voter launch",
+        "each PO launch that authors or applies a tracker write or record",
+        "each accept-round voter launch, including the re-refine accept round",
+        "each Step 3 pointing launch, including the re-run after a re-refine",
+        "each Step 4 discussion launch",
+        "each Step 4 re-vote launch",
+        "each Step 4 no-consensus path-decision launch",
+        "each anchoring recovery re-launch",
+        "each slice estimate launch",
+    ],
+)
+def test_metrics_section_names_each_timed_launch_kind(launch: str) -> None:
+    timed = bullet(section(SKILL.read_text(), METRICS), "Timed launches")
+    assert flat(launch) in timed
+
+
+def test_metrics_section_does_not_restate_the_reference() -> None:
+    body = section(SKILL.read_text(), METRICS)
+    for phrase in ("| Role | Runtime |", "Run metrics: <skill>", "Accept rounds:", "Pointing rounds:"):
+        assert phrase not in body, phrase
+
+
+def test_read_first_authority_rule_is_unchanged() -> None:
+    assert (
+        "Where this file and a capability file disagree, the capability file is authoritative, except the "
+        "non-voting facilitator rule, the independence rules, and the anchoring guardrail here, which always override."
+    ) in skill_section("Read first")
+
+
+@pytest.mark.parametrize(
+    "sentence",
+    [
+        "With `metrics` off or omitted, the facilitator does not open `references/metrics.md`, collects no figure, creates no metrics scratch file, posts no metrics comment, and adds no metrics content to any brief, record, report, todo list, closing message, or tracker write, other than the `metrics: off` line.",
+        "Every other metrics instruction in this skill applies only when `metrics` is on.",
+    ],
+)
+def test_arguments_section_states_the_off_path(sentence: str) -> None:
+    assert sentence in skill_section(ARGUMENTS)
+
+
+def test_metrics_mentions_outside_the_permitted_sections_are_absent() -> None:
+    """B2: outside Arguments, Metrics, and Closing message, the skill text never mentions metrics."""
+    text = re.sub(r"<!--.*?-->", "", SKILL.read_text(), flags=re.DOTALL)
+    for heading in (ARGUMENTS, METRICS, CLOSING):
+        text, count = re.subn(rf"^## {re.escape(heading)}\s*$.*?(?=^#{{1,2}} |\Z)", "", text,
+                              flags=re.MULTILINE | re.DOTALL)
+        assert count == 1, heading
+    assert "metric" not in text.lower()
+
+
+def test_readme_row_names_the_metrics_switch() -> None:
+    row = next(line for line in (ROOT / "README.md").read_text().splitlines()
+               if "skills/story-refinement/SKILL.md" in line)
+    assert "`metrics` switch (default `off`)" in row
+    assert "run summary in the closing message" in row
+
+
+def test_todo_tracking_seed_collects_metrics_only_when_the_switch_is_on() -> None:
+    seed = next(line for line in (ROOT / "shared" / "todo-tracking.md").read_text().splitlines()
+                if line.startswith("- **story-refinement:**"))
+    assert "and, only when the `metrics` switch is on, collect metrics." in seed
