@@ -285,18 +285,40 @@ def test_metrics_switch_plain_words_are_mapped_or_asked() -> None:
 def test_metrics_line_goes_in_the_todo_list_and_every_closing_report() -> None:
     body = " ".join(section(SKILL.read_text(), "Arguments").split())
     assert METRICS_LINE_SENTENCE in body
-    assert "(the step 5 report, or the report made at a stop in steps 1 to 4)" in body
+    assert "(the step 5 report, or the report made at any stop, including one before step 0)" in body
     assert "Write the four resolved values at the top of your todo list and in the final report" not in body
     close_out = " ".join(section(SKILL.read_text(), "5. Close out").split())
     assert "the four resolved model and effort values and the `metrics: on|off` line" in close_out
 
 
 METRICS_OPENING = "Only when `metrics` is on, read [references/metrics.md](references/metrics.md)"
+# SKL-95: the closing-report summary; SKL-96 adds the engineer and QA launch rows and the extras.
 METRICS_ON_SCOPE = (
-    "With `metrics` on, this skill does not yet take any figure, write a metrics file, add totals to a report, "
-    "or post a summary, and this sentence overrides the reference's collection, totals, and posting rules: "
-    "the run adds only the `metrics: on` line, and the coordinator makes no tracker write."
+    "With `metrics` on, this skill does not yet record a row for a senior engineer or QA launch or record the "
+    "`story-to-done` extras, and it posts no summary comment; this sentence overrides the reference's collection "
+    "rules for those rows and extras and all of its posting rules."
 )
+METRICS_START = (
+    "With `metrics` on, timestamp the invocation's start when `metrics` resolves to on, before step 0; the "
+    "elapsed wall-clock runs from it to the closing report."
+)
+METRICS_COMMAND_ROWS = (
+    "From the start timestamp on, record a row for each command the coordinator launches, in launch order, "
+    "timestamped immediately before and after the launch, with its usage figures recorded under "
+    "`references/metrics.md` and `not reported` for any usage the runtime does not return."
+)
+METRICS_TIMESTAMP_COMMANDS = "Take each timestamp inside the command it times; a start timestamp taken by a command of its own is that command's row, the first in the table."
+METRICS_CLOSING_REPORT = (
+    "Give the summary, in the template `references/metrics.md` defines, in the closing report of every end "
+    "state: Done, or any stop, including a stop before step 0 or before any senior engineer or QA agent is spawned."
+)
+METRICS_NO_LAUNCHES = (
+    "The summary reads `no launches` only when the coordinator launched no role and no command; otherwise it "
+    "has a row for each coordinator-launched command in launch order, the elapsed wall-clock, and the end "
+    "state or stop reason."
+)
+METRICS_NO_TRACKER_WRITE = "The coordinator makes no tracker write and never sets the story state."
+METRICS_NO_SECRETS = "The closing report contains no secrets and no local or scratch paths."
 
 
 def test_manifest_appends_metrics_to_story_to_done() -> None:
@@ -328,9 +350,9 @@ OFF_PATH = (
 )
 
 
-# Every line of the skill that touches metrics, pinned exactly: adding, extending, or rewording
+# Every line of the skill that touches metrics, the closing report, or a tracker write, pinned exactly: adding, extending, or rewording
 # metrics content anywhere (Arguments and Metrics included) fails until it is pinned here.
-METRICS_WORDS = re.compile(r"metric|figure|token|tool.call|wall-clock|duration|usage|summar|total|cost|switch|\btim(?:e|ing|er|estamp)\w*|elapsed|clock|latency", re.IGNORECASE)
+METRICS_WORDS = re.compile(r"metric|figure|token|tool.call|wall-clock|duration|usage|summar|total|cost|switch|\btim(?:e|ing|er|estamp)\w*|elapsed|clock|latency|closing report|tracker write", re.IGNORECASE)
 METRICS_LINES = [
     METRICS_ROW,
     '- `metrics` is given as `metrics=on` or `metrics=off`, or in plain words: "with metrics" and "metrics on" '
@@ -338,11 +360,18 @@ METRICS_LINES = [
     "never guess.",
     "- Resolve `metrics` before step 0 creates the todo list; it sets no model or effort.",
     "- " + OFF_PATH,
-    "- " + METRICS_LINE_SENTENCE + " (the step 5 report, or the report made at a stop in steps 1 to 4).",
+    "- " + METRICS_LINE_SENTENCE + " (the step 5 report, or the report made at any stop, including one before step 0).",
     "## Metrics",
     METRICS_OPENING + " once the story ID is known: it is the single home for what a `story-to-done` run "
     "collects and reports, and this file does not restate it.",
+    METRICS_START,
+    METRICS_COMMAND_ROWS,
+    METRICS_TIMESTAMP_COMMANDS,
+    METRICS_CLOSING_REPORT,
+    METRICS_NO_LAUNCHES,
     METRICS_ON_SCOPE,
+    METRICS_NO_TRACKER_WRITE,
+    METRICS_NO_SECRETS,
     "Report the story identifier, its final state, the four resolved model and effort values and the "
     "`metrics: on|off` line, each PR, the number of QA rounds with the items fixed in each, where QA recorded "
     "its evidence, and any incidental defects left open.",
@@ -364,10 +393,68 @@ def test_arguments_prose_count_matches_the_table() -> None:
     assert len(rows) == 5 and "Five arguments are optional" in body
 
 
-def test_readme_row_names_the_metrics_switch_and_its_default() -> None:
-    row = next(
+def readme_row() -> str:
+    rows = [
         line
         for line in (ROOT / "README.md").read_text().splitlines()
         if line.startswith("| [`story-to-done`](skills/story-to-done/SKILL.md) |")
-    )
+    ]
+    assert rows, "README Skills table is missing the story-to-done row"
+    return rows[0]
+
+
+def test_readme_row_names_the_metrics_switch_and_its_default() -> None:
+    row = readme_row()
     assert "a `metrics` switch, `off` by default" in row
+
+
+def metrics_body() -> str:
+    return " ".join(section(SKILL.read_text(), "Metrics").split())
+
+
+def test_metrics_start_is_timestamped_when_the_switch_resolves() -> None:
+    assert METRICS_START in metrics_body()
+
+
+def test_each_coordinator_command_gets_a_timed_row_with_its_usage() -> None:
+    body = metrics_body()
+    assert METRICS_COMMAND_ROWS in body
+    assert METRICS_TIMESTAMP_COMMANDS in body
+
+
+def test_closing_report_of_every_end_state_gives_the_summary_in_the_template() -> None:
+    assert METRICS_CLOSING_REPORT in metrics_body()
+
+
+def test_summary_reads_no_launches_only_without_any_launch() -> None:
+    assert METRICS_NO_LAUNCHES in metrics_body()
+
+
+def test_metrics_make_no_tracker_write() -> None:
+    body = metrics_body()
+    assert METRICS_NO_TRACKER_WRITE in body
+    assert METRICS_ON_SCOPE in body
+
+
+def test_closing_report_carries_no_secrets_or_paths() -> None:
+    assert METRICS_NO_SECRETS in metrics_body()
+
+
+def test_readme_row_says_the_summary_is_given_in_the_closing_report() -> None:
+    row = readme_row()
+    assert "a `metrics` switch, `off` by default, turns on run metrics, with the run summary given in the closing report" in row
+
+
+POST_WORDS = re.compile(r"\bpost(?:s|ed|ing)?\b|\bcomments?\b", re.IGNORECASE)
+
+
+def test_no_line_tells_the_coordinator_to_post_or_comment() -> None:
+    body = SKILL.read_text().split("\n---\n", 1)[1]
+    allowed = {"- " + OFF_PATH, METRICS_ON_SCOPE}
+    merge_rule = "needs a delta review posted before merging"
+    for line in body.splitlines():
+        if line in allowed:
+            continue
+        assert not POST_WORDS.search(line.replace(merge_rule, "")), (
+            f"a line tells the coordinator to post or comment: {line}"
+        )
