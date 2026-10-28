@@ -21,7 +21,7 @@ Every item QA rules not met goes back to the senior engineer, and the loop repea
 `STORY_ID` is required: a Linear story identifier (for example `ABC-123`, with the team key `profile.tracker.team_key`).
 If none was given, ask the user for one before doing anything else; never guess a story number.
 
-Four arguments are optional, given as `key=value` or in plain words ("QA on Opus 5.5 at max" sets `qa-model` and `qa-effort`):
+Five arguments are optional, given as `key=value` or in plain words ("QA on Opus 5.5 at max" sets `qa-model` and `qa-effort`):
 
 | Argument | Sets | Default |
 |---|---|---|
@@ -29,6 +29,7 @@ Four arguments are optional, given as `key=value` or in plain words ("QA on Opus
 | `engineer-effort` | the senior engineer's reasoning effort | `high` |
 | `qa-model` | the QA agent's model | Opus 5.5 (`claude-opus-5-5`) |
 | `qa-effort` | the QA agent's reasoning effort | `high` |
+| `metrics` | whether the run collects and reports run metrics | `off` |
 
 - An argument left out takes its default.
 - Effort is one of `low`, `medium`, `high`, `xhigh`, or `max`.
@@ -36,7 +37,10 @@ Four arguments are optional, given as `key=value` or in plain words ("QA on Opus
 - Map each model and effort to your runtime with `references/runtimes.md`.
   If the runtime cannot run that exact model or effort level, stop and say so; never substitute another model or level.
 - Each role keeps the same model and effort in every round.
-- Write the four resolved values at the top of your todo list and in the final report.
+- `metrics` is given as `metrics=on` or `metrics=off`, or in plain words: "with metrics" and "metrics on" mean on, "without metrics" and "metrics off" mean off; ask the user about any other phrasing about metrics; never guess.
+- Resolve `metrics` before step 0 creates the todo list; it sets no model or effort.
+- With `metrics` off or omitted, read no metrics reference, collect no figure, create no metrics file, post no metrics comment, and add no metrics content to any brief, report, todo list, or tracker write, other than the `metrics: off` line.
+- Write the four resolved model and effort values and the `metrics: on|off` line at the top of your todo list and in the closing report of every end state (the step 5 report, or the report made at a stop in steps 1 to 4).
 
 ## Read first
 
@@ -51,6 +55,11 @@ Read each of these at the step that needs it:
 - [references/secrets.md](references/secrets.md) - its rules go into every brief.
 
 Where this file and a capability file disagree, the capability file is authoritative.
+
+## Metrics
+
+Only when `metrics` is on, read [references/metrics.md](references/metrics.md) once the story ID is known: it is the single home for what a `story-to-done` run collects and reports, and this file does not restate it.
+With `metrics` on, this skill does not yet take any figure, write a metrics file, add totals to a report, or post a summary, and this sentence overrides the reference's collection, totals, and posting rules: the run adds only the `metrics: on` line, and the coordinator makes no tracker write.
 
 ## 0. Track everything on a todo list
 
@@ -147,7 +156,7 @@ After each round, tell the user the round number, the items that failed, and the
 ## 5. Close out
 
 Read the story back and confirm it is in `profile.tracker.states.done` with the completion record step 4 checks, then finish your todo list.
-Report the story identifier, its final state, the four resolved model and effort values, each PR, the number of QA rounds with the items fixed in each, where QA recorded its evidence, and any incidental defects left open.
+Report the story identifier, its final state, the four resolved model and effort values and the `metrics: on|off` line, each PR, the number of QA rounds with the items fixed in each, where QA recorded its evidence, and any incidental defects left open.
 
 ## Boundaries
 

@@ -50,7 +50,7 @@ def test_readme_lists_skill_in_table() -> None:
 
 def test_skill_links_to_required_references() -> None:
     text = SKILL.read_text()
-    for name in ("profile", "runtimes", "todo-tracking", "linear", "code-review", "secrets"):
+    for name in ("profile", "runtimes", "todo-tracking", "linear", "code-review", "secrets", "metrics"):
         assert f"](references/{name}.md)" in text, name
 
 
@@ -252,3 +252,122 @@ def test_nesting_guidance_stays_runtime_neutral() -> None:
     assert "subagent_depth" not in body
     assert "grant `task`" not in body
     assert "On opencode" not in body
+
+
+# SKL-48: the `metrics` switch, its off path, and its wiring.
+
+METRICS_ROW = "| `metrics` | whether the run collects and reports run metrics | `off` |"
+METRICS_LINE_SENTENCE = (
+    "Write the four resolved model and effort values and the `metrics: on|off` line at the top of "
+    "your todo list and in the closing report of every end state"
+)
+
+
+def test_arguments_table_adds_the_metrics_switch_off_by_default() -> None:
+    body = section(SKILL.read_text(), "Arguments")
+    assert METRICS_ROW in body, "arguments table missing the metrics row and its off default"
+    assert "Five arguments are optional" in body
+    assert "Four arguments are optional" not in body
+
+
+def test_metrics_switch_plain_words_are_mapped_or_asked() -> None:
+    body = " ".join(section(SKILL.read_text(), "Arguments").split())
+    for phrase in (
+        "`metrics` is given as `metrics=on` or `metrics=off`",
+        '"with metrics" and "metrics on" mean on',
+        '"without metrics" and "metrics off" mean off',
+        "ask the user about any other phrasing about metrics; never guess",
+        "Resolve `metrics` before step 0 creates the todo list; it sets no model or effort.",
+    ):
+        assert phrase in body, f"arguments missing: {phrase}"
+
+
+def test_metrics_line_goes_in_the_todo_list_and_every_closing_report() -> None:
+    body = " ".join(section(SKILL.read_text(), "Arguments").split())
+    assert METRICS_LINE_SENTENCE in body
+    assert "(the step 5 report, or the report made at a stop in steps 1 to 4)" in body
+    assert "Write the four resolved values at the top of your todo list and in the final report" not in body
+    close_out = " ".join(section(SKILL.read_text(), "5. Close out").split())
+    assert "the four resolved model and effort values and the `metrics: on|off` line" in close_out
+
+
+METRICS_OPENING = "Only when `metrics` is on, read [references/metrics.md](references/metrics.md)"
+METRICS_ON_SCOPE = (
+    "With `metrics` on, this skill does not yet take any figure, write a metrics file, add totals to a report, "
+    "or post a summary, and this sentence overrides the reference's collection, totals, and posting rules: "
+    "the run adds only the `metrics: on` line, and the coordinator makes no tracker write."
+)
+
+
+def test_manifest_appends_metrics_to_story_to_done() -> None:
+    entry = MANIFEST["skills"]["story-to-done"]
+    assert entry.count("metrics") == 1, "story-to-done must list metrics exactly once"
+    assert entry.index("metrics") == entry.index("secrets") + 1, "metrics is appended after secrets"
+
+
+def test_vendored_metrics_reference_carries_the_not_reported_rule() -> None:
+    vendored = ROOT / "skills" / "story-to-done" / "references" / "metrics.md"
+    assert vendored.is_file(), "run scripts/vendor_shared.py to vendor references/metrics.md"
+    assert "A figure the runtime does not return is `not reported`; it is never estimated or inferred." in (
+        vendored.read_text()
+    )
+
+
+def test_metrics_section_opens_on_only_and_links_the_reference() -> None:
+    text = SKILL.read_text()
+    body = section(text, "Metrics").strip()
+    assert body.startswith(METRICS_OPENING), "the Metrics section must open with its on-only condition"
+    assert METRICS_ON_SCOPE in body, "the Metrics section must keep the on path to the metrics line"
+    assert "](references/metrics.md)" not in section(text, "Read first")
+
+
+OFF_PATH = (
+    "With `metrics` off or omitted, read no metrics reference, collect no figure, create no metrics file, "
+    "post no metrics comment, and add no metrics content to any brief, report, todo list, or tracker write, "
+    "other than the `metrics: off` line."
+)
+
+
+# Every line of the skill that touches metrics, pinned exactly: adding, extending, or rewording
+# metrics content anywhere (Arguments and Metrics included) fails until it is pinned here.
+METRICS_WORDS = re.compile(r"metric|figure|token|tool.call|wall-clock|duration|usage|summar|total|cost|switch", re.IGNORECASE)
+METRICS_LINES = [
+    METRICS_ROW,
+    '- `metrics` is given as `metrics=on` or `metrics=off`, or in plain words: "with metrics" and "metrics on" '
+    'mean on, "without metrics" and "metrics off" mean off; ask the user about any other phrasing about metrics; '
+    "never guess.",
+    "- Resolve `metrics` before step 0 creates the todo list; it sets no model or effort.",
+    "- " + OFF_PATH,
+    "- " + METRICS_LINE_SENTENCE + " (the step 5 report, or the report made at a stop in steps 1 to 4).",
+    "## Metrics",
+    METRICS_OPENING + " once the story ID is known: it is the single home for what a `story-to-done` run "
+    "collects and reports, and this file does not restate it.",
+    METRICS_ON_SCOPE,
+    "Report the story identifier, its final state, the four resolved model and effort values and the "
+    "`metrics: on|off` line, each PR, the number of QA rounds with the items fixed in each, where QA recorded "
+    "its evidence, and any incidental defects left open.",
+]
+
+
+def test_metrics_off_changes_nothing_but_the_metrics_line() -> None:
+    text = SKILL.read_text()
+    assert OFF_PATH in " ".join(section(text, "Arguments").split())
+    body = text.split("\n---\n", 1)[1]
+    found = [line for line in body.splitlines() if METRICS_WORDS.search(line)]
+    assert found == METRICS_LINES, "metrics content outside the pinned switch, line, and on-only lines"
+    assert not METRICS_WORDS.search(text.split("\n---\n", 1)[0]), "the front matter adds metrics content"
+
+
+def test_arguments_prose_count_matches_the_table() -> None:
+    body = section(SKILL.read_text(), "Arguments")
+    rows = [line for line in body.splitlines() if line.startswith("| `")]
+    assert len(rows) == 5 and "Five arguments are optional" in body
+
+
+def test_readme_row_names_the_metrics_switch_and_its_default() -> None:
+    row = next(
+        line
+        for line in (ROOT / "README.md").read_text().splitlines()
+        if line.startswith("| [`story-to-done`](skills/story-to-done/SKILL.md) |")
+    )
+    assert "a `metrics` switch, `off` by default" in row
