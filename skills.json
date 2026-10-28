@@ -101,7 +101,8 @@
       "todo-tracking",
       "linear",
       "code-review",
-      "secrets"
+      "secrets",
+      "metrics"
     ]
   }
 }
