@@ -58,9 +58,9 @@ review:
     model: gpt-6-sol
   # Interim: the owner will change this again once opencode 2.x is in the agent container.
   adjudicator:
-    name: MiMo V2.6 Flash
+    name: DeepSeek V4 Pro
     runtime: opencode
-    model: opencode/mimo-v2.6-flash-free
+    model: deepseek/deepseek-v4-pro
   shadow_adjudicators: []
   merge_owner: agent
   pre_pr:
