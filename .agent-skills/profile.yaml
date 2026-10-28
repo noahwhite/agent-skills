@@ -72,11 +72,11 @@ review:
       name: Codex GPT-6 Sol
       runtime: codex
       model: gpt-6-sol
-    # Interim: the owner will change this again once opencode 2.x is in the agent container.
+    # The arbiter runs as a Claude Code subagent because opencode lists no usable Claude model here.
     arbiter:
-      name: GLM 5.3 Flash
-      runtime: opencode
-      model: opencode-go/glm-5.3-flash
+      name: Sonnet 5.5
+      runtime: claude-code
+      model: sonnet
     simplicity_reviewer:
       name: DeepSeek V4 Pro
       runtime: opencode
