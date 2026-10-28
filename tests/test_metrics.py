@@ -4,6 +4,7 @@ Each test pins an exact sentence or table-header fragment, so deleting the guard
 from the source file fails the named test.
 """
 
+import re
 from pathlib import Path
 
 import pytest
@@ -15,6 +16,17 @@ METRICS = ROOT / "shared" / "metrics.md"
 def metrics_text() -> str:
     assert METRICS.is_file(), "shared/metrics.md is missing"
     return METRICS.read_text()
+
+
+def metrics_prose() -> str:
+    """The file without its fenced blocks, so a rule moved into an example no longer counts."""
+    return re.sub(r"```.*?```", "", metrics_text(), flags=re.S)
+
+
+def template_block() -> str:
+    text = metrics_text()
+    assert text.count("```text") == 1, "expected exactly one summary template block"
+    return text.split("```text", 1)[1].split("```", 1)[0]
 
 
 def flat(text: str) -> str:
@@ -32,6 +44,12 @@ ROW_SCOPE = (
     "spawns, including each re-launch and the tracker-write preflight where the skill has one."
 )
 ROUND_COUNTERS = "Round counters are not rows; they are listed separately under the extras below."
+USAGE_SOURCE = (
+    "What each runtime's usage report returns is in the \"Read a subagent's usage (duration, "
+    "tokens, tool calls)\" row of `references/runtimes.md`, and for a shell-launched agent in its "
+    "\"Usage from shell-launched agents\" rule."
+)
+FIELD_MARKERS = ["Role", "Runtime", "Model", "Effort", "Duration", "Tokens", "Tool calls"]
 ROW_FIELDS = [
     pytest.param("1. **Role:** the role the launch filled.", id="role"),
     pytest.param(
@@ -141,7 +159,7 @@ STORY_TO_DONE_EXTRAS = [
     ),
     pytest.param("- **End state:** Done or the stop reason.", id="end-state"),
 ]
-TEMPLATE = [
+TEMPLATE_BLOCK = [
     pytest.param(
         "Run metrics: <skill> <story key> - <end state or stop reason>", id="heading-line"
     ),
@@ -154,9 +172,31 @@ TEMPLATE = [
     pytest.param(
         "- Tool calls: <sum> [partial: <n> not reported, <n> cumulative]", id="totals-tool-calls"
     ),
+    pytest.param("Totals", id="totals-heading"),
+]
+TEMPLATE_PLACEHOLDERS = {
+    "<skill>", "<story key>", "<end state or stop reason>", "<role>", "<runtime>", "<model>",
+    "<effort or not set>", "<duration>", "<tokens>", "<tool calls>",
+    "<one line per extra of this skill: name: value>", "<elapsed>", "<sum>", "<n>",
+}
+TEMPLATE_PROSE = [
     pytest.param(
-        "With no launches, the table is replaced by the line `no launches` and each total reads "
-        "`not applicable`.",
+        "The heading line names the skill, the story key, and the invocation's end state or stop "
+        "reason.",
+        id="template-heading-rule",
+    ),
+    pytest.param(
+        "Each launch gets one table row with the fields in the order above; a figure cell holds "
+        "the number, `not reported`, or the number followed by `cumulative`.",
+        id="template-row-per-launch",
+    ),
+    pytest.param(
+        "In a cell value, a `|` is written as `\\|` and a line break as a space.",
+        id="template-cell-escaping",
+    ),
+    pytest.param(
+        "With no launches, the table is replaced by the line `no launches`, the elapsed wall-clock "
+        "is still given, and each per-figure total reads `not applicable`.",
         id="template-no-launches",
     ),
 ]
@@ -167,51 +207,73 @@ def test_metrics_reference_exists():
 
 
 def test_one_row_per_launch_the_poster_spawns():
-    assert_states(metrics_text(), ROW_SCOPE)
+    assert_states(metrics_prose(), ROW_SCOPE)
 
 
 def test_round_counters_are_listed_separately():
-    assert_states(metrics_text(), ROUND_COUNTERS)
+    assert_states(metrics_prose(), ROUND_COUNTERS)
+
+
+def test_usage_source_names_the_row_and_the_shell_launched_rule():
+    assert_states(metrics_prose(), USAGE_SOURCE)
 
 
 @pytest.mark.parametrize("phrase", ROW_FIELDS)
 def test_row_field(phrase):
-    assert_states(metrics_text(), phrase)
+    assert_states(metrics_prose(), phrase)
 
 
 def test_row_fields_are_in_order():
-    text = flat(metrics_text())
-    positions = [text.index(flat(p.values[0])) for p in ROW_FIELDS if p.id != "runtime-is-data"]
+    text = metrics_prose()
+    positions = []
+    for number, name in enumerate(FIELD_MARKERS, start=1):
+        marker = f"{number}. **{name}:**"
+        assert text.count(marker) == 1, f"expected exactly one {marker!r}"
+        positions.append(text.index(marker))
     assert positions == sorted(positions)
 
 
 @pytest.mark.parametrize("phrase", FIGURE_RULES)
 def test_figure_rule(phrase):
-    assert_states(metrics_text(), phrase)
+    assert_states(metrics_prose(), phrase)
 
 
 @pytest.mark.parametrize("phrase", REFINEMENT_EXTRAS)
 def test_story_refinement_extra(phrase):
-    assert_states(metrics_text(), phrase)
+    assert_states(metrics_prose(), phrase)
 
 
 @pytest.mark.parametrize("phrase", STORY_TO_DONE_EXTRAS)
 def test_story_to_done_extra(phrase):
-    assert_states(metrics_text(), phrase)
+    assert_states(metrics_prose(), phrase)
 
 
-@pytest.mark.parametrize("phrase", TEMPLATE)
+@pytest.mark.parametrize("phrase", TEMPLATE_BLOCK)
 def test_summary_template(phrase):
-    assert_states(metrics_text(), phrase)
+    assert phrase in template_block().splitlines(), f"missing template line: {phrase}"
+
+
+def test_summary_template_uses_only_the_listed_placeholders():
+    assert set(re.findall(r"<[^<>]+>", template_block())) == TEMPLATE_PLACEHOLDERS
+
+
+@pytest.mark.parametrize("phrase", TEMPLATE_PROSE)
+def test_summary_template_rule(phrase):
+    assert_states(metrics_prose(), phrase)
 
 
 # A2: independence and posting rules.
 INDEPENDENCE_AND_POSTING = [
     pytest.param(
-        "Collected figures live only in one metrics file inside the session's one scratch "
-        "directory (the Scratch files rule in `references/runtimes.md`), outside every per-story "
-        "or per-role subdirectory a voter, engineer, or QA writes into.",
+        "Collected figures live only in one metrics file in the session's one scratch directory "
+        "(the Scratch files rule in `references/runtimes.md`).",
         id="scratch-location",
+    ),
+    pytest.param(
+        "Every skill passes each voter, engineer, and QA only its own per-role or per-story "
+        "subdirectory of that directory, never the directory itself and never another role's "
+        "files, so that no voter is handed another voter's votes or inputs.",
+        id="own-subdirectory-only",
     ),
     pytest.param(
         "The poster the consuming skill names writes the metrics file and posts the summary: the "
@@ -277,8 +339,9 @@ INDEPENDENCE_AND_POSTING = [
         id="refinement-order-anchoring",
     ),
     pytest.param(
-        "The coordinator posts its own comment as the coordinator's only tracker write of the "
-        "invocation; the delegated engineer and QA make their own writes.",
+        "The coordinator makes no tracker write other than its summary comment: the delegated "
+        "engineer and QA make their own writes, and failed QA items reach the engineer in the "
+        "hand-back brief, never as a coordinator tracker write.",
         id="story-to-done-only-tracker-write",
     ),
     pytest.param("The coordinator never sets the story state.", id="story-to-done-never-sets-state"),
@@ -287,22 +350,26 @@ INDEPENDENCE_AND_POSTING = [
 
 @pytest.mark.parametrize("phrase", INDEPENDENCE_AND_POSTING)
 def test_independence_and_posting_rule(phrase):
-    assert_states(metrics_text(), phrase)
+    assert_states(metrics_prose(), phrase)
 
 
 def test_template_has_no_path_placeholder():
-    template = metrics_text().split("```text", 1)[1].split("```", 1)[0]
-    assert "path" not in template.lower() and "dir" not in template.lower(), template
+    placeholders = set(re.findall(r"<[^<>]+>", template_block()))
+    assert placeholders <= TEMPLATE_PLACEHOLDERS, placeholders - TEMPLATE_PLACEHOLDERS
+    for placeholder in placeholders:
+        assert not re.search(r"path|dir|scratch|session|file", placeholder), placeholder
 
 
 # A3: registered in the shared index only.
 README = ROOT / "shared" / "README.md"
-README_ROW = "| `metrics.md` | Run metrics: what a run collects, the summary template, and the independence and posting rules. |"
+README_ROW_START = "| `metrics.md` |"
 README_INTRO = "A capability listed here may wait for a later slice to compose it."
 
 
 def test_shared_readme_lists_metrics():
-    assert README_ROW in README.read_text().splitlines()
+    rows = [line for line in README.read_text().splitlines() if line.startswith(README_ROW_START)]
+    assert len(rows) == 1, rows
+    assert rows[0].count("|") == 3 and rows[0].split("|")[2].strip(), rows[0]
 
 
 def test_shared_readme_intro_allows_an_uncomposed_capability():
@@ -314,6 +381,16 @@ def test_shared_readme_intro_allows_an_uncomposed_capability():
 RUNTIMES = ROOT / "shared" / "runtimes.md"
 USAGE_ROW = "| Read a subagent's usage (duration, tokens, tool calls) |"
 USAGE_BULLET = "- **Usage from shell-launched agents.**"
+SCRATCH_BULLET = "- **Scratch files.**"
+OWN_SUBDIRECTORY = (
+    "A skill passes each voter, engineer, or QA only its own subdirectory of the session "
+    "directory, never the session directory itself and never another role's files, so that no "
+    "voter is handed another voter's votes or inputs."
+)
+V1_INTRO = (
+    "OpenCode V1 guidance is legacy, untested; a V1 observation recorded with its version in a "
+    "cell is an observation, not V1 guidance."
+)
 
 
 def usage_row() -> str:
@@ -322,16 +399,32 @@ def usage_row() -> str:
     return rows[0]
 
 
-def usage_bullet() -> str:
+def rule_bullet(start: str) -> str:
     text = RUNTIMES.read_text()
-    assert text.count(USAGE_BULLET) == 1, "expected exactly one usage bullet"
-    rest = text[text.index(USAGE_BULLET):]
+    assert text.count(start) == 1, f"expected exactly one {start!r} bullet"
+    rest = text[text.index(start):]
     end = len(rest)
     for marker in ("\n- **", "\n## "):
         found = rest.find(marker, 1)
         if found != -1:
             end = min(end, found)
     return rest[:end]
+
+
+def usage_bullet() -> str:
+    return rule_bullet(USAGE_BULLET)
+
+
+def test_scratch_files_rule_passes_each_role_only_its_own_subdirectory():
+    assert_states(rule_bullet(SCRATCH_BULLET), OWN_SUBDIRECTORY)
+
+
+def test_scratch_files_rule_no_longer_passes_the_session_directory():
+    assert "Pass the session's directory to every subagent" not in rule_bullet(SCRATCH_BULLET)
+
+
+def test_runtime_map_intro_separates_v1_observations_from_v1_guidance():
+    assert_states(RUNTIMES.read_text().split("\n|", 1)[0], V1_INTRO)
 
 
 def test_runtime_map_has_one_usage_row_with_two_cells():
@@ -351,6 +444,10 @@ def test_usage_row_opencode_cell_names_each_version_line():
 
 def test_usage_bullet_states_codex_observations_with_version():
     assert_states(usage_bullet(), "For `runtime: codex`, observed on codex-cli 0.163.0:")
+
+
+def test_usage_bullet_marks_other_codex_versions_not_observed():
+    assert_states(usage_bullet(), "Any other codex version is `not observed` until it is run.")
 
 
 def test_usage_bullet_states_command_has_no_common_contract():

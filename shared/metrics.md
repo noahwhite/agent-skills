@@ -22,7 +22,7 @@ Each row has these fields, in this order:
 6. **Tokens:** the token count the runtime's usage report returns for that launch.
 7. **Tool calls:** the tool-call count the runtime's usage report returns for that launch.
 
-What each runtime's usage report returns is in the "Read a subagent's usage (duration, tokens, tool calls)" row of `references/runtimes.md`.
+What each runtime's usage report returns is in the "Read a subagent's usage (duration, tokens, tool calls)" row of `references/runtimes.md`, and for a shell-launched agent in its "Usage from shell-launched agents" rule.
 
 ### Figures
 
@@ -78,12 +78,14 @@ Totals
 
 The heading line names the skill, the story key, and the invocation's end state or stop reason.
 Each launch gets one table row with the fields in the order above; a figure cell holds the number, `not reported`, or the number followed by `cumulative`.
+In a cell value, a `|` is written as `\|` and a line break as a space.
 The bracketed `partial` note appears only under the condition in Run totals.
-With no launches, the table is replaced by the line `no launches` and each total reads `not applicable`.
+With no launches, the table is replaced by the line `no launches`, the elapsed wall-clock is still given, and each per-figure total reads `not applicable`.
 
 ## Independence
 
-- Collected figures live only in one metrics file inside the session's one scratch directory (the Scratch files rule in `references/runtimes.md`), outside every per-story or per-role subdirectory a voter, engineer, or QA writes into.
+- Collected figures live only in one metrics file in the session's one scratch directory (the Scratch files rule in `references/runtimes.md`).
+  Every skill passes each voter, engineer, and QA only its own per-role or per-story subdirectory of that directory, never the directory itself and never another role's files, so that no voter is handed another voter's votes or inputs.
 - The metrics file is never named in any brief.
 - The poster the consuming skill names writes the metrics file and posts the summary: the facilitator for `story-refinement`, the coordinator for `story-to-done`.
 - No brief and no voter-visible record contains this invocation's metrics or another role's figures from this invocation, other than the summary comment this invocation posts at its end.
@@ -108,5 +110,5 @@ With no launches, the table is replaced by the line `no launches` and each total
 
 ### `story-to-done`
 
-- The coordinator posts its own comment as the coordinator's only tracker write of the invocation; the delegated engineer and QA make their own writes.
+- The coordinator makes no tracker write other than its summary comment: the delegated engineer and QA make their own writes, and failed QA items reach the engineer in the hand-back brief, never as a coordinator tracker write.
 - The coordinator never sets the story state.

@@ -3,7 +3,7 @@
 # Runtime capability map
 
 The skills name capabilities, not tools.
-This table maps each capability to Claude Code and OpenCode V2; OpenCode V1 guidance is legacy, untested.
+This table maps each capability to Claude Code and OpenCode V2; OpenCode V1 guidance is legacy, untested; a V1 observation recorded with its version in a cell is an observation, not V1 guidance.
 The V2 guidance targets 2.1.2 from `@opencode/cli`, pinned by the discovery CI check; discovery is not end-to-end verification of delegated workflows or review models.
 V2 supported legacy fields are translated in memory; migration to native syntax is optional, not a claim that every V1 field is broken.
 If your runtime is not listed, map each capability to its closest equivalent and say which one you used.
@@ -34,7 +34,8 @@ If your runtime is not listed, map each capability to its closest equivalent and
   The handshake is defined once in the merge-approval capability.
 - **Scratch files.** Create exactly one scratch directory for the session's lifetime with `mktemp -d` inside the base directory the runtime or the profile gives, and use it for every scratch artefact of the session: gate dossiers, throwaway checkouts, agent config homes, checklist files, and subagent inputs.
   The base directory is the runtime's own scratch directory when the runtime provides one (the capability row above), else `profile.workspace.scratch_dir`; it is a base only, never the directory a session works in, and the runtime's base wins when both exist.
-  Pass the session's directory to every subagent and shell-launched agent you start.
+  Pass every subagent and shell-launched agent you start a directory inside the session's directory.
+  A skill passes each voter, engineer, or QA only its own subdirectory of the session directory, never the session directory itself and never another role's files, so that no voter is handed another voter's votes or inputs.
   When neither the runtime nor `profile.workspace.scratch_dir` gives a directory, create one with a standalone `mktemp -d` and use it for the whole task.
   A base that cannot be created or written falls back the same way.
   Keep the base outside every repository under review: a session directory inside a checkout shows up as untracked work and fails the clean-tree preflight.
