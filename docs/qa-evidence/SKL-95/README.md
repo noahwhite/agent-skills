@@ -11,7 +11,7 @@ Outcome: C1 and C4 are not met, so the story returns to In Progress.
 
 | Item | Verdict | Evidence |
 |---|---|---|
-| C1 closing report | Not met | The Metrics section states every C1 rule, but in the engineer's SKL-110 run at `f78452e` (tracker comment `70440152`) the third command row, "show story description from saved JSON", has `not reported` as its duration because the coordinator did not time that command. C1 requires each command row to be timestamped immediately before and after the launch, and `references/metrics.md` reserves `not reported` for figures the runtime does not return, while duration is measured by the coordinator. The QA SKL-111 run timed every command, so one of the two real runs at the reviewed head broke the rule. |
+| C1 closing report | Not met | The Metrics section states every C1 rule, but neither real run at `f78452e` timed every command row before and after the launch. In the engineer's SKL-110 run (tracker comment `70440152`) row 3, "show story description from saved JSON", has `not reported` as its duration because the coordinator did not time that command, and `references/metrics.md` reserves `not reported` for figures the runtime does not return, while duration is measured by the coordinator. In both the SKL-110 and the QA SKL-111 runs, row 1, the start-timestamp command, has one timestamp repeated as start and end (see the C4 row). The QA run timed rows 2 to 4 inside each command. |
 | C2 docs | Verified | The README row adds "with the run summary given in the closing report", and PR #73 changes no file under `shared/` and no vendored reference. |
 | C3 tests | Verified | Eight new text-contract tests pin each C1 phrase, the PR body records a deletion mutant per phrase with the named failing tests, the orchestrator-state guard and scratch-directory tests are unchanged and pass, `uv run --locked pytest -q` passes 669 tests, the vendor check exits 0, and CI is green on the PR head (run 40730452808) and on `main` (run 40731383320). |
 | C4 verified end to end | Not met | QA ran `story-to-done SKL-111 metrics=on` with a clean coordinator loading the skill from `f78452e`. It stopped at step 1 before any role, and its closing report has the heading line, four command rows in launch order matching the four shell commands in its transcript, the elapsed wall-clock from the start timestamp, the totals block, and the `metrics: on` line, with no path or secret and no tracker write. Rows 2 to 4 carry start and end timestamps taken inside each command, but row 1, the start-timestamp command, is one `date` call whose single timestamp is repeated as start and end, so its `0.000 s` is derived and that row is not timestamped before and after the launch, which C4 requires of every row. The engineer's SKL-110 run has the same row 1. C4 is re-run at the fix head. |
@@ -25,7 +25,7 @@ Outcome: C1 and C4 are not met, so the story returns to In Progress.
 ## Failed item for the engineer
 
 C1: with `metrics` on, a coordinator left a command it launched untimed and reported its duration as `not reported`.
-C4: in both runs the start-timestamp command's row has one timestamp, repeated as its start and end.
+C1 and C4: in both runs the start-timestamp command's row has one timestamp, repeated as its start and end.
 The skill text must make every coordinator-launched command, the start-timestamp command included, carry its own before and after timestamps reliably, and C4 is re-run at the fix head.
 
 ## Incidental findings
