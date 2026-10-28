@@ -1,0 +1,224 @@
+# SKL-95 QA round 2 raw output (2026-10-28)
+
+## Build
+$ git rev-parse origin/main
+caba7b7fbc00f801cfcf3628b7f2a02ddeba8b92
+$ trees of main and the PR #78 reviewed head
+caba7b7 tree c9e5eca22d1ccf769211bb196f26e7782ecf4824
+c47ae61 tree c9e5eca22d1ccf769211bb196f26e7782ecf4824
+
+## PR #78 head, merge and reviews of record
+headRefOid c47ae61c958c5143df219e7721469f6d22ea1f1f
+mergeCommit caba7b7fbc00f801cfcf3628b7f2a02ddeba8b92
+mergedAt 2026-10-28T20:12:26Z
+review 5688477403 commit_id 8fe0e8e38e427fd33ece0be46a1c9a4df2890842 submitted 2026-10-28T19:25:55Z first line: Review of record 8fe0e8e38e427fd33ece0be46a1c9a4df2890842
+review 5688535563 commit_id fa0f645f4e844305ed30662f4e2fce12881481ed submitted 2026-10-28T19:30:28Z first line: Review of record fa0f645f4e844305ed30662f4e2fce12881481ed
+review 5688547014 commit_id e412ce379bdf181520d6cde8f696b304aff0dba7 submitted 2026-10-28T19:31:18Z first line: Review of record e412ce379bdf181520d6cde8f696b304aff0dba7
+review 5688678199 commit_id 323ab844aa3819f92a71e55e06b950b0f7a28a12 submitted 2026-10-28T19:41:42Z first line: Review of record 323ab844aa3819f92a71e55e06b950b0f7a28a12
+review 5688748258 commit_id adfef464c47b98c289c709221ba0dc9ad94d6101 submitted 2026-10-28T19:47:14Z first line: Review of record adfef464c47b98c289c709221ba0dc9ad94d6101
+review 5688836993 commit_id 016355bff9f5ec24453cd4462c7535c0bef2527e submitted 2026-10-28T19:54:39Z first line: Review of record 016355bff9f5ec24453cd4462c7535c0bef2527e
+review 5688872022 commit_id 0129b410fafe99eaffc461812d21f53be6271beb submitted 2026-10-28T19:57:37Z first line: Review of record 0129b410fafe99eaffc461812d21f53be6271beb
+review 5688992331 commit_id 116218f209385fd710483592c78469678a653fd5 submitted 2026-10-28T20:07:25Z first line: Review of record 116218f209385fd710483592c78469678a653fd5
+review 5689017268 commit_id c47ae61c958c5143df219e7721469f6d22ea1f1f submitted 2026-10-28T20:09:34Z first line: Review of record c47ae61c958c5143df219e7721469f6d22ea1f1f
+
+## PR #78 reviews of record: reviewer and adjudicator lines, as written in each review body
+review 5688477403 Reviewer: Codex GPT-6 Sol (`codex`, `gpt-6-sol`), read-only, detached worktree at the head. ; Adjudicator: DeepSeek V4 Pro (`opencode`, `deepseek/deepseek-v4-pro`), clean and neutral, read-only.
+review 5688535563 Reviewer: Codex GPT-6 Sol (`codex`, `gpt-6-sol`), read-only, detached worktree at the head. ; Adjudicator: DeepSeek V4 Pro (`opencode`, `deepseek/deepseek-v4-pro`), clean and neutral, read-only.
+review 5688547014 Reviewer: Codex GPT-6 Sol (`codex`, `gpt-6-sol`), read-only, detached worktree at the head. ; Adjudicator: DeepSeek V4 Pro (`opencode`, `deepseek/deepseek-v4-pro`): no findings to adjudicate.
+review 5688678199 Reviewer: Codex GPT-6 Sol (`codex`, `gpt-6-sol`), read-only, detached worktree at the head. ; Adjudicator: DeepSeek V4 Pro (`opencode`, `deepseek/deepseek-v4-pro`), clean and neutral, read-only.
+review 5688748258 Reviewer: Codex GPT-6 Sol (`codex`, `gpt-6-sol`), read-only, detached worktree at the head. ; Adjudicator: DeepSeek V4 Pro (`opencode`, `deepseek/deepseek-v4-pro`), clean and neutral, read-only.
+review 5688836993 Reviewer: Codex GPT-6 Sol (`codex`, `gpt-6-sol`), read-only, detached worktree at the head. ; Adjudicator: DeepSeek V4 Pro (`opencode`, `deepseek/deepseek-v4-pro`), clean and neutral, read-only.
+review 5688872022 Reviewer: Codex GPT-6 Sol (`codex`, `gpt-6-sol`), read-only, detached worktree at the head. ; Adjudicator: DeepSeek V4 Pro (`opencode`, `deepseek/deepseek-v4-pro`), clean and neutral, read-only.
+review 5688992331 Reviewer: Codex GPT-6 Sol (`codex`, `gpt-6-sol`), read-only, detached worktree at the head. ; Adjudicator: DeepSeek V4 Pro (`opencode`, `deepseek/deepseek-v4-pro`), clean and neutral, read-only.
+review 5689017268 Reviewer: Codex GPT-6 Sol (`codex`, `gpt-6-sol`), read-only, detached worktree at the head. ; Adjudicator: DeepSeek V4 Pro (`opencode`, `deepseek/deepseek-v4-pro`), clean and neutral, read-only.
+
+## Files changed by PR #78
+caba7b7fbc00f801cfcf3628b7f2a02ddeba8b92 SKL-95: time every metrics command with distinct start and end timestamps (#78)
+
+ .agent-skills/profile.yaml    |   8 +-
+ skills/story-to-done/SKILL.md |  36 ++++-
+ tests/test_story_to_done.py   | 321 ++++++++++++++++++++++++++++++++++++++++--
+ 3 files changed, 347 insertions(+), 18 deletions(-)
+
+## Files under shared/ or vendored todo-tracking changed by SKL-95 PRs (#73 90be48f, #78 caba7b7)
+(none)
+
+## README row
+42:| [`story-to-done`](skills/story-to-done/SKILL.md) | Implement a story to deployment review with a senior engineer, QA it, and loop fixes until Done; a `metrics` switch, `off` by default, turns on run metrics, with the run summary given in the closing report. |
+
+## Tests at main
+$ uv run --locked pytest -q
+731 passed in 93.11s (0:01:33)
+$ uv run --locked python scripts/vendor_shared.py --check
+exit 0
+$ git diff 7ecd8b6 caba7b7 --stat -- tests/test_scratch_directory.py
+(empty: unchanged)
+$ guard test test_orchestrator_never_sets_the_story_state: lines touched by PR #78
+0
+
+## CI
+c47ae61c958c5143df219e7721469f6d22ea1f1f run 40760437086 ci pull_request success https://github.com/noahwhite/agent-skills/actions/runs/40760437086
+caba7b7fbc00f801cfcf3628b7f2a02ddeba8b92 run 40761182315 ci push success https://github.com/noahwhite/agent-skills/actions/runs/40761182315
+
+## Mutation spot-check (QA, at main): delete one guarded line of the Metrics section, run tests/test_story_to_done.py
+- "Never launch a command outside ..." -> FAILED test_metrics_off_changes_nothing_but_the_metrics_line, test_every_launch_runs_in_the_start_form_or_the_timing_wrapper
+- wrapper line "); rc=$?; printf 'end ..." -> FAILED test_a_handed_directory_with_a_single_quote_is_timed, test_the_timing_wrapper_takes_distinct_start_and_end_timestamps_around_the_command, test_the_timing_wrapper_keeps_the_command_exit_status, test_the_wrapper_keeps_an_inherited_errexit, test_no_command_can_lose_or_corrupt_its_row (and more)
+- "Its `end` timestamp is recorded as ..." -> FAILED test_metrics_off_changes_nothing_but_the_metrics_line, test_every_launch_runs_in_the_start_form_or_the_timing_wrapper
+- "The closing report contains no secrets ..." -> FAILED test_metrics_off_changes_nothing_but_the_metrics_line, test_closing_report_carries_no_secrets_or_paths
+- "The summary reads `no launches` ..." -> FAILED test_metrics_off_changes_nothing_but_the_metrics_line, test_summary_reads_no_launches_only_without_any_launch
+Checkout restored; git status clean.
+
+## C4 QA run: fixture
+$ linear issue create --team SKL --state Blocked --title "[Tabletop fixture] SKL-95 QA round 2 metrics=on stop before any role"
+Created SKL-117 (issue URL omitted: it names the tracker workspace)
+$ linear issue view SKL-117   (before the run)
+**State:** Blocked
+
+## C4 QA run: invocation
+A clean, neutral general-purpose coordinator agent was given only: "story-to-done SKL-117 metrics=on", the instruction to load the skill by reading SKILL.md from a clone of main at caba7b7fbc00f801cfcf3628b7f2a02ddeba8b92 (same tree as c47ae61c958c5143df219e7721469f6d22ea1f1f), the secrets and attribution rules, and to hand back its closing report verbatim and a list of the shell commands it launched.
+
+## C4 QA run: tool calls in order, from the coordinator transcript (<checkout> and <scratch> replace local paths)
+Read	<checkout>/skills/story-to-done/SKILL.md
+Read	<checkout>/.agent-skills/profile.yaml
+Read	<checkout>/skills/story-to-done/references/metrics.md
+Read	<checkout>/skills/story-to-done/references/profile.md
+Read	<checkout>/skills/story-to-done/references/runtimes.md
+Bash	Create session scratch directory and record metrics start row
+Read	<checkout>/skills/story-to-done/references/todo-tracking.md
+Write	<scratch>/<todo>.md
+Bash	Check runtime model/effort overrides and available CLIs
+Edit	<scratch>/<todo>.md
+Bash	Read Linear story SKL-117 and its state
+Read	<checkout>/skills/story-to-done/references/linear.md
+Edit	<scratch>/<todo>.md
+Bash	Print metrics file and record the end row
+Edit	<scratch>/<todo>.md
+SubagentHandback	
+
+## C4 QA run: the four shell commands, sanitized (verbatim except local paths replaced by <scratch>)
+----
+s=$(date -u +%s.%N)
+scratch_base="${CLAUDE_JOB_DIR:+$CLAUDE_JOB_DIR/tmp}"
+[ -n "$scratch_base" ] || scratch_base='/tmp/agent-skills'
+case "${scratch_base:-}" in /*) ;; *) scratch_base="" ;; esac
+if [ -n "$scratch_base" ] && mkdir -p -- "$scratch_base" && [ -w "$scratch_base" ]; then
+  scratch="$(mktemp -d -- "${scratch_base%/}/session.XXXXXX")" || scratch="$(mktemp -d)"
+else
+  scratch="$(mktemp -d)"
+fi
+if [ -z "$scratch" ] || [ ! -d "$scratch" ]; then
+  printf 'could not create a scratch directory\n' >&2
+  exit 1
+fi
+printf '%s\n' "$scratch"
+printf 'start %s start\nend %s start\n' "$s" "$(date -u +%s.%N)" >> "$scratch/metrics.txt"
+----
+f='<scratch>/metrics.txt'; o=$-; set +e; s=$(date -u +%s.%N); printf 'start %s %s\n' "$s" 'check-runtime-overrides' >> "$f"; ( case $o in *e*) set -e;; esac
+for v in CLAUDE_CODE_EFFORT_LEVEL CLAUDE_CODE_SUBAGENT_MODEL_FORCE CLAUDE_CODE_SUBAGENT_MODEL; do
+  if printenv "$v" >/dev/null; then printf '%s=%s\n' "$v" "$(printenv "$v")"; else printf '%s unset\n' "$v"; fi
+done
+command -v linear gh codex opencode
+); rc=$?; printf 'end %s %s\n' "$(date -u +%s.%N)" 'check-runtime-overrides' >> "$f"; case $o in *e*) set -e;; esac; (exit $rc)
+----
+f='<scratch>/metrics.txt'; o=$-; set +e; s=$(date -u +%s.%N); printf 'start %s %s\n' "$s" 'read-story-initial' >> "$f"; ( case $o in *e*) set -e;; esac
+linear issue view SKL-117 --no-pager 2>&1 | head -200
+); rc=$?; printf 'end %s %s\n' "$(date -u +%s.%N)" 'read-story-initial' >> "$f"; case $o in *e*) set -e;; esac; (exit $rc)
+----
+s=$(date -u +%s.%N); cat '<scratch>/metrics.txt' && e=$(date -u +%s.%N) && printf 'start %s end\nend %s end\n' "$s" "$e" | tee -a '<scratch>/metrics.txt'
+
+## C4 QA run: metrics file written by the run
+start 1793218675.844376952 start
+end 1793218675.846927585 start
+start 1793218695.048415999 check-runtime-overrides
+end 1793218695.052669004 check-runtime-overrides
+start 1793218699.714441160 read-story-initial
+end 1793218700.193350113 read-story-initial
+start 1793218712.467409439 end
+end 1793218712.469115491 end
+
+## C4 QA run: durations recomputed from the metrics file
+start 0.002551 s
+check-runtime-overrides 0.004253 s
+read-story-initial 0.478909 s
+end 0.001706 s
+elapsed invocation_start..invocation_end 36.624738 s
+invocation_start 2026-10-28T20:17:55.844376952Z  invocation_end 2026-10-28T20:18:32.469115491Z
+
+## C4 QA run: closing report, verbatim as handed back
+SKL-117 is in **Blocked**, so the run stopped at step 1. No senior engineer or QA agent was launched, and nothing was written to the tracker.
+
+- engineer-model: Sonnet 5.5 (claude-sonnet-5-5)
+- engineer-effort: high
+- qa-model: Opus 5.5 (claude-opus-5-5)
+- qa-effort: high
+- metrics: on
+
+**Stop reason:** step 1 found the story in `Blocked` (team SKL). The issue body gives no blocking reason; it describes the issue as a disposable fixture with no work to be done.
+
+No PRs, QA rounds or fixes. No QA evidence was recorded and no incidental defects were found.
+
+```text
+Run metrics: story-to-done SKL-117 - stopped at step 1: story is Blocked
+
+| Role | Runtime | Model | Effort | Duration | Tokens | Tool calls |
+|---|---|---|---|---|---|---|
+| start | command | not set | not set | 0.003 s | not reported | not reported |
+| check runtime model and effort overrides | command | not set | not set | 0.004 s | not reported | not reported |
+| read story state | command | not set | not set | 0.479 s | not reported | not reported |
+| end | command | not set | not set | 0.002 s | not reported | not reported |
+
+QA rounds: 0
+Failed items: none (no QA round ran)
+Fix rounds: 0
+PRs merged: 0
+Start: Blocked; implementation step did not run
+Time to deployment review: not applicable
+QA round durations: none (no QA round ran)
+End state: stopped at step 1: SKL-117 is Blocked
+
+Totals
+- Elapsed wall-clock: 36.625 s (2026-10-28 20:17:55.844 UTC to 2026-10-28 20:18:31.469 UTC)
+- Tokens: not reported
+- Tool calls: not reported
+```
+
+Shell commands launched, as the coordinator listed them:
+1. Start form: created the session scratch directory and recorded the metrics `start` row.
+2. Wrapped command (`check-runtime-overrides`): checked the Claude Code subagent model and effort override variables (all unset) and checked that the `linear`, `gh`, `codex` and `opencode` CLIs are installed.
+3. Wrapped command (`read-story-initial`): read SKL-117 and its state with `linear issue view`.
+4. End form: printed the metrics file and appended the `end` row.
+
+## C4 QA run: comparison with the template in skills/story-to-done/references/metrics.md
+Holds:
+- Heading line names the skill, the story key and the stop reason.
+- Four rows in launch order, one per shell command in the transcript (no command before the start form; every file was read with the file-read tool).
+- Every row has its own start and end line in the metrics file, from separate `date` calls; every duration matches end minus start (rounded to ms); no duration reads `not reported`.
+- Elapsed 36.625 s equals invocation_end minus invocation_start (36.624738 s).
+- `metrics: on` line present; no secret and no local or scratch path in the report; no tracker write (the transcript has only the read `linear issue view`).
+Does not hold:
+- Totals: references/metrics.md Run totals: "A total is labelled `partial`, with the count of launches not reported and the count excluded as `cumulative`, only when either count is non-zero." Here 4 launches are `not reported` for tokens and for tool calls, so the template line is "Tokens: not reported [partial: 4 not reported, 0 cumulative]" (likewise Tool calls). The report omits the partial note on both lines.
+- Elapsed line: the report gives invocation_end as 2026-10-28 20:18:31.469 UTC; the recorded invocation_end is 1793218712.469115491 = 2026-10-28T20:18:32.469Z (one second later). The stated end timestamp is not the recorded one.
+- Also observed: the report lists eight `story-to-done` extras lines, while SKILL.md line 97 says "With `metrics` on, this skill does not yet record ... the `story-to-done` extras".
+
+## Engineer's C4 re-run at c47ae61 (SKL-116), closing report summary as quoted verbatim in tracker comment 7d8889f1
+Run metrics: story-to-done SKL-116 - stopped at step 1: story is Blocked
+
+| Role | Runtime | Model | Effort | Duration | Tokens | Tool calls |
+|---|---|---|---|---|---|---|
+| start (record invocation start) | command | not set | not set | 0.000879s | not reported | not reported |
+| check-runtime-overrides | command | not set | not set | 0.001525s | not reported | not reported |
+| read-story-state | command | not set | not set | 0.374288s | not reported | not reported |
+| end (record invocation end) | command | not set | not set | 0.001444s | not reported | not reported |
+
+Totals
+- Elapsed wall-clock: 26.886s (1793218198.428506630 to 1793218225.314579937, UTC epoch seconds)
+- Tokens: not reported
+- Tool calls: not reported
+
+(4 rows, every one `not reported` for tokens and tool calls; the partial note is absent here too, and no extras lines appear between the table and Totals. The engineer's comment itself notes the partial-note omission as a deviation from the template.)
+For comparison, both round 1 runs at f78452e (SKL-110, SKL-111) gave "not reported [partial: 4 not reported, 0 cumulative]".
+
+## Fixture read-back after the run
+$ linear issue update SKL-117 --state Canceled
+$ linear issue view SKL-117
+**State:** Canceled | **Priority:** --- | **Assignee:** Unassigned | **Cycle:** #2 (now)
