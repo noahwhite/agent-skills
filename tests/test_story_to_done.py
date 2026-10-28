@@ -447,8 +447,10 @@ POST_WORDS = re.compile(r"\bpost(?:s|ed|ing)?\b|\bcomments?\b", re.IGNORECASE)
 def test_no_line_tells_the_coordinator_to_post_or_comment() -> None:
     body = SKILL.read_text().split("\n---\n", 1)[1]
     allowed = {"- " + OFF_PATH, METRICS_ON_SCOPE}
+    merge_rule = "needs a delta review posted before merging"
     for line in body.splitlines():
-        if POST_WORDS.search(line):
-            assert line in allowed or "needs a delta review posted before merging" in line, (
-                f"a line tells the coordinator to post or comment: {line}"
-            )
+        if line in allowed:
+            continue
+        assert not POST_WORDS.search(line.replace(merge_rule, "")), (
+            f"a line tells the coordinator to post or comment: {line}"
+        )
