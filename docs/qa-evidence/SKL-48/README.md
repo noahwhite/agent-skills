@@ -5,7 +5,7 @@ The verified build is `b8d08df49ac6353e2c1931659e2365d0839699b8`, the squash mer
 Its head `72c5032c4364a4e31899853a8e8af20647cbdac4` has the same tree as that build and carries the delta review of record.
 Verification used a clean detached worktree of that build.
 The fixtures are the disposable issues SKL-101 to SKL-104, all read back as Canceled.
-The QA comment on SKL-48 (tracker comment `958fe061`) cites the attached evidence page and the raw output kept here as [raw-output.txt](raw-output.txt).
+The QA comment on SKL-48 (tracker comment `958fe061`) cites the attachments behind every row: the evidence page and the sanitized raw output (test suite, vendor check, spot mutants, fixture read-back, reviews of record, and CI).
 
 | Item | Verdict | Evidence |
 |---|---|---|
