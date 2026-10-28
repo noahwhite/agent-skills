@@ -76,7 +76,7 @@ review:
     arbiter:
       name: GLM 5.3 Flash
       runtime: opencode
-      model: opencode/glm-5.3-flash-free
+      model: opencode-go/glm-5.3-flash
     simplicity_reviewer:
       name: DeepSeek V4 Pro
       runtime: opencode
