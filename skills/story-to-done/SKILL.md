@@ -59,18 +59,19 @@ Where this file and a capability file disagree, the capability file is authorita
 ## Metrics
 
 Only when `metrics` is on, read [references/metrics.md](references/metrics.md) once the story ID is known: it is the single home for what a `story-to-done` run collects and reports, and this file does not restate it.
-With `metrics` on, once `metrics` resolves to on and before step 0, launch a command that records the invocation's start; its own start timestamp is the invocation's start, its row is the first in the table, and the elapsed wall-clock runs from that timestamp to the closing report.
+With `metrics` on, once `metrics` resolves to on and before step 0, launch the wrapper below with `true` as its command to record the invocation's start; its own start timestamp is the invocation's start, its row is the first in the table, and the elapsed wall-clock runs from that timestamp to the closing report.
 From then on, record a row for each command the coordinator launches, in launch order, with its usage figures recorded under `references/metrics.md` and `not reported` for any usage the runtime does not return.
-Launch every such command, the first included, in this wrapper, with the command's own lines in place of `<command>`, a label unique within the invocation and without a single quote or a line break in place of `<row label>`, and the absolute path of one metrics file kept for this invocation in its scratch directory in place of `<metrics file>`:
+Launch every such command, the first included, in this wrapper, with the command's own lines in place of `<command>`, a label unique within the invocation and without a single quote or a line break in place of `<row label>`, and the absolute path, without a single quote, of one metrics file kept for this invocation in its scratch directory in place of `<metrics file>`:
 
 ```sh
-f='<metrics file>'; mkdir -p -- "${f%/*}"; s=$(date -u +%s.%N); printf 'start %s %s\n' "$s" '<row label>' >> "$f"; (
+f='<metrics file>'; o=$-; set +e; mkdir -p -- "${f%/*}"; s=$(date -u +%s.%N); printf 'start %s %s\n' "$s" '<row label>' >> "$f"; (
 <command>
-); rc=$?; printf 'end %s %s\n' "$(date -u +%s.%N)" '<row label>' >> "$f"; (exit $rc)
+); rc=$?; printf 'end %s %s\n' "$(date -u +%s.%N)" '<row label>' >> "$f"; case $o in *e*) set -e;; esac; (exit $rc)
 ```
 
-The command runs in a subshell, so nothing it does can move or overwrite the wrapper's timestamps, and the wrapper keeps its exit status; a command's duration is its `end` timestamp minus its `start` timestamp, and the rows are reported in start-timestamp order.
-If a command is killed before it writes its `end` line, the coordinator's next launch is a wrapped command whose `<command>` is `printf 'end %s %s\n' "$(date -u +%s.%N)" '<killed row label>' >> '<metrics file>'`, and that command gets a row of its own.
+The command runs in a subshell, so its assignments, function definitions, `cd`, `exec`, traps and `PATH` changes cannot move the wrapper's timestamps, and the wrapper keeps its exit status even under `set -e`; the command never writes to the metrics file itself.
+A command's duration is its `end` timestamp minus its `start` timestamp, and the rows are reported in start-timestamp order.
+If a command is killed before it writes its `end` line, the coordinator's very next launch, made as soon as the kill is reported and even when no other launch would follow, is a wrapped command whose `<command>` is `printf 'end %s %s\n' "$(date -u +%s.%N)" '<killed row label>' >> '<metrics file>'`, for a label that has a `start` line and no `end` line; that end timestamp is taken after the killed launch returned, and the recovery command gets a row of its own.
 Never launch such a command unwrapped, never reuse one timestamp as both its start and its end, and never report a command's duration as `not reported`.
 Give the summary, in the template `references/metrics.md` defines, in the closing report of every end state: Done, or any stop, including a stop before step 0 or before any senior engineer or QA agent is spawned.
 The summary reads `no launches` only when the coordinator launched no role and no command; otherwise it has a row for each coordinator-launched command in launch order, the elapsed wall-clock, and the end state or stop reason.

@@ -303,9 +303,9 @@ METRICS_ON_SCOPE = (
     "rules for those rows and extras and all of its posting rules."
 )
 METRICS_START = (
-    "With `metrics` on, once `metrics` resolves to on and before step 0, launch a command that records the "
-    "invocation's start; its own start timestamp is the invocation's start, its row is the first in the table, "
-    "and the elapsed wall-clock runs from that timestamp to the closing report."
+    "With `metrics` on, once `metrics` resolves to on and before step 0, launch the wrapper below with `true` as "
+    "its command to record the invocation's start; its own start timestamp is the invocation's start, its row is "
+    "the first in the table, and the elapsed wall-clock runs from that timestamp to the closing report."
 )
 METRICS_COMMAND_ROWS = (
     "From then on, record a row for each command the coordinator launches, in launch order, with its usage "
@@ -314,25 +314,31 @@ METRICS_COMMAND_ROWS = (
 METRICS_WRAPPER_INTRO = (
     "Launch every such command, the first included, in this wrapper, with the command's own lines in place of "
     "`<command>`, a label unique within the invocation and without a single quote or a line break in place of "
-    "`<row label>`, and the absolute path of one metrics file kept for this invocation in its scratch directory "
-    "in place of `<metrics file>`:"
+    "`<row label>`, and the absolute path, without a single quote, of one metrics file kept for this invocation "
+    "in its scratch directory in place of `<metrics file>`:"
 )
 METRICS_WRAPPER_BLOCK = [
     "```sh",
-    "f='<metrics file>'; mkdir -p -- \"${f%/*}\"; s=$(date -u +%s.%N); printf 'start %s %s\\n' \"$s\" '<row label>' >> \"$f\"; (",
+    "f='<metrics file>'; o=$-; set +e; mkdir -p -- \"${f%/*}\"; s=$(date -u +%s.%N); printf 'start %s %s\\n' \"$s\" '<row label>' >> \"$f\"; (",
     "<command>",
-    "); rc=$?; printf 'end %s %s\\n' \"$(date -u +%s.%N)\" '<row label>' >> \"$f\"; (exit $rc)",
+    "); rc=$?; printf 'end %s %s\\n' \"$(date -u +%s.%N)\" '<row label>' >> \"$f\"; case $o in *e*) set -e;; esac; (exit $rc)",
     "```",
 ]
 METRICS_WRAPPER_RULE = (
-    "The command runs in a subshell, so nothing it does can move or overwrite the wrapper's timestamps, and the "
-    "wrapper keeps its exit status; a command's duration is its `end` timestamp minus its `start` timestamp, and "
-    "the rows are reported in start-timestamp order."
+    "The command runs in a subshell, so its assignments, function definitions, `cd`, `exec`, traps and `PATH` "
+    "changes cannot move the wrapper's timestamps, and the wrapper keeps its exit status even under `set -e`; "
+    "the command never writes to the metrics file itself."
+)
+METRICS_DURATION = (
+    "A command's duration is its `end` timestamp minus its `start` timestamp, and the rows are reported in "
+    "start-timestamp order."
 )
 METRICS_KILLED = (
-    "If a command is killed before it writes its `end` line, the coordinator's next launch is a wrapped command "
-    "whose `<command>` is `printf 'end %s %s\\n' \"$(date -u +%s.%N)\" '<killed row label>' >> '<metrics file>'`, "
-    "and that command gets a row of its own."
+    "If a command is killed before it writes its `end` line, the coordinator's very next launch, made as soon as "
+    "the kill is reported and even when no other launch would follow, is a wrapped command whose `<command>` is "
+    "`printf 'end %s %s\\n' \"$(date -u +%s.%N)\" '<killed row label>' >> '<metrics file>'`, for a label that "
+    "has a `start` line and no `end` line; that end timestamp is taken after the killed launch returned, and the "
+    "recovery command gets a row of its own."
 )
 METRICS_NEVER_UNTIMED = (
     "Never launch such a command unwrapped, never reuse one timestamp as both its start and its end, and never "
@@ -399,6 +405,7 @@ METRICS_LINES = [
     METRICS_WRAPPER_INTRO,
     *[line for line in METRICS_WRAPPER_BLOCK if METRICS_WORDS.search(line)],
     METRICS_WRAPPER_RULE,
+    METRICS_DURATION,
     METRICS_KILLED,
     METRICS_NEVER_UNTIMED,
     METRICS_CLOSING_REPORT,
@@ -458,6 +465,7 @@ def test_every_command_the_start_command_included_runs_in_the_timing_wrapper() -
     body = metrics_body()
     assert METRICS_WRAPPER_INTRO in body
     assert METRICS_WRAPPER_RULE in body
+    assert METRICS_DURATION in body
     assert METRICS_KILLED in body
     assert METRICS_NEVER_UNTIMED in body
 
@@ -471,9 +479,14 @@ def skill_wrapper() -> str:
     return "\n".join(block[1:-1])
 
 
-def run_wrapper(record: Path, command: str, label: str = "probe") -> int:
-    script = skill_wrapper().replace("<row label>", label).replace("<metrics file>", str(record))
-    return subprocess.run(["bash", "-c", script.replace("<command>", command, 1)]).returncode
+def wrapper_script(record: Path, command: str, label: str) -> str:
+    script = skill_wrapper().replace("<command>", command, 1)
+    return script.replace("<row label>", label).replace("<metrics file>", str(record))
+
+
+def run_wrapper(record: Path, command: str, label: str = "probe", errexit: bool = False) -> int:
+    flags = ["-e"] if errexit else []
+    return subprocess.run(["bash", *flags, "-c", wrapper_script(record, command, label)]).returncode
 
 
 def read_rows(record: Path) -> list[tuple[str, float, str]]:
@@ -494,8 +507,13 @@ def test_the_timing_wrapper_takes_distinct_start_and_end_timestamps_around_the_c
 
 
 def test_the_timing_wrapper_keeps_the_command_exit_status(tmp_path: Path) -> None:
-    for command, status in (("true", 0), ("false", 1), ("sh -c 'exit 7'", 7), ("exit 3", 3), ("set -e; false; true", 1)):
-        assert run_wrapper(tmp_path / "metrics.txt", command) == status, f"{command} must keep exit status {status}"
+    cases = (("true", 0), ("false", 1), ("sh -c 'exit 7'", 7), ("exit 3", 3), ("set -e; false; true", 1))
+    for errexit in (False, True):
+        record = tmp_path / f"errexit-{errexit}.txt"
+        for count, (command, status) in enumerate(cases, start=1):
+            assert run_wrapper(record, command, errexit=errexit) == status, f"{command} must keep exit status {status}"
+            assert [kind for kind, _, _ in read_rows(record)][-2:] == ["start", "end"], f"{command}: both lines"
+            assert len(read_rows(record)) == 2 * count
 
 
 def test_no_command_can_lose_or_corrupt_its_row(tmp_path: Path) -> None:
@@ -503,35 +521,42 @@ def test_no_command_can_lose_or_corrupt_its_row(tmp_path: Path) -> None:
     commands = [
         "true # a trailing comment",
         "true;",
-        "sleep 0.1 &",
+        "sleep 0.1 & wait",
         "s=0; f=/dev/null; rc=0",
         "date() { printf 0; }; printf() { :; }",
         "PATH=/nonexistent",
         "exec true",
         "cd /",
         "trap 'exit 9' EXIT",
-        "echo '<command>'",
     ]
     for count, command in enumerate(commands, start=1):
-        run_wrapper(record, command, "row $(printf injected)")
+        run_wrapper(record, command, "row $(printf injected) <command>")
         rows = read_rows(record)
         assert len(rows) == 2 * count, f"{command}: one start and one end line per launch"
         (start_kind, start, start_label), (end_kind, end, end_label) = rows[-2:]
         assert (start_kind, end_kind) == ("start", "end"), f"{command}: start line, then end line"
-        assert start_label == end_label == "row $(printf injected)", f"{command}: the label is written literally"
+        assert start_label == end_label == "row $(printf injected) <command>", f"{command}: the label is literal"
         assert end >= start > 1_000_000_000, f"{command}: both timestamps are real and ordered"
 
 
-def test_a_killed_command_keeps_its_start_line(tmp_path: Path) -> None:
+def test_a_killed_command_keeps_its_start_line_and_the_recovery_writes_its_end(tmp_path: Path) -> None:
     record = tmp_path / "metrics.txt"
-    script = skill_wrapper().replace("<row label>", "killed").replace("<metrics file>", str(record))
-    process = subprocess.Popen(["bash", "-c", script.replace("<command>", "sleep 5", 1)], start_new_session=True)
-    deadline = time.monotonic() + 5
+    process = subprocess.Popen(["bash", "-c", wrapper_script(record, "sleep 30", "killed")], start_new_session=True)
+    deadline = time.monotonic() + 10
     while not (record.exists() and record.read_text().endswith("\n")) and time.monotonic() < deadline:
         time.sleep(0.05)
     os.killpg(process.pid, signal.SIGKILL)
     process.wait()
     assert [kind for kind, _, _ in read_rows(record)] == ["start"], "the start line is written before the command"
+    recoveries = re.findall(r"`(printf 'end [^`]*)`", metrics_body())
+    assert len(recoveries) == 1, "the Metrics section must give exactly one recovery command"
+    recovery = recoveries[0].replace("<killed row label>", "killed").replace("<metrics file>", str(record))
+    assert run_wrapper(record, recovery, "recovery") == 0
+    rows = read_rows(record)
+    assert [(kind, label) for kind, _, label in rows] == [
+        ("start", "killed"), ("start", "recovery"), ("end", "killed"), ("end", "recovery")
+    ], "the recovery writes the killed row's end line and gets a row of its own"
+    assert rows[2][1] >= rows[0][1], "the killed row's end follows its start"
 
 
 def test_closing_report_of_every_end_state_gives_the_summary_in_the_template() -> None:
