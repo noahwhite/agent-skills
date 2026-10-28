@@ -323,8 +323,8 @@ METRICS_START_FAILED = (
     "stop reason."
 )
 METRICS_QUOTED_PATHS = (
-    "Every path placed inside single quotes in the start form, the wrapper, or the recovery command has each of "
-    "its own single quotes written as `'\\''`."
+    "Every path placed inside single quotes in the start form, the wrapper, the recovery command, or the end form "
+    "has each of its own single quotes written as `'\\''`."
 )
 METRICS_COMMAND_ROWS = (
     "From then on, record a row for each command the coordinator launches, in launch order, with its usage "
@@ -360,8 +360,8 @@ METRICS_KILLED = (
 )
 METRICS_NEVER_UNTIMED = (
     "Never launch a command outside the start form, the wrapper, or the end form below, never reuse one timestamp "
-    "as both its start and its end, and never "
-    "report a command's duration as `not reported`."
+    "as both its start and its end, and never report a command's duration as `not reported`; the only row without "
+    "a duration is a lost row, below."
 )
 METRICS_WRITE_FAILED = (
     "A wrapped launch whose output shows an error writing the metrics file has lost its row, so the coordinator "
@@ -373,8 +373,8 @@ METRICS_END_INTRO = (
 )
 METRICS_END_BLOCK = [
     "```sh",
-    "s=$(date -u +%s.%N); printf 'start %s end\\nend %s end\\n' \"$s\" \"$(date -u +%s.%N)\" >> '<metrics file>' "
-    "&& cat '<metrics file>'",
+    "s=$(date -u +%s.%N); cat '<metrics file>' && e=$(date -u +%s.%N) && "
+    "printf 'start %s end\\nend %s end\\n' \"$s\" \"$e\" | tee -a '<metrics file>'",
     "```",
 ]
 METRICS_END_RULE = (
@@ -677,11 +677,11 @@ def end_form(record: Path) -> str:
 
 
 def test_the_end_form_times_itself_last_and_prints_every_row(tmp_path: Path) -> None:
-    handed = tmp_path / "session"
+    handed = tmp_path / "team's session"
     handed.mkdir()
     subprocess.run(["bash", "-c", start_form(f"scratch='{quoted(handed)}'")], check=True)
     record = handed / "metrics.txt"
-    assert run_wrapper(record, "sleep 0.1", "probe") == 0
+    assert subprocess.run(["bash", "-c", wrapper_script(record, "sleep 0.1", "probe", quote=True)]).returncode == 0
     result = subprocess.run(["bash", "-c", end_form(record)], capture_output=True, text=True, check=True)
     assert result.stdout == record.read_text(), "the end form prints the whole metrics file after its own row"
     rows = read_rows(record)

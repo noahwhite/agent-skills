@@ -69,7 +69,7 @@ printf 'start %s start\nend %s start\n' "$s" "$(date -u +%s.%N)" >> "$scratch/me
 
 Its start timestamp is the invocation's start, recorded as `invocation_start`, its row, labelled `start`, is the first in the table, and `metrics.txt` in that directory is the `<metrics file>` of every later launch.
 A start form that exits non-zero has not recorded the `start` row, so the coordinator stops with that as the stop reason.
-Every path placed inside single quotes in the start form, the wrapper, or the recovery command has each of its own single quotes written as `'\''`.
+Every path placed inside single quotes in the start form, the wrapper, the recovery command, or the end form has each of its own single quotes written as `'\''`.
 From then on, record a row for each command the coordinator launches, in launch order, with its usage figures recorded under `references/metrics.md` and `not reported` for any usage the runtime does not return.
 Launch every later command in this wrapper, with the command's own lines in place of `<command>`, a label unique within the invocation and without a single quote or a line break in place of `<row label>`, and the absolute path of that `metrics.txt` in place of `<metrics file>`:
 
@@ -82,12 +82,12 @@ f='<metrics file>'; o=$-; set +e; s=$(date -u +%s.%N); printf 'start %s %s\n' "$
 The command runs in a subshell, so its assignments, function definitions, `cd`, `exec`, traps and `PATH` changes cannot move the wrapper's timestamps, and the wrapper keeps both the command's exit status and an inherited `set -e`; apart from the recovery command below, a command never writes to the metrics file.
 A command's duration is its `end` timestamp minus its `start` timestamp, and the rows are reported in start-timestamp order.
 If a command is killed before it writes its `end` line, the coordinator's very next launch, made as soon as the kill is reported and even when no other launch would follow, is a wrapped command whose `<command>` is `printf 'end %s %s\n' "$(date -u +%s.%N)" '<killed row label>' >> '<metrics file>'`, for a label that has a `start` line and no `end` line; that end timestamp is taken after the killed launch returned, and the recovery command gets a row of its own.
-Never launch a command outside the start form, the wrapper, or the end form below, never reuse one timestamp as both its start and its end, and never report a command's duration as `not reported`.
+Never launch a command outside the start form, the wrapper, or the end form below, never reuse one timestamp as both its start and its end, and never report a command's duration as `not reported`; the only row without a duration is a lost row, below.
 A wrapped launch whose output shows an error writing the metrics file has lost its row, so the coordinator stops with that as the stop reason.
 Immediately before the closing report, the last launch is this end form, with the absolute path of that `metrics.txt` in place of `<metrics file>`:
 
 ```sh
-s=$(date -u +%s.%N); printf 'start %s end\nend %s end\n' "$s" "$(date -u +%s.%N)" >> '<metrics file>' && cat '<metrics file>'
+s=$(date -u +%s.%N); cat '<metrics file>' && e=$(date -u +%s.%N) && printf 'start %s end\nend %s end\n' "$s" "$e" | tee -a '<metrics file>'
 ```
 
 Its `end` timestamp is recorded as `invocation_end`, the elapsed wall-clock runs from `invocation_start` to `invocation_end`, and the closing report's rows are read from its output, where its own row, labelled `end`, is the last.
