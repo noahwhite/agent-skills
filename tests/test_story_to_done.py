@@ -292,16 +292,16 @@ def test_metrics_line_goes_in_the_todo_list_and_every_closing_report() -> None:
 
 
 METRICS_OPENING = "Only when `metrics` is on, read [references/metrics.md](references/metrics.md)"
+METRICS_ON_SCOPE = (
+    "With `metrics` on, this skill does not yet take any figure, write a metrics file, add totals to a report, "
+    "or post a summary: the run adds only the `metrics: on` line, and the coordinator makes no tracker write."
+)
 
 
 def test_manifest_appends_metrics_to_story_to_done() -> None:
-    assert MANIFEST["skills"]["story-to-done"] == [
-        "todo-tracking",
-        "linear",
-        "code-review",
-        "secrets",
-        "metrics",
-    ]
+    entry = MANIFEST["skills"]["story-to-done"]
+    assert entry.count("metrics") == 1, "story-to-done must list metrics exactly once"
+    assert entry.index("metrics") == entry.index("secrets") + 1, "metrics is appended after secrets"
 
 
 def test_vendored_metrics_reference_carries_the_not_reported_rule() -> None:
@@ -316,6 +316,7 @@ def test_metrics_section_opens_on_only_and_links_the_reference() -> None:
     text = SKILL.read_text()
     body = section(text, "Metrics").strip()
     assert body.startswith(METRICS_OPENING), "the Metrics section must open with its on-only condition"
+    assert METRICS_ON_SCOPE in body, "the Metrics section must keep the on path to the metrics line"
     assert "](references/metrics.md)" not in section(text, "Read first")
 
 
@@ -326,18 +327,40 @@ OFF_PATH = (
 )
 
 
+# Every line of the skill that touches metrics, pinned exactly: adding, extending, or rewording
+# metrics content anywhere (Arguments and Metrics included) fails until it is pinned here.
+METRICS_WORDS = re.compile(r"metric|figure|token|tool.call|wall-clock|duration|usage|summar|total", re.IGNORECASE)
+METRICS_LINES = [
+    METRICS_ROW,
+    '- `metrics` is given as `metrics=on` or `metrics=off`, or in plain words: "with metrics" and "metrics on" '
+    'mean on, "without metrics" and "metrics off" mean off; ask the user about any other phrasing about metrics; '
+    "never guess.",
+    "- Resolve `metrics` before step 0 creates the todo list; it sets no model or effort.",
+    "- " + OFF_PATH,
+    "- " + METRICS_LINE_SENTENCE + " (the step 5 report, or the report made at a stop in steps 1 to 4).",
+    "## Metrics",
+    METRICS_OPENING + " once the story ID is known: it is the single home for what a `story-to-done` run "
+    "collects and reports, and this file does not restate it.",
+    METRICS_ON_SCOPE,
+    "Report the story identifier, its final state, the four resolved model and effort values and the "
+    "`metrics: on|off` line, each PR, the number of QA rounds with the items fixed in each, where QA recorded "
+    "its evidence, and any incidental defects left open.",
+]
+
+
 def test_metrics_off_changes_nothing_but_the_metrics_line() -> None:
     text = SKILL.read_text()
     assert OFF_PATH in " ".join(section(text, "Arguments").split())
-    # Outside the Arguments and on-only Metrics sections, metrics appear only as the switch's line.
-    for heading in re.findall(r"^## (.+)$", text, re.MULTILINE):
-        if heading in ("Arguments", "Metrics"):
-            continue
-        for line in section(text, heading).splitlines():
-            if "metric" in line.lower():
-                assert "the `metrics: on|off` line" in line, f"{heading} adds metrics content: {line}"
-    preamble = text.split("\n## ", 1)[0]
-    assert "metric" not in preamble.lower(), "the front matter or introduction adds metrics content"
+    body = text.split("\n---\n", 1)[1]
+    found = [line for line in body.splitlines() if METRICS_WORDS.search(line)]
+    assert found == METRICS_LINES, "metrics content outside the pinned switch, line, and on-only lines"
+    assert not METRICS_WORDS.search(text.split("\n---\n", 1)[0]), "the front matter adds metrics content"
+
+
+def test_arguments_prose_count_matches_the_table() -> None:
+    body = section(SKILL.read_text(), "Arguments")
+    rows = [line for line in body.splitlines() if line.startswith("| `")]
+    assert len(rows) == 5 and "Five arguments are optional" in body
 
 
 def test_readme_row_names_the_metrics_switch_and_its_default() -> None:

@@ -59,6 +59,7 @@ Where this file and a capability file disagree, the capability file is authorita
 ## Metrics
 
 Only when `metrics` is on, read [references/metrics.md](references/metrics.md) once the story ID is known: it is the single home for what a `story-to-done` run collects and reports, and this file does not restate it.
+With `metrics` on, this skill does not yet take any figure, write a metrics file, add totals to a report, or post a summary: the run adds only the `metrics: on` line, and the coordinator makes no tracker write.
 
 ## 0. Track everything on a todo list
 
