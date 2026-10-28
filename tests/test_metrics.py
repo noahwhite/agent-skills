@@ -368,9 +368,19 @@ README_ROW_DESCRIPTION = (
 README_INTRO = "A capability listed here may wait for a later slice to compose it."
 
 
+def files_table() -> list[str]:
+    lines = README.read_text().splitlines()
+    start = lines.index("| File | Capability |")
+    end = start
+    while end < len(lines) and lines[end].startswith("|"):
+        end += 1
+    return lines[start:end]
+
+
 def test_shared_readme_lists_metrics():
-    rows = [line for line in README.read_text().splitlines() if line.startswith(README_ROW_START)]
-    assert len(rows) == 1, rows
+    assert README.read_text().count(README_ROW_START) == 1, "expected exactly one metrics row"
+    rows = [line for line in files_table() if line.startswith(README_ROW_START)]
+    assert len(rows) == 1, "the metrics row is not in the Files table"
     assert rows[0].count("|") == 3 and rows[0].split("|")[2].strip() == README_ROW_DESCRIPTION, rows[0]
 
 
@@ -448,9 +458,13 @@ def test_scratch_files_rule_passes_each_role_only_its_own_subdirectory():
 
 
 def test_scratch_files_rule_no_longer_passes_the_session_directory():
-    bullet = rule_bullet(SCRATCH_BULLET)
-    assert "Pass the session's directory to every subagent" not in bullet
-    assert "pass the printed path to every subagent" not in bullet
+    # Join wrapped lines of the shell example's comments so a rewrapped sentence is still found.
+    bullet = flat(re.sub(r"\n\s*#\s*", " ", rule_bullet(SCRATCH_BULLET))).lower()
+    for removed in (
+        "pass the session's directory to every subagent",
+        "pass the printed path to every subagent",
+    ):
+        assert removed not in bullet, removed
 
 
 def test_scratch_files_rule_passes_every_other_agent_the_session_directory():
@@ -465,17 +479,23 @@ def test_runtime_map_intro_separates_v1_observations_from_v1_guidance():
     assert_states(RUNTIMES.read_text().split("\n|", 1)[0], V1_INTRO)
 
 
+def row_cells(row: str) -> list[str]:
+    """The cells of a Markdown table row, split on unescaped pipes."""
+    return [cell.strip() for cell in re.split(r"(?<!\\)\|", row)[1:-1]]
+
+
 def test_runtime_map_has_one_usage_row_with_two_cells():
-    assert usage_row().count("|") == 4, "the row needs a Claude Code cell and an OpenCode cell"
+    cells = row_cells(usage_row())
+    assert len(cells) == 3 and all(cells), "the row needs a Claude Code cell and an OpenCode cell"
 
 
 def test_usage_row_claude_code_cell_is_version_qualified():
-    claude_cell = usage_row().split("|")[2]
+    claude_cell = row_cells(usage_row())[1]
     assert_states(claude_cell, "Observed on 2.1.312:")
 
 
 def test_usage_row_opencode_cell_names_each_version_line():
-    opencode_cell = usage_row().split("|")[3]
+    opencode_cell = row_cells(usage_row())[2]
     assert_states(opencode_cell, "V2 (2.1.2): `not observed`, not run.")
     assert_states(opencode_cell, "V1 (legacy, not V2 guidance), observed on 1.19.3:")
 
