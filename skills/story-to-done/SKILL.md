@@ -40,7 +40,7 @@ Five arguments are optional, given as `key=value` or in plain words ("QA on Opus
 - `metrics` is given as `metrics=on` or `metrics=off`, or in plain words: "with metrics" and "metrics on" mean on, "without metrics" and "metrics off" mean off; ask the user about any other phrasing about metrics; never guess.
 - Resolve `metrics` before step 0 creates the todo list; it sets no model or effort.
 - With `metrics` off or omitted, read no metrics reference, collect no figure, create no metrics file, post no metrics comment, and add no metrics content to any brief, report, todo list, or tracker write, other than the `metrics: off` line.
-- Write the four resolved model and effort values and the `metrics: on|off` line at the top of your todo list and in the closing report of every end state (the step 5 report, or the report made at a stop in steps 1 to 4).
+- Write the four resolved model and effort values and the `metrics: on|off` line at the top of your todo list and in the closing report of every end state (the step 5 report, or the report made at any stop, including one before step 0).
 
 ## Read first
 
@@ -61,9 +61,9 @@ Where this file and a capability file disagree, the capability file is authorita
 Only when `metrics` is on, read [references/metrics.md](references/metrics.md) once the story ID is known: it is the single home for what a `story-to-done` run collects and reports, and this file does not restate it.
 With `metrics` on, timestamp the invocation's start when `metrics` resolves to on, before step 0; the elapsed wall-clock runs from it to the closing report.
 Record a row for each command the coordinator launches, in launch order, timestamped immediately before and after the launch, with its usage figures recorded under `references/metrics.md` and `not reported` for any usage the runtime does not return.
-Give the summary, in the template `references/metrics.md` defines, in the closing report of every end state: Done, or any stop in steps 1 to 4, including a stop before any senior engineer or QA agent is spawned.
+Give the summary, in the template `references/metrics.md` defines, in the closing report of every end state: Done, or any stop, including a stop before step 0 or before any senior engineer or QA agent is spawned.
 The summary reads `no launches` only when the coordinator launched no role and no command; otherwise it has a row for each coordinator-launched command in launch order, the elapsed wall-clock, and the end state or stop reason.
-With `metrics` on, this skill does not yet record a row for a senior engineer or QA launch, record the `story-to-done` extras, or post a summary, and this sentence overrides the reference's collection and posting rules for them.
+With `metrics` on, this skill does not yet record a row for a senior engineer or QA launch or record the `story-to-done` extras, and it posts no summary comment; this sentence overrides the reference's collection rules for those rows and extras and all of its posting rules.
 The coordinator makes no tracker write and never sets the story state.
 The closing report contains no secrets and no local or scratch paths.
 
