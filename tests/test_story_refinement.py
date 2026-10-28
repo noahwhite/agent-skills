@@ -1317,8 +1317,10 @@ def test_vendored_metrics_reference_is_present() -> None:
     assert copy.read_text() == header + (ROOT / "shared" / "metrics.md").read_text()
 
 
-def test_no_other_skill_lists_metrics() -> None:
-    assert [name for name, caps in MANIFEST["skills"].items() if "metrics" in caps] == ["story-refinement"]
+def test_only_the_metrics_consumers_list_metrics() -> None:
+    """B3: only the two consumers `shared/metrics.md` names (this skill and story-to-done, SKL-48) vendor it."""
+    assert sorted(name for name, caps in MANIFEST["skills"].items() if "metrics" in caps) == [
+        "story-refinement", "story-to-done"]
 
 
 def test_metrics_reference_is_linked_from_the_metrics_section_and_not_read_first() -> None:
