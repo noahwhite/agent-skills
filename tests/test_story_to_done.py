@@ -294,7 +294,8 @@ def test_metrics_line_goes_in_the_todo_list_and_every_closing_report() -> None:
 METRICS_OPENING = "Only when `metrics` is on, read [references/metrics.md](references/metrics.md)"
 METRICS_ON_SCOPE = (
     "With `metrics` on, this skill does not yet take any figure, write a metrics file, add totals to a report, "
-    "or post a summary: the run adds only the `metrics: on` line, and the coordinator makes no tracker write."
+    "or post a summary, and this sentence overrides the reference's collection, totals, and posting rules: "
+    "the run adds only the `metrics: on` line, and the coordinator makes no tracker write."
 )
 
 
@@ -329,7 +330,7 @@ OFF_PATH = (
 
 # Every line of the skill that touches metrics, pinned exactly: adding, extending, or rewording
 # metrics content anywhere (Arguments and Metrics included) fails until it is pinned here.
-METRICS_WORDS = re.compile(r"metric|figure|token|tool.call|wall-clock|duration|usage|summar|total", re.IGNORECASE)
+METRICS_WORDS = re.compile(r"metric|figure|token|tool.call|wall-clock|duration|usage|summar|total|cost|switch", re.IGNORECASE)
 METRICS_LINES = [
     METRICS_ROW,
     '- `metrics` is given as `metrics=on` or `metrics=off`, or in plain words: "with metrics" and "metrics on" '
