@@ -330,7 +330,7 @@ OFF_PATH = (
 
 # Every line of the skill that touches metrics, pinned exactly: adding, extending, or rewording
 # metrics content anywhere (Arguments and Metrics included) fails until it is pinned here.
-METRICS_WORDS = re.compile(r"metric|figure|token|tool.call|wall-clock|duration|usage|summar|total|cost|switch|\btim(?:e|es|ed|ing|estamps?)\b|elapsed|clock|latency", re.IGNORECASE)
+METRICS_WORDS = re.compile(r"metric|figure|token|tool.call|wall-clock|duration|usage|summar|total|cost|switch|\btim(?:e|ing|er|estamp)\w*|elapsed|clock|latency", re.IGNORECASE)
 METRICS_LINES = [
     METRICS_ROW,
     '- `metrics` is given as `metrics=on` or `metrics=off`, or in plain words: "with metrics" and "metrics on" '
