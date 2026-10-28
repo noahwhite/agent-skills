@@ -61,15 +61,16 @@ Where this file and a capability file disagree, the capability file is authorita
 Only when `metrics` is on, read [references/metrics.md](references/metrics.md) once the story ID is known: it is the single home for what a `story-to-done` run collects and reports, and this file does not restate it.
 With `metrics` on, once `metrics` resolves to on and before step 0, launch a command that records the invocation's start; its own start timestamp is the invocation's start, its row is the first in the table, and the elapsed wall-clock runs from that timestamp to the closing report.
 From then on, record a row for each command the coordinator launches, in launch order, with its usage figures recorded under `references/metrics.md` and `not reported` for any usage the runtime does not return.
-Launch every such command, the first included, in this wrapper, with the command's own lines in place of `<command>`, a label without a single quote in place of `<row label>`, and the absolute path of one metrics file kept for this invocation in its scratch directory in place of `<metrics file>`:
+Launch every such command, the first included, in this wrapper, with the command's own lines in place of `<command>`, a label unique within the invocation and without a single quote or a line break in place of `<row label>`, and the absolute path of one metrics file kept for this invocation in its scratch directory in place of `<metrics file>`:
 
 ```sh
-s=$(date -u +%s.%N); (
+f='<metrics file>'; mkdir -p -- "${f%/*}"; s=$(date -u +%s.%N); printf 'start %s %s\n' "$s" '<row label>' >> "$f"; (
 <command>
-); rc=$?; e=$(date -u +%s.%N); printf '%s %s %s\n' "$s" "$e" '<row label>' >> '<metrics file>'; (exit $rc)
+); rc=$?; printf 'end %s %s\n' "$(date -u +%s.%N)" '<row label>' >> "$f"; (exit $rc)
 ```
 
-The command runs in a subshell, so nothing it does can move or overwrite the wrapper's timestamps, and the wrapper keeps its exit status; a command's duration is its end timestamp minus its start timestamp, and the rows are reported in start-timestamp order.
+The command runs in a subshell, so nothing it does can move or overwrite the wrapper's timestamps, and the wrapper keeps its exit status; a command's duration is its `end` timestamp minus its `start` timestamp, and the rows are reported in start-timestamp order.
+If a command is killed before it writes its `end` line, the coordinator's next launch is a wrapped command whose `<command>` is `printf 'end %s %s\n' "$(date -u +%s.%N)" '<killed row label>' >> '<metrics file>'`, and that command gets a row of its own.
 Never launch such a command unwrapped, never reuse one timestamp as both its start and its end, and never report a command's duration as `not reported`.
 Give the summary, in the template `references/metrics.md` defines, in the closing report of every end state: Done, or any stop, including a stop before step 0 or before any senior engineer or QA agent is spawned.
 The summary reads `no launches` only when the coordinator launched no role and no command; otherwise it has a row for each coordinator-launched command in launch order, the elapsed wall-clock, and the end state or stop reason.
