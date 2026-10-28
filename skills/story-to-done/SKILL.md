@@ -59,7 +59,7 @@ Where this file and a capability file disagree, the capability file is authorita
 ## Metrics
 
 Only when `metrics` is on, read [references/metrics.md](references/metrics.md) once the story ID is known: it is the single home for what a `story-to-done` run collects and reports, and this file does not restate it.
-With `metrics` on, once `metrics` resolves to on and before step 0 or any reference is read, the very next launch creates the session's scratch directory in this start form, with the scratch-directory creation from `references/runtimes.md`, or `scratch='<directory you were handed>'` when you were handed one, in place of `<scratch creation>`:
+With `metrics` on, once `metrics` resolves to on and before step 0, the first command launched, with every file read before it made by reading the file rather than by launching a command, creates the session's scratch directory in this start form, with the scratch-directory creation from `references/runtimes.md`, or `scratch='<directory you were handed>'` when you were handed one, in place of `<scratch creation>`:
 
 ```sh
 s=$(date -u +%s.%N)
