@@ -307,7 +307,7 @@ METRICS_COMMAND_ROWS = (
     "timestamped immediately before and after the launch, with its usage figures recorded under "
     "`references/metrics.md` and `not reported` for any usage the runtime does not return."
 )
-METRICS_TIMESTAMP_NOT_A_LAUNCH = "Taking a timestamp is not a launch and gets no row."
+METRICS_TIMESTAMP_COMMANDS = "Take each timestamp inside the command it times; a start timestamp taken by a command of its own is that command's row, the first in the table."
 METRICS_CLOSING_REPORT = (
     "Give the summary, in the template `references/metrics.md` defines, in the closing report of every end "
     "state: Done, or any stop, including a stop before step 0 or before any senior engineer or QA agent is spawned."
@@ -366,7 +366,7 @@ METRICS_LINES = [
     "collects and reports, and this file does not restate it.",
     METRICS_START,
     METRICS_COMMAND_ROWS,
-    METRICS_TIMESTAMP_NOT_A_LAUNCH,
+    METRICS_TIMESTAMP_COMMANDS,
     METRICS_CLOSING_REPORT,
     METRICS_NO_LAUNCHES,
     METRICS_ON_SCOPE,
@@ -419,7 +419,7 @@ def test_metrics_start_is_timestamped_when_the_switch_resolves() -> None:
 def test_each_coordinator_command_gets_a_timed_row_with_its_usage() -> None:
     body = metrics_body()
     assert METRICS_COMMAND_ROWS in body
-    assert METRICS_TIMESTAMP_NOT_A_LAUNCH in body
+    assert METRICS_TIMESTAMP_COMMANDS in body
 
 
 def test_closing_report_of_every_end_state_gives_the_summary_in_the_template() -> None:
