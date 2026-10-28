@@ -1263,3 +1263,47 @@ def test_record_templates_cite_file_base_names(heading: str, line: str) -> None:
 @pytest.mark.parametrize("phrase", ["<scratch path>", "cite their paths"])
 def test_record_templates_never_request_local_paths(phrase: str) -> None:
     assert phrase not in RECORD.read_text()
+
+
+# --- SKL-47: the metrics switch, the closing message, and the run summary --------------------------
+
+ARGUMENTS = "Arguments"
+CLOSING = "Closing message"
+METRICS = "Metrics"
+
+
+def skill_section(heading: str) -> str:
+    return spaced(section(SKILL.read_text(), heading))
+
+
+@pytest.mark.parametrize(
+    "sentence",
+    [
+        "`STORY_ID` is required: a Linear issue key (for example `ABC-123`, with the team key `profile.tracker.team_key`).",
+        "If none was given, ask the owner for one before doing anything else; never guess an issue key.",
+        "`metrics` is optional, given as `metrics=on` or `metrics=off` or in plain words, and defaults to `off`.",
+        "`with metrics` and `metrics on` mean on; `without metrics` and `metrics off` mean off.",
+        "Any other phrasing about metrics is asked about, never guessed.",
+        "Resolve both arguments, asking about any ambiguity, before the todo list is created.",
+        "Write the resolved value as one line `metrics: on` or `metrics: off` at the top of the todo list and in the closing message.",
+    ],
+)
+def test_arguments_section_defines_the_story_identifier_and_the_metrics_switch(sentence: str) -> None:
+    assert sentence in skill_section(ARGUMENTS)
+
+
+def test_arguments_section_precedes_read_first() -> None:
+    text = SKILL.read_text()
+    assert text.index("\n## Arguments\n") < text.index("\n## Read first\n")
+
+
+@pytest.mark.parametrize(
+    "sentence",
+    [
+        "The closing message is the facilitator's final message to the owner when the invocation ends, on every end state and every stop.",
+        "It names the outcome (the consensus value, unpointed, or split with the slice count) or the stop reason, including `needs input` on a denied tracker write.",
+        "It carries the `metrics: on` or `metrics: off` line.",
+    ],
+)
+def test_closing_message_is_defined_on_every_end_state_and_stop(sentence: str) -> None:
+    assert sentence in skill_section(CLOSING)

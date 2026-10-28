@@ -22,6 +22,18 @@ Stage 1 is refinement: independent inputs, then reconciliation and the accept ro
 Stage 2 is pointing: secret votes, then the high/low discussion and consensus.
 Each step names its inputs, outputs, and stop conditions.
 
+## Arguments
+
+`STORY_ID` is required: a Linear issue key (for example `ABC-123`, with the team key `profile.tracker.team_key`).
+If none was given, ask the owner for one before doing anything else; never guess an issue key.
+
+`metrics` is optional, given as `metrics=on` or `metrics=off` or in plain words, and defaults to `off`.
+`with metrics` and `metrics on` mean on; `without metrics` and `metrics off` mean off.
+Any other phrasing about metrics is asked about, never guessed.
+
+- Resolve both arguments, asking about any ambiguity, before the todo list is created.
+- Write the resolved value as one line `metrics: on` or `metrics: off` at the top of the todo list and in the closing message.
+
 ## Read first
 
 - [references/profile.md](references/profile.md) - find the profile and this skill's overlay before anything else.
@@ -250,6 +262,12 @@ Use [references/refinement-record.md](references/refinement-record.md) for the r
 Keep the raw voter files in the session's scratch directory and cite each file by its base name only (never a directory path) in the record.
 Quote or attach any file content a reader needs in the record.
 Record the refinement comment id, every accept round, all three point values, the SM/EM sizing context, the discussion result, every challenge with its outcome, the consensus, any no-consensus decision with each voter's accepted paths and the decision rationale, and any split.
+
+## Closing message
+
+The closing message is the facilitator's final message to the owner when the invocation ends, on every end state and every stop.
+It names the outcome (the consensus value, unpointed, or split with the slice count) or the stop reason, including `needs input` on a denied tracker write.
+It carries the `metrics: on` or `metrics: off` line.
 
 ## Runtime portability
 
