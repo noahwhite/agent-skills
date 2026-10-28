@@ -299,8 +299,8 @@ METRICS_ON_SCOPE = (
     "rules for those rows and extras and all of its posting rules."
 )
 METRICS_START = (
-    "With `metrics` on, timestamp the invocation's start when `metrics` resolves to on, before step 0; the "
-    "elapsed wall-clock runs from it to the closing report."
+    "With `metrics` on, timestamp the invocation's start when `metrics` resolves to on, before step 0, and "
+    "record it as `invocation_start`; the elapsed wall-clock runs from it to the closing report."
 )
 METRICS_COMMAND_ROWS = (
     "From the start timestamp on, record a row for each command the coordinator launches, in launch order, "

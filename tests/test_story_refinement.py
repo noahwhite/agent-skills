@@ -1287,6 +1287,7 @@ def skill_section(heading: str) -> str:
         "Any other phrasing about metrics is asked about, never guessed.",
         "Resolve both arguments, asking about any ambiguity, before the todo list is created.",
         "Write the resolved value as one line `metrics: on` or `metrics: off` at the top of the todo list and in the closing message.",
+        "When `metrics` resolves on, the facilitator's next action, before the todo list, is to take a UTC timestamp with a command and record it as `invocation_start` in the metrics file.",
     ],
 )
 def test_arguments_section_defines_the_story_identifier_and_the_metrics_switch(sentence: str) -> None:
@@ -1420,4 +1421,17 @@ def test_readme_row_names_the_metrics_switch() -> None:
 def test_todo_tracking_seed_collects_metrics_only_when_the_switch_is_on() -> None:
     seed = next(line for line in (ROOT / "shared" / "todo-tracking.md").read_text().splitlines()
                 if line.startswith("- **story-refinement:**"))
-    assert "and, only when the `metrics` switch is on, collect metrics." in seed
+    assert "and, only when the `metrics` switch is on, record invocation start (metrics on) and collect metrics." in seed
+
+
+def test_todo_tracking_seed_lists_invocation_start_first_among_metrics_on_items() -> None:
+    seed = next(line for line in (ROOT / "shared" / "todo-tracking.md").read_text().splitlines()
+                if line.startswith("- **story-refinement:**"))
+    metrics_on = seed[seed.index("only when the `metrics` switch is on"):]
+    assert metrics_on.index("record invocation start (metrics on)") < metrics_on.index("collect metrics")
+
+
+def test_invocation_start_is_the_first_action_after_the_switch_resolves() -> None:
+    section = skill_section(ARGUMENTS)
+    assert section.index("record it as `invocation_start`") > section.index("Resolve both arguments")
+    assert "before the todo list" in section[section.index("When `metrics` resolves on"):]
