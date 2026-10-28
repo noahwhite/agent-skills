@@ -60,7 +60,7 @@ The round 2 QA comment on SKL-47 (tracker comment `536a2743`) cites the attachme
 | DoD tests written and passing | Verified | The full suite passes 719 tests on `main`. |
 | DoD independently reviewed | Verified | Review of record 5687830846 at `f6a1246`, the merged head, was posted before the merge, with Codex GPT-6 Sol as reviewer and Opus 5.5 as adjudicator. |
 | DoD docs updated | Verified | The README row from PR #69 is intact, and B9 updates the `shared/todo-tracking.md` seed line. |
-| DoD verified in staging | Not applicable | No environment exists; the B7 and B9 live runs stand in, as the story states. |
+| DoD verified in staging | Not applicable | No environment exists; B7 stands in, as the story states, and the B9 live run adds to it. |
 | DoD no critical bugs or regressions | Verified | The suite and CI pass at `main`. |
 
 ### B9 checks
@@ -72,7 +72,7 @@ The `story-refinement` seed line lists "record invocation start (metrics on)" fi
 Every vendored `metrics.md` and `todo-tracking.md` equals its source, and `--check` exits 0.
 The tests pin each guarded phrase, and the PR records 12 of 12 phrase mutations each failing a named test; a diff read confirms each pinned phrase is asserted.
 `story-to-done`, the other skill that vendors `metrics.md`, records its start as `invocation_start`, and its pinned test is updated.
-The live run on SKL-115 (tracker comment `f87dea75`) reached an unpointed outcome, and its closing message reads `13m08s (2026-10-28T18:34:04Z to 2026-10-28T18:47:12Z)`, a difference of 788 seconds, equal to the stated value.
+The live run on SKL-115 (tracker comment `f87dea75`) ran at PR #76 head `f6a1246`, whose tree equals `fe24764`, and reached an unpointed outcome, and its closing message reads `13m08s (2026-10-28T18:34:04Z to 2026-10-28T18:47:12Z)`, a difference of 788 seconds, equal to the stated value.
 All four SKL-115 comments fall inside that window, no other comment, relation, or SKL issue change occurred in it, and SKL-115 reads back Canceled.
 
 ### Round 2 incidental findings
