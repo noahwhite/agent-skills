@@ -1403,3 +1403,16 @@ def test_metrics_mentions_outside_the_permitted_sections_are_absent() -> None:
     for heading in (ARGUMENTS, METRICS, CLOSING):
         text = text.replace(f"## {heading}\n" + section(SKILL.read_text(), heading), "")
     assert "metric" not in text.lower()
+
+
+def test_readme_row_names_the_metrics_switch() -> None:
+    row = next(line for line in (ROOT / "README.md").read_text().splitlines()
+               if "skills/story-refinement/SKILL.md" in line)
+    assert "`metrics` switch (default `off`)" in row
+    assert "run summary in the closing message" in row
+
+
+def test_todo_tracking_seed_collects_metrics_only_when_the_switch_is_on() -> None:
+    seed = next(line for line in (ROOT / "shared" / "todo-tracking.md").read_text().splitlines()
+                if line.startswith("- **story-refinement:**"))
+    assert "and, only when the `metrics` switch is on, collect metrics." in seed
