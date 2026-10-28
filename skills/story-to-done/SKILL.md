@@ -59,9 +59,39 @@ Where this file and a capability file disagree, the capability file is authorita
 ## Metrics
 
 Only when `metrics` is on, read [references/metrics.md](references/metrics.md) once the story ID is known: it is the single home for what a `story-to-done` run collects and reports, and this file does not restate it.
-With `metrics` on, timestamp the invocation's start when `metrics` resolves to on, before step 0, and record it as `invocation_start`; the elapsed wall-clock runs from it to the closing report.
-From the start timestamp on, record a row for each command the coordinator launches, in launch order, timestamped immediately before and after the launch, with its usage figures recorded under `references/metrics.md` and `not reported` for any usage the runtime does not return.
-Take each timestamp inside the command it times; a start timestamp taken by a command of its own is that command's row, the first in the table.
+With `metrics` on, once `metrics` resolves to on and before step 0, the first command launched, with every file read before it made by reading the file rather than by launching a command, creates the session's scratch directory in this start form, with the scratch-directory creation from `references/runtimes.md`, or `scratch='<directory you were handed>'` when you were handed one, in place of `<scratch creation>`:
+
+```sh
+s=$(date -u +%s.%N)
+<scratch creation>
+printf 'start %s start\nend %s start\n' "$s" "$(date -u +%s.%N)" >> "$scratch/metrics.txt"
+```
+
+Its start timestamp is the invocation's start, recorded as `invocation_start`, its row, labelled `start`, is the first in the table, and `metrics.txt` in that directory is the `<metrics file>` of every later launch.
+A start form that exits non-zero has not recorded the `start` row, so the coordinator stops with that as the stop reason.
+Every path placed inside single quotes in the start form, the wrapper, the recovery command, or the end form has each of its own single quotes written as `'\''`.
+From then on, record a row for each command the coordinator launches, in launch order, with its usage figures recorded under `references/metrics.md` and `not reported` for any usage the runtime does not return.
+Launch every later command in this wrapper, with the command's own lines in place of `<command>`, a label unique within the invocation and without a single quote or a line break in place of `<row label>`, and the absolute path of that `metrics.txt` in place of `<metrics file>`:
+
+```sh
+f='<metrics file>'; o=$-; set +e; s=$(date -u +%s.%N); printf 'start %s %s\n' "$s" '<row label>' >> "$f"; ( case $o in *e*) set -e;; esac
+<command>
+); rc=$?; printf 'end %s %s\n' "$(date -u +%s.%N)" '<row label>' >> "$f"; case $o in *e*) set -e;; esac; (exit $rc)
+```
+
+The command runs in a subshell, so its assignments, function definitions, `cd`, `exec`, traps and `PATH` changes cannot move the wrapper's timestamps, and the wrapper keeps both the command's exit status and an inherited `set -e`; apart from the recovery command below, a command never writes to the metrics file.
+A command's duration is its `end` timestamp minus its `start` timestamp, and the rows are reported in start-timestamp order.
+If a command is killed before it writes its `end` line, the coordinator's very next launch, made as soon as the kill is reported and even when no other launch would follow, is a wrapped command whose `<command>` is `printf 'end %s %s\n' "$(date -u +%s.%N)" '<killed row label>' >> '<metrics file>'`, for a label that has a `start` line and no `end` line; that end timestamp is taken after the killed launch returned, and the recovery command gets a row of its own.
+Never launch a command outside the start form, the wrapper, or the end form below, never reuse one timestamp as both its start and its end, and never report a command's duration as `not reported`; the only row without a duration is a lost row, below.
+A wrapped launch whose output shows an error writing the metrics file has lost its row, so the coordinator stops with that as the stop reason.
+Immediately before the closing report, the last launch is this end form, with the absolute path of that `metrics.txt` in place of `<metrics file>`:
+
+```sh
+s=$(date -u +%s.%N); cat '<metrics file>' && e=$(date -u +%s.%N) && printf 'start %s end\nend %s end\n' "$s" "$e" | tee -a '<metrics file>'
+```
+
+Its `end` timestamp is recorded as `invocation_end`, the elapsed wall-clock runs from `invocation_start` to `invocation_end`, and the closing report's rows are read from its output, where its own row, labelled `end`, is the last.
+A launch whose label lacks a `start` or an `end` line in that output, or an end form that exits non-zero, has lost its row, and the closing report names each lost row and gives it no duration.
 Give the summary, in the template `references/metrics.md` defines, in the closing report of every end state: Done, or any stop, including a stop before step 0 or before any senior engineer or QA agent is spawned.
 The summary reads `no launches` only when the coordinator launched no role and no command; otherwise it has a row for each coordinator-launched command in launch order, the elapsed wall-clock, and the end state or stop reason.
 With `metrics` on, this skill does not yet record a row for a senior engineer or QA launch or record the `story-to-done` extras, and it posts no summary comment; this sentence overrides the reference's collection rules for those rows and extras and all of its posting rules.
