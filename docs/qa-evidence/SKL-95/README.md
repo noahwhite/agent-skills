@@ -31,3 +31,37 @@ The skill text must make every coordinator-launched command, the start-timestamp
 ## Incidental findings
 
 The engineer's proposal in tracker comment `1115a862` to add "the `story-to-done` extras are added by SKL-96" to C1 is open for the product owner.
+
+# SKL-95 QA evidence, round 2, 2026-10-28
+
+The verified build is `caba7b7fbc00f801cfcf3628b7f2a02ddeba8b92`, the squash merge of [PR #78](https://github.com/noahwhite/agent-skills/pull/78).
+Its head `c47ae61c958c5143df219e7721469f6d22ea1f1f` has the same tree as that build and carries the final review of record (review 5689017268, posted before the merge).
+Verification used a clean clone of `main` at that build.
+The fixture is the disposable issue SKL-117, created Blocked and read back as Canceled after the run.
+The engineer's re-run on SKL-116 at `c47ae61` (tracker comment `7d8889f1`) was also read.
+[`raw-output-round-2.txt`](raw-output-round-2.txt) holds the sanitized raw output behind every row: the build and tree check, the reviews of record, the test suite, the vendor check, the mutation spot-check, CI, the QA run's tool calls, shell commands, metrics file and closing report, the template comparison, and the fixture read-backs.
+
+Outcome: the round 1 timing defect is fixed, but C1 and C4 are not met, so the story returns to In Progress.
+
+| Item | Verdict | Evidence |
+|---|---|---|
+| C1 closing report | Not met | The Metrics section states every C1 rule, and the QA run timed each of its four command rows with distinct start and end timestamps from separate `date` calls, the start row included, with no command launched before the start form. The summary is not in the template `references/metrics.md` defines: its Run totals rule labels a total `partial`, with the count of launches not reported and the count excluded as `cumulative`, whenever either count is non-zero. Four launches are `not reported` for tokens and tool calls, so each line must read `not reported [partial: 4 not reported, 0 cumulative]`. Both runs at `c47ae61` (SKL-116 and SKL-117) omit the note, while both round 1 runs had it. The QA run's Elapsed line also gives `invocation_end` as 20:18:31.469 UTC, while the recorded value is 1793218712.469115491, which is 20:18:32.469 UTC. |
+| C2 docs | Verified | The README row ends "with the run summary given in the closing report", and PRs #73 and #78 change no file under `shared/` and no vendored `todo-tracking.md`. |
+| C3 tests | Verified | `uv run --locked pytest -q` passes 731 tests and the vendor check exits 0. The orchestrator-state guard test and the scratch-directory tests are unchanged and pass. CI is green on the PR head (run 40760437086) and on `main` (run 40761182315). The PR #78 body records 65 mutants that each fail a test, and a QA spot-check deleting five guarded lines failed named tests each time. |
+| C4 verified end to end | Not met | QA ran `story-to-done SKL-117 metrics=on` with a clean coordinator loading the skill from the clone. It stopped at step 1 before any role. Its closing report has the heading line, four rows in launch order matching the four shell commands in its transcript, an elapsed wall-clock of 36.625 s equal to the recorded `invocation_end` minus `invocation_start`, and the `metrics: on` line, with no path or secret and no tracker write. Its totals block lacks the required `partial` note (see C1). |
+| DoD all acceptance criteria met | Not met | C1 and C4 above. |
+| DoD tests written and passing | Verified | The C3 row. |
+| DoD independently reviewed | Verified | PR #78 has reviews of record on nine heads, each a Codex GPT-6 Sol review with a DeepSeek V4 Pro adjudication as the repository profile configures, and the last covers the merged head `c47ae61`. |
+| DoD docs updated | Verified | The C2 row. |
+| DoD verified in staging | Not applicable | No environment exists; C4 stands in, as the story states. |
+| DoD no critical bugs or regressions | Verified | The suite and CI pass at `main`. |
+
+## Failed items for the engineer, round 2
+
+C1 and C4: with launches `not reported` for tokens and tool calls, the Totals lines must carry the `partial` note the template defines; both runs at `c47ae61` omit it.
+C1 and C4: the Elapsed line must give the recorded `invocation_end`; the QA run gave a value one second earlier than the one it recorded.
+
+## Incidental findings, round 2
+
+The QA run printed eight `story-to-done` extras lines, although the Metrics section says the skill does not yet record them; SKL-96 adds them.
+The AC clarification proposed in tracker comment `1115a862` is now in the C1 text.
