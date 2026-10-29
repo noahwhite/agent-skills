@@ -112,8 +112,8 @@ FIGURE_RULES = [
         "The elapsed wall-clock runs from the recorded `invocation_start`, the UTC timestamp taken "
         "with a command the moment the `metrics` switch resolved on, to `invocation_end`, a UTC "
         "timestamp taken with a command immediately before the closing message or closing report, "
-        "or, when the summary is posted as a comment at the end of the invocation, immediately before "
-        "that summary is composed.",
+        "or, where the skill composes the summary before that message, immediately before the "
+        "summary is composed.",
         id="total-elapsed",
     ),
     pytest.param(
