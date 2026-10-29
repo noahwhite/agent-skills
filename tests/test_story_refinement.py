@@ -1441,99 +1441,130 @@ def test_invocation_start_is_the_first_action_after_the_switch_resolves() -> Non
 
 
 def metrics_body() -> str:
+    """The Metrics section, whitespace collapsed, case kept: these pins are exact phrases."""
     return spaced(section(SKILL.read_text(), METRICS))
 
 
 def test_metrics_section_posts_the_summary_as_its_own_sm_em_comment() -> None:
-    assert (
-        "the facilitator posts the summary on the story under refinement as its own sm/em comment"
-    ) in flat(metrics_body())
+    body = metrics_body()
+    assert "the facilitator posts the summary on the story under refinement as its own SM/EM comment" in body
+    assert "at the end of the invocation, when no further voter round will run in it" in body
+    assert "reads its own comment back, and the closing message names the posted comment" in body
 
 
-def test_metrics_section_posts_at_the_end_of_the_invocation_as_the_last_tracker_write() -> None:
-    body = flat(metrics_body())
-    assert "the comment is the invocation's last tracker write" in body
+def test_metrics_section_pins_the_post_sequence_and_the_end_timestamp() -> None:
     assert (
-        "it posts only after every voter round, including every slice estimate under the split rule, has finished"
-    ) in body
-    assert (
-        "the pointing record (a consensus, an unpointed result, including one after a re-refine accept round, "
-        "or a split decision) and any split comment have been posted and read back" in body
+        "On a permitted post, `invocation_end` is taken immediately before the summary is composed, and the comment "
+        "and the closing message carry that same summary; no second timestamp is taken." in metrics_body()
     )
-    assert "and the invocation's triage writes have been applied and read back" in body
+
+
+def test_metrics_section_does_not_retry_a_failed_read_back() -> None:
+    assert (
+        "A failed or differing read-back is not retried: the closing message carries the summary and names the "
+        "failed read-back." in metrics_body()
+    )
+
+
+def test_metrics_section_orders_the_post_as_the_last_tracker_write() -> None:
+    body = metrics_body()
+    assert "When a pointing record exists, the comment is the invocation's last tracker write." in body
+    assert (
+        "It posts only after every voter round, including every slice estimate under the Split rule, has finished; "
+        "the pointing record (a consensus, an unpointed result, including one after a re-refine accept round, "
+        "or a split decision) and any split comment have been posted and read back; and the invocation's triage "
+        "writes have been applied and read back." in body
+    )
 
 
 def test_metrics_section_posts_on_a_stop_only_after_the_step_one_inputs() -> None:
-    body = flat(metrics_body())
     assert (
-        "on a stop before a pointing record exists, the comment posts only after every step 1 voter input is recorded"
-    ) in body
-    assert "and every launched voter has returned or been stopped, with its end timestamp taken" in body
+        "On a stop before a pointing record exists, the comment posts only after every Step 1 voter input is "
+        "recorded - with the three-voter roster, all three Stage 1 voter inputs - and every launched voter has "
+        "returned or been stopped, with its end timestamp taken; on that path no pointing record and no triage "
+        "write is required." in metrics_body()
+    )
 
 
 def test_metrics_section_attempts_no_post_before_the_step_one_inputs() -> None:
-    body = flat(metrics_body())
-    assert "a stop before every step 1 voter input is recorded attempts no post" in body
-    assert "step 1 allows no tracker comment before then except the preflight" in body
-    assert "the summary stays in the closing message" in body
+    assert (
+        "A stop before every Step 1 voter input is recorded attempts no post, because Step 1 allows no tracker "
+        "comment before then except the preflight, and the summary stays in the closing message." in metrics_body()
+    )
 
 
 def test_metrics_section_never_posts_during_an_anchoring_recovery() -> None:
     assert (
-        "the comment is never posted while an anchoring recovery, its step 3 re-run and its step 4 re-vote, "
-        "is still to run" in flat(metrics_body())
+        "The comment is never posted while an anchoring recovery, its Step 3 re-run and its Step 4 re-vote, "
+        "is still to run." in metrics_body()
     )
 
 
 def test_metrics_section_states_the_resumed_run_rule() -> None:
-    body = flat(metrics_body())
-    assert "a resumed run is a new invocation and posts its own comment covering only that invocation" in body
     assert (
-        "a resume in the same session after the owner authorizes the denied tracker writes fallback "
-        "is the same invocation and posts once" in body
+        "A resumed run is a new invocation and posts its own comment covering only that invocation; a resume in "
+        "the same session after the owner authorizes the denied tracker writes fallback is the same invocation "
+        "and posts once." in metrics_body()
     )
-
-
-def test_metrics_section_reads_the_comment_back() -> None:
-    assert "reads its own comment back" in flat(metrics_body())
 
 
 def test_metrics_section_names_the_denied_post() -> None:
-    body = flat(metrics_body())
+    body = metrics_body()
     assert (
-        "if the post is denied, the closing message carries the summary and names the denied write, "
-        "and no other tool or server is tried" in body
+        "If the post is denied, the closing message carries the summary and names the denied write, and no other "
+        "tool or server is tried." in body
     )
-    assert "where the run stopped on denied tracker writes without the owner's authorization, no post is attempted" in body
+    assert (
+        "Where the run stopped on denied tracker writes without the owner's authorization, no post is attempted."
+        in body
+    )
 
 
 def test_metrics_section_forbids_secrets_and_paths_in_the_comment() -> None:
-    assert "the comment contains no secrets and no local or scratch paths" in flat(metrics_body())
+    assert "The comment contains no secrets and no local or scratch paths." in metrics_body()
+
+
+ROLES_METRICS_SENTENCE = (
+    "When `metrics` is on, the metrics summary is the one comment the facilitator posts outside the denied "
+    "tracker writes fallback.\n  It is the facilitator's own SM/EM comment, never a PO-authored write."
+)
+TRIAGE_METRICS_SENTENCE = (
+    "When `metrics` is on, the metrics summary is the one comment the SM/EM posts outside the denied tracker "
+    "writes fallback; it is the SM/EM's own comment, never a PO-authored write."
+)
 
 
 def test_roles_carry_the_metrics_posting_exception() -> None:
-    roles = flat(section(SKILL.read_text(), "Roles"))
-    assert "when `metrics` is on, the metrics summary is the one comment the facilitator posts" in roles
-    assert "outside the denied tracker writes fallback" in roles
+    raw = section(SKILL.read_text(), "Roles")
+    assert ROLES_METRICS_SENTENCE in raw
+    roles = flat(raw)
     # the phrases SKL-47 and the fallback stories pin stay verbatim
     assert "the only author of tracker writes" in roles
     assert "the facilitator applies tracker writes only under the denied tracker writes fallback" in roles
 
 
 def test_triage_carries_the_metrics_posting_exception() -> None:
-    triage = flat(section(SKILL.read_text(), "Triage"))
-    assert "when `metrics` is on, the metrics summary comment is the one tracker write the sm/em posts" in triage
-    assert "outside the denied tracker writes fallback" in triage
+    raw = section(SKILL.read_text(), "Triage")
+    assert TRIAGE_METRICS_SENTENCE in raw
+    triage = flat(raw)
     # the phrases the fallback stories pin stay verbatim
     assert "the sm/em posts only its own comments" in triage
     assert "applies the po's writes only under the denied tracker writes fallback" in triage
     assert "applies and reads each one back, except under the denied tracker writes fallback" in triage
 
 
+def test_roles_and_triage_add_only_their_one_metrics_sentence() -> None:
+    roles = section(SKILL.read_text(), "Roles")
+    triage = section(SKILL.read_text(), "Triage")
+    assert "metric" not in roles.replace(ROLES_METRICS_SENTENCE, "").lower()
+    assert "metric" not in triage.replace(TRIAGE_METRICS_SENTENCE, "").lower()
+
+
 def test_closing_message_names_the_posted_comment() -> None:
     assert (
-        "When `metrics` is on, it names the metrics summary comment the facilitator posted; "
-        "when that post was denied, it carries the summary and names the denied write" in skill_section(CLOSING)
+        "When `metrics` is on, it names the metrics summary comment the facilitator posted; when that post was "
+        "denied, it carries the summary and names the denied write; when no post was attempted, it carries the "
+        "summary and names no comment." in skill_section(CLOSING)
     )
 
 
@@ -1549,18 +1580,23 @@ def story_refinement_seed(root: Path) -> str:
     return next(line for line in todo.read_text().splitlines() if line.startswith("- **story-refinement:**"))
 
 
-def test_todo_tracking_seed_posts_the_metrics_summary_only_when_the_switch_is_on() -> None:
+def test_todo_tracking_seed_collects_metrics_only_when_the_switch_is_on() -> None:
     seed = story_refinement_seed(ROOT)
-    assert "and, only when the `metrics` switch is on, record invocation start (metrics on), collect metrics, and post the metrics summary on the story." in seed
+    assert "and, only when the `metrics` switch is on, record invocation start (metrics on), collect metrics" in seed
 
 
-def test_vendored_todo_tracking_seed_posts_the_metrics_summary() -> None:
+def test_todo_tracking_seed_posts_the_metrics_summary_after_collecting_it() -> None:
+    seed = story_refinement_seed(ROOT)
+    assert "collect metrics, and post the metrics summary on the story." in seed
+    on_only = seed.split("only when the `metrics` switch is on, ", 1)[1]
+    assert on_only.startswith("record invocation start (metrics on), collect metrics, and post the metrics summary")
+
+
+def test_vendored_todo_tracking_seed_matches_the_shared_seed() -> None:
     copy = ROOT / "skills" / "story-refinement" / "references" / "todo-tracking.md"
-    copy_text = next(
-        line for line in copy.read_text().splitlines() if line.startswith("- **story-refinement:**")
-    )
-    assert "post the metrics summary on the story" in copy_text
-    assert "post the metrics summary on the story" in story_refinement_seed(ROOT)
+    copy_seed = next(line for line in copy.read_text().splitlines() if line.startswith("- **story-refinement:**"))
+    assert copy_seed == story_refinement_seed(ROOT)
+    assert "post the metrics summary on the story" in copy_seed
 
 
 def test_readme_row_says_the_summary_is_posted_on_the_story() -> None:
