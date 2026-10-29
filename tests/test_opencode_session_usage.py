@@ -73,7 +73,9 @@ SESSION_B = export(tokens(3618, 2, 0), [{"id": "msg_u", "type": "user"}, assista
 PIPE_CUTOFF = 262144
 
 
-def install_stub(tmp_path: Path, sessions: list[dict], exports: dict[str, object], list_exit: int = 0) -> dict:
+def install_stub(
+    tmp_path: Path, sessions: list[dict], exports: dict[str, object], list_exit: int = 0, interrupt: bool = False
+) -> dict:
     """Put a stub opencode on PATH; `exports` maps an id to a payload or a raw (unparseable) string."""
     state = tmp_path / "state"
     state.mkdir()
@@ -96,7 +98,9 @@ def install_stub(tmp_path: Path, sessions: list[dict], exports: dict[str, object
         f'  emit "$state/list.json"; exit {list_exit}\n'
         "fi\n"
         'if [ "$1 $2" = "session export" ]; then\n'
-        '  if [ -f "$state/$3.json" ]; then emit "$state/$3.json"; exit 0; fi\n'
+        '  if [ -f "$state/$3.json" ]; then emit "$state/$3.json"; '
+        + ('kill -TERM "$PPID"; sleep 1; ' if interrupt else "")
+        + 'exit 0; fi\n'
         '  if [ -f "$state/$3.raw" ]; then emit "$state/$3.raw"; exit 0; fi\n'
         '  printf "Session not found: %s\\n" "$3" >&2; exit 1\n'
         "fi\n"
@@ -106,11 +110,12 @@ def install_stub(tmp_path: Path, sessions: list[dict], exports: dict[str, object
     return {"state": state, "path": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
 
 
-def launch(stub: dict, cwd: Path, title: str) -> tuple[subprocess.Popen, Path]:
+def launch(stub: dict, cwd: Path, title: str, **extra: str) -> tuple[subprocess.Popen, Path]:
     """Start the published snippet as a reader pastes it: plain bash, no extra shell options."""
     scratch = cwd / "scratch"
     scratch.mkdir(parents=True)
-    env = {**os.environ, "PATH": stub["path"], "title": title, "scratch": str(scratch)}
+    env = {k: v for k, v in os.environ.items() if k not in ("id", "resume_id")}
+    env |= {"PATH": stub["path"], "title": title, "scratch": str(scratch), **extra}
     proc = subprocess.Popen(
         ["bash", "-c", usage_snippet()],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env, cwd=cwd,
@@ -118,9 +123,12 @@ def launch(stub: dict, cwd: Path, title: str) -> tuple[subprocess.Popen, Path]:
     return proc, scratch
 
 
-def collect(stub: dict, proc: subprocess.Popen, scratch: Path) -> dict[str, str]:
+def collect(stub: dict, proc: subprocess.Popen, scratch: Path, expect_rc: int = 0) -> dict[str, str]:
     stdout, stderr = proc.communicate(timeout=60)
-    assert proc.returncode == 0, stderr
+    assert proc.returncode == expect_rc, stderr
+    if expect_rc:
+        assert list(scratch.iterdir()) == [], "an interrupted read must still remove the export"
+        return {"stderr": stderr}
     figures = dict(line.split(": ", 1) for line in stdout.strip().splitlines())
     assert set(figures) == {"tokens", "tool calls"}, stdout
     assert list(scratch.iterdir()) == [], "the list and export files must be removed"
@@ -179,6 +187,47 @@ def test_an_empty_title_never_takes_an_untitled_session(tmp_path):
     out = run_snippet(tmp_path, "", listed(("ses_a", "")), {"ses_a": SESSION_A})
     assert (out["tokens"], out["tool calls"]) == (NOT_REPORTED, NOT_REPORTED)
     assert out["list_args"] == "", "an empty title must not reach the lookup"
+
+
+def test_a_resumed_launch_exports_its_explicit_id_and_marks_both_figures_cumulative(tmp_path):
+    stub = install_stub(tmp_path, listed(("ses_b", "run-a")), {"ses_a": SESSION_A, "ses_b": SESSION_B})
+    out = collect(stub, *launch(stub, tmp_path, "run-a", resume_id="ses_a"))
+    assert (out["tokens"], out["tool calls"]) == ("3866 cumulative", "3 cumulative")
+    assert out["list_args"] == "", "a resumed launch takes no title lookup"
+
+
+def test_a_resumed_launch_whose_export_fails_reports_neither_figure(tmp_path):
+    stub = install_stub(tmp_path, listed(("ses_a", "run-a")), {"ses_a": SESSION_A})
+    out = collect(stub, *launch(stub, tmp_path, "run-a", resume_id="ses_gone"))
+    assert (out["tokens"], out["tool calls"]) == (NOT_REPORTED, NOT_REPORTED)
+
+
+def test_an_inherited_id_variable_never_stands_in_for_the_lookup(tmp_path):
+    stub = install_stub(tmp_path, listed(("ses_b", "other")), {"ses_a": SESSION_A})
+    out = collect(stub, *launch(stub, tmp_path, "run-a", id="ses_a"))
+    assert (out["tokens"], out["tool calls"]) == (NOT_REPORTED, NOT_REPORTED)
+
+
+def test_an_inherited_id_variable_never_stands_in_for_an_empty_title(tmp_path):
+    stub = install_stub(tmp_path, listed(("ses_a", "run-a")), {"ses_a": SESSION_A})
+    out = collect(stub, *launch(stub, tmp_path, "", id="ses_a"))
+    assert (out["tokens"], out["tool calls"]) == (NOT_REPORTED, NOT_REPORTED)
+
+
+def test_an_interrupted_read_removes_the_export(tmp_path):
+    stub = install_stub(tmp_path, listed(("ses_a", "run-a")), {"ses_a": SESSION_A}, interrupt=True)
+    collect(stub, *launch(stub, tmp_path, "run-a"), expect_rc=130)
+
+
+def test_an_assistant_message_without_content_does_not_lose_the_tool_count(tmp_path):
+    messages = [{"id": "msg_e", "type": "assistant"}, assistant(tool(), tool())]
+    out = run_snippet(tmp_path, "run-a", listed(("ses_a", "run-a")), {"ses_a": export(tokens(1, 1, 1), messages)})
+    assert out["tool calls"] == "2"
+
+
+def test_an_export_with_no_messages_reports_tool_calls_not_zero(tmp_path):
+    out = run_snippet(tmp_path, "run-a", listed(("ses_a", "run-a")), {"ses_a": export(tokens(2, 2, 2), [])})
+    assert (out["tokens"], out["tool calls"]) == ("6", NOT_REPORTED)
 
 
 def test_a_failed_list_reports_neither_figure_even_when_it_printed_a_match(tmp_path):
@@ -307,5 +356,6 @@ def test_repo_profile_opencode_voters_carry_a_title_and_no_metrics_breaking_flag
     for role in roles:
         command = role["command"]
         assert '--title "{session_title}"' in command, role["name"]
-        for flag in ("--standalone", "--format", "--continue", " -c ", " -s ", "--session"):
+        for flag in ("--standalone", "--format", "--continue", "--session", "--fork"):
             assert flag not in command, f"{role['name']} passes {flag}"
+        assert not re.search(r"(^|\s)-[cs](\s|=|$)", command), f"{role['name']} resumes a session"

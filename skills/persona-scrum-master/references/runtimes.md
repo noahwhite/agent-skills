@@ -123,32 +123,46 @@ If your runtime is not listed, map each capability to its closest equivalent and
   Cache read and cache write (`.info.tokens.cache`) are excluded from Tokens.
   The figures cover the top-level session only: a child or subagent session the launch spawns is a separate session, absent from the list, and its usage is excluded; the spawn itself is one tool part of the parent.
   A launch that resumes a session by explicit id (`-s <session id>`) exports that id in place of the lookup, and both figures are marked `cumulative`: the export covers the whole session, and v2.2.0 names no launch-scoped figure, since per-message `tokens` are per step.
-  A list or an export that fails (on v2.2.0 an unknown id exits 1 with `Session not found`) or does not parse, or a missing session id, records `not reported` for both cells, and an absent field records `not reported` for its own cell; the launch counts toward the `partial` label of each affected total, and a cell never reads `0` and never carries another session's figure.
+  A list or an export that fails (on v2.2.0 an unknown id exits 1 with `Session not found`) or does not parse, or a missing session id, records `not reported` for both cells, and an absent field, or an export with no messages for the tool count, records `not reported` for its own cell; the launch counts toward the `partial` label of each affected total, and a cell never reads `0` and never carries another session's figure.
   The list and the export read the launch's usage after its end timestamp is taken, so they are not part of its Duration.
   Only the two derived figures are recorded; the raw export, prompts and tool output are never written to the summary, the story or the repository, and the export file exists only in the scratch directory until the figures are read.
 
   ```bash
-  # Read one new `opencode run` launch's usage (OpenCode V2, observed on v2.2.0) after it exits
+  # Read one `opencode run` launch's usage (OpenCode V2, observed on v2.2.0) after it exits
   # successfully. Run it from the launch's working directory with `title` set to the launch's
-  # unique --title and `scratch` set to the launch's own scratch directory. The list and the
-  # export go to files, never through a pipe, and are removed afterwards. A figure that cannot be
-  # read stays `not reported`, and the failing command prints the reason on stderr.
-  tokens='not reported'
-  tool_calls='not reported'
-  if [ -n "$title" ] && dir="$(mktemp -d "$scratch/opencode-usage.XXXXXX")"; then
-    if opencode session list --format json --max-count 1000 > "$dir/list.json" &&
-      id="$(jq -er --arg t "$title" '[.[] | select(.title == $t)]
-        | if length == 1 then .[0].id else error("not exactly one session titled \($t)") end' "$dir/list.json")" &&
-      opencode session export "$id" > "$dir/export.json"; then
-      tokens="$(jq -e '.info.tokens
-        | if ([.input, .output, .reasoning] | all(type == "number")) then .input + .output + .reasoning
-          else error("a token field is absent") end' "$dir/export.json")" || tokens='not reported'
-      tool_calls="$(jq -e '[.messages[] | select(.type == "assistant")
-        | .content[] | select(.type == "tool")] | length' "$dir/export.json")" || tool_calls='not reported'
+  # unique --title and `scratch` set to the launch's own scratch directory; for a launch that
+  # resumed a session by explicit id, set `resume_id` to that id instead, and both figures print
+  # marked `cumulative`. The list and the export go to files, never through a pipe, and are removed
+  # when the subshell exits, an interrupt included. A figure that cannot be read stays
+  # `not reported`, and the failing command prints the reason on stderr.
+  (
+    tokens='not reported'
+    tool_calls='not reported'
+    mark=''
+    dir=''
+    id=''
+    trap 'rm -rf -- "$dir"' EXIT
+    trap 'exit 130' INT TERM HUP
+    if dir="$(mktemp -d "$scratch/opencode-usage.XXXXXX")"; then
+      if [ -n "${resume_id-}" ]; then
+        id="$resume_id"
+        mark=' cumulative'
+      elif [ -n "${title-}" ] &&
+        opencode session list --format json --max-count 1000 > "$dir/list.json"; then
+        id="$(jq -er --arg t "$title" '[.[] | select(.title == $t)]
+          | if length == 1 then .[0].id else error("not exactly one session titled \($t)") end' "$dir/list.json")" || id=''
+      fi
+      if [ -n "${id-}" ] && opencode session export "$id" > "$dir/export.json"; then
+        tokens="$(jq -e '.info.tokens
+          | if ([.input, .output, .reasoning] | all(type == "number")) then .input + .output + .reasoning
+            else error("a token field is absent") end' "$dir/export.json")$mark" || tokens='not reported'
+        tool_calls="$(jq -e 'if (.messages | type) == "array" and (.messages | length) > 0
+          then [.messages[] | select(.type == "assistant") | .content[]? | select(.type == "tool")] | length
+          else error("the export has no messages") end' "$dir/export.json")$mark" || tool_calls='not reported'
+      fi
     fi
-    rm -rf -- "$dir"
-  fi
-  printf 'tokens: %s\ntool calls: %s\n' "$tokens" "$tool_calls"
+    printf 'tokens: %s\ntool calls: %s\n' "$tokens" "$tool_calls"
+  )
   ```
 
   For any other `runtime: command` program, arbitrary `command` programs have no common usage contract.

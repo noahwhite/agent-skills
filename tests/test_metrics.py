@@ -721,7 +721,8 @@ OPENCODE_BULLET_FACTS = [
     pytest.param(
         "A list or an export that fails (on v2.2.0 an unknown id exits 1 with `Session not found`) "
         "or does not parse, or a missing session id, records `not reported` for both cells, and an "
-        "absent field records `not reported` for its own cell; the launch counts toward the "
+        "absent field, or an export with no messages for the tool count, records `not reported` for "
+        "its own cell; the launch counts toward the "
         "`partial` label of each affected total, and a cell never reads `0` and never carries "
         "another session's figure.",
         id="ac10-failure",
@@ -760,7 +761,7 @@ def test_usage_bullet_never_sums_stream_events_for_opencode_v2():
         assert flat(sentence) in bullet, "the AC4 prohibition is missing"
         bullet = bullet.replace(flat(sentence), "")
     bullet = bullet.replace("session list --format json", "")
-    for token in ("--format json", "step_finish", "stream event"):
+    for token in ("--format json", "--format=json", "step_finish", "stream event", "tool_use", "event stream"):
         assert token not in bullet, f"{token} appears outside its prohibition"
 
 
