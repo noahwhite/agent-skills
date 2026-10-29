@@ -9,8 +9,8 @@ The attached assertions are the raw record, not screenshots or a hosted page.
 
 ## Evidence
 
-- [Tracker evidence comment](https://linear.app/officina-pub/issue/SKL-96/user-story-story-to-done-collect-per-launch-metrics-for-the-engineer#comment-9162762b).
-- Raw evidence: attachment titled `SKL-96 QA round 1 - AC and DoD assertions` on the story linked above, including per-item assertions and CLI output.
+- Tracker evidence: SKL-96, comment `9162762b`.
+- Raw evidence: attachment titled `SKL-96 QA round 1 - AC and DoD assertions` on that story, including per-item assertions and CLI output.
 - [Merged CI](https://github.com/noahwhite/agent-skills/actions/runs/40825922676): `checks` and `discovery` succeeded; `uv run --locked pytest -q` reported 744 passed in 99.29s.
 - [Implementation PR](https://github.com/noahwhite/agent-skills/pull/86): merged as the build above, with the latest submitted review of record bound to `619c40098f067875d5c4de547b9b2083e4964dd3`.
 
