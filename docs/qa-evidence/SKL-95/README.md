@@ -124,3 +124,30 @@ Outcome: C1 and C4 are not met, so the story returns to In Progress.
 
 C1 and C4: with `metrics` on, a coordinator loading the skill at `48ef00f` launches a command after the switch resolves and before the start form, and that command gets no row.
 The skill text must again make the start form the first command reliably, as the rules PR #82 removed did in round 3; C4 is re-run at the fix head.
+
+# SKL-95 QA evidence, round 5, 2026-10-29
+
+The verified build is `61ad7acd4cca472165b4c6e89700761de2345fb8`, the squash merge of [PR #84](https://github.com/noahwhite/agent-skills/pull/84), which adds one Metrics sentence: launch no command before the start form.
+Its head `3b872a43e1cd3124ad27f1f8e3bab890136b478f` has the same tree as that build and carries the review of record (review 5692032800, posted before the merge).
+The fixture is the disposable issue SKL-126, created Blocked and read back as Canceled after its run.
+The run was `story-to-done SKL-126 metrics=on`, by a clean coordinator whose working directory was a checkout of `main` at that build, so the repository's own profile (team key SKL) resolved.
+The engineer's run on SKL-125 at `61ad7ac` (tracker comment `c30c99c4`) was also read, and its nine durations and elapsed recompute exactly.
+QA's sanitized record of the raw output is attached to the story as "SKL-95 QA round 5 raw output".
+
+Outcome: every acceptance criterion and Definition of Done item is met, so the story moves to Done.
+
+| Item | Verdict | Evidence |
+|---|---|---|
+| C1 closing report | Verified | The coordinator read six files with its file tool, then launched the start form as its first shell command. Four commands ran and the summary has four rows in launch order. Every duration and the elapsed `38.479292102s` equal recorded end minus start, and the Totals lines read `not reported [partial: 4 not reported, 0 cumulative]`. The summary is the end-form output verbatim, and there is no tracker write, secret, or path. |
+| C2 docs | Verified | PR #84 changed only `SKILL.md` and the test file; the README row verified in earlier rounds stands. |
+| C3 tests | Verified | `uv run --locked pytest -q` passes 734 tests and the vendor check exits 0. CI is green on the PR head (run 40804386548) and on `main` (run 40804633398). Deleting the new sentence, each of the five guarded C1 phrases, or the script's `partial` note fails a named test. |
+| C4 verified end to end | Verified | The SKL-126 run stopped at step 1 before any role. Its closing report has the heading line, `metrics: on`, the table, the elapsed wall-clock, and the totals block. |
+| DoD all acceptance criteria met | Verified | C1 to C4. |
+| DoD tests written and passing | Verified | The C3 row. |
+| DoD independently reviewed | Verified | Review of record 5692032800 on the merged head `3b872a4`: Codex GPT-6 Sol reviewer and Claude Opus 5.5 adjudicator; no findings. |
+| DoD docs updated | Verified | The C2 row. |
+| DoD verified in staging | Not applicable | No environment exists; C4 stands in, as the story states. |
+| DoD no critical bugs or regressions | Verified | The round 4 regression did not recur, and the suite and CI pass at `main`. |
+
+One extra launch attempt in the run included a `git` command, and the worktree guard of QA's test harness refused it before it ran.
+It wrote no metrics line, so it has no row; the guard exists only in QA's isolated setup.
