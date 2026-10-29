@@ -340,7 +340,8 @@ METRICS_READ_BACK_FAILED = (
 METRICS_RESUMED = "A resumed run is a new invocation and posts its own summary comment."
 METRICS_POST_NO_SECRETS = (
     "The `end-state` extra is a short stop reason with no path, secret, or tool output, no other recorded extra "
-    "holds a path or secret, and the summary comment contains no secrets and no local or scratch paths."
+    "holds a path or secret, so a failed item is recorded restated without its path, and the summary comment "
+    "contains no secrets and no local or scratch paths."
 )
 METRICS_ONLY_WRITE = (
     "The summary comment is the coordinator's only tracker write: the senior engineer and the QA agent make "
@@ -353,24 +354,33 @@ BOUNDARIES_ONLY_WRITE = (
     "reads back and repeats in the closing report; with `metrics` off it makes no tracker write."
 )
 METRICS_BODY_BYTES = (
-    "The summary body file holds exactly the heading line, a blank line and the end form's output, ending at the end of "
-    "its last line with no newline after it, and the closing report's summary is those same bytes."
+    "The summary body file holds exactly the heading line, a blank line and the end form's output without the "
+    "newline that ends its last line, which is no line's text, so no line is added, reworded, or left out; the "
+    "closing report's summary is those same bytes."
 )
 METRICS_END_IS_LAST = (
-    "The end form is the last launch: between it and the closing report the coordinator runs only the summary "
-    "post and its read-back, writes only the summary body file with the runtime's file-write tool, looks up no "
-    "command syntax, and updates no todo list or checklist, so the post item stays open until the closing report "
-    "names the comment."
+    "The end form is the last launch: between it and the closing report the coordinator launches only the summary "
+    "post and its read-back, and looks up no command syntax."
+)
+METRICS_POST_ITEM = (
+    "After the end form, the coordinator writes the summary body file with the runtime's file-write tool, and right "
+    "after the read-back, or after a denied or unavailable post, marks the post item completed with its todo tool, "
+    "or in its checklist file with the file-write tool, noting any denied post or failed read-back; neither write is "
+    "a launched command."
 )
 METRICS_LINEAR_COMMANDS = (
-    "With the `linear` CLI, the post is `linear issue comment add '<story>' --body-file '<summary body file>'` and the "
-    "read-back is `linear issue comment list '<story>' --json`, read for the comment the post returned."
+    "With the `linear` CLI, the post is `linear issue comment add '<story>' --body-file '<summary body file>'`, which "
+    "prints the comment's URL ending in `#comment-<id>`, and the read-back is `linear issue comment list '<story>' "
+    "--json`, read for the one comment whose `id` begins with that `<id>`; with another tracker interface the "
+    "read-back reads the comment by the identifier its post returns, and a post that returns no identifier is a "
+    "failed read-back."
 )
 METRICS_POSTING = [
     METRICS_POST,
     METRICS_POST_BODY,
     METRICS_BODY_BYTES,
     METRICS_END_IS_LAST,
+    METRICS_POST_ITEM,
     METRICS_LINEAR_COMMANDS,
     METRICS_READ_BACK,
     METRICS_POST_NOT_A_LAUNCH,
@@ -582,6 +592,7 @@ METRICS_LINES = [
     METRICS_POST_BODY,
     METRICS_BODY_BYTES,
     METRICS_END_IS_LAST,
+    METRICS_POST_ITEM,
     METRICS_LINEAR_COMMANDS,
     METRICS_READ_BACK,
     METRICS_POST_NOT_A_LAUNCH,
@@ -1463,3 +1474,34 @@ def test_the_body_and_the_closing_report_summary_are_the_same_bytes() -> None:
 
 def test_the_closing_report_restates_a_relayed_finding_without_its_path() -> None:
     assert METRICS_NO_SECRETS in metrics_lines()
+
+
+def test_the_post_item_is_closed_with_the_todo_or_file_tool_on_every_post_outcome() -> None:
+    lines = metrics_lines()
+    assert lines.count(METRICS_POST_ITEM) == 1
+    assert lines.index(METRICS_END_IS_LAST) < lines.index(METRICS_POST_ITEM) < lines.index(METRICS_READ_BACK)
+    assert "updates no todo list" not in SKILL.read_text(), "a rule forbids the todo update todo-tracking requires"
+
+
+def test_the_read_back_finds_the_comment_by_the_id_the_post_printed() -> None:
+    assert METRICS_LINEAR_COMMANDS in metrics_lines()
+    assert "the comment the post returned" not in SKILL.read_text()
+
+
+def test_the_dropped_final_newline_is_stated_as_no_line_so_verbatim_holds() -> None:
+    assert METRICS_BODY_BYTES in metrics_lines()
+    assert "with no newline after it" not in SKILL.read_text()
+
+
+METRICS_FENCED = [
+    "```sh",
+    "```",
+    *METRICS_START_BLOCK,
+    *METRICS_WRAPPER_BLOCK,
+]
+
+
+def test_every_metrics_section_line_is_pinned_so_no_contradicting_line_can_be_inserted() -> None:
+    pinned = set(METRICS_LINES) | set(METRICS_FENCED) | {METRICS_NEVER_SETS_STATE}
+    unpinned = [line for line in metrics_lines() if line.strip() and line not in pinned]
+    assert not unpinned, f"unpinned Metrics lines: {unpinned}"
