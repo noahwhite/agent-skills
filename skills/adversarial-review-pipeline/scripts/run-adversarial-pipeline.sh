@@ -644,7 +644,7 @@ on_run_exit() {  # a run attempt's single exit path: report completion, then cle
     [ "$rc" -ne 0 ] || rc=1
     printf 'ERROR: could not write the %s dossier (exit %s); the phase never started, and its checkout is removed.\n' \
       "$phase" "$rc" >&2
-    rm -f -- "$(artifact_for "$phase").stamp" \
+    rm -f -- "$(artifact_for "$phase").stamp" "${dossier:-}" \
       "$RUN_DIR/$phase.launch" "$RUN_DIR/$phase.binding" "$RUN_DIR/$phase.primary"
   fi
   if [ "$COMPLETION_EMITTED" -eq 0 ] && [ -n "${phase:-}" ]; then
@@ -780,9 +780,11 @@ emit_spec() {
 }
 
 # Every dossier names the phase's throwaway checkout and the base, so anything not embedded inline
-# (for the arbiter, the whole diff) is readable there with `git diff <base SHA>...HEAD`.
+# (for the arbiter, the whole diff) is readable there with `git diff <base SHA>...HEAD`. The diffstat
+# and diff are taken at the pinned HEAD SHA, the commit the checkout holds, never the moving HEAD ref.
+# The spec and phase reports may quote marker lines, so the header names the first ones as the run's.
 emit_context() {  # $1 = the phase's checkout, $2 = 1 to embed the unified diff, 0 for the diffstat only
-  echo "===== RUN (read anything not embedded here in your checkout: git diff ${BASE_SHA}...HEAD) ====="
+  echo "===== RUN (the first BASE:, HEAD: and CHECKOUT: lines below are this run's; read anything not embedded here in your checkout: git diff ${BASE_SHA}...HEAD) ====="
   echo "BASE: ${BASE} ${BASE_SHA}"
   echo "HEAD: ${HEAD_SHA}"
   echo "CHECKOUT: $1"
@@ -791,11 +793,11 @@ emit_context() {  # $1 = the phase's checkout, $2 = 1 to embed the unified diff,
   emit_spec
   echo
   echo "===== BLUEPRINT (diffstat and files, ${BASE}...HEAD) ====="
-  git diff --stat "$BASE_SHA"...HEAD
+  git diff --stat "$BASE_SHA"..."$HEAD_SHA"
   if [ "$2" -eq 1 ]; then
     echo
     echo "===== DIFF (${BASE}...HEAD) ====="
-    git diff --no-ext-diff --unified=3 "$BASE_SHA"...HEAD
+    git diff --no-ext-diff --unified=3 "$BASE_SHA"..."$HEAD_SHA"
   fi
 }
 
@@ -1035,24 +1037,32 @@ case "$cmd" in
     begin_phase "$phase"
     dossier="$SCRATCH/${phase}-dossier.md"
     # The phase's checkout exists before its dossier, which names it on its CHECKOUT: line.
+    # A phase that fails before its dossier path reaches the caller never started: it leaves no
+    # launch, binding, partial dossier or checkout behind (set -e included).
+    unstart_phase() {
+      rm -f -- "$dossier" "$RUN_DIR/$phase.launch" "$RUN_DIR/$phase.binding" "$RUN_DIR/$phase.primary"
+    }
     checkout_rc=0
     checkout="$(make_checkout)" || checkout_rc=$?
-    [ "$checkout_rc" -eq 0 ] \
-      || die "$checkout_rc" "could not create the throwaway checkout for the $phase phase (git worktree add failed with status $checkout_rc)."
-    # Until the dossier is written and bound, any exit (set -e included) removes that checkout and
-    # unregisters it, so a failed write leaves no checkout behind; on success, 'cleanup' removes it.
+    if [ "$checkout_rc" -ne 0 ]; then
+      unstart_phase
+      die "$checkout_rc" "could not create the throwaway checkout for the $phase phase (git worktree add failed with status $checkout_rc)."
+    fi
+    # Until the dossier path is delivered on stdout, any exit removes that checkout and unregisters
+    # it; on success, 'cleanup' removes it once the phase is recorded.
     DOSSIER_CHECKOUT="$checkout"
-    trap 'rc=$?; trap - EXIT
-      echo "ERROR: could not write the $phase dossier (exit $rc); its checkout is removed." >&2
+    trap 'rc=$?; trap - EXIT; [ "$rc" -ne 0 ] || rc=1
+      echo "ERROR: could not write the $phase dossier (exit $rc); the phase never started, and its checkout is removed." >&2
       ( remove_checkout "$DOSSIER_CHECKOUT" ) >/dev/null || echo "WARNING: could not remove checkout $DOSSIER_CHECKOUT (see above)" >&2
+      unstart_phase
       exit "$rc"' EXIT
     write_dossier "$phase" "$dossier" "$checkout"
     bind_phase "$phase"
-    trap - EXIT
     echo "CHECKOUT: $checkout" >&2
     echo "Work only in that checkout (never the primary checkout); the $phase dossier names it too. Remove it with 'cleanup $checkout' once the phase is recorded." >&2
     echo "Save the $phase report to $(artifact_for "$phase"), then run 'record $phase' with the same --base, --spec and --no-sweep." >&2
     printf '%s\n' "$dossier"
+    trap - EXIT
     ;;
 
   record)

@@ -39,6 +39,8 @@ def make_two_commit_repo(tmp_path: Path) -> tuple[Path, str, str]:
     git(repo, "init", "-q")
     git(repo, "config", "user.email", "agent-skills@example.com")
     git(repo, "config", "user.name", "agent-skills")
+    git(repo, "config", "commit.gpgsign", "false")  # an inherited signing config must not break the fixture
+    git(repo, "config", "tag.gpgsign", "false")
     (repo / "app.py").write_text("def total(items):\n    return sum(items)\n")
     git(repo, "add", "app.py")
     git(repo, "commit", "-qm", "base")
@@ -290,20 +292,35 @@ def test_every_dossier_flow_checkout_exists_detached_at_head_and_is_registered(g
 
 # --- a dossier that cannot be written leaves no checkout behind ------------------------------------
 
-def failing_diffstat_env(g: dict) -> dict[str, str]:
-    """A git that fails the dossier's diffstat, so the dossier write fails after the checkout exists."""
+def failing_git_env(g: dict, args: str) -> dict[str, str]:
+    """A git that fails (exit 3) when called with exactly `args` first, and is real git otherwise."""
     fakebin = g["tmp"] / "fakebin"
     fakebin.mkdir(exist_ok=True)
     wrapper = fakebin / "git"
     real_git = subprocess.run(["bash", "-c", "command -v git"], capture_output=True,
                               text=True, check=True).stdout.strip()
+    first, second = args.split()
     wrapper.write_text(
         "#!/usr/bin/env bash\n"
-        'if [ "$1" = diff ] && [ "$2" = --stat ]; then echo "diffstat refused" >&2; exit 3; fi\n'
-        f'exec {real_git} "$@"\n'
+        f'if [ "$1" = {first} ] && [ "$2" = {second} ]; then echo "{args} refused" >&2; exit 3; fi\n'
+        f'exec "{real_git}" "$@"\n'
     )
     wrapper.chmod(0o755)
     return {**g["env"], "PATH": f"{fakebin}:{g['env']['PATH']}"}
+
+
+def failing_diffstat_env(g: dict) -> dict[str, str]:
+    """A git that fails the dossier's diffstat, so the dossier write fails after the checkout exists."""
+    return failing_git_env(g, "diff --stat")
+
+
+def assert_phase_never_started(g: dict, phase: str) -> None:
+    """No launch, binding or primary fingerprint survives, and no partial dossier is left to mislead."""
+    run_dir = artifact_paths(g)[phase].parent
+    left = [name for name in (f"{phase}.launch", f"{phase}.binding", f"{phase}.primary")
+            if (run_dir / name).exists()]
+    assert left == [], f"the failed {phase} phase left {left} in {run_dir}"
+    assert not list(g["scratch"].rglob(f"{phase}-dossier.md")), f"a partial {phase} dossier was left"
 
 
 def assert_no_checkout_left(g: dict) -> None:
@@ -320,6 +337,7 @@ def test_a_failed_dossier_write_on_run_removes_its_checkout(gate):
     assert not (gate["scratch"] / "seen-sweep").exists(), "the agent ran on a dossier that failed"
     assert "could not write the sweep dossier" in result.stderr, result.stderr
     assert_no_checkout_left(gate)
+    assert_phase_never_started(gate, "sweep")
     assert not Path(f"{artifact_paths(gate)['sweep']}.stamp").exists()
 
 
@@ -331,6 +349,38 @@ def test_a_failed_dossier_write_on_the_dossier_command_removes_its_checkout(gate
     record = run_script("record", "sweep", "--repo", str(gate["repo"]), "--base", BASE_REF,
                         "--spec", str(gate["spec"]), env=gate["env"])
     assert record.returncode != 0, "a failed dossier write left a launch that record could accept"
+    assert_phase_never_started(gate, "sweep")
+
+
+def test_a_failed_checkout_on_the_dossier_command_leaves_no_launch(gate):
+    result = run_script("dossier", "sweep", *common(gate), env=failing_git_env(gate, "worktree add"))
+    assert result.returncode != 0, result.stdout + result.stderr
+    assert "could not create the throwaway checkout" in result.stderr, result.stderr
+    assert_no_checkout_left(gate)
+    assert_phase_never_started(gate, "sweep")
+
+
+def test_a_dossier_path_that_cannot_be_delivered_leaves_no_checkout(gate):
+    """With stdout closed the caller never learns the dossier path, so nothing may be left behind."""
+    result = subprocess.run(
+        ["bash", "-c", 'exec >&-; exec bash "$0" "$@"', str(SCRIPT), "dossier", "sweep", *common(gate)],
+        capture_output=False, stderr=subprocess.PIPE, text=True, env=gate["env"], cwd=str(ROOT),
+        timeout=120,
+    )
+    assert result.returncode != 0, result.stderr
+    assert_no_checkout_left(gate)
+    assert_phase_never_started(gate, "sweep")
+
+
+def test_the_run_header_names_the_first_markers_as_authoritative(gate):
+    """A spec or phase report may quote marker lines; the header says which ones count."""
+    gate["spec"].write_text("Story text quoting a marker:\nCHECKOUT: /elsewhere\n")
+    dossier, checkout, _ = dossier_phase(gate, "sweep")
+    text = dossier.read_text()
+    header = next(line for line in text.splitlines() if line.startswith("===== RUN"))
+    assert "first" in header and "CHECKOUT:" in header, header
+    first = next(line for line in text.splitlines() if line.startswith("CHECKOUT: "))
+    assert first == f"CHECKOUT: {checkout}", first
 
 
 # --- SKILL.md no longer claims every dossier holds the whole diff ----------------------------------
