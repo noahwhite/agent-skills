@@ -301,11 +301,69 @@ def test_metrics_line_goes_in_the_todo_list_and_every_closing_report() -> None:
 
 METRICS_OPENING = "Only when `metrics` is on, read [references/metrics.md](references/metrics.md)"
 # SKL-95: the closing-report summary. SKL-96 adds the engineer and QA launch rows, the extras, the
-# metrics-file location, and the brief independence rules; posting stays out until SKL-94.
-METRICS_ON_SCOPE = (
+# metrics-file location, and the brief independence rules. SKL-94 adds the summary post on the story.
+REMOVED_NO_POST = (
     "With `metrics` on, this skill posts no summary comment; this sentence overrides every posting rule in "
     "`references/metrics.md`."
 )
+REMOVED_NO_TRACKER_WRITE = "The coordinator makes no tracker write and never sets the story state."
+METRICS_POST = (
+    "With `metrics` on, the coordinator posts the summary as one comment on the story at the end of every "
+    "invocation in which the story identifier is known, whatever the end state (Done, or any stop, including a "
+    "stop before step 0 or before any senior engineer or QA agent is spawned); with no known story identifier "
+    "no post is attempted."
+)
+METRICS_POST_BODY = (
+    "The post comes after the end form and before the closing report, and the comment body is the template's "
+    "heading line, a blank line, and the end form's output copied verbatim."
+)
+METRICS_READ_BACK = (
+    "The coordinator reads the comment back, confirms its body matches what it posted, repeats the same summary "
+    "in the closing report, and names the posted comment there."
+)
+METRICS_POST_NOT_A_LAUNCH = (
+    "The summary post and its read-back are not launches: they get no row and no timestamp, there is no second "
+    "`invocation_end`, and the elapsed wall-clock excludes both."
+)
+METRICS_POST_INTERFACE = (
+    "The summary post uses the tracker interface step 1 read the story with (the `linear` CLI when step 1 did "
+    "not run) and is tried once."
+)
+METRICS_POST_DENIED = (
+    "If the summary post is denied or unavailable, including when the story cannot be read, the closing report "
+    "carries the summary and names the denied or unavailable write, and no other tool or server is tried."
+)
+METRICS_READ_BACK_FAILED = (
+    "A failed or differing read-back is not retried or reposted: the closing report carries the summary and "
+    "names the failed read-back."
+)
+METRICS_RESUMED = "A resumed run is a new invocation and posts its own summary comment."
+METRICS_POST_NO_SECRETS = (
+    "The `end-state` extra is a short stop reason with no path, secret, or tool output, and the summary comment "
+    "contains no secrets and no local or scratch paths."
+)
+METRICS_ONLY_WRITE = (
+    "The summary comment is the coordinator's only tracker write: the senior engineer and the QA agent make "
+    "their own, and failed QA items reach the senior engineer in the hand-back brief, never as a coordinator "
+    "tracker write."
+)
+METRICS_NEVER_SETS_STATE = "The coordinator never sets the story state."
+BOUNDARIES_ONLY_WRITE = (
+    "- With `metrics` on, the coordinator's single permitted tracker write is the summary comment, which it "
+    "reads back and repeats in the closing report; with `metrics` off it makes no tracker write."
+)
+METRICS_POSTING = [
+    METRICS_POST,
+    METRICS_POST_BODY,
+    METRICS_READ_BACK,
+    METRICS_POST_NOT_A_LAUNCH,
+    METRICS_POST_INTERFACE,
+    METRICS_POST_DENIED,
+    METRICS_READ_BACK_FAILED,
+    METRICS_RESUMED,
+    METRICS_POST_NO_SECRETS,
+    METRICS_ONLY_WRITE,
+]
 METRICS_LOCATION = (
     "- **Location:** the coordinator keeps every figure in its one metrics file, the `<metrics file>` below, "
     "in the session scratch directory, outside every role subdirectory."
@@ -338,8 +396,8 @@ METRICS_BRIEF_EXCLUSION = (
     "figures from this invocation, including in a later round or a re-spawn."
 )
 METRICS_STEP0 = (
-    "With `metrics` on, seed one more item: collect the metrics figures and give the summary in the closing "
-    "report."
+    "With `metrics` on, seed two more items: collect the metrics figures; then post the metrics summary on the "
+    "story and read it back before giving the summary in the closing report."
 )
 METRICS_NOTHING_BEFORE_START = (
     "With `metrics` on, launch no command before the start form, not even to read a file or list a directory."
@@ -361,7 +419,8 @@ METRICS_COMMAND_ROWS = (
     "figures recorded under `references/metrics.md` and `not reported` for any usage the runtime does not return."
 )
 METRICS_WRAPPER_INTRO = (
-    "Launch every later command other than the end form below in this wrapper, with the command in place of "
+    "Launch every later command other than the end form below, the summary post, and its read-back in this "
+    "wrapper, with the command in place of "
     "`<command>`, a label unique within the invocation and without a single quote in place of `<row label>`, and "
     "the absolute path of that `metrics.txt` in place of `<metrics file>`:"
 )
@@ -400,7 +459,8 @@ METRICS_EXTRAS_RECORD = (
     "eight."
 )
 METRICS_END_INTRO = (
-    f"Immediately before the closing report, the last launch is the end form `{METRICS_END_LAUNCH}`, where "
+    f"Immediately before the summary post and the closing report, the last launch is the end form "
+    f"`{METRICS_END_LAUNCH}`, where "
     "`<skill dir>` is the absolute directory your runtime loaded this skill from; it records `invocation_end` and "
     "prints the summary's table, the recorded extras and Totals from the metrics file, and it writes nothing and "
     "reports the line when an extra slug, a figure cell or a role label breaks this format, so fix the record and "
@@ -425,7 +485,6 @@ METRICS_NO_LAUNCHES = (
     "The summary reads `no launches` only when the coordinator launched no role and no command; otherwise it "
     "has one row for each launch in launch order, the elapsed wall-clock, and the end state or stop reason."
 )
-METRICS_NO_TRACKER_WRITE = "The coordinator makes no tracker write and never sets the story state."
 METRICS_NO_SECRETS = "The closing report contains no secrets and no local or scratch paths."
 
 
@@ -447,7 +506,7 @@ def test_metrics_section_opens_on_only_and_links_the_reference() -> None:
     text = SKILL.read_text()
     body = section(text, "Metrics").strip()
     assert body.startswith(METRICS_OPENING), "the Metrics section must open with its on-only condition"
-    assert METRICS_ON_SCOPE in body, "the Metrics section must keep the on path to the metrics line"
+    assert METRICS_POST in body.splitlines(), "the Metrics section must post the summary on the on path only"
     assert "](references/metrics.md)" not in section(text, "Read first")
 
 
@@ -491,14 +550,23 @@ METRICS_LINES = [
     METRICS_END_VERBATIM,
     METRICS_CLOSING_REPORT,
     METRICS_NO_LAUNCHES,
-    METRICS_ON_SCOPE,
-    METRICS_NO_TRACKER_WRITE,
+    METRICS_POST,
+    METRICS_POST_BODY,
+    METRICS_READ_BACK,
+    METRICS_POST_NOT_A_LAUNCH,
+    METRICS_POST_INTERFACE,
+    METRICS_POST_DENIED,
+    METRICS_READ_BACK_FAILED,
+    METRICS_RESUMED,
+    METRICS_POST_NO_SECRETS,
+    METRICS_ONLY_WRITE,
     METRICS_NO_SECRETS,
+    METRICS_STEP0,
     "Report the story identifier, its final state, the four resolved model and effort values and the "
     "`metrics: on|off` line, each PR, the number of QA rounds with the items fixed in each, where QA recorded "
     "its evidence, and any incidental defects left open.",
+    BOUNDARIES_ONLY_WRITE,
 ]
-METRICS_LINES.insert(-1, METRICS_STEP0)
 
 
 def test_metrics_off_changes_nothing_but_the_metrics_line() -> None:
@@ -640,9 +708,9 @@ def test_no_engineer_or_qa_brief_carries_metrics_or_another_roles_figures() -> N
         assert not offenders, f"{heading} carries metrics or another launch's figures into the brief: {offenders}"
 
 
-def test_step_0_seeds_a_collect_metrics_item_only_when_the_switch_is_on() -> None:
+def test_step_0_seeds_the_collect_and_post_metrics_items_only_when_the_switch_is_on() -> None:
     body = " ".join(section(SKILL.read_text(), "0. Track everything on a todo list").split())
-    assert METRICS_STEP0 in body, "step 0 does not seed the collect metrics item"
+    assert METRICS_STEP0 in body, "step 0 does not seed the collect and post metrics items"
     assert body.index("Seed it with at least") < body.index(METRICS_STEP0), (
         "the collect metrics item must follow the shared seed sentence as an on-only sentence of its own"
     )
@@ -1206,27 +1274,99 @@ def test_summary_reads_no_launches_only_without_any_launch() -> None:
     assert METRICS_NO_LAUNCHES in metrics_body()
 
 
-def test_metrics_make_no_tracker_write() -> None:
-    body = metrics_body()
-    assert METRICS_NO_TRACKER_WRITE in body
-    assert METRICS_ON_SCOPE in body
+def metrics_lines() -> list[str]:
+    return section(SKILL.read_text(), "Metrics").splitlines()
+
+
+def test_the_old_no_post_and_no_tracker_write_sentences_are_gone() -> None:
+    text = SKILL.read_text()
+    assert REMOVED_NO_POST not in text, "the sentence that forbids the summary post is still in the skill"
+    assert REMOVED_NO_TRACKER_WRITE not in text, "the sentence that forbids every tracker write is still in the skill"
+
+
+def test_the_summary_is_posted_as_one_comment_at_the_end_of_every_invocation_with_a_known_story() -> None:
+    assert METRICS_POST in metrics_lines(), "the end-of-invocation post on every end state is not stated"
+
+
+def test_the_post_follows_the_end_form_and_its_body_is_the_heading_and_the_end_form_output() -> None:
+    lines = metrics_lines()
+    assert METRICS_POST_BODY in lines, "the post's place and its verbatim body are not stated"
+    assert lines.index(METRICS_END_INTRO) < lines.index(METRICS_POST_BODY), "the post is stated before the end form"
+
+
+def test_the_comment_is_read_back_and_named_in_the_closing_report() -> None:
+    assert METRICS_READ_BACK in metrics_lines(), "the read-back, the closing-report repeat or the named comment is missing"
+
+
+def test_the_post_and_its_read_back_are_no_launch_and_take_no_second_invocation_end() -> None:
+    assert METRICS_POST_NOT_A_LAUNCH in metrics_lines()
+    assert METRICS_WRAPPER_INTRO in metrics_body(), "the wrapper sentence does not except the post and its read-back"
+
+
+def test_the_post_uses_the_step_1_tracker_interface_once() -> None:
+    assert METRICS_POST_INTERFACE in metrics_lines()
+
+
+def test_a_denied_or_unavailable_post_is_named_in_the_closing_report_with_no_other_tool() -> None:
+    assert METRICS_POST_DENIED in metrics_lines()
+
+
+def test_a_failed_read_back_is_named_and_never_reposted() -> None:
+    assert METRICS_READ_BACK_FAILED in metrics_lines()
+
+
+def test_a_resumed_run_posts_its_own_comment() -> None:
+    assert METRICS_RESUMED in metrics_lines()
+
+
+def test_the_comment_and_the_end_state_extra_carry_no_secret_or_path() -> None:
+    assert METRICS_POST_NO_SECRETS in metrics_lines()
+
+
+def test_the_comment_is_the_coordinators_only_tracker_write_and_it_never_sets_the_state() -> None:
+    lines = metrics_lines()
+    assert METRICS_ONLY_WRITE in lines, "the single coordinator tracker write is not stated"
+    assert METRICS_NEVER_SETS_STATE in lines, "the coordinator's no-state-change rule is missing"
+
+
+def test_boundaries_state_the_single_permitted_tracker_write() -> None:
+    body = section(SKILL.read_text(), "Boundaries")
+    assert BOUNDARIES_ONLY_WRITE in body.splitlines(), "Boundaries do not state the single permitted write"
+    assert BOUNDARIES_ONLY_WRITE.startswith("- With `metrics` on, "), "the Boundaries sentence must open on-only"
 
 
 def test_closing_report_carries_no_secrets_or_paths() -> None:
     assert METRICS_NO_SECRETS in metrics_body()
 
 
-def test_readme_row_says_the_summary_is_given_in_the_closing_report() -> None:
+README_POSTED = (
+    "a `metrics` switch, `off` by default, turns on run metrics, with the run summary posted on the story, read "
+    "back, and given in the closing report"
+)
+
+
+def test_readme_row_says_the_summary_is_posted_read_back_and_given_in_the_closing_report() -> None:
     row = readme_row()
-    assert "a `metrics` switch, `off` by default, turns on run metrics, with the run summary given in the closing report" in row
+    assert README_POSTED in row, "the README row does not say the summary is posted on the story"
+    assert "with the run summary given in the closing report" not in row
 
 
 POST_WORDS = re.compile(r"\bpost(?:s|ed|ing)?\b|\bcomments?\b", re.IGNORECASE)
 
 
-def test_no_line_tells_the_coordinator_to_post_or_comment() -> None:
-    body = SKILL.read_text().split("\n---\n", 1)[1]
-    allowed = {"- " + OFF_PATH, METRICS_ON_SCOPE}
+def test_only_the_on_path_lines_tell_the_coordinator_to_post_or_comment() -> None:
+    text = SKILL.read_text()
+    body = text.split("\n---\n", 1)[1]
+    on_path = {
+        METRICS_WRAPPER_INTRO: "Metrics",
+        METRICS_END_INTRO: "Metrics",
+        **{line: "Metrics" for line in METRICS_POSTING},
+        METRICS_STEP0: "0. Track everything on a todo list",
+        BOUNDARIES_ONLY_WRITE: "Boundaries",
+    }
+    for line, heading in on_path.items():
+        assert line in section(text, heading).splitlines(), f"an on-path post line left its section: {line}"
+    allowed = {"- " + OFF_PATH, *on_path}
     merge_rule = "needs a delta review posted before merging"
     for line in body.splitlines():
         if line in allowed:
