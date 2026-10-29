@@ -17,7 +17,7 @@ There is no visual application surface; structured assertions and raw command ou
 | C4 live ceremonies | Verified | SKL-130 and SKL-131 each reached a recorded 1-point outcome from the exact PR-head checkout; summary, complete closing messages, off-path absence, permission provenance, and both Canceled read-backs are recorded on SKL-92 in comments `ba885326` and `2b64c49c`. |
 | DoD all acceptance criteria met | Verified | C1-C4 above, with 27 passing combined tracker assertions and both fixture cancellation assertions. |
 | DoD unit/integration tests written and passing | Verified | Added posting-rule tests are present and the implementation PR CI suite passes. |
-| DoD independently reviewed | Verified | [Review of record 5701927357](https://github.com/noahwhite/agent-skills/pull/90#pullrequestreview-5701927357) records Codex review and separate DeepSeek adjudication with zero blocking findings; both `commit_id` and first-line SHA match the merged PR head. |
+| DoD independently reviewed | Not met | [Review 5701927357](https://github.com/noahwhite/agent-skills/pull/90#pullrequestreview-5701927357) binds the correct implementation head but used DeepSeek V4.1 Flash rather than repository-configured DeepSeek V4 Pro, with no documented owner exception; independent evidence review confirmed that this cannot certify the required gate. |
 | DoD docs updated | Verified | README row and shared todo seed, with all 18 generated copies. |
 | DoD staging substitute | Verified | No staging deployment exists; both completed C4 fixture ceremonies are the story's specified substitute. |
 | DoD no critical bugs/regressions | Verified within scope | Posting and omitted-switch checks pass, with implementation-head and merged-build CI green; run-discipline and historical-record findings below remain disclosed. |
@@ -34,7 +34,7 @@ The resumed invocation captured its own UTC start and reports only its 15 launch
 Its elapsed value, 1092.996 seconds, matches the raw timestamp difference of 1092.995841 seconds to the displayed millisecond precision.
 Tokens and tool calls are `not reported`, with `[partial: 15 not reported, 0 cumulative]`, matching all 15 rows.
 The normal facilitator shell action successfully posted its own SM/EM summary and read back the full body, without a denied-write fallback, permission edit, auto-approval flag, or alternate tool/server.
-The [summary comment](https://linear.app/officina-pub/issue/SKL-130/tabletop-fixture-skl-92-c4-qa-round-1-on-contribution-guide-link#comment-239dea2c), complete genuine closing message, permission provenance, structured assertions, and cancellation read-back are recorded on SKL-92 in [comment ba885326](https://linear.app/officina-pub/issue/SKL-92/user-story-story-refinement-post-the-metrics-run-summary-on-the-story#comment-ba885326).
+The summary comment `239dea2c`, complete genuine closing message, permission provenance, structured assertions, and cancellation read-back are recorded on SKL-92 in comment `ba885326`.
 The coordinator canceled SKL-130 after the invocation; its state reads back Canceled and it has no children or split siblings.
 
 ### Omitted-switch fixture and final read-backs
@@ -44,8 +44,8 @@ Its genuine closing message has `metrics: off` as its only metrics content.
 Its pointing record is `baa08c0a`, and PO triage evidence is `add28754`; both were read back by the facilitator and independently observed by QA.
 The fixture remained Backlog because hypothetical implementation write access was not verified; that fixture DoR item is not an outstanding SKL-92 criterion.
 The coordinator canceled SKL-131 and independently read both fixtures back as Canceled, with no children or split siblings.
-The complete off-run closing message, off issue link, on summary link, 27 passing combined tracker assertions, both cancellation assertions, scope snapshot, and merged-build CI record are attached to SKL-92 in [comment 2b64c49c](https://linear.app/officina-pub/issue/SKL-92/user-story-story-refinement-post-the-metrics-run-summary-on-the-story#comment-2b64c49c).
-The repository, documentation, and contract/CI assertions are attached in [comment 9c89fc72](https://linear.app/officina-pub/issue/SKL-92/user-story-story-refinement-post-the-metrics-run-summary-on-the-story#comment-9c89fc72).
+The complete off-run closing message, off issue link, on summary link, 27 passing combined tracker assertions, both cancellation assertions, scope snapshot, and merged-build CI record are attached to SKL-92 in comment `2b64c49c`.
+The repository, documentation, and contract/CI assertions are attached in comment `9c89fc72`; its initial independent-review certification is superseded by the failure verdict here.
 No other story mutation appears in either ceremony's operation records, and only the two fixtures were created in the complete SKL baseline comparison.
 That comparison also observed an SKL-94 preflight outside these operation records, so the evidence does not claim the shared tracker was globally idle.
 
@@ -64,3 +64,12 @@ The off-run also recovered a stale/truncated CLI read and moved its own accident
 PR #90's historical mutation table M28 names `test_metrics_reference_orders_the_story_refinement_post`, which was replaced during the timestamp-review remediation by `test_metrics_reference_shares_the_timestamp_with_a_posted_summary` and the shared timing contracts.
 The review of record describes the final timing implementation and its tests; the historical table is not proof that the replacement timing assertions were independently mutation-tested at the final head.
 This does not remove any of C3's required C1-rule guards; report the stale historical test name to the coordinator rather than editing implementation history in QA.
+
+### Closing decision and outstanding owner
+
+C1-C4 pass, but SKL-92 is not eligible for Done because the independent-review DoD item is not met.
+The QA closing decision is In Progress, not Blocked: no undeployed dependency prevents testing, and the missing configured review is a delivered-work completion gap owned by engineering.
+The engineering owner must resolve the adjudicator-model compliance gap and supply the required review evidence at the exact implementation head before QA can verify that DoD item.
+This QA record does not retrospectively certify PR #90's pre-merge gate or substitute an evidence-only review for an implementation review.
+Evidence review F1 was independently ruled valid by both the repository-configured DeepSeek V4 Pro and the standing-container DeepSeek V4.1 Flash adjudicator.
+The historical implementation review also says 776 tests passed while both linked CI runs report 790; that count discrepancy is non-blocking record follow-up for the coordinator.
