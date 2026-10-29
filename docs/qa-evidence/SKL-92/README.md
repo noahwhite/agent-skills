@@ -17,7 +17,7 @@ There is no visual application surface; structured assertions and raw command ou
 | C4 live ceremonies | Verified | SKL-130 and SKL-131 each reached a recorded 1-point outcome from the exact PR-head checkout; summary, complete closing messages, off-path absence, permission provenance, and both Canceled read-backs are recorded on SKL-92 in comments `ba885326` and `2b64c49c`. |
 | DoD all acceptance criteria met | Verified | C1-C4 above, with 27 passing combined tracker assertions and both fixture cancellation assertions. |
 | DoD unit/integration tests written and passing | Verified | Added posting-rule tests are present and the implementation PR CI suite passes. |
-| DoD independently reviewed | Not met | [Review 5701927357](https://github.com/noahwhite/agent-skills/pull/90#pullrequestreview-5701927357) binds the correct implementation head but used DeepSeek V4.1 Flash rather than repository-configured DeepSeek V4 Pro, with no documented owner exception; independent evidence review confirmed that this cannot certify the required gate. |
+| DoD independently reviewed | Verified with owner-authorized exception | [Review 5701927357](https://github.com/noahwhite/agent-skills/pull/90#pullrequestreview-5701927357) binds exact head `8b6f8a47ae53a11b53c8dcca645fc6ab3af9020a`; the owner explicitly accepted its Flash adjudicator instead of configured V4 Pro in [comment 6505175411](https://github.com/noahwhite/agent-skills/pull/90#issuecomment-6505175411) and tracker comment `4caf3c09`. |
 | DoD docs updated | Verified | README row and shared todo seed, with all 18 generated copies. |
 | DoD staging substitute | Verified | No staging deployment exists; both completed C4 fixture ceremonies are the story's specified substitute. |
 | DoD no critical bugs/regressions | Verified within scope | Posting and omitted-switch checks pass, with implementation-head and merged-build CI green; run-discipline and historical-record findings below remain disclosed. |
@@ -45,7 +45,7 @@ Its pointing record is `baa08c0a`, and PO triage evidence is `add28754`; both we
 The fixture remained Backlog because hypothetical implementation write access was not verified; that fixture DoR item is not an outstanding SKL-92 criterion.
 The coordinator canceled SKL-131 and independently read both fixtures back as Canceled, with no children or split siblings.
 The complete off-run closing message, off issue link, on summary link, 27 passing combined tracker assertions, both cancellation assertions, scope snapshot, and merged-build CI record are attached to SKL-92 in comment `2b64c49c`.
-The repository, documentation, and contract/CI assertions are attached in comment `9c89fc72`; its initial independent-review certification is superseded by the failure verdict here.
+The repository, documentation, and contract/CI assertions are attached in comment `9c89fc72`; its initial independent-review certification is qualified by the subsequently documented owner exception below.
 No other story mutation appears in either ceremony's operation records, and only the two fixtures were created in the complete SKL baseline comparison.
 That comparison also observed an SKL-94 preflight outside these operation records, so the evidence does not claim the shared tracker was globally idle.
 
@@ -65,11 +65,17 @@ PR #90's historical mutation table M28 names `test_metrics_reference_orders_the_
 The review of record describes the final timing implementation and its tests; the historical table is not proof that the replacement timing assertions were independently mutation-tested at the final head.
 This does not remove any of C3's required C1-rule guards; report the stale historical test name to the coordinator rather than editing implementation history in QA.
 
-### Closing decision and outstanding owner
+### Owner exception, source conflict, and closing decision
 
-C1-C4 pass, but SKL-92 is not eligible for Done because the independent-review DoD item is not met.
-The QA closing decision is In Progress, not Blocked: no undeployed dependency prevents testing, and the missing configured review is a delivered-work completion gap owned by engineering.
-The engineering owner must resolve the adjudicator-model compliance gap and supply the required review evidence at the exact implementation head before QA can verify that DoD item.
-This QA record does not retrospectively certify PR #90's pre-merge gate or substitute an evidence-only review for an implementation review.
-Evidence review F1 was independently ruled valid by both the repository-configured DeepSeek V4 Pro and the standing-container DeepSeek V4.1 Flash adjudicator.
+Evidence review F1 correctly identified that the implementation review used Flash instead of repository-configured V4 Pro without a documented exception at that time.
+The owner then directly authorized the exception in the QA conversation, recorded verbatim on SKL-92 in comment `4caf3c09` and on implementation PR #90 in comment `6505175411`:
+
+> I authorize the use of deepseek flash in this case though it would be good to know why it was chosed if the profile have v4 pro. No need to return it to in progress.
+
+The source conflict is verified: container-global `AGENTS.md` prescribes Codex plus DeepSeek V4.1 Flash, while this repository's profile pins DeepSeek V4 Pro.
+The actual review followed the container-global model choice; its original driver did not document why it preferred that source, so no internal rationale is asserted.
+This is an explicit post-review owner exception, not a claim that the repository profile originally named Flash or that a V4 Pro implementation adjudication ran.
+The earlier proposed In Progress decision was withdrawn before any state change, as the owner directed.
+All C1-C4 and DoD items are verified, with the independent-review item qualified by that authorization.
+The closing decision is Done once this evidence PR has its own completed current-head review, green CI, and guarded merge; no implementation item remains outstanding.
 The historical implementation review also says 776 tests passed while both linked CI runs report 790; that count discrepancy is non-blocking record follow-up for the coordinator.
