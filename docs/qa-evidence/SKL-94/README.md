@@ -133,3 +133,68 @@ Its closing report also names a local path.
 C4 is re-run at the fix head.
 
 Decision: In Progress; C4 is re-run at the fix head.
+
+## Round 3, 2026-10-29
+
+The environment under test is merged `main`, build `a0fa2d02e397cff09f55d342d3a06d3683e794d5` from [PR #103](https://github.com/noahwhite/agent-skills/pull/103), which has the same tree as PR head `c4d50874cd55747f42c626d80cd09e3dd7a2d2b2`.
+Both live runs load `skills/story-to-done/SKILL.md` and its references from a detached checkout at that PR head, not from the installed skill, and each coordinator runs as a top-level headless Claude Code session.
+Fixtures are SKL-143 (Run 1, created In Deployment Review) and SKL-144 (Run 2, created Blocked), both `[Tabletop fixture]` issues in SKL.
+There is no visual surface; structured assertions and raw command output are the evidence, without screenshots.
+The tracker record is QA comment `ef6f47f4` on SKL-94 and its attachment `SKL-94 QA round 3 assertions (2026-10-29)`.
+
+Outcome: C4 is not met, so the story returns to In Progress.
+
+| Item | Verdict | Evidence |
+|---|---|---|
+| C1 post the summary | Verified (text) | Every C1 phrase check passes in the shipped `SKILL.md`, the removed sentences are absent, and the end-form sentence precedes the post sentence; nothing under `shared/`, no vendored reference, `metrics-summary.sh`, or todo tracking changed; the live behaviour is recorded under C4. |
+| C2 docs | Verified | The README row clause, the kept switch phrase, and the step 0 seed sentence are present, and the old sentence is absent. |
+| C3 tests | Verified | 816 tests pass, including the named guard tests and the pinned tests PR #103 added, and `vendor_shared.py --check` exits 0; [CI run 40961895271](https://github.com/noahwhite/agent-skills/actions/runs/40961895271) succeeded on the PR head and [CI run 40963392725](https://github.com/noahwhite/agent-skills/actions/runs/40963392725) on merged `main`. |
+| C4 verified end to end | Not met | Both comments equal their closing report's summary byte for byte and are well formed, but in both runs the first read-back failed, was retried, and is not named in the closing report; Run 1 also launched commands before the end form with no row and edited the metrics file, and Run 2 launched a shape lookup after the end form with no row. |
+| DoD all acceptance criteria met | Not met | C4. |
+| DoD tests written and passing | Verified | C3. |
+| DoD independently reviewed | Verified | [Review 5705599880](https://github.com/noahwhite/agent-skills/pull/103#pullrequestreview-5705599880) binds head `c4d50874cd55747f42c626d80cd09e3dd7a2d2b2`: Codex GPT-6 Sol reviewer, DeepSeek V4 Pro and Opus 5.5 adjudicators, no merge-blocking finding. |
+| DoD docs updated | Verified | C2. |
+| DoD staging | Not met | No staging target exists; C4 stands in for it and is not met. |
+| DoD no critical bugs or regressions | Verified | The full suite and CI are green; the C4 gap is recorded under C4. |
+
+### Run 1 (SKL-143)
+
+The coordinator read SKL-143 as In Deployment Review and launched one QA round, which found no failed item.
+The fixture QA merged evidence [PR #104](https://github.com/noahwhite/agent-skills/pull/104) on reviewed head `6c7d16be0d3ff69ba08415cba16bf9349aff61f0` and set SKL-143 to Done.
+The coordinator posted comment `bc82aa6f` on SKL-143, and the closing report names it.
+The comment is 1236 bytes and equals the closing report's summary byte for byte.
+Its 7 rows, in launch order, are `start`, two wrapped commands, the role row `QA round 1` (462.204195879s, 93437 tokens, 50 tool calls), two more wrapped commands, and `end`.
+Every Tokens, Tool calls, and Duration cell is well formed, all eight extras are filled, and `PRs merged` reads 1.
+Neither the comment nor the closing report holds a local or scratch path or a token pattern; the closing report names repository paths only.
+In the same call as the last wrapped command, the coordinator ran a `tail` of the metrics file after the wrapper had closed, outside any row.
+In later calls it launched these commands with no row: a story view with `grep`, a `cat` of the metrics file, a preview run of the summary script, a `tail` of the metrics file with a `grep` of that script's source, and a second run of the script piped through `grep`.
+Each run of the summary script appends an `invocation_end` record, so the run wrote three of them.
+Before the final end form, the coordinator ran `sed -i` on the metrics file, which deleted the two earlier `end` records and rewrote the recorded `qa-round-durations` extra; the closing report says it removed one preview record.
+The first read-back failed with a parser `AttributeError` on the `--json` output.
+The coordinator ran a second read-back with another parser, which compares after stripping whitespace, and the closing report says the read-back matched without naming the failed one.
+The coordinator's checklist was never updated after its first write, so the post item was not marked completed.
+Run end state: Done; QA then canceled SKL-143 and read it back as Canceled.
+
+### Run 2 (SKL-144)
+
+The coordinator read SKL-144 as Blocked and stopped at step 1; no senior engineer or QA agent was spawned.
+It posted comment `7968390c` on SKL-144, and the closing report names it.
+The comment is 1065 bytes and equals the closing report's summary byte for byte.
+Its 5 rows are `start`, three wrapped commands, and `end`, one per launch up to the end form.
+It carries the stop reason, an elapsed wall-clock of 28.004457630s, all eight extras, and the totals, and does not read `no launches`.
+Neither the comment nor the closing report holds a local or scratch path or a token pattern.
+The first read-back failed with a `jq` error, because `linear issue comment list --json` returns an object with `nodes` and `pageInfo`, not an array.
+The coordinator then launched a shape lookup of that output with no row and ran a second read-back, and the closing report says the read-back matched without naming the failed one.
+The coordinator's checklist was never updated after its first write, so the post item was not marked completed.
+Run end state: stopped at step 1, story Blocked; QA then canceled SKL-144 and read it back as Canceled.
+
+### Failed item for the engineer
+
+C4: in both runs the first read-back failed, was retried, and is not named in the closing report, against the no-retry rule; the skill gives the read-back command but not the shape of its `--json` output.
+In Run 1 the coordinator read and edited the metrics file and ran the summary script as a preview, outside the wrapper and with no row, so the comment does not have one row per launch and the run wrote extra `invocation_end` records.
+In Run 2 the coordinator launched a shape lookup of the `--json` output after the end form, with no row, against the rule that only the post and its read-back follow the end form.
+The skill does not say the read-back comparison is exact, so Run 1 compared after stripping whitespace; the bodies were in fact equal byte for byte.
+Neither coordinator marked its post item completed after the read-back.
+C4 is re-run at the fix head.
+
+Decision: In Progress; C4 is re-run at the fix head.
