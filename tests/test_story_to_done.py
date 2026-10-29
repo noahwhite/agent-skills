@@ -172,7 +172,7 @@ def test_failed_items_go_back_to_the_engineer_before_qa_reruns() -> None:
         reopened,
         "Those failed items are the issues to fix.",
         "Hand them back to the senior engineer",
-        "add each failed item as QA recorded it",
+        "add to the hand-back brief each failed item as QA recorded it",
         "fix them through `engineering-workflow` on this story",
         "Confirm that state as step 2 does",
         "run step 3 again with a new QA agent",
@@ -339,8 +339,8 @@ METRICS_READ_BACK_FAILED = (
 )
 METRICS_RESUMED = "A resumed run is a new invocation and posts its own summary comment."
 METRICS_POST_NO_SECRETS = (
-    "The `end-state` extra is a short stop reason with no path, secret, or tool output, and the summary comment "
-    "contains no secrets and no local or scratch paths."
+    "The `end-state` extra is a short stop reason with no path, secret, or tool output, no other recorded extra "
+    "holds a path or secret, and the summary comment contains no secrets and no local or scratch paths."
 )
 METRICS_ONLY_WRITE = (
     "The summary comment is the coordinator's only tracker write: the senior engineer and the QA agent make "
@@ -1349,6 +1349,7 @@ def test_readme_row_says_the_summary_is_posted_read_back_and_given_in_the_closin
     row = readme_row()
     assert README_POSTED in row, "the README row does not say the summary is posted on the story"
     assert "with the run summary given in the closing report" not in row
+    assert row.endswith(README_POSTED + ". |"), "the README row adds text after the posted-summary clause"
 
 
 POST_WORDS = re.compile(r"\bpost(?:s|ed|ing)?\b|\bcomments?\b", re.IGNORECASE)
@@ -1374,3 +1375,16 @@ def test_only_the_on_path_lines_tell_the_coordinator_to_post_or_comment() -> Non
         assert not POST_WORDS.search(line.replace(merge_rule, "")), (
             f"a line tells the coordinator to post or comment: {line}"
         )
+
+
+STORY_WRITE_WORDS = re.compile(r"\b(?:on|to) the story\b", re.IGNORECASE)
+
+
+def test_only_the_summary_post_and_the_hand_back_brief_name_content_on_the_story() -> None:
+    body = SKILL.read_text().split("\n---\n", 1)[1]
+    found = [line.strip() for line in body.splitlines() if STORY_WRITE_WORDS.search(line)]
+    assert found == [
+        METRICS_POST,
+        METRICS_STEP0,
+        next(line.strip() for line in body.splitlines() if "add to the hand-back brief each failed item" in line),
+    ], "a line outside the summary post and the hand-back brief puts content on the story"

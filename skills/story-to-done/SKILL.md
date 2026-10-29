@@ -95,7 +95,7 @@ The summary post uses the tracker interface step 1 read the story with (the `lin
 If the summary post is denied or unavailable, including when the story cannot be read, the closing report carries the summary and names the denied or unavailable write, and no other tool or server is tried.
 A failed or differing read-back is not retried or reposted: the closing report carries the summary and names the failed read-back.
 A resumed run is a new invocation and posts its own summary comment.
-The `end-state` extra is a short stop reason with no path, secret, or tool output, and the summary comment contains no secrets and no local or scratch paths.
+The `end-state` extra is a short stop reason with no path, secret, or tool output, no other recorded extra holds a path or secret, and the summary comment contains no secrets and no local or scratch paths.
 The summary comment is the coordinator's only tracker write: the senior engineer and the QA agent make their own, and failed QA items reach the senior engineer in the hand-back brief, never as a coordinator tracker write.
 The coordinator never sets the story state.
 The closing report contains no secrets and no local or scratch paths.
@@ -179,7 +179,7 @@ For a waived PR, compare the merged PR's `headRefOid` with the SHA recorded when
 - **`profile.tracker.states.in_progress`:** QA ruled at least one AC or DoD item not met and reopened the story.
   Those failed items are the issues to fix.
   Hand them back to the senior engineer: resume the same subagent if the runtime can, else spawn a new clean, neutral one on the same model and effort with the step 2 brief.
-  Either way, add each failed item as QA recorded it on the story (the item, its verdict, and the evidence it cites), and instruct the engineer to fix them through `engineering-workflow` on this story and take it back to `profile.tracker.states.in_deployment_review`.
+  Either way, add to the hand-back brief each failed item as QA recorded it on the story (the item, its verdict, and the evidence it cites), and instruct the engineer to fix them through `engineering-workflow` on this story and take it back to `profile.tracker.states.in_deployment_review`.
   Confirm that state as step 2 does, then run step 3 again with a new QA agent.
 - **`profile.tracker.states.in_deployment_review`:** QA is not finished (a pending owner action, missing access, a live trigger still to run).
   Report exactly what remains and who owns it, and stop; resume at step 3 once it is cleared.
