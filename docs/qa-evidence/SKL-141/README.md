@@ -11,8 +11,8 @@ There is no visual surface, so structured assertions and their raw output are th
 
 - Tracker evidence: SKL-141, QA comment `461c029d`.
 - Raw evidence: attachment titled `SKL-141 QA round 1 - C1 and DoD assertions` on that story.
-- Probe: `git show origin/main:skills/story-to-done/SKILL.md` after a fetch, with `origin/main` equal to `git ls-remote` and the GitHub commits API for `main`; the frontmatter is the lines between the opening `---` on line 1 and the next `---` line.
-- Cross-check: the GitHub contents API at `ref=main` returns the same line 8; the file blob at the build is `9e8e2788c894b81213d9b77c50988106921e8d53`.
+- Probe: `git show 21f026593944ded43af3bd6b64f16bcae441095e:skills/story-to-done/SKILL.md`; at run time `origin/main` after a fetch, `git ls-remote`, and the GitHub commits API for `main` all resolved to that build; the frontmatter is the lines between the opening `---` on line 1 and the next `---` line.
+- Cross-check: the GitHub contents API at `ref=21f026593944ded43af3bd6b64f16bcae441095e` returns the same blob `9e8e2788c894b81213d9b77c50988106921e8d53` and the same line 8.
 
 ## Verdicts
 
