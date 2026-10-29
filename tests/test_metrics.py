@@ -634,26 +634,29 @@ def test_usage_row_opencode_cell_records_the_v2_export(phrase):
     assert_states(row_cells(usage_row())[2], phrase)
 
 
+AC4_DEFAULT_FORMAT = "A metrics-on launch runs in the default output format, with no `--format json`."
+AC4_NO_STREAM_EVENTS = (
+    "No Tokens or Tool calls figure is derived from `step_finish` or other stream events: on "
+    "v2.2.0 the stream emitted one `step_finish` for a session of two model steps, so summing "
+    "it undercounts."
+)
 OPENCODE_BULLET_FACTS = [
     pytest.param(
         "For `runtime: command` launches whose command invokes `opencode run` on OpenCode V2, "
         "observed on v2.2.0, usage comes from the launch's session export, never from its output.",
         id="scope",
     ),
+    pytest.param(AC4_DEFAULT_FORMAT, id="ac4-default-format"),
+    pytest.param(AC4_NO_STREAM_EVENTS, id="ac4-no-stream-events"),
     pytest.param(
-        "A metrics-on launch runs in the default output format, with no `--format json`.",
-        id="ac4-default-format",
-    ),
-    pytest.param(
-        "No Tokens or Tool calls figure is derived from `step_finish` or other stream events: on "
-        "v2.2.0 the stream emitted one `step_finish` for a session of two model steps, so summing "
-        "it undercounts.",
-        id="ac4-no-stream-events",
-    ),
-    pytest.param(
-        "The session key is a launch-unique `--title`: a title no other session carries, which the "
-        "launching skill fills through the command's `{session_title}` placeholder.",
+        "The session key is a launch-unique `--title`: a title no other session carries, which "
+        "`story-refinement` fills through a role command's `{session_title}` placeholder.",
         id="ac2-key",
+    ),
+    pytest.param(
+        "A launcher that does not fill the placeholder gives its launches no launch-unique title, so "
+        "their usage is `not reported`.",
+        id="ac2-unfilled-placeholder",
     ),
     pytest.param(
         "Metrics-on launches that this repository's skills control omit `--standalone`, so the "
@@ -678,9 +681,20 @@ OPENCODE_BULLET_FACTS = [
         id="ac2-exactly-one",
     ),
     pytest.param(
+        "An empty title matches no session, so it also records `not reported` for both cells.",
+        id="ac10-empty-title",
+    ),
+    pytest.param(
         "Two concurrent launches in one project each resolve their own session, because their titles "
         "differ.",
         id="ac2-concurrent",
+    ),
+    pytest.param(
+        "On v2.2.0, output of `opencode session` written to a pipe or a command substitution stopped "
+        "at 262144 bytes, so a longer export did not parse; the list and the export are therefore "
+        "written to files in a directory of their own inside the launch's scratch directory, never "
+        "read through a pipe, and the directory is removed once the figures are read.",
+        id="ac1-files-not-pipes",
     ),
     pytest.param(
         "Tokens is `.info.tokens` `input` + `output` + `reasoning` of the export, and Tool calls is "
@@ -705,10 +719,11 @@ OPENCODE_BULLET_FACTS = [
         id="ac3-resume-cumulative",
     ),
     pytest.param(
-        "A missing session id, an export that fails (on v2.2.0 an unknown id exits 1 with `Session "
-        "not found`) or does not parse, or an absent field records `not reported` for the affected "
-        "cell, and the launch counts toward the `partial` label of each affected total; the cell "
-        "never reads `0` and never carries another session's figure.",
+        "A list or an export that fails (on v2.2.0 an unknown id exits 1 with `Session not found`) "
+        "or does not parse, or a missing session id, records `not reported` for both cells, and an "
+        "absent field records `not reported` for its own cell; the launch counts toward the "
+        "`partial` label of each affected total, and a cell never reads `0` and never carries "
+        "another session's figure.",
         id="ac10-failure",
     ),
     pytest.param(
@@ -718,7 +733,8 @@ OPENCODE_BULLET_FACTS = [
     ),
     pytest.param(
         "Only the two derived figures are recorded; the raw export, prompts and tool output are never "
-        "written to the summary, the story or the repository.",
+        "written to the summary, the story or the repository, and the export file exists only in the "
+        "scratch directory until the figures are read.",
         id="ac12-privacy",
     ),
     pytest.param(
@@ -740,8 +756,9 @@ def test_usage_bullet_never_sums_stream_events_for_opencode_v2():
     `opencode session list --format json` is the lookup's own listing format, not a run's.
     """
     bullet = flat(usage_bullet())
-    for sentence in OPENCODE_BULLET_FACTS[1:3]:
-        bullet = bullet.replace(flat(sentence.values[0]), "")
+    for sentence in (AC4_DEFAULT_FORMAT, AC4_NO_STREAM_EVENTS):
+        assert flat(sentence) in bullet, "the AC4 prohibition is missing"
+        bullet = bullet.replace(flat(sentence), "")
     bullet = bullet.replace("session list --format json", "")
     for token in ("--format json", "step_finish", "stream event"):
         assert token not in bullet, f"{token} appears outside its prohibition"
@@ -790,8 +807,6 @@ def test_usage_bullet_states_codex_observations_with_version():
 
 def test_usage_bullet_marks_other_codex_versions_not_observed():
     assert_states(usage_bullet(), "Any other codex version is `not observed` until it is run.")
-
-
 
 
 def test_usage_bullet_distinguishes_not_observed_from_not_reported():

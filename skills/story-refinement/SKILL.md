@@ -71,6 +71,7 @@ Where this file and a capability file disagree, the capability file is authorita
 Launch each non-facilitator role in a separate context with the runtime, model, optional `agent`, optional `command`, and optional `family` from its profile entry.
 A `command` runtime gets its prompt in a file and writes its result to an output file.
 When the command carries a `{session_title}` placeholder, the facilitator replaces it on every launch with a title unique to that launch: the story key, the word `launch`, the launch's number in this invocation, and a UTC timestamp to the nanosecond taken with `date -u +%Y%m%dT%H%M%S%NZ`, joined by `-`, which carries no secret and no path.
+Every launch counts toward that number, a re-launch or retry included, so no two launches of one invocation share a title.
 
 ## Denied tracker writes
 

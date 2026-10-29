@@ -68,8 +68,13 @@ SESSION_A = export(
 SESSION_B = export(tokens(3618, 2, 0), [{"id": "msg_u", "type": "user"}, assistant(TEXT)])
 
 
-def run_snippet(tmp_path: Path, title: str, sessions: list[dict], exports: dict[str, object]) -> dict[str, str]:
-    """Run the published snippet with a stub opencode; `exports` maps an id to a payload or a failure."""
+# v2.2.0 stopped `opencode session` output written to a pipe or a command substitution at this
+# many bytes; the stub does the same, so a snippet that reads the export through a pipe fails.
+PIPE_CUTOFF = 262144
+
+
+def install_stub(tmp_path: Path, sessions: list[dict], exports: dict[str, object], list_exit: int = 0) -> dict:
+    """Put a stub opencode on PATH; `exports` maps an id to a payload or a raw (unparseable) string."""
     state = tmp_path / "state"
     state.mkdir()
     (state / "list.json").write_text(json.dumps(sessions))
@@ -85,28 +90,49 @@ def run_snippet(tmp_path: Path, title: str, sessions: list[dict], exports: dict[
         "#!/usr/bin/env bash\n"
         "set -eu\n"
         f"state='{state}'\n"
+        f"emit() {{ if [ -p /dev/stdout ]; then head -c {PIPE_CUTOFF} \"$1\"; else cat \"$1\"; fi; }}\n"
         'if [ "$1 $2" = "session list" ]; then\n'
         '  printf "%s\\n" "$*" >> "$state/list-args"\n'
-        '  cat "$state/list.json"; exit 0\n'
+        f'  emit "$state/list.json"; exit {list_exit}\n'
         "fi\n"
         'if [ "$1 $2" = "session export" ]; then\n'
-        '  if [ -f "$state/$3.json" ]; then cat "$state/$3.json"; exit 0; fi\n'
-        '  if [ -f "$state/$3.raw" ]; then cat "$state/$3.raw"; exit 0; fi\n'
+        '  if [ -f "$state/$3.json" ]; then emit "$state/$3.json"; exit 0; fi\n'
+        '  if [ -f "$state/$3.raw" ]; then emit "$state/$3.raw"; exit 0; fi\n'
         '  printf "Session not found: %s\\n" "$3" >&2; exit 1\n'
         "fi\n"
         'printf "unexpected opencode call: %s\\n" "$*" >&2; exit 64\n'
     )
     stub.chmod(0o755)
-    env = {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}", "title": title}
-    res = subprocess.run(
-        ["bash", "-euo", "pipefail", "-c", usage_snippet()],
-        capture_output=True, text=True, env=env, cwd=tmp_path,
+    return {"state": state, "path": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
+
+
+def launch(stub: dict, cwd: Path, title: str) -> tuple[subprocess.Popen, Path]:
+    """Start the published snippet as a reader pastes it: plain bash, no extra shell options."""
+    scratch = cwd / "scratch"
+    scratch.mkdir(parents=True)
+    env = {**os.environ, "PATH": stub["path"], "title": title, "scratch": str(scratch)}
+    proc = subprocess.Popen(
+        ["bash", "-c", usage_snippet()],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env, cwd=cwd,
     )
-    assert res.returncode == 0, res.stderr
-    figures = dict(line.split(": ", 1) for line in res.stdout.strip().splitlines())
-    assert set(figures) == {"tokens", "tool calls"}, res.stdout
-    list_args = (state / "list-args").read_text() if (state / "list-args").exists() else ""
-    return {**figures, "stderr": res.stderr, "list_args": list_args}
+    return proc, scratch
+
+
+def collect(stub: dict, proc: subprocess.Popen, scratch: Path) -> dict[str, str]:
+    stdout, stderr = proc.communicate(timeout=60)
+    assert proc.returncode == 0, stderr
+    figures = dict(line.split(": ", 1) for line in stdout.strip().splitlines())
+    assert set(figures) == {"tokens", "tool calls"}, stdout
+    assert list(scratch.iterdir()) == [], "the list and export files must be removed"
+    list_args = (stub["state"] / "list-args").read_text() if (stub["state"] / "list-args").exists() else ""
+    return {**figures, "stderr": stderr, "list_args": list_args}
+
+
+def run_snippet(
+    tmp_path: Path, title: str, sessions: list[dict], exports: dict[str, object], list_exit: int = 0
+) -> dict[str, str]:
+    stub = install_stub(tmp_path, sessions, exports, list_exit)
+    return collect(stub, *launch(stub, tmp_path, title))
 
 
 def listed(*pairs: tuple[str, str]) -> list[dict]:
@@ -133,14 +159,31 @@ def test_a_session_with_no_tool_part_reports_zero_tool_calls(tmp_path):
 
 
 def test_two_concurrent_launches_each_resolve_their_own_session(tmp_path):
-    sessions = listed(("ses_b", "run-b"), ("ses_a", "run-a"))
-    payloads = {"ses_a": SESSION_A, "ses_b": SESSION_B}
-    (tmp_path / "a").mkdir()
-    (tmp_path / "b").mkdir()
-    first = run_snippet(tmp_path / "a", "run-a", sessions, payloads)
-    second = run_snippet(tmp_path / "b", "run-b", sessions, payloads)
-    assert (first["tokens"], first["tool calls"]) == ("3866", "3")
-    assert (second["tokens"], second["tool calls"]) == ("3620", "0")
+    stub = install_stub(tmp_path, listed(("ses_b", "run-b"), ("ses_a", "run-a")), {"ses_a": SESSION_A, "ses_b": SESSION_B})
+    first = launch(stub, tmp_path / "a", "run-a")
+    second = launch(stub, tmp_path / "b", "run-b")
+    first_out, second_out = collect(stub, *first), collect(stub, *second)
+    assert (first_out["tokens"], first_out["tool calls"]) == ("3866", "3")
+    assert (second_out["tokens"], second_out["tool calls"]) == ("3620", "0")
+
+
+def test_an_export_longer_than_the_pipe_cutoff_is_read_whole(tmp_path):
+    padding = [assistant({"type": "text", "text": "x" * 4096}) for _ in range(80)]
+    big = export(tokens(151316, 11243, 60370), [*SESSION_A["messages"], *padding])
+    assert len(json.dumps(big)) > PIPE_CUTOFF
+    out = run_snippet(tmp_path, "run-a", listed(("ses_a", "run-a")), {"ses_a": big})
+    assert (out["tokens"], out["tool calls"]) == (str(151316 + 11243 + 60370), "3"), out["stderr"]
+
+
+def test_an_empty_title_never_takes_an_untitled_session(tmp_path):
+    out = run_snippet(tmp_path, "", listed(("ses_a", "")), {"ses_a": SESSION_A})
+    assert (out["tokens"], out["tool calls"]) == (NOT_REPORTED, NOT_REPORTED)
+    assert out["list_args"] == "", "an empty title must not reach the lookup"
+
+
+def test_a_failed_list_reports_neither_figure_even_when_it_printed_a_match(tmp_path):
+    out = run_snippet(tmp_path, "run-a", listed(("ses_a", "run-a")), {"ses_a": SESSION_A}, list_exit=1)
+    assert (out["tokens"], out["tool calls"]) == (NOT_REPORTED, NOT_REPORTED)
 
 
 @pytest.mark.parametrize(
@@ -208,7 +251,9 @@ TITLE_FILL = (
     "When the command carries a `{session_title}` placeholder, the facilitator replaces it on every "
     "launch with a title unique to that launch: the story key, the word "
     "`launch`, the launch's number in this invocation, and a UTC timestamp to the nanosecond taken "
-    "with `date -u +%Y%m%dT%H%M%S%NZ`, joined by `-`, which carries no secret and no path."
+    "with `date -u +%Y%m%dT%H%M%S%NZ`, joined by `-`, which carries no secret and no path. "
+    "Every launch counts toward that number, a re-launch or retry included, so no two launches of "
+    "one invocation share a title."
 )
 TITLE_RECORD = (
     "With `metrics` on, the facilitator keeps each launch's title in the metrics file and reads "

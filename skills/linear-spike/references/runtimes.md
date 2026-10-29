@@ -109,36 +109,44 @@ If your runtime is not listed, map each capability to its closest equivalent and
   For `runtime: command` launches whose command invokes `opencode run` on OpenCode V2, observed on v2.2.0, usage comes from the launch's session export, never from its output.
   A metrics-on launch runs in the default output format, with no `--format json`.
   No Tokens or Tool calls figure is derived from `step_finish` or other stream events: on v2.2.0 the stream emitted one `step_finish` for a session of two model steps, so summing it undercounts.
-  The session key is a launch-unique `--title`: a title no other session carries, which the launching skill fills through the command's `{session_title}` placeholder.
+  The session key is a launch-unique `--title`: a title no other session carries, which `story-refinement` fills through a role command's `{session_title}` placeholder.
+  A launcher that does not fill the placeholder gives its launches no launch-unique title, so their usage is `not reported`.
   Metrics-on launches that this repository's skills control omit `--standalone`, so the session stays in the shared background service where the lookup below resolves it, and never use `--continue`.
   A consumer profile's own OpenCode voter wrapper that passes `--standalone` is outside this repository and is not changed by it.
   After the launch exits successfully, its session id is the id of the one entry of `opencode session list --format json --max-count 1000`, run from the launch's working directory, whose `title` equals the launch's title.
   Zero or more than one match records `not reported` for both cells; the newest session, or a session no other launch has claimed, is never taken in its place.
+  An empty title matches no session, so it also records `not reported` for both cells.
   Two concurrent launches in one project each resolve their own session, because their titles differ.
   The usage is read from `opencode session export <session id>`.
+  On v2.2.0, output of `opencode session` written to a pipe or a command substitution stopped at 262144 bytes, so a longer export did not parse; the list and the export are therefore written to files in a directory of their own inside the launch's scratch directory, never read through a pipe, and the directory is removed once the figures are read.
   Tokens is `.info.tokens` `input` + `output` + `reasoning` of the export, and Tool calls is the count of `type: "tool"` parts in the `content[]` of `type: "assistant"` messages, each part counted once.
   Cache read and cache write (`.info.tokens.cache`) are excluded from Tokens.
   The figures cover the top-level session only: a child or subagent session the launch spawns is a separate session, absent from the list, and its usage is excluded; the spawn itself is one tool part of the parent.
   A launch that resumes a session by explicit id (`-s <session id>`) exports that id in place of the lookup, and both figures are marked `cumulative`: the export covers the whole session, and v2.2.0 names no launch-scoped figure, since per-message `tokens` are per step.
-  A missing session id, an export that fails (on v2.2.0 an unknown id exits 1 with `Session not found`) or does not parse, or an absent field records `not reported` for the affected cell, and the launch counts toward the `partial` label of each affected total; the cell never reads `0` and never carries another session's figure.
+  A list or an export that fails (on v2.2.0 an unknown id exits 1 with `Session not found`) or does not parse, or a missing session id, records `not reported` for both cells, and an absent field records `not reported` for its own cell; the launch counts toward the `partial` label of each affected total, and a cell never reads `0` and never carries another session's figure.
   The list and the export read the launch's usage after its end timestamp is taken, so they are not part of its Duration.
-  Only the two derived figures are recorded; the raw export, prompts and tool output are never written to the summary, the story or the repository.
+  Only the two derived figures are recorded; the raw export, prompts and tool output are never written to the summary, the story or the repository, and the export file exists only in the scratch directory until the figures are read.
 
   ```bash
   # Read one new `opencode run` launch's usage (OpenCode V2, observed on v2.2.0) after it exits
   # successfully. Run it from the launch's working directory with `title` set to the launch's
-  # unique --title. The export stays in memory. A figure that cannot be read stays
-  # `not reported`, and jq prints the reason on stderr.
+  # unique --title and `scratch` set to the launch's own scratch directory. The list and the
+  # export go to files, never through a pipe, and are removed afterwards. A figure that cannot be
+  # read stays `not reported`, and the failing command prints the reason on stderr.
   tokens='not reported'
   tool_calls='not reported'
-  if id="$(opencode session list --format json --max-count 1000 | jq -er --arg t "$title" \
-      '[.[] | select(.title == $t)] | if length == 1 then .[0].id else error("not exactly one session titled \($t)") end')" &&
-    session="$(opencode session export "$id")"; then
-    tokens="$(printf '%s' "$session" | jq -e '.info.tokens
-      | if ([.input, .output, .reasoning] | all(type == "number")) then .input + .output + .reasoning
-        else error("a token field is absent") end')" || tokens='not reported'
-    tool_calls="$(printf '%s' "$session" | jq -e '[.messages[] | select(.type == "assistant")
-      | .content[] | select(.type == "tool")] | length')" || tool_calls='not reported'
+  if [ -n "$title" ] && dir="$(mktemp -d "$scratch/opencode-usage.XXXXXX")"; then
+    if opencode session list --format json --max-count 1000 > "$dir/list.json" &&
+      id="$(jq -er --arg t "$title" '[.[] | select(.title == $t)]
+        | if length == 1 then .[0].id else error("not exactly one session titled \($t)") end' "$dir/list.json")" &&
+      opencode session export "$id" > "$dir/export.json"; then
+      tokens="$(jq -e '.info.tokens
+        | if ([.input, .output, .reasoning] | all(type == "number")) then .input + .output + .reasoning
+          else error("a token field is absent") end' "$dir/export.json")" || tokens='not reported'
+      tool_calls="$(jq -e '[.messages[] | select(.type == "assistant")
+        | .content[] | select(.type == "tool")] | length' "$dir/export.json")" || tool_calls='not reported'
+    fi
+    rm -rf -- "$dir"
   fi
   printf 'tokens: %s\ntool calls: %s\n' "$tokens" "$tool_calls"
   ```
