@@ -306,6 +306,9 @@ METRICS_ON_SCOPE = (
     "`story-to-done` extras, and it posts no summary comment; this sentence overrides the reference's collection "
     "rules for those rows and extras and all of its posting rules."
 )
+METRICS_NOTHING_BEFORE_START = (
+    "With `metrics` on, launch no command before the start form, not even to read a file or list a directory."
+)
 METRICS_START = (
     "With `metrics` on, the first command launched, before step 0, is this start form, which records "
     "`invocation_start` and makes its `metrics.txt` the `<metrics file>` of every later launch, with the "
@@ -408,6 +411,7 @@ METRICS_LINES = [
     "## Metrics",
     METRICS_OPENING + " once the story ID is known: it is the single home for what a `story-to-done` run "
     "collects and reports, and this file does not restate it.",
+    METRICS_NOTHING_BEFORE_START,
     METRICS_START,
     *[line for line in METRICS_START_BLOCK if METRICS_WORDS.search(line)],
     METRICS_COMMAND_ROWS,
