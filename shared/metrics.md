@@ -36,7 +36,8 @@ What each runtime's usage report returns is in the "Read a subagent's usage (dur
 
 ### Run totals
 
-- The elapsed wall-clock runs from the recorded `invocation_start`, the UTC timestamp taken with a command the moment the `metrics` switch resolved on, to `invocation_end`, a UTC timestamp taken with a command immediately before the closing message or closing report.
+- The elapsed wall-clock runs from the recorded `invocation_start`, the UTC timestamp taken with a command the moment the `metrics` switch resolved on, to `invocation_end`, a UTC timestamp taken with a command immediately before the closing message or closing report, or, when the summary is posted as a comment at the end of the invocation, immediately before that summary is composed.
+  A posted summary and the closing report therefore share one `invocation_end`, and the elapsed it reports excludes the post and its read-back.
   Elapsed is computed from those two recorded timestamps only, never from file, directory, or log times, and is never estimated.
   When `invocation_start` was not recorded, the elapsed wall-clock reads `not reported`.
   When `invocation_end` was not recorded, the elapsed wall-clock also reads `not reported`.
@@ -117,7 +118,6 @@ With no launches, the table is replaced by the line `no launches`, the elapsed w
 - Both are subject to the denied tracker writes fallback.
   While a tracker write is denied and the owner has not authorized the denied tracker writes fallback, no post is attempted.
 - The comment is never posted while an anchoring recovery re-vote is still to run in this invocation.
-- On a permitted post, `invocation_end` is taken immediately before the summary is composed, and the comment and the closing report carry that same summary; no second timestamp is taken.
 
 ### `story-to-done`
 

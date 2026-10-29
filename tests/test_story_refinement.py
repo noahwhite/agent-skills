@@ -1460,14 +1460,20 @@ def test_metrics_section_pins_the_post_sequence_and_the_end_timestamp() -> None:
     )
 
 
-def test_metrics_reference_orders_the_story_refinement_post() -> None:
+def test_metrics_reference_shares_the_timestamp_with_a_posted_summary() -> None:
     """The timing sequence is bound in the reference itself, so the skill and the capability agree."""
-    text = (ROOT / "shared" / "metrics.md").read_text()
-    block = spaced(text.split("### `story-refinement` order", 1)[1].split("\n### ", 1)[0])
-    assert (
-        "On a permitted post, `invocation_end` is taken immediately before the summary is composed, and the "
-        "comment and the closing report carry that same summary; no second timestamp is taken." in block
+    text = spaced((ROOT / "shared" / "metrics.md").read_text())
+    sentence = (
+        "The elapsed wall-clock runs from the recorded `invocation_start`, the UTC timestamp taken with a command "
+        "the moment the `metrics` switch resolved on, to `invocation_end`, a UTC timestamp taken with a command "
+        "immediately before the closing message or closing report, or, when the summary is posted as a comment at "
+        "the end of the invocation, immediately before that summary is composed."
     )
+    assert text.count(sentence) == 1
+    assert (
+        "A posted summary and the closing report therefore share one `invocation_end`, and the elapsed it reports "
+        "excludes the post and its read-back."
+    ) in text
 
 
 def test_metrics_section_does_not_retry_a_failed_read_back() -> None:
