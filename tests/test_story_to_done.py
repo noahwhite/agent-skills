@@ -300,11 +300,45 @@ def test_metrics_line_goes_in_the_todo_list_and_every_closing_report() -> None:
 
 
 METRICS_OPENING = "Only when `metrics` is on, read [references/metrics.md](references/metrics.md)"
-# SKL-95: the closing-report summary; SKL-96 adds the engineer and QA launch rows and the extras.
+# SKL-95: the closing-report summary. SKL-96 adds the engineer and QA launch rows, the extras, the
+# metrics-file location, and the brief independence rules; posting stays out until SKL-94.
 METRICS_ON_SCOPE = (
-    "With `metrics` on, this skill does not yet record a row for a senior engineer or QA launch or record the "
-    "`story-to-done` extras, and it posts no summary comment; this sentence overrides the reference's collection "
-    "rules for those rows and extras and all of its posting rules."
+    "With `metrics` on, this skill posts no summary comment; this sentence overrides every posting rule in "
+    "`references/metrics.md`."
+)
+METRICS_LOCATION = (
+    "- **Location:** the coordinator keeps every figure in its one metrics file, the `<metrics file>` below, "
+    "in the session scratch directory, outside every role subdirectory."
+)
+METRICS_NEVER_NAMED = "- **Never named:** the metrics file is never named in a brief."
+METRICS_TIMED_LAUNCHES = (
+    "- **Timed launches:** time each senior engineer launch and each QA round, taking the start immediately "
+    "before the launch and the end when it returns, and record it as one row in launch order under a "
+    "label unique within the invocation, with its runtime, model, effort, duration, tokens, and tool "
+    "calls as `references/metrics.md` defines; `not "
+    "reported` stands for any figure the runtime does not return, and a resumed role's cumulative figure is "
+    "marked `cumulative`."
+)
+METRICS_LAUNCH_POINTS = (
+    "The senior engineer's timed launches are the first launch in step 2 and each resume or re-spawn in "
+    "step 4, and each QA round is one launch in step 3."
+)
+METRICS_EXTRAS = (
+    "- **Extras:** take each `story-to-done` extra at the step that observes it: **Start** from the step 1 "
+    "state read and whether step 2 ran; **PRs merged** from every step 2, step 3, and step 4 read of a "
+    "merged PR's head and merge commit; **Time to deployment review** from the recorded invocation start "
+    "to the read-back that confirms the deployment-review state; **QA rounds** at each spawn in step 3, "
+    "each with its **duration** from that round's launch row; **Failed items** from the step 4 read of "
+    "each QA round's outcome, in round order; **Fix rounds** from the step 4 branch that hands the failed "
+    "items back; and **End state** at the closing report."
+)
+METRICS_BRIEF_EXCLUSION = (
+    "- **Independence:** no senior engineer or QA brief carries this invocation's figures or another role's "
+    "figures from this invocation, including in a later round or a re-spawn."
+)
+METRICS_STEP0 = (
+    "With `metrics` on, seed one more item: collect the metrics figures and give the summary in the closing "
+    "report."
 )
 METRICS_NOTHING_BEFORE_START = (
     "With `metrics` on, launch no command before the start form, not even to read a file or list a directory."
@@ -361,8 +395,7 @@ METRICS_CLOSING_REPORT = (
 )
 METRICS_NO_LAUNCHES = (
     "The summary reads `no launches` only when the coordinator launched no role and no command; otherwise it "
-    "has a row for each coordinator-launched command in launch order, the elapsed wall-clock, and the end "
-    "state or stop reason."
+    "has one row for each launch in launch order, the elapsed wall-clock, and the end state or stop reason."
 )
 METRICS_NO_TRACKER_WRITE = "The coordinator makes no tracker write and never sets the story state."
 METRICS_NO_SECRETS = "The closing report contains no secrets and no local or scratch paths."
@@ -411,6 +444,12 @@ METRICS_LINES = [
     "## Metrics",
     METRICS_OPENING + " once the story ID is known: it is the single home for what a `story-to-done` run "
     "collects and reports, and this file does not restate it.",
+    METRICS_LOCATION,
+    METRICS_NEVER_NAMED,
+    METRICS_TIMED_LAUNCHES,
+    "  " + METRICS_LAUNCH_POINTS,
+    METRICS_EXTRAS,
+    METRICS_BRIEF_EXCLUSION,
     METRICS_NOTHING_BEFORE_START,
     METRICS_START,
     *[line for line in METRICS_START_BLOCK if METRICS_WORDS.search(line)],
@@ -429,6 +468,7 @@ METRICS_LINES = [
     "`metrics: on|off` line, each PR, the number of QA rounds with the items fixed in each, where QA recorded "
     "its evidence, and any incidental defects left open.",
 ]
+METRICS_LINES.insert(-1, METRICS_STEP0)
 
 
 def test_metrics_off_changes_nothing_but_the_metrics_line() -> None:
@@ -528,6 +568,63 @@ def test_a_start_form_that_cannot_record_its_row_fails(tmp_path: Path) -> None:
 
 def test_each_coordinator_command_gets_a_row_with_its_usage() -> None:
     assert METRICS_COMMAND_ROWS in metrics_body()
+
+
+# SKL-96: the engineer and QA launch rows, the extras' collection points, the metrics-file location,
+# the never-named statement, and the brief independence rules.
+
+
+def test_engineer_and_qa_launches_are_timed_and_recorded_as_one_row_each() -> None:
+    body = metrics_body()
+    assert METRICS_TIMED_LAUNCHES in body, "the launch timing and its row figures are not stated"
+    assert METRICS_LAUNCH_POINTS in body, "which launches are rows is not stated"
+
+
+def test_each_story_to_done_extra_is_taken_at_the_step_that_observes_it() -> None:
+    assert METRICS_EXTRAS in metrics_body(), "an extra's collection point is missing"
+
+
+def test_the_metrics_file_lives_in_the_session_scratch_directory_outside_every_role_subdirectory() -> None:
+    assert METRICS_LOCATION in metrics_body()
+
+
+def test_the_metrics_file_is_never_named_in_a_brief() -> None:
+    assert METRICS_NEVER_NAMED in metrics_body()
+
+
+# A brief leak can be phrased without the word `metrics`, so the two brief sections are scanned for the
+# vocabulary a cost figure or a comparison with another launch would use.
+BRIEF_LEAK = re.compile(
+    r"metric|figure|token|tool.call|wall-clock|duration|elapsed|usage|summar|total|cost|switch"
+    r"|\btim(?:e|ing|er|estamp)\w*|\bhow long\b|\btook\b|\bprevious\b"
+    r"|\bclock\b|latency|closing report|tracker write",
+    re.IGNORECASE,
+)
+
+
+def test_no_engineer_or_qa_brief_carries_metrics_or_another_roles_figures() -> None:
+    assert METRICS_BRIEF_EXCLUSION in metrics_body()
+    text = SKILL.read_text()
+    for heading in ("2. Senior engineer: implement to deployment review", "3. QA agent: verify the deployed story"):
+        offenders = [line for line in section(text, heading).splitlines() if BRIEF_LEAK.search(line)]
+        assert not offenders, f"{heading} carries metrics or another launch's figures into the brief: {offenders}"
+
+
+def test_step_0_seeds_a_collect_metrics_item_only_when_the_switch_is_on() -> None:
+    body = " ".join(section(SKILL.read_text(), "0. Track everything on a todo list").split())
+    assert METRICS_STEP0 in body, "step 0 does not seed the collect metrics item"
+    assert body.index("Seed it with at least") < body.index(METRICS_STEP0), (
+        "the collect metrics item must follow the shared seed sentence as an on-only sentence of its own"
+    )
+    assert METRICS_STEP0.startswith("With `metrics` on, "), "the seed item must apply only when the switch is on"
+
+
+def test_step_0_adds_no_unconditional_collect_metrics_instruction() -> None:
+    body = " ".join(section(SKILL.read_text(), "0. Track everything on a todo list").split())
+    assert METRICS_STEP0 in body
+    rest = " ".join(body.replace(METRICS_STEP0, "").split()).lower()
+    for phrase in ("metric", "seed the same", "same item", " off "):
+        assert phrase not in rest, f"step 0 adds an unconditional collect-metrics instruction: {phrase!r}"
 
 
 def test_every_launch_runs_in_the_start_form_or_the_timing_wrapper() -> None:

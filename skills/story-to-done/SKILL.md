@@ -59,6 +59,14 @@ Where this file and a capability file disagree, the capability file is authorita
 ## Metrics
 
 Only when `metrics` is on, read [references/metrics.md](references/metrics.md) once the story ID is known: it is the single home for what a `story-to-done` run collects and reports, and this file does not restate it.
+
+- **Location:** the coordinator keeps every figure in its one metrics file, the `<metrics file>` below, in the session scratch directory, outside every role subdirectory.
+- **Never named:** the metrics file is never named in a brief.
+- **Timed launches:** time each senior engineer launch and each QA round, taking the start immediately before the launch and the end when it returns, and record it as one row in launch order under a label unique within the invocation, with its runtime, model, effort, duration, tokens, and tool calls as `references/metrics.md` defines; `not reported` stands for any figure the runtime does not return, and a resumed role's cumulative figure is marked `cumulative`.
+  The senior engineer's timed launches are the first launch in step 2 and each resume or re-spawn in step 4, and each QA round is one launch in step 3.
+- **Extras:** take each `story-to-done` extra at the step that observes it: **Start** from the step 1 state read and whether step 2 ran; **PRs merged** from every step 2, step 3, and step 4 read of a merged PR's head and merge commit; **Time to deployment review** from the recorded invocation start to the read-back that confirms the deployment-review state; **QA rounds** at each spawn in step 3, each with its **duration** from that round's launch row; **Failed items** from the step 4 read of each QA round's outcome, in round order; **Fix rounds** from the step 4 branch that hands the failed items back; and **End state** at the closing report.
+- **Independence:** no senior engineer or QA brief carries this invocation's figures or another role's figures from this invocation, including in a later round or a re-spawn.
+
 With `metrics` on, launch no command before the start form, not even to read a file or list a directory.
 With `metrics` on, the first command launched, before step 0, is this start form, which records `invocation_start` and makes its `metrics.txt` the `<metrics file>` of every later launch, with the scratch-directory creation from `references/runtimes.md`, or `scratch='<directory you were handed>'` when you were handed one, in place of `<scratch creation>`:
 ```sh
@@ -76,8 +84,8 @@ If a command is killed before it writes its `end` line, the coordinator's very n
 Immediately before the closing report, the last launch is the end form `sh '<skill dir>/scripts/metrics-summary.sh' '<metrics file>'`, where `<skill dir>` is the absolute directory your runtime loaded this skill from; it records `invocation_end` and prints the summary's table and Totals from the metrics file.
 The summary in the closing report is the template's heading line, a blank line, and then the end form's output copied verbatim: no line is added, reworded, or left out, and no duration, timestamp, or total is recomputed or converted.
 Give the summary, in the template `references/metrics.md` defines, in the closing report of every end state: Done, or any stop, including a stop before step 0 or before any senior engineer or QA agent is spawned.
-The summary reads `no launches` only when the coordinator launched no role and no command; otherwise it has a row for each coordinator-launched command in launch order, the elapsed wall-clock, and the end state or stop reason.
-With `metrics` on, this skill does not yet record a row for a senior engineer or QA launch or record the `story-to-done` extras, and it posts no summary comment; this sentence overrides the reference's collection rules for those rows and extras and all of its posting rules.
+The summary reads `no launches` only when the coordinator launched no role and no command; otherwise it has one row for each launch in launch order, the elapsed wall-clock, and the end state or stop reason.
+With `metrics` on, this skill posts no summary comment; this sentence overrides every posting rule in `references/metrics.md`.
 The coordinator makes no tracker write and never sets the story state.
 The closing report contains no secrets and no local or scratch paths.
 
@@ -85,6 +93,7 @@ The closing report contains no secrets and no local or scratch paths.
 
 Once the story ID is known and the profile is read, before step 1, create a fine-grained todo list per `references/todo-tracking.md`.
 Seed it with at least: resolve the arguments, read the story state, spawn the senior engineer, each check on its checklist until it hands back, read back the deployment-review state, each QA round, each read-back of QA's resulting state, each failed item handed back, each fix round, and the final state read-back.
+With `metrics` on, seed one more item: collect the metrics figures and give the summary in the closing report.
 Add an item for every new round the moment it starts, and mark each item done the moment its outcome is observed.
 Every subagent brief requires a checklist file in that subagent's own subdirectory of the scratch directory; read it from there and mirror it into your list whenever you check on the subagent.
 If your own todo tool is unavailable, use the primary-session checklist fallback in `references/todo-tracking.md`; do not block on the missing tool.
