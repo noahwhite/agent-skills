@@ -374,22 +374,25 @@ METRICS_TODO_UPDATES = (
     "its checklist file, never with a launched command."
 )
 METRICS_READ_BACK_COMMAND = (
-    "linear issue comment list '<story>' --json | jq -e --arg id '<comment id>' --rawfile body "
-    "'<summary body file>' '[.nodes[] | select(.id | startswith($id))] | length == 1 and .[0].body == $body'"
+    "o=$(linear issue comment list '<story>' --json) && printf '%s' \"$o\" | jq -e --arg id '<comment id>' "
+    "--rawfile body '<summary body file>' '($id | length) > 0 and ([.nodes[] | select(.id | startswith($id))] | "
+    "length == 1 and .[0].body == $body)'"
 )
 METRICS_LINEAR_COMMANDS = (
     "With the `linear` CLI, the post is `linear issue comment add '<story>' --body-file '<summary body file>'`, which "
-    "prints the comment's URL ending in `#comment-<id>`, and the read-back is this one command, with that `<id>` in "
-    f"place of `<comment id>`: `{METRICS_READ_BACK_COMMAND}`."
+    "prints the comment's URL ending in `#comment-<id>` (a post that prints no such `<id>` is a failed read-back), "
+    "and the read-back is this one command, with that `<id>` in place of `<comment id>`: "
+    f"`{METRICS_READ_BACK_COMMAND}`."
 )
 METRICS_READ_BACK_SHAPE = (
     "`linear issue comment list --json` prints one object, not an array: `nodes` lists every comment of the story, "
-    "newest first, each with its full `id` and its `body`, beside a `pageInfo` object; the filter needs exactly one comment "
-    "whose `id` begins with `<comment id>` and compares its body with the summary body file exactly, byte for byte, "
+    "newest first, each with its full `id` and its `body`, beside a `pageInfo` object; the command fails when the "
+    "listing command fails, and the filter needs a non-empty `<comment id>` and exactly one comment whose `id` begins "
+    "with it, and compares its body with the summary body file exactly, byte for byte, "
     "with no trimming or normalising."
 )
 METRICS_READ_BACK_RESULT = (
-    "The read-back matched only when that command prints `true` and exits 0; anything else it prints, any other "
+    "The read-back matched the summary only when that command prints `true` and exits 0; anything else it prints, any other "
     "exit status, and any parse error is a failed read-back."
 )
 METRICS_OTHER_INTERFACE = (
@@ -525,21 +528,23 @@ METRICS_EXTRAS_RECORD = (
     "eight."
 )
 METRICS_CLOSED_LAUNCHES = (
-    "With `metrics` on, every command the coordinator launches, from the start form to the closing report, is "
-    "exactly one of these, run as this section gives it: the start form, a command in the wrapper above, a role-row "
-    "or extras command, the end form, the summary post, or its read-back; nothing is chained before or after one of "
-    "them in the same launch, piped into or out of one, or launched in any other form."
+    "With `metrics` on, every command the coordinator runs, from the start form to the closing report, is exactly "
+    "one of these, run as this section gives it: the start form, a command in the wrapper above, a role-row or "
+    "extras command, the end form, the summary post, or its read-back; nothing is chained before or after one of "
+    "them, or piped into or out of one, beyond what its given form contains, and no command runs in any other form."
 )
 METRICS_FILE_OWNERSHIP = (
     "The metrics file and the summary script are read and written only by those forms: the coordinator never "
     "reads, prints, searches, edits, or deletes from the metrics file by any tool or command, never reads the "
-    "summary script, and runs the script only as the end form, never as a preview, because every completed run "
-    "appends another `invocation_end`."
+    "summary script, and runs the script only as the end form, never as a preview, and runs the end form once per "
+    "invocation, again only after it reports an invalid record, because every completed run appends another "
+    "`invocation_end`."
 )
 METRICS_INVALID_RECORD = (
     "The one exception is an invalid record: the end form then writes nothing and names the line, and the "
-    "coordinator corrects that line in place with the runtime's file-read and file-edit tools, deleting no line and "
-    "changing no other, before it runs the end form again."
+    "coordinator corrects only the format of that line of the metrics file, in place with the runtime's file-read "
+    "and file-edit tools, keeping every value as it was recorded and never recomputing or guessing one, deleting no "
+    "line and changing no other, before it runs the end form again."
 )
 METRICS_END_INTRO = (
     f"Immediately before the summary post and the closing report, the last launch is the end form "
@@ -632,6 +637,7 @@ METRICS_LINES = [
     METRICS_WAITS,
     METRICS_CLOSED_LAUNCHES,
     METRICS_FILE_OWNERSHIP,
+    METRICS_INVALID_RECORD,
     METRICS_KILLED,
     METRICS_ROLE_ROW,
     METRICS_EXTRAS_RECORD,
@@ -647,6 +653,7 @@ METRICS_LINES = [
     METRICS_TODO_UPDATES,
     METRICS_LINEAR_COMMANDS,
     METRICS_READ_BACK_SHAPE,
+    METRICS_READ_BACK_RESULT,
     METRICS_OTHER_INTERFACE,
     METRICS_READ_BACK,
     METRICS_POST_NOT_A_LAUNCH,
@@ -1558,7 +1565,7 @@ METRICS_FENCED = [
 
 
 def test_every_metrics_section_line_is_pinned_so_no_contradicting_line_can_be_inserted() -> None:
-    pinned = set(METRICS_LINES) | set(METRICS_POSTING) | set(METRICS_FENCED) | {METRICS_NEVER_SETS_STATE, METRICS_INVALID_RECORD}
+    pinned = set(METRICS_LINES) | set(METRICS_FENCED) | {METRICS_NEVER_SETS_STATE}
     unpinned = [line for line in metrics_lines() if line.strip() and line not in pinned]
     assert not unpinned, f"unpinned Metrics lines: {unpinned}"
 
@@ -1592,11 +1599,15 @@ def test_the_read_back_gives_the_json_shape_and_an_exact_result_rule() -> None:
     assert lines[at + 1 : at + 4] == [METRICS_READ_BACK_SHAPE, METRICS_READ_BACK_RESULT, METRICS_OTHER_INTERFACE]
 
 
-def run_read_back(tmp_path: Path, listing: str, body: bytes, comment_id: str) -> subprocess.CompletedProcess:
+def run_read_back(
+    tmp_path: Path, listing: str, body: bytes, comment_id: str, status: int = 0
+) -> subprocess.CompletedProcess:
     fake = tmp_path / "bin"
     fake.mkdir()
     (tmp_path / "listing.json").write_text(listing)
-    (fake / "linear").write_text(f"#!/bin/sh\ncat '{tmp_path / 'listing.json'}'\n")
+    (fake / "linear").write_text(
+        '#!/bin/sh\nprintf \'%s\\n\' "$@" > "$FAKE_ARGV"\ncat "$FAKE_LISTING"\nexit "$FAKE_STATUS"\n'
+    )
     (fake / "linear").chmod(0o755)
     (tmp_path / "body.md").write_bytes(body)
     command = (
@@ -1604,11 +1615,19 @@ def run_read_back(tmp_path: Path, listing: str, body: bytes, comment_id: str) ->
         .replace("<comment id>", comment_id)
         .replace("<summary body file>", str(tmp_path / "body.md"))
     )
-    env = {**os.environ, "PATH": f"{fake}:{os.environ['PATH']}"}
-    return subprocess.run(["sh", "-c", command], capture_output=True, text=True, env=env)
+    env = {
+        **os.environ,
+        "PATH": f"{fake}:{os.environ['PATH']}",
+        "FAKE_ARGV": str(tmp_path / "argv"),
+        "FAKE_LISTING": str(tmp_path / "listing.json"),
+        "FAKE_STATUS": str(status),
+    }
+    result = subprocess.run(["sh", "-c", command], capture_output=True, text=True, env=env)
+    assert (tmp_path / "argv").read_text().split("\n")[:5] == ["issue", "comment", "list", "ABC-1", "--json"]
+    return result
 
 
-SUMMARY = "## Run metrics\n\n| Role |\n|---|\n- Tool calls: 3"
+SUMMARY = "Run metrics: story-to-done ABC-1 - Done\n\n| Role |\n|---|\n- Tool calls: 3"
 
 
 def listing(*comments: tuple[str, str]) -> str:
@@ -1616,26 +1635,43 @@ def listing(*comments: tuple[str, str]) -> str:
     return json.dumps({"nodes": nodes, "pageInfo": {"hasNextPage": False, "endCursor": None}})
 
 
+def matched(result: subprocess.CompletedProcess) -> bool:
+    return result.returncode == 0 and result.stdout.strip() == "true"
+
+
 @pytest.mark.skipif(shutil.which("jq") is None, reason="jq is required by the read-back command")
 @pytest.mark.parametrize(
-    ("comments", "body", "matched"),
+    ("comments", "body", "comment_id", "expected"),
     [
-        ([("1a2b3c4d-0000", SUMMARY), ("99999999-0000", "older")], SUMMARY, True),
-        ([("1a2b3c4d-0000", SUMMARY + "\n")], SUMMARY, False),
-        ([("1a2b3c4d-0000", " " + SUMMARY)], SUMMARY, False),
-        ([("1a2b3c4d-0000", SUMMARY), ("1a2b3c4d-1111", SUMMARY)], SUMMARY, False),
-        ([("99999999-0000", SUMMARY)], SUMMARY, False),
+        ([("1a2b3c4d-0000", SUMMARY), ("99999999-0000", "older")], SUMMARY, "1a2b3c4d", True),
+        ([("1a2b3c4d-0000", SUMMARY + "\n")], SUMMARY, "1a2b3c4d", False),
+        ([("1a2b3c4d-0000", SUMMARY)], SUMMARY + "\n", "1a2b3c4d", False),
+        ([("1a2b3c4d-0000", " " + SUMMARY)], SUMMARY, "1a2b3c4d", False),
+        ([("1a2b3c4d-0000", SUMMARY), ("1a2b3c4d-1111", SUMMARY)], SUMMARY, "1a2b3c4d", False),
+        ([("99999999-0000", SUMMARY)], SUMMARY, "1a2b3c4d", False),
+        ([("1a2b3c4d-0000", SUMMARY)], SUMMARY, "", False),
     ],
-    ids=["exact", "trailing-newline", "leading-space", "ambiguous-prefix", "missing"],
+    ids=["exact", "comment-newline", "body-file-newline", "leading-space", "ambiguous-prefix", "missing", "empty-id"],
 )
 def test_the_read_back_command_matches_only_one_exact_comment(
-    tmp_path: Path, comments: list[tuple[str, str]], body: str, matched: bool
+    tmp_path: Path, comments: list[tuple[str, str]], body: str, comment_id: str, expected: bool
 ) -> None:
-    result = run_read_back(tmp_path, listing(*comments), body.encode(), "1a2b3c4d")
-    assert (result.returncode == 0 and result.stdout.strip() == "true") is matched, result
+    assert matched(run_read_back(tmp_path, listing(*comments), body.encode(), comment_id)) is expected
 
 
 @pytest.mark.skipif(shutil.which("jq") is None, reason="jq is required by the read-back command")
 def test_the_read_back_command_fails_on_an_unparseable_listing(tmp_path: Path) -> None:
-    result = run_read_back(tmp_path, "not json", SUMMARY.encode(), "1a2b3c4d")
-    assert result.returncode != 0
+    assert run_read_back(tmp_path, "not json", SUMMARY.encode(), "1a2b3c4d").returncode != 0
+
+
+@pytest.mark.skipif(shutil.which("jq") is None, reason="jq is required by the read-back command")
+def test_the_read_back_command_fails_when_the_listing_command_fails(tmp_path: Path) -> None:
+    result = run_read_back(tmp_path, listing(("1a2b3c4d-0000", SUMMARY)), SUMMARY.encode(), "1a2b3c4d", status=1)
+    assert not matched(result) and result.returncode != 0
+
+
+def test_the_end_form_runs_once_per_invocation() -> None:
+    assert "runs the end form once per invocation, again only after it reports an invalid record" in (
+        METRICS_FILE_OWNERSHIP
+    )
+    assert METRICS_FILE_OWNERSHIP in metrics_lines()
