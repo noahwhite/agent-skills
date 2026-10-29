@@ -163,10 +163,11 @@ The coordinator read SKL-143 as In Deployment Review and launched one QA round, 
 The fixture QA merged evidence [PR #104](https://github.com/noahwhite/agent-skills/pull/104) on reviewed head `6c7d16be0d3ff69ba08415cba16bf9349aff61f0` and set SKL-143 to Done.
 The coordinator posted comment `bc82aa6f` on SKL-143, and the closing report names it.
 The comment is 1236 bytes and equals the closing report's summary byte for byte.
-Its 7 rows, in launch order, are `start`, four wrapped commands and the role row `QA round 1` (462.204195879s, 93437 tokens, 50 tool calls), and `end`.
+Its 7 rows, in launch order, are `start`, two wrapped commands, the role row `QA round 1` (462.204195879s, 93437 tokens, 50 tool calls), two more wrapped commands, and `end`.
 Every Tokens, Tool calls, and Duration cell is well formed, all eight extras are filled, and `PRs merged` reads 1.
 Neither the comment nor the closing report holds a local or scratch path or a token pattern; the closing report names repository paths only.
-After the last wrapped command, the coordinator launched these commands with no row: a `tail` of the metrics file, a story view with `grep`, a `cat` of the metrics file, a preview run of the summary script, a `tail` of the metrics file with a `grep` of that script's source, and a second run of the script piped through `grep`.
+In the same call as the last wrapped command, the coordinator ran a `tail` of the metrics file after the wrapper had closed, outside any row.
+In later calls it launched these commands with no row: a story view with `grep`, a `cat` of the metrics file, a preview run of the summary script, a `tail` of the metrics file with a `grep` of that script's source, and a second run of the script piped through `grep`.
 Each run of the summary script appends an `invocation_end` record, so the run wrote three of them.
 Before the final end form, the coordinator ran `sed -i` on the metrics file, which deleted the two earlier `end` records and rewrote the recorded `qa-round-durations` extra; the closing report says it removed one preview record.
 The first read-back failed with a parser `AttributeError` on the `--json` output.
@@ -192,7 +193,7 @@ Run end state: stopped at step 1, story Blocked; QA then canceled SKL-144 and re
 C4: in both runs the first read-back failed, was retried, and is not named in the closing report, against the no-retry rule; the skill gives the read-back command but not the shape of its `--json` output.
 In Run 1 the coordinator read and edited the metrics file and ran the summary script as a preview, outside the wrapper and with no row, so the comment does not have one row per launch and the run wrote extra `invocation_end` records.
 In Run 2 the coordinator launched a shape lookup of the `--json` output after the end form, with no row, against the rule that only the post and its read-back follow the end form.
-The skill does not say the read-back comparison is exact, so Run 1's whitespace-stripped comparison passed.
+The skill does not say the read-back comparison is exact, so Run 1 compared after stripping whitespace; the bodies were in fact equal byte for byte.
 Neither coordinator marked its post item completed after the read-back.
 C4 is re-run at the fix head.
 
