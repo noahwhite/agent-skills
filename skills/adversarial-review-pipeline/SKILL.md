@@ -2,7 +2,7 @@
 name: adversarial-review-pipeline
 description: >-
   Run the pre-PR adversarial code-review gate: a deterministic preflight (clean tree, suite green in a
-  detached worktree at HEAD), a cheap whole-diff sweep, an empirical verify-and-hunt pass that
+  detached worktree at HEAD), a cheap sweep over the diff, an empirical verify-and-hunt pass that
   mutates and runs code in a throwaway worktree, one bounded arbitration by a strong reviewer, then
   fix and one bounded re-verify. Use on every pre-PR review, and when asked to run the adversarial
   gate, the pre-PR pipeline, or the sweep, hunt and arbitrate review. The two-lens loop in
@@ -31,9 +31,9 @@ If a configured agent cannot run on this runtime, stop and say so (see `referenc
 | Phase | Agent | Job | Why this tier |
 |---|---|---|---|
 | 0 Preflight | none (deterministic) | Clean tree, every intended file committed, suite green in a detached worktree at HEAD | Free, seconds, catches a class no reviewer should spend tokens on |
-| 1 Sweep | `profile.review.pre_pr.sweeper` | Read the whole diff, emit a raw candidate list with `file:line` and a concrete failure scenario | Large context at the lowest price; volume over precision |
+| 1 Sweep | `profile.review.pre_pr.sweeper` | Read the diffstat and the diff its dossier embeds (its read-only checkout holds anything not embedded), emit a raw candidate list with `file:line` and a concrete failure scenario | Large context at the lowest price; volume over precision |
 | 2 Verify and hunt | `profile.review.pre_pr.hunter` | For each candidate: mutate, run, report VERIFIED or REFUTED with the command and result; then hunt open-ended for new defects | The only phase that proves rather than asserts |
-| 3 Arbitrate | `profile.review.pre_pr.arbiter` | Filter false positives, weigh empirical evidence over theory, catch cross-module regressions, name accepted risks, decide converged or not | Strongest reasoning, spent once on a pre-filtered bundle |
+| 3 Arbitrate | `profile.review.pre_pr.arbiter` | From the diffstat, both phase reports and its own read-only checkout (its dossier embeds no diff): filter false positives, weigh empirical evidence over theory, catch cross-module regressions, name accepted risks, decide converged or not | Strongest reasoning, spent once on a pre-filtered bundle |
 | 4 Fix and re-verify | the implementing agent | Fix in-scope findings, re-run each proving mutant (it must now fail), one bounded re-verify | Closes the loop without unbounded ping-pong |
 
 The sweep is configurable: if `profile.review.pre_pr.sweeper` is unset, record "sweep: not configured" and run Phase 2 as hunt only.
@@ -96,14 +96,16 @@ Launching a phase depends on the profile agent's `runtime`:
   For `runtime: codex`, read the prompt from stdin with `-`: `codex exec -m <model> -s read-only --cd {checkout} -o {output_file} -` for the sweep and arbitration; the hunter writes in its checkout, so it uses `codex exec -m <model> -s workspace-write --cd {checkout} -o {output_file} -`.
   Never default to `-s danger-full-access`; see the hunt phase for when it is allowed.
   For `runtime: opencode`, run it non-interactively with the agent's model and a short instruction to read `{prompt_file}` with its file tools and output only the report.
-- A subagent runtime (`claude-code`, or the runtime you are in): run `dossier <phase>` to write the dossier and print its path.
-  Also run `checkout --base "$BASE" --scratch "$scratch"` for a throwaway worktree, for every phase, and pass `--scratch "$scratch"` to `dossier` too, so the run's dossiers and checkouts stay in the session's directory.
+- A subagent runtime (`claude-code`, or the runtime you are in): run `dossier <phase> --scratch "$scratch"` for every phase.
+  It creates the phase's throwaway detached checkout of the head first, then writes the dossier, prints the dossier's path on stdout and the checkout's path on stderr as `CHECKOUT: <path>`; the dossier carries the same `CHECKOUT: ` line and the base on a `BASE: <ref> <base SHA>` line.
+  If the dossier cannot be written, the command removes that checkout itself before it exits.
   Spawn a clean, neutral subagent (its whole brief is the dossier) with the agent's model, tell it to read the dossier and work only in that checkout, and save its final report to the phase's artifact path (`paths` prints them).
+  The sweep and the arbiter treat the checkout as read-only; only the hunter mutates its own.
   Then run `record <phase>` with the same `--base`, `--spec` and `--no-sweep` as the dossier; it reads the script's own run state, not a scratch directory.
   It accepts the report only if it is non-empty, newer than the dossier, starts with `REVIEW-RAN: yes`, its inputs still match the dossier's, and the tripwire saw no change to the primary checkout since the dossier was written.
-  Remove the checkout with `cleanup <path>`; it removes only a checkout the script created and registered, and refuses any other path.
+  Remove the checkout with `cleanup <path>` once the phase is recorded; it removes only a checkout the script created and registered, and refuses any other path.
 
-Never put the dossier's contents in argv: argv is visible to other processes, and one argument is capped at 128 KiB, which a real diff exceeds.
+Never put the dossier's contents in argv: argv is visible to other processes, and one argument is capped at 128 KiB, which a sweep or hunt dossier still exceeds on a large diff because it embeds the diff (the arbitrate dossier carries only the diffstat, but the rule is the same for every phase).
 Give it to the agent on stdin or as a path it reads.
 Every dossier asks for a first line of `REVIEW-RAN: yes`, or `REVIEW-RAN: no - <reason>` when the agent could not read or run what it needed; keep that instruction in any prompt you write yourself.
 Every prompt the script writes tells the agent never to write secrets to files or command arguments; keep that line in any prompt you write yourself.
@@ -214,6 +216,7 @@ Its dossier asks for both jobs and demands execution rather than reasoning:
 "$PIPELINE" run arbitrate --base "$BASE" --model "<profile.review.pre_pr.arbiter model>" --spec "$SPEC" --scratch "$scratch" --agent-cmd "<template>"
 ```
 
+Its dossier carries the story, the diffstat, both phase reports, the base and head, and the path of its own read-only checkout, but no diff: the arbiter reads the diff and any file it needs in that checkout.
 The arbiter filters hallucinations and unexploitable edge cases, weighs Phase-2 empirical results over Phase-1 theory, surfaces cross-module and architectural regressions, writes the report, and states which categories it found clean.
 Its output is the gate's deliverable.
 Record the arbiter's agent name and model at the top of the report.
