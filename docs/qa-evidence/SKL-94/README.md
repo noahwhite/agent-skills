@@ -84,7 +84,7 @@ Outcome: C4 is not met, so the story returns to In Progress.
 | C1 post the summary | Verified | All 16 phrase checks pass in the shipped `SKILL.md`, the removed sentences are absent, and the end-form sentence precedes the post sentence; nothing under `shared/`, no vendored reference, `metrics-summary.sh`, or todo tracking changed. |
 | C2 docs | Verified | The README row clause, the kept switch phrase, and the step 0 seed sentence are present, and the old sentence is absent. |
 | C3 tests | Verified | 790 tests pass, including the named guard tests and the two wait-rule tests PR #95 added, and `vendor_shared.py --check` exits 0; [CI run 40951799712](https://github.com/noahwhite/agent-skills/actions/runs/40951799712) succeeded on the PR head and [CI run 40952600556](https://github.com/noahwhite/agent-skills/actions/runs/40952600556) on merged `main`. |
-| C4 verified end to end | Not met | Run 2 meets every Run 2 clause; in Run 1 two launches after the end form have no row, and the closing report names a local path (see Run 1 attempt 2). |
+| C4 verified end to end | Not met | Run 2 meets every Run 2 clause; in Run 1 three launches have no row (one before the start form, two after the end form), the comment is one byte longer than the closing report's summary, and the closing report names a local path (see Run 1 attempt 2). |
 | DoD all acceptance criteria met | Not met | C4. |
 | DoD tests written and passing | Verified | C3. |
 | DoD independently reviewed | Verified | [Review 5704776979](https://github.com/noahwhite/agent-skills/pull/95#pullrequestreview-5704776979) binds head `9043327f334f2f26b5126c6b6fa5ee60930aaa25`: Codex GPT-6 Sol reviewer, DeepSeek V4 Pro and Opus 5.5 adjudicators, no merge-blocking finding. |
@@ -96,7 +96,7 @@ Outcome: C4 is not met, so the story returns to In Progress.
 
 The coordinator ran as a nested Claude Code subagent and launched one background QA round.
 The runtime made it hand back while QA was still running, so the run ended as a recorded stop at step 4.
-The runtime refused its write of the summary body file, its single post attempt failed, and no comment was posted, so this attempt gives no C4 evidence.
+The runtime refused its write of the summary body file, its single post attempt failed, and no comment was posted, so this attempt does not count as C4's Run 1.
 Every shell command it launched before the stop ran in the metrics wrapper.
 The orphaned fixture QA later merged evidence [PR #96](https://github.com/noahwhite/agent-skills/pull/96) on reviewed head `c04af614cf0569b6090b61aa07a00717845325e3` and set SKL-139 to Done.
 QA then canceled SKL-139 and read it back as Canceled.
@@ -108,11 +108,11 @@ QA closed [PR #98](https://github.com/noahwhite/agent-skills/pull/98) unmerged a
 The coordinator posted comment `158b4cb4` on SKL-141 and read it back.
 Its 22 rows are in launch order, from `start` through the role row `QA agent round 1` (553.20s, 114625 tokens, 53 tool calls) to `end`.
 Every Tokens, Tool calls, and Duration cell is well formed, all eight extras are filled, and `PRs merged` reads 1.
-The posted body equals the closing report's summary line for line and differs only by one trailing newline (2696 against 2695 bytes), which the headless capture of the closing report may trim.
+The posted body is 2696 bytes and the closing report's summary 2695: they are equal line for line, and the posted body ends with one trailing newline that the closing report, as the runtime returned it, lacks, so the byte-for-byte clause is not met.
 The comment holds no local path or token pattern.
 The top-level transcript shows two shell launches after the end form with no row: a `linear issue comment add --help` lookup in the same command that wrote the summary body file, and a `sed -i` that ticked the coordinator's own checklist item for the post after the read-back.
 The closing report names a local path, a home-directory SSH public key file, while relaying QA's signing finding.
-A `cat` of `SKILL.md` before the start form also has no row; the QA brief told the coordinator to read the skill from the checkout, so it is not counted against C4.
+A `cat` of `SKILL.md` before the start form also has no row; `SKILL.md` forbids any command before the start form, and a file-tool read of the checkout would not have been a launch, so it counts against C4.
 Run end state: Done; QA then canceled SKL-141 and read it back as Canceled.
 
 ### Run 2 (SKL-140)
@@ -126,7 +126,9 @@ Run end state: stopped at step 1, story Blocked; QA then canceled SKL-140 and re
 
 ### Failed item for the engineer
 
-C4: in Run 1 attempt 2 the coordinator ran a CLI help lookup between the end form and the post and updated its own checklist after the read-back, both without a row, so the end form was not the last launch and the comment does not have one row per launch.
+C4: in Run 1 attempt 2 the coordinator ran a CLI help lookup between the end form and the post and updated its own checklist after the read-back, both without a row, so the end form was not the last launch.
+It also ran a `cat` before the start form, so with those two the comment does not have one row per launch.
+The posted comment ends with a trailing newline the closing report's summary lacks, so the two are not equal byte for byte.
 Its closing report also names a local path.
 C4 is re-run at the fix head.
 
