@@ -38,7 +38,8 @@ What each runtime's usage report returns is in the "Read a subagent's usage (dur
 
 ### Run totals
 
-- The elapsed wall-clock runs from the recorded `invocation_start`, the UTC timestamp taken with a command the moment the `metrics` switch resolved on, to `invocation_end`, a UTC timestamp taken with a command immediately before the closing message or closing report.
+- The elapsed wall-clock runs from the recorded `invocation_start`, the UTC timestamp taken with a command the moment the `metrics` switch resolved on, to `invocation_end`, a UTC timestamp taken with a command immediately before the closing message or closing report, or, where the skill composes the summary before that message, immediately before the summary is composed.
+  A posted summary and the closing report therefore share one `invocation_end`, and the elapsed it reports excludes the post and its read-back.
   Elapsed is computed from those two recorded timestamps only, never from file, directory, or log times, and is never estimated.
   When `invocation_start` was not recorded, the elapsed wall-clock reads `not reported`.
   When `invocation_end` was not recorded, the elapsed wall-clock also reads `not reported`.
