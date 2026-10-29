@@ -927,7 +927,15 @@ make_checkout() {  # prints the path of a registered throwaway detached worktree
     rmdir -- "$container" 2>/dev/null || true
     return "$rc"
   fi
-  printf '%s\n' "$dir" >> "$REGISTRY"
+  # Only a registered checkout may be handed out: 'cleanup' refuses any other path, so a checkout
+  # whose registration failed is removed here rather than advertised.
+  if ! printf '%s\n' "$dir" >> "$REGISTRY"; then
+    echo "ERROR: could not register the throwaway checkout in $REGISTRY; it is removed." >&2
+    git worktree remove --force -- "$dir" >/dev/null 2>&1 || rm -rf -- "$dir"
+    git worktree prune >/dev/null 2>&1 || true
+    rmdir -- "$container" 2>/dev/null || true
+    return 2
+  fi
   printf '%s\n' "$dir"
 }
 
@@ -1046,7 +1054,7 @@ case "$cmd" in
     checkout="$(make_checkout)" || checkout_rc=$?
     if [ "$checkout_rc" -ne 0 ]; then
       unstart_phase
-      die "$checkout_rc" "could not create the throwaway checkout for the $phase phase (git worktree add failed with status $checkout_rc)."
+      die "$checkout_rc" "could not create the throwaway checkout for the $phase phase (status $checkout_rc; see the error above)."
     fi
     # Until the dossier path is delivered on stdout, any exit removes that checkout and unregisters
     # it; on success, 'cleanup' removes it once the phase is recorded.
@@ -1134,7 +1142,7 @@ case "$cmd" in
       fail_phase 19 "the $phase phase was killed by --timeout: the ${TIMEOUT}s phase deadline expired while creating the throwaway checkout (model=$MODEL_LABEL); the phase is a failure, not a clean one."
     fi
     if [ "$checkout_rc" -ne 0 ]; then
-      fail_phase "$checkout_rc" "could not create the throwaway checkout for the $phase phase (git worktree add failed with status $checkout_rc); the phase never started."
+      fail_phase "$checkout_rc" "could not create the throwaway checkout for the $phase phase (status $checkout_rc; see the error above); the phase never started."
     fi
     CHECKOUT_PATH="$checkout"
     # A failed write exits through on_run_exit (set -e), which reports it and removes the checkout.

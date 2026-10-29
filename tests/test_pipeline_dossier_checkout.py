@@ -360,6 +360,21 @@ def test_a_failed_checkout_on_the_dossier_command_leaves_no_launch(gate):
     assert_phase_never_started(gate, "sweep")
 
 
+def test_a_checkout_that_cannot_be_registered_is_never_advertised(gate):
+    """A checkout 'cleanup' would refuse (not in the registry) is removed, and the dossier fails."""
+    registry = Path(git(gate["repo"], "rev-parse", "--path-format=absolute", "--git-path",
+                        "adversarial-pipeline")) / "checkouts.registry"
+    registry.parent.mkdir(parents=True, exist_ok=True)
+    registry.mkdir()  # the append to the registry fails
+    result = run_script("dossier", "sweep", *common(gate), env=gate["env"])
+    assert result.returncode != 0, result.stdout + result.stderr
+    assert "CHECKOUT: " not in result.stderr, result.stderr
+    assert registered_worktrees(gate["repo"]) == [str(gate["repo"].resolve())], \
+        "an unregistered throwaway worktree was left behind"
+    assert not list(gate["scratch"].rglob("head-*")), "a checkout directory was left on disk"
+    assert_phase_never_started(gate, "sweep")
+
+
 def test_a_dossier_path_that_cannot_be_delivered_leaves_no_checkout(gate):
     """With stdout closed the caller never learns the dossier path, so nothing may be left behind."""
     result = subprocess.run(
