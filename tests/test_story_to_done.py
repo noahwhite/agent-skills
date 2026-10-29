@@ -352,9 +352,26 @@ BOUNDARIES_ONLY_WRITE = (
     "- With `metrics` on, the coordinator's single permitted tracker write is the summary comment, which it "
     "reads back and repeats in the closing report; with `metrics` off it makes no tracker write."
 )
+METRICS_BODY_BYTES = (
+    "The summary body file holds exactly the heading line, a blank line and the end form's output, ending at the end of "
+    "its last line with no newline after it, and the closing report's summary is those same bytes."
+)
+METRICS_END_IS_LAST = (
+    "The end form is the last launch: between it and the closing report the coordinator runs only the summary "
+    "post and its read-back, writes only the summary body file with the runtime's file-write tool, looks up no "
+    "command syntax, and updates no todo list or checklist, so the post item stays open until the closing report "
+    "names the comment."
+)
+METRICS_LINEAR_COMMANDS = (
+    "With the `linear` CLI, the post is `linear issue comment add '<story>' --body-file '<summary body file>'` and the "
+    "read-back is `linear issue comment list '<story>' --json`, read for the comment the post returned."
+)
 METRICS_POSTING = [
     METRICS_POST,
     METRICS_POST_BODY,
+    METRICS_BODY_BYTES,
+    METRICS_END_IS_LAST,
+    METRICS_LINEAR_COMMANDS,
     METRICS_READ_BACK,
     METRICS_POST_NOT_A_LAUNCH,
     METRICS_POST_INTERFACE,
@@ -400,7 +417,8 @@ METRICS_STEP0 = (
     "story and read it back before giving the summary in the closing report."
 )
 METRICS_NOTHING_BEFORE_START = (
-    "With `metrics` on, launch no command before the start form, not even to read a file or list a directory."
+    "With `metrics` on, launch no command before the start form, not even to read a file or list a directory; "
+    "read this skill, its references and the profile with the runtime's file-read tool, which launches nothing."
 )
 METRICS_START = (
     "With `metrics` on, the first command launched, before step 0, is this start form, which records "
@@ -491,7 +509,10 @@ METRICS_NO_LAUNCHES = (
     "The summary reads `no launches` only when the coordinator launched no role and no command; otherwise it "
     "has one row for each launch in launch order, the elapsed wall-clock, and the end state or stop reason."
 )
-METRICS_NO_SECRETS = "The closing report contains no secrets and no local or scratch paths."
+METRICS_NO_SECRETS = (
+    "The closing report contains no secrets and no local or scratch paths, including where it relays a role's "
+    "finding, evidence or incidental defect, which it restates without the path."
+)
 
 
 def test_manifest_appends_metrics_to_story_to_done() -> None:
@@ -559,6 +580,9 @@ METRICS_LINES = [
     METRICS_NO_LAUNCHES,
     METRICS_POST,
     METRICS_POST_BODY,
+    METRICS_BODY_BYTES,
+    METRICS_END_IS_LAST,
+    METRICS_LINEAR_COMMANDS,
     METRICS_READ_BACK,
     METRICS_POST_NOT_A_LAUNCH,
     METRICS_POST_INTERFACE,
@@ -1415,3 +1439,27 @@ def test_only_the_wait_rule_tells_the_coordinator_how_to_wait_or_read_a_role_out
         METRICS_WAITS,
         next(line for line in body.splitlines() if line.startswith('- A "Track your work" paragraph')),
     ], "a line outside the pinned wait rule tells the coordinator how to wait or read a role's output"
+
+
+def test_nothing_before_the_start_form_and_files_are_read_with_the_file_tool() -> None:
+    assert METRICS_NOTHING_BEFORE_START in metrics_lines()
+
+
+def test_the_end_form_is_the_last_launch_before_the_post_and_the_closing_report() -> None:
+    lines = metrics_lines()
+    assert lines.count(METRICS_END_IS_LAST) == 1, "the end-form-is-last rule must be stated once"
+    assert lines.index(METRICS_END_INTRO) < lines.index(METRICS_END_IS_LAST) < lines.index(METRICS_READ_BACK)
+
+
+def test_the_post_and_read_back_commands_are_given_so_no_syntax_lookup_is_needed() -> None:
+    assert METRICS_LINEAR_COMMANDS in metrics_lines()
+
+
+def test_the_body_and_the_closing_report_summary_are_the_same_bytes() -> None:
+    lines = metrics_lines()
+    assert lines.count(METRICS_BODY_BYTES) == 1
+    assert lines.index(METRICS_POST_BODY) < lines.index(METRICS_BODY_BYTES)
+
+
+def test_the_closing_report_restates_a_relayed_finding_without_its_path() -> None:
+    assert METRICS_NO_SECRETS in metrics_lines()

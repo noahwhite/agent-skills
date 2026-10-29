@@ -67,7 +67,7 @@ Only when `metrics` is on, read [references/metrics.md](references/metrics.md) o
 - **Extras:** take each `story-to-done` extra at the step that observes it: **Start** from the step 1 state read and whether step 2 ran; **PRs merged** from every step 2, step 3, and step 4 read of a merged PR's head and merge commit; **Time to deployment review** from the recorded invocation start to the read-back that confirms the deployment-review state; **QA rounds** at each spawn in step 3, each with its **duration** copied from that round's launch row; **Failed items** from the step 4 read of each QA round's outcome, in round order; **Fix rounds** from the step 4 branch that hands the failed items back; and **End state** immediately before the end form, once the run's end state or stop reason is known.
 - **Independence:** no senior engineer or QA brief carries this invocation's figures or another role's figures from this invocation, including in a later round or a re-spawn.
 
-With `metrics` on, launch no command before the start form, not even to read a file or list a directory.
+With `metrics` on, launch no command before the start form, not even to read a file or list a directory; read this skill, its references and the profile with the runtime's file-read tool, which launches nothing.
 With `metrics` on, the first command launched, before step 0, is this start form, which records `invocation_start` and makes its `metrics.txt` the `<metrics file>` of every later launch, with the scratch-directory creation from `references/runtimes.md`, or `scratch='<directory you were handed>'` when you were handed one, in place of `<scratch creation>`:
 ```sh
 s=$(date -u +%s.%N); <scratch creation>
@@ -90,6 +90,9 @@ Give the summary, in the template `references/metrics.md` defines, in the closin
 The summary reads `no launches` only when the coordinator launched no role and no command; otherwise it has one row for each launch in launch order, the elapsed wall-clock, and the end state or stop reason.
 With `metrics` on, the coordinator posts the summary as one comment on the story at the end of every invocation in which the story identifier is known, whatever the end state (Done, or any stop, including a stop before step 0 or before any senior engineer or QA agent is spawned); with no known story identifier no post is attempted.
 The post comes after the end form and before the closing report, and the comment body is the template's heading line, a blank line, and the end form's output copied verbatim.
+The summary body file holds exactly the heading line, a blank line and the end form's output, ending at the end of its last line with no newline after it, and the closing report's summary is those same bytes.
+The end form is the last launch: between it and the closing report the coordinator runs only the summary post and its read-back, writes only the summary body file with the runtime's file-write tool, looks up no command syntax, and updates no todo list or checklist, so the post item stays open until the closing report names the comment.
+With the `linear` CLI, the post is `linear issue comment add '<story>' --body-file '<summary body file>'` and the read-back is `linear issue comment list '<story>' --json`, read for the comment the post returned.
 The coordinator reads the comment back, confirms its body matches what it posted, repeats the same summary in the closing report, and names the posted comment there.
 The summary post and its read-back are not launches: they get no row and no timestamp, there is no second `invocation_end`, and the elapsed wall-clock excludes both.
 The summary post uses the tracker interface step 1 read the story with (the `linear` CLI when step 1 did not run) and is tried once.
@@ -99,7 +102,7 @@ A resumed run is a new invocation and posts its own summary comment.
 The `end-state` extra is a short stop reason with no path, secret, or tool output, no other recorded extra holds a path or secret, and the summary comment contains no secrets and no local or scratch paths.
 The summary comment is the coordinator's only tracker write: the senior engineer and the QA agent make their own, and failed QA items reach the senior engineer in the hand-back brief, never as a coordinator tracker write.
 The coordinator never sets the story state.
-The closing report contains no secrets and no local or scratch paths.
+The closing report contains no secrets and no local or scratch paths, including where it relays a role's finding, evidence or incidental defect, which it restates without the path.
 
 ## 0. Track everything on a todo list
 
