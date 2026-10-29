@@ -313,8 +313,9 @@ METRICS_LOCATION = (
 METRICS_NEVER_NAMED = "- **Never named:** the metrics file is never named in a brief."
 METRICS_TIMED_LAUNCHES = (
     "- **Timed launches:** time each senior engineer launch and each QA round, taking the start immediately "
-    "before the launch and the end when it returns, and record it as one row in launch order with its "
-    "runtime, model, effort, duration, tokens, and tool calls as `references/metrics.md` defines; `not "
+    "before the launch and the end when it returns, and record it as one row in launch order under a "
+    "label unique within the invocation, with its runtime, model, effort, duration, tokens, and tool "
+    "calls as `references/metrics.md` defines; `not "
     "reported` stands for any figure the runtime does not return, and a resumed role's cumulative figure is "
     "marked `cumulative`."
 )
@@ -324,11 +325,12 @@ METRICS_LAUNCH_POINTS = (
 )
 METRICS_EXTRAS = (
     "- **Extras:** take each `story-to-done` extra at the step that observes it: **Start** from the step 1 "
-    "state read and whether step 2 ran; **PRs merged** from the step 2 read of each merged PR's head and "
-    "merge commit; **Time to deployment review** from the recorded invocation start to the step 2 read-back "
-    "that confirms the deployment-review state; **QA rounds** at each spawn in step 3, each with its "
-    "**duration** from that round's launch row; **Failed items** and **Fix rounds** from the step 4 branch "
-    "that reads QA's outcome and hands the failed items back; and **End state** at the closing report."
+    "state read and whether step 2 ran; **PRs merged** from every step 2, step 3, and step 4 read of a "
+    "merged PR's head and merge commit; **Time to deployment review** from the recorded invocation start "
+    "to the read-back that confirms the deployment-review state; **QA rounds** at each spawn in step 3, "
+    "each with its **duration** from that round's launch row; **Failed items** and **Fix rounds** from the "
+    "step 4 branch that reads QA's outcome and hands the failed items back; and **End state** at the "
+    "closing report."
 )
 METRICS_BRIEF_EXCLUSION = (
     "- **Independence:** no senior engineer or QA brief carries this invocation's figures or another role's "
@@ -590,8 +592,22 @@ def test_the_metrics_file_is_never_named_in_a_brief() -> None:
     assert METRICS_NEVER_NAMED in metrics_body()
 
 
+# A brief leak can be phrased without the word `metrics`, so the two brief sections are scanned for the
+# vocabulary a cost figure or a comparison with another launch would use.
+BRIEF_LEAK = re.compile(
+    r"metric|figure|token|tool.call|wall-clock|duration|elapsed|usage|summar|total|cost|switch"
+    r"|\btim(?:e|ing|er|estamp)\w*|\bhow long\b|\btook\b|\bprevious\b"
+    r"|\bclock\b|latency|closing report|tracker write",
+    re.IGNORECASE,
+)
+
+
 def test_no_engineer_or_qa_brief_carries_metrics_or_another_roles_figures() -> None:
     assert METRICS_BRIEF_EXCLUSION in metrics_body()
+    text = SKILL.read_text()
+    for heading in ("2. Senior engineer: implement to deployment review", "3. QA agent: verify the deployed story"):
+        offenders = [line for line in section(text, heading).splitlines() if BRIEF_LEAK.search(line)]
+        assert not offenders, f"{heading} carries metrics or another launch's figures into the brief: {offenders}"
 
 
 def test_step_0_seeds_a_collect_metrics_item_only_when_the_switch_is_on() -> None:
@@ -601,6 +617,14 @@ def test_step_0_seeds_a_collect_metrics_item_only_when_the_switch_is_on() -> Non
         "the collect metrics item must follow the shared seed sentence as an on-only sentence of its own"
     )
     assert METRICS_STEP0.startswith("With `metrics` on, "), "the seed item must apply only when the switch is on"
+
+
+def test_step_0_adds_no_unconditional_collect_metrics_instruction() -> None:
+    body = " ".join(section(SKILL.read_text(), "0. Track everything on a todo list").split())
+    assert METRICS_STEP0 in body
+    rest = " ".join(body.replace(METRICS_STEP0, "").split()).lower()
+    for phrase in ("metric", "seed the same", "same item", " off "):
+        assert phrase not in rest, f"step 0 adds an unconditional collect-metrics instruction: {phrase!r}"
 
 
 def test_every_launch_runs_in_the_start_form_or_the_timing_wrapper() -> None:
