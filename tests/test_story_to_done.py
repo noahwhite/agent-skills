@@ -328,9 +328,9 @@ METRICS_EXTRAS = (
     "state read and whether step 2 ran; **PRs merged** from every step 2, step 3, and step 4 read of a "
     "merged PR's head and merge commit; **Time to deployment review** from the recorded invocation start "
     "to the read-back that confirms the deployment-review state; **QA rounds** at each spawn in step 3, "
-    "each with its **duration** from that round's launch row; **Failed items** and **Fix rounds** from the "
-    "step 4 branch that reads QA's outcome and hands the failed items back; and **End state** at the "
-    "closing report."
+    "each with its **duration** from that round's launch row; **Failed items** from the step 4 read of "
+    "each QA round's outcome, in round order; **Fix rounds** from the step 4 branch that hands the failed "
+    "items back; and **End state** at the closing report."
 )
 METRICS_BRIEF_EXCLUSION = (
     "- **Independence:** no senior engineer or QA brief carries this invocation's figures or another role's "
