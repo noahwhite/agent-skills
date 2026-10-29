@@ -421,7 +421,8 @@ METRICS_COMMAND_ROWS = (
 METRICS_WRAPPER_INTRO = (
     "Launch every later command other than the end form below, the summary post, and its read-back in this "
     "wrapper, with the command in place of "
-    "`<command>`, a label unique within the invocation and without a single quote in place of `<row label>`, and "
+    "`<command>`, a label unique within the invocation, without a single quote and naming no path, in place of "
+    "`<row label>`, and "
     "the absolute path of that `metrics.txt` in place of `<metrics file>`:"
 )
 METRICS_WRAPPER_BLOCK = [
@@ -431,6 +432,11 @@ METRICS_WRAPPER_BLOCK = [
     "); rc=$?; printf 'end %s %s\\n' \"$(date -u +%s.%N)\" '<row label>' >> \"$f\"; (exit $rc)",
     "```",
 ]
+METRICS_WAITS = (
+    "Waiting on a role launched in the background is not a launch and gets no row: wait for the runtime's notice "
+    "that the role returned, and run every command launched while waiting in the wrapper above, including a read "
+    "of the role's output file and any sleep or wait, so each gets a row of its own."
+)
 SUMMARY_SCRIPT = ROOT / "skills" / "story-to-done" / "scripts" / "metrics-summary.sh"
 METRICS_END_LAUNCH = "sh '<skill dir>/scripts/metrics-summary.sh' '<metrics file>'"
 METRICS_ROLE_START = (
@@ -519,7 +525,7 @@ OFF_PATH = (
 
 # Every line of the skill that touches metrics, the closing report, or a tracker write, pinned exactly: adding, extending, or rewording
 # metrics content anywhere (Arguments and Metrics included) fails until it is pinned here.
-METRICS_WORDS = re.compile(r"metric|figure|token|tool.call|wall-clock|duration|usage|summar|total|cost|switch|\btim(?:e|ing|er|estamp)\w*|elapsed|clock|latency|closing report|tracker write", re.IGNORECASE)
+METRICS_WORDS = re.compile(r"metric|figure|token|tool.call|wall-clock|duration|usage|summar|total|cost|switch|\btim(?:e|ing|er|estamp)\w*|elapsed|clock|latency|closing report|tracker write|\bbackground\b", re.IGNORECASE)
 METRICS_LINES = [
     METRICS_ROW,
     '- `metrics` is given as `metrics=on` or `metrics=off`, or in plain words: "with metrics" and "metrics on" '
@@ -543,6 +549,7 @@ METRICS_LINES = [
     METRICS_COMMAND_ROWS,
     METRICS_WRAPPER_INTRO,
     *[line for line in METRICS_WRAPPER_BLOCK if METRICS_WORDS.search(line)],
+    METRICS_WAITS,
     METRICS_KILLED,
     METRICS_ROLE_ROW,
     METRICS_EXTRAS_RECORD,
@@ -1388,3 +1395,23 @@ def test_only_the_summary_post_and_the_hand_back_brief_name_content_on_the_story
         METRICS_STEP0,
         next(line.strip() for line in body.splitlines() if "add to the hand-back brief each failed item" in line),
     ], "a line outside the summary post and the hand-back brief puts content on the story"
+
+
+def test_commands_launched_while_waiting_on_a_background_role_run_in_the_wrapper() -> None:
+    lines = metrics_lines()
+    assert METRICS_WAITS in lines, "commands launched while a background role runs are not bound to the wrapper"
+    assert lines.count(METRICS_WAITS) == 1, "the wait rule must be stated once"
+    assert lines.index(METRICS_WAITS) > lines.index(METRICS_WRAPPER_BLOCK[-2]), "the wait rule must follow the wrapper"
+    assert lines.index(METRICS_WAITS) < lines.index(METRICS_KILLED), "the wait rule must precede the killed-command rule"
+
+
+WAIT_WORDS = re.compile(r"\bwait|\bpoll|\bsleep|output file|\bread\b[^.]*\boutput\b", re.IGNORECASE)
+
+
+def test_only_the_wait_rule_tells_the_coordinator_how_to_wait_or_read_a_role_output() -> None:
+    body = SKILL.read_text().split("\n---\n", 1)[1]
+    found = [line for line in body.splitlines() if WAIT_WORDS.search(line)]
+    assert found == [
+        METRICS_WAITS,
+        next(line for line in body.splitlines() if line.startswith('- A "Track your work" paragraph')),
+    ], "a line outside the pinned wait rule tells the coordinator how to wait or read a role's output"
