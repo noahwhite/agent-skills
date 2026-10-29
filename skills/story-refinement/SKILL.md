@@ -65,6 +65,8 @@ Where this file and a capability file disagree, the capability file is authorita
   Ask for the value; never substitute one.
 - Stop when the configured facilitator runtime differs from the orchestrator runtime.
   The facilitator is always the top-level session.
+- When `metrics` is on, the metrics summary is the one comment the facilitator posts outside the denied tracker writes fallback.
+  It is the facilitator's own SM/EM comment, never a PO-authored write.
 
 Launch each non-facilitator role in a separate context with the runtime, model, optional `agent`, optional `command`, and optional `family` from its profile entry.
 A `command` runtime gets its prompt in a file and writes its result to an output file.
@@ -253,6 +255,7 @@ Cite [references/linear.md](references/linear.md) for the split mechanics; do no
 
 The PO authors every tracker write (priority, assignee, estimate, Definition of Ready ticks, and state) and applies and reads each one back, except under the denied tracker writes fallback.
 The SM/EM posts only its own comments, and applies the PO's writes only under the denied tracker writes fallback.
+When `metrics` is on, the metrics summary comment is the one tracker write the SM/EM posts outside the denied tracker writes fallback, as its own comment.
 
 - The PO ticks a Definition of Ready box only after verifying the condition and records the evidence for every ticked box.
   An unverified box stays unticked.
@@ -281,14 +284,23 @@ This section applies only when `metrics` is on.
 - **Independence:** Add no metrics of this invocation and no other role's figures from this invocation to any voter brief, voter input, SM/EM sizing context, refinement comment, Accept round result comment, or pointing, unpointed, or split record; story comments posted by an earlier invocation stay part of the story surface.
 - **Summary:** The closing message carries the run summary in the template `references/metrics.md` defines, on every end state and every stop, with every field filled or labelled as that reference defines (`not reported`, `cumulative`, `partial`, or, when the invocation performed no launch, `no launches` with `not applicable` totals), and the stop reason where the run stopped.
   The summary contains no secrets and no local or scratch paths.
-- **No post:** This skill does not post the summary on the story, and no posting statement in `references/metrics.md` applies to it: neither its Independence rule that the facilitator posts the summary, nor that rule's exception for the summary comment posted at the end, nor its Posting section and its `story-refinement` order.
-  This is an exception to the "Read first" rule that a capability file is authoritative.
+- **Post:** When the invocation reaches a permitted post, the facilitator posts the summary on the story under refinement as its own SM/EM comment at the end of the invocation, when no further voter round will run in it, reads its own comment back, and the closing message names the posted comment.
+  The comment contains no secrets and no local or scratch paths.
+- **Order:** The comment is the invocation's last tracker write.
+  It posts only after every voter round, including every slice estimate under the Split rule, has finished; the pointing record (a consensus, an unpointed result, including one after a re-refine accept round, or a split decision) and any split comment have been posted and read back; and the invocation's triage writes have been applied and read back.
+- **Stop before a record:** On a stop before a pointing record exists, the comment posts only after every Step 1 voter input is recorded - with the three-voter roster, all three Stage 1 voter inputs - and every launched voter has returned or been stopped, with its end timestamp taken.
+  A stop before every Step 1 voter input is recorded attempts no post, because Step 1 allows no tracker comment before then except the preflight, and the summary stays in the closing message.
+- **Never during an anchoring recovery:** The comment is never posted while an anchoring recovery, its Step 3 re-run and its Step 4 re-vote, is still to run.
+- **Resumed run:** A resumed run is a new invocation and posts its own comment covering only that invocation; a resume in the same session after the owner authorizes the denied tracker writes fallback is the same invocation and posts once.
+- **Denied post:** If the post is denied, the closing message carries the summary and names the denied write, and no other tool or server is tried.
+  Where the run stopped on denied tracker writes without the owner's authorization, no post is attempted.
 
 ## Closing message
 
 The closing message is the facilitator's final message to the owner when the invocation ends, on every end state and every stop.
 It names the outcome (the consensus value, unpointed, or split with the slice count) or the stop reason, including `needs input` on a denied tracker write.
 It carries the `metrics: on` or `metrics: off` line.
+When `metrics` is on, it names the metrics summary comment the facilitator posted; when that post was denied, it carries the summary and names the denied write.
 
 ## Runtime portability
 
