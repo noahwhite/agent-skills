@@ -431,6 +431,11 @@ METRICS_WRAPPER_BLOCK = [
     "); rc=$?; printf 'end %s %s\\n' \"$(date -u +%s.%N)\" '<row label>' >> \"$f\"; (exit $rc)",
     "```",
 ]
+METRICS_WAITS = (
+    "Waiting on a role launched in the background is not a launch and gets no row: wait for the runtime's notice "
+    "that the role returned, and run every command launched while waiting in the wrapper above, including a read "
+    "of the role's output file and any sleep or wait, so each gets a row of its own."
+)
 SUMMARY_SCRIPT = ROOT / "skills" / "story-to-done" / "scripts" / "metrics-summary.sh"
 METRICS_END_LAUNCH = "sh '<skill dir>/scripts/metrics-summary.sh' '<metrics file>'"
 METRICS_ROLE_START = (
@@ -1388,3 +1393,10 @@ def test_only_the_summary_post_and_the_hand_back_brief_name_content_on_the_story
         METRICS_STEP0,
         next(line.strip() for line in body.splitlines() if "add to the hand-back brief each failed item" in line),
     ], "a line outside the summary post and the hand-back brief puts content on the story"
+
+
+def test_commands_launched_while_waiting_on_a_background_role_run_in_the_wrapper() -> None:
+    lines = metrics_lines()
+    assert METRICS_WAITS in lines, "commands launched while a background role runs are not bound to the wrapper"
+    assert lines.index(METRICS_WAITS) > lines.index(METRICS_WRAPPER_BLOCK[-2]), "the wait rule must follow the wrapper"
+    assert lines.index(METRICS_WAITS) < lines.index(METRICS_KILLED), "the wait rule must precede the killed-command rule"
