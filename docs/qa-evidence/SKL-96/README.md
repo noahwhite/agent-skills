@@ -20,7 +20,7 @@ The implementation PR records named failing tests for phrase deletions and the l
 
 ## Verdicts
 
-Every evidence section below is in the tracker attachment linked above.
+Every evidence section below is in the tracker attachment identified above.
 
 | Item | Verdict | Evidence |
 |---|---|---|
