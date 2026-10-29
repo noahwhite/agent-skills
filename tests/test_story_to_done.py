@@ -373,10 +373,24 @@ METRICS_WRAPPER_BLOCK = [
 ]
 SUMMARY_SCRIPT = ROOT / "skills" / "story-to-done" / "scripts" / "metrics-summary.sh"
 METRICS_END_LAUNCH = "sh '<skill dir>/scripts/metrics-summary.sh' '<metrics file>'"
+METRICS_ROLE_ROW = (
+    "Record a role row with two commands of its own: immediately before the launch, `f='<metrics file>'; printf "
+    "'start %s %s\\t<runtime>\\t<model>\\t<effort>\\n' \"$(date -u +%s.%N)\" '<row label>' >> \"$f\"`, and when it "
+    "returns, `f='<metrics file>'; printf 'end %s %s\\t<tokens>\\t<tool calls><cumulative>\\n' \"$(date -u "
+    "+%s.%N)\" '<row label>' >> \"$f\"`, where `<cumulative>` is `\\tcumulative` when the figures are cumulative over "
+    "earlier launches and empty otherwise, and `<tokens>` and `<tool calls>` are `not reported` for a figure the "
+    "runtime does not return; these two commands are the row's own timestamps and get no row of their own."
+)
+METRICS_EXTRAS_RECORD = (
+    "Record each extra as one `extra <slug>\\t<value>` line in the metrics file: the slugs are `qa-rounds`, "
+    "`failed-items`, `fix-rounds`, `prs-merged`, `start`, `time-to-deployment-review`, `qa-round-durations` and "
+    "`end-state`, a per-round value is written in round order as `round 1: <value>; round 2: <value>` with a `;` "
+    "inside a value written as `\\;`, and the extra lines get no row of their own."
+)
 METRICS_END_INTRO = (
     f"Immediately before the closing report, the last launch is the end form `{METRICS_END_LAUNCH}`, where "
     "`<skill dir>` is the absolute directory your runtime loaded this skill from; it records `invocation_end` and "
-    "prints the summary's table and Totals from the metrics file."
+    "prints the summary's table, the recorded extras and Totals from the metrics file."
 )
 METRICS_END_VERBATIM = (
     "The summary in the closing report is the template's heading line, a blank line, and then the end form's output "
@@ -457,6 +471,8 @@ METRICS_LINES = [
     METRICS_WRAPPER_INTRO,
     *[line for line in METRICS_WRAPPER_BLOCK if METRICS_WORDS.search(line)],
     METRICS_KILLED,
+    METRICS_ROLE_ROW,
+    METRICS_EXTRAS_RECORD,
     METRICS_END_INTRO,
     METRICS_END_VERBATIM,
     METRICS_CLOSING_REPORT,
@@ -713,6 +729,12 @@ def test_a_failed_metrics_write_shows_an_error_and_keeps_the_exit_status(tmp_pat
         assert len(errors) == 2, f"{command}: the failed start and end writes each show an error naming the file"
 
 
+def test_the_metrics_section_says_how_a_role_row_is_recorded() -> None:
+    body = metrics_body()
+    assert METRICS_ROLE_ROW in body, "the role row's own start and end lines are not stated"
+    assert METRICS_EXTRAS_RECORD in body, "the extras' recording lines are not stated"
+
+
 def test_the_end_form_runs_the_summary_script() -> None:
     assert METRICS_END_INTRO in metrics_body()
     assert SUMMARY_SCRIPT.is_file(), "the end form's script must ship with the skill"
@@ -737,7 +759,12 @@ def run_end_form(record: Path, awk: str, tmp_path: Path) -> subprocess.Completed
 
 
 def recorded(record: Path) -> dict[tuple[str, str], str]:
-    return {(kind, label): stamp for kind, stamp, label in (line.split(" ", 2) for line in record.read_text().splitlines())}
+    rows = {}
+    for line in record.read_text().splitlines():
+        parts = line.split(" ", 2)
+        if len(parts) == 3 and parts[0] in ("start", "end"):
+            rows[(parts[0], parts[2].split("\t", 1)[0])] = parts[1]
+    return rows
 
 
 def seconds(start: str, end: str) -> str:
@@ -806,6 +833,150 @@ def test_a_run_that_stops_after_the_start_form_has_two_rows(tmp_path: Path, awk:
     rows = [(label, seconds(stamps["start", label], stamps["end", label])) for label in ("start", "end")]
     start, end = stamps["start", "start"], stamps["end", "end"]
     assert result.stdout == expected_summary(rows, start, end, seconds(start, end))
+
+
+# SKL-96 round 2: a role launch's row carries its runtime, model and effort on its start line and its usage on
+# its end line, the extras are recorded as `extra` lines, and the end form prints both.
+
+EXTRA_LABELS = {
+    "qa-rounds": "QA rounds",
+    "failed-items": "Failed items",
+    "fix-rounds": "Fix rounds",
+    "prs-merged": "PRs merged",
+    "start": "Start",
+    "time-to-deployment-review": "Time to deployment review",
+    "qa-round-durations": "QA round durations",
+    "end-state": "End state",
+}
+
+
+def row_line(kind: str, stamp: str, label: str, *fields: str) -> str:
+    line = f"{kind} {stamp} {label}"
+    return (f"{line}\t" + "\t".join(fields) if fields else line) + "\n"
+
+
+def role_start(stamp: str, label: str, runtime: str, model: str, effort: str) -> str:
+    return row_line("start", stamp, label, runtime, model, effort)
+
+
+def role_end(stamp: str, label: str, tokens: str, calls: str, cumulative: bool = False) -> str:
+    return row_line("end", stamp, label, tokens, calls, *(["cumulative"] if cumulative else []))
+
+
+def extra_line(slug: str, value: str) -> str:
+    return f"extra {slug}\t{value}\n"
+
+
+def summary(rows: list[tuple[str, ...]], totals: tuple[str, str], start: str, end: str, elapsed: str,
+            extras: list[tuple[str, str]] | None = None) -> str:
+    table = [
+        "| Role | Runtime | Model | Effort | Duration | Tokens | Tool calls |",
+        "|---|---|---|---|---|---|---|",
+        *["| " + " | ".join(row) + " |" for row in rows],
+    ]
+    lines = [*table, ""]
+    for slug, value in extras or []:
+        lines.append(f"{EXTRA_LABELS[slug]}: {value}")
+    if extras:
+        lines.append("")
+    lines.extend([
+        "Totals",
+        f"- Elapsed wall-clock: {elapsed} ({start} to {end})",
+        f"- Tokens: {totals[0]}",
+        f"- Tool calls: {totals[1]}",
+    ])
+    return "\n".join(lines) + "\n"
+
+
+@pytest.mark.parametrize("awk", AWKS)
+def test_a_role_row_carries_its_runtime_model_effort_and_usage(tmp_path: Path, awk: str) -> None:
+    record = tmp_path / "metrics.txt"
+    record.write_text(
+        "start 1793218210.500000000 start\nend 1793218210.600000000 start\n"
+        + role_start("1793218300.000000000", "senior-engineer-1", "opencode", "deepseek/deepseek-v4-pro", "high")
+        + role_end("1793218900.000000000", "senior-engineer-1", "120000", "41")
+        + role_start("1793219000.000000000", "qa-agent-round-1", "opencode", "deepseek/deepseek-flash", "high")
+        + role_end("1793219200.000000000", "qa-agent-round-1", "not reported", "not reported")
+    )
+    result = run_end_form(record, awk, tmp_path)
+    assert result.returncode == 0 and result.stderr == ""
+    end = recorded(record)["end", "end"]
+    rows = [
+        ("start", "command", "not set", "not set", "0.100000000s", "not reported", "not reported"),
+        ("senior-engineer-1", "opencode", "deepseek/deepseek-v4-pro", "high", "600.000000000s", "120000", "41"),
+        ("qa-agent-round-1", "opencode", "deepseek/deepseek-flash", "high", "200.000000000s", "not reported", "not reported"),
+        ("end", "command", "not set", "not set", seconds(recorded(record)["start", "end"], end), "not reported", "not reported"),
+    ]
+    totals = ("120000 [partial: 3 not reported, 0 cumulative]", "41 [partial: 3 not reported, 0 cumulative]")
+    assert result.stdout == summary(rows, totals, "1793218210.500000000", end, seconds("1793218210.500000000", end))
+
+
+@pytest.mark.parametrize("awk", AWKS)
+def test_a_cumulative_role_row_is_marked_and_excluded_from_the_totals(tmp_path: Path, awk: str) -> None:
+    record = tmp_path / "metrics.txt"
+    record.write_text(
+        "start 1793218210.500000000 start\nend 1793218210.600000000 start\n"
+        + role_start("1793218300.000000000", "senior-engineer-1", "opencode", "deepseek/deepseek-v4-pro", "high")
+        + role_end("1793218900.000000000", "senior-engineer-1", "120000", "41")
+        + role_start("1793219000.000000000", "senior-engineer-1-resumed", "opencode", "deepseek/deepseek-v4-pro", "high")
+        + role_end("1793219100.000000000", "senior-engineer-1-resumed", "260000", "55", cumulative=True)
+    )
+    result = run_end_form(record, awk, tmp_path)
+    assert result.returncode == 0 and result.stderr == ""
+    stamps = recorded(record)
+    end = stamps["end", "end"]
+    rows = [
+        ("start", "command", "not set", "not set", "0.100000000s", "not reported", "not reported"),
+        ("senior-engineer-1", "opencode", "deepseek/deepseek-v4-pro", "high", "600.000000000s", "120000", "41"),
+        ("senior-engineer-1-resumed", "opencode", "deepseek/deepseek-v4-pro", "high", "100.000000000s", "260000 cumulative", "55 cumulative"),
+        ("end", "command", "not set", "not set", seconds(stamps["start", "end"], end), "not reported", "not reported"),
+    ]
+    totals = ("120000 [partial: 2 not reported, 1 cumulative]", "41 [partial: 2 not reported, 1 cumulative]")
+    assert result.stdout == summary(rows, totals, "1793218210.500000000", end, seconds("1793218210.500000000", end))
+
+
+@pytest.mark.parametrize("awk", AWKS)
+def test_the_recorded_extras_print_one_line_each_in_the_reference_order(tmp_path: Path, awk: str) -> None:
+    record = tmp_path / "metrics.txt"
+    values = {
+        "qa-rounds": "2",
+        "failed-items": "round 1: 2; round 2: 0",
+        "fix-rounds": "1",
+        "prs-merged": "2",
+        "start": "In Progress, implementation ran",
+        "time-to-deployment-review": "1h 12m",
+        "qa-round-durations": "round 1: 200.000000000s; round 2: 90.000000000s",
+        "end-state": "In Deployment Review",
+    }
+    record.write_text(
+        "start 1793218210.500000000 start\nend 1793218210.600000000 start\n"
+        + "".join(extra_line(slug, values[slug]) for slug in reversed(list(EXTRA_LABELS)))
+    )
+    result = run_end_form(record, awk, tmp_path)
+    assert result.returncode == 0 and result.stderr == ""
+    stamps = recorded(record)
+    end = stamps["end", "end"]
+    rows = [
+        ("start", "command", "not set", "not set", "0.100000000s", "not reported", "not reported"),
+        ("end", "command", "not set", "not set", seconds(stamps["start", "end"], end), "not reported", "not reported"),
+    ]
+    totals = ("not reported [partial: 2 not reported, 0 cumulative]",) * 2
+    extras = [(slug, values[slug]) for slug in EXTRA_LABELS]
+    assert result.stdout == summary(rows, totals, "1793218210.500000000", end, seconds("1793218210.500000000", end), extras)
+
+
+@pytest.mark.parametrize("awk", AWKS)
+def test_an_extra_value_keeps_its_escaping_and_its_unknown_slugs_print_nothing(tmp_path: Path, awk: str) -> None:
+    record = tmp_path / "metrics.txt"
+    record.write_text(
+        "start 1793218210.500000000 start\n"
+        + extra_line("failed-items", "round 1: a\\;b")
+        + extra_line("unknown-slug", "never printed")
+    )
+    result = run_end_form(record, awk, tmp_path)
+    assert result.returncode == 0 and result.stderr == ""
+    assert "Failed items: round 1: a\\;b\n" in result.stdout
+    assert "unknown-slug" not in result.stdout and "never printed" not in result.stdout
 
 
 def end_form_program() -> str:
