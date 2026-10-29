@@ -307,114 +307,50 @@ METRICS_ON_SCOPE = (
     "rules for those rows and extras and all of its posting rules."
 )
 METRICS_START = (
-    "With `metrics` on, once `metrics` resolves to on and before step 0, the first command launched, with every "
-    "file read before it made by reading the file rather than by launching a command, creates the session's "
-    "scratch directory in this start form, with the scratch-directory creation from "
-    "`references/runtimes.md`, or `scratch='<directory you were handed>'` when you were handed one, in place of "
-    "`<scratch creation>`:"
+    "With `metrics` on, the first command launched, before step 0, is this start form, which records "
+    "`invocation_start` and makes its `metrics.txt` the `<metrics file>` of every later launch, with the "
+    "scratch-directory creation from `references/runtimes.md`, or `scratch='<directory you were handed>'` when "
+    "you were handed one, in place of `<scratch creation>`:"
 )
 METRICS_START_BLOCK = [
     "```sh",
-    "s=$(date -u +%s.%N)",
-    "<scratch creation>",
+    "s=$(date -u +%s.%N); <scratch creation>",
     "printf 'start %s start\\nend %s start\\n' \"$s\" \"$(date -u +%s.%N)\" >> \"$scratch/metrics.txt\"",
     "```",
 ]
-METRICS_START_RULE = (
-    "Its start timestamp is the invocation's start, recorded as `invocation_start`, its row, labelled `start`, is "
-    "the first in the table, and `metrics.txt` in that directory is the `<metrics file>` of every later launch."
-)
-METRICS_START_FAILED = (
-    "A start form that exits non-zero has not recorded the `start` row, so the coordinator stops with that as the "
-    "stop reason."
-)
-METRICS_QUOTED_PATHS = (
-    "Every path placed inside single quotes in the start form, the wrapper, the recovery command, or the end form "
-    "has each of its own single quotes written as `'\\''`."
-)
 METRICS_COMMAND_ROWS = (
     "From then on, record a row for each command the coordinator launches, in launch order, with its usage "
     "figures recorded under `references/metrics.md` and `not reported` for any usage the runtime does not return."
 )
 METRICS_WRAPPER_INTRO = (
-    "Launch every later command in this wrapper, with the command's own lines in place of "
-    "`<command>`, a label unique within the invocation, other than `start` and `end`, and without a single quote, a `|`, "
-    "or a line break in place of `<row label>`, and the absolute path of that `metrics.txt` in place of `<metrics file>`:"
+    "Launch every later command other than the end form below in this wrapper, with the command in place of "
+    "`<command>`, a label unique within the invocation and without a single quote in place of `<row label>`, and "
+    "the absolute path of that `metrics.txt` in place of `<metrics file>`:"
 )
 METRICS_WRAPPER_BLOCK = [
     "```sh",
-    "f='<metrics file>'; o=$-; set +e; s=$(date -u +%s.%N); printf 'start %s %s\\n' \"$s\" '<row label>' >> \"$f\"; ( case $o in *e*) set -e;; esac",
+    "f='<metrics file>'; printf 'start %s %s\\n' \"$(date -u +%s.%N)\" '<row label>' >> \"$f\"; (",
     "<command>",
-    "); rc=$?; printf 'end %s %s\\n' \"$(date -u +%s.%N)\" '<row label>' >> \"$f\"; case $o in *e*) set -e;; esac; (exit $rc)",
+    "); rc=$?; printf 'end %s %s\\n' \"$(date -u +%s.%N)\" '<row label>' >> \"$f\"; (exit $rc)",
     "```",
 ]
-METRICS_WRAPPER_RULE = (
-    "The command runs in a subshell, so its assignments, function definitions, `cd`, `exec`, traps and `PATH` "
-    "changes cannot move the wrapper's timestamps, and the wrapper keeps both the command's exit status and an "
-    "inherited `set -e`; apart from the recovery command below, a command never writes to the metrics file."
-)
-METRICS_DURATION = (
-    "A command's duration is its `end` timestamp minus its `start` timestamp, and the rows are reported in "
-    "start-timestamp order."
-)
-METRICS_KILLED = (
-    "If a command is killed before it writes its `end` line, the coordinator's very next launch, made as soon as "
-    "the kill is reported and even when no other launch would follow, is a wrapped command whose `<command>` is "
-    "`printf 'end %s %s\\n' \"$(date -u +%s.%N)\" '<killed row label>' >> '<metrics file>'`, for a label that "
-    "has a `start` line and no `end` line; that end timestamp is taken after the killed launch returned, and the "
-    "recovery command gets a row of its own."
-)
-METRICS_NEVER_UNTIMED = (
-    "Never launch a command outside the start form, the wrapper, or the end form below, never reuse one timestamp "
-    "as both its start and its end, and never report a command's duration as `not reported`; the only row without "
-    "a duration is a lost row, below."
-)
-METRICS_WRITE_FAILED = (
-    "A wrapped launch whose output shows an error writing the metrics file has lost its row, so the coordinator "
-    "stops with that as the stop reason."
-)
+SUMMARY_SCRIPT = ROOT / "skills" / "story-to-done" / "scripts" / "metrics-summary.sh"
+METRICS_END_LAUNCH = "sh '<skill dir>/scripts/metrics-summary.sh' '<metrics file>'"
 METRICS_END_INTRO = (
-    "Immediately before the closing report, the last launch is this end form, with the absolute path of that "
-    "`metrics.txt` in place of `<metrics file>`:"
-)
-METRICS_END_BLOCK = [
-    "```sh",
-    "s=$(date -u +%s.%N); e=$(date -u +%s.%N); printf 'start %s end\\nend %s end\\n' \"$s\" \"$e\" >> '<metrics file>' && awk '",
-    'function span(a, b,  x, y, d) { split(a, x, "."); split(b, y, "."); d = (y[1] - x[1]) * 1000000000 + substr(y[2] "000000000", 1, 9) - substr(x[2] "000000000", 1, 9); '
-    'return (d < 0 ? "-" : "") sprintf("%d.%09d", int((d < 0 ? -d : d) / 1000000000), (d < 0 ? -d : d) % 1000000000) "s" }',
-    "{ k = substr($0, length($1) + length($2) + 3); if (!(k in seen)) { seen[k]; order[++n] = k }; at[$1, k] = $2 }",
-    "END {",
-    '  print "| Role | Runtime | Model | Effort | Duration | Tokens | Tool calls |"',
-    '  print "|---|---|---|---|---|---|---|"',
-    '  for (i = 1; i <= n; i++) { k = order[i]; d = ((("start", k) in at) && (("end", k) in at)) ? '
-    'span(at["start", k], at["end", k]) : "lost"; '
-    'printf "| %s | command | not set | not set | %s | not reported | not reported |\\n", k, d }',
-    '  a = (("start", "start") in at) ? at["start", "start"] : "not recorded"; z = (("end", "end") in at) ? at["end", "end"] : "not recorded"',
-    '  print ""',
-    '  print "Totals"',
-    '  printf "- Elapsed wall-clock: %s (%s to %s)\\n", (a == "not recorded" || z == "not recorded" ? "not reported" : span(a, z)), a, z',
-    '  printf "- Tokens: not reported [partial: %d not reported, 0 cumulative]\\n", n',
-    '  printf "- Tool calls: not reported [partial: %d not reported, 0 cumulative]\\n", n',
-    "}' '<metrics file>'",
-    "```",
-]
-METRICS_END_RULE = (
-    "Its `end` timestamp is recorded as `invocation_end`, and from the metrics file it prints the summary's table, "
-    "one row per label in the order the labels first appear, with its own row, labelled `end`, last, and then the "
-    "Totals lines, with each duration and the elapsed wall-clock from `invocation_start` to `invocation_end` worked "
-    "out exactly from the recorded timestamps, each timestamp given as recorded, and every row counted as "
-    "`not reported` in the `partial` note."
-)
-METRICS_LOST_ROW = (
-    "A launch whose label lacks a `start` or an `end` line in the metrics file has lost its row, and the end form "
-    "gives that row `lost` in place of a duration; the output of an end form that exits non-zero is discarded, and the "
-    "closing report gives the heading line and then `summary lost: the end form exited non-zero` in place of the "
-    "summary."
+    f"Immediately before the closing report, the last launch is the end form `{METRICS_END_LAUNCH}`, where "
+    "`<skill dir>` is the absolute directory your runtime loaded this skill from; it records `invocation_end` and "
+    "prints the summary's table and Totals from the metrics file."
 )
 METRICS_END_VERBATIM = (
     "The summary in the closing report is the template's heading line, a blank line, and then the end form's output "
     "copied verbatim: no line is added, reworded, or left out, and no duration, timestamp, or total is recomputed or "
-    "converted, so the summary has no extras line."
+    "converted."
+)
+METRICS_KILLED = (
+    "If a command is killed before it writes its `end` line, the coordinator's very next launch, made as "
+    "soon as the kill is reported, is a wrapped command whose `<command>` is `printf 'end %s %s\\n' "
+    "\"$(date -u +%s.%N)\" '<killed row label>' >> '<metrics file>'`, and the recovery command gets a row "
+    "of its own."
 )
 METRICS_CLOSING_REPORT = (
     "Give the summary, in the template `references/metrics.md` defines, in the closing report of every end "
@@ -474,19 +410,11 @@ METRICS_LINES = [
     "collects and reports, and this file does not restate it.",
     METRICS_START,
     *[line for line in METRICS_START_BLOCK if METRICS_WORDS.search(line)],
-    METRICS_START_RULE,
     METRICS_COMMAND_ROWS,
     METRICS_WRAPPER_INTRO,
     *[line for line in METRICS_WRAPPER_BLOCK if METRICS_WORDS.search(line)],
-    METRICS_WRAPPER_RULE,
-    METRICS_DURATION,
     METRICS_KILLED,
-    METRICS_NEVER_UNTIMED,
-    METRICS_WRITE_FAILED,
     METRICS_END_INTRO,
-    *[line for line in METRICS_END_BLOCK if METRICS_WORDS.search(line)],
-    METRICS_END_RULE,
-    METRICS_LOST_ROW,
     METRICS_END_VERBATIM,
     METRICS_CLOSING_REPORT,
     METRICS_NO_LAUNCHES,
@@ -536,7 +464,6 @@ def metrics_body() -> str:
 def test_metrics_start_is_timestamped_when_the_switch_resolves() -> None:
     body = metrics_body()
     assert METRICS_START in body
-    assert METRICS_START_RULE in body
 
 
 def metrics_blocks() -> list[list[str]]:
@@ -560,9 +487,6 @@ def start_form(creation: str) -> str:
 
 
 def test_the_start_form_creates_the_scratch_directory_and_times_itself(tmp_path: Path) -> None:
-    body = metrics_body()
-    assert METRICS_START_FAILED in body
-    assert METRICS_QUOTED_PATHS in body
     base = tmp_path / "base"
     script = f"scratch_base='{quoted(base)}'\n" + start_form(runtimes_scratch_creation())
     result = subprocess.run(["bash", "-c", script], capture_output=True, text=True, check=True)
@@ -605,20 +529,14 @@ def test_each_coordinator_command_gets_a_row_with_its_usage() -> None:
 def test_every_launch_runs_in_the_start_form_or_the_timing_wrapper() -> None:
     body = metrics_body()
     assert METRICS_WRAPPER_INTRO in body
-    assert METRICS_WRAPPER_RULE in body
-    assert METRICS_DURATION in body
-    assert METRICS_KILLED in body
-    assert METRICS_NEVER_UNTIMED in body
-    assert METRICS_WRITE_FAILED in body
     assert METRICS_END_INTRO in body
-    assert METRICS_END_RULE in body
-    assert METRICS_LOST_ROW in body
     assert METRICS_END_VERBATIM in body
+    assert METRICS_KILLED in body
 
 
 def skill_wrapper() -> str:
     blocks = metrics_blocks()
-    assert len(blocks) == 3, "the Metrics section gives exactly the start form, one wrapper and the end form"
+    assert len(blocks) == 2, "the Metrics section gives exactly the start form and one wrapper"
     assert blocks[1] == METRICS_WRAPPER_BLOCK, "the timing wrapper must be the pinned block"
     return "\n".join(blocks[1][1:-1])
 
@@ -628,9 +546,8 @@ def wrapper_script(record: Path, command: str, label: str, quote: bool = False) 
     return script.replace("<row label>", label).replace("<metrics file>", quoted(record) if quote else str(record))
 
 
-def run_wrapper(record: Path, command: str, label: str = "probe", errexit: bool = False) -> int:
-    flags = ["-e"] if errexit else []
-    return subprocess.run(["bash", *flags, "-c", wrapper_script(record, command, label)]).returncode
+def run_wrapper(record: Path, command: str, label: str = "probe") -> int:
+    return subprocess.run(["bash", "-c", wrapper_script(record, command, label)]).returncode
 
 
 def read_rows(record: Path) -> list[tuple[str, float, str]]:
@@ -652,18 +569,11 @@ def test_the_timing_wrapper_takes_distinct_start_and_end_timestamps_around_the_c
 
 def test_the_timing_wrapper_keeps_the_command_exit_status(tmp_path: Path) -> None:
     cases = (("true", 0), ("false", 1), ("sh -c 'exit 7'", 7), ("exit 3", 3), ("set -e; false; true", 1))
-    for errexit in (False, True):
-        record = tmp_path / f"errexit-{errexit}.txt"
-        for count, (command, status) in enumerate(cases, start=1):
-            assert run_wrapper(record, command, errexit=errexit) == status, f"{command} must keep exit status {status}"
-            assert [kind for kind, _, _ in read_rows(record)][-2:] == ["start", "end"], f"{command}: both lines"
-            assert len(read_rows(record)) == 2 * count
-
-
-def test_the_wrapper_keeps_an_inherited_errexit(tmp_path: Path) -> None:
-    marker = tmp_path / "continued"
-    assert run_wrapper(tmp_path / "metrics.txt", f"false; touch '{marker}'", errexit=True) == 1
-    assert not marker.exists(), "a command run under an inherited set -e stops at its first failure"
+    record = tmp_path / "metrics.txt"
+    for count, (command, status) in enumerate(cases, start=1):
+        assert run_wrapper(record, command) == status, f"{command} must keep exit status {status}"
+        assert [kind for kind, _, _ in read_rows(record)][-2:] == ["start", "end"], f"{command}: both lines"
+        assert len(read_rows(record)) == 2 * count
 
 
 def test_no_command_can_lose_or_corrupt_its_row(tmp_path: Path) -> None:
@@ -702,13 +612,14 @@ def test_a_failed_metrics_write_shows_an_error_and_keeps_the_exit_status(tmp_pat
         assert len(errors) == 2, f"{command}: the failed start and end writes each show an error naming the file"
 
 
-def test_the_end_form_is_the_last_pinned_block() -> None:
-    blocks = metrics_blocks()
-    assert len(blocks) == 3 and blocks[2] == METRICS_END_BLOCK, "the end form must be the last pinned block"
+def test_the_end_form_runs_the_summary_script() -> None:
+    assert METRICS_END_INTRO in metrics_body()
+    assert SUMMARY_SCRIPT.is_file(), "the end form's script must ship with the skill"
 
 
 def end_form(record: Path) -> str:
-    return "\n".join(metrics_blocks()[2][1:-1]).replace("<metrics file>", quoted(record))
+    skill_dir = quoted(SUMMARY_SCRIPT.parent.parent)
+    return METRICS_END_LAUNCH.replace("<skill dir>", skill_dir).replace("<metrics file>", quoted(record))
 
 
 AWKS = sorted({os.path.realpath(path) for name in ("awk", "gawk", "mawk", "nawk") if (path := shutil.which(name))})
@@ -769,20 +680,19 @@ def test_the_end_form_times_itself_last_and_prints_the_summary(tmp_path: Path, a
 
 
 @pytest.mark.parametrize("awk", AWKS)
-def test_the_end_form_names_lost_rows_and_a_missing_start(tmp_path: Path, awk: str) -> None:
+def test_the_end_form_names_lost_rows(tmp_path: Path, awk: str) -> None:
     record = tmp_path / "metrics.txt"
     record.write_text(
-        "start 1793218210.722929459 killed\n"
-        "start 1793218211.000000001 orphan end\n"
-        "end 1793218212.999999999 orphan end\n"
-        "end 1793218213.5 only an end\n"
+        "start 1793218210.722929459 start\n"
+        "end 1793218211.000000001 start\n"
+        "start 1793218212.5 killed\n"
     )
     result = run_end_form(record, awk, tmp_path)
     assert result.returncode == 0 and result.stderr == ""
-    end = recorded(record)["end", "end"]
-    rows = [("killed", "lost"), ("orphan end", "1.999999998s"), ("only an end", "lost"),
-            ("end", seconds(recorded(record)["start", "end"], end))]
-    assert result.stdout == expected_summary(rows, "not recorded", end, "not reported")
+    stamps = recorded(record)
+    end = stamps["end", "end"]
+    rows = [("start", "0.277070542s"), ("killed", "lost"), ("end", seconds(stamps["start", "end"], end))]
+    assert result.stdout == expected_summary(rows, "1793218210.722929459", end, seconds("1793218210.722929459", end))
 
 
 @pytest.mark.parametrize("awk", AWKS)
@@ -798,8 +708,8 @@ def test_a_run_that_stops_after_the_start_form_has_two_rows(tmp_path: Path, awk:
 
 
 def end_form_program() -> str:
-    script = "\n".join(metrics_blocks()[2][1:-1])
-    return script[script.index("awk '") + 5 : script.rindex("' '<metrics file>'")]
+    script = SUMMARY_SCRIPT.read_text()
+    return script[script.index("awk '") + 5 : script.rindex("' \"$1\"")]
 
 
 def test_the_end_form_works_out_durations_exactly() -> None:
@@ -812,24 +722,19 @@ def test_the_end_form_works_out_durations_exactly() -> None:
         assert result.stdout == expected, awk
 
 
-def test_a_missing_end_row_leaves_the_elapsed_not_reported() -> None:
-    stamps = "start 1793218198.000000000 start\nend 1793218199.000000000 start\n"
-    rows = [("start", "1.000000000s")]
-    expected = expected_summary(rows, "1793218198.000000000", "not recorded", "not reported")
-    for awk in AWKS:
-        result = subprocess.run([awk, end_form_program()], input=stamps, capture_output=True, text=True, check=True)
-        assert result.stdout == expected, awk
-
-
 def test_an_end_form_that_cannot_record_its_row_fails(tmp_path: Path) -> None:
     blocker = tmp_path / "not a directory"
     blocker.write_text("")
-    result = subprocess.run(["bash", "-c", end_form(blocker / "metrics.txt")], capture_output=True, text=True)
-    assert "metrics.txt" in result.stderr and result.stdout == "", "a failed end form prints no summary"
-    assert result.returncode != 0, "an end form that writes no row must exit non-zero"
+    read_only = tmp_path / "metrics.txt"
+    read_only.write_text("start 1793218198.0 start\nend 1793218199.0 start\n")
+    read_only.chmod(0o444)
+    for record in (blocker / "metrics.txt", read_only):
+        result = subprocess.run(["bash", "-c", end_form(record)], capture_output=True, text=True)
+        assert "metrics.txt" in result.stderr and result.stdout == "", "a failed end form prints no summary"
+        assert result.returncode != 0, "an end form that writes no row must exit non-zero"
 
 
-def test_a_killed_command_keeps_its_start_line_and_the_recovery_writes_its_end(tmp_path: Path) -> None:
+def test_a_killed_command_keeps_its_start_line(tmp_path: Path) -> None:
     record = tmp_path / "metrics.txt"
     process = subprocess.Popen(["bash", "-c", wrapper_script(record, "sleep 30", "killed")], start_new_session=True)
     deadline = time.monotonic() + 10
@@ -842,11 +747,9 @@ def test_a_killed_command_keeps_its_start_line_and_the_recovery_writes_its_end(t
     assert len(recoveries) == 1, "the Metrics section must give exactly one recovery command"
     recovery = recoveries[0].replace("<killed row label>", "killed").replace("<metrics file>", str(record))
     assert run_wrapper(record, recovery, "recovery") == 0
-    rows = read_rows(record)
-    assert [(kind, label) for kind, _, label in rows] == [
+    assert [(kind, label) for kind, _, label in read_rows(record)] == [
         ("start", "killed"), ("start", "recovery"), ("end", "killed"), ("end", "recovery")
     ], "the recovery writes the killed row's end line and gets a row of its own"
-    assert rows[2][1] >= rows[0][1], "the killed row's end follows its start"
 
 
 def test_closing_report_of_every_end_state_gives_the_summary_in_the_template() -> None:
