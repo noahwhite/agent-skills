@@ -95,3 +95,32 @@ Outcome: both round 2 items are fixed, and every acceptance criterion and Defini
 
 The PR #80 review of record quotes the reviewer's links verbatim, so it carries local scratch paths in a public repository.
 The five non-blocking review findings recorded in the PR #80 body (nanosecond exactness past about 104 days, the undeclared `awk` dependency, two test gaps, and the start-timestamp versus first-appearance order wording) remain open.
+
+# SKL-95 QA evidence, round 4, 2026-10-29
+
+The verified build is `48ef00f24d5ae42c195d18f4ad8f2479e8bea127`, the squash merge of [PR #82](https://github.com/noahwhite/agent-skills/pull/82), which shortened the Metrics section and moved the end form into `scripts/metrics-summary.sh`.
+Its head `4507b486af2cf05f3bac7fb85997f3f3d5b62358` has the same tree as that build and carries the review of record (review 5691762002, posted before the merge).
+Verification used a clean clone of `main` at that build.
+The fixtures are the disposable issues SKL-121 and SKL-122, each created Blocked and read back as Canceled after its run.
+The engineer's run on SKL-120 at `48ef00f` (tracker comment `5e199c55`) was also read, and its durations and elapsed recompute exactly from its posted metrics file.
+The full sanitized raw output is attached to the story as "SKL-95 QA round 4 raw output".
+
+Outcome: C1 and C4 are not met, so the story returns to In Progress.
+
+| Item | Verdict | Evidence |
+|---|---|---|
+| C1 closing report | Not met | In both QA runs the coordinator launched an `ls` of the skill directory after `metrics` resolved on and before the start form, so that command has no row; in the SKL-122 run it had already read `references/metrics.md`. PR #82 removed the two rules PR #78 added for this same deviation: read every file before the start form with a file tool, and never launch a command outside the start form, the wrapper, or the end form. The rest of C1 holds in both runs: every duration and the elapsed recompute exactly, the Totals lines carry the `partial` note, the summary is the end-form output verbatim, and there is no tracker write, secret, or path. |
+| C2 docs | Verified | PR #82 changed no `README.md`, `shared/`, or vendored file; the README row verified in earlier rounds stands. |
+| C3 tests | Verified | `uv run --locked pytest -q` passes 734 tests and the vendor check exits 0. CI is green on the PR head (run 40799916817) and on `main` (run 40800197473). Deleting each of the five guarded C1 phrases fails its named test, and so does dropping the `partial` note from the script. |
+| C4 verified end to end | Not met | The engineer's SKL-120 run meets every clause, but QA's two independent runs (`story-to-done SKL-121 metrics=on` and `story-to-done SKL-122 metrics=on`, both stopped before any role) each launched a command with no row (see C1). SKL-121 stopped at step 1 with six rows for seven shell commands; SKL-122 stopped before step 1 with four rows for five. The SKL-122 stop came from the QA agent's working directory, which resolved the home default profile; it is not an SKL-95 defect. |
+| DoD all acceptance criteria met | Not met | C1 and C4. |
+| DoD tests written and passing | Verified | The C3 row. |
+| DoD independently reviewed | Verified | Review of record 5691762002 on the merged head `4507b48`: Codex GPT-6 Sol reviewer and Claude Opus 5.5 adjudicator; no blocking finding. |
+| DoD docs updated | Verified | The C2 row. |
+| DoD verified in staging | Not applicable | No environment exists; C4 stands in, as the story states. |
+| DoD no critical bugs or regressions | Not met | The unrowed command before the start form is a regression of the round 1 fix (C1); the suite and CI pass at `main`. |
+
+## Failed items for the engineer, round 4
+
+C1 and C4: with `metrics` on, a coordinator loading the skill at `48ef00f` launches a command after the switch resolves and before the start form, and that command gets no row.
+The skill text must again make the start form the first command reliably, as the rules PR #82 removed did in round 3; C4 is re-run at the fix head.
