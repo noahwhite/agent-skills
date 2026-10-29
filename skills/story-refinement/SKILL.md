@@ -294,7 +294,7 @@ This section applies only when `metrics` is on.
   A stop before every Step 1 voter input is recorded attempts no post, because Step 1 allows no tracker comment before then except the preflight, and the summary stays in the closing message.
 - **Never during an anchoring recovery:** The comment is never posted while an anchoring recovery, its Step 3 re-run and its Step 4 re-vote, is still to run.
 - **Resumed run:** A resumed run is a new invocation and posts its own comment covering only that invocation; a resume in the same session after the owner authorizes the denied tracker writes fallback is the same invocation and posts once.
-- **Denied post:** If the post is denied, the closing message carries the summary and names the denied write, and no other tool or server is tried.
+- **Denied post:** If the post is denied or unavailable, the closing message carries the summary and names the denied or unavailable write, and no other tool or server is tried.
   Where the run stopped on denied tracker writes without the owner's authorization, no post is attempted.
 
 ## Closing message
@@ -302,7 +302,7 @@ This section applies only when `metrics` is on.
 The closing message is the facilitator's final message to the owner when the invocation ends, on every end state and every stop.
 It names the outcome (the consensus value, unpointed, or split with the slice count) or the stop reason, including `needs input` on a denied tracker write.
 It carries the `metrics: on` or `metrics: off` line.
-When `metrics` is on, it names the metrics summary comment the facilitator posted; when that post was denied, it carries the summary and names the denied write; when no post was attempted, it carries the summary and names no comment.
+When `metrics` is on, it names the metrics summary comment the facilitator posted; when the post was denied or unavailable, it carries the summary and names the denied or unavailable write; when the read-back failed, it carries the summary and names the failed read-back; when no post was attempted, it carries the summary and names no comment.
 
 ## Runtime portability
 

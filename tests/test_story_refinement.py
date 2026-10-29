@@ -1399,7 +1399,7 @@ def test_arguments_section_states_the_off_path(sentence: str) -> None:
 
 
 def test_metrics_mentions_outside_the_permitted_sections_are_absent() -> None:
-    """B2: outside Arguments, Metrics, Closing message, and SKL-92's Roles and Triage exception, no metrics mention."""
+    """B2: outside Arguments, Metrics, Closing, and the Roles and Triage bullets pinned separately, no metrics mention."""
     text = re.sub(r"<!--.*?-->", "", SKILL.read_text(), flags=re.DOTALL)
     for heading in (ARGUMENTS, METRICS, CLOSING, "Roles", "Triage"):
         text, count = re.subn(rf"^## {re.escape(heading)}\s*$.*?(?=^#{{1,2}} |\Z)", "", text,
@@ -1447,6 +1447,7 @@ def metrics_body() -> str:
 
 def test_metrics_section_posts_the_summary_as_its_own_sm_em_comment() -> None:
     body = metrics_body()
+    assert "**Post:** When the invocation reaches a permitted post, the facilitator posts the summary" in body
     assert "the facilitator posts the summary on the story under refinement as its own SM/EM comment" in body
     assert "at the end of the invocation, when no further voter round will run in it" in body
     assert "reads its own comment back, and the closing message names the posted comment" in body
@@ -1456,6 +1457,16 @@ def test_metrics_section_pins_the_post_sequence_and_the_end_timestamp() -> None:
     assert (
         "On a permitted post, `invocation_end` is taken immediately before the summary is composed, and the comment "
         "and the closing message carry that same summary; no second timestamp is taken." in metrics_body()
+    )
+
+
+def test_metrics_reference_orders_the_story_refinement_post() -> None:
+    """The timing sequence is bound in the reference itself, so the skill and the capability agree."""
+    text = (ROOT / "shared" / "metrics.md").read_text()
+    block = spaced(text.split("### `story-refinement` order", 1)[1].split("\n### ", 1)[0])
+    assert (
+        "On a permitted post, `invocation_end` is taken immediately before the summary is composed, and the "
+        "comment and the closing report carry that same summary; no second timestamp is taken." in block
     )
 
 
@@ -1511,8 +1522,8 @@ def test_metrics_section_states_the_resumed_run_rule() -> None:
 def test_metrics_section_names_the_denied_post() -> None:
     body = metrics_body()
     assert (
-        "If the post is denied, the closing message carries the summary and names the denied write, and no other "
-        "tool or server is tried." in body
+        "If the post is denied or unavailable, the closing message carries the summary and names the denied or "
+        "unavailable write, and no other tool or server is tried." in body
     )
     assert (
         "Where the run stopped on denied tracker writes without the owner's authorization, no post is attempted."
@@ -1556,15 +1567,18 @@ def test_triage_carries_the_metrics_posting_exception() -> None:
 def test_roles_and_triage_add_only_their_one_metrics_sentence() -> None:
     roles = section(SKILL.read_text(), "Roles")
     triage = section(SKILL.read_text(), "Triage")
+    assert roles.count(ROLES_METRICS_SENTENCE) == 1
+    assert triage.count(TRIAGE_METRICS_SENTENCE) == 1
     assert "metric" not in roles.replace(ROLES_METRICS_SENTENCE, "").lower()
     assert "metric" not in triage.replace(TRIAGE_METRICS_SENTENCE, "").lower()
 
 
 def test_closing_message_names_the_posted_comment() -> None:
     assert (
-        "When `metrics` is on, it names the metrics summary comment the facilitator posted; when that post was "
-        "denied, it carries the summary and names the denied write; when no post was attempted, it carries the "
-        "summary and names no comment." in skill_section(CLOSING)
+        "When `metrics` is on, it names the metrics summary comment the facilitator posted; when the post was "
+        "denied or unavailable, it carries the summary and names the denied or unavailable write; when the "
+        "read-back failed, it carries the summary and names the failed read-back; when no post was attempted, it "
+        "carries the summary and names no comment." in skill_section(CLOSING)
     )
 
 
@@ -1580,16 +1594,13 @@ def story_refinement_seed(root: Path) -> str:
     return next(line for line in todo.read_text().splitlines() if line.startswith("- **story-refinement:**"))
 
 
-def test_todo_tracking_seed_collects_metrics_only_when_the_switch_is_on() -> None:
+def test_todo_tracking_seed_posts_the_metrics_summary_only_when_the_switch_is_on() -> None:
     seed = story_refinement_seed(ROOT)
-    assert "and, only when the `metrics` switch is on, record invocation start (metrics on), collect metrics" in seed
-
-
-def test_todo_tracking_seed_posts_the_metrics_summary_after_collecting_it() -> None:
-    seed = story_refinement_seed(ROOT)
-    assert "collect metrics, and post the metrics summary on the story." in seed
-    on_only = seed.split("only when the `metrics` switch is on, ", 1)[1]
-    assert on_only.startswith("record invocation start (metrics on), collect metrics, and post the metrics summary")
+    marker = "only when the `metrics` switch is on, "
+    assert marker in seed, "the metrics-on condition is missing from the seed line"
+    assert seed.endswith(
+        "record invocation start (metrics on), collect metrics, and post the metrics summary on the story."
+    )
 
 
 def test_vendored_todo_tracking_seed_matches_the_shared_seed() -> None:

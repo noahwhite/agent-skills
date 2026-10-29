@@ -119,6 +119,7 @@ With no launches, the table is replaced by the line `no launches`, the elapsed w
 - Both are subject to the denied tracker writes fallback.
   While a tracker write is denied and the owner has not authorized the denied tracker writes fallback, no post is attempted.
 - The comment is never posted while an anchoring recovery re-vote is still to run in this invocation.
+- On a permitted post, `invocation_end` is taken immediately before the summary is composed, and the comment and the closing report carry that same summary; no second timestamp is taken.
 
 ### `story-to-done`
 
