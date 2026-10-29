@@ -330,7 +330,7 @@ METRICS_EXTRAS = (
     "to the read-back that confirms the deployment-review state; **QA rounds** at each spawn in step 3, "
     "each with its **duration** from that round's launch row; **Failed items** from the step 4 read of "
     "each QA round's outcome, in round order; **Fix rounds** from the step 4 branch that hands the failed "
-    "items back; and **End state** at the closing report."
+    "items back; and **End state** immediately before the end form, once the run's end state or stop reason is known."
 )
 METRICS_BRIEF_EXCLUSION = (
     "- **Independence:** no senior engineer or QA brief carries this invocation's figures or another role's "
@@ -373,19 +373,27 @@ METRICS_WRAPPER_BLOCK = [
 ]
 SUMMARY_SCRIPT = ROOT / "skills" / "story-to-done" / "scripts" / "metrics-summary.sh"
 METRICS_END_LAUNCH = "sh '<skill dir>/scripts/metrics-summary.sh' '<metrics file>'"
+METRICS_ROLE_START = (
+    "f='<metrics file>'; printf 'start %s %s\\t%s\\t%s\\t%s\\n' \"$(date -u +%s.%N)\" '<row label>' "
+    "'<runtime>' '<model>' '<effort>' >> \"$f\""
+)
+METRICS_ROLE_END = (
+    "f='<metrics file>'; printf 'end %s %s\\t%s\\t%s\\n' \"$(date -u +%s.%N)\" '<row label>' "
+    "'<tokens>' '<tool calls>' >> \"$f\""
+)
 METRICS_ROLE_ROW = (
-    "Record a role row with two commands of its own: immediately before the launch, `f='<metrics file>'; printf "
-    "'start %s %s\\t<runtime>\\t<model>\\t<effort>\\n' \"$(date -u +%s.%N)\" '<row label>' >> \"$f\"`, and when it "
-    "returns, `f='<metrics file>'; printf 'end %s %s\\t<tokens>\\t<tool calls><cumulative>\\n' \"$(date -u "
-    "+%s.%N)\" '<row label>' >> \"$f\"`, where `<cumulative>` is `\\tcumulative` when the figures are cumulative over "
-    "earlier launches and empty otherwise, and `<tokens>` and `<tool calls>` are `not reported` for a figure the "
-    "runtime does not return; these two commands are the row's own timestamps and get no row of their own."
+    "Record a role row with two commands of its own, neither of them wrapped and neither getting a row of its "
+    f"own: immediately before the launch, `{METRICS_ROLE_START}`, and when it returns, `{METRICS_ROLE_END}`, "
+    "where `<tokens>` and `<tool calls>` are written exactly as the summary's cells read: the number, "
+    "`not reported`, or the number followed by ` cumulative`."
 )
 METRICS_EXTRAS_RECORD = (
-    "Record each extra as one `extra <slug>\\t<value>` line in the metrics file: the slugs are `qa-rounds`, "
-    "`failed-items`, `fix-rounds`, `prs-merged`, `start`, `time-to-deployment-review`, `qa-round-durations` and "
-    "`end-state`, a per-round value is written in round order as `round 1: <value>; round 2: <value>` with a `;` "
-    "inside a value written as `\\;`, and the extra lines get no row of their own."
+    "Record every extra before the end form launches, each as one `extra <slug>\\t<value>` line in the metrics "
+    "file: the slugs are `qa-rounds`, `failed-items`, `fix-rounds`, `prs-merged`, `start`, "
+    "`time-to-deployment-review`, `qa-round-durations` and `end-state`, a value is one physical line with a tab "
+    "written as a space and a `;` inside a per-round value written as `\\;`, a value the run did not observe "
+    "is `not reported` and one the reference marks `not applicable` is that, and the extra lines get no row of "
+    "their own."
 )
 METRICS_END_INTRO = (
     f"Immediately before the closing report, the last launch is the end form `{METRICS_END_LAUNCH}`, where "
@@ -835,8 +843,8 @@ def test_a_run_that_stops_after_the_start_form_has_two_rows(tmp_path: Path, awk:
     assert result.stdout == expected_summary(rows, start, end, seconds(start, end))
 
 
-# SKL-96 round 2: a role launch's row carries its runtime, model and effort on its start line and its usage on
-# its end line, the extras are recorded as `extra` lines, and the end form prints both.
+# SKL-96 round 2: a role launch's row carries its runtime, model and effort on its start line and its usage
+# cells on its end line, the extras are recorded as `extra` lines, and the end form prints both.
 
 EXTRA_LABELS = {
     "qa-rounds": "QA rounds",
@@ -859,15 +867,34 @@ def role_start(stamp: str, label: str, runtime: str, model: str, effort: str) ->
     return row_line("start", stamp, label, runtime, model, effort)
 
 
-def role_end(stamp: str, label: str, tokens: str, calls: str, cumulative: bool = False) -> str:
-    return row_line("end", stamp, label, tokens, calls, *(["cumulative"] if cumulative else []))
+def role_end(stamp: str, label: str, tokens: str, calls: str) -> str:
+    return row_line("end", stamp, label, tokens, calls)
 
 
 def extra_line(slug: str, value: str) -> str:
     return f"extra {slug}\t{value}\n"
 
 
-def summary(rows: list[tuple[str, ...]], totals: tuple[str, str], start: str, end: str, elapsed: str,
+ROLE_PLACEHOLDERS = {
+    "label": "<row label>",
+    "runtime": "<runtime>",
+    "model": "<model>",
+    "effort": "<effort>",
+    "tokens": "<tokens>",
+    "calls": "<tool calls>",
+}
+
+
+def documented(command: str, record: Path, **values: str) -> str:
+    """Fill the SKILL's documented command with real values, so the test runs what the skill tells a coordinator."""
+    filled = command.replace("<metrics file>", str(record))
+    for name, value in values.items():
+        assert ROLE_PLACEHOLDERS[name] in filled, f"{command} carries no {ROLE_PLACEHOLDERS[name]}"
+        filled = filled.replace(ROLE_PLACEHOLDERS[name], value)
+    return filled
+
+
+def summary(rows: list[tuple[str, ...]], totals: tuple[str, str], start: str | None, end: str,
             extras: list[tuple[str, str]] | None = None) -> str:
     table = [
         "| Role | Runtime | Model | Effort | Duration | Tokens | Tool calls |",
@@ -879,12 +906,12 @@ def summary(rows: list[tuple[str, ...]], totals: tuple[str, str], start: str, en
         lines.append(f"{EXTRA_LABELS[slug]}: {value}")
     if extras:
         lines.append("")
-    lines.extend([
-        "Totals",
-        f"- Elapsed wall-clock: {elapsed} ({start} to {end})",
-        f"- Tokens: {totals[0]}",
-        f"- Tool calls: {totals[1]}",
-    ])
+    lines.append("Totals")
+    if start is None:
+        lines.append(f"- Elapsed wall-clock: not reported (not recorded to {end})")
+    else:
+        lines.append(f"- Elapsed wall-clock: {seconds(start, end)} ({start} to {end})")
+    lines.extend([f"- Tokens: {totals[0]}", f"- Tool calls: {totals[1]}"])
     return "\n".join(lines) + "\n"
 
 
@@ -900,26 +927,47 @@ def test_a_role_row_carries_its_runtime_model_effort_and_usage(tmp_path: Path, a
     )
     result = run_end_form(record, awk, tmp_path)
     assert result.returncode == 0 and result.stderr == ""
-    end = recorded(record)["end", "end"]
+    stamps = recorded(record)
+    end = stamps["end", "end"]
     rows = [
         ("start", "command", "not set", "not set", "0.100000000s", "not reported", "not reported"),
         ("senior-engineer-1", "opencode", "deepseek/deepseek-v4-pro", "high", "600.000000000s", "120000", "41"),
         ("qa-agent-round-1", "opencode", "deepseek/deepseek-flash", "high", "200.000000000s", "not reported", "not reported"),
-        ("end", "command", "not set", "not set", seconds(recorded(record)["start", "end"], end), "not reported", "not reported"),
+        ("end", "command", "not set", "not set", seconds(stamps["start", "end"], end), "not reported", "not reported"),
     ]
     totals = ("120000 [partial: 3 not reported, 0 cumulative]", "41 [partial: 3 not reported, 0 cumulative]")
-    assert result.stdout == summary(rows, totals, "1793218210.500000000", end, seconds("1793218210.500000000", end))
+    assert result.stdout == summary(rows, totals, "1793218210.500000000", end)
 
 
 @pytest.mark.parametrize("awk", AWKS)
-def test_a_cumulative_role_row_is_marked_and_excluded_from_the_totals(tmp_path: Path, awk: str) -> None:
+def test_the_documented_role_row_commands_record_what_the_summary_then_shows(tmp_path: Path, awk: str) -> None:
+    record = tmp_path / "metrics.txt"
+    start = documented(METRICS_ROLE_START, record, label="engineer 1", runtime="opencode",
+                       model="vendor/model%x|1", effort="high")
+    end = documented(METRICS_ROLE_END, record, label="engineer 1", tokens="120000", calls="41 cumulative")
+    for command in (start, "sleep 0.05", end):
+        assert subprocess.run(["bash", "-c", command], capture_output=True, text=True).returncode == 0
+    result = run_end_form(record, awk, tmp_path)
+    assert result.returncode == 0 and result.stderr == ""
+    stamps = recorded(record)
+    assert stamps["start", "engineer 1"] and stamps["end", "engineer 1"]
+    rows = [
+        ("engineer 1", "opencode", "vendor/model%x\\|1", "high", seconds(stamps["start", "engineer 1"], stamps["end", "engineer 1"]), "120000", "41 cumulative"),
+        ("end", "command", "not set", "not set", seconds(stamps["start", "end"], stamps["end", "end"]), "not reported", "not reported"),
+    ]
+    totals = ("120000 [partial: 1 not reported, 0 cumulative]", "not reported [partial: 1 not reported, 1 cumulative]")
+    assert result.stdout == summary(rows, totals, None, stamps["end", "end"])
+
+
+@pytest.mark.parametrize("awk", AWKS)
+def test_a_cumulative_figure_is_marked_and_excluded_per_figure(tmp_path: Path, awk: str) -> None:
     record = tmp_path / "metrics.txt"
     record.write_text(
         "start 1793218210.500000000 start\nend 1793218210.600000000 start\n"
         + role_start("1793218300.000000000", "senior-engineer-1", "opencode", "deepseek/deepseek-v4-pro", "high")
-        + role_end("1793218900.000000000", "senior-engineer-1", "120000", "41")
-        + role_start("1793219000.000000000", "senior-engineer-1-resumed", "opencode", "deepseek/deepseek-v4-pro", "high")
-        + role_end("1793219100.000000000", "senior-engineer-1-resumed", "260000", "55", cumulative=True)
+        + role_end("1793218900.000000000", "senior-engineer-1", "260000 cumulative", "5")
+        + role_start("1793219000.000000000", "qa-agent-round-1", "opencode", "deepseek/deepseek-flash", "high")
+        + role_end("1793219200.000000000", "qa-agent-round-1", "not reported", "not reported cumulative")
     )
     result = run_end_form(record, awk, tmp_path)
     assert result.returncode == 0 and result.stderr == ""
@@ -927,12 +975,54 @@ def test_a_cumulative_role_row_is_marked_and_excluded_from_the_totals(tmp_path: 
     end = stamps["end", "end"]
     rows = [
         ("start", "command", "not set", "not set", "0.100000000s", "not reported", "not reported"),
-        ("senior-engineer-1", "opencode", "deepseek/deepseek-v4-pro", "high", "600.000000000s", "120000", "41"),
-        ("senior-engineer-1-resumed", "opencode", "deepseek/deepseek-v4-pro", "high", "100.000000000s", "260000 cumulative", "55 cumulative"),
+        ("senior-engineer-1", "opencode", "deepseek/deepseek-v4-pro", "high", "600.000000000s", "260000 cumulative", "5"),
+        ("qa-agent-round-1", "opencode", "deepseek/deepseek-flash", "high", "200.000000000s", "not reported", "not reported"),
         ("end", "command", "not set", "not set", seconds(stamps["start", "end"], end), "not reported", "not reported"),
     ]
-    totals = ("120000 [partial: 2 not reported, 1 cumulative]", "41 [partial: 2 not reported, 1 cumulative]")
-    assert result.stdout == summary(rows, totals, "1793218210.500000000", end, seconds("1793218210.500000000", end))
+    totals = ("not reported [partial: 3 not reported, 1 cumulative]", "5 [partial: 3 not reported, 0 cumulative]")
+    assert result.stdout == summary(rows, totals, "1793218210.500000000", end)
+
+
+@pytest.mark.parametrize("awk", AWKS)
+def test_a_role_row_missing_its_fields_says_not_reported_not_command(tmp_path: Path, awk: str) -> None:
+    record = tmp_path / "metrics.txt"
+    record.write_text(
+        "start 1793218210.500000000 start\n"
+        + role_start("1793218300.000000000", "engineer", "", "", "")
+        + role_end("1793218400.000000000", "engineer", "10", "2")
+    )
+    result = run_end_form(record, awk, tmp_path)
+    assert result.returncode == 0 and result.stderr == ""
+    assert "| engineer | not reported | not reported | not reported | 100.000000000s | 10 | 2 |" in result.stdout
+
+
+@pytest.mark.parametrize("awk", AWKS)
+def test_a_blank_line_is_not_a_row(tmp_path: Path, awk: str) -> None:
+    record = tmp_path / "metrics.txt"
+    record.write_text(
+        "start 1793218210.500000000 start\nend 1793218210.600000000 start\n\n"
+        + role_start("1793218300.000000000", "engineer", "opencode", "m", "high")
+        + role_end("1793218400.000000000", "engineer", "10", "2")
+        + "injected continuation line\n"
+    )
+    result = run_end_form(record, awk, tmp_path)
+    assert result.returncode == 0 and result.stderr == ""
+    rows = [line for line in result.stdout.splitlines() if line.startswith("| ")][1:]
+    assert [row.split(" | ")[0] for row in rows] == ["| start", "| engineer", "| end"], (
+        "a blank line or a stray continuation line must not become a row"
+    )
+    assert "lost" not in result.stdout
+
+
+@pytest.mark.parametrize("awk", AWKS)
+def test_a_run_without_an_invocation_start_says_not_reported(tmp_path: Path, awk: str) -> None:
+    record = tmp_path / "metrics.txt"
+    record.write_text(role_start("1793218300.000000000", "engineer", "opencode", "m", "high")
+                      + role_end("1793218400.000000000", "engineer", "10", "2"))
+    result = run_end_form(record, awk, tmp_path)
+    assert result.returncode == 0 and result.stderr == ""
+    stamps = recorded(record)
+    assert f"- Elapsed wall-clock: not reported (not recorded to {stamps['end', 'end']})" in result.stdout
 
 
 @pytest.mark.parametrize("awk", AWKS)
@@ -962,21 +1052,45 @@ def test_the_recorded_extras_print_one_line_each_in_the_reference_order(tmp_path
     ]
     totals = ("not reported [partial: 2 not reported, 0 cumulative]",) * 2
     extras = [(slug, values[slug]) for slug in EXTRA_LABELS]
-    assert result.stdout == summary(rows, totals, "1793218210.500000000", end, seconds("1793218210.500000000", end), extras)
+    assert result.stdout == summary(rows, totals, "1793218210.500000000", end, extras)
 
 
 @pytest.mark.parametrize("awk", AWKS)
-def test_an_extra_value_keeps_its_escaping_and_its_unknown_slugs_print_nothing(tmp_path: Path, awk: str) -> None:
+def test_an_empty_extra_value_reads_not_reported(tmp_path: Path, awk: str) -> None:
+    record = tmp_path / "metrics.txt"
+    record.write_text(extra_line("fix-rounds", ""))
+    result = run_end_form(record, awk, tmp_path)
+    assert result.returncode == 0 and result.stderr == ""
+    assert "Fix rounds: not reported\n" in result.stdout
+
+
+def test_an_unknown_extra_slug_fails_the_end_form(tmp_path: Path) -> None:
+    record = tmp_path / "metrics.txt"
+    record.write_text(extra_line("qa-round", "2"))
+    result = subprocess.run(["bash", "-c", end_form(record)], capture_output=True, text=True)
+    assert result.returncode != 0 and result.stdout == "", "an unknown slug must not print a summary"
+    assert "unknown extra slug qa-round" in result.stderr
+
+
+def test_every_display_label_matches_the_vendored_reference() -> None:
+    text = (ROOT / "skills" / "story-to-done" / "references" / "metrics.md").read_text()
+    for label in EXTRA_LABELS.values():
+        assert f"**{label}:**" in text, f"the reference names no extra {label!r}"
+
+
+@pytest.mark.parametrize("awk", AWKS)
+def test_an_extra_keeps_its_escaped_semicolon_and_a_pipe_is_escaped_in_the_cells(tmp_path: Path, awk: str) -> None:
     record = tmp_path / "metrics.txt"
     record.write_text(
-        "start 1793218210.500000000 start\n"
+        "start 1793218210.500000000 start\nend 1793218210.600000000 start\n"
+        + role_start("1793218300.000000000", "engineer|one", "opencode", "m", "high")
+        + role_end("1793218400.000000000", "engineer|one", "1", "2")
         + extra_line("failed-items", "round 1: a\\;b")
-        + extra_line("unknown-slug", "never printed")
     )
     result = run_end_form(record, awk, tmp_path)
     assert result.returncode == 0 and result.stderr == ""
+    assert "| engineer\\|one | opencode | m | high | 100.000000000s | 1 | 2 |" in result.stdout
     assert "Failed items: round 1: a\\;b\n" in result.stdout
-    assert "unknown-slug" not in result.stdout and "never printed" not in result.stdout
 
 
 def end_form_program() -> str:
