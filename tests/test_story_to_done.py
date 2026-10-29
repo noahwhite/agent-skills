@@ -359,8 +359,8 @@ METRICS_BODY_BYTES = (
     "closing report's summary is those same bytes."
 )
 METRICS_END_IS_LAST = (
-    "The end form is the last launch: between it and the closing report the coordinator launches only the summary "
-    "post and its read-back, and looks up no command syntax."
+    "The end form is the last launch: between it and the closing report the coordinator runs only the summary "
+    "post and its read-back, which are not launches, and looks up no command syntax or JSON shape."
 )
 METRICS_POST_ITEM = (
     "After the end form, the coordinator writes the summary body file with the runtime's file-write tool, and right "
@@ -368,12 +368,39 @@ METRICS_POST_ITEM = (
     "or in its checklist file with the file-write tool, noting any denied post or failed read-back; neither write is "
     "a launched command."
 )
+METRICS_TODO_UPDATES = (
+    "Todo and checklist updates are not launches and are never skipped: with `metrics` on, the coordinator makes "
+    "every update step 0 requires, at the step that observes it, with its todo tool or with the file-write tool on "
+    "its checklist file, never with a launched command."
+)
+METRICS_READ_BACK_COMMAND = (
+    "linear issue comment list '<story>' --json | jq -e --arg id '<comment id>' --rawfile body "
+    "'<summary body file>' '[.nodes[] | select(.id | startswith($id))] | length == 1 and .[0].body == $body'"
+)
 METRICS_LINEAR_COMMANDS = (
     "With the `linear` CLI, the post is `linear issue comment add '<story>' --body-file '<summary body file>'`, which "
-    "prints the comment's URL ending in `#comment-<id>`, and the read-back is `linear issue comment list '<story>' "
-    "--json`, read for the one comment whose `id` begins with that `<id>`; with another tracker interface the "
-    "read-back reads the comment by the identifier its post returns, and a post that returns no identifier is a "
-    "failed read-back."
+    "prints the comment's URL ending in `#comment-<id>`, and the read-back is this one command, with that `<id>` in "
+    f"place of `<comment id>`: `{METRICS_READ_BACK_COMMAND}`."
+)
+METRICS_READ_BACK_SHAPE = (
+    "`linear issue comment list --json` prints one object, not an array: `nodes` lists every comment of the story, "
+    "newest first, each with its full `id` and its `body`, beside a `pageInfo` object; the filter needs exactly one comment "
+    "whose `id` begins with `<comment id>` and compares its body with the summary body file exactly, byte for byte, "
+    "with no trimming or normalising."
+)
+METRICS_READ_BACK_RESULT = (
+    "The read-back matched only when that command prints `true` and exits 0; anything else it prints, any other "
+    "exit status, and any parse error is a failed read-back."
+)
+METRICS_OTHER_INTERFACE = (
+    "With another tracker interface, the read-back reads the comment by the identifier its post returns and "
+    "compares its body with the summary body file exactly, and a post that returns no identifier is a failed "
+    "read-back."
+)
+METRICS_READ_BACK_FINAL = (
+    "A failed read-back is final: the coordinator runs no second read-back, no other filter, and no command that "
+    "inspects what the read-back printed, the comment, or the story, and the closing report says the read-back "
+    "failed, never that it matched."
 )
 METRICS_POSTING = [
     METRICS_POST,
@@ -381,12 +408,17 @@ METRICS_POSTING = [
     METRICS_BODY_BYTES,
     METRICS_END_IS_LAST,
     METRICS_POST_ITEM,
+    METRICS_TODO_UPDATES,
     METRICS_LINEAR_COMMANDS,
+    METRICS_READ_BACK_SHAPE,
+    METRICS_READ_BACK_RESULT,
+    METRICS_OTHER_INTERFACE,
     METRICS_READ_BACK,
     METRICS_POST_NOT_A_LAUNCH,
     METRICS_POST_INTERFACE,
     METRICS_POST_DENIED,
     METRICS_READ_BACK_FAILED,
+    METRICS_READ_BACK_FINAL,
     METRICS_RESUMED,
     METRICS_POST_NO_SECRETS,
     METRICS_ONLY_WRITE,
@@ -492,13 +524,30 @@ METRICS_EXTRAS_RECORD = (
     "applicable` is that, and no value contains a single quote; a run that records any extra records all "
     "eight."
 )
+METRICS_CLOSED_LAUNCHES = (
+    "With `metrics` on, every command the coordinator launches, from the start form to the closing report, is "
+    "exactly one of these, run as this section gives it: the start form, a command in the wrapper above, a role-row "
+    "or extras command, the end form, the summary post, or its read-back; nothing is chained before or after one of "
+    "them in the same launch, piped into or out of one, or launched in any other form."
+)
+METRICS_FILE_OWNERSHIP = (
+    "The metrics file and the summary script are read and written only by those forms: the coordinator never "
+    "reads, prints, searches, edits, or deletes from the metrics file by any tool or command, never reads the "
+    "summary script, and runs the script only as the end form, never as a preview, because every completed run "
+    "appends another `invocation_end`."
+)
+METRICS_INVALID_RECORD = (
+    "The one exception is an invalid record: the end form then writes nothing and names the line, and the "
+    "coordinator corrects that line in place with the runtime's file-read and file-edit tools, deleting no line and "
+    "changing no other, before it runs the end form again."
+)
 METRICS_END_INTRO = (
     f"Immediately before the summary post and the closing report, the last launch is the end form "
     f"`{METRICS_END_LAUNCH}`, where "
     "`<skill dir>` is the absolute directory your runtime loaded this skill from; it records `invocation_end` and "
     "prints the summary's table, the recorded extras and Totals from the metrics file, and it writes nothing and "
-    "reports the line when an extra slug, a figure cell or a role label breaks this format, so fix the record and "
-    "run it again."
+    "reports the line when an extra slug, a figure cell or a role label breaks this format, so correct that line as "
+    "the invalid-record exception above allows and run it again."
 )
 METRICS_END_VERBATIM = (
     "The summary in the closing report is the template's heading line, a blank line, and then the end form's output "
@@ -581,6 +630,8 @@ METRICS_LINES = [
     METRICS_WRAPPER_INTRO,
     *[line for line in METRICS_WRAPPER_BLOCK if METRICS_WORDS.search(line)],
     METRICS_WAITS,
+    METRICS_CLOSED_LAUNCHES,
+    METRICS_FILE_OWNERSHIP,
     METRICS_KILLED,
     METRICS_ROLE_ROW,
     METRICS_EXTRAS_RECORD,
@@ -593,12 +644,16 @@ METRICS_LINES = [
     METRICS_BODY_BYTES,
     METRICS_END_IS_LAST,
     METRICS_POST_ITEM,
+    METRICS_TODO_UPDATES,
     METRICS_LINEAR_COMMANDS,
+    METRICS_READ_BACK_SHAPE,
+    METRICS_OTHER_INTERFACE,
     METRICS_READ_BACK,
     METRICS_POST_NOT_A_LAUNCH,
     METRICS_POST_INTERFACE,
     METRICS_POST_DENIED,
     METRICS_READ_BACK_FAILED,
+    METRICS_READ_BACK_FINAL,
     METRICS_RESUMED,
     METRICS_POST_NO_SECRETS,
     METRICS_ONLY_WRITE,
@@ -1403,6 +1458,7 @@ def test_only_the_on_path_lines_tell_the_coordinator_to_post_or_comment() -> Non
     on_path = {
         METRICS_WRAPPER_INTRO: "Metrics",
         METRICS_END_INTRO: "Metrics",
+        METRICS_CLOSED_LAUNCHES: "Metrics",
         **{line: "Metrics" for line in METRICS_POSTING},
         METRICS_STEP0: "0. Track everything on a todo list",
         BOUNDARIES_ONLY_WRITE: "Boundaries",
@@ -1502,6 +1558,84 @@ METRICS_FENCED = [
 
 
 def test_every_metrics_section_line_is_pinned_so_no_contradicting_line_can_be_inserted() -> None:
-    pinned = set(METRICS_LINES) | set(METRICS_FENCED) | {METRICS_NEVER_SETS_STATE}
+    pinned = set(METRICS_LINES) | set(METRICS_POSTING) | set(METRICS_FENCED) | {METRICS_NEVER_SETS_STATE, METRICS_INVALID_RECORD}
     unpinned = [line for line in metrics_lines() if line.strip() and line not in pinned]
     assert not unpinned, f"unpinned Metrics lines: {unpinned}"
+
+
+def test_every_launch_is_one_of_the_named_forms_with_nothing_chained_or_piped() -> None:
+    lines = metrics_lines()
+    assert lines.count(METRICS_CLOSED_LAUNCHES) == 1
+    assert lines.index(METRICS_WAITS) < lines.index(METRICS_CLOSED_LAUNCHES) < lines.index(METRICS_KILLED)
+
+
+def test_only_the_forms_touch_the_metrics_file_and_the_script_runs_only_as_the_end_form() -> None:
+    lines = metrics_lines()
+    assert lines.index(METRICS_CLOSED_LAUNCHES) + 1 == lines.index(METRICS_FILE_OWNERSHIP)
+    assert lines.index(METRICS_FILE_OWNERSHIP) + 1 == lines.index(METRICS_INVALID_RECORD)
+    assert METRICS_END_INTRO in lines, "the end form must point its fix at the invalid-record exception"
+
+
+def test_todo_and_checklist_updates_are_never_skipped_or_launched() -> None:
+    lines = metrics_lines()
+    assert lines.index(METRICS_POST_ITEM) + 1 == lines.index(METRICS_TODO_UPDATES)
+
+
+def test_a_failed_read_back_is_final_and_named() -> None:
+    lines = metrics_lines()
+    assert lines.index(METRICS_READ_BACK_FAILED) + 1 == lines.index(METRICS_READ_BACK_FINAL)
+
+
+def test_the_read_back_gives_the_json_shape_and_an_exact_result_rule() -> None:
+    lines = metrics_lines()
+    at = lines.index(METRICS_LINEAR_COMMANDS)
+    assert lines[at + 1 : at + 4] == [METRICS_READ_BACK_SHAPE, METRICS_READ_BACK_RESULT, METRICS_OTHER_INTERFACE]
+
+
+def run_read_back(tmp_path: Path, listing: str, body: bytes, comment_id: str) -> subprocess.CompletedProcess:
+    fake = tmp_path / "bin"
+    fake.mkdir()
+    (tmp_path / "listing.json").write_text(listing)
+    (fake / "linear").write_text(f"#!/bin/sh\ncat '{tmp_path / 'listing.json'}'\n")
+    (fake / "linear").chmod(0o755)
+    (tmp_path / "body.md").write_bytes(body)
+    command = (
+        METRICS_READ_BACK_COMMAND.replace("<story>", "ABC-1")
+        .replace("<comment id>", comment_id)
+        .replace("<summary body file>", str(tmp_path / "body.md"))
+    )
+    env = {**os.environ, "PATH": f"{fake}:{os.environ['PATH']}"}
+    return subprocess.run(["sh", "-c", command], capture_output=True, text=True, env=env)
+
+
+SUMMARY = "## Run metrics\n\n| Role |\n|---|\n- Tool calls: 3"
+
+
+def listing(*comments: tuple[str, str]) -> str:
+    nodes = [{"id": cid, "body": body, "url": f"https://example.test/#comment-{cid[:8]}"} for cid, body in comments]
+    return json.dumps({"nodes": nodes, "pageInfo": {"hasNextPage": False, "endCursor": None}})
+
+
+@pytest.mark.skipif(shutil.which("jq") is None, reason="jq is required by the read-back command")
+@pytest.mark.parametrize(
+    ("comments", "body", "matched"),
+    [
+        ([("1a2b3c4d-0000", SUMMARY), ("99999999-0000", "older")], SUMMARY, True),
+        ([("1a2b3c4d-0000", SUMMARY + "\n")], SUMMARY, False),
+        ([("1a2b3c4d-0000", " " + SUMMARY)], SUMMARY, False),
+        ([("1a2b3c4d-0000", SUMMARY), ("1a2b3c4d-1111", SUMMARY)], SUMMARY, False),
+        ([("99999999-0000", SUMMARY)], SUMMARY, False),
+    ],
+    ids=["exact", "trailing-newline", "leading-space", "ambiguous-prefix", "missing"],
+)
+def test_the_read_back_command_matches_only_one_exact_comment(
+    tmp_path: Path, comments: list[tuple[str, str]], body: str, matched: bool
+) -> None:
+    result = run_read_back(tmp_path, listing(*comments), body.encode(), "1a2b3c4d")
+    assert (result.returncode == 0 and result.stdout.strip() == "true") is matched, result
+
+
+@pytest.mark.skipif(shutil.which("jq") is None, reason="jq is required by the read-back command")
+def test_the_read_back_command_fails_on_an_unparseable_listing(tmp_path: Path) -> None:
+    result = run_read_back(tmp_path, "not json", SUMMARY.encode(), "1a2b3c4d")
+    assert result.returncode != 0
