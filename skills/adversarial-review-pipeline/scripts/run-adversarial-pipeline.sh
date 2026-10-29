@@ -13,8 +13,9 @@
 #                               [--model ID] [--probe-cmd TEMPLATE] [--probe-timeout SECONDS]
 #                               [--spec FILE] [--no-sweep] [--scratch DIR] [--timeout SECONDS]
 #   run-adversarial-pipeline.sh dossier <sweep|hunt|arbitrate> --base REF [--spec FILE] [--no-sweep] [--scratch DIR]
+#                               # also creates the phase's checkout and prints 'CHECKOUT: <path>' on stderr
 #   run-adversarial-pipeline.sh record <sweep|hunt|arbitrate> --base REF [--model ID] [--spec FILE] [--no-sweep]  # accept a subagent's report
-#   run-adversarial-pipeline.sh checkout --base REF [--scratch DIR]   # throwaway detached worktree at HEAD (subagent flow)
+#   run-adversarial-pipeline.sh checkout --base REF [--scratch DIR]   # an extra throwaway detached worktree at HEAD
 #   run-adversarial-pipeline.sh cleanup <checkout-path>               # removes a checkout this script made
 #   run-adversarial-pipeline.sh paths --base REF                      # prints this run's artifact paths
 # Every command also takes --repo DIR.
@@ -34,7 +35,12 @@
 # binding, and any report in flight (a later `record` then exits 15).
 #
 # Isolation: every model phase runs in its own throwaway detached worktree at HEAD ({checkout},
-# also the command's working directory), never in the primary checkout. A tripwire, not a boundary,
+# also the command's working directory), never in the primary checkout. The checkout exists before
+# the phase's dossier is written, and every dossier names it on a 'CHECKOUT: <path>' line beside
+# 'BASE: <ref> <base SHA>' and 'HEAD: <sha>', so what a dossier does not embed is readable there:
+# the sweep and hunt dossiers embed the diff, the arbitrate dossier only its diffstat. A dossier
+# that cannot be written removes its checkout: `run` through its exit teardown, `dossier` itself
+# before it exits; after a successful `dossier`, `cleanup` removes it. A tripwire, not a boundary,
 # compares the primary checkout before and after the agent: HEAD, tracked and untracked status, the
 # diff, the shared git config and the hooks directory. Any change fails the phase (exit 18). It does
 # not see ignored files or edits to files that were already untracked; the agent's sandbox is the
@@ -626,12 +632,21 @@ completion_line() {  # $1 phase, $2 elapsed seconds, $3 the phase's exit status
 PHASE_START=0
 CHECKOUT_PATH=""
 COMPLETION_EMITTED=0
+DOSSIER_PENDING=0
 on_run_exit() {  # a run attempt's single exit path: report completion, then clean up, keeping the status
   local rc=$?
   set +e
   trap - EXIT
   kill_guarded   # whatever ended the attempt, no guarded child may outlive it
   trap '' INT TERM HUP QUIT USR1 USR2   # the status is reported; a later signal must not rewrite it
+  if [ "$DOSSIER_PENDING" -eq 1 ]; then
+    # The dossier write failed: the phase never started, so nothing it bound may be accepted later.
+    [ "$rc" -ne 0 ] || rc=1
+    printf 'ERROR: could not write the %s dossier (exit %s); the phase never started, and its checkout is removed.\n' \
+      "$phase" "$rc" >&2
+    rm -f -- "$(artifact_for "$phase").stamp" "${dossier:-}" \
+      "$RUN_DIR/$phase.launch" "$RUN_DIR/$phase.binding" "$RUN_DIR/$phase.primary"
+  fi
   if [ "$COMPLETION_EMITTED" -eq 0 ] && [ -n "${phase:-}" ]; then
     COMPLETION_EMITTED=1
     completion_line "$phase" "$(( SECONDS - PHASE_START ))" "$rc"
@@ -764,23 +779,34 @@ emit_spec() {
   fi
 }
 
-emit_context() {
+# Every dossier names the phase's throwaway checkout and the base, so anything not embedded inline
+# (for the arbiter, the whole diff) is readable there with `git diff <base SHA>...HEAD`. The diffstat
+# and diff are taken at the pinned HEAD SHA, the commit the checkout holds, never the moving HEAD ref.
+# The spec and phase reports may quote marker lines, so the header names the first ones as the run's.
+emit_context() {  # $1 = the phase's checkout, $2 = 1 to embed the unified diff, 0 for the diffstat only
+  echo "===== RUN (the first BASE:, HEAD: and CHECKOUT: lines below are this run's; read anything not embedded here in your checkout: git diff ${BASE_SHA}...HEAD) ====="
+  echo "BASE: ${BASE} ${BASE_SHA}"
+  echo "HEAD: ${HEAD_SHA}"
+  echo "CHECKOUT: $1"
+  echo
   echo "===== STORY / ACCEPTANCE CRITERIA (the scope reference: work outside it is out of scope, not a defect) ====="
   emit_spec
   echo
   echo "===== BLUEPRINT (diffstat and files, ${BASE}...HEAD) ====="
-  git diff --stat "$BASE_SHA"...HEAD
-  echo
-  echo "===== DIFF (${BASE}...HEAD) ====="
-  git diff --no-ext-diff --unified=3 "$BASE_SHA"...HEAD
+  git diff --stat "$BASE_SHA"..."$HEAD_SHA"
+  if [ "$2" -eq 1 ]; then
+    echo
+    echo "===== DIFF (${BASE}...HEAD) ====="
+    git diff --no-ext-diff --unified=3 "$BASE_SHA"..."$HEAD_SHA"
+  fi
 }
 
 emit_prior() {  # $1 = phase, $2 = text when that phase is intentionally absent (--no-sweep)
   if accepted "$1"; then cat -- "$(artifact_for "$1")"; else echo "$2"; fi
 }
 
-write_dossier() {  # $1 = phase, $2 = dossier path
-  local p="$1" out="$2"
+write_dossier() {  # $1 = phase, $2 = dossier path, $3 = the phase's checkout (exists already)
+  local p="$1" out="$2" co="$3"
   case "$p" in
     sweep)
       {
@@ -789,18 +815,20 @@ write_dossier() {  # $1 = phase, $2 = dossier path
         echo "- file:line | severity (Critical/High/Medium/Low) | one-line claim | the concrete failure scenario"
         echo "Cover: vulnerability vectors, logic flaws, breaking changes, API/contract mismatches, test gaps, code smells."
         echo "Be exhaustive; volume over precision, and mark speculation as such."
-        echo "Do NOT modify any files. Never write secrets to files or command arguments."
+        echo "Do NOT modify any files: the checkout on the CHECKOUT: line below is read-only, for reading code"
+        echo "the diff does not show. Never write secrets to files or command arguments."
         echo "The session's scratch directory is ${SESSION_SCRATCH:-$SCRATCH}; keep any artefact you create there."
         echo "The FIRST line of your report must be exactly 'REVIEW-RAN: yes' when you read the diff below; otherwise"
         echo "make it 'REVIEW-RAN: no - <reason>'. A report without that line is treated as a review that did not run."
         echo
-        emit_context
+        emit_context "$co" 1
       } > "$out"
       ;;
     hunt)
       {
-        echo "You are an empirical adversarial reviewer working in a THROWAWAY checkout of the unfixed head."
-        echo "You may edit files in that checkout to run experiments; never commit, push, or touch any other tree."
+        echo "You are an empirical adversarial reviewer working in a THROWAWAY checkout of the unfixed head: the"
+        echo "one on the CHECKOUT: line below. You may edit files in that checkout to run experiments; never"
+        echo "commit, push, or touch any other tree."
         echo "Never write secrets to files or command arguments."
         echo "The session's scratch directory is ${SESSION_SCRATCH:-$SCRATCH}; keep any artefact you create there."
         echo
@@ -820,13 +848,15 @@ write_dossier() {  # $1 = phase, $2 = dossier path
         echo "===== CANDIDATES (Phase 1 sweep) ====="
         emit_prior sweep "(sweep not configured - hunt only)"
         echo
-        emit_context
+        emit_context "$co" 1
       } > "$out"
       ;;
     arbitrate)
       {
-        echo "You are the ARBITER for an adversarial code review. You get the diff, a raw candidate list from a"
-        echo "cheap sweep (Phase 1), and empirical execution results (Phase 2)."
+        echo "You are the ARBITER for an adversarial code review. You get the diffstat (not the diff), a raw"
+        echo "candidate list from a cheap sweep (Phase 1), empirical execution results (Phase 2), and a"
+        echo "read-only checkout of the head under review on the CHECKOUT: line below: read the diff there with"
+        echo "'git diff ${BASE_SHA}...HEAD', and any file you need. Do not edit, commit or push in it."
         echo "1. Filter hallucinations, false positives and unexploitable edge cases. Weigh the EMPIRICAL"
         echo "   Phase-2 results over Phase-1 theory."
         echo "2. Surface cross-module logic inconsistencies, security bypasses and architectural regressions"
@@ -834,8 +864,9 @@ write_dossier() {  # $1 = phase, $2 = dossier path
         echo "3. Never invent findings to fill a section. Do not modify files. Never write secrets to files or command arguments."
         echo "The session's scratch directory is ${SESSION_SCRATCH:-$SCRATCH}; keep any artefact you create there."
         echo "4. Output the final report in EXACTLY this Markdown layout and nothing else, after one first line:"
-        echo "   'REVIEW-RAN: yes' when you read the diff and both phase results below; otherwise"
-        echo "   'REVIEW-RAN: no - <reason>'. A report without that line is treated as a review that did not run."
+        echo "   'REVIEW-RAN: yes' when you read the diffstat and both phase results below and this dossier"
+        echo "   carries its CHECKOUT: line; otherwise 'REVIEW-RAN: no - <reason>'. A report without that"
+        echo "   line is treated as a review that did not run."
         echo
         echo "### Critical vulnerabilities and breaking bugs"
         echo "(Only items validated by Phase-2 execution or confirmed by your reasoning.)"
@@ -850,7 +881,7 @@ write_dossier() {  # $1 = phase, $2 = dossier path
         echo "### Verified safe modules"
         echo "(The parts of the diff that were attacked and stood up, and the categories found clean.)"
         echo
-        emit_context
+        emit_context "$co" 0
         echo
         echo "===== PHASE 1 (sweep candidates) ====="
         emit_prior sweep "(sweep not configured)"
@@ -896,7 +927,15 @@ make_checkout() {  # prints the path of a registered throwaway detached worktree
     rmdir -- "$container" 2>/dev/null || true
     return "$rc"
   fi
-  printf '%s\n' "$dir" >> "$REGISTRY"
+  # Only a registered checkout may be handed out: 'cleanup' refuses any other path, so a checkout
+  # whose registration failed is removed here rather than advertised.
+  if ! printf '%s\n' "$dir" >> "$REGISTRY"; then
+    echo "ERROR: could not register the throwaway checkout in $REGISTRY; it is removed." >&2
+    git worktree remove --force -- "$dir" >/dev/null 2>&1 || rm -rf -- "$dir"
+    git worktree prune >/dev/null 2>&1 || true
+    rmdir -- "$container" 2>/dev/null || true
+    return 2
+  fi
   printf '%s\n' "$dir"
 }
 
@@ -1005,11 +1044,33 @@ case "$cmd" in
     init_scratch
     begin_phase "$phase"
     dossier="$SCRATCH/${phase}-dossier.md"
-    write_dossier "$phase" "$dossier"
+    # The phase's checkout exists before its dossier, which names it on its CHECKOUT: line.
+    # A phase that fails before its dossier path reaches the caller never started: it leaves no
+    # launch, binding, partial dossier or checkout behind (set -e included).
+    unstart_phase() {
+      rm -f -- "$dossier" "$RUN_DIR/$phase.launch" "$RUN_DIR/$phase.binding" "$RUN_DIR/$phase.primary"
+    }
+    checkout_rc=0
+    checkout="$(make_checkout)" || checkout_rc=$?
+    if [ "$checkout_rc" -ne 0 ]; then
+      unstart_phase
+      die "$checkout_rc" "could not create the throwaway checkout for the $phase phase (status $checkout_rc; see the error above)."
+    fi
+    # Until the dossier path is delivered on stdout, any exit removes that checkout and unregisters
+    # it; on success, 'cleanup' removes it once the phase is recorded.
+    DOSSIER_CHECKOUT="$checkout"
+    trap 'rc=$?; trap - EXIT; [ "$rc" -ne 0 ] || rc=1
+      echo "ERROR: could not write the $phase dossier (exit $rc); the phase never started, and its checkout is removed." >&2
+      ( remove_checkout "$DOSSIER_CHECKOUT" ) >/dev/null || echo "WARNING: could not remove checkout $DOSSIER_CHECKOUT (see above)" >&2
+      unstart_phase
+      exit "$rc"' EXIT
+    write_dossier "$phase" "$dossier" "$checkout"
     bind_phase "$phase"
-    echo "Work in a throwaway checkout from 'checkout' (never the primary checkout)." >&2
+    echo "CHECKOUT: $checkout" >&2
+    echo "Work only in that checkout (never the primary checkout); the $phase dossier names it too. Remove it with 'cleanup $checkout' once the phase is recorded." >&2
     echo "Save the $phase report to $(artifact_for "$phase"), then run 'record $phase' with the same --base, --spec and --no-sweep." >&2
     printf '%s\n' "$dossier"
+    trap - EXIT
     ;;
 
   record)
@@ -1071,8 +1132,8 @@ case "$cmd" in
       fi
     fi
     printf 'adversarial-pipeline: phase=%s model=%s; %s\n' "$phase" "$MODEL_LABEL" "$availability_state" >&2
-    write_dossier "$phase" "$dossier"
-    # Every phase gets its own throwaway checkout; no agent ever runs in the primary checkout.
+    # Every phase gets its own throwaway checkout; no agent ever runs in the primary checkout. It
+    # exists before the dossier is written, because the dossier names it on its CHECKOUT: line.
     CHECKOUT_DEADLINE="$phase_deadline"
     checkout_rc=0
     checkout="$(make_checkout)" || checkout_rc=$?
@@ -1081,9 +1142,13 @@ case "$cmd" in
       fail_phase 19 "the $phase phase was killed by --timeout: the ${TIMEOUT}s phase deadline expired while creating the throwaway checkout (model=$MODEL_LABEL); the phase is a failure, not a clean one."
     fi
     if [ "$checkout_rc" -ne 0 ]; then
-      fail_phase "$checkout_rc" "could not create the throwaway checkout for the $phase phase (git worktree add failed with status $checkout_rc); the phase never started."
+      fail_phase "$checkout_rc" "could not create the throwaway checkout for the $phase phase (status $checkout_rc; see the error above); the phase never started."
     fi
     CHECKOUT_PATH="$checkout"
+    # A failed write exits through on_run_exit (set -e), which reports it and removes the checkout.
+    DOSSIER_PENDING=1
+    write_dossier "$phase" "$dossier" "$checkout"
+    DOSSIER_PENDING=0
     q_prompt="$(printf '%q' "$dossier")"
     q_out="$(printf '%q' "$out")"
     q_checkout="$(printf '%q' "$checkout")"
