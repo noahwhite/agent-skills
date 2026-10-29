@@ -48,3 +48,49 @@ Fix owner: SKL-96 engineer through `engineering-workflow`, coordinating the emit
 SKL-48 and SKL-95 are Done, so they are not undeployed blockers.
 SKL-97/SKL-98 own the real engineer/QA role-launch verification, and SKL-94 owns posting.
 No separate incidental defect was observed.
+
+## Round 2 - 2026-10-29
+
+Build: `d06da60c3d737fd7fb31ae3d611f23cd897c0f44`, freshly fetched merged `main`.
+Environment: repository CI, with `environments: []` in the current-main repository profile; no service deployment or staging target exists.
+Fixtures: scratch-only records for an initial engineer, a resumed engineer and two QA rounds, using the artifact's documented writer commands, real command timestamps and synthetic usage values.
+These probes exercise the CLI protocol, not live role launches.
+No visual surface exists, so there are no screenshots; this runtime has no hosted-artifact capability.
+The round-1 record above is retained as history, not the verdict on this build.
+
+### Round-2 evidence
+
+- Tracker evidence: SKL-96, comment `cfed1db1`.
+- Raw record: story attachment titled `SKL-96 QA round 2 - AC and DoD assertions`, with sections C1-C4, DoD1-DoD6 and CI.
+- [Merged CI](https://github.com/noahwhite/agent-skills/actions/runs/40834323141): `checks` and `discovery` succeeded on the build above; `uv run --locked pytest -q` reported 772 passed in 102.34s.
+- [Remediation implementation PR](https://github.com/noahwhite/agent-skills/pull/88): merged as the build above; latest submitted review of record's first-line SHA and `commit_id` both match head `9e43d572b91718c08c44427a198c07eebbfeec6e`.
+
+QA inspected the merged diff's realistic caller tests: they execute the documented writer commands and assert the exact end-form output, including literal model characters and cumulative handling.
+The passing unfiltered CI suite includes `scripts/vendor_shared.py --check` via `test_vendored_references_are_current`.
+The implementation PRs record named failed tests for guarded-phrase deletions; QA did not rebuild or mutate the suite.
+
+### Round-2 verdicts
+
+Every evidence section below is in the round-2 tracker attachment.
+
+| Item | Verdict | Evidence |
+|---|---|---|
+| C1 Collection | Verified: required text and documented commands preserve four ordered role rows, metadata, exact measured durations, unknown usage, independent cumulative markings and all eight extras. | C1 |
+| C2 Independence | Verified: both brief sections are byte-identical to before SKL-96; later-round and re-spawn exclusions remain explicit. | C2 |
+| C3 Docs | Verified: separate on-only seed; shared and all vendored todo files unchanged across both implementation rounds. | C3 |
+| C4 Tests | Verified: exact-phrase guards, named deletion records, unchanged state/scratch guards, realistic caller tests and green merged CI. | C4, CI |
+| DoD All AC met | Verified within this story's text-contract and executable protocol scope. | DoD1, C1-C4 |
+| DoD Tests written and passing | Verified: 772 merged-CI tests passed, including vendoring checks. | DoD2, CI |
+| DoD Independent review | Verified: implementation review is bound to the exact merged PR head. | DoD3 |
+| DoD Docs updated | Verified: required step-0 seed is present. | DoD4, C3 |
+| DoD Staging | Correct by design / N/A as specified; live orchestration runs remain owned by SKL-97/SKL-98, both Backlog, not completed here. | DoD5 |
+| DoD No critical bugs/regressions | Verified within observed scope: emitter conflict no longer reproduces, invalid records refuse without writes, command-only behavior is preserved, merged CI passes. | DoD6, C1, CI |
+
+The four-row probe preserved `120000`, `not reported`, `260000 cumulative` and `3000` tokens, and `41`, `not reported`, `5` and `6 cumulative` tool calls.
+Totals were `123000` tokens and `46` tool calls, each with `3 not reported, 1 cumulative`, proving exclusion is per figure rather than per row.
+Unknown-extra, malformed-figure and duplicate-label inputs returned nonzero without changing their records or printing a summary.
+Command-only output matched the pre-remediation build after normalizing only dynamic end-time-derived cells.
+Decision: accept this slice and move it to Done once this evidence is merged through the exact-head review and CI gate.
+SKL-48 and SKL-95 are Done, so no undeployed dependency blocks direct verification.
+Outstanding downstream work remains SKL-97's live engineer run, SKL-98's live QA run and SKL-94's posting, all Backlog; none is claimed complete here.
+No separate incidental defect was observed.
