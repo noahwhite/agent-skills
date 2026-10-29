@@ -7,6 +7,8 @@ $1 == "extra" { rest = $0; sub(/^extra[ \t]+/, "", rest); i = index(rest, "\t");
 $1 == "start" || $1 == "end" { k = substr($0, length($1) + length($2) + 3); parts = split(k, f, "\t"); k = f[1]
   if (parts > 1 && (k == "start" || k == "end")) { if (bad == "") bad = "the reserved label " k }
   if ($1 == "end") for (j = 2; j <= parts; j++) if (f[j] !~ /^[0-9]+( cumulative)?$/ && f[j] != "not reported") { if (bad == "") bad = "the figure " f[j] }
+  if ($1 == "start" && (k in began)) { if (bad == "") bad = "the label " k " is used twice" }
+  began[k] = 1
   next }
 END { if (bad == "") exit 0; printf "metrics: the record is invalid: %s\n", bad > "/dev/stderr"; exit 1 }
 ' "$1" || exit $?
@@ -33,7 +35,8 @@ END {
     printf "| %s | %s | %s | %s | %s | %s | %s |\n", esc(k), esc(rt[k] != "" ? rt[k] : (roleish[k] ? "not reported" : "command")), esc(model[k] != "" ? model[k] : (roleish[k] ? "not reported" : "not set")), esc(effort[k] != "" ? effort[k] : (roleish[k] ? "not reported" : "not set")), ((("start", k) in at) && (("end", k) in at)) ? span(at["start", k], at["end", k]) : "lost", tk, cl
   }
   a = at["start", "start"]; z = at["end", "end"]; printf "\n"
-  for (i = 1; i <= nknown; i++) if (known[i] in extras) { printf "%s: %s\n", label(known[i]), (extras[known[i]] == "" ? "not reported" : extras[known[i]]); ne++ }
+  for (i = 1; i <= nknown; i++) if (i <= nknown && (known[i] in extras)) any = 1
+  if (any) for (i = 1; i <= nknown; i++) { v = (known[i] in extras ? extras[known[i]] : ""); printf "%s: %s\n", label(known[i]), (v == "" ? "not reported" : v); ne++ }
   if (ne > 0) printf "\n"
   if (a == "" || z == "") printf "Totals\n- Elapsed wall-clock: not reported (%s to %s)\n", (a == "" ? "not recorded" : a), (z == "" ? "not recorded" : z)
   else printf "Totals\n- Elapsed wall-clock: %s (%s to %s)\n", span(a, z), a, z

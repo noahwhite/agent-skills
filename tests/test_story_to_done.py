@@ -396,7 +396,8 @@ METRICS_EXTRAS_RECORD = (
     "`qa-rounds`, `failed-items`, `fix-rounds`, `prs-merged`, `start`, `time-to-deployment-review`, "
     "`qa-round-durations` and `end-state`; a value is one physical line, a `;` inside a per-round value is "
     "written as `\\;`, a value the run did not observe is `not reported`, one the reference marks `not "
-    "applicable` is that, and no value contains a single quote."
+    "applicable` is that, and no value contains a single quote; a run that records any extra records all "
+    "eight."
 )
 METRICS_END_INTRO = (
     f"Immediately before the closing report, the last launch is the end form `{METRICS_END_LAUNCH}`, where "
@@ -1088,6 +1089,18 @@ def test_an_end_line_without_its_start_line_is_lost_not_a_fabricated_duration(tm
     assert "| orphan | not reported | not reported | not reported | lost | 5 | 6 |" in result.stdout
 
 
+def test_a_reused_role_label_fails_the_end_form(tmp_path: Path) -> None:
+    record = tmp_path / "metrics.txt"
+    record.write_text(
+        role_start("1793218300.000000000", "qa-round-1", "opencode", "m", "high")
+        + role_end("1793218400.000000000", "qa-round-1", "1", "2")
+        + role_start("1793218500.000000000", "qa-round-1", "opencode", "m", "high")
+    )
+    result = subprocess.run(["bash", "-c", end_form(record)], capture_output=True, text=True)
+    assert result.returncode != 0 and result.stdout == "", "a reused label must not print a summary"
+    assert "the label qa-round-1 is used twice" in result.stderr
+
+
 def test_a_role_row_may_not_take_the_reserved_start_or_end_label(tmp_path: Path) -> None:
     record = tmp_path / "metrics.txt"
     record.write_text(role_start("1793218300.000000000", "start", "opencode", "m", "high"))
@@ -1102,7 +1115,10 @@ def test_an_empty_extra_value_reads_not_reported(tmp_path: Path, awk: str) -> No
     record.write_text(extra_line("fix-rounds", ""))
     result = run_end_form(record, awk, tmp_path)
     assert result.returncode == 0 and result.stderr == ""
-    assert "Fix rounds: not reported\n" in result.stdout
+    lines = [line for line in result.stdout.splitlines() if ": " in line and not line.startswith("- ")]
+    assert lines == [f"{label}: not reported" for label in EXTRA_LABELS.values()], (
+        "recording one extra records all eight, and an empty value reads not reported"
+    )
 
 
 def test_a_figure_outside_the_cell_grammar_fails_the_end_form(tmp_path: Path) -> None:
