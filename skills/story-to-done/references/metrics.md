@@ -33,6 +33,8 @@ What each runtime's usage report returns is in the "Read a subagent's usage (dur
 - Roles spawned inside a delegated role get no row; their usage counts only if the parent's figure is stated to include it.
 - A figure the runtime does not return is `not reported`; it is never estimated or inferred.
 - A figure the runtime returns only per step or per event, never as one figure for the launch, is `not reported`; summing the steps would infer it.
+- A figure the runtime reports as one total for the launch's whole session, such as a session-level export total read after the launch, is one figure for the launch: the per-step `not reported` rule above does not apply to it, and it enters the run total once per launch.
+  A resumed launch's session-level total also covers the earlier launches of that session, so it is `cumulative` under the rule below.
 - A resumed role's figures are recorded as returned.
   A figure that is cumulative over earlier launches is marked `cumulative` in its row and is excluded from the run total unless the runtime separately reports a launch-scoped figure.
 

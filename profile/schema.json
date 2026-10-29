@@ -555,7 +555,7 @@
         },
         "command": {
           "type": "string",
-          "description": "Required when runtime is command: the command line, with {prompt_file} and {output_file} placeholders."
+          "description": "Required when runtime is command: the command line, with {prompt_file} and {output_file} placeholders, and an optional {session_title} placeholder the facilitator fills with a title unique to the launch (an opencode run command passes it as --title, so the launch's usage can be read from its session export)."
         },
         "family": {
           "type": "string",

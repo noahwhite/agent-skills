@@ -70,6 +70,7 @@ Where this file and a capability file disagree, the capability file is authorita
 
 Launch each non-facilitator role in a separate context with the runtime, model, optional `agent`, optional `command`, and optional `family` from its profile entry.
 A `command` runtime gets its prompt in a file and writes its result to an output file.
+When the command carries a `{session_title}` placeholder, the facilitator replaces it on every launch with a title unique to that launch: the story key, the word `launch`, the launch's number in this invocation, and a UTC timestamp to the nanosecond taken with `date -u +%Y%m%dT%H%M%S%NZ`, joined by `-`, which carries no secret and no path.
 
 ## Denied tracker writes
 
@@ -278,6 +279,8 @@ This section applies only when `metrics` is on.
 - **Location:** Figures live only in one metrics file in the session's scratch directory, outside every per-role subdirectory.
 - **Never named:** The metrics file is never named in any brief.
 - **Not reported:** A figure the runtime does not return is `not reported`; it is never estimated or inferred.
+- **Usage:** Each launch's Tokens and Tool calls are read as the "Read a subagent's usage" row and the "Usage from shell-launched agents" rule in [references/runtimes.md](references/runtimes.md) state; this section states no usage formula of its own.
+  With `metrics` on, the facilitator keeps each launch's title in the metrics file and reads that launch's usage by it.
 - **Timed launches:** Time every launch the facilitator spawns, including each re-launch.
   That covers the tracker-write preflight; each Step 1 voter launch; each PO launch that authors or applies a tracker write or record; each accept-round voter launch, including the re-refine accept round; each Step 3 pointing launch, including the re-run after a re-refine; each Step 4 discussion launch; each Step 4 re-vote launch; each Step 4 no-consensus path-decision launch; each anchoring recovery re-launch; and each slice estimate launch.
   Take the start timestamp immediately before the launch and the end timestamp when the launch returns.

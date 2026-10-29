@@ -22,7 +22,7 @@ If your runtime is not listed, map each capability to its closest equivalent and
 | Scratch base directory | `$CLAUDE_JOB_DIR/tmp` in background jobs, else `profile.workspace.scratch_dir` | `profile.workspace.scratch_dir` |
 | Session label (for agent stamps) | the session or job name if set, else the session id | the session title if set, else the session id |
 | Tracker writes from a subagent | a subagent's write can be denied by the auto-mode permission check; only the owner grants it | V2: agent `permissions` rules for `shell`; V1: `permission.bash`; probe the actual write path |
-| Read a subagent's usage (duration, tokens, tool calls) | Observed on 2.1.312: a background subagent's completion notice carries a usage block with `subagent_tokens` (one total), `tool_uses` and `duration_ms`, with `tool_uses` 2 for a launch asked to run one command; no input, output or cache token breakdown. The run metrics reference records each figure as returned | V2 (2.1.2): `not observed`, not run. V1 (legacy, not V2 guidance), observed on 1.19.3: default `opencode run` output carries no usage figure (`not reported`); `opencode run --format json` emits one `step_finish` event per model step with `part.tokens` (`total`, `input`, `output`, `reasoning`, `cache`) and one `tool_use` event per tool call, each event with a millisecond `timestamp`, and no run total or tool-call count field; a `task` subagent's result carries its text, session id, model and start and end times, and its tokens and tool calls are `not reported`. The run metrics reference records each figure as returned |
+| Read a subagent's usage (duration, tokens, tool calls) | Observed on 2.1.312: a background subagent's completion notice carries a usage block with `subagent_tokens` (one total), `tool_uses` and `duration_ms`, with `tool_uses` 2 for a launch asked to run one command; no input, output or cache token breakdown. The run metrics reference records each figure as returned | V2 `opencode run`, observed on v2.2.0 (the 2.1.2 pin above is the discovery pin, not the version this was observed on): the default output carries no usage figure, so both figures come from `opencode session export <session id>` after the launch exits: Tokens is `.info.tokens` `input` + `output` + `reasoning`, with `cache.read` and `cache.write` excluded, and Tool calls is the count of `type: "tool"` parts in the `content[]` of `type: "assistant"` messages, each part counted once; both figures cover the top-level session only, and child and subagent sessions are excluded; the session id comes from the procedure in the "Usage from shell-launched agents" rule. V2 `subagent` tool launches: `not observed`, not run. V1 (legacy, not V2 guidance), observed on 1.19.3: default `opencode run` output carries no usage figure (`not reported`); `opencode run --format json` emits one `step_finish` event per model step with `part.tokens` (`total`, `input`, `output`, `reasoning`, `cache`) and one `tool_use` event per tool call, each event with a millisecond `timestamp`, and no run total or tool-call count field; a `task` subagent's result carries its text, session id, model and start and end times, and its tokens and tool calls are `not reported`; its `--format json` notes are legacy and are not a V2 usage source. The run metrics reference records each figure as returned |
 
 ## Rules that follow from the map
 
@@ -101,10 +101,47 @@ If your runtime is not listed, map each capability to its closest equivalent and
   `-s danger-full-access` is acceptable only when the operator has confirmed that the whole session already runs inside an outer sandbox they control, such as a disposable container or VM holding no credentials beyond what the review needs; the profile or an overlay records that confirmation, and an agent never assumes it.
   A worktree is not that boundary: it only keeps edits out of the main checkout, while the process can still read credentials, reach the network, and write anywhere the user can.
   Under that flag, run every phase against a throwaway detached worktree, never the primary checkout, and afterwards confirm that `git status --porcelain` of the primary checkout is unchanged.
-- **Usage from shell-launched agents.** The run metrics reference records what each launch returns; this bullet states what was observed.
+- **Usage from shell-launched agents.** The run metrics reference records what each launch returns; this bullet states what was observed and, for OpenCode V2 `opencode run`, how a launch's usage is read.
   For `runtime: codex`, observed on codex-cli 0.163.0: `codex exec` prints `tokens used` and one total on stderr; with `--json`, the `turn.completed` event carries `usage` (`input_tokens`, `cached_input_tokens`, `cache_write_input_tokens`, `output_tokens`, `reasoning_output_tokens`) and each tool call is a `command_execution` item, with no tool-call count or duration field (`not reported`).
   Any other codex version is `not observed` until it is run.
-  For `runtime: command`, arbitrary `command` programs have no common usage contract.
+  For `runtime: command` launches whose command invokes `opencode run` on OpenCode V2, observed on v2.2.0, usage comes from the launch's session export, never from its output.
+  A metrics-on launch runs in the default output format, with no `--format json`.
+  No Tokens or Tool calls figure is derived from `step_finish` or other stream events: on v2.2.0 the stream emitted one `step_finish` for a session of two model steps, so summing it undercounts.
+  The session key is a launch-unique `--title`: a title no other session carries, which the launching skill fills through the command's `{session_title}` placeholder.
+  Metrics-on launches that this repository's skills control omit `--standalone`, so the session stays in the shared background service where the lookup below resolves it, and never use `--continue`.
+  A consumer profile's own OpenCode voter wrapper that passes `--standalone` is outside this repository and is not changed by it.
+  After the launch exits successfully, its session id is the id of the one entry of `opencode session list --format json --max-count 1000`, run from the launch's working directory, whose `title` equals the launch's title.
+  Zero or more than one match records `not reported` for both cells; the newest session, or a session no other launch has claimed, is never taken in its place.
+  Two concurrent launches in one project each resolve their own session, because their titles differ.
+  The usage is read from `opencode session export <session id>`.
+  Tokens is `.info.tokens` `input` + `output` + `reasoning` of the export, and Tool calls is the count of `type: "tool"` parts in the `content[]` of `type: "assistant"` messages, each part counted once.
+  Cache read and cache write (`.info.tokens.cache`) are excluded from Tokens.
+  The figures cover the top-level session only: a child or subagent session the launch spawns is a separate session, absent from the list, and its usage is excluded; the spawn itself is one tool part of the parent.
+  A launch that resumes a session by explicit id (`-s <session id>`) exports that id in place of the lookup, and both figures are marked `cumulative`: the export covers the whole session, and v2.2.0 names no launch-scoped figure, since per-message `tokens` are per step.
+  A missing session id, an export that fails (on v2.2.0 an unknown id exits 1 with `Session not found`) or does not parse, or an absent field records `not reported` for the affected cell, and the launch counts toward the `partial` label of each affected total; the cell never reads `0` and never carries another session's figure.
+  The list and the export read the launch's usage after its end timestamp is taken, so they are not part of its Duration.
+  Only the two derived figures are recorded; the raw export, prompts and tool output are never written to the summary, the story or the repository.
+
+  ```bash
+  # Read one new `opencode run` launch's usage (OpenCode V2, observed on v2.2.0) after it exits
+  # successfully. Run it from the launch's working directory with `title` set to the launch's
+  # unique --title. The export stays in memory. A figure that cannot be read stays
+  # `not reported`, and jq prints the reason on stderr.
+  tokens='not reported'
+  tool_calls='not reported'
+  if id="$(opencode session list --format json --max-count 1000 | jq -er --arg t "$title" \
+      '[.[] | select(.title == $t)] | if length == 1 then .[0].id else error("not exactly one session titled \($t)") end')" &&
+    session="$(opencode session export "$id")"; then
+    tokens="$(printf '%s' "$session" | jq -e '.info.tokens
+      | if ([.input, .output, .reasoning] | all(type == "number")) then .input + .output + .reasoning
+        else error("a token field is absent") end')" || tokens='not reported'
+    tool_calls="$(printf '%s' "$session" | jq -e '[.messages[] | select(.type == "assistant")
+      | .content[] | select(.type == "tool")] | length')" || tool_calls='not reported'
+  fi
+  printf 'tokens: %s\ntool calls: %s\n' "$tokens" "$tool_calls"
+  ```
+
+  For any other `runtime: command` program, arbitrary `command` programs have no common usage contract.
   `not observed` means the runtime or version line was not run; `not reported` means it ran and returned no figure.
 
 ## OpenCode V2 configuration and invocation

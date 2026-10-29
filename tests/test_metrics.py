@@ -583,10 +583,203 @@ def test_usage_row_claude_code_cell_is_version_qualified():
 
 def test_usage_row_opencode_cell_names_each_version_line():
     opencode_cell = row_cells(usage_row())[2]
-    assert_states(opencode_cell, "V2 (2.1.2): `not observed`, not run.")
+    assert_states(opencode_cell, "V2 `opencode run`, observed on v2.2.0")
     assert_states(opencode_cell, "V1 (legacy, not V2 guidance), observed on 1.19.3:")
     for field in ("`step_finish`", "`part.tokens`", "`tool_use`", "`timestamp`"):
         assert field in opencode_cell, f"the OpenCode V1 observation lost {field}"
+
+
+# SKL-132: OpenCode V2 `opencode run` usage comes from the session export.
+def test_usage_row_no_longer_marks_v2_opencode_run_not_observed():
+    opencode_cell = flat(row_cells(usage_row())[2])
+    assert "V2 (2.1.2): `not observed`" not in opencode_cell
+    v2_run = opencode_cell.split("V2 `opencode run`", 1)[1].split(". V2 `subagent`", 1)[0]
+    assert "not observed" not in v2_run, v2_run
+
+
+OPENCODE_ROW_FACTS = [
+    pytest.param(
+        "V2 `opencode run`, observed on v2.2.0 (the 2.1.2 pin above is the discovery pin, not the "
+        "version this was observed on):",
+        id="observation-version-not-discovery-pin",
+    ),
+    pytest.param("`opencode session export <session id>`", id="export-command"),
+    pytest.param(
+        "Tokens is `.info.tokens` `input` + `output` + `reasoning`, with `cache.read` and "
+        "`cache.write` excluded",
+        id="token-fields-cache-excluded",
+    ),
+    pytest.param(
+        "Tool calls is the count of `type: \"tool\"` parts in the `content[]` of "
+        "`type: \"assistant\"` messages, each part counted once",
+        id="tool-part-count",
+    ),
+    pytest.param(
+        "both figures cover the top-level session only, and child and subagent sessions are excluded",
+        id="top-level-only",
+    ),
+    pytest.param(
+        "the session id comes from the procedure in the \"Usage from shell-launched agents\" rule",
+        id="session-id-procedure",
+    ),
+    pytest.param("V2 `subagent` tool launches: `not observed`, not run.", id="v2-subagent-not-observed"),
+    pytest.param(
+        "its `--format json` notes are legacy and are not a V2 usage source", id="v1-format-json-legacy"
+    ),
+]
+
+
+@pytest.mark.parametrize("phrase", OPENCODE_ROW_FACTS)
+def test_usage_row_opencode_cell_records_the_v2_export(phrase):
+    assert_states(row_cells(usage_row())[2], phrase)
+
+
+OPENCODE_BULLET_FACTS = [
+    pytest.param(
+        "For `runtime: command` launches whose command invokes `opencode run` on OpenCode V2, "
+        "observed on v2.2.0, usage comes from the launch's session export, never from its output.",
+        id="scope",
+    ),
+    pytest.param(
+        "A metrics-on launch runs in the default output format, with no `--format json`.",
+        id="ac4-default-format",
+    ),
+    pytest.param(
+        "No Tokens or Tool calls figure is derived from `step_finish` or other stream events: on "
+        "v2.2.0 the stream emitted one `step_finish` for a session of two model steps, so summing "
+        "it undercounts.",
+        id="ac4-no-stream-events",
+    ),
+    pytest.param(
+        "The session key is a launch-unique `--title`: a title no other session carries, which the "
+        "launching skill fills through the command's `{session_title}` placeholder.",
+        id="ac2-key",
+    ),
+    pytest.param(
+        "Metrics-on launches that this repository's skills control omit `--standalone`, so the "
+        "session stays in the shared background service where the lookup below resolves it, and "
+        "never use `--continue`.",
+        id="ac11-no-standalone-no-continue",
+    ),
+    pytest.param(
+        "A consumer profile's own OpenCode voter wrapper that passes `--standalone` is outside this "
+        "repository and is not changed by it.",
+        id="ac11-consumer-wrapper",
+    ),
+    pytest.param(
+        "After the launch exits successfully, its session id is the id of the one entry of "
+        "`opencode session list --format json --max-count 1000`, run from the launch's working "
+        "directory, whose `title` equals the launch's title.",
+        id="ac2-lookup",
+    ),
+    pytest.param(
+        "Zero or more than one match records `not reported` for both cells; the newest session, or "
+        "a session no other launch has claimed, is never taken in its place.",
+        id="ac2-exactly-one",
+    ),
+    pytest.param(
+        "Two concurrent launches in one project each resolve their own session, because their titles "
+        "differ.",
+        id="ac2-concurrent",
+    ),
+    pytest.param(
+        "Tokens is `.info.tokens` `input` + `output` + `reasoning` of the export, and Tool calls is "
+        "the count of `type: \"tool\"` parts in the `content[]` of `type: \"assistant\"` messages, "
+        "each part counted once.",
+        id="ac1-formula",
+    ),
+    pytest.param(
+        "Cache read and cache write (`.info.tokens.cache`) are excluded from Tokens.",
+        id="ac1-cache-excluded",
+    ),
+    pytest.param(
+        "The figures cover the top-level session only: a child or subagent session the launch spawns "
+        "is a separate session, absent from the list, and its usage is excluded; the spawn itself is "
+        "one tool part of the parent.",
+        id="ac1-top-level-only",
+    ),
+    pytest.param(
+        "A launch that resumes a session by explicit id (`-s <session id>`) exports that id in place "
+        "of the lookup, and both figures are marked `cumulative`: the export covers the whole "
+        "session, and v2.2.0 names no launch-scoped figure, since per-message `tokens` are per step.",
+        id="ac3-resume-cumulative",
+    ),
+    pytest.param(
+        "A missing session id, an export that fails (on v2.2.0 an unknown id exits 1 with `Session "
+        "not found`) or does not parse, or an absent field records `not reported` for the affected "
+        "cell, and the launch counts toward the `partial` label of each affected total; the cell "
+        "never reads `0` and never carries another session's figure.",
+        id="ac10-failure",
+    ),
+    pytest.param(
+        "The list and the export read the launch's usage after its end timestamp is taken, so they "
+        "are not part of its Duration.",
+        id="reads-outside-duration",
+    ),
+    pytest.param(
+        "Only the two derived figures are recorded; the raw export, prompts and tool output are never "
+        "written to the summary, the story or the repository.",
+        id="ac12-privacy",
+    ),
+    pytest.param(
+        "For any other `runtime: command` program, arbitrary `command` programs have no common usage "
+        "contract.",
+        id="other-commands",
+    ),
+]
+
+
+@pytest.mark.parametrize("phrase", OPENCODE_BULLET_FACTS)
+def test_usage_bullet_records_the_opencode_v2_procedure(phrase):
+    assert_states(usage_bullet(), phrase)
+
+
+def test_usage_bullet_never_sums_stream_events_for_opencode_v2():
+    """AC4: outside the two prohibitions, no run output format or stream event is named.
+
+    `opencode session list --format json` is the lookup's own listing format, not a run's.
+    """
+    bullet = flat(usage_bullet())
+    for sentence in OPENCODE_BULLET_FACTS[1:3]:
+        bullet = bullet.replace(flat(sentence.values[0]), "")
+    bullet = bullet.replace("session list --format json", "")
+    for token in ("--format json", "step_finish", "stream event"):
+        assert token not in bullet, f"{token} appears outside its prohibition"
+
+
+def test_usage_bullet_drops_the_old_command_contract_sentence():
+    assert "For `runtime: command`, arbitrary" not in flat(usage_bullet())
+
+
+# SKL-132 AC6: a session-level total is one figure for the launch.
+SESSION_TOTAL_RULES = [
+    pytest.param(
+        "A figure the runtime reports as one total for the launch's whole session, such as a "
+        "session-level export total read after the launch, is one figure for the launch: the "
+        "per-step `not reported` rule above does not apply to it, and it enters the run total once "
+        "per launch.",
+        id="session-total-one-figure",
+    ),
+    pytest.param(
+        "A resumed launch's session-level total also covers the earlier launches of that session, "
+        "so it is `cumulative` under the rule below.",
+        id="resumed-session-total-cumulative",
+    ),
+]
+
+
+@pytest.mark.parametrize("phrase", SESSION_TOTAL_RULES)
+def test_session_level_total_rule(phrase):
+    figures = metrics_prose().split("### Figures", 1)[1].split("\n### ", 1)[0]
+    assert_states(figures, phrase)
+
+
+def test_session_level_total_rule_sits_between_the_per_step_and_cumulative_rules():
+    figures = flat(metrics_prose().split("### Figures", 1)[1].split("\n### ", 1)[0])
+    per_step = figures.index("summing the steps would infer it.")
+    session = figures.index("is one figure for the launch:")
+    cumulative = figures.index("A figure that is cumulative over earlier launches")
+    assert per_step < session < cumulative
 
 
 def test_usage_bullet_states_codex_observations_with_version():
@@ -599,11 +792,6 @@ def test_usage_bullet_marks_other_codex_versions_not_observed():
     assert_states(usage_bullet(), "Any other codex version is `not observed` until it is run.")
 
 
-def test_usage_bullet_states_command_has_no_common_contract():
-    assert_states(
-        usage_bullet(),
-        "For `runtime: command`, arbitrary `command` programs have no common usage contract.",
-    )
 
 
 def test_usage_bullet_distinguishes_not_observed_from_not_reported():
