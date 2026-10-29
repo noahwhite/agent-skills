@@ -328,7 +328,8 @@ METRICS_EXTRAS = (
     "state read and whether step 2 ran; **PRs merged** from every step 2, step 3, and step 4 read of a "
     "merged PR's head and merge commit; **Time to deployment review** from the recorded invocation start "
     "to the read-back that confirms the deployment-review state; **QA rounds** at each spawn in step 3, "
-    "each with its **duration** from that round's launch row; **Failed items** from the step 4 read of "
+    "each with its **duration** copied from that round's launch row; **Failed items** from the step 4 "
+    "read of "
     "each QA round's outcome, in round order; **Fix rounds** from the step 4 branch that hands the failed "
     "items back; and **End state** immediately before the end form, once the run's end state or stop reason is known."
 )
@@ -382,23 +383,27 @@ METRICS_ROLE_END = (
     "'<tokens>' '<tool calls>' >> \"$f\""
 )
 METRICS_ROLE_ROW = (
-    "Record a role row with two commands of its own, neither of them wrapped and neither getting a row of its "
-    f"own: immediately before the launch, `{METRICS_ROLE_START}`, and when it returns, `{METRICS_ROLE_END}`, "
-    "where `<tokens>` and `<tool calls>` are written exactly as the summary's cells read: the number, "
-    "`not reported`, or the number followed by ` cumulative`."
+    "Record a role row with two commands that are not launches, so neither runs in the wrapper above and "
+    f"neither gets a row of its own: immediately before the launch, `{METRICS_ROLE_START}`, and when it "
+    f"returns, `{METRICS_ROLE_END}`, where `<tokens>` and `<tool calls>` are written exactly as the summary's "
+    "cells read: the number, `not reported`, or the number followed by ` cumulative`; a row label is unique, "
+    "is neither `start` nor `end`, and no value these commands carry contains a single quote."
 )
+METRICS_EXTRA_WRITE = "f='<metrics file>'; printf 'extra %s\\t%s\\n' '<slug>' '<value>' >> \"$f\""
 METRICS_EXTRAS_RECORD = (
-    "Record every extra before the end form launches, each as one `extra <slug>\\t<value>` line in the metrics "
-    "file: the slugs are `qa-rounds`, `failed-items`, `fix-rounds`, `prs-merged`, `start`, "
-    "`time-to-deployment-review`, `qa-round-durations` and `end-state`, a value is one physical line with a tab "
-    "written as a space and a `;` inside a per-round value written as `\\;`, a value the run did not observe "
-    "is `not reported` and one the reference marks `not applicable` is that, and the extra lines get no row of "
-    "their own."
+    "Record every extra before the end form launches, with a command that is not a launch and gets no row, "
+    f"each as one `extra <slug>\\t<value>` line written as `{METRICS_EXTRA_WRITE}`, where the slug is one of "
+    "`qa-rounds`, `failed-items`, `fix-rounds`, `prs-merged`, `start`, `time-to-deployment-review`, "
+    "`qa-round-durations` and `end-state`; a value is one physical line, a `;` inside a per-round value is "
+    "written as `\\;`, a value the run did not observe is `not reported`, one the reference marks `not "
+    "applicable` is that, and no value contains a single quote."
 )
 METRICS_END_INTRO = (
     f"Immediately before the closing report, the last launch is the end form `{METRICS_END_LAUNCH}`, where "
     "`<skill dir>` is the absolute directory your runtime loaded this skill from; it records `invocation_end` and "
-    "prints the summary's table, the recorded extras and Totals from the metrics file."
+    "prints the summary's table, the recorded extras and Totals from the metrics file, and it writes nothing and "
+    "reports the line when an extra slug, a figure cell or a role label breaks this format, so fix the record and "
+    "run it again."
 )
 METRICS_END_VERBATIM = (
     "The summary in the closing report is the template's heading line, a blank line, and then the end form's output "
@@ -967,7 +972,7 @@ def test_a_cumulative_figure_is_marked_and_excluded_per_figure(tmp_path: Path, a
         + role_start("1793218300.000000000", "senior-engineer-1", "opencode", "deepseek/deepseek-v4-pro", "high")
         + role_end("1793218900.000000000", "senior-engineer-1", "260000 cumulative", "5")
         + role_start("1793219000.000000000", "qa-agent-round-1", "opencode", "deepseek/deepseek-flash", "high")
-        + role_end("1793219200.000000000", "qa-agent-round-1", "not reported", "not reported cumulative")
+        + role_end("1793219200.000000000", "qa-agent-round-1", "not reported", "not reported")
     )
     result = run_end_form(record, awk, tmp_path)
     assert result.returncode == 0 and result.stderr == ""
@@ -1056,6 +1061,42 @@ def test_the_recorded_extras_print_one_line_each_in_the_reference_order(tmp_path
 
 
 @pytest.mark.parametrize("awk", AWKS)
+def test_the_documented_extra_command_writes_a_line_the_summary_prints(tmp_path: Path, awk: str) -> None:
+    record = tmp_path / "metrics.txt"
+    command = METRICS_EXTRA_WRITE.replace("<metrics file>", str(record))
+    command = command.replace("<slug>", "failed-items").replace("<value>", "round 1: 2|3; round 2: 0")
+    assert subprocess.run(["bash", "-c", command], capture_output=True, text=True).returncode == 0
+    result = run_end_form(record, awk, tmp_path)
+    assert result.returncode == 0 and result.stderr == ""
+    assert "Failed items: round 1: 2|3; round 2: 0\n" in result.stdout, (
+        "an extra value is not a table cell, so its pipes print as written"
+    )
+
+
+def test_the_extra_labels_and_their_order_match_the_vendored_reference() -> None:
+    text = (ROOT / "skills" / "story-to-done" / "references" / "metrics.md").read_text()
+    block = text.split("### `story-to-done` extras", 1)[1].split("\n### ", 1)[0]
+    assert re.findall(r"^- \*\*(.+?):\*\*", block, re.MULTILINE) == list(EXTRA_LABELS.values())
+
+
+@pytest.mark.parametrize("awk", AWKS)
+def test_an_end_line_without_its_start_line_is_lost_not_a_fabricated_duration(tmp_path: Path, awk: str) -> None:
+    record = tmp_path / "metrics.txt"
+    record.write_text("end 1793218500.000000000 orphan\t5\t6\n")
+    result = run_end_form(record, awk, tmp_path)
+    assert result.returncode == 0 and result.stderr == ""
+    assert "| orphan | not reported | not reported | not reported | lost | 5 | 6 |" in result.stdout
+
+
+def test_a_role_row_may_not_take_the_reserved_start_or_end_label(tmp_path: Path) -> None:
+    record = tmp_path / "metrics.txt"
+    record.write_text(role_start("1793218300.000000000", "start", "opencode", "m", "high"))
+    result = subprocess.run(["bash", "-c", end_form(record)], capture_output=True, text=True)
+    assert result.returncode != 0 and result.stdout == ""
+    assert "the reserved label start" in result.stderr
+
+
+@pytest.mark.parametrize("awk", AWKS)
 def test_an_empty_extra_value_reads_not_reported(tmp_path: Path, awk: str) -> None:
     record = tmp_path / "metrics.txt"
     record.write_text(extra_line("fix-rounds", ""))
@@ -1064,18 +1105,21 @@ def test_an_empty_extra_value_reads_not_reported(tmp_path: Path, awk: str) -> No
     assert "Fix rounds: not reported\n" in result.stdout
 
 
+def test_a_figure_outside_the_cell_grammar_fails_the_end_form(tmp_path: Path) -> None:
+    record = tmp_path / "metrics.txt"
+    record.write_text(role_start("1793218300.000000000", "eng", "opencode", "m", "high")
+                      + role_end("1793218400.000000000", "eng", "1,204", "2"))
+    result = subprocess.run(["bash", "-c", end_form(record)], capture_output=True, text=True)
+    assert result.returncode != 0 and result.stdout == "", "a bad cell must not print a summary"
+    assert "the figure 1,204" in result.stderr
+
+
 def test_an_unknown_extra_slug_fails_the_end_form(tmp_path: Path) -> None:
     record = tmp_path / "metrics.txt"
     record.write_text(extra_line("qa-round", "2"))
     result = subprocess.run(["bash", "-c", end_form(record)], capture_output=True, text=True)
     assert result.returncode != 0 and result.stdout == "", "an unknown slug must not print a summary"
     assert "unknown extra slug qa-round" in result.stderr
-
-
-def test_every_display_label_matches_the_vendored_reference() -> None:
-    text = (ROOT / "skills" / "story-to-done" / "references" / "metrics.md").read_text()
-    for label in EXTRA_LABELS.values():
-        assert f"**{label}:**" in text, f"the reference names no extra {label!r}"
 
 
 @pytest.mark.parametrize("awk", AWKS)
@@ -1095,7 +1139,7 @@ def test_an_extra_keeps_its_escaped_semicolon_and_a_pipe_is_escaped_in_the_cells
 
 def end_form_program() -> str:
     script = SUMMARY_SCRIPT.read_text()
-    return script[script.index("awk '") + 5 : script.rindex("' \"$1\"")]
+    return script[script.rindex("awk '") + 5 : script.rindex("' \"$1\"")]
 
 
 def test_the_end_form_works_out_durations_exactly() -> None:
