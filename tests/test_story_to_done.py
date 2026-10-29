@@ -383,13 +383,13 @@ METRICS_WRAPPED_WHOLE = (
     'chained before or after the wrapper in the same launch.'
 )
 METRICS_SCRIPT_ONCE = (
-    'The summary script runs only as the end form, once per invocation and again only after it reports an '
-    'invalid record, never as a preview, because every completed run appends another `invocation_end`.'
+    'The summary script runs only as the end form, once per invocation and again only after a run that exits '
+    'nonzero, never as a preview, because every run that exits 0 appends another `invocation_end`.'
 )
 METRICS_NO_EDIT = (
-    'The coordinator never edits, rewrites, or deletes a line of the metrics file; fixing an invalid '
-    'record means correcting only the format of the line the end form names, in place, keeping every '
-    'value as it was recorded.'
+    'The coordinator never edits, rewrites, or deletes a line of the metrics file, with one exception: when '
+    'the end form reports an invalid record, the coordinator corrects only the format of the line holding '
+    'the value it names, in place, keeping every value as it was recorded.'
 )
 METRICS_READ_BACK_RESULT = (
     'The read-back command compares the comment body with the summary body file exactly, byte for byte, '
