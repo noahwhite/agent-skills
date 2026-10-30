@@ -364,10 +364,6 @@ Each names the reviewer (Codex GPT-6 Sol) and both adjudicators (DeepSeek V4 Pro
 Each lists the round's findings, the verdict per finding, the fix commit for each valid finding, and why the round was not posted at the time.
 None begins `Review of record`, so [review 5707752059](https://github.com/noahwhite/agent-skills/pull/109#pullrequestreview-5707752059) on merge head `1fd8a9eeed039728323d12bc6ff80d33cb4f2dc9`, which has no findings, stays PR #109's review of record.
 The findings in each post match the reviewer output saved for that round, the DeepSeek V4 Pro verdicts match that round's saved adjudication report, and the Opus 5.5 verdicts match the engineer's checklist from the time.
-Every finding ruled valid has a fix commit in PR #109 before the merge head that touches the file the finding names: `0076af5`, `7b11347`, `c64635e`, `987fc99`, `7e73ac5`, and `1fd8a9e`.
-
-### Incidental
-
-Review 5707454673 on PR #109 links its findings to local scratch paths, so those links are dead; no acceptance criterion or Definition of Done item covers it.
+Every finding ruled valid has a fix commit in PR #109, up to and including the merge head, that touches the file the finding names: `0076af5`, `7b11347`, `c64635e`, `987fc99`, `7e73ac5`, and `1fd8a9e`.
 
 Decision: Done.
