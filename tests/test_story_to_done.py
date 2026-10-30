@@ -386,13 +386,13 @@ METRICS_SCRIPT_ONCE = (
     'The summary script runs only as the end form, never as a preview, because each run that writes its row '
     'appends another `invocation_end`: it runs once per invocation, again after it reports an invalid record, '
     'and again after any other nonzero exit, but first the coordinator reads the metrics file with the '
-    'runtime\'s file-read tool and, when its last two lines are the end form\'s own `start` and `end` lines '
-    'labelled `end`, removes those two lines with the runtime\'s file-edit tool, so the record keeps one '
-    '`invocation_end`.'
+    'runtime\'s file-read tool and removes, with the runtime\'s file-edit tool, what the failed run left at its '
+    'end: a last line with no line ending, then the `start` line labelled `end` and any `end` line labelled '
+    '`end` after it, so the record keeps one `invocation_end`.'
 )
 METRICS_NO_EDIT = (
     'The coordinator never edits, rewrites, or deletes a line of the metrics file other than the end form\'s '
-    'own two lines as above, with one exception: when '
+    'own lines as above, with one exception: when '
     'the end form reports an invalid record, the coordinator corrects, in place, only the value it names and '
     'keeps every other value as it was recorded: a figure or an extra slug gets only its format corrected, and '
     'a row label used twice or reserved gets a new label, under the row-label rule above, on the `start` and '
@@ -1245,16 +1245,19 @@ def test_a_reused_role_label_fails_the_end_form(tmp_path: Path) -> None:
         role_start("1793218300.000000000", "qa-round-1", "opencode", "m", "high")
         + role_end("1793218400.000000000", "qa-round-1", "1", "2")
         + role_start("1793218500.000000000", "qa-round-1", "opencode", "m", "high")
+        + role_end("1793218650.000000000", "qa-round-1", "3", "4")
     )
     result = subprocess.run(["bash", "-c", end_form(record)], capture_output=True, text=True)
     assert result.returncode != 0 and result.stdout == "", "a reused label must not print a summary"
     assert "the label qa-round-1 is used twice" in result.stderr
     lines = record.read_text().splitlines(keepends=True)
-    lines[2] = lines[2].replace(" qa-round-1\t", " qa-round-2\t", 1)
+    for later in (2, 3):
+        lines[later] = lines[later].replace(" qa-round-1\t", " qa-round-2\t", 1)
     record.write_text("".join(lines))
     result = subprocess.run(["bash", "-c", end_form(record)], capture_output=True, text=True)
     assert result.returncode == 0 and result.stderr == "", "relabelling the later row recovers the record"
-    assert "| qa-round-1 |" in result.stdout and "| qa-round-2 |" in result.stdout
+    assert "| qa-round-1 | opencode | m | high | 100.000000000s | 1 | 2 |" in result.stdout
+    assert "| qa-round-2 | opencode | m | high | 150.000000000s | 3 | 4 |" in result.stdout
 
 
 def test_a_role_row_may_not_take_the_reserved_start_or_end_label(tmp_path: Path) -> None:
@@ -1324,24 +1327,47 @@ def test_the_end_form_works_out_durations_exactly() -> None:
         assert result.stdout == expected, awk
 
 
-@pytest.mark.skipif(not Path("/dev/full").exists(), reason="needs /dev/full to make the summary write fail")
-@pytest.mark.parametrize("awk", AWKS)
-def test_removing_the_end_forms_own_lines_after_a_failed_print_keeps_one_invocation_end(tmp_path: Path, awk: str) -> None:
-    record = tmp_path / "metrics.txt"
-    record.write_text("start 1793218198.0 start\nend 1793218199.0 start\n")
-    before = record.read_text()
+def remove_what_a_failed_end_form_left(text: str) -> str:
+    lines = text.splitlines(keepends=True)
+    if lines and not lines[-1].endswith("\n"):
+        lines.pop()
+    if lines and re.fullmatch(r"end \S+ end\n", lines[-1]):
+        lines.pop()
+    if lines and re.fullmatch(r"start \S+ end\n", lines[-1]):
+        lines.pop()
+    return "".join(lines)
+
+
+def end_form_after_failed_print(record: Path, awk: str, tmp_path: Path) -> None:
     bin_dir = tmp_path / "awk-bin"
-    bin_dir.mkdir()
-    (bin_dir / "awk").symlink_to(awk)
+    bin_dir.mkdir(exist_ok=True)
+    link = bin_dir / "awk"
+    link.unlink(missing_ok=True)
+    link.symlink_to(awk)
     env = {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
     failed = subprocess.run(["bash", "-c", end_form(record) + " >/dev/full"], capture_output=True, text=True, env=env)
     assert failed.returncode != 0, "an end form whose summary cannot be written exits nonzero"
-    lines = record.read_text().splitlines(keepends=True)
-    assert [line.split(" ")[0] + " " + line.split(" ")[2] for line in lines[-2:]] == ["start end\n", "end end\n"], (
-        "the failed run has recorded its own row as the last two lines"
-    )
+
+
+@pytest.mark.skipif(not Path("/dev/full").exists(), reason="needs /dev/full to make the summary write fail")
+@pytest.mark.parametrize("awk", AWKS)
+@pytest.mark.parametrize("left", ["whole row", "start line only", "start line and a cut end line", "cut start line"])
+def test_removing_what_a_failed_end_form_left_keeps_one_invocation_end(tmp_path: Path, awk: str, left: str) -> None:
     assert METRICS_SCRIPT_ONCE in metrics_lines()
-    record.write_text("".join(lines[:-2]))
+    record = tmp_path / "metrics.txt"
+    before = "start 1793218198.0 start\nend 1793218199.0 start\n"
+    record.write_text(before)
+    end_form_after_failed_print(record, awk, tmp_path)
+    whole = record.read_text()
+    assert [line.split(" ")[0] + " " + line.split(" ")[2] for line in whole.splitlines()[-2:]] == ["start end", "end end"]
+    start_line = whole.splitlines(keepends=True)[-2]
+    record.write_text(before + {
+        "whole row": whole[len(before):],
+        "start line only": start_line,
+        "start line and a cut end line": start_line + "end 17932",
+        "cut start line": start_line[:9],
+    }[left])
+    record.write_text(remove_what_a_failed_end_form_left(record.read_text()))
     assert record.read_text() == before
     rerun = run_end_form(record, awk, tmp_path)
     assert rerun.returncode == 0 and rerun.stderr == ""
