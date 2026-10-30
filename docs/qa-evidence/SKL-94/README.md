@@ -345,23 +345,9 @@ Outcome: every acceptance criterion and Definition of Done item is met.
 | C4 verified end to end | Verified | Verified in Round 5 at `1fd8a9eeed039728323d12bc6ff80d33cb4f2dc9`; the skill is unchanged since, so the runs are not repeated. |
 | DoD all acceptance criteria met | Verified | C1 to C4. |
 | DoD tests written and passing | Verified | C3. |
-| DoD independently reviewed | Verified | The four unposted PR #109 rounds now have posted reviews that meet the product owner's conditions; details below. |
+| DoD independently reviewed | Verified | The product owner's condition holds: PR #109's four unposted rounds now have late `COMMENTED` reviews bound to their heads, [5708154066](https://github.com/noahwhite/agent-skills/pull/109#pullrequestreview-5708154066) on `8278159`, [5708154176](https://github.com/noahwhite/agent-skills/pull/109#pullrequestreview-5708154176) on `0076af5`, [5708154293](https://github.com/noahwhite/agent-skills/pull/109#pullrequestreview-5708154293) on `7b11347`, and [5708154420](https://github.com/noahwhite/agent-skills/pull/109#pullrequestreview-5708154420) on `c64635e`, each naming Codex GPT-6 Sol and both adjudicators (DeepSeek V4 Pro, Opus 5.5) with its findings, verdicts, fix commits, and why it was not posted at the time, and none beginning `Review of record`, so [review 5707752059](https://github.com/noahwhite/agent-skills/pull/109#pullrequestreview-5707752059) on merge head `1fd8a9eeed039728323d12bc6ff80d33cb4f2dc9`, with no findings, stays the review of record; the findings and verdicts match each round's saved reviewer and DeepSeek V4 Pro output and the engineer's checklist for Opus 5.5, and every valid finding has a fix commit in PR #109 up to and including the merge head, as the tracker attachment records. |
 | DoD docs updated | Verified | C2. |
 | DoD staging | Verified | No staging target exists; C4 stands in for it and is met. |
 | DoD no critical bugs or regressions | Verified | The full suite and CI are green. |
-
-### Independent review of PR #109
-
-The product owner ruled on the story that late posts of the four unposted rounds meet this item if each carries the details Round 5 listed, the engineer explains why the round was not posted at the time, and no post begins `Review of record`.
-PR #109 now has these four reviews, each in state `COMMENTED` with `commit_id` equal to the full head SHA on its first line:
-
-- [Review 5708154066](https://github.com/noahwhite/agent-skills/pull/109#pullrequestreview-5708154066) on `827815964fe675c63473333672ebdd50d9f501bf`.
-- [Review 5708154176](https://github.com/noahwhite/agent-skills/pull/109#pullrequestreview-5708154176) on `0076af5a251872984c82e6f0e85d9379ca32525e`.
-- [Review 5708154293](https://github.com/noahwhite/agent-skills/pull/109#pullrequestreview-5708154293) on `7b113472226936ffb6f2036ff03ed0bdc08666a3`.
-- [Review 5708154420](https://github.com/noahwhite/agent-skills/pull/109#pullrequestreview-5708154420) on `c64635e0d2ce4d4f117f65e634eedf8884469b3b`.
-
-Each names the reviewer (Codex GPT-6 Sol) and both adjudicators (DeepSeek V4 Pro and Opus 5.5), and lists the round's findings, verdicts, fix commits, and why it was not posted at the time.
-None begins `Review of record`, so [review 5707752059](https://github.com/noahwhite/agent-skills/pull/109#pullrequestreview-5707752059) on merge head `1fd8a9eeed039728323d12bc6ff80d33cb4f2dc9`, which has no findings, stays PR #109's review of record.
-Each valid finding's fix commit (`0076af5`, `7b11347`, `c64635e`, `987fc99`, `7e73ac5`, `1fd8a9e`) is in PR #109 up to and including the merge head and touches the file the finding names.
 
 Decision: Done.
