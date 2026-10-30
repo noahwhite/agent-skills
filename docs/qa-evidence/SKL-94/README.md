@@ -326,7 +326,7 @@ No clause of C1 to C4 or the Definition of Done covers that update, so this roun
 
 ### Failed item for the engineer
 
-DoD independently reviewed: post the review of each of the four unposted PR #109 rounds on PR #109 at the head it reviewed, each with its findings, the verdict per finding, and the fix commit for each valid one.
+DoD independently reviewed: post the review of each of the four unposted PR #109 rounds on PR #109 at the head it reviewed, as a review of record in the format of `references/code-review.md` (first line `Review of record <full head SHA>`, reviewer and adjudicator names and models), each with its findings, the verdict per finding, and the fix commit for each valid one.
 PR #109 is merged, so posting them now cannot undo the breach of the rule that each round posts before the merge; whether the late posts meet this item is a product-owner decision, recorded on the story before the next round rules on this item.
 
 Decision: In Progress; C4 is met at `1fd8a9eeed039728323d12bc6ff80d33cb4f2dc9`, and its runs need no rerun unless the fix changes the skill.
