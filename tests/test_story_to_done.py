@@ -533,7 +533,7 @@ METRICS_END_INTRO = (
     f"`{METRICS_END_LAUNCH}`, where "
     "`<skill dir>` is the absolute directory your runtime loaded this skill from; it records `invocation_end` and "
     "prints the summary's table, the recorded extras and Totals from the metrics file, and it writes nothing and "
-    "reports the line when an extra slug, a figure cell or a role label breaks this format, so fix the record and "
+    "reports the line when an extra slug, a figure cell or a row label breaks this format, so fix the record and "
     "run it again."
 )
 METRICS_END_VERBATIM = (
@@ -1267,6 +1267,23 @@ def test_a_role_row_may_not_take_the_reserved_start_or_end_label(tmp_path: Path)
     result = subprocess.run(["bash", "-c", end_form(record)], capture_output=True, text=True)
     assert result.returncode != 0 and result.stdout == ""
     assert "the reserved label start" in result.stderr
+
+
+def test_a_command_row_labelled_end_fails_the_end_form_and_is_relabelled(tmp_path: Path) -> None:
+    record = tmp_path / "metrics.txt"
+    record.write_text(
+        "start 1793218100.000000000 start\nend 1793218101.000000000 start\n"
+        "start 1793218102.000000000 end\nend 1793218110.000000000 end\n"
+    )
+    before = record.read_text()
+    result = subprocess.run(["bash", "-c", end_form(record)], capture_output=True, text=True)
+    assert result.returncode != 0 and result.stdout == "", "a command row labelled end must not print a summary"
+    assert "the reserved label end" in result.stderr
+    assert record.read_text() == before, "an invalid-record report leaves the metrics file as it was"
+    record.write_text(before.replace(" end\n", " push-branch\n"))
+    result = subprocess.run(["bash", "-c", end_form(record)], capture_output=True, text=True)
+    assert result.returncode == 0 and result.stderr == "", "relabelling the command row recovers the record"
+    assert "| push-branch | command | not set | not set | 8.000000000s | not reported | not reported |" in result.stdout
 
 
 def test_a_role_row_labelled_end_survives_the_cleanup_and_is_relabelled(tmp_path: Path) -> None:
