@@ -262,3 +262,65 @@ Third, a duplicate row label has no recovery path under the rule that forbids ed
 The PR #106 merge stays recorded here as a breach of the same-PR rule, which no later PR undoes; whether a fix PR whose review of record shows every finding ruled valid fixed before merge meets this item despite that breach is a product-owner decision, recorded on the story before the next round rules on this item.
 
 Decision: In Progress; C4 is met at `91a6c4fcf703e4511f5c07ffd0adafa61b84e5df`, and the next round re-runs it at the fix head.
+
+## Round 5, 2026-10-30
+
+The environment under test is merged `main`, build `617dc2edeb75a578fe53681248f5ee9182f70d72` from [PR #109](https://github.com/noahwhite/agent-skills/pull/109), which has the same tree as PR head `1fd8a9eeed039728323d12bc6ff80d33cb4f2dc9`.
+Both live runs load `skills/story-to-done/SKILL.md` and its references from a detached checkout at that PR head, not from the installed skill, and each coordinator runs as a top-level headless Claude Code session.
+Fixtures are SKL-148 (Run 1, created In Deployment Review) and SKL-149 (Run 2, created Blocked), both `[Tabletop fixture]` issues in SKL.
+There is no visual surface; structured assertions and raw command output are the evidence, without screenshots.
+The tracker record is QA comment `ee12e718` on SKL-94 and its attachment `SKL-94 QA round 5 assertions (2026-10-30)`.
+
+Outcome: every acceptance criterion and Definition of Done item is met, so the story moves to Done once this evidence merges.
+
+| Item | Verdict | Evidence |
+|---|---|---|
+| C1 post the summary | Verified | Every C1 phrase check passes in the shipped `SKILL.md`, the removed sentences are absent, and the end-form sentence precedes the post sentence; no SKL-94 PR changed anything under `shared/`, a vendored reference, or todo tracking, and the only `metrics-summary.sh` change is the one line in PR #109 that rejects a row labelled `end`, the C1 exception the product owner allowed on the story; the live behaviour is recorded under C4. |
+| C2 docs | Verified | The README row clause, the kept switch phrase, and the step 0 seed sentence are present, and the old sentence is absent. |
+| C3 tests | Verified | 812 tests pass, including the named guard tests, and `vendor_shared.py --check` exits 0; [CI run 40996697847](https://github.com/noahwhite/agent-skills/actions/runs/40996697847) succeeded on the PR head and [CI run 40997677624](https://github.com/noahwhite/agent-skills/actions/runs/40997677624) on merged `main`. |
+| C4 verified end to end | Verified | Both comments equal the summary in their closing report byte for byte, have one row per launch in launch order, and were read back once with a `true` result; details below. |
+| DoD all acceptance criteria met | Verified | C1 to C4. |
+| DoD tests written and passing | Verified | C3. |
+| DoD independently reviewed | Verified | The product owner ruled on the story that a fix PR whose review of record shows every valid finding fixed meets this item despite the PR #106 breach; details below. |
+| DoD docs updated | Verified | C2. |
+| DoD staging | Verified | No staging target exists; C4 stands in for it and is met. |
+| DoD no critical bugs or regressions | Verified | The full suite and CI are green. |
+
+### Independent review of PR #109
+
+PR #109 fixes the three Low findings from the PR #106 review of record that Round 4 found merged unfixed.
+[Review 5707752059](https://github.com/noahwhite/agent-skills/pull/109#pullrequestreview-5707752059) binds merge head `1fd8a9eeed039728323d12bc6ff80d33cb4f2dc9` (Codex GPT-6 Sol reviewer, DeepSeek V4 Pro and Opus 5.5 adjudicators) and has no findings.
+[Review 5707454673](https://github.com/noahwhite/agent-skills/pull/109#pullrequestreview-5707454673) on `987fc994088c683f2e8e87ffe315e40e4cad2660` rules two Low findings valid, and commits `7e73ac5a` and `1fd8a9ee`, inside the delta the merge-head review covers, fix them.
+The branch had four more review rounds, on `8278159`, `0076af5`, `7b11347`, and `c64635e`, and every finding ruled valid in them was fixed before the merge.
+
+### Run 1 (SKL-148)
+
+The coordinator read SKL-148 as In Deployment Review and launched one QA round, which found no failed item.
+The fixture QA merged evidence [PR #110](https://github.com/noahwhite/agent-skills/pull/110) on reviewed head `99bcc1bea4dcfe5180b4656ce9684df82317424c` and set SKL-148 to Done.
+The coordinator posted comment `6fd9c64b` on SKL-148, and the closing report names it.
+The comment is 1104 bytes and equals the summary in the closing report and the summary body file byte for byte.
+Its 6 rows, in launch order, are `start`, two wrapped commands, the role row `qa round 1` (630.261495673s, 99070 tokens, 52 tool calls), one more wrapped command, and `end`.
+The coordinator made exactly those 6 launches; it read the metrics file with the file-read tool before the end form, ran the end form once, and did not edit the metrics file, which holds one `invocation_end` pair.
+Every Tokens, Tool calls, and Duration cell is well formed, all eight extras are filled, and the elapsed wall-clock is 659.352532377s.
+After the end form it ran only the post and one read-back, which printed `true`.
+Neither the comment nor the closing report holds a local or scratch path or a token pattern.
+Run end state: Done; QA then canceled SKL-148 and read it back as Canceled.
+
+### Run 2 (SKL-149)
+
+The coordinator read SKL-149 as Blocked and stopped at step 1; no senior engineer or QA agent was spawned.
+It posted comment `25b7a6f5` on SKL-149, and the closing report names it.
+The comment is 963 bytes and equals the closing report's summary and the summary body file byte for byte.
+Its 4 rows are `start`, the wrapped commands `check-env` and `read-story`, and `end`, one per launch.
+It carries the stop reason, an elapsed wall-clock of 23.075754925s, all eight extras, and the totals, and does not read `no launches`.
+After the end form it ran only the post and one read-back, which printed `true`, and the coordinator marked its post item completed.
+Neither the comment nor the closing report holds a local or scratch path or a token pattern.
+Run end state: stopped at step 1, story Blocked; QA then canceled SKL-149 and read it back as Canceled.
+
+### Observations outside the acceptance criteria
+
+PR #109 posted two of its six review rounds as PR reviews, although the review rules have each round post one.
+Review 5707454673 links its findings to local scratch paths, so those links do not resolve.
+The Run 1 coordinator did not update its checklist after the first write, so its post item stayed unmarked, which the skill requires after the read-back.
+
+Decision: Done, once this evidence merges.
