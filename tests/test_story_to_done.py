@@ -384,15 +384,15 @@ METRICS_WRAPPED_WHOLE = (
 )
 METRICS_SCRIPT_ONCE = (
     'The summary script runs only as the end form, once per invocation and again only after a run that exits '
-    'nonzero, never as a preview, because its first run that passes the record check records `invocation_end`; '
-    'a later run finds that row, appends nothing, and prints the summary from the record.'
+    'nonzero, never as a preview, because a run that exits 0 has printed the summary and then appended '
+    '`invocation_end`, and a run that exits nonzero has appended nothing.'
 )
 METRICS_NO_EDIT = (
     'The coordinator never edits, rewrites, or deletes a line of the metrics file, with one exception: when '
     'the end form reports an invalid record, the coordinator corrects, in place, only the value it names and '
     'keeps every other value as it was recorded: a figure or an extra slug gets only its format corrected, and '
-    'a row label used twice or reserved gets a label unique within the invocation on the `start` and `end` '
-    'lines of the later row that carries it.'
+    'a row label used twice or reserved gets a new label, under the row-label rule above, on the `start` and '
+    '`end` lines of the later row that carries it.'
 )
 METRICS_READ_BACK_RESULT = (
     'The read-back command compares the comment body with the summary body file exactly, byte for byte, '
@@ -1245,10 +1245,9 @@ def test_a_reused_role_label_fails_the_end_form(tmp_path: Path) -> None:
     result = subprocess.run(["bash", "-c", end_form(record)], capture_output=True, text=True)
     assert result.returncode != 0 and result.stdout == "", "a reused label must not print a summary"
     assert "the label qa-round-1 is used twice" in result.stderr
-    assert METRICS_NO_EDIT in metrics_lines()
     lines = record.read_text().splitlines(keepends=True)
-    renamed = role_start("1793218500.000000000", "qa-round-2", "opencode", "m", "high")
-    record.write_text("".join(lines[:2]) + renamed + role_end("1793218600.000000000", "qa-round-2", "3", "4"))
+    lines[2] = lines[2].replace(" qa-round-1\t", " qa-round-2\t", 1)
+    record.write_text("".join(lines))
     result = subprocess.run(["bash", "-c", end_form(record)], capture_output=True, text=True)
     assert result.returncode == 0 and result.stderr == "", "relabelling the later row recovers the record"
     assert "| qa-round-1 |" in result.stdout and "| qa-round-2 |" in result.stdout
@@ -1321,18 +1320,31 @@ def test_the_end_form_works_out_durations_exactly() -> None:
         assert result.stdout == expected, awk
 
 
+@pytest.mark.skipif(not Path("/dev/full").exists(), reason="needs /dev/full to make the summary write fail")
 @pytest.mark.parametrize("awk", AWKS)
-def test_a_rerun_of_the_end_form_appends_no_second_invocation_end(tmp_path: Path, awk: str) -> None:
+def test_an_end_form_that_fails_to_print_records_no_row_and_its_rerun_records_one(tmp_path: Path, awk: str) -> None:
     record = tmp_path / "metrics.txt"
     record.write_text("start 1793218198.0 start\nend 1793218199.0 start\n")
-    first = subprocess.run(["bash", "-c", end_form(record) + " | head -c 0"], capture_output=True, text=True)
-    assert first.stdout == ""
-    after_first = record.read_text()
-    assert after_first.count(" end\n") == 2, "the first run records the end form's row"
+    before = record.read_text()
+    bin_dir = tmp_path / "awk-bin"
+    bin_dir.mkdir()
+    (bin_dir / "awk").symlink_to(awk)
+    env = {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
+    failed = subprocess.run(["bash", "-c", end_form(record) + " >/dev/full"], capture_output=True, text=True, env=env)
+    assert failed.returncode != 0, "an end form whose summary cannot be written exits nonzero"
+    assert record.read_text() == before, "an end form that exits nonzero records no row"
     rerun = run_end_form(record, awk, tmp_path)
     assert rerun.returncode == 0 and rerun.stderr == ""
-    assert record.read_text() == after_first, "a rerun appends no second invocation_end"
-    assert rerun.stdout.count("| end |") == 1
+    rows = read_rows(record)
+    assert [(kind, label) for kind, _, label in rows] == [
+        ("start", "start"), ("end", "start"), ("start", "end"), ("end", "end")
+    ], "the rerun records exactly one invocation_end"
+    stamps = recorded(record)
+    start, end = stamps["start", "start"], stamps["end", "end"]
+    expected_rows = [(label, seconds(stamps["start", label], stamps["end", label])) for label in ("start", "end")]
+    assert rerun.stdout == expected_summary(expected_rows, start, end, seconds(start, end)), (
+        "the rerun prints the whole summary, with the row it records"
+    )
 
 
 def test_compatibility_names_jq_for_the_linear_cli_read_back() -> None:
