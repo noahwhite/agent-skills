@@ -14,6 +14,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 SKILL = ROOT / "skills" / "story-to-done" / "SKILL.md"
+PROTOCOL = ROOT / "skills" / "story-to-done" / "references" / "metrics-protocol.md"
 MANIFEST = json.loads((ROOT / "skills.json").read_text())
 
 
@@ -585,7 +586,8 @@ def test_metrics_section_opens_on_only_and_links_the_reference() -> None:
     text = SKILL.read_text()
     body = section(text, "Metrics").strip()
     assert body.startswith(METRICS_OPENING), "the Metrics section must open with its on-only condition"
-    assert METRICS_POST in body.splitlines(), "the Metrics section must post the summary on the on path only"
+    assert METRICS_POINTER in body.splitlines(), "the Metrics section must point at the on-only run rules"
+    assert METRICS_POST in PROTOCOL.read_text().splitlines(), "the protocol must post the summary on the on path only"
     assert "](references/metrics.md)" not in section(text, "Read first")
 
 
@@ -599,6 +601,12 @@ OFF_PATH = (
 # Every line of the skill that touches metrics, the closing report, or a tracker write, pinned exactly: adding, extending, or rewording
 # metrics content anywhere (Arguments and Metrics included) fails until it is pinned here.
 METRICS_WORDS = re.compile(r"metric|figure|token|tool.call|wall-clock|duration|usage|summar|total|cost|switch|\btim(?:e|ing|er|estamp)\w*|elapsed|clock|latency|closing report|tracker write|\bbackground\b", re.IGNORECASE)
+METRICS_POINTER = (
+    "The run rules for a `metrics=on` run - where the figures live, timed launches, extras, the start form, the "
+    "command wrapper, the end form, the summary post, and the closing report - are in "
+    "[references/metrics-protocol.md](references/metrics-protocol.md); read it with the runtime's file-read tool, "
+    "which launches nothing, together with `references/metrics.md`, before the first command is launched."
+)
 METRICS_LINES = [
     METRICS_ROW,
     '- `metrics` is given as `metrics=on` or `metrics=off`, or in plain words: "with metrics" and "metrics on" '
@@ -610,14 +618,25 @@ METRICS_LINES = [
     "## Metrics",
     METRICS_OPENING + " once the story ID is known: it is the single home for what a `story-to-done` run "
     "collects and reports, and this file does not restate it.",
+    METRICS_POINTER,
+    METRICS_USAGE,
+    METRICS_NOTHING_BEFORE_START,
+    METRICS_STEP0,
+    "Report the story identifier, its final state, the four resolved model and effort values and the "
+    "`metrics: on|off` line, each PR, the number of QA rounds with the items fixed in each, where QA recorded "
+    "its evidence, and any incidental defects left open.",
+    BOUNDARIES_ONLY_WRITE,
+]
+
+PROTOCOL_LINES = [
+    "# Metrics run rules (story-to-done)",
+    "Read this only when `metrics` is on.",
     METRICS_LOCATION,
     METRICS_NEVER_NAMED,
-    METRICS_USAGE,
     METRICS_TIMED_LAUNCHES,
     "  " + METRICS_LAUNCH_POINTS,
     METRICS_EXTRAS,
     METRICS_BRIEF_EXCLUSION,
-    METRICS_NOTHING_BEFORE_START,
     METRICS_START,
     *[line for line in METRICS_START_BLOCK if METRICS_WORDS.search(line)],
     METRICS_COMMAND_ROWS,
@@ -651,11 +670,6 @@ METRICS_LINES = [
     METRICS_POST_NO_SECRETS,
     METRICS_ONLY_WRITE,
     METRICS_NO_SECRETS,
-    METRICS_STEP0,
-    "Report the story identifier, its final state, the four resolved model and effort values and the "
-    "`metrics: on|off` line, each PR, the number of QA rounds with the items fixed in each, where QA recorded "
-    "its evidence, and any incidental defects left open.",
-    BOUNDARIES_ONLY_WRITE,
 ]
 
 
@@ -666,6 +680,8 @@ def test_metrics_off_changes_nothing_but_the_metrics_line() -> None:
     found = [line for line in body.splitlines() if METRICS_WORDS.search(line)]
     assert found == METRICS_LINES, "metrics content outside the pinned switch, line, and on-only lines"
     assert not METRICS_WORDS.search(text.split("\n---\n", 1)[0]), "the front matter adds metrics content"
+    proto = [line for line in PROTOCOL.read_text().splitlines() if METRICS_WORDS.search(line)]
+    assert proto == PROTOCOL_LINES, "metrics content in the protocol reference outside the pinned lines"
 
 
 def test_arguments_prose_count_matches_the_table() -> None:
@@ -689,8 +705,13 @@ def test_readme_row_names_the_metrics_switch_and_its_default() -> None:
     assert "a `metrics` switch, `off` by default" in row
 
 
+def metrics_section() -> str:
+    """The Metrics rules: the SKILL.md stub plus the protocol reference it points at."""
+    return section(SKILL.read_text(), "Metrics") + "\n" + PROTOCOL.read_text()
+
+
 def metrics_body() -> str:
-    return " ".join(section(SKILL.read_text(), "Metrics").split())
+    return " ".join(metrics_section().split())
 
 
 def test_metrics_start_is_timestamped_when_the_switch_resolves() -> None:
@@ -699,7 +720,7 @@ def test_metrics_start_is_timestamped_when_the_switch_resolves() -> None:
 
 
 def metrics_blocks() -> list[list[str]]:
-    lines = section(SKILL.read_text(), "Metrics").splitlines()
+    lines = metrics_section().splitlines()
     fences = [i for i, line in enumerate(lines) if line.startswith("```")]
     return [lines[a : b + 1] for a, b in zip(fences[::2], fences[1::2])]
 
@@ -1461,7 +1482,7 @@ def test_summary_reads_no_launches_only_without_any_launch() -> None:
 
 
 def metrics_lines() -> list[str]:
-    return section(SKILL.read_text(), "Metrics").splitlines()
+    return metrics_section().splitlines()
 
 
 def test_the_old_no_post_and_no_tracker_write_sentences_are_gone() -> None:
@@ -1555,10 +1576,11 @@ def test_only_the_on_path_lines_tell_the_coordinator_to_post_or_comment() -> Non
         BOUNDARIES_ONLY_WRITE: "Boundaries",
     }
     for line, heading in on_path.items():
-        assert line in section(text, heading).splitlines(), f"an on-path post line left its section: {line}"
-    allowed = {"- " + OFF_PATH, *on_path}
+        home = metrics_section() if heading == "Metrics" else section(text, heading)
+        assert line in home.splitlines(), f"an on-path post line left its section: {line}"
+    allowed = {"- " + OFF_PATH, METRICS_POINTER, *on_path}
     merge_rule = "needs a delta review posted before merging"
-    for line in body.splitlines():
+    for line in [*body.splitlines(), *PROTOCOL.read_text().splitlines()]:
         if line in allowed:
             continue
         assert not POST_WORDS.search(line.replace(merge_rule, "")), (
@@ -1571,9 +1593,11 @@ STORY_WRITE_WORDS = re.compile(r"\b(?:on|to) the story\b", re.IGNORECASE)
 
 def test_only_the_summary_post_and_the_hand_back_brief_name_content_on_the_story() -> None:
     body = SKILL.read_text().split("\n---\n", 1)[1]
-    found = [line.strip() for line in body.splitlines() if STORY_WRITE_WORDS.search(line)]
+    protocol = PROTOCOL.read_text().splitlines()
+    found = [line.strip() for line in [*body.splitlines(), *protocol] if STORY_WRITE_WORDS.search(line)]
+    assert METRICS_POST in protocol
     assert found == [
-        METRICS_POST,
         METRICS_STEP0,
         next(line.strip() for line in body.splitlines() if "add to the hand-back brief each failed item" in line),
+        METRICS_POST,
     ], "a line outside the summary post and the hand-back brief puts content on the story"
