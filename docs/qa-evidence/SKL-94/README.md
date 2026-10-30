@@ -217,7 +217,7 @@ Outcome: C1 to C4 are met, but the Definition of Done item "independently review
 | C4 verified end to end | Verified | Both comments equal the summary in their closing report byte for byte, have one row per launch in launch order, and were read back once with a `true` result; details below. |
 | DoD all acceptance criteria met | Verified | C1 to C4. |
 | DoD tests written and passing | Verified | C3. |
-| DoD independently reviewed | Not met | [Review 5706418807](https://github.com/noahwhite/agent-skills/pull/106#pullrequestreview-5706418807) binds head `91a6c4fcf703e4511f5c07ffd0adafa61b84e5df` (Codex GPT-6 Sol reviewer, Opus 5.5 and DeepSeek V4 Pro adjudicators) and has no merge-blocking finding, but it rules three Low findings valid and PR #106 merged with all three unfixed, while the review rules require every finding to be resolved in the same PR before merge. |
+| DoD independently reviewed | Not met | [Review 5706418807](https://github.com/noahwhite/agent-skills/pull/106#pullrequestreview-5706418807) binds head `91a6c4fcf703e4511f5c07ffd0adafa61b84e5df` (Codex GPT-6 Sol reviewer, Opus 5.5 and DeepSeek V4 Pro adjudicators) and has no merge-blocking finding, but it rules three Low findings valid and PR #106 merged with all three unfixed, while the review rules require every finding ruled valid to be fixed in the same PR before merge. |
 | DoD docs updated | Verified | C2. |
 | DoD staging | Verified | No staging target exists; C4 stands in for it and is met. |
 | DoD no critical bugs or regressions | Verified | The full suite and CI are green. |
@@ -254,8 +254,9 @@ The Run 1 closing report opens with a copy of the summary heading line before it
 
 ### Failed item for the engineer
 
-DoD independently reviewed: PR #106 is merged, so the three findings its review of record rules valid can no longer be resolved in that PR.
-Fix them in a new PR on this story; that PR needs its own review of record with every finding resolved before merge, and the next round checks this item against that review.
+DoD independently reviewed: PR #106 is merged, so the three findings its review of record rules valid can no longer be fixed in that PR.
+Fix them in a new PR on this story; that PR needs its own review of record with every finding ruled valid fixed before merge.
+The PR #106 merge stays recorded here as a breach of the same-PR rule, which no later PR undoes; the next round marks this item met only if the new PR's review of record shows every finding ruled valid fixed before merge, and cites this breach in its verdict.
 First, a rerun of the end form after a nonzero exit can append a second `invocation_end` when the summary script fails after its append.
 Second, the read-back command needs `jq`, which the skill's `compatibility` does not name.
 Third, a duplicate row label has no recovery path under the rule that forbids editing the metrics file.
