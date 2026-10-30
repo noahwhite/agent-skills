@@ -318,15 +318,10 @@ After the end form it ran only the post and one read-back, which printed `true`,
 Neither the comment nor the closing report holds a local or scratch path or a token pattern.
 Run end state: stopped at step 1, story Blocked; QA then canceled SKL-149 and read it back as Canceled.
 
-### Observations outside the acceptance criteria
-
-Review 5707454673 links its findings to local scratch paths, so those links do not resolve.
-The Run 1 coordinator did not mark its post item completed after the read-back, which the skill requires; its checklist stopped after its first write.
-No clause of C1 to C4 or the Definition of Done covers that update, so this round does not count it against C4.
-
 ### Failed item for the engineer
 
-DoD independently reviewed: post the review of each of the four unposted PR #109 rounds on PR #109 at the head it reviewed, as a review of record in the format of `references/code-review.md` (first line `Review of record <full head SHA>`, reviewer and adjudicator names and models), each with its findings, the verdict per finding, and the fix commit for each valid one.
-PR #109 is merged, so posting them now cannot undo the breach of the rule that each round posts before the merge; whether the late posts meet this item is a product-owner decision, recorded on the story before the next round rules on this item.
+DoD independently reviewed: the PR #109 rounds on `8278159`, `0076af5`, `7b11347`, and `c64635e` have no posted review, and PR #109 is merged, so the rule that each round posts before the merge can no longer be met for them.
+The engineer can still put them on the record: post the review of each round on PR #109 at the head it reviewed, as a review of record in the format of `references/code-review.md` (first line `Review of record <full head SHA>`, reviewer and adjudicator names and models), each with its findings, the verdict per finding, and the fix commit for each valid one.
+Whether those late posts meet this item is a product-owner decision, recorded on the story before the next round rules on this item.
 
 Decision: In Progress; C4 is met at `1fd8a9eeed039728323d12bc6ff80d33cb4f2dc9`, and its runs need no rerun unless the fix changes the skill.
