@@ -385,13 +385,14 @@ METRICS_WRAPPED_WHOLE = (
 METRICS_SCRIPT_ONCE = (
     'The summary script runs only as the end form, never as a preview, because each run that writes its row '
     'appends another `invocation_end`: it runs once per invocation, again after it reports an invalid record, '
-    'and after any other nonzero exit only when the last line of the metrics file, read with the runtime\'s '
-    'file-read tool, is not an `end` line labelled `end`; when it is, the end form\'s row is recorded, so the '
-    'coordinator runs the end form no more, posts no summary, and the closing report says the end form recorded '
-    'its row and printed no summary.'
+    'and again after any other nonzero exit, but first the coordinator reads the metrics file with the '
+    'runtime\'s file-read tool and, when its last two lines are the end form\'s own `start` and `end` lines '
+    'labelled `end`, removes those two lines with the runtime\'s file-edit tool, so the record keeps one '
+    '`invocation_end`.'
 )
 METRICS_NO_EDIT = (
-    'The coordinator never edits, rewrites, or deletes a line of the metrics file, with one exception: when '
+    'The coordinator never edits, rewrites, or deletes a line of the metrics file other than the end form\'s '
+    'own two lines as above, with one exception: when '
     'the end form reports an invalid record, the coordinator corrects, in place, only the value it names and '
     'keeps every other value as it was recorded: a figure or an extra slug gets only its format corrected, and '
     'a row label used twice or reserved gets a new label, under the row-label rule above, on the `start` and '
@@ -408,7 +409,6 @@ METRICS_READ_BACK_FINAL = (
     'never that it matched.'
 )
 METRICS_POSTING = [
-    METRICS_SCRIPT_ONCE,
     METRICS_POST,
     METRICS_POST_BODY,
     METRICS_BODY_BYTES,
@@ -1322,6 +1322,36 @@ def test_the_end_form_works_out_durations_exactly() -> None:
     for awk in AWKS:
         result = subprocess.run([awk, end_form_program()], input=stamps, capture_output=True, text=True, check=True)
         assert result.stdout == expected, awk
+
+
+@pytest.mark.skipif(not Path("/dev/full").exists(), reason="needs /dev/full to make the summary write fail")
+@pytest.mark.parametrize("awk", AWKS)
+def test_removing_the_end_forms_own_lines_after_a_failed_print_keeps_one_invocation_end(tmp_path: Path, awk: str) -> None:
+    record = tmp_path / "metrics.txt"
+    record.write_text("start 1793218198.0 start\nend 1793218199.0 start\n")
+    before = record.read_text()
+    bin_dir = tmp_path / "awk-bin"
+    bin_dir.mkdir()
+    (bin_dir / "awk").symlink_to(awk)
+    env = {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
+    failed = subprocess.run(["bash", "-c", end_form(record) + " >/dev/full"], capture_output=True, text=True, env=env)
+    assert failed.returncode != 0, "an end form whose summary cannot be written exits nonzero"
+    lines = record.read_text().splitlines(keepends=True)
+    assert [line.split(" ")[0] + " " + line.split(" ")[2] for line in lines[-2:]] == ["start end\n", "end end\n"], (
+        "the failed run has recorded its own row as the last two lines"
+    )
+    assert METRICS_SCRIPT_ONCE in metrics_lines()
+    record.write_text("".join(lines[:-2]))
+    assert record.read_text() == before
+    rerun = run_end_form(record, awk, tmp_path)
+    assert rerun.returncode == 0 and rerun.stderr == ""
+    assert [(kind, label) for kind, _, label in read_rows(record)] == [
+        ("start", "start"), ("end", "start"), ("start", "end"), ("end", "end")
+    ], "the record keeps one invocation_end"
+    stamps = recorded(record)
+    start, end = stamps["start", "start"], stamps["end", "end"]
+    rows = [(label, seconds(stamps["start", label], stamps["end", label])) for label in ("start", "end")]
+    assert rerun.stdout == expected_summary(rows, start, end, seconds(start, end))
 
 
 def test_compatibility_names_jq_for_the_linear_cli_read_back() -> None:
