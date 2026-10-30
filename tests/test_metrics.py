@@ -721,8 +721,8 @@ OPENCODE_BULLET_FACTS = [
     pytest.param(
         "A list or an export that fails (on v2.2.0 an unknown id exits 1 with `Session not found`) "
         "or does not parse, or a missing session id, records `not reported` for both cells, and an "
-        "absent field, or an export with no messages for the tool count, records `not reported` for "
-        "its own cell; the launch counts toward the "
+        "absent field, or, for the tool count, an export with no messages or an assistant message "
+        "without a `content` array, records `not reported` for its own cell; the launch counts toward the "
         "`partial` label of each affected total, and a cell never reads `0` and never carries "
         "another session's figure.",
         id="ac10-failure",

@@ -121,7 +121,7 @@ If your runtime is not listed, map each capability to its closest equivalent and
   Cache read and cache write (`.info.tokens.cache`) are excluded from Tokens.
   The figures cover the top-level session only: a child or subagent session the launch spawns is a separate session, absent from the list, and its usage is excluded; the spawn itself is one tool part of the parent.
   A launch that resumes a session by explicit id (`-s <session id>`) exports that id in place of the lookup, and both figures are marked `cumulative`: the export covers the whole session, and v2.2.0 names no launch-scoped figure, since per-message `tokens` are per step.
-  A list or an export that fails (on v2.2.0 an unknown id exits 1 with `Session not found`) or does not parse, or a missing session id, records `not reported` for both cells, and an absent field, or an export with no messages for the tool count, records `not reported` for its own cell; the launch counts toward the `partial` label of each affected total, and a cell never reads `0` and never carries another session's figure.
+  A list or an export that fails (on v2.2.0 an unknown id exits 1 with `Session not found`) or does not parse, or a missing session id, records `not reported` for both cells, and an absent field, or, for the tool count, an export with no messages or an assistant message without a `content` array, records `not reported` for its own cell; the launch counts toward the `partial` label of each affected total, and a cell never reads `0` and never carries another session's figure.
   The list and the export read the launch's usage after its end timestamp is taken, so they are not part of its Duration.
   Only the two derived figures are recorded; the raw export, prompts and tool output are never written to the summary, the story or the repository, and the export file exists only in the scratch directory until the figures are read.
 
@@ -154,9 +154,11 @@ If your runtime is not listed, map each capability to its closest equivalent and
         tokens="$(jq -e '.info.tokens
           | if ([.input, .output, .reasoning] | all(type == "number")) then .input + .output + .reasoning
             else error("a token field is absent") end' "$dir/export.json")$mark" || tokens='not reported'
-        tool_calls="$(jq -e 'if (.messages | type) == "array" and (.messages | length) > 0
-          then [.messages[] | select(.type == "assistant") | .content[]? | select(.type == "tool")] | length
-          else error("the export has no messages") end' "$dir/export.json")$mark" || tool_calls='not reported'
+        tool_calls="$(jq -e 'if (.messages | type) != "array" or (.messages | length) == 0
+          then error("the export has no messages")
+          elif any(.messages[]; .type == "assistant" and (.content | type) != "array")
+          then error("an assistant message has no content array")
+          else [.messages[] | select(.type == "assistant") | .content[] | select(.type == "tool")] | length end' "$dir/export.json")$mark" || tool_calls='not reported'
       fi
     fi
     printf 'tokens: %s\ntool calls: %s\n' "$tokens" "$tool_calls"
