@@ -259,6 +259,6 @@ Fix them in a new PR on this story.
 First, a rerun of the end form after a nonzero exit can append a second `invocation_end` when the summary script fails after its append.
 Second, the read-back command needs `jq`, which the skill's `compatibility` does not name.
 Third, a duplicate row label has no recovery path under the rule that forbids editing the metrics file.
-The PR #106 merge stays recorded here as a breach of the same-PR rule, which no later PR undoes; the next round marks this item met only if the new PR's review of record shows every finding ruled valid fixed before merge, and cites this breach in its verdict.
+The PR #106 merge stays recorded here as a breach of the same-PR rule, which no later PR undoes; the next round marks this item met only if the new PR's review of record shows every finding ruled valid fixed before merge, and that round's verdict cites this breach.
 
 Decision: In Progress; C4 is met at `91a6c4fcf703e4511f5c07ffd0adafa61b84e5df`, and the next round re-runs it at the fix head.
