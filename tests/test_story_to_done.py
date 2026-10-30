@@ -383,9 +383,12 @@ METRICS_WRAPPED_WHOLE = (
     'chained before or after the wrapper in the same launch.'
 )
 METRICS_SCRIPT_ONCE = (
-    'The summary script runs only as the end form, once per invocation and again only after a run that exits '
-    'nonzero, never as a preview, because a run that exits 0 has printed the summary and then appended '
-    '`invocation_end`, and a run that exits nonzero has appended nothing.'
+    'The summary script runs only as the end form, never as a preview, because each run that writes its row '
+    'appends another `invocation_end`: it runs once per invocation, again after it reports an invalid record, '
+    'and after any other nonzero exit only when the last line of the metrics file, read with the runtime\'s '
+    'file-read tool, is not an `end` line labelled `end`; when it is, the end form\'s row is recorded, so the '
+    'coordinator runs the end form no more, posts no summary, and the closing report says the end form recorded '
+    'its row and printed no summary.'
 )
 METRICS_NO_EDIT = (
     'The coordinator never edits, rewrites, or deletes a line of the metrics file, with one exception: when '
@@ -405,6 +408,7 @@ METRICS_READ_BACK_FINAL = (
     'never that it matched.'
 )
 METRICS_POSTING = [
+    METRICS_SCRIPT_ONCE,
     METRICS_POST,
     METRICS_POST_BODY,
     METRICS_BODY_BYTES,
@@ -1253,16 +1257,6 @@ def test_a_reused_role_label_fails_the_end_form(tmp_path: Path) -> None:
     assert "| qa-round-1 |" in result.stdout and "| qa-round-2 |" in result.stdout
 
 
-def test_a_wrapped_row_may_not_take_the_reserved_end_label(tmp_path: Path) -> None:
-    record = tmp_path / "metrics.txt"
-    record.write_text("start 1793218198.0 start\nend 1793218199.0 start\nstart 1793218300.0 end\nend 1793218301.0 end\n")
-    before = record.read_text()
-    result = subprocess.run(["bash", "-c", end_form(record)], capture_output=True, text=True)
-    assert result.returncode != 0 and result.stdout == "", "a wrapped row labelled end must not print a summary"
-    assert "the reserved label end" in result.stderr
-    assert record.read_text() == before, "a rejected record gets no row"
-
-
 def test_a_role_row_may_not_take_the_reserved_start_or_end_label(tmp_path: Path) -> None:
     record = tmp_path / "metrics.txt"
     record.write_text(role_start("1793218300.000000000", "start", "opencode", "m", "high"))
@@ -1328,33 +1322,6 @@ def test_the_end_form_works_out_durations_exactly() -> None:
     for awk in AWKS:
         result = subprocess.run([awk, end_form_program()], input=stamps, capture_output=True, text=True, check=True)
         assert result.stdout == expected, awk
-
-
-@pytest.mark.skipif(not Path("/dev/full").exists(), reason="needs /dev/full to make the summary write fail")
-@pytest.mark.parametrize("awk", AWKS)
-def test_an_end_form_that_fails_to_print_records_no_row_and_its_rerun_records_one(tmp_path: Path, awk: str) -> None:
-    record = tmp_path / "metrics.txt"
-    record.write_text("start 1793218198.0 start\nend 1793218199.0 start\n")
-    before = record.read_text()
-    bin_dir = tmp_path / "awk-bin"
-    bin_dir.mkdir()
-    (bin_dir / "awk").symlink_to(awk)
-    env = {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
-    failed = subprocess.run(["bash", "-c", end_form(record) + " >/dev/full"], capture_output=True, text=True, env=env)
-    assert failed.returncode != 0, "an end form whose summary cannot be written exits nonzero"
-    assert record.read_text() == before, "an end form that exits nonzero records no row"
-    rerun = run_end_form(record, awk, tmp_path)
-    assert rerun.returncode == 0 and rerun.stderr == ""
-    rows = read_rows(record)
-    assert [(kind, label) for kind, _, label in rows] == [
-        ("start", "start"), ("end", "start"), ("start", "end"), ("end", "end")
-    ], "the rerun records exactly one invocation_end"
-    stamps = recorded(record)
-    start, end = stamps["start", "start"], stamps["end", "end"]
-    expected_rows = [(label, seconds(stamps["start", label], stamps["end", label])) for label in ("start", "end")]
-    assert rerun.stdout == expected_summary(expected_rows, start, end, seconds(start, end)), (
-        "the rerun prints the whole summary, with the row it records"
-    )
 
 
 def test_compatibility_names_jq_for_the_linear_cli_read_back() -> None:
