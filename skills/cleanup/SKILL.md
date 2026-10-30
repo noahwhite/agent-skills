@@ -1,8 +1,8 @@
 ---
 name: cleanup
 description: >-
-  Remove every artefact a working session created for a Linear story - worktrees, local and remote branches, disposable QA output and scratch debris - and move the evidence the session hosted onto the story itself, under a guarded inventory that refuses anything still holding unmerged work.
-  Use when asked to clean up, tidy up, or clear the artefacts of a story (for example "clean up ABC-123"), or to move a story's hosted evidence onto the tracker.
+  Remove every artifact a working session created for a Linear story - worktrees, local and remote branches, disposable QA output and scratch debris - and move the evidence the session hosted onto the story itself, under a guarded inventory that refuses anything still holding unmerged work.
+  Use when asked to clean up, tidy up, or clear the artifacts of a story (for example "clean up ABC-123"), or to move a story's hosted evidence onto the tracker.
   Not for implementing or reviewing a story (use engineering-workflow), not for verifying one (use qa-verification), and not the `cleanup <path>` subcommand of the adversarial pre-PR pipeline script.
 license: Apache-2.0
 compatibility: Requires git, gh, and the linear CLI (schpet/linear-cli).
@@ -10,7 +10,7 @@ compatibility: Requires git, gh, and the linear CLI (schpet/linear-cli).
 
 # Cleanup
 
-Remove the artefacts a session created while working a Linear story, and move the evidence it hosted onto that story.
+Remove the artifacts a session created while working a Linear story, and move the evidence it hosted onto that story.
 This is the last step of a story's life: the story ends with no leftover worktree, branch, or scratch debris, and with its evidence on the tracker rather than on a third-party host.
 It deletes; it never implements, reviews, or verifies a story.
 
@@ -51,21 +51,21 @@ Do this before anything is touched, so a mistyped key removes nothing.
   A key does not resolve when that lookup fails, or when the key's own team prefix is not `profile.tracker.team_key`: an issue identifier carries its team key, which is what makes the check applyable without a team field.
   The view's team field carries no key, so the prefix is the check, never a guess about the returned object.
 - Report an unresolved key as `unresolved` and skip it.
-  The other keys still run: one bad key never stops the run, and no artefact is attributed to it.
+  The other keys still run: one bad key never stops the run, and no artifact is attributed to it.
 - Never invent, guess, or shorten a key, and never take one from the current branch, a worktree path, or the session's own history.
 - Record each key's resolution in the final report.
 
-## 2. Inventory every artefact before removing any
+## 2. Inventory every artifact before removing any
 
 Print the inventory first: nothing is removed before the inventory report is printed.
-Each line states the artefact, its path or URL, and its disposition, which is `remove`, `keep`, `skip`, or `refuse`.
+Each line states the artifact, its path or URL, and its disposition, which is `remove`, `keep`, `skip`, or `refuse`.
 A cited pull request is `keep`: it is the evidence the removal guard needs, not something to delete.
-Find artefacts by story key: a session's scratch directory is per-session and randomly named, so nothing can be located by the directory a session happens to be in.
+Find artifacts by story key: a session's scratch directory is per-session and randomly named, so nothing can be located by the directory a session happens to be in.
 
 **Match the key at a token boundary.**
 A name carries the key only when the key stands as its own token: the key starts the name or follows a `-` or `/` in it, and the key ends the name or is followed by a `-` or `/` in it.
 `feature/<key>`, `<key>-follow-up`, `fix-x-<key>`, and the directory `<key>` in `/tmp/<key>/checkout` all carry it; `<key>0`, `x<key>`, and `<key>x` do not.
-A name that fails the boundary test is a different story's artefact: it is never inventoried as removable and never acted on, whatever a glob or a search returns.
+A name that fails the boundary test is a different story's artifact: it is never inventoried as removable and never acted on, whatever a glob or a search returns.
 
 Sources, all of them:
 
@@ -124,10 +124,10 @@ Remove in this order, so a branch is never refused because a worktree still hold
 Guards that hold for every removal:
 
 - `--force` is never used, on any command, and a removal that would need it is refused instead.
-- An artefact that fails a check is skipped, not forced, and the run continues with the others.
-- Each removal is confirmed by reading it back: `git branch --list <branch>`, `git worktree list`, and `git ls-remote --heads origin <branch>` must no longer list the artefact.
+- An artifact that fails a check is skipped, not forced, and the run continues with the others.
+- Each removal is confirmed by reading it back: `git branch --list <branch>`, `git worktree list`, and `git ls-remote --heads origin <branch>` must no longer list the artifact.
   A read-back that still lists it is a refusal, not a removal, and its output is reported as the evidence.
-- Every refusal is recorded in the report as a dated line naming the artefact, the failed check, and why, and step 6 posts it on the named story.
+- Every refusal is recorded in the report as a dated line naming the artifact, the failed check, and why, and step 6 posts it on the named story.
 
 ## 4. Hosted evidence (a self-contained, capability-detected section)
 
@@ -139,8 +139,8 @@ It names no host and no runtime: both come from the hosted-evidence row of [refe
   Reachability is the publishing session's own: a later session reaches none of an earlier session's hosted copies, which is why this step sweeps only what this session hosted.
 - When the row gives the runtime no such capability, or the map has no row for it, print `skipped: this runtime has no hosted-evidence capability`, touch no hosted content, and name the skip and its reason in the final report.
   A capability is never guessed from a runtime the map does list: for this capability a missing row means the skip, never a nearby mechanism.
-- When the row does give the capability, sweep only through the mapped mechanism: list the evidence this session hosted for the story, download it into the session's scratch directory, attach it to the named story as step 5 says, and delete the hosted copy only through the mapped per-artefact delete action.
-  With no mapped per-artefact delete action the copy stays where it is, and the report names it as left in place.
+- When the row does give the capability, sweep only through the mapped mechanism: list the evidence this session hosted for the story, download it into the session's scratch directory, attach it to the named story as step 5 says, and delete the hosted copy only through the mapped per-artifact delete action.
+  With no mapped per-artifact delete action the copy stays where it is, and the report names it as left in place.
 - Detection never guesses.
   A capability the row gives but the session cannot reach fails the run loudly: print `error: hosted-evidence capability unreachable: <failure>` naming the failure, touch no hosted content, print the report and post the story comments step 6 requires so the work already done is not silent, and exit non-zero.
   That is never a silent skip and never a pass.
@@ -168,16 +168,16 @@ cleanup report
 <story-key>: resolved | unresolved
 
 removed:
-- <artefact>: <path or URL>
+- <artifact>: <path or URL>
 
 archived to the tracker:
 - <attachment name>: <what it shows>
 
 skipped:
-- <artefact>: <reason>
+- <artifact>: <reason>
 
 refused:
-- <artefact>: <failed check>, <why>
+- <artifact>: <failed check>, <why>
 ```
 
 - Every story named at invocation gets its own section, including an unresolved key, which carries only its resolution line.
@@ -189,8 +189,8 @@ refused:
 ## Boundaries
 
 - It acts in one repository: the one the run starts in, or the one this skill's overlay names.
-  An artefact in another repository is that repository's own run to clean, and is named as skipped rather than touched.
-- It removes only artefacts it can attribute to a named key at a token boundary.
+  An artifact in another repository is that repository's own run to clean, and is named as skipped rather than touched.
+- It removes only artifacts it can attribute to a named key at a token boundary.
   Everything else is left out and named as skipped.
 - It never removes work that has not landed, and it never forces a removal.
 - It never edits, reviews, or verifies a story, and it never moves a story's status.

@@ -1,6 +1,6 @@
 """Contract checks for the cleanup skill.
 
-The skill is the last step of a story's life: it removes the artefacts a session created for a
+The skill is the last step of a story's life: it removes the artifacts a session created for a
 story and moves the evidence it hosted onto the story. These checks pin the registration the
 repository contract-tests for every skill, and then the behaviour the acceptance criteria name.
 """
@@ -104,32 +104,32 @@ def test_every_key_is_resolved_against_the_tracker_before_anything_is_touched() 
         assert phrase in body, phrase
 
 
-def test_inventory_prints_before_anything_is_removed_and_finds_artefacts_by_key() -> None:
-    body = section(text(), "2. Inventory every artefact before removing any")
+def test_inventory_prints_before_anything_is_removed_and_finds_artifacts_by_key() -> None:
+    body = section(text(), "2. Inventory every artifact before removing any")
     for phrase in (
         "nothing is removed before the inventory report is printed",
-        "states the artefact, its path or URL, and its disposition",
+        "states the artifact, its path or URL, and its disposition",
         "A cited pull request is `keep`",
-        "Find artefacts by story key",
+        "Find artifacts by story key",
         "per-session and randomly named",
     ):
         assert phrase in body, phrase
 
 
 def test_the_key_is_matched_at_a_token_boundary_never_as_a_substring() -> None:
-    body = section(text(), "2. Inventory every artefact before removing any")
+    body = section(text(), "2. Inventory every artifact before removing any")
     for phrase in (
         "**Match the key at a token boundary.**",
         "the key starts the name or follows a `-` or `/` in it, and the key ends the name or is followed by a `-` or `/` in it",
         "the directory `<key>` in `/tmp/<key>/checkout` all carry it",
         "`<key>0`, `x<key>`, and `<key>x` do not",
-        "A name that fails the boundary test is a different story's artefact",
+        "A name that fails the boundary test is a different story's artifact",
     ):
         assert phrase in body, phrase
 
 
 def test_inventory_names_every_source() -> None:
-    body = section(text(), "2. Inventory every artefact before removing any")
+    body = section(text(), "2. Inventory every artifact before removing any")
     for phrase in (
         "Every entry `git worktree list` reports whose path or branch carries the key",
         "worktree helper created",
@@ -151,7 +151,7 @@ def test_inventory_names_every_source() -> None:
 
 
 def test_inventory_excludes_the_durable_record_and_refuses_a_live_session() -> None:
-    body = section(text(), "2. Inventory every artefact before removing any")
+    body = section(text(), "2. Inventory every artifact before removing any")
     for phrase in (
         "Evidence committed under `profile.qa.evidence_dir`",
         "durable record",
@@ -183,7 +183,7 @@ def test_deletion_requires_merge_evidence_from_the_storys_pull_requests() -> Non
         assert phrase in body, phrase
 
 
-def test_each_artefact_kind_has_its_guarded_removal() -> None:
+def test_each_artifact_kind_has_its_guarded_removal() -> None:
     body = section(text(), "3. Delete only with merge evidence")
     for phrase in (
         "Remove in this order, so a branch is never refused because a worktree still holds it",
@@ -210,13 +210,13 @@ def test_worktrees_are_removed_before_the_branch_they_hold() -> None:
     assert body.index("**Worktree.**") < body.index("**Local branch.**") < body.index("**Remote branch.**")
 
 
-def test_the_never_force_and_per_artefact_refusal_rules_are_pinned() -> None:
+def test_the_never_force_and_per_artifact_refusal_rules_are_pinned() -> None:
     body = section(text(), "3. Delete only with merge evidence")
     for phrase in (
         "`--force` is never used, on any command, and a removal that would need it is refused instead.",
-        "An artefact that fails a check is skipped, not forced, and the run continues with the others.",
+        "An artifact that fails a check is skipped, not forced, and the run continues with the others.",
         "A read-back that still lists it is a refusal, not a removal",
-        "Every refusal is recorded in the report as a dated line naming the artefact, the failed check, and why",
+        "Every refusal is recorded in the report as a dated line naming the artifact, the failed check, and why",
     ):
         assert phrase in body, phrase
     for line in body.splitlines():
@@ -225,14 +225,14 @@ def test_the_never_force_and_per_artefact_refusal_rules_are_pinned() -> None:
                 assert escape not in line.lower(), f"a never-force exception crept in: {line.strip()}"
 
 
-def test_the_hosted_evidence_row_names_list_download_and_a_per_artefact_delete() -> None:
+def test_the_hosted_evidence_row_names_list_download_and_a_per_artifact_delete() -> None:
     capability, claude, opencode = (cell.strip() for cell in hosted_evidence_row().split("|")[1:4])
     assert capability.startswith("Hosted evidence")
     for phrase in ("list and download", "per-artifact delete action"):
         assert phrase in claude, phrase
     assert "where no per-artifact delete action is exposed, the map gives none and the copy stays" in claude
     assert "nothing to list, download, or delete" in opencode
-    assert "conversation delete" not in claude, "a conversation-wide delete is not a per-artefact action"
+    assert "conversation delete" not in claude, "a conversation-wide delete is not a per-artifact action"
 
 
 def test_the_hosted_evidence_section_is_separated_and_cites_the_map() -> None:
@@ -264,8 +264,8 @@ def test_the_sweep_downloads_and_deletes_through_the_mapped_action_only() -> Non
     for phrase in (
         "download it into the session's scratch directory",
         "attach it to the named story as step 5 says",
-        "delete the hosted copy only through the mapped per-artefact delete action",
-        "With no mapped per-artefact delete action the copy stays where it is",
+        "delete the hosted copy only through the mapped per-artifact delete action",
+        "With no mapped per-artifact delete action the copy stays where it is",
         "There is no user-facing runtime switch",
     ):
         assert phrase in body, phrase

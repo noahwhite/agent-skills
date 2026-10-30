@@ -1,4 +1,4 @@
-"""Every gate artefact lives in the session's scratch directory, never directly under the base.
+"""Every gate artifact lives in the session's scratch directory, never directly under the base.
 
 The pipeline script is handed the session's scratch directory with `--scratch`; its dossiers and
 throwaway checkouts belong under that directory (SKL-58, AC2), inside a per-run directory so two
@@ -50,7 +50,7 @@ def dossier_path(result: subprocess.CompletedProcess) -> Path:
     return Path(result.stdout.strip().splitlines()[-1])
 
 
-def test_gate_artefacts_stay_inside_the_supplied_session_directory(tmp_path):
+def test_gate_artifacts_stay_inside_the_supplied_session_directory(tmp_path):
     repo = make_repo(tmp_path)
     scratch = tmp_path / "session-scratch"
     scratch.mkdir()

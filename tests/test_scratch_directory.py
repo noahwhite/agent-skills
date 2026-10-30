@@ -190,7 +190,7 @@ def test_snippet_falls_back_to_a_standalone_dir_when_the_base_is_unset(tmp_path)
 def test_runtimes_rule_is_the_per_session_directory():
     body = rule_paragraph()
     for phrase in ("exactly one scratch directory", "for the session's lifetime", "`mktemp -d`",
-                   "base directory the runtime or the profile gives", "every scratch artefact",
+                   "base directory the runtime or the profile gives", "every scratch artifact",
                    "subagent", "shell-launched agent", "never write to a fixed file"):
         assert phrase.lower() in body.lower(), f"the Scratch files rule does not say {phrase!r}"
     assert "`profile.workspace.scratch_dir`" in body
@@ -341,7 +341,7 @@ def test_no_doc_states_the_profile_must_set_the_scratch_dir():
 
 
 def test_no_doc_names_a_fixed_scratch_path_under_the_base():
-    """AC2: every scratch artefact lives in the session's directory, never at a fixed path.
+    """AC2: every scratch artifact lives in the session's directory, never at a fixed path.
 
     The one exception is the merge-approval rendezvous: an engagement's shared file with a
     manager-created unique directory, not a session's scratch (shared/merge-approval.md).
