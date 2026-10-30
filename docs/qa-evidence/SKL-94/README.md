@@ -350,4 +350,4 @@ Outcome: every acceptance criterion and Definition of Done item is met.
 | DoD staging | Verified | No staging target exists; C4 stands in for it and is met. |
 | DoD no critical bugs or regressions | Verified | The full suite and CI are green. |
 
-Decision: Done.
+Decision: Done once this evidence PR merges through its review of record and CI.
