@@ -321,7 +321,7 @@ Run end state: stopped at step 1, story Blocked; QA then canceled SKL-149 and re
 ### Failed item for the engineer
 
 DoD independently reviewed: the PR #109 rounds on `8278159`, `0076af5`, `7b11347`, and `c64635e` have no posted review, and PR #109 is merged, so the rule that each round posts before the merge can no longer be met for them.
-The engineer can still put them on the record: post a retrospective record of each round on PR #109 through the reviews API with `commit_id` set to the head it reviewed, each with that full head SHA, the reviewer and adjudicator names and models, its findings, the verdict per finding, and the fix commit for each valid one.
+The engineer can still put them on the record: post a retrospective record of each round on PR #109 through the reviews API with `event` `COMMENT` and `commit_id` set to the head it reviewed, each with that full head SHA, the reviewer and adjudicator names and models, its findings, the verdict per finding, and the fix commit for each valid one.
 Each post's first line must not begin with `Review of record`, for example `Late record of review round <full head SHA>`, so that review 5707752059 stays PR #109's review of record at its merge head.
 Whether those late posts meet this item is a product-owner decision, recorded on the story before the next round rules on this item.
 
