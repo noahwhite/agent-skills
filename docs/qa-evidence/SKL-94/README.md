@@ -271,7 +271,7 @@ Fixtures are SKL-148 (Run 1, created In Deployment Review) and SKL-149 (Run 2, c
 There is no visual surface; structured assertions and raw command output are the evidence, without screenshots.
 The tracker record is QA comment `ee12e718` on SKL-94 and its attachment `SKL-94 QA round 5 assertions (2026-10-30)`.
 
-Outcome: every acceptance criterion and Definition of Done item is met, so the story moves to Done once this evidence merges.
+Outcome: C1 to C4 are met, but the Definition of Done item "independently reviewed" is not, so the story returns to In Progress.
 
 | Item | Verdict | Evidence |
 |---|---|---|
@@ -281,7 +281,7 @@ Outcome: every acceptance criterion and Definition of Done item is met, so the s
 | C4 verified end to end | Verified | Both comments equal the summary in their closing report byte for byte, have one row per launch in launch order, and were read back once with a `true` result; details below. |
 | DoD all acceptance criteria met | Verified | C1 to C4. |
 | DoD tests written and passing | Verified | C3. |
-| DoD independently reviewed | Verified | The product owner ruled on the story that a fix PR whose review of record shows every valid finding fixed meets this item despite the PR #106 breach; details below. |
+| DoD independently reviewed | Not met | The product owner ruled on the story that a fix PR whose review of record shows every valid finding fixed meets this item despite the PR #106 breach, but PR #109 posted two of its six review rounds, while the review rules have each delta round post a new review, so the findings of the four unposted rounds appear in no review of record; details below. |
 | DoD docs updated | Verified | C2. |
 | DoD staging | Verified | No staging target exists; C4 stands in for it and is met. |
 | DoD no critical bugs or regressions | Verified | The full suite and CI are green. |
@@ -292,6 +292,7 @@ PR #109 fixes the three Low findings from the PR #106 review of record that Roun
 [Review 5707752059](https://github.com/noahwhite/agent-skills/pull/109#pullrequestreview-5707752059) binds merge head `1fd8a9eeed039728323d12bc6ff80d33cb4f2dc9` (Codex GPT-6 Sol reviewer, DeepSeek V4 Pro and Opus 5.5 adjudicators) and has no findings.
 [Review 5707454673](https://github.com/noahwhite/agent-skills/pull/109#pullrequestreview-5707454673) on `987fc994088c683f2e8e87ffe315e40e4cad2660` rules two Low findings valid, and commits `7e73ac5a` and `1fd8a9ee`, inside the delta the merge-head review covers, fix them.
 The branch had four more review rounds, on `8278159`, `0076af5`, `7b11347`, and `c64635e`, and every finding ruled valid in them was fixed before the merge.
+None of those four rounds was posted as a PR review, so no posted review shows their findings, verdicts, or fix commits.
 
 ### Run 1 (SKL-148)
 
@@ -303,7 +304,7 @@ Its 6 rows, in launch order, are `start`, two wrapped commands, the role row `qa
 The coordinator made exactly those 6 launches; it read the metrics file with the file-read tool before the end form, ran the end form once, and did not edit the metrics file, which holds one `invocation_end` pair.
 Every Tokens, Tool calls, and Duration cell is well formed, all eight extras are filled, and the elapsed wall-clock is 659.352532377s.
 After the end form it ran only the post and one read-back, which printed `true`.
-Neither the comment nor the closing report holds a local or scratch path or a token pattern.
+Neither the comment nor the closing report holds a local or scratch path or a token pattern; the closing report names repository paths only.
 Run end state: Done; QA then canceled SKL-148 and read it back as Canceled.
 
 ### Run 2 (SKL-149)
@@ -319,8 +320,13 @@ Run end state: stopped at step 1, story Blocked; QA then canceled SKL-149 and re
 
 ### Observations outside the acceptance criteria
 
-PR #109 posted two of its six review rounds as PR reviews, although the review rules have each round post one.
 Review 5707454673 links its findings to local scratch paths, so those links do not resolve.
-The Run 1 coordinator did not update its checklist after the first write, so its post item stayed unmarked, which the skill requires after the read-back.
+The Run 1 coordinator did not mark its post item completed after the read-back, which the skill requires; its checklist stopped after its first write.
+No clause of C1 to C4 or the Definition of Done covers that update, so this round does not count it against C4.
 
-Decision: Done, once this evidence merges.
+### Failed item for the engineer
+
+DoD independently reviewed: post the review of each of the four unposted PR #109 rounds on PR #109 at the head it reviewed, each with its findings, the verdict per finding, and the fix commit for each valid one.
+PR #109 is merged, so posting them now cannot undo the breach of the rule that each round posts before the merge; whether the late posts meet this item is a product-owner decision, recorded on the story before the next round rules on this item.
+
+Decision: In Progress; C4 is met at `1fd8a9eeed039728323d12bc6ff80d33cb4f2dc9`, and its runs need no rerun unless the fix changes the skill.
