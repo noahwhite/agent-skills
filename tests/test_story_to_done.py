@@ -384,16 +384,16 @@ METRICS_WRAPPED_WHOLE = (
 )
 METRICS_SCRIPT_ONCE = (
     'The summary script runs only as the end form, never as a preview, because each run that writes its row '
-    'appends another `invocation_end`: it runs once per invocation, again after it reports an invalid record, '
-    'which leaves the metrics file as it was, and again after any other nonzero exit, but first the coordinator '
-    'reads the metrics file with the runtime\'s file-read tool and removes, with the runtime\'s file-edit tool, '
-    'only the end form\'s own lines that the failed run left at its end: a last line with no line ending, then '
-    'the `start` line labelled `end` with no tab in it and any `end` line labelled `end` with no tab in it after '
-    'it, so the record keeps one `invocation_end`.'
+    'appends another `invocation_end`: it runs once per invocation, again after it reports an invalid record,'
+    ' which leaves the metrics file as it was, and again after any other nonzero exit, but first the '
+    "coordinator restores the metrics file, with the runtime's file-edit tool, to exactly the content it read"
+    " with the runtime's file-read tool immediately before that failed launch, so the record keeps one "
+    '`invocation_end`; the coordinator therefore reads the metrics file immediately before each end-form '
+    'launch.'
 )
 METRICS_NO_EDIT = (
-    'The coordinator never edits, rewrites, or deletes a line of the metrics file other than the end form\'s '
-    'own lines as above, with one exception: when '
+    'The coordinator never edits, rewrites, or deletes a line of the metrics file other than restoring it '
+    'before a rerun as above, with one exception: when '
     'the end form reports an invalid record, the coordinator corrects, in place, only the value it names and '
     'keeps every other value as it was recorded: a figure or an extra slug gets only its format corrected, and '
     'a row label used twice or reserved gets a new label, under the row-label rule above, on the `start` and '
@@ -1282,7 +1282,6 @@ def test_a_role_row_labelled_end_survives_the_cleanup_and_is_relabelled(tmp_path
     assert result.returncode != 0 and result.stdout == ""
     assert "the reserved label end" in result.stderr
     assert record.read_text() == before, "an invalid-record report leaves the metrics file as it was"
-    assert remove_what_a_failed_end_form_left(before) == before, "the cleanup removes no role row"
     lines = before.splitlines(keepends=True)
     for later in (2, 3):
         lines[later] = lines[later].replace(" end\t", " qa-round-1\t", 1)
@@ -1351,17 +1350,6 @@ def test_the_end_form_works_out_durations_exactly() -> None:
         assert result.stdout == expected, awk
 
 
-def remove_what_a_failed_end_form_left(text: str) -> str:
-    lines = text.splitlines(keepends=True)
-    if lines and not lines[-1].endswith("\n"):
-        lines.pop()
-    if lines and re.fullmatch(r"end \S+ end\n", lines[-1]):
-        lines.pop()
-    if lines and re.fullmatch(r"start \S+ end\n", lines[-1]):
-        lines.pop()
-    return "".join(lines)
-
-
 def end_form_after_failed_print(record: Path, awk: str, tmp_path: Path) -> None:
     bin_dir = tmp_path / "awk-bin"
     bin_dir.mkdir(exist_ok=True)
@@ -1376,7 +1364,7 @@ def end_form_after_failed_print(record: Path, awk: str, tmp_path: Path) -> None:
 @pytest.mark.skipif(not Path("/dev/full").exists(), reason="needs /dev/full to make the summary write fail")
 @pytest.mark.parametrize("awk", AWKS)
 @pytest.mark.parametrize("left", ["whole row", "start line only", "start line and a cut end line", "cut start line"])
-def test_removing_what_a_failed_end_form_left_keeps_one_invocation_end(tmp_path: Path, awk: str, left: str) -> None:
+def test_restoring_the_file_read_before_a_failed_end_form_keeps_one_invocation_end(tmp_path: Path, awk: str, left: str) -> None:
     assert METRICS_SCRIPT_ONCE in metrics_lines()
     record = tmp_path / "metrics.txt"
     before = "start 1793218198.0 start\nend 1793218199.0 start\n"
@@ -1391,8 +1379,8 @@ def test_removing_what_a_failed_end_form_left_keeps_one_invocation_end(tmp_path:
         "start line and a cut end line": start_line + "end 17932",
         "cut start line": start_line[:9],
     }[left])
-    record.write_text(remove_what_a_failed_end_form_left(record.read_text()))
-    assert record.read_text() == before
+    assert record.read_text() != before
+    record.write_text(before)
     rerun = run_end_form(record, awk, tmp_path)
     assert rerun.returncode == 0 and rerun.stderr == ""
     assert [(kind, label) for kind, _, label in read_rows(record)] == [
