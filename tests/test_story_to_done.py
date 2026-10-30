@@ -1580,7 +1580,7 @@ def test_only_the_on_path_lines_tell_the_coordinator_to_post_or_comment() -> Non
         assert line in home.splitlines(), f"an on-path post line left its section: {line}"
     allowed = {"- " + OFF_PATH, METRICS_POINTER, *on_path}
     merge_rule = "needs a delta review posted before merging"
-    for line in body.splitlines():
+    for line in [*body.splitlines(), *PROTOCOL.read_text().splitlines()]:
         if line in allowed:
             continue
         assert not POST_WORDS.search(line.replace(merge_rule, "")), (
@@ -1593,9 +1593,11 @@ STORY_WRITE_WORDS = re.compile(r"\b(?:on|to) the story\b", re.IGNORECASE)
 
 def test_only_the_summary_post_and_the_hand_back_brief_name_content_on_the_story() -> None:
     body = SKILL.read_text().split("\n---\n", 1)[1]
-    found = [line.strip() for line in body.splitlines() if STORY_WRITE_WORDS.search(line)]
-    assert METRICS_POST in PROTOCOL.read_text().splitlines()
+    protocol = PROTOCOL.read_text().splitlines()
+    found = [line.strip() for line in [*body.splitlines(), *protocol] if STORY_WRITE_WORDS.search(line)]
+    assert METRICS_POST in protocol
     assert found == [
         METRICS_STEP0,
         next(line.strip() for line in body.splitlines() if "add to the hand-back brief each failed item" in line),
+        METRICS_POST,
     ], "a line outside the summary post and the hand-back brief puts content on the story"
