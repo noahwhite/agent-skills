@@ -255,10 +255,10 @@ The Run 1 closing report opens with a copy of the summary heading line before it
 ### Failed item for the engineer
 
 DoD independently reviewed: PR #106 is merged, so the three findings its review of record rules valid can no longer be fixed in that PR.
-Fix them in a new PR on this story; that PR needs its own review of record with every finding ruled valid fixed before merge.
-The PR #106 merge stays recorded here as a breach of the same-PR rule, which no later PR undoes; the next round marks this item met only if the new PR's review of record shows every finding ruled valid fixed before merge, and cites this breach in its verdict.
+Fix them in a new PR on this story.
 First, a rerun of the end form after a nonzero exit can append a second `invocation_end` when the summary script fails after its append.
 Second, the read-back command needs `jq`, which the skill's `compatibility` does not name.
 Third, a duplicate row label has no recovery path under the rule that forbids editing the metrics file.
+The PR #106 merge stays recorded here as a breach of the same-PR rule, which no later PR undoes; the next round marks this item met only if the new PR's review of record shows every finding ruled valid fixed before merge, and cites this breach in its verdict.
 
 Decision: In Progress; C4 is met at `91a6c4fcf703e4511f5c07ffd0adafa61b84e5df`, and the next round re-runs it at the fix head.
