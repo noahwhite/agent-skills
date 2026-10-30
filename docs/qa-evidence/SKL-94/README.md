@@ -326,3 +326,48 @@ Each post's first line must not begin with `Review of record`, for example `Late
 Whether those late posts meet this item is a product-owner decision, recorded on the story before the next round rules on this item.
 
 Decision: In Progress; C4 is met at `1fd8a9eeed039728323d12bc6ff80d33cb4f2dc9`, and its runs need no rerun unless the fix changes the skill.
+
+## Round 6, 2026-10-30
+
+The environment under test is merged `main`, build `eb849b809d4b98a1dd3704965fbb9d74b0f0a08e`.
+Since the PR #109 squash `617dc2edeb75a578fe53681248f5ee9182f70d72`, only files under `docs/qa-evidence/` changed, so the skill, its references, its script, the tests, and the README are the ones Round 5 verified.
+The product owner ruled on the story that this round re-checks the Definition of Done item "independently reviewed" only, and that C4 is not rerun unless the skill changes.
+There is no visual surface; structured assertions and raw command output are the evidence, without screenshots.
+The tracker record is QA comment `29a9cbae` on SKL-94 and its attachment `SKL-94 QA round 6 assertions (2026-10-30)`.
+
+Outcome: every acceptance criterion and Definition of Done item is met.
+
+| Item | Verdict | Evidence |
+|---|---|---|
+| C1 post the summary | Verified | Verified in Round 5; the skill is unchanged since. |
+| C2 docs | Verified | Verified in Round 5; the skill and the README are unchanged since. |
+| C3 tests | Verified | 812 tests pass and `vendor_shared.py --check` exits 0 at `eb849b8`; [CI run 41003856823](https://github.com/noahwhite/agent-skills/actions/runs/41003856823) succeeded on that commit. |
+| C4 verified end to end | Verified | Verified in Round 5 at `1fd8a9eeed039728323d12bc6ff80d33cb4f2dc9`; the skill is unchanged since, so the runs are not repeated. |
+| DoD all acceptance criteria met | Verified | C1 to C4. |
+| DoD tests written and passing | Verified | C3. |
+| DoD independently reviewed | Verified | The four unposted PR #109 rounds now have posted reviews that meet the product owner's conditions; details below. |
+| DoD docs updated | Verified | C2. |
+| DoD staging | Verified | No staging target exists; C4 stands in for it and is met. |
+| DoD no critical bugs or regressions | Verified | The full suite and CI are green. |
+
+### Independent review of PR #109
+
+The product owner ruled on the story that late posts of the four unposted rounds meet this item if each carries the details Round 5 listed, the engineer explains why the round was not posted at the time, and no post begins `Review of record`.
+PR #109 now has these four reviews, each in state `COMMENTED` with `commit_id` equal to the full head SHA on its first line:
+
+- [Review 5708154066](https://github.com/noahwhite/agent-skills/pull/109#pullrequestreview-5708154066) on `827815964fe675c63473333672ebdd50d9f501bf`.
+- [Review 5708154176](https://github.com/noahwhite/agent-skills/pull/109#pullrequestreview-5708154176) on `0076af5a251872984c82e6f0e85d9379ca32525e`.
+- [Review 5708154293](https://github.com/noahwhite/agent-skills/pull/109#pullrequestreview-5708154293) on `7b113472226936ffb6f2036ff03ed0bdc08666a3`.
+- [Review 5708154420](https://github.com/noahwhite/agent-skills/pull/109#pullrequestreview-5708154420) on `c64635e0d2ce4d4f117f65e634eedf8884469b3b`.
+
+Each names the reviewer (Codex GPT-6 Sol) and both adjudicators (DeepSeek V4 Pro and Opus 5.5).
+Each lists the round's findings, the verdict per finding, the fix commit for each valid finding, and why the round was not posted at the time.
+None begins `Review of record`, so [review 5707752059](https://github.com/noahwhite/agent-skills/pull/109#pullrequestreview-5707752059) on merge head `1fd8a9eeed039728323d12bc6ff80d33cb4f2dc9`, which has no findings, stays PR #109's review of record.
+The findings in each post match the reviewer output saved for that round, the DeepSeek V4 Pro verdicts match that round's saved adjudication report, and the Opus 5.5 verdicts match the engineer's checklist from the time.
+Every finding ruled valid has a fix commit in PR #109 before the merge head that touches the file the finding names: `0076af5`, `7b11347`, `c64635e`, `987fc99`, `7e73ac5`, and `1fd8a9e`.
+
+### Incidental
+
+Review 5707454673 on PR #109 links its findings to local scratch paths, so those links are dead; no acceptance criterion or Definition of Done item covers it.
+
+Decision: Done.
