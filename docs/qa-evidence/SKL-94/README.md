@@ -314,14 +314,15 @@ It posted comment `25b7a6f5` on SKL-149, and the closing report names it.
 The comment is 963 bytes and equals the closing report's summary and the summary body file byte for byte.
 Its 4 rows are `start`, the wrapped commands `check-env` and `read-story`, and `end`, one per launch.
 It carries the stop reason, an elapsed wall-clock of 23.075754925s, all eight extras, and the totals, and does not read `no launches`.
-After the end form it ran only the post and one read-back, which printed `true`, and the coordinator marked its post item completed.
+After the end form it ran only the post and one read-back, which printed `true`.
 Neither the comment nor the closing report holds a local or scratch path or a token pattern.
 Run end state: stopped at step 1, story Blocked; QA then canceled SKL-149 and read it back as Canceled.
 
 ### Failed item for the engineer
 
 DoD independently reviewed: the PR #109 rounds on `8278159`, `0076af5`, `7b11347`, and `c64635e` have no posted review, and PR #109 is merged, so the rule that each round posts before the merge can no longer be met for them.
-The engineer can still put them on the record: post the review of each round on PR #109 at the head it reviewed, as a review of record in the format of `references/code-review.md` (first line `Review of record <full head SHA>`, reviewer and adjudicator names and models), each with its findings, the verdict per finding, and the fix commit for each valid one.
+The engineer can still put them on the record: post a retrospective record of each round on PR #109 through the reviews API with `commit_id` set to the head it reviewed, each with that full head SHA, the reviewer and adjudicator names and models, its findings, the verdict per finding, and the fix commit for each valid one.
+Each post's first line must not begin with `Review of record`, for example `Late record of review round <full head SHA>`, so that review 5707752059 stays PR #109's review of record at its merge head.
 Whether those late posts meet this item is a product-owner decision, recorded on the story before the next round rules on this item.
 
 Decision: In Progress; C4 is met at `1fd8a9eeed039728323d12bc6ff80d33cb4f2dc9`, and its runs need no rerun unless the fix changes the skill.
