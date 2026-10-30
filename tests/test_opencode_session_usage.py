@@ -219,10 +219,18 @@ def test_an_interrupted_read_removes_the_export(tmp_path):
     collect(stub, *launch(stub, tmp_path, "run-a"), expect_rc=130)
 
 
-def test_an_assistant_message_without_content_does_not_lose_the_tool_count(tmp_path):
-    messages = [{"id": "msg_e", "type": "assistant"}, assistant(tool(), tool())]
+@pytest.mark.parametrize(
+    "messages",
+    [
+        [{"id": "msg_e", "type": "assistant"}, assistant(tool(), tool())],
+        [{"id": "msg_e", "type": "assistant"}],
+        [{"id": "msg_e", "type": "assistant", "content": None}, assistant(tool())],
+    ],
+    ids=["beside-a-tool-part", "alone", "null-content"],
+)
+def test_an_assistant_message_without_a_content_array_reports_tool_calls_not_zero(tmp_path, messages):
     out = run_snippet(tmp_path, "run-a", listed(("ses_a", "run-a")), {"ses_a": export(tokens(1, 1, 1), messages)})
-    assert out["tool calls"] == "2"
+    assert (out["tokens"], out["tool calls"]) == ("3", NOT_REPORTED)
 
 
 def test_an_export_with_no_messages_reports_tool_calls_not_zero(tmp_path):
@@ -299,10 +307,12 @@ POINTER = (
 TITLE_FILL = (
     "When the command carries a `{session_title}` placeholder, the facilitator replaces it on every "
     "launch with a title unique to that launch: the story key, the word "
-    "`launch`, the launch's number in this invocation, and a UTC timestamp to the nanosecond taken "
-    "with `date -u +%Y%m%dT%H%M%S%NZ`, joined by `-`, which carries no secret and no path. "
+    "`launch`, the launch's number in this invocation, a UTC timestamp to the nanosecond taken "
+    "with `date -u +%Y%m%dT%H%M%S%NZ`, and 16 random hexadecimal characters taken with "
+    "`od -An -N8 -tx1 /dev/urandom | tr -d ' \\n'`, joined by `-`, which carries no secret and no path. "
     "Every launch counts toward that number, a re-launch or retry included, so no two launches of "
-    "one invocation share a title."
+    "one invocation share a title, and the random part keeps launches of concurrent invocations of "
+    "one story apart even when their clocks give the same timestamp."
 )
 TITLE_RECORD = (
     "With `metrics` on, the facilitator keeps each launch's title in the metrics file and reads "
