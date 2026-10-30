@@ -577,3 +577,10 @@ def test_reference_mentions_in_bundles_resolve_to_local_files():
                         offenders.append(
                             f"{md.relative_to(ROOT)}:{n}: {token} has no local file in this bundle")
     assert not offenders, "\n".join(offenders)
+
+
+def test_user_story_template_spells_artifact_with_an_i():
+    """SKL-152: the house spelling is "artifact"; the story template must not seed "artefact"."""
+    template = (ROOT / "skills" / "linear-user-story" / "SKILL.md").read_text()
+    assert "artefact" not in template.lower()
+    assert "Any artifact or method this story changes" in template
