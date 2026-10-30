@@ -360,10 +360,8 @@ PR #109 now has these four reviews, each in state `COMMENTED` with `commit_id` e
 - [Review 5708154293](https://github.com/noahwhite/agent-skills/pull/109#pullrequestreview-5708154293) on `7b113472226936ffb6f2036ff03ed0bdc08666a3`.
 - [Review 5708154420](https://github.com/noahwhite/agent-skills/pull/109#pullrequestreview-5708154420) on `c64635e0d2ce4d4f117f65e634eedf8884469b3b`.
 
-Each names the reviewer (Codex GPT-6 Sol) and both adjudicators (DeepSeek V4 Pro and Opus 5.5).
-Each lists the round's findings, the verdict per finding, the fix commit for each valid finding, and why the round was not posted at the time.
+Each names the reviewer (Codex GPT-6 Sol) and both adjudicators (DeepSeek V4 Pro and Opus 5.5), and lists the round's findings, verdicts, fix commits, and why it was not posted at the time.
 None begins `Review of record`, so [review 5707752059](https://github.com/noahwhite/agent-skills/pull/109#pullrequestreview-5707752059) on merge head `1fd8a9eeed039728323d12bc6ff80d33cb4f2dc9`, which has no findings, stays PR #109's review of record.
-The findings in each post match the reviewer output saved for that round, the DeepSeek V4 Pro verdicts match that round's saved adjudication report, and the Opus 5.5 verdicts match the engineer's checklist from the time.
-Every finding ruled valid has a fix commit in PR #109, up to and including the merge head, that touches the file the finding names: `0076af5`, `7b11347`, `c64635e`, `987fc99`, `7e73ac5`, and `1fd8a9e`.
+Each valid finding's fix commit (`0076af5`, `7b11347`, `c64635e`, `987fc99`, `7e73ac5`, `1fd8a9e`) is in PR #109 up to and including the merge head and touches the file the finding names.
 
 Decision: Done.
