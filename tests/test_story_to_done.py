@@ -432,6 +432,12 @@ METRICS_LOCATION = (
     "in the session scratch directory, outside every role subdirectory."
 )
 METRICS_NEVER_NAMED = "- **Never named:** the metrics file is never named in a brief."
+# SKL-132: the usage pointer to the shared procedure, with no formula of its own.
+METRICS_USAGE = (
+    "- **Usage:** Each launch's Tokens and Tool calls are read as the \"Read a subagent's usage\" row and the "
+    "\"Usage from shell-launched agents\" rule in [references/runtimes.md](references/runtimes.md) state; this "
+    "section states no usage formula of its own."
+)
 METRICS_TIMED_LAUNCHES = (
     "- **Timed launches:** time each senior engineer launch and each QA round, taking the start immediately "
     "before the launch and the end when it returns, and record it as one row in launch order under a "
@@ -606,6 +612,7 @@ METRICS_LINES = [
     "collects and reports, and this file does not restate it.",
     METRICS_LOCATION,
     METRICS_NEVER_NAMED,
+    METRICS_USAGE,
     METRICS_TIMED_LAUNCHES,
     "  " + METRICS_LAUNCH_POINTS,
     METRICS_EXTRAS,

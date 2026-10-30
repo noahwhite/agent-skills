@@ -103,6 +103,7 @@ refinement:
     model: opencode-go/grok-4.7
     command: >-
       opencode run --model opencode-go/grok-4.7 "Follow the instructions in the attached file exactly. Do not modify any file."
+      --title "{session_title}"
       --file "{prompt_file}" > "{output_file}"
     family: xai
   reviewers:
@@ -111,6 +112,7 @@ refinement:
       model: deepseek/deepseek-flash
       command: >-
         opencode run --model deepseek/deepseek-flash "Follow the instructions in the attached file exactly. Do not modify any file."
+        --title "{session_title}"
         --file "{prompt_file}" > "{output_file}"
       family: deepseek
     - name: GPT-6.1 Sol
@@ -118,6 +120,7 @@ refinement:
       model: openai/gpt-6.1-sol
       command: >-
         opencode run --model openai/gpt-6.1-sol "Follow the instructions in the attached file exactly. Do not modify any file."
+        --title "{session_title}"
         --file "{prompt_file}" > "{output_file}"
       family: openai
   point_cap: 5
