@@ -326,3 +326,28 @@ Each post's first line must not begin with `Review of record`, for example `Late
 Whether those late posts meet this item is a product-owner decision, recorded on the story before the next round rules on this item.
 
 Decision: In Progress; C4 is met at `1fd8a9eeed039728323d12bc6ff80d33cb4f2dc9`, and its runs need no rerun unless the fix changes the skill.
+
+## Round 6, 2026-10-30
+
+The environment under test is merged `main`, build `eb849b809d4b98a1dd3704965fbb9d74b0f0a08e`.
+Since the PR #109 squash `617dc2edeb75a578fe53681248f5ee9182f70d72`, only files under `docs/qa-evidence/` changed, so the skill, its references, its script, the tests, and the README are the ones Round 5 verified.
+The product owner ruled on the story that this round re-checks the Definition of Done item "independently reviewed" only, and that C4 is not rerun unless the skill changes.
+There is no visual surface; structured assertions and raw command output are the evidence, without screenshots.
+The tracker record is QA comment `29a9cbae` on SKL-94 and its attachment `SKL-94 QA round 6 assertions (2026-10-30)`.
+
+Outcome: every acceptance criterion and Definition of Done item is met.
+
+| Item | Verdict | Evidence |
+|---|---|---|
+| C1 post the summary | Verified | Verified in Round 5; the skill is unchanged since. |
+| C2 docs | Verified | Verified in Round 5; the skill and the README are unchanged since. |
+| C3 tests | Verified | 812 tests pass and `vendor_shared.py --check` exits 0 at `eb849b8`; [CI run 41003856823](https://github.com/noahwhite/agent-skills/actions/runs/41003856823) succeeded on that commit. |
+| C4 verified end to end | Verified | Verified in Round 5 at `1fd8a9eeed039728323d12bc6ff80d33cb4f2dc9`; the skill is unchanged since, so the runs are not repeated. |
+| DoD all acceptance criteria met | Verified | C1 to C4. |
+| DoD tests written and passing | Verified | C3. |
+| DoD independently reviewed | Verified | The product owner's condition holds: PR #109's four unposted rounds now have late `COMMENTED` reviews bound to their heads, [5708154066](https://github.com/noahwhite/agent-skills/pull/109#pullrequestreview-5708154066) on `8278159`, [5708154176](https://github.com/noahwhite/agent-skills/pull/109#pullrequestreview-5708154176) on `0076af5`, [5708154293](https://github.com/noahwhite/agent-skills/pull/109#pullrequestreview-5708154293) on `7b11347`, and [5708154420](https://github.com/noahwhite/agent-skills/pull/109#pullrequestreview-5708154420) on `c64635e`, each naming Codex GPT-6 Sol and both adjudicators (DeepSeek V4 Pro, Opus 5.5) with its findings, verdicts, fix commits, and why it was not posted at the time, and none beginning `Review of record`, so [review 5707752059](https://github.com/noahwhite/agent-skills/pull/109#pullrequestreview-5707752059) on merge head `1fd8a9eeed039728323d12bc6ff80d33cb4f2dc9`, with no findings, stays the review of record; the findings and verdicts match each round's saved reviewer and DeepSeek V4 Pro output and the engineer's checklist for Opus 5.5, and every valid finding has a fix commit in PR #109 up to and including the merge head (`0076af5`, `7b11347`, `c64635e`, `987fc99`, `7e73ac5`, `1fd8a9e`), as the tracker attachment records. |
+| DoD docs updated | Verified | C2. |
+| DoD staging | Verified | No staging target exists; C4 stands in for it and is met. |
+| DoD no critical bugs or regressions | Verified | The full suite and CI are green. |
+
+Decision: Done once this evidence PR merges through its review of record and CI.
