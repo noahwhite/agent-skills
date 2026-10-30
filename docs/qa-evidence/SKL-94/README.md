@@ -207,7 +207,7 @@ Fixtures are SKL-145 (Run 1, created In Deployment Review) and SKL-146 (Run 2, c
 There is no visual surface; structured assertions and raw command output are the evidence, without screenshots.
 The tracker record is QA comment `70a26d4a` on SKL-94 and its attachment `SKL-94 QA round 4 assertions (2026-10-30)`.
 
-Outcome: every acceptance criterion and Definition of Done item is met.
+Outcome: C1 to C4 are met, but the Definition of Done item "independently reviewed" is not, so the story returns to In Progress.
 
 | Item | Verdict | Evidence |
 |---|---|---|
@@ -217,7 +217,7 @@ Outcome: every acceptance criterion and Definition of Done item is met.
 | C4 verified end to end | Verified | Both comments equal the summary in their closing report byte for byte, have one row per launch in launch order, and were read back once with a `true` result; details below. |
 | DoD all acceptance criteria met | Verified | C1 to C4. |
 | DoD tests written and passing | Verified | C3. |
-| DoD independently reviewed | Verified | The review of record on PR #106 binds head `91a6c4fcf703e4511f5c07ffd0adafa61b84e5df`: Codex GPT-6 Sol reviewer, Opus 5.5 and DeepSeek V4 Pro adjudicators, no merge-blocking finding. |
+| DoD independently reviewed | Not met | [Review 5706418807](https://github.com/noahwhite/agent-skills/pull/106#pullrequestreview-5706418807) binds head `91a6c4fcf703e4511f5c07ffd0adafa61b84e5df` (Codex GPT-6 Sol reviewer, Opus 5.5 and DeepSeek V4 Pro adjudicators) and has no merge-blocking finding, but it rules three Low findings valid and PR #106 merged with all three unfixed, while the review rules require every finding ruled valid to be fixed in the same PR. |
 | DoD docs updated | Verified | C2. |
 | DoD staging | Verified | No staging target exists; C4 stands in for it and is met. |
 | DoD no critical bugs or regressions | Verified | The full suite and CI are green. |
@@ -249,7 +249,13 @@ Run end state: stopped at step 1, story Blocked; QA then canceled SKL-146 and re
 ### Observations outside the acceptance criteria
 
 Neither coordinator marked its post item completed in its checklist after the read-back, which the skill requires; each checklist stopped after its first write.
+No clause of C1 to C4 or the Definition of Done covers that update, so, unlike the Round 3 failed-item list, this round does not count it against C4.
 The Run 1 closing report opens with a copy of the summary heading line before its prose; the summary itself sits in a code block and equals the comment.
-The review of record on PR #106 rules three Low findings valid and leaves them unfixed.
+### Failed item for the engineer
 
-Decision: Done.
+DoD independently reviewed: fix the three findings the review of record on PR #106 rules valid.
+First, a rerun of the end form after a nonzero exit can append a second `invocation_end` when the summary script fails after its append.
+Second, the read-back command needs `jq`, which the skill's `compatibility` does not name.
+Third, a duplicate row label has no recovery path under the rule that forbids editing the metrics file.
+
+Decision: In Progress; C4 is met at `91a6c4fcf703e4511f5c07ffd0adafa61b84e5df`, and the next round re-runs it if the fix changes the metrics rules.
