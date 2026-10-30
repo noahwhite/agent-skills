@@ -480,8 +480,8 @@ METRICS_COMMAND_ROWS = (
 METRICS_WRAPPER_INTRO = (
     "Launch every later command other than the end form below, the summary post, and its read-back in this "
     "wrapper, with the command in place of "
-    "`<command>`, a label unique within the invocation, without a single quote and naming no path, in place of "
-    "`<row label>`, and "
+    "`<command>`, a label unique within the invocation, other than the reserved `start` and `end`, without a "
+    "single quote and naming no path, in place of `<row label>`, and "
     "the absolute path of that `metrics.txt` in place of `<metrics file>`:"
 )
 METRICS_WRAPPER_BLOCK = [
@@ -1251,6 +1251,16 @@ def test_a_reused_role_label_fails_the_end_form(tmp_path: Path) -> None:
     result = subprocess.run(["bash", "-c", end_form(record)], capture_output=True, text=True)
     assert result.returncode == 0 and result.stderr == "", "relabelling the later row recovers the record"
     assert "| qa-round-1 |" in result.stdout and "| qa-round-2 |" in result.stdout
+
+
+def test_a_wrapped_row_may_not_take_the_reserved_end_label(tmp_path: Path) -> None:
+    record = tmp_path / "metrics.txt"
+    record.write_text("start 1793218198.0 start\nend 1793218199.0 start\nstart 1793218300.0 end\nend 1793218301.0 end\n")
+    before = record.read_text()
+    result = subprocess.run(["bash", "-c", end_form(record)], capture_output=True, text=True)
+    assert result.returncode != 0 and result.stdout == "", "a wrapped row labelled end must not print a summary"
+    assert "the reserved label end" in result.stderr
+    assert record.read_text() == before, "a rejected record gets no row"
 
 
 def test_a_role_row_may_not_take_the_reserved_start_or_end_label(tmp_path: Path) -> None:

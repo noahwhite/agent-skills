@@ -74,7 +74,7 @@ s=$(date -u +%s.%N); <scratch creation>
 printf 'start %s start\nend %s start\n' "$s" "$(date -u +%s.%N)" >> "$scratch/metrics.txt"
 ```
 From then on, record a row for each command the coordinator launches, in launch order, with its usage figures recorded under `references/metrics.md` and `not reported` for any usage the runtime does not return.
-Launch every later command other than the end form below, the summary post, and its read-back in this wrapper, with the command in place of `<command>`, a label unique within the invocation, without a single quote and naming no path, in place of `<row label>`, and the absolute path of that `metrics.txt` in place of `<metrics file>`:
+Launch every later command other than the end form below, the summary post, and its read-back in this wrapper, with the command in place of `<command>`, a label unique within the invocation, other than the reserved `start` and `end`, without a single quote and naming no path, in place of `<row label>`, and the absolute path of that `metrics.txt` in place of `<metrics file>`:
 ```sh
 f='<metrics file>'; printf 'start %s %s\n' "$(date -u +%s.%N)" '<row label>' >> "$f"; (
 <command>
