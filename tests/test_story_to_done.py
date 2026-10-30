@@ -385,10 +385,11 @@ METRICS_WRAPPED_WHOLE = (
 METRICS_SCRIPT_ONCE = (
     'The summary script runs only as the end form, never as a preview, because each run that writes its row '
     'appends another `invocation_end`: it runs once per invocation, again after it reports an invalid record, '
-    'and again after any other nonzero exit, but first the coordinator reads the metrics file with the '
-    'runtime\'s file-read tool and removes, with the runtime\'s file-edit tool, what the failed run left at its '
-    'end: a last line with no line ending, then the `start` line labelled `end` and any `end` line labelled '
-    '`end` after it, so the record keeps one `invocation_end`.'
+    'which leaves the metrics file as it was, and again after any other nonzero exit, but first the coordinator '
+    'reads the metrics file with the runtime\'s file-read tool and removes, with the runtime\'s file-edit tool, '
+    'only the end form\'s own lines that the failed run left at its end: a last line with no line ending, then '
+    'the `start` line labelled `end` with no tab in it and any `end` line labelled `end` with no tab in it after '
+    'it, so the record keeps one `invocation_end`.'
 )
 METRICS_NO_EDIT = (
     'The coordinator never edits, rewrites, or deletes a line of the metrics file other than the end form\'s '
@@ -1266,6 +1267,29 @@ def test_a_role_row_may_not_take_the_reserved_start_or_end_label(tmp_path: Path)
     result = subprocess.run(["bash", "-c", end_form(record)], capture_output=True, text=True)
     assert result.returncode != 0 and result.stdout == ""
     assert "the reserved label start" in result.stderr
+
+
+def test_a_role_row_labelled_end_survives_the_cleanup_and_is_relabelled(tmp_path: Path) -> None:
+    record = tmp_path / "metrics.txt"
+    record.write_text(
+        role_start("1793218300.000000000", "eng", "opencode", "m", "high")
+        + role_end("1793218400.000000000", "eng", "1", "2")
+        + role_start("1793218500.000000000", "end", "opencode", "m", "high")
+        + role_end("1793218650.000000000", "end", "3", "4")
+    )
+    before = record.read_text()
+    result = subprocess.run(["bash", "-c", end_form(record)], capture_output=True, text=True)
+    assert result.returncode != 0 and result.stdout == ""
+    assert "the reserved label end" in result.stderr
+    assert record.read_text() == before, "an invalid-record report leaves the metrics file as it was"
+    assert remove_what_a_failed_end_form_left(before) == before, "the cleanup removes no role row"
+    lines = before.splitlines(keepends=True)
+    for later in (2, 3):
+        lines[later] = lines[later].replace(" end\t", " qa-round-1\t", 1)
+    record.write_text("".join(lines))
+    result = subprocess.run(["bash", "-c", end_form(record)], capture_output=True, text=True)
+    assert result.returncode == 0 and result.stderr == "", "relabelling the reserved row recovers the record"
+    assert "| qa-round-1 | opencode | m | high | 150.000000000s | 3 | 4 |" in result.stdout
 
 
 @pytest.mark.parametrize("awk", AWKS)
