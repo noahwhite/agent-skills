@@ -5,7 +5,7 @@ awk '
 function label(s) { if (s == "qa-rounds") return "QA rounds"; if (s == "failed-items") return "Failed items"; if (s == "fix-rounds") return "Fix rounds"; if (s == "prs-merged") return "PRs merged"; if (s == "start") return "Start"; if (s == "time-to-deployment-review") return "Time to deployment review"; if (s == "qa-round-durations") return "QA round durations"; if (s == "end-state") return "End state"; return "" }
 $1 == "extra" { rest = $0; sub(/^extra[ \t]+/, "", rest); i = index(rest, "\t"); s = (i > 0 ? substr(rest, 1, i - 1) : rest); if (label(s) == "") { if (bad == "") bad = "unknown extra slug " s }; next }
 $1 == "start" || $1 == "end" { k = substr($0, length($1) + length($2) + 3); parts = split(k, f, "\t"); k = f[1]
-  if (parts > 1 && (k == "start" || k == "end")) { if (bad == "") bad = "the reserved label " k }
+  if (k == "end" || (parts > 1 && k == "start")) { if (bad == "") bad = "the reserved label " k }
   if ($1 == "end") for (j = 2; j <= parts; j++) if (f[j] !~ /^[0-9]+( cumulative)?$/ && f[j] != "not reported") { if (bad == "") bad = "the figure " f[j] }
   if ($1 == "start" && (k in began)) { if (bad == "") bad = "the label " k " is used twice" }
   began[k] = 1

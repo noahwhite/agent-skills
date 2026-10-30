@@ -383,13 +383,21 @@ METRICS_WRAPPED_WHOLE = (
     'chained before or after the wrapper in the same launch.'
 )
 METRICS_SCRIPT_ONCE = (
-    'The summary script runs only as the end form, once per invocation and again only after a run that exits '
-    'nonzero, never as a preview, because every run that exits 0 appends another `invocation_end`.'
+    'The summary script runs only as the end form, never as a preview, because each run that writes its row '
+    'appends another `invocation_end`: it runs once per invocation, again after it reports an invalid record,'
+    ' which leaves the metrics file as it was, and again after any other nonzero exit, but first the '
+    "coordinator restores the metrics file, with the runtime's file-edit tool, to exactly the content it read"
+    " with the runtime's file-read tool immediately before that failed launch, so the record keeps one "
+    '`invocation_end`; the coordinator therefore reads the metrics file immediately before each end-form '
+    'launch.'
 )
 METRICS_NO_EDIT = (
-    'The coordinator never edits, rewrites, or deletes a line of the metrics file, with one exception: when '
-    'the end form reports an invalid record, the coordinator corrects only the format of the line holding '
-    'the value it names, in place, keeping every value as it was recorded.'
+    'The coordinator never edits, rewrites, or deletes a line of the metrics file other than restoring it '
+    'before a rerun as above, with one exception: when '
+    'the end form reports an invalid record, the coordinator corrects, in place, only the value it names and '
+    'keeps every other value as it was recorded: a figure or an extra slug gets only its format corrected, and '
+    'a row label used twice or reserved gets a new label, under the row-label rule above, on the `start` and '
+    '`end` lines of the later row that carries it.'
 )
 METRICS_READ_BACK_RESULT = (
     'The read-back command compares the comment body with the summary body file exactly, byte for byte, '
@@ -477,8 +485,8 @@ METRICS_COMMAND_ROWS = (
 METRICS_WRAPPER_INTRO = (
     "Launch every later command other than the end form below, the summary post, and its read-back in this "
     "wrapper, with the command in place of "
-    "`<command>`, a label unique within the invocation, without a single quote and naming no path, in place of "
-    "`<row label>`, and "
+    "`<command>`, a label unique within the invocation, other than the reserved `start` and `end`, without a "
+    "single quote and naming no path, in place of `<row label>`, and "
     "the absolute path of that `metrics.txt` in place of `<metrics file>`:"
 )
 METRICS_WRAPPER_BLOCK = [
@@ -525,7 +533,7 @@ METRICS_END_INTRO = (
     f"`{METRICS_END_LAUNCH}`, where "
     "`<skill dir>` is the absolute directory your runtime loaded this skill from; it records `invocation_end` and "
     "prints the summary's table, the recorded extras and Totals from the metrics file, and it writes nothing and "
-    "reports the line when an extra slug, a figure cell or a role label breaks this format, so fix the record and "
+    "reports the line when an extra slug, a figure cell or a row label breaks this format, so fix the record and "
     "run it again."
 )
 METRICS_END_VERBATIM = (
@@ -1238,10 +1246,19 @@ def test_a_reused_role_label_fails_the_end_form(tmp_path: Path) -> None:
         role_start("1793218300.000000000", "qa-round-1", "opencode", "m", "high")
         + role_end("1793218400.000000000", "qa-round-1", "1", "2")
         + role_start("1793218500.000000000", "qa-round-1", "opencode", "m", "high")
+        + role_end("1793218650.000000000", "qa-round-1", "3", "4")
     )
     result = subprocess.run(["bash", "-c", end_form(record)], capture_output=True, text=True)
     assert result.returncode != 0 and result.stdout == "", "a reused label must not print a summary"
     assert "the label qa-round-1 is used twice" in result.stderr
+    lines = record.read_text().splitlines(keepends=True)
+    for later in (2, 3):
+        lines[later] = lines[later].replace(" qa-round-1\t", " qa-round-2\t", 1)
+    record.write_text("".join(lines))
+    result = subprocess.run(["bash", "-c", end_form(record)], capture_output=True, text=True)
+    assert result.returncode == 0 and result.stderr == "", "relabelling the later row recovers the record"
+    assert "| qa-round-1 | opencode | m | high | 100.000000000s | 1 | 2 |" in result.stdout
+    assert "| qa-round-2 | opencode | m | high | 150.000000000s | 3 | 4 |" in result.stdout
 
 
 def test_a_role_row_may_not_take_the_reserved_start_or_end_label(tmp_path: Path) -> None:
@@ -1250,6 +1267,45 @@ def test_a_role_row_may_not_take_the_reserved_start_or_end_label(tmp_path: Path)
     result = subprocess.run(["bash", "-c", end_form(record)], capture_output=True, text=True)
     assert result.returncode != 0 and result.stdout == ""
     assert "the reserved label start" in result.stderr
+
+
+def test_a_command_row_labelled_end_fails_the_end_form_and_is_relabelled(tmp_path: Path) -> None:
+    record = tmp_path / "metrics.txt"
+    record.write_text(
+        "start 1793218100.000000000 start\nend 1793218101.000000000 start\n"
+        "start 1793218102.000000000 end\nend 1793218110.000000000 end\n"
+    )
+    before = record.read_text()
+    result = subprocess.run(["bash", "-c", end_form(record)], capture_output=True, text=True)
+    assert result.returncode != 0 and result.stdout == "", "a command row labelled end must not print a summary"
+    assert "the reserved label end" in result.stderr
+    assert record.read_text() == before, "an invalid-record report leaves the metrics file as it was"
+    record.write_text(before.replace(" end\n", " push-branch\n"))
+    result = subprocess.run(["bash", "-c", end_form(record)], capture_output=True, text=True)
+    assert result.returncode == 0 and result.stderr == "", "relabelling the command row recovers the record"
+    assert "| push-branch | command | not set | not set | 8.000000000s | not reported | not reported |" in result.stdout
+
+
+def test_a_role_row_labelled_end_survives_the_cleanup_and_is_relabelled(tmp_path: Path) -> None:
+    record = tmp_path / "metrics.txt"
+    record.write_text(
+        role_start("1793218300.000000000", "eng", "opencode", "m", "high")
+        + role_end("1793218400.000000000", "eng", "1", "2")
+        + role_start("1793218500.000000000", "end", "opencode", "m", "high")
+        + role_end("1793218650.000000000", "end", "3", "4")
+    )
+    before = record.read_text()
+    result = subprocess.run(["bash", "-c", end_form(record)], capture_output=True, text=True)
+    assert result.returncode != 0 and result.stdout == ""
+    assert "the reserved label end" in result.stderr
+    assert record.read_text() == before, "an invalid-record report leaves the metrics file as it was"
+    lines = before.splitlines(keepends=True)
+    for later in (2, 3):
+        lines[later] = lines[later].replace(" end\t", " qa-round-1\t", 1)
+    record.write_text("".join(lines))
+    result = subprocess.run(["bash", "-c", end_form(record)], capture_output=True, text=True)
+    assert result.returncode == 0 and result.stderr == "", "relabelling the reserved row recovers the record"
+    assert "| qa-round-1 | opencode | m | high | 150.000000000s | 3 | 4 |" in result.stdout
 
 
 @pytest.mark.parametrize("awk", AWKS)
@@ -1309,6 +1365,54 @@ def test_the_end_form_works_out_durations_exactly() -> None:
     for awk in AWKS:
         result = subprocess.run([awk, end_form_program()], input=stamps, capture_output=True, text=True, check=True)
         assert result.stdout == expected, awk
+
+
+def end_form_after_failed_print(record: Path, awk: str, tmp_path: Path) -> None:
+    bin_dir = tmp_path / "awk-bin"
+    bin_dir.mkdir(exist_ok=True)
+    link = bin_dir / "awk"
+    link.unlink(missing_ok=True)
+    link.symlink_to(awk)
+    env = {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
+    failed = subprocess.run(["bash", "-c", end_form(record) + " >/dev/full"], capture_output=True, text=True, env=env)
+    assert failed.returncode != 0, "an end form whose summary cannot be written exits nonzero"
+
+
+@pytest.mark.skipif(not Path("/dev/full").exists(), reason="needs /dev/full to make the summary write fail")
+@pytest.mark.parametrize("awk", AWKS)
+@pytest.mark.parametrize("left", ["whole row", "start line only", "start line and a cut end line", "cut start line"])
+def test_restoring_the_file_read_before_a_failed_end_form_keeps_one_invocation_end(tmp_path: Path, awk: str, left: str) -> None:
+    assert METRICS_SCRIPT_ONCE in metrics_lines()
+    record = tmp_path / "metrics.txt"
+    before = "start 1793218198.0 start\nend 1793218199.0 start\n"
+    record.write_text(before)
+    end_form_after_failed_print(record, awk, tmp_path)
+    whole = record.read_text()
+    assert [line.split(" ")[0] + " " + line.split(" ")[2] for line in whole.splitlines()[-2:]] == ["start end", "end end"]
+    start_line = whole.splitlines(keepends=True)[-2]
+    record.write_text(before + {
+        "whole row": whole[len(before):],
+        "start line only": start_line,
+        "start line and a cut end line": start_line + "end 17932",
+        "cut start line": start_line[:9],
+    }[left])
+    assert record.read_text() != before
+    record.write_text(before)
+    rerun = run_end_form(record, awk, tmp_path)
+    assert rerun.returncode == 0 and rerun.stderr == ""
+    assert [(kind, label) for kind, _, label in read_rows(record)] == [
+        ("start", "start"), ("end", "start"), ("start", "end"), ("end", "end")
+    ], "the record keeps one invocation_end"
+    stamps = recorded(record)
+    start, end = stamps["start", "start"], stamps["end", "end"]
+    rows = [(label, seconds(stamps["start", label], stamps["end", label])) for label in ("start", "end")]
+    assert rerun.stdout == expected_summary(rows, start, end, seconds(start, end))
+
+
+def test_compatibility_names_jq_for_the_linear_cli_read_back() -> None:
+    compatibility = next(line for line in SKILL.read_text().splitlines() if line.startswith("compatibility:"))
+    assert "the linear CLI (schpet/linear-cli) with jq, or the Linear MCP server" in compatibility
+    assert "| jq -e " in METRICS_LINEAR_COMMANDS
 
 
 def test_an_end_form_that_cannot_record_its_row_fails(tmp_path: Path) -> None:
