@@ -20,7 +20,7 @@ If your runtime is not listed, map each capability to its closest equivalent and
 | Wake the manager (merge approval) | `SendMessage` | no push capability; the approvals file plus the manager's watcher is the delivery path |
 | Run a shell command | `Bash` | V2: `shell`; V1: `bash` |
 | Fetch a URL | `WebFetch` | `webfetch` |
-| Hosted evidence (the artefacts a session published for itself) | reachable where the session published artifacts from its own conversation on `claude.ai`: list and download them in that conversation's artifact view, and delete a single artifact with that product's per-artifact delete action; where no per-artifact delete action is exposed, the map gives none and the copy stays | none: an OpenCode session publishes no hosted artefacts, so there is nothing to list, download, or delete |
+| Hosted evidence (the artifacts a session published for itself) | reachable where the session published artifacts from its own conversation on `claude.ai`: list and download them in that conversation's artifact view, and delete a single artifact with that product's per-artifact delete action; where no per-artifact delete action is exposed, the map gives none and the copy stays | none: an OpenCode session publishes no hosted artifacts, so there is nothing to list, download, or delete |
 | Scratch base directory | `$CLAUDE_JOB_DIR/tmp` in background jobs, else `profile.workspace.scratch_dir` | `profile.workspace.scratch_dir` |
 | Session label (for agent stamps) | the session or job name if set, else the session id | the session title if set, else the session id |
 | Tracker writes from a subagent | a subagent's write can be denied by the auto-mode permission check; only the owner grants it | V2: agent `permissions` rules for `shell`; V1: `permission.bash`; probe the actual write path |
@@ -32,7 +32,7 @@ If your runtime is not listed, map each capability to its closest equivalent and
   The wake is a prompt to read the file, never the record itself.
   Where the runtime has no push capability, the approvals file plus the manager's watcher is the delivery path.
   The handshake is defined once in the merge-approval capability.
-- **Scratch files.** Create exactly one scratch directory for the session's lifetime with `mktemp -d` inside the base directory the runtime or the profile gives, and use it for every scratch artefact of the session: gate dossiers, throwaway checkouts, agent config homes, checklist files, and subagent inputs.
+- **Scratch files.** Create exactly one scratch directory for the session's lifetime with `mktemp -d` inside the base directory the runtime or the profile gives, and use it for every scratch artifact of the session: gate dossiers, throwaway checkouts, agent config homes, checklist files, and subagent inputs.
   The base directory is the runtime's own scratch directory when the runtime provides one (the capability row above), else `profile.workspace.scratch_dir`; it is a base only, never the directory a session works in, and the runtime's base wins when both exist.
   A skill passes each voter, engineer, or QA only its own subdirectory of the session directory, never the session directory itself and never another role's files, so that no voter is handed another voter's votes or inputs.
   Pass every other subagent and shell-launched agent you start the session's directory or a directory inside it.

@@ -473,7 +473,7 @@
       "properties": {
         "scratch_dir": {
           "type": "string",
-          "description": "Base directory for the session's scratch space: the session creates exactly one directory inside it with `mktemp -d` and keeps every scratch artefact there. A base directory only, never the per-session directory. Optional; when it is unset, the session creates a standalone `mktemp -d` and uses it for the whole task."
+          "description": "Base directory for the session's scratch space: the session creates exactly one directory inside it with `mktemp -d` and keeps every scratch artifact there. A base directory only, never the per-session directory. Optional; when it is unset, the session creates a standalone `mktemp -d` and uses it for the whole task."
         }
       }
     },

@@ -59,7 +59,7 @@ RUNTIME_TERMS = re.compile(
     r"\b(TaskCreate|TaskUpdate|TodoWrite|todowrite|AskUserQuestion|subagent_type|CLAUDE_JOB_DIR)\b"
     r"|mcp__|~/\.claude/|\.opencode/"
 )
-# A hosted artefact store's host name is runtime detail too: the capability map names the host,
+# A hosted artifact store's host name is runtime detail too: the capability map names the host,
 # and a skill names the capability and cites that map (SKL-63, AC7). The scan covers skill prose
 # only, and exempts any file named runtimes.md on purpose: that map is where a host belongs.
 # The list covers the stores a session publishes screenshots and files to; a name-based check can
@@ -75,7 +75,7 @@ HOSTED_STORE_HOSTS = re.compile(
 
 
 def hosted_store_offenders(paths) -> list[str]:
-    """Lines of the given Markdown files that name a hosted artefact store, runtimes maps aside."""
+    """Lines of the given Markdown files that name a hosted artifact store, runtimes maps aside."""
     offenders = []
     for md in paths:
         if md.name == "runtimes.md":
@@ -579,8 +579,24 @@ def test_reference_mentions_in_bundles_resolve_to_local_files():
     assert not offenders, "\n".join(offenders)
 
 
-def test_user_story_template_spells_artifact_with_an_i():
-    """SKL-152: the house spelling is "artifact"; the story template must not seed "artefact"."""
-    template = (ROOT / "skills" / "linear-user-story" / "SKILL.md").read_text()
-    assert "artefact" not in template.lower()
-    assert "Any artifact or method this story changes" in template
+# The British spelling, assembled so this file does not contain it.
+BRITISH_ARTIFACT = "arte" + "fact"
+# Closed-story QA evidence is a frozen record and is not rewritten.
+SPELLING_EXEMPT = ("docs/qa-evidence/",)
+
+
+def test_house_spelling_is_artifact_everywhere_tracked():
+    """SKL-152: the house spelling is "artifact"; no tracked file outside frozen QA evidence uses the British one."""
+    tracked = subprocess.run(
+        ["git", "ls-files", "-z"], cwd=ROOT, capture_output=True, check=True
+    ).stdout.decode().split("\0")
+    offenders = []
+    for name in filter(None, tracked):
+        if name.startswith(SPELLING_EXEMPT) or not (ROOT / name).is_file():
+            continue
+        try:
+            text = (ROOT / name).read_text()
+        except UnicodeDecodeError:
+            continue
+        offenders += [f"{name}:{n}" for n, line in enumerate(text.splitlines(), 1) if BRITISH_ARTIFACT in line.lower()]
+    assert not offenders, "use 'artifact', not the British spelling:\n" + "\n".join(offenders)

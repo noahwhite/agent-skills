@@ -122,7 +122,7 @@
 # collide. Never pass the profile's base directory itself. Omitted, the script creates its own
 # standalone directory per invocation and exposes that directory to the phase agent. A phase agent
 # also receives the session directory (the supplied one, else the standalone run directory) in
-# ADVERSARIAL_SESSION_SCRATCH, so it can keep its own artefacts beside the run.
+# ADVERSARIAL_SESSION_SCRATCH, so it can keep its own artifacts beside the run.
 #
 # --agent-cmd is a shell command template built from the profile's agent definition for that phase.
 # Placeholders (substituted shell-quoted): {prompt_file} the dossier, {output_file} the artifact,
@@ -817,7 +817,7 @@ write_dossier() {  # $1 = phase, $2 = dossier path, $3 = the phase's checkout (e
         echo "Be exhaustive; volume over precision, and mark speculation as such."
         echo "Do NOT modify any files: the checkout on the CHECKOUT: line below is read-only, for reading code"
         echo "the diff does not show. Never write secrets to files or command arguments."
-        echo "The session's scratch directory is ${SESSION_SCRATCH:-$SCRATCH}; keep any artefact you create there."
+        echo "The session's scratch directory is ${SESSION_SCRATCH:-$SCRATCH}; keep any artifact you create there."
         echo "The FIRST line of your report must be exactly 'REVIEW-RAN: yes' when you read the diff below; otherwise"
         echo "make it 'REVIEW-RAN: no - <reason>'. A report without that line is treated as a review that did not run."
         echo
@@ -830,7 +830,7 @@ write_dossier() {  # $1 = phase, $2 = dossier path, $3 = the phase's checkout (e
         echo "one on the CHECKOUT: line below. You may edit files in that checkout to run experiments; never"
         echo "commit, push, or touch any other tree."
         echo "Never write secrets to files or command arguments."
-        echo "The session's scratch directory is ${SESSION_SCRATCH:-$SCRATCH}; keep any artefact you create there."
+        echo "The session's scratch directory is ${SESSION_SCRATCH:-$SCRATCH}; keep any artifact you create there."
         echo
         echo "Job 1 - VERIFY. For each candidate below, write and run a minimal adversarial check (mutate the"
         echo "code, run the relevant tests, revert) and report VERIFIED with the exact command and observed"
@@ -862,7 +862,7 @@ write_dossier() {  # $1 = phase, $2 = dossier path, $3 = the phase's checkout (e
         echo "2. Surface cross-module logic inconsistencies, security bypasses and architectural regressions"
         echo "   the lower tiers missed."
         echo "3. Never invent findings to fill a section. Do not modify files. Never write secrets to files or command arguments."
-        echo "The session's scratch directory is ${SESSION_SCRATCH:-$SCRATCH}; keep any artefact you create there."
+        echo "The session's scratch directory is ${SESSION_SCRATCH:-$SCRATCH}; keep any artifact you create there."
         echo "4. Output the final report in EXACTLY this Markdown layout and nothing else, after one first line:"
         echo "   'REVIEW-RAN: yes' when you read the diffstat and both phase results below and this dossier"
         echo "   carries its CHECKOUT: line; otherwise 'REVIEW-RAN: no - <reason>'. A report without that"
