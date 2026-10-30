@@ -384,12 +384,15 @@ METRICS_WRAPPED_WHOLE = (
 )
 METRICS_SCRIPT_ONCE = (
     'The summary script runs only as the end form, once per invocation and again only after a run that exits '
-    'nonzero, never as a preview, because every run that exits 0 appends another `invocation_end`.'
+    'nonzero, never as a preview, because its first run that passes the record check records `invocation_end`; '
+    'a later run finds that row, appends nothing, and prints the summary from the record.'
 )
 METRICS_NO_EDIT = (
     'The coordinator never edits, rewrites, or deletes a line of the metrics file, with one exception: when '
-    'the end form reports an invalid record, the coordinator corrects only the format of the line holding '
-    'the value it names, in place, keeping every value as it was recorded.'
+    'the end form reports an invalid record, the coordinator corrects, in place, only the value it names and '
+    'keeps every other value as it was recorded: a figure or an extra slug gets only its format corrected, and '
+    'a row label used twice or reserved gets a label unique within the invocation on the `start` and `end` '
+    'lines of the later row that carries it.'
 )
 METRICS_READ_BACK_RESULT = (
     'The read-back command compares the comment body with the summary body file exactly, byte for byte, '
@@ -1242,6 +1245,13 @@ def test_a_reused_role_label_fails_the_end_form(tmp_path: Path) -> None:
     result = subprocess.run(["bash", "-c", end_form(record)], capture_output=True, text=True)
     assert result.returncode != 0 and result.stdout == "", "a reused label must not print a summary"
     assert "the label qa-round-1 is used twice" in result.stderr
+    assert METRICS_NO_EDIT in metrics_lines()
+    lines = record.read_text().splitlines(keepends=True)
+    renamed = role_start("1793218500.000000000", "qa-round-2", "opencode", "m", "high")
+    record.write_text("".join(lines[:2]) + renamed + role_end("1793218600.000000000", "qa-round-2", "3", "4"))
+    result = subprocess.run(["bash", "-c", end_form(record)], capture_output=True, text=True)
+    assert result.returncode == 0 and result.stderr == "", "relabelling the later row recovers the record"
+    assert "| qa-round-1 |" in result.stdout and "| qa-round-2 |" in result.stdout
 
 
 def test_a_role_row_may_not_take_the_reserved_start_or_end_label(tmp_path: Path) -> None:
@@ -1309,6 +1319,26 @@ def test_the_end_form_works_out_durations_exactly() -> None:
     for awk in AWKS:
         result = subprocess.run([awk, end_form_program()], input=stamps, capture_output=True, text=True, check=True)
         assert result.stdout == expected, awk
+
+
+@pytest.mark.parametrize("awk", AWKS)
+def test_a_rerun_of_the_end_form_appends_no_second_invocation_end(tmp_path: Path, awk: str) -> None:
+    record = tmp_path / "metrics.txt"
+    record.write_text("start 1793218198.0 start\nend 1793218199.0 start\n")
+    first = subprocess.run(["bash", "-c", end_form(record) + " | head -c 0"], capture_output=True, text=True)
+    assert first.stdout == ""
+    after_first = record.read_text()
+    assert after_first.count(" end\n") == 2, "the first run records the end form's row"
+    rerun = run_end_form(record, awk, tmp_path)
+    assert rerun.returncode == 0 and rerun.stderr == ""
+    assert record.read_text() == after_first, "a rerun appends no second invocation_end"
+    assert rerun.stdout.count("| end |") == 1
+
+
+def test_compatibility_names_jq_for_the_linear_cli_read_back() -> None:
+    compatibility = next(line for line in SKILL.read_text().splitlines() if line.startswith("compatibility:"))
+    assert "the linear CLI (schpet/linear-cli) with jq, or the Linear MCP server" in compatibility
+    assert "| jq -e " in METRICS_LINEAR_COMMANDS
 
 
 def test_an_end_form_that_cannot_record_its_row_fails(tmp_path: Path) -> None:
