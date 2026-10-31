@@ -1,13 +1,13 @@
 # SKL-90 QA round 1
 
 - Date: 2026-10-31 UTC.
-- Story: [SKL-90](https://linear.app/officina-pub/issue/SKL-90/spike-improve-story-refinement-speed-cost-and-accuracy).
+- Story: SKL-90 in the project tracker.
 - Environment: Linear tracker deliverables and read-only repository source, not a deployed service.
 - Build SHA: not applicable; research source SHA `f7453b3b22feec7e3d1f5928790e9bb23f9f6baf`.
 - Fixtures: QA independently captured 167 SKL issues and 792 team-filtered comments before posting its own findings, and separately inspected the two research scripts attached to the story.
 - Surface: CLI/API assertions and source records; no visual UI or screenshot applies.
 - Outcome: not met; reopen the existing spike to In Progress for correction.
-- [QA evidence comment](https://linear.app/officina-pub/issue/SKL-90/spike-improve-story-refinement-speed-cost-and-accuracy#comment-f906f047) includes the source references and ownership.
+- QA evidence comment `f906f047` on SKL-90 includes the source references and ownership; use `linear issue comment list SKL-90` to retrieve it.
 - Raw assertions and source output are attached as `qa-assertions.txt` and linked from the QA evidence comment; 23 assertions, 14 passed and 9 failed.
 - Timing assertions are attached separately as `timing-assertions.json` and linked from the same QA evidence comment.
 
