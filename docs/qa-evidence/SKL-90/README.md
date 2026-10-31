@@ -88,3 +88,42 @@ The SKL-90 senior engineer owns correcting the actual-round count and affected t
 No external blocking story is recorded; related SKL-91 is Done.
 Incidental non-blocking defects: SKL-158 already owns malformed nanosecond timestamps, and the blanket claim that spans understate measured cycles needs its labelled SKL-130 exception because that metric covers only resumed invocation 2.
 This evidence change implements no recommendation and deploys nothing.
+
+## QA round 3 - 2026-10-31 UTC
+
+This section preserves both earlier rounds and verifies findings revision 4, comment `6f64a66c` on SKL-90.
+The environment is Linear tracker deliverables and read-only source at research SHA `f7453b3b22feec7e3d1f5928790e9bb23f9f6baf`; no deployed build, UI fixture, screenshot or hosted page applies.
+Fixtures are an independent fully paginated CLI capture of 167 SKL issues and 802 team-filtered comments, the attached revision-4 baseline script, and freshly fetched repository source.
+The comment count is snapshot-specific.
+QA reproduced all 65 published ceremony rows across the independently identified 54-story population, checked their evidence IDs against the source issues, and inspected the round-2 correction sources.
+The baseline reproduces 254 record comments, 78 accept rounds, 64 pointing rounds, 63 re-votes, 5 voids and 1,363 modeled launches.
+Arithmetic reproduction alone does not establish the script's hard-coded round judgments; the corrected SKL-16 source explicitly records rounds 1-4 under a five-round cap.
+The outcome is met for all six acceptance criteria, four deliverables and four DoD items; closure additionally requires this evidence change to merge.
+
+The QA evidence comment `b7c67227` on SKL-90 links the tracker attachment titled "SKL-90 QA round 3 assertions and source records".
+Retrieve it with `linear issue comment list SKL-90`.
+The attachment contains 25 passing structured assertions, reproduced baseline rows, authoritative source excerpts with full IDs and timestamps, and the final findings text.
+It is the raw evidence behind every row below.
+
+| Item | Verdict | Evidence |
+|---|---|---|
+| AC1: complete baseline | Met | Independent population is 54 stories; all 65 ceremony rows and their totals reproduce; SKL-16 `9ef600ea` now contributes four actual pointing rounds and re-votes rather than the five-round cap. |
+| AC2: number classes | Met | Observed, modeled, measured and unavailable figures are labelled; SKL-153 `e10dc49a` independently sums to 20 rows, 1,855.9 seconds, 805,365 tokens and 204 tool calls; unmeasured savings are explicit. |
+| AC3: recommendation contracts | Met | R1-R10 state steps, launch/write effects, risks, guard tests and evidence; all 26 named tests exist at the research SHA. |
+| AC4: exhaustive overlap | Met | Independent search reproduces 50 matches and 16 open matches; all 15 other open issues plus named issues are classified and owned, including SKL-114. |
+| AC5: full-cycle timing | Met | SKL-167 source timestamps give C1 Step 1 28.56/42.48 minutes (67%); C2 gives 11.18/24.40 (46%), or 14.12/24.40 (58%) through first accept result; revision 4 attributes them correctly as tracker intervals, supplies four measured cycles and phase limits, and names S6/R10 for residual measurement. |
+| AC6: proposed decisions | Met | R1-R10 and the rejected concurrent-preflight option carry proposed decisions with rationale for owner review. |
+| Deliverable 1: reproducible findings | Met | Final supersession, research date and SHA, queries, counting rules, corrected baseline and all eight source byte sizes verify. |
+| Deliverable 2: limitations | Met | Complete command-seat usage, partial earlier runs and 61 ceremonies without metrics are distinguished; S6/R10 owns future measurement. |
+| Deliverable 3: follow-up outlines | Met | S1-S6 each contain a one-paragraph summary, 3-5 draft ACs and dependency declarations; SKL-60 and SKL-21 amendments are specified. |
+| Deliverable 4: decision table | Met | Same verified table as AC6. |
+| DoD1: criteria evidenced | Met | Criteria-status table cites corrected evidence for all six ACs and four deliverables. |
+| DoD2: findings in Linear | Met | Revision 4 is stored on SKL-90. |
+| DoD3: owner-review submission | Met | The proposed decision table is explicitly for owner review; an owner response is not this spike's closure gate. |
+| DoD4: next steps and owners | Met | S1-S6 and existing owners are explicit; approved recommendations are filed after owner review. |
+
+The three round-2 gaps are corrected: actual-round count, SKL-167 cycle attribution and S3-S6 summaries.
+The earlier blanket span-understates-cycle claim now explicitly exempts SKL-130's resumed invocation.
+No research correction or external blocker remains; related SKL-91 is Done.
+Incidental non-blocking defect: malformed nanosecond timestamps are already owned by SKL-158 and disclosed in the findings.
+This round changes only QA evidence, not implementation or deployment.
