@@ -53,7 +53,7 @@ No implementation PR or deployment forms part of this QA round.
 
 ## QA round 2 - 2026-10-31 UTC
 
-This section preserves round 1 above and records verification of findings revision 3, comment `0eb9afe4-780e-477c-991d-f84e4d047e27`.
+This section preserves round 1 above and records verification of findings revision 3, comment `0eb9afe4`.
 The environment is the Linear tracker and read-only repository source, with research SHA `f7453b3b22feec7e3d1f5928790e9bb23f9f6baf`; there is no application build, deployment, visual surface or screenshot.
 Fixtures are an independent fully paginated capture of 167 SKL issues and 797 team-filtered comments, the corrected attached analysis scripts, and freshly fetched source at the research SHA.
 The comment count is snapshot-specific and grows when evidence is posted.
@@ -61,13 +61,13 @@ The attached script reproduces 65 ceremonies, 54 stories, 254 record comments, 7
 QA checked those judgments against source records, all 26 cited guard names and all eight source byte sizes.
 The outcome is not met; the existing spike must return to In Progress, not Blocked.
 
-The [round 2 evidence comment](https://linear.app/officina-pub/issue/SKL-90/spike-improve-story-refinement-speed-cost-and-accuracy#comment-089106b4) links the [30 structured assertions and raw source records](https://uploads.linear.app/7fbfc592-b1ef-432c-96af-87e5111c541e/bf3044f9-68db-4315-968e-21b27fe78d4f/32dfb381-89cb-48c1-aaea-357ef1e0d62a): 27 passed and 3 failed.
+The [round 2 evidence comment](https://linear.app/officina-pub/issue/SKL-90/spike-improve-story-refinement-speed-cost-and-accuracy#comment-089106b4) links the tracker attachment titled "SKL-90 QA round 2 assertions and source records": 30 assertions, 27 passed and 3 failed.
 The attachment is the raw evidence behind every row below.
 
 | Item | Verdict | Evidence |
 |---|---|---|
-| AC1: complete baseline | Not met | SKL-16 `9ef600ea-908f-4a70-a5cb-1135223750c8` records actual rounds 1-4, while revision 3 and its script count 5 pointing rounds and 5 re-votes; five was the permitted cap, not the rounds run. |
-| AC2: number classes | Met | Labels separate observed, modeled, measured and unavailable quantities; SKL-153 `e10dc49a-4309-47ce-94e7-ca2b5688c4c6` independently sums to 20 launch rows, 1855.9 seconds, 805365 tokens and 204 tool calls. |
+| AC1: complete baseline | Not met | SKL-16 `9ef600ea` records actual rounds 1-4, while revision 3 and its script count 5 pointing rounds and 5 re-votes; five was the permitted cap, not the rounds run. |
+| AC2: number classes | Met | Labels separate observed, modeled, measured and unavailable quantities; SKL-153 `e10dc49a` independently sums to 20 launch rows, 1855.9 seconds, 805365 tokens and 204 tool calls. |
 | AC3: recommendation contracts | Met | R1-R10 state their steps, launch and write savings, risks, guards and evidence; all 26 named tests exist at the research SHA. |
 | AC4: exhaustive overlaps | Met | Independent scan reproduces 50 title/description matches and 16 open matches; excluding SKL-90 itself, all 15 other open matches and named issues are classified and owned, including SKL-114. |
 | AC5: full-cycle timing | Not met | The 67% attribution belongs to SKL-167 C1 (28.56/42.48 minutes), not its C2 no-consensus cycle; C2 is 11.18/24.40 minutes (46%) through Step 1 or 14.12/24.40 (58%) through its first accept result. |
