@@ -50,3 +50,41 @@ The SKL-90 senior engineer owns correcting the existing findings, baseline, metr
 There is no external dependency blocking those research corrections.
 Incidental defect: SKL-153's glued nanosecond timestamps are already tracked by SKL-158, not an additional implementation prerequisite for SKL-90.
 No implementation PR or deployment forms part of this QA round.
+
+## QA round 2 - 2026-10-31 UTC
+
+This section preserves round 1 above and records verification of findings revision 3, comment `0eb9afe4`.
+The environment is the Linear tracker and read-only repository source, with research SHA `f7453b3b22feec7e3d1f5928790e9bb23f9f6baf`; there is no application build, deployment, visual surface or screenshot.
+Fixtures are an independent fully paginated capture of 167 SKL issues and 797 team-filtered comments, the corrected attached analysis scripts, and freshly fetched source at the research SHA.
+The comment count is snapshot-specific and grows when evidence is posted.
+The attached script reproduces 65 ceremonies, 54 stories, 254 record comments, 78 accept rounds, 65 pointing rounds, 64 re-votes, 5 voids and 1372 modeled launches, but its round judgments are hard-coded and arithmetic reproduction does not validate their truth.
+QA checked those judgments against source records, all 26 cited guard names and all eight source byte sizes.
+The outcome is not met; the existing spike must return to In Progress, not Blocked.
+
+The round 2 evidence comment `089106b4` on SKL-90 links the tracker attachment titled "SKL-90 QA round 2 assertions and source records": 30 assertions, 27 passed and 3 failed.
+Retrieve the comment with `linear issue comment list SKL-90`.
+The attachment is the raw evidence behind every row below.
+
+| Item | Verdict | Evidence |
+|---|---|---|
+| AC1: complete baseline | Not met | SKL-16 `9ef600ea` records actual rounds 1-4, while revision 3 and its script count 5 pointing rounds and 5 re-votes; five was the permitted cap, not the rounds run. |
+| AC2: number classes | Met | Labels separate observed, modeled, measured and unavailable quantities; SKL-153 `e10dc49a` independently sums to 20 launch rows, 1855.9 seconds, 805365 tokens and 204 tool calls. |
+| AC3: recommendation contracts | Met | R1-R10 state their steps, launch and write savings, risks, guards and evidence; all 26 named tests exist at the research SHA. |
+| AC4: exhaustive overlaps | Met | Independent scan reproduces 50 title/description matches and 16 open matches; excluding SKL-90 itself, all 15 other open matches and named issues are classified and owned, including SKL-114. |
+| AC5: full-cycle timing | Not met | The 67% attribution belongs to SKL-167 C1 (28.56/42.48 minutes), not its C2 no-consensus cycle; C2 is 11.18/24.40 minutes (46%) through Step 1 or 14.12/24.40 (58%) through its first accept result. |
+| AC6: proposed decisions | Met | R1-R10 and the rejected concurrent-preflight option have proposed decisions, risks and rationales for owner review. |
+| Deliverable 1: final reproducible findings | Not met | Supersession, queries, date, SHA and byte sizes verify, but source-false rounds and phase attribution remain. |
+| Deliverable 2: limitations | Met | Findings identify 61 unmeasured ceremonies, partial usage, complete command-seat usage and proposed S6/R10 as measurement owner. |
+| Deliverable 3: follow-up outlines | Not met | S1-S6 declare blockers and 3-5 draft ACs each, but S3-S6 jump directly from their titles to ACs without the required one-paragraph summaries. |
+| Deliverable 4: decision table | Met | Same verified proposed table as AC6. |
+| DoD1: criteria evidenced or explicitly unmet | Not met | The findings criteria-status table incorrectly claims AC1 and AC5 met. |
+| DoD2: findings in Linear | Met | Findings revision 3 is posted on SKL-90. |
+| DoD3: owner-review submission | Met | The decision table explicitly awaits owner review; owner approval is not a spike closure gate. |
+| DoD4: next steps and owners | Met | Existing owners and proposed S1-S6 are named; approved recommendations are filed only after owner review. |
+
+The timing assertions use source comments `8fd5ba23`, `22d83f40`, `92750d81`, `ebf177bb`, `fb92fcd8`, `b9584831` and `f03f2149`, whose full IDs, bodies and timestamps are in the tracker attachment.
+These are observed tracker intervals, not measured launch durations.
+The SKL-90 senior engineer owns correcting the actual-round count and affected totals, assigning the timing percentage to the right invocation, supplying S3-S6 summaries, and updating the findings criteria-status table before re-verification.
+No external blocking story is recorded; related SKL-91 is Done.
+Incidental non-blocking defects: SKL-158 already owns malformed nanosecond timestamps, and the blanket claim that spans understate measured cycles needs its labelled SKL-130 exception because that metric covers only resumed invocation 2.
+This evidence change implements no recommendation and deploys nothing.
