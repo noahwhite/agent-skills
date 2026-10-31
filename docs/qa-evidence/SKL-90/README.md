@@ -4,12 +4,30 @@
 - Story: [SKL-90](https://linear.app/officina-pub/issue/SKL-90/spike-improve-story-refinement-speed-cost-and-accuracy).
 - Environment: Linear tracker deliverables and read-only repository source, not a deployed service.
 - Build SHA: not applicable; research source SHA `f7453b3b22feec7e3d1f5928790e9bb23f9f6baf`.
-- Fixtures: all 167 SKL issues and 792 team-filtered comments at the QA snapshot, plus the two analysis scripts attached to the story.
+- Fixtures: QA independently captured 167 SKL issues and 792 team-filtered comments before posting its own findings, and separately inspected the two research scripts attached to the story.
 - Surface: CLI/API assertions and source records; no visual UI or screenshot applies.
 - Outcome: not met; reopen the existing spike to In Progress for correction.
 - [QA evidence comment](https://linear.app/officina-pub/issue/SKL-90/spike-improve-story-refinement-speed-cost-and-accuracy#comment-f906f047) includes the source references and ownership.
-- [Raw assertions and source output](https://uploads.linear.app/7fbfc592-b1ef-432c-96af-87e5111c541e/dd208107-d1dc-4d7d-8ae6-26c0ecc79a66/13a1e05e-e5c0-4de5-b68f-00f5d77dd643) are attached to the story; 23 assertions, 14 passed and 9 failed.
-- [Timing assertions](https://uploads.linear.app/7fbfc592-b1ef-432c-96af-87e5111c541e/69f11deb-12fb-402c-a45a-5eff047906a6/c2ff0761-886e-4183-979f-70e8332d1cbb) are attached separately.
+- Raw assertions and source output are attached as `qa-assertions.txt` and linked from the QA evidence comment; 23 assertions, 14 passed and 9 failed.
+- Timing assertions are attached separately as `timing-assertions.json` and linked from the same QA evidence comment.
+
+QA's independent capture used `linear api` with the two queries below, following `pageInfo.endCursor` until `hasNextPage` was false and counting all returned nodes.
+The 792 count comes from this team-filtered QA query, not from the research author's unfiltered workspace comment fetch; current counts can change after the captured snapshot.
+
+```graphql
+query($after: String) {
+  issues(first: 100, after: $after, filter: {team: {key: {eq: "SKL"}}}) {
+    nodes { id }
+    pageInfo { hasNextPage endCursor }
+  }
+}
+query($after: String) {
+  comments(first: 100, after: $after, filter: {issue: {team: {key: {eq: "SKL"}}}}) {
+    nodes { id }
+    pageInfo { hasNextPage endCursor }
+  }
+}
+```
 
 | Item | Verdict | Evidence |
 |---|---|---|
@@ -24,7 +42,7 @@
 | Deliverable 3: follow-up outlines/amendments | Met | Five proposed Backlog outlines with draft criteria and dependencies plus SKL-60/SKL-21 amendments are present. |
 | Deliverable 4: decision table | Met | Same verified table as AC6. |
 | DoD1: criteria evidenced or explicitly unmet | Not met | Failed criteria are pre-ticked as met, without their gaps recorded as unmet in the findings. |
-| DoD2: findings in Linear | Met | Final findings comment `58c94de5-26bc-4886-ba77-9412b6fe89dd` is stored on SKL-90. |
+| DoD2: findings in Linear | Met | Final findings comment `58c94de5` is stored on SKL-90. |
 | DoD3: submitted for owner review | Met | The final findings explicitly submit the proposed decision table; owner response is outside the spike's closure gate. |
 | DoD4: next steps and proposed owners | Met | Proposed stories and SKL-60/SKL-21 owners are named; filing approved work waits for owner review. |
 
