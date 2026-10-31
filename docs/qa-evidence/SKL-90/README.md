@@ -91,7 +91,7 @@ This evidence change implements no recommendation and deploys nothing.
 
 ## QA round 3 - 2026-10-31 UTC
 
-This section preserves both earlier rounds and verifies findings revision 4, comment `6f64a66c-cde7-4f2f-bc69-99132649bd5b` on SKL-90.
+This section preserves both earlier rounds and verifies findings revision 4, comment `6f64a66c` on SKL-90.
 The environment is Linear tracker deliverables and read-only source at research SHA `f7453b3b22feec7e3d1f5928790e9bb23f9f6baf`; no deployed build, UI fixture, screenshot or hosted page applies.
 Fixtures are an independent fully paginated CLI capture of 167 SKL issues and 802 team-filtered comments, the attached revision-4 baseline script, and freshly fetched repository source.
 The comment count is snapshot-specific.
