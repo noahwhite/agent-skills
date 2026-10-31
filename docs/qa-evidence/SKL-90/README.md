@@ -61,7 +61,8 @@ The attached script reproduces 65 ceremonies, 54 stories, 254 record comments, 7
 QA checked those judgments against source records, all 26 cited guard names and all eight source byte sizes.
 The outcome is not met; the existing spike must return to In Progress, not Blocked.
 
-The [round 2 evidence comment](https://linear.app/officina-pub/issue/SKL-90/spike-improve-story-refinement-speed-cost-and-accuracy#comment-089106b4) links the tracker attachment titled "SKL-90 QA round 2 assertions and source records": 30 assertions, 27 passed and 3 failed.
+The round 2 evidence comment `089106b4` on SKL-90 links the tracker attachment titled "SKL-90 QA round 2 assertions and source records": 30 assertions, 27 passed and 3 failed.
+Retrieve the comment with `linear issue comment list SKL-90`.
 The attachment is the raw evidence behind every row below.
 
 | Item | Verdict | Evidence |
