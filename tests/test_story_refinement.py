@@ -268,7 +268,7 @@ def test_step_four_residual_variance_derives_one_value_per_voter() -> None:
     )
     assert (
         "A voter that records no consensus in item 4 has no accepted set, so its re-vote value is the value that "
-        "stands for that voter: the replacement value it recorded in item 2 or item 4, or, when it recorded none, "
+        "stands for that voter: the replacement value it recorded in item 2, or, when it recorded none, "
         "the value in its Step 3 file." in item
     )
 
@@ -335,7 +335,9 @@ def test_step_four_residual_variance_more_than_one_step_apart_stops_unpointed() 
         "reads the posted unpointed variance record, validates the owner's decision against "
         "`profile.tracker.estimate_scale` and the item 1 sequence, applies the split rule to it, records it as "
         "the estimate, and adds the pointing record's `- Owner decision:` line, and it does not re-point before "
-        "that decision. The decision is the owner's: the product owner does not decide that "
+        "that decision. An owner decision to leave the story unpointed is recorded on that line with its reason "
+        "and ends the follow-up with no estimate, and a decision outside the scale or the sequence is re-asked "
+        "rather than recorded. The decision is the owner's: the product owner does not decide that "
         "outcome, under the estimator-ownership rule that the people doing the work estimate, and no facilitator "
         "and no voter chooses the value or the path." in item
     )
@@ -864,7 +866,8 @@ def test_step_four_records_a_value_outside_the_sequence_as_wider_than_one_step()
     item = process_items(STEP_FOUR)[0]
     assert (
         "A value outside that sequence for the profile's scale has no step position, so two different values that "
-        "involve one are more than one step apart; three identical values are identical whatever their value." in item
+        "involve one are more than one step apart; three identical values are identical, and Step 3 already "
+        "re-records an off-sequence value before the reveal." in item
     )
     assert (
         "or they differ and either of them is outside the sequence, the discussion in item 3 and the re-vote in "
@@ -1033,8 +1036,9 @@ SKIP_BRANCH_CHALLENGE = (
     "of its own: the facilitator launches each challenged voter once in a newly created voter context whose "
     "prompt lists every ground challenged for that voter and carries the story, the refinement comment id, that "
     "voter's own recorded value and rationale, the Step 3 pointing basis and the Step 3 item 4 rationale rule; "
-    "that launch records one replacement value for that voter, and an unresolved ground voids the round under "
-    "the Anchoring guardrail, so no estimate and no split action survives an unresolved challenge."
+    "that launch records a replacement value for that voter only when the voter's basis does not support its "
+    "recorded value, and otherwise the value that stands holds; an unresolved ground voids the round under the "
+    "Anchoring guardrail, so no estimate and no split action survives an unresolved challenge."
 )
 
 
@@ -1046,7 +1050,7 @@ def test_step_four_identical_values_skip_still_challenges_every_off_basis_ground
     assert "skip the basis review" not in check, "the skip branch must keep the basis review"
     assert SKIP_BRANCH_REVIEW in review
     assert SKIP_BRANCH_CHALLENGE in review
-    assert "A challenged ground must be restated as a basis driver, retracted, or answered by a value its basis supports" in review
+    assert "A challenged ground must be restated as a basis driver or retracted" in review
     assert "no estimate and no split action survives an unresolved challenge" in review
     # The fixture: three identical 8s (SKL-13) with one off-basis rationale.
     assert len(set(SKL13_VALUES)) == 1, "the fixture is three identical values"
@@ -1055,7 +1059,7 @@ def test_step_four_identical_values_skip_still_challenges_every_off_basis_ground
     # The challenge fires on that rationale, and the round cannot end on it.
     assert "outside the pointing basis" in review
     assert "recorded rationale" in review
-    assert "answered by a value its basis supports" in review
+    assert "retracts an unsupported ground and records a replacement value" in review
     assert "an unresolved ground voids the round under the Anchoring guardrail" in review
     assert "no estimate and no split action survives an unresolved challenge" in review
     assert "before the estimate is written to the tracker" in review
@@ -1108,8 +1112,8 @@ def test_step_four_item_cross_references_resolve() -> None:
 def test_step_four_facilitator_challenges_every_off_basis_ground() -> None:
     item = process_items(STEP_FOUR)[1]
     assert (
-        "The review challenges every ground outside the pointing basis, whether it is read in a recorded "
-        "rationale or heard in the discussion of item 3, "
+        "The review challenges every ground outside the pointing basis that a recorded rationale carries; a "
+        "ground first heard in the discussion of item 3 is challenged there, under item 3, "
         "except a prescription of this story's value and, from the SM/EM, a statement of elapsed time, effort or "
         "run cost, which are anchoring events the moment they are seen."
     ) in item
@@ -1124,10 +1128,8 @@ def test_step_four_facilitator_challenges_every_off_basis_ground() -> None:
         "that embeds a point value is named by its kind alone."
     ) in item
     assert (
-        "A challenged ground must be restated as a basis driver, retracted, or answered by a value its basis "
-        "supports, except a prescription of this story's value, which is an anchoring event as soon as it is "
-        "seen; a value is supported when the restated ground admits it, and the facilitator judges that by the "
-        "same test it applies to a Step 3 rationale."
+        "A challenged ground must be restated as a basis driver or retracted, except a prescription of this "
+        "story's value, which is an anchoring event as soon as it is seen."
     ) in item
     assert (
         "The SM/EM withdraws or restates its own sizing comment on the same terms, except a point value named "
@@ -1135,13 +1137,21 @@ def test_step_four_facilitator_challenges_every_off_basis_ground() -> None:
         "answer, or a statement of elapsed time, effort or run cost, each of which is an anchoring event as soon "
         "as the facilitator sees it."
     ) in item
-    assert "A ground that is neither restated as a basis driver, retracted, nor answered by a value its basis supports is an anchoring event under the Anchoring guardrail." in item
+    assert "A ground that is neither restated as a basis driver nor retracted is an anchoring event under the Anchoring guardrail." in item
     assert (
-        "A voter whose basis does not support its recorded value records a replacement value in the re-vote, and a "
-        "replacement value is valid for `profile.tracker.estimate_scale` and present in the item 1 sequence, "
-        "re-recorded otherwise; when the consensus check skips the re-vote, it records that replacement value in "
-        "the basis-challenge round of this item, and the consensus check in item 1 then re-runs on the three "
-        "standing values" in item
+        "A voter whose basis does not support its recorded value retracts an unsupported ground and records a "
+        "replacement value, in the re-vote or, when the consensus check skips the re-vote, in the basis-challenge "
+        "round of this item; a replacement value is valid for `profile.tracker.estimate_scale` and present in the "
+        "item 1 sequence, re-recorded otherwise." in item
+    )
+    assert (
+        "A replacement value supersedes the value that stands for that voter, and the consensus check in item 1 "
+        "then re-runs on the three standing values" in item
+    )
+    assert (
+        "The re-run's outcome supersedes the `Consensus check:` outcome in the pointing record, and when it is "
+        "more than one step apart the discussion in item 3 and the re-vote in item 4 run before any estimate is "
+        "written or posted." in item
     )
 
 
@@ -1163,7 +1173,7 @@ def test_anchoring_guardrail_makes_a_point_value_sizing_note_an_event_on_challen
     body = flat(section(SKILL.read_text(), GUARDRAIL))
     assert (
         "an anchoring trigger is an off-basis ground step 4 challenges, so it becomes an anchoring event only "
-        "when it is neither restated as a basis driver, retracted, nor answered by a value its basis supports" in body
+        "when it is neither restated as a basis driver nor retracted" in body
     )
     assert (
         "every prohibited behaviour above, a prescription of this story's value by any participant, and an sm/em "
@@ -1175,9 +1185,8 @@ def test_anchoring_guardrail_makes_a_point_value_sizing_note_an_event_on_challen
         "together with a basis difference, is information the voters weigh, and the round continues." in body
     )
     assert (
-        "any other challenged ground that is neither restated as a basis driver, retracted, nor answered by a "
-        "supported value, or a sizing comment the sm/em neither withdraws nor restates, is an anchoring event, and "
-        "the recovery below is the "
+        "any other challenged ground that is neither restated as a basis driver nor retracted, or a sizing comment "
+        "the sm/em neither withdraws nor restates, is an anchoring event, and the recovery below is the "
         "single void rule: it voids the recorded estimate, the `consensus check:` outcome, the consensus and every "
         "vote recorded after the anchor, and for a ground read "
         "in a recorded rationale the anchor precedes that rationale, so the vote it grounds and every later vote "
@@ -1203,7 +1212,7 @@ def test_anchoring_guardrail_names_off_basis_grounds_as_a_trigger() -> None:
     body = flat(section(SKILL.read_text(), GUARDRAIL))
     assert (
         "an anchoring trigger is an off-basis ground step 4 challenges, so it becomes an anchoring event only "
-        "when it is neither restated as a basis driver, retracted, nor answered by a value its basis supports" in body
+        "when it is neither restated as a basis driver nor retracted" in body
     )
     assert (
         "a ground that weighs verification strength, testability, coverage, the shape of the tests, or a "
@@ -1366,7 +1375,8 @@ def test_phrasing_table_permitted_cells_state_no_target_value() -> None:
 def test_pointing_template_records_each_challenge_and_outcome() -> None:
     assert (
         "- Challenges: <none, or each ground challenged by kind, its author (a voter, or the SM/EM for a sizing "
-        "comment), the restatement, withdrawal, retraction, replacement value or the void; elide a pre-reveal value or a "
+        "comment), the restatement, withdrawal or retraction, and any replacement value it produced, or the void; "
+        "elide a pre-reveal value or a "
         "prescription>" in pointing_template()
     )
     assert (
@@ -1390,8 +1400,7 @@ def test_pointing_template_records_each_challenge_and_outcome() -> None:
     assert (
         "A sizing comment that names a point value before the reveal, prescribes this story's value, or states "
         "elapsed time, effort or run cost voids the round under the Anchoring guardrail recovery "
-        "as soon as the facilitator sees it, as does any ground that is neither restated, retracted nor "
-        "answered by a supported value, and the "
+        "as soon as the facilitator sees it, as does any ground that is neither restated nor retracted, and the "
         "void records the voided consensus under Superseded values after a void, so the Consensus field carries "
         "the vote that stands, or n/a when the consensus check or the residual variance rule recorded the "
         "estimate."
