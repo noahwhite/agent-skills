@@ -167,8 +167,6 @@ Only the PO and the two engineers count toward the agreement.
      Before the reveal it must not name any point value.
      A prescription of this story's value, from the SM/EM or from a voter, is an anchoring event under the Anchoring guardrail.
      A statement of elapsed time or effort is an anchoring event under the Anchoring guardrail.
-  8. A `tshirt` scale stops the cap step with a clear message.
-     Pointing still records the three values and Step 4 still runs and records the larger size of a pair one step apart; the split rule's numeric cap does not apply.
 - **Outputs:** three point value files and, when provided, a separate SM/EM sizing context file.
 - **Stop:** any voter value is missing; a voter's second off-sequence value is a missing-valid-value stop, which the owner resolves by authorizing a re-run of that voter's record in a new invocation whose `Outcome` reads `missing valid value`; an SM/EM sizing comment appears before all three values are recorded (see the anchoring guardrail).
 
@@ -177,13 +175,12 @@ Only the PO and the two engineers count toward the agreement.
 - **Inputs:** the three recorded point values and any recorded SM/EM sizing context.
 - **Process:**
   1. Run the consensus check first, on the three values recorded in Step 3.
-     The ordered step sequence is fixed here for each `profile.tracker.estimate_scale` value: `fibonacci` 1, 2, 3, 5, 8, 13; `linear` the ordinal list 1, 2, 3, 5, 8, 13; `exponential` 1, 2, 4, 8, 16; `tshirt` XS, S, M, L, XL in that order.
+     The ordered step sequence is fixed here for each `profile.tracker.estimate_scale` value: `fibonacci` 1, 2, 3, 5, 8, 13; `linear` the ordinal list 1, 2, 3, 5, 8, 13; `exponential` 1, 2, 4, 8, 16, in that order.
      The tolerance is one step, and it is fixed in this skill: no profile key and no skill argument sets it.
      A value outside that sequence for the profile's scale has no step position, so two different values that involve one are more than one step apart; three identical values are identical, and Step 3 already re-records an off-sequence value before the reveal.
      When the three values are identical, or the highest and the lowest are one step apart (5 and 8 on `fibonacci`, for example), the highest of the three values is the estimate, the discussion in item 3 and the re-vote in item 4 are skipped, and the split rule in item 9 still applies to it.
      The basis review in item 2 still runs on this branch, and nothing is written to the tracker and no pointing record is posted until it has run.
      When the highest and the lowest are more than one step apart (1 and 5, for example), or they differ and either of them is outside the sequence, the discussion in item 3 and the re-vote in item 4 run, naming the high and the low.
-     On a `tshirt` scale a pair one step apart records the larger size, and the split rule's numeric cap does not apply to a size.
      Record the outcome in the pointing record as `Consensus check: <identical | one step | more than one step>`, so a skipped discussion and re-vote read as skipped and never as not run; the record's values block keeps the values recorded before the discussion, and a replacement value appears on its Challenges line and in the voter's file.
   2. Review every rationale recorded in Step 3 against the pointing basis, after the consensus check and before the estimate is written to the tracker and before the pointing record is posted, so a void never leaves a written estimate to unwind.
      This review is not the discussion: it runs on both branches, and the discussion in item 3 only carries the challenges it raises.
@@ -254,7 +251,6 @@ Do not resume the tainted discussion.
 
 The effective accepted maximum is `profile.refinement.point_cap` (default 5), with a schema maximum of 8.
 A story is split when its recorded estimate is above `profile.refinement.point_cap` or is 8 or more; the recorded estimate is the consensus, or the value the Step 4 consensus check or residual variance rule records.
-A recorded `tshirt` size never triggers this rule: Step 3 item 8 stops the cap step, and a size is recorded as the estimate without a split.
 The lower trigger applies, and the 8-point rule in [references/linear.md](references/linear.md) is never relaxed.
 
 If the split trigger is met, split the story.

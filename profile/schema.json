@@ -177,8 +177,7 @@
           "enum": [
             "fibonacci",
             "linear",
-            "exponential",
-            "tshirt"
+            "exponential"
           ]
         },
         "cycle_weeks": {

@@ -367,12 +367,18 @@ def test_split_rule_takes_the_recorded_estimate() -> None:
     assert "group-decided" not in body
 
 
-def test_split_rule_never_compares_a_size() -> None:
+def test_split_rule_has_no_size_clause() -> None:
     body = flat(section(SKILL.read_text(), "Split rule"))
-    assert (
-        "a recorded `tshirt` size never triggers this rule: step 3 item 8 stops the cap step, and a size is "
-        "recorded as the estimate without a split" in body
-    )
+    assert "tshirt" not in body, "the split rule reads a numeric estimate only"
+    assert "never compared" not in body and "without a split" not in body
+
+
+def test_shared_linear_rule_has_no_size_clause() -> None:
+    shared = (ROOT / "shared" / "linear.md").read_text()
+    rule = flat(next(line for line in shared.splitlines() if "Split a story estimated at 8 points" in line))
+    assert "tshirt" not in rule and "t-shirt" not in rule.lower()
+    assert "or, on a numeric scale, its equivalent" in rule
+    assert "or the scale's equivalent" not in rule
 
 
 def test_split_rule_keeps_the_split_mechanics() -> None:
@@ -848,14 +854,12 @@ def test_step_four_re_vote_carries_the_basis_by_reference_to_step_three() -> Non
     assert squash(POINTING_BASIS) not in squash(operative_step(STEP_FOUR))
 
 
-def test_step_three_tshirt_cap_step_does_not_stop_the_ceremony() -> None:
-    stop = bullet(operative_step(STEP_THREE), "Stop")
-    assert "tshirt" not in stop, "the cap step stops the cap, not the ceremony"
-    item = process_item(STEP_THREE, "A `tshirt` scale stops the cap step")
-    assert (
-        "Pointing still records the three values and Step 4 still runs and records the larger size of a pair one "
-        "step apart; the split rule's numeric cap does not apply." in item
-    )
+def test_step_three_has_no_size_cap_step() -> None:
+    body = operative_step(STEP_THREE)
+    stop = bullet(body, "Stop")
+    assert "tshirt" not in body.lower(), "a t-shirt size is a project and epic label, not a story scale"
+    assert "tshirt" not in stop.lower()
+    assert "scale stops the cap step" not in body
 
 
 def test_step_three_re_records_an_off_sequence_value_before_the_reveal() -> None:
@@ -910,6 +914,15 @@ def test_step_four_re_vote_prompt_carries_the_rationale_rule() -> None:
     assert (
         "It also carries the Step 3 item 4 rationale rule and the fixed step sequence from item 1, since an "
         "accepted set is drawn from that sequence." in item
+    )
+
+
+def test_pointing_template_has_no_size_note() -> None:
+    lines = pointing_template()
+    assert not any("tshirt" in line.lower() for line in lines), "a pointing record never carries a size"
+    assert (
+        "- Effective maximum: <profile.refinement.point_cap; the 8-point rule still triggers at 8 or more>"
+        in lines
     )
 
 
@@ -982,7 +995,7 @@ CONSENSUS_CHECK = "Run the consensus check first, on the three values recorded i
 ESTIMATE_SEQUENCES = (
     "The ordered step sequence is fixed here for each `profile.tracker.estimate_scale` value: "
     "`fibonacci` 1, 2, 3, 5, 8, 13; `linear` the ordinal list 1, 2, 3, 5, 8, 13; "
-    "`exponential` 1, 2, 4, 8, 16; `tshirt` XS, S, M, L, XL in that order."
+    "`exponential` 1, 2, 4, 8, 16, in that order."
 )
 CONSENSUS_CHECK_BRANCHES = (
     "When the three values are identical, or the highest and the lowest are one step apart (5 and 8 on "
@@ -1019,13 +1032,25 @@ def test_step_four_identical_values_record_the_higher_value_and_skip() -> None:
     ), "an unconditional discussion would make an identical round run one"
 
 
+def test_schema_estimate_scale_is_numeric_only() -> None:
+    scales = SCHEMA["properties"]["tracker"]["properties"]["estimate_scale"]["enum"]
+    assert scales == ["fibonacci", "linear", "exponential"], "story pointing runs on numeric scales only"
+
+
+def test_epic_size_labels_are_untouched_and_carry_t_shirt_sizing() -> None:
+    labels = SCHEMA["properties"]["tracker"]["properties"]["epic"]["properties"]["size_labels"]
+    assert labels["type"] == "object"
+    assert set(labels["properties"]) == {"small", "medium", "large", "extra_large"}
+
+
 def test_step_four_fixes_a_sequence_for_every_estimate_scale() -> None:
     item = process_items(STEP_FOUR)[0]
     scales = SCHEMA["properties"]["tracker"]["properties"]["estimate_scale"]["enum"]
-    assert scales == ["fibonacci", "linear", "exponential", "tshirt"]
+    assert scales == ["fibonacci", "linear", "exponential"]
     for scale in scales:
         assert f"`{scale}`" in item, f"no fixed step sequence for the {scale} scale"
-    assert ESTIMATE_SEQUENCES in item, "the four sequences are pinned verbatim"
+    assert ESTIMATE_SEQUENCES in item, "the three numeric sequences are pinned verbatim"
+    assert "tshirt" not in item.lower(), "a story is given points, never a t-shirt size"
 
 
 def test_step_four_one_step_apart_records_the_higher_value_and_skips() -> None:
@@ -1035,12 +1060,7 @@ def test_step_four_one_step_apart_records_the_higher_value_and_skips() -> None:
         "the highest and the lowest are one step apart (5 and 8 on `fibonacci`, for example), the highest of "
         "the three values is the estimate, the discussion in item 3 and the re-vote in item 4 are skipped" in item
     )
-    assert (
-        "On a `tshirt` scale a pair one step apart records the larger size, and the split rule's numeric cap "
-        "does not apply to a size." in item
-    )
-    cap = process_items(STEP_THREE)[7]
-    assert cap.startswith("A `tshirt` scale stops the cap step with a clear message."), "Step 3 item 8 moved"
+    assert "tshirt" not in item.lower(), "a size has no step position on a numeric scale"
 
 
 def test_step_four_more_than_one_step_apart_runs_the_discussion() -> None:

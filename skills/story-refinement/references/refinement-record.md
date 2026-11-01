@@ -79,7 +79,7 @@ A sizing comment that names a point value before the reveal, prescribes this sto
 - Consensus: <the highest value in the intersection of the vote that stands, or n/a when the consensus check or the residual variance rule recorded the estimate, or none when the round stopped unpointed>
 - Residual variance: <each voter's derived value, the gap between the highest and the lowest in scale steps, the rule applied and the resulting value, or the unpointed variance stop; n/a only when all three voters recorded an accepted set and the intersection is not empty, or when the consensus check, or the re-run of it that supersedes that outcome, recorded the estimate>
 - Recorded estimate: <the value recorded, or unpointed with the gap between the highest and the lowest in scale steps when the round stopped there>
-- Effective maximum: <profile.refinement.point_cap; the 8-point rule still triggers at 8 or more; n/a on a `tshirt` scale, where a size is never compared>
+- Effective maximum: <profile.refinement.point_cap; the 8-point rule still triggers at 8 or more>
 - Split: <none, or the slice mapping and sibling issue keys>
 - Challenges: <none, or each ground challenged by kind, its author (a voter, or the SM/EM for a sizing comment), the restatement, withdrawal or retraction, and any replacement value it produced, or the void; elide a pre-reveal value or a prescription>
 - Owner decision: <n/a when the round did not stop unpointed, otherwise pending owner decision in a later run until the later run edits this line, then the value the owner decided and the basis, or unpointed with the owner's reason>
