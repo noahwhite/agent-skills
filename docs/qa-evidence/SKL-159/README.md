@@ -5,7 +5,7 @@ Artifact: merged `main` at `4f0eb796d9390e77a7388aa26ce2ec1e24aa20a2` in an isol
 Environment: repository state; `.agent-skills/profile.yaml` declares `environments: []`, so no deployed build exists.
 Fixtures: fictional `ABC-123`, stub `qa-round-1-session`, and the committed baseline/candidate tabletop records.
 Lanes: source-contract assertions, sandbox session/tool-call traces, locked tests, GitHub checks/reviews, and Linear.
-There is no visual surface and no hosted page; sanitized assertion output is attached to [SKL-159](https://linear.app/officina-pub/issue/SKL-159) as `SKL-159 QA round 1 assertions`.
+There is no visual surface and no hosted page; sanitized assertion output is attached to SKL-159 as `SKL-159 QA round 1 assertions`.
 Tracker QA comment identifier prefix: `dd0726a1`; raw attachment identifier prefix: `e876ba1c`.
 
 ## Verdicts
