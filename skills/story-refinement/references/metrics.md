@@ -57,7 +57,7 @@ What each runtime's usage report returns is in the "Read a subagent's usage (dur
   A Step 4 basis-challenge round is not a blind value collection, so it is not a pointing round: its launches are the timed-launch rows, counted like every other launch.
 - **Re-votes:** one per Step 4 re-vote.
 - **Anchoring events:** the number of anchoring events.
-- **Outcome:** one of: the recorded estimate or size; unpointed, which on the Step 4 residual variance rule is the variance stop that names the story and the derived values; split with the slice count; or the stop reason, including `needs input` on a denied tracker write or on the Step 4 unpointed variance stop.
+- **Outcome:** one of: the recorded estimate or size; unpointed, which on the Step 4 residual variance rule is the variance stop that names the story and the derived values; split with the slice count, plus `needs input` for each slice that stopped unpointed; or the stop reason, including `needs input` on a denied tracker write or on the Step 4 unpointed variance stop.
 - **Denied tracker writes fallback:** whether the denied tracker writes fallback was used.
 
 ### `story-to-done` extras
