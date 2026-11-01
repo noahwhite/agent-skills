@@ -156,20 +156,21 @@ FIGURE_RULES = [
 REFINEMENT_EXTRAS = [
     pytest.param("- **Accept rounds:** the number of accept rounds run.", id="accept-rounds"),
     pytest.param(
-        "- **Pointing rounds:** one per blind value collection: Step 3, the Step 3 re-run after a "
-        "Step 4 re-refine, each split slice estimate under the Split rule, and each anchoring "
-        "recovery re-run.",
+        "- **Pointing rounds:** one per blind value collection: Step 3, each split slice estimate under the Split "
+        "rule, and each anchoring recovery re-run.",
         id="pointing-rounds",
     ),
     pytest.param(
-        "- **Re-votes:** one per Step 4 re-vote, including the re-vote after a re-refine's Step 3 re-run.",
+        "- **Re-votes:** one per Step 4 re-vote.",
         id="re-votes",
     ),
-    pytest.param("- **Re-refine:** whether re-refine ran.", id="re-refine"),
     pytest.param("- **Anchoring events:** the number of anchoring events.", id="anchoring-events"),
     pytest.param(
-        "- **Outcome:** the consensus value or size, unpointed, split with the slice count, or the "
-        "stop reason, including `needs input` on a denied tracker write.",
+        "- **Outcome:** one of: the recorded estimate or size; unpointed, which on the Step 4 residual "
+        "variance rule is the variance stop that names the story and the derived values; split with the "
+        "slice count, plus `needs input` for each slice that stopped unpointed; or the stop reason, including "
+        "`needs input` on a denied tracker write, `missing valid value` on a Step 3 off-sequence stop, or the "
+        "Step 4 unpointed variance stop.",
         id="outcome",
     ),
     pytest.param(
@@ -419,8 +420,8 @@ INDEPENDENCE_AND_POSTING = [
         id="refinement-order-early-stop",
     ),
     pytest.param(
-        "The comment is never posted while an anchoring recovery re-vote is still to run in this "
-        "invocation.",
+        "The comment is never posted while an anchoring recovery, its Step 3 re-run, or any Step 4 re-vote "
+        "that follows them, is still to run in this invocation.",
         id="refinement-order-anchoring",
     ),
     pytest.param(

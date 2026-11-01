@@ -222,71 +222,156 @@ def test_record_reference_has_templates_and_phrasing_table() -> None:
         assert phrase.lower() in text.lower(), phrase
 
 
-def test_step_four_presents_three_paths_without_a_recommendation() -> None:
+def test_step_four_derivation_replaces_the_path_vote() -> None:
     body = flat(section(SKILL.read_text(), STEP_FOUR, level=3))
-    assert "if the intersection is empty, record no consensus and run the no-consensus decision" in body
-    assert (
-        "the facilitator presents only the empty intersection and the three paths: "
-        "split, re-refine, or leave unpointed" in body
-    )
-    assert "the facilitator does not recommend a path" in body
-    assert "record no consensus and leave the story unpointed" not in body, "the bare stop is the original defect"
-
-
-def test_step_four_path_decision_is_the_intersection_with_a_po_tie_break() -> None:
-    body = flat(section(SKILL.read_text(), STEP_FOUR, level=3))
-    assert "each voter (the po and both engineers) records the set of paths it accepts" in body
-    assert "a voter that accepts re-refine also lists the amendments it needs" in body
-    assert "the chosen path is in the intersection of the three accepted path sets" in body
-    assert "when that intersection holds more than one path, the po chooses among them and records why" in body
-    assert "the facilitator records the decision; it does not choose it" in body
+    assert "each voter's re-vote value is the highest value in its accepted set" in body
+    for removed in (
+        "split, re-refine, or leave unpointed",
+        "the set of paths it accepts",
+        "the chosen path is in the intersection of the three accepted path sets",
+        "the po chooses among them and records why",
+        "the po decides",
+        "the facilitator records the decision; it does not choose it",
+        "paths it will accept",
+        "paths it accepts",
+    ):
+        assert removed not in body, f"the removed path vote survived: {removed}"
+    assert "accepted path" not in body, "no accepted-path set survives in Step 4"
 
 
 def test_step_four_empty_path_intersection_leaves_the_story_unpointed() -> None:
     body = flat(section(SKILL.read_text(), STEP_FOUR, level=3))
-    assert "when that intersection is empty, the story is left unpointed" in body
+    assert (
+        "when the highest and the lowest derived values are more than one step apart (1 and 5, for example), "
+        "the ceremony records the result as unpointed and stops" in body
+    )
 
 
-def test_step_four_split_path_applies_the_split_rule() -> None:
-    body = flat(section(SKILL.read_text(), STEP_FOUR, level=3))
-    assert "split applies the split rule as a group-decided split" in body
-
-
-def test_step_four_re_refine_returns_to_step_two_with_one_accept_round() -> None:
-    body = flat(section(SKILL.read_text(), STEP_FOUR, level=3))
-    assert "re-refine returns to step 2" in body
-    assert "the po authors the amendments and an updated refinement comment and applies both" in body
-    assert "under the denied tracker writes fallback, the facilitator applies the amendments and the updated refinement comment verbatim" in body
-    assert "one accept round runs on the new comment id" in body
-    assert "if all three voters do not return `accept`, the po records the story as unpointed" in body
-    assert "on acceptance, step 3 re-runs blind with newly created voter contexts, then this step runs again" in body
-
-
-def test_step_four_re_refine_is_offered_once() -> None:
-    body = flat(section(SKILL.read_text(), STEP_FOUR, level=3))
-    assert "re-refine is offered at most once per ceremony" in body
-    assert "a second empty intersection offers only split or leave unpointed" in body
-
-
-def test_step_four_outputs_and_stop_name_the_decision() -> None:
+def test_step_four_outputs_and_stop_name_the_variance_outcome() -> None:
     body = section(SKILL.read_text(), STEP_FOUR, level=3)
     outputs = bullet(body, "Outputs")
     stop = bullet(body, "Stop")
-    for line in (outputs, stop):
-        assert "no-consensus decision" in line
-        assert "leave unpointed" in line and "is the default when no path is in all three sets" in line
-        assert re.search(r"re-refine runs (at most|only) once per ceremony", line)
-    assert "the re-refine accept round ends without three `accept`" in stop
+    assert "the unpointed variance stop with the three values" in outputs
+    assert "the `consensus check:` outcome in the pointing record" in outputs
+    assert "the derived values are more than one step apart" in stop
+    assert "reports `needs input` to the owner naming the story and the derived values" in stop
+    for stale in ("no-consensus decision", "leave unpointed is the default", "re-refine"):
+        assert stale not in outputs and stale not in stop, stale
 
 
-def test_split_rule_adds_the_group_decided_trigger() -> None:
-    body = flat(section(SKILL.read_text(), "Split rule"))
-    assert "a story is also split when the step 4 no-consensus decision chooses split (a group-decided split)" in body
-    assert "this trigger adds to the consensus thresholds and does not change them" in body
-    assert "if either split trigger is met, split the story" in body
+def test_step_four_residual_variance_derives_one_value_per_voter() -> None:
+    item = process_items(STEP_FOUR)[5]
+    assert item.startswith(
+        "Residual variance: when the re-vote leaves no value shared by all three accepted sets, each voter's "
+        "re-vote value is the highest value in its accepted set."
+    )
     assert (
-        "a story is split when its consensus is above `profile.refinement.point_cap` or is 8 or more; "
-        "the lower trigger applies, and the 8-point rule in [references/linear.md](references/linear.md) is never relaxed" in body
+        "A voter that records no consensus in item 4 has no accepted set, so its re-vote value is the value it "
+        "recorded in its Step 3 file; after a void that is the value in the re-run's file, never a voided one." in item
+    )
+
+
+def test_step_four_empty_intersection_identical_derived_values_apply_the_tolerance_rule() -> None:
+    item = process_items(STEP_FOUR)[5]
+    assert (
+        "For example, accepted sets `{5}` and `{5}`, with no consensus from the voter whose Step 3 value was "
+        "5, derive 5, 5 and 5 from an empty intersection, so the ceremony records 5 as the estimate instead "
+        "of stopping unpointed." in item
+    )
+
+
+def test_step_four_residual_variance_one_step_apart_records_the_higher_value() -> None:
+    item = process_items(STEP_FOUR)[5]
+    assert (
+        "Every derived value comes from an accepted set or a Step 3 file, so it is on the sequence and its gap in "
+        "scale steps is measurable." in item
+    )
+    assert (
+        "When those derived per-voter values are identical, or the highest and the lowest of them are one step "
+        "apart on the sequence in item 1, the same tolerance rule applies to them: the highest derived value "
+        "is the estimate" in item
+    )
+    assert item.count("the highest and the lowest of them are one step apart") == 1, "the one-step branch is named once"
+    assert "When those derived per-voter values are identical" in item, "the identical branch is named"
+
+
+def test_step_four_residual_variance_pick_applies_the_split_rule() -> None:
+    item = process_items(STEP_FOUR)[5]
+    assert "the highest derived value is the estimate, and the split rule in item 9 still applies to it" in item
+
+
+def test_step_four_abstention_with_a_wide_step3_value_stops_unpointed() -> None:
+    item = process_items(STEP_FOUR)[5]
+    assert (
+        "A voter that records no consensus in item 4 has no accepted set, so its re-vote value is the value it "
+        "recorded in its Step 3 file" in item
+    )
+    derived = (5, 5, 13)
+    match = re.search(r"`fibonacci` ([0-9, ]+?);", process_items(STEP_FOUR)[0])
+    assert match, "Step 4 item 1 states the fibonacci sequence"
+    stated = match.group(1)
+    sequence = [int(value) for value in stated.split(",")]
+    gap = sequence.index(max(derived)) - sequence.index(min(derived))
+    assert gap > 1, "5 and 13 are more than one step apart on the fibonacci sequence the skill states"
+    assert "the highest and the lowest of them are one step apart on the sequence in item 1" in item
+    assert (
+        "When the highest and the lowest derived values are more than one step apart (1 and 5, for example), the "
+        "ceremony records the result as unpointed and stops" in item
+    )
+
+
+def test_step_four_residual_variance_more_than_one_step_apart_stops_unpointed() -> None:
+    item = process_items(STEP_FOUR)[5]
+    assert (
+        "When the highest and the lowest derived values are more than one step apart (1 and 5, for example), the "
+        "ceremony records the result as unpointed and stops: it posts the three values, the derived values with "
+        "the gap between the highest and the lowest in scale steps, and the three rationales, and reports "
+        "`needs input` to the owner naming the story and the derived values." in item
+    )
+    assert (
+        "The owner decides that outcome in a later run, which records it by editing the posted pointing record's "
+        "`Owner decision:` line, which the posting run leaves as `pending owner decision in a later run`: a numeric "
+        "decision is recorded as the estimate and the split rule applies to it, and a decision to leave the story "
+        "unpointed is recorded with the owner's reason and records no estimate." in item
+    )
+    assert (
+        "The product owner does not decide that outcome, and no facilitator and no voter chooses the value or the "
+        "path." in item
+    )
+
+
+def test_step_four_names_the_unpointed_variance_stop_apart_from_the_denied_write() -> None:
+    item = process_items(STEP_FOUR)[5]
+    assert (
+        "That unpointed variance stop is a `needs input` state of this skill, distinct from the `needs input` a "
+        "denied tracker write produces." in item
+    )
+    closing = flat(section(SKILL.read_text(), "Closing message"))
+    assert "including each `needs input`" in closing
+    assert "the denied tracker write of step 1" in closing
+    assert "the unpointed variance stop of step 4" in closing
+
+
+def test_split_rule_takes_the_recorded_estimate() -> None:
+    body = flat(section(SKILL.read_text(), "Split rule"))
+    assert (
+        "a story is split when its recorded estimate is above `profile.refinement.point_cap` or is 8 or more; "
+        "the recorded estimate is the consensus, or the value the step 4 consensus check or residual variance "
+        "rule records" in body
+    )
+    assert (
+        "the lower trigger applies, and the 8-point rule in [references/linear.md](references/linear.md) is never "
+        "relaxed" in body
+    )
+    assert "if the split trigger is met, split the story" in body
+    assert "group-decided" not in body
+
+
+def test_split_rule_never_compares_a_size() -> None:
+    body = flat(section(SKILL.read_text(), "Split rule"))
+    assert (
+        "a recorded `tshirt` size never triggers this rule: step 3 item 8 stops the cap step, and a size is "
+        "recorded as the estimate without a split" in body
     )
 
 
@@ -299,14 +384,6 @@ def test_split_rule_keeps_the_split_mechanics() -> None:
         "every acceptance criterion is mapped to a slice in the split comment",
     ):
         assert rule in body, rule
-
-
-def test_split_rule_re_points_the_core_slice_after_a_group_decided_split() -> None:
-    body = flat(section(SKILL.read_text(), "Split rule"))
-    assert (
-        "after a group-decided split, the core slice has no consensus value of its own, so the core slice and each sibling "
-        "get their own blind three-voter estimate in one round, with newly created voter contexts" in body
-    )
 
 
 def pointing_template() -> list[str]:
@@ -324,25 +401,39 @@ def pointing_template() -> list[str]:
     return templates[0].splitlines()
 
 
-def test_refinement_template_records_the_re_refine_accept_round() -> None:
-    line = "- Re-refine accept round (only after a Step 4 re-refine; one round): see the Accept round result comment"
-    assert line in template("Refinement comment").splitlines()
+def test_pointing_template_records_the_consensus_check_outcome() -> None:
+    assert "- Consensus check: <identical | one step | more than one step>" in pointing_template()
 
 
-def test_pointing_template_records_the_no_consensus_decision() -> None:
+def test_pointing_template_records_the_residual_variance() -> None:
     lines = pointing_template()
-    for line in (
-        "- No-consensus decision: <split, re-refine, or leave unpointed; n/a when there is a consensus>",
-        "- Paths accepted: <set per voter, or n/a>",
-        "- Decision rationale: <one line, or n/a>",
-    ):
-        assert line in lines, line
+    assert (
+        "- Residual variance: <each voter's derived value, the gap between the highest and the lowest in scale "
+        "steps, the rule applied and the resulting value, or the unpointed variance stop; n/a only when all three "
+        "voters recorded an accepted set and the intersection is not empty, or when the consensus check, or the "
+        "re-run of it that supersedes that outcome, recorded the estimate>" in lines
+    )
+    for removed in ("- No-consensus decision:", "- Paths accepted:", "- Decision rationale:"):
+        assert not any(line.startswith(removed) for line in lines), f"removed line survived: {removed}"
+    assert not any(line.startswith("- Re-refine") for line in lines), "the re-refine lines are removed"
 
 
-def test_records_names_the_no_consensus_decision() -> None:
+def test_pointing_template_records_the_recorded_estimate() -> None:
+    assert (
+        "- Recorded estimate: <the value recorded, or unpointed with the gap between the highest and the lowest in "
+        "scale steps when the round stopped there>" in pointing_template()
+    )
+
+
+def test_records_names_the_residual_variance() -> None:
     body = flat(section(SKILL.read_text(), "Records"))
-    assert "any no-consensus decision with each voter's accepted paths and the decision rationale" in body
-
+    assert "the `consensus check:` outcome" in body
+    assert (
+        "the consensus or the residual variance outcome with the derived values, the gap between the highest "
+        "and the lowest in scale steps and the rule applied, the recorded estimate or the unpointed variance "
+        "stop" in body
+    )
+    assert "no-consensus decision" not in body
 
 
 def test_records_requires_every_challenge_with_its_outcome() -> None:
@@ -651,16 +742,11 @@ def test_fallback_never_reapplies_a_write_the_po_already_applied() -> None:
 
 
 def test_step_four_unpointed_record_follows_the_apply_rule() -> None:
-    body = flat(section(SKILL.read_text(), STEP_FOUR, level=3))
+    item = process_items(STEP_FOUR)[5]
     assert (
-        "the po records the story as unpointed, or under the denied tracker writes fallback "
-        "the facilitator applies the po-authored unpointed record verbatim"
-    ) in body
-
-
-def test_step_four_amendments_use_the_otherwise_apply_rule() -> None:
-    body = flat(section(SKILL.read_text(), STEP_FOUR, level=3))
-    assert "applies both; otherwise, under the denied tracker writes fallback, the facilitator applies the amendments and the updated refinement comment verbatim" in body
+        "The PO authors the unpointed variance record and applies it, or under the denied tracker writes fallback "
+        "the facilitator applies the PO-authored record verbatim." in item
+    )
 
 
 # SKL-51: a point measures complexity, never the amount of work or elapsed time.
@@ -715,8 +801,7 @@ def test_pointing_basis_is_its_own_item_right_after_the_launch_item() -> None:
 def test_step_three_requires_the_basis_in_every_pointing_prompt() -> None:
     assert process_items(STEP_THREE)[2] == (
         "The sentence above is the pointing basis. Every pointing prompt or prompt file carries it verbatim, and "
-        "carries the item 4 rationale rule, including the re-run after a Step 4 re-refine and each slice estimate "
-        "under the Split rule."
+        "carries the item 4 rationale rule, including each slice estimate under the Split rule."
     )
 
 
@@ -757,10 +842,59 @@ def test_step_three_does_not_restate_the_pointing_basis() -> None:
 
 
 def test_step_four_re_vote_carries_the_basis_by_reference_to_step_three() -> None:
-    item = process_items(STEP_FOUR)[1]
-    assert item.startswith("Run one re-vote.")
+    item = process_items(STEP_FOUR)[3]
+    assert item.startswith("Run one re-vote, when the consensus check calls for it.")
     assert "The re-vote prompt carries the pointing basis from Step 3." in item
     assert squash(POINTING_BASIS) not in squash(operative_step(STEP_FOUR))
+
+
+def test_step_three_tshirt_cap_step_does_not_stop_the_ceremony() -> None:
+    stop = bullet(operative_step(STEP_THREE), "Stop")
+    assert "tshirt" not in stop, "the cap step stops the cap, not the ceremony"
+    item = process_item(STEP_THREE, "A `tshirt` scale stops the cap step")
+    assert (
+        "Pointing still records the three values and Step 4 still runs and records the larger size of a pair one "
+        "step apart; the split rule's numeric cap does not apply." in item
+    )
+
+
+def test_step_three_re_records_an_off_sequence_value_before_the_reveal() -> None:
+    item = process_item(STEP_THREE, "Each voter submits one point value")
+    assert (
+        "and present in the fixed step sequence Step 4 item 1 states for that scale" in item
+    )
+    assert (
+        "A value outside that sequence is re-recorded before the reveal, in a launch that starts a new voter "
+        "context, so every value and every accepted set has a step position" in item
+    )
+    assert (
+        "a second off-sequence value from the same voter stops the round with a missing-valid-value stop reason"
+        in item
+    )
+    stop = bullet(operative_step(STEP_THREE), "Stop")
+    assert "a voter's second off-sequence value is a missing-valid-value stop" in stop
+
+
+def test_step_four_re_vote_recovers_an_off_sequence_accepted_value() -> None:
+    item = process_items(STEP_FOUR)[3]
+    assert (
+        "An accepted-set value outside that sequence is re-recorded once under the Step 3 re-record rule, and a "
+        "second off-sequence re-vote value from the same voter stops the round like a Step 3 off-sequence stop."
+        in item
+    )
+
+
+def test_step_four_records_a_value_outside_the_sequence_as_wider_than_one_step() -> None:
+    item = process_items(STEP_FOUR)[0]
+    assert (
+        "A value outside that sequence for the profile's scale has no step position, so two different values that "
+        "involve one are more than one step apart; three identical values are identical, and Step 3 already "
+        "re-records an off-sequence value before the reveal." in item
+    )
+    assert (
+        "or they differ and either of them is outside the sequence, the discussion in item 3 and the re-vote in "
+        "item 4 run" in item
+    )
 
 
 def test_step_three_defines_the_reveal() -> None:
@@ -772,30 +906,36 @@ def test_step_three_defines_the_reveal() -> None:
 
 
 def test_step_four_re_vote_prompt_carries_the_rationale_rule() -> None:
-    item = process_items(STEP_FOUR)[1]
-    assert "It also carries the Step 3 item 4 rationale rule." in item
+    item = process_items(STEP_FOUR)[3]
+    assert (
+        "It also carries the Step 3 item 4 rationale rule and the fixed step sequence from item 1, since an "
+        "accepted set is drawn from that sequence." in item
+    )
 
 
 def test_pointing_template_notes_the_private_self_context_rule() -> None:
     assert (
-        "- Discussion: <high <value>, low <value>, or none; the shared content names only the high and the low, "
-        "while a voter's own recorded value and rationale are carried privately in that voter's prompt>"
+        "- Discussion: <high <value>, low <value>; or none when the discussion ran and recorded nothing; or "
+        "skipped, when the consensus check recorded the estimate; the shared content names only the high and the "
+        "low, while a voter's own recorded value and rationale are carried privately in that voter's prompt>"
         in pointing_template()
     )
 
 
 def test_pointing_template_states_the_standing_consensus() -> None:
     assert (
-        "- Consensus: <highest value in the intersection of the vote that stands, or none when the intersection is empty>"
+        "- Consensus: <the highest value in the intersection of the vote that stands, or n/a when the consensus check "
+        "or the residual variance rule recorded the estimate, or none when the round stopped unpointed>"
         in pointing_template()
     )
 
 
 def test_step_four_re_vote_requires_a_complexity_rationale() -> None:
-    item = process_items(STEP_FOUR)[1]
+    item = process_items(STEP_FOUR)[3]
     assert (
-        "Each voter records the set of values it accepts for this story (one or more) or records no consensus, "
-        "with a short complexity rationale under the Step 3 rationale rule."
+        "Each voter records the set of values it accepts for this story (one or more, each valid for "
+        "`profile.tracker.estimate_scale` and present in the item 1 sequence) or records no consensus, with a "
+        "short complexity rationale under the Step 3 rationale rule."
     ) in item
 
 
@@ -826,30 +966,214 @@ def test_step_three_sizing_context_is_in_complexity_terms() -> None:
 
 
 STEP_FOUR_ITEM_PREFIXES = [
-    "Hold one discussion round that names only the high and the low.",
-    "Run one re-vote.",
-    "Consensus is the highest value in the intersection of the three accepted sets.",
-    "Never average and never take a value silently.",
-    "The facilitator records the consensus; it does not declare it.",
-    "If the split trigger is met",
-    "No-consensus decision:",
-    "Split applies the split rule as a group-decided split.",
-    "Re-refine returns to Step 2.",
+    "Run the consensus check first, on the three values recorded in Step 3.",
+    "Review every rationale recorded in Step 3 against the pointing basis,",
+    "Hold one discussion round that names only the high and the low, when the consensus check calls for it.",
+    "Run one re-vote, when the consensus check calls for it.",
+    "When the re-vote ran, consensus is the highest value in the intersection of the three accepted sets.",
+    "Residual variance: when the re-vote leaves no value shared by all three accepted sets,",
+    "Never average and never take a value silently, except the tolerance value the consensus check or the residual variance rule records.",
+    "The facilitator records the estimate or the consensus; it does not declare it.",
+    "Apply the split rule when the split trigger it defines is met by the recorded estimate.",
 ]
+
+
+CONSENSUS_CHECK = "Run the consensus check first, on the three values recorded in Step 3."
+ESTIMATE_SEQUENCES = (
+    "The ordered step sequence is fixed here for each `profile.tracker.estimate_scale` value: "
+    "`fibonacci` 1, 2, 3, 5, 8, 13; `linear` the ordinal list 1, 2, 3, 5, 8, 13; "
+    "`exponential` 1, 2, 4, 8, 16; `tshirt` XS, S, M, L, XL in that order."
+)
+CONSENSUS_CHECK_BRANCHES = (
+    "When the three values are identical, or the highest and the lowest are one step apart (5 and 8 on "
+    "`fibonacci`, for example), the highest of the three values is the estimate, the discussion in item 3 and "
+    "the re-vote in item 4 are skipped, and the split rule in item 9 still applies to it. "
+    "The basis review in item 2 still runs on this branch, and nothing is written to the tracker and no "
+    "pointing record is posted until it has run. "
+    "When the highest and the lowest are more than one step apart (1 and 5, for example), or they differ and "
+    "either of them is outside the sequence, the discussion in item 3 and the re-vote in item 4 run, naming the "
+    "high and the low."
+)
+
+
+def test_step_four_identical_values_record_the_higher_value_and_skip() -> None:
+    item = process_items(STEP_FOUR)[0]
+    assert item.startswith(CONSENSUS_CHECK)
+    assert ESTIMATE_SEQUENCES in item
+    assert (
+        "The tolerance is one step, and it is fixed in this skill: no profile key and no skill argument sets it."
+    ) in item
+    assert CONSENSUS_CHECK_BRANCHES in item
+    assert (
+        "the record's values block keeps the values recorded before the discussion, and a replacement value "
+        "appears on its Challenges line and in the voter's file" in item
+    )
+    assert (
+        "Record the outcome in the pointing record as `Consensus check: <identical | one step | more than one "
+        "step>`, so a skipped discussion and re-vote read as skipped and never as not run; the record's values "
+        "block keeps the values recorded before the discussion, and a replacement value appears on its Challenges "
+        "line and in the voter's file."
+    ) in item
+    assert process_items(STEP_FOUR)[2].startswith(
+        "Hold one discussion round that names only the high and the low, when the consensus check calls for it."
+    ), "an unconditional discussion would make an identical round run one"
+
+
+def test_step_four_fixes_a_sequence_for_every_estimate_scale() -> None:
+    item = process_items(STEP_FOUR)[0]
+    scales = SCHEMA["properties"]["tracker"]["properties"]["estimate_scale"]["enum"]
+    assert scales == ["fibonacci", "linear", "exponential", "tshirt"]
+    for scale in scales:
+        assert f"`{scale}`" in item, f"no fixed step sequence for the {scale} scale"
+    assert ESTIMATE_SEQUENCES in item, "the four sequences are pinned verbatim"
+
+
+def test_step_four_one_step_apart_records_the_higher_value_and_skips() -> None:
+    item = process_items(STEP_FOUR)[0]
+    assert "`fibonacci` 1, 2, 3, 5, 8, 13" in item
+    assert (
+        "the highest and the lowest are one step apart (5 and 8 on `fibonacci`, for example), the highest of "
+        "the three values is the estimate, the discussion in item 3 and the re-vote in item 4 are skipped" in item
+    )
+    assert (
+        "On a `tshirt` scale a pair one step apart records the larger size, and the split rule's numeric cap "
+        "does not apply to a size." in item
+    )
+    cap = process_items(STEP_THREE)[7]
+    assert cap.startswith("A `tshirt` scale stops the cap step with a clear message."), "Step 3 item 8 moved"
+
+
+def test_step_four_more_than_one_step_apart_runs_the_discussion() -> None:
+    item = process_items(STEP_FOUR)[0]
+    run_clause = "the discussion in item 3 and the re-vote in item 4 run, naming the high and the low."
+    assert "(1 and 5, for example), or they differ and either of them is outside the sequence, " + run_clause in item
+    assert item.count(run_clause) == 1, "the discussion must run on the wide branch only"
+    assert "is the estimate" in item
+
+
+SKL13_VALUES = (8, 8, 8)
+SKL13_OFF_BASIS = "the tests took two days to write, so this is a 13"
+SPLIT_TRIGGER = 8
+SKIP_BRANCH_REVIEW = (
+    "Review every rationale recorded in Step 3 against the pointing basis, after the consensus check and before "
+    "the estimate is written to the tracker and before the pointing record is posted, so a void never leaves a "
+    "written estimate to unwind. This review is not the discussion: it runs on both branches, and the discussion "
+    "in item 3 only carries the challenges it raises."
+)
+SKIP_BRANCH_CHALLENGE = (
+    "When the consensus check skips the discussion and the re-vote, this review runs as a basis-challenge round "
+    "of its own: the facilitator launches each challenged voter once per round in a newly created voter context "
+    "whose prompt lists every ground challenged for that voter and carries the story, the refinement comment id, "
+    "that voter's own recorded value and rationale, the Step 3 pointing basis and the Step 3 item 4 rationale "
+    "rule; an off-sequence replacement value is re-recorded in a second launch of that voter. That launch records "
+    "a replacement value for that voter only when the voter's basis does not support its recorded value, and "
+    "otherwise the value that stands holds. An unresolved ground voids the round under the Anchoring guardrail, "
+    "so no estimate and no split action survives an unresolved challenge."
+)
+
+
+def test_step_four_identical_values_skip_still_challenges_every_off_basis_ground() -> None:
+    review = process_items(STEP_FOUR)[1]
+    check = process_items(STEP_FOUR)[0]
+    assert "When the three values are identical, or the highest and the lowest are one step apart" in check
+    assert "the discussion in item 3 and the re-vote in item 4 are skipped" in check
+    assert "skip the basis review" not in check, "the skip branch must keep the basis review"
+    assert SKIP_BRANCH_REVIEW in review
+    assert SKIP_BRANCH_CHALLENGE in review
+    assert "A challenged ground must be restated as a basis driver or retracted" in review
+    assert (
+        "The basis-challenge round applies this same review to every rationale its launches record: an off-basis "
+        "replacement rationale is restated or retracted, and an unresolved one voids the round." in review
+    )
+    assert "no estimate and no split action survives an unresolved challenge" in review
+    # The fixture: three identical 8s (SKL-13) with one off-basis rationale.
+    assert len(set(SKL13_VALUES)) == 1, "the fixture is three identical values"
+    recorded = max(SKL13_VALUES)
+    assert recorded >= SPLIT_TRIGGER, "SKL-13's recorded 8 reaches the eight-point split trigger"
+    # The fixture rationale is off-basis on the skill's own trigger list (a duration).
+    assert "two days" in SKL13_OFF_BASIS
+    guardrail = flat(section(SKILL.read_text(), GUARDRAIL))
+    assert "a duration, effort or run cost" in guardrail, "the guardrail names a duration as off basis"
+    # The challenge fires on that rationale, and the round cannot end on it.
+    assert "outside the pointing basis" in review
+    assert "recorded rationale" in review
+    assert "retracts an unsupported ground and records a replacement value" in review
+    assert "An unresolved ground voids the round under the Anchoring guardrail" in review
+    assert "no estimate and no split action survives an unresolved challenge" in review
+    assert "before the estimate is written to the tracker" in review
+    # And the recorded value still meets the skill's own split trigger.
+    split_rule = flat(section(SKILL.read_text(), "Split rule"))
+    matches = re.findall(r"or is (\d+) or more", split_rule)
+    assert len(matches) == 1, f"exactly one numeric split trigger, found {matches}"
+    assert recorded >= int(matches[0]), "the skill's split trigger catches SKL-13's 8"
+
+
+def test_step_four_one_step_skip_still_challenges_every_off_basis_ground() -> None:
+    review = process_items(STEP_FOUR)[1]
+    check = process_items(STEP_FOUR)[0]
+    assert "the highest and the lowest are one step apart (5 and 8 on `fibonacci`, for example), the highest of the three values is the estimate, the discussion in item 3 and the re-vote in item 4 are skipped" in check
+    assert SKIP_BRANCH_REVIEW in review
+    assert SKIP_BRANCH_CHALLENGE in review
+    assert "no estimate and no split action survives an unresolved challenge" in review
+
+
+def test_step_four_ordering_puts_the_basis_review_before_any_write() -> None:
+    review = process_items(STEP_FOUR)[1]
+    assert review.index("before the estimate is written to the tracker") < review.index(
+        "before the pointing record is posted"
+    )
+    check = process_items(STEP_FOUR)[0]
+    assert "nothing is written to the tracker and no pointing record is posted until it has run" in check
+
+
+def test_step_four_owner_never_chooses_the_derived_value() -> None:
+    item = process_items(STEP_FOUR)[5]
+    assert "The product owner does not decide that outcome" in item
+    assert "no facilitator and no voter chooses the value or the path" in item
+
+
+def test_step_four_abstention_stop_reports_needs_input() -> None:
+    item = process_items(STEP_FOUR)[5]
+    assert (
+        "and reports `needs input` to the owner naming the story and the derived values" in item
+    )
 
 
 def test_step_four_process_items_keep_their_count_and_order() -> None:
     items = process_items(STEP_FOUR)
+    assert len(items) == 9, "Step 4 has nine items: the check, the review, the discussion, the re-vote, the consensus, the residual variance, no averaging, the record, the split"
     assert len(items) == len(STEP_FOUR_ITEM_PREFIXES)
     for index, prefix in enumerate(STEP_FOUR_ITEM_PREFIXES):
         assert items[index].startswith(prefix), (index, prefix)
 
 
+STEP_FOUR_CROSS_REFERENCES = {
+    1: "Run the consensus check first",
+    2: "Review every rationale recorded in Step 3",
+    3: "Hold one discussion round",
+    4: "Run one re-vote",
+    6: "Residual variance:",
+    5: "When the re-vote ran, consensus is the highest value in the intersection",
+    9: "Apply the split rule when the split trigger it defines is met",
+}
+
+
+def test_step_four_item_cross_references_resolve() -> None:
+    items = process_items(STEP_FOUR)
+    body = flat(section(SKILL.read_text(), STEP_FOUR, level=3))
+    referenced = {int(number) for number in re.findall(r"item (\d+)", body)}
+    assert referenced, "Step 4 refers to its own items"
+    assert referenced <= set(range(1, len(items) + 1)), f"dangling item reference: {sorted(referenced)}"
+    assert {1, 2, 3, 4, 6, 9} <= referenced, f"a numbered step stopped being referenced: {sorted(referenced)}"
+    for number, prefix in STEP_FOUR_CROSS_REFERENCES.items():
+        assert items[number - 1].startswith(prefix), (number, prefix)
+
+
 def test_step_four_facilitator_challenges_every_off_basis_ground() -> None:
-    item = process_items(STEP_FOUR)[0]
+    item = process_items(STEP_FOUR)[1]
     assert (
-        "In that round, and against the rationales recorded in Step 3, the facilitator challenges every ground "
-        "outside the pointing basis, whether it is heard in the discussion or read in a recorded rationale, "
+        "The review challenges every ground outside the pointing basis that a recorded rationale carries; a "
+        "ground first heard in the discussion of item 3 is challenged there, under item 3, "
         "except a prescription of this story's value and, from the SM/EM, a statement of elapsed time, effort or "
         "run cost, which are anchoring events the moment they are seen."
     ) in item
@@ -865,8 +1189,7 @@ def test_step_four_facilitator_challenges_every_off_basis_ground() -> None:
     ) in item
     assert (
         "A challenged ground must be restated as a basis driver or retracted, except a prescription of this "
-        "story's value, which is an anchoring event as soon as it is seen; a voter whose basis does not support "
-        "its recorded value records that in the re-vote."
+        "story's value, which is an anchoring event as soon as it is seen."
     ) in item
     assert (
         "The SM/EM withdraws or restates its own sizing comment on the same terms, except a point value named "
@@ -874,18 +1197,37 @@ def test_step_four_facilitator_challenges_every_off_basis_ground() -> None:
         "answer, or a statement of elapsed time, effort or run cost, each of which is an anchoring event as soon "
         "as the facilitator sees it."
     ) in item
-    assert "A ground that is neither is an anchoring event under the Anchoring guardrail." in item
+    assert "A ground that is neither restated as a basis driver nor retracted is an anchoring event under the Anchoring guardrail." in item
+    assert (
+        "A voter whose basis does not support its recorded value retracts an unsupported ground and records a "
+        "replacement value with a basis-driver rationale under the Step 3 item 4 rationale rule, in the re-vote or, "
+        "when the consensus check skips the re-vote, in the basis-challenge round of this item, and the facilitator "
+        "records it in that voter's Step 3 file on either path; one basis-challenge "
+        "round runs per voter per ceremony, so a replacement whose rationale is again off basis leaves the ground "
+        "unresolved and voids the round rather than starting another; a replacement value is valid for "
+        "`profile.tracker.estimate_scale` and present in the item 1 sequence, re-recorded otherwise." in item
+    )
+    assert (
+        "The facilitator records a replacement value in that voter's Step 3 file, so the value recorded there is "
+        "the value that stands, and, when the consensus check skipped the re-vote, it then re-runs on the three "
+        "standing values" in item
+    )
+    assert (
+        "The re-run's outcome supersedes the `Consensus check:` outcome in the pointing record, and when it is "
+        "more than one step apart the discussion in item 3 and the re-vote in item 4 run before any estimate is "
+        "written or posted." in item
+    )
 
 
 def test_step_four_re_vote_challenges_an_off_basis_rationale() -> None:
-    item = process_items(STEP_FOUR)[1]
+    item = process_items(STEP_FOUR)[3]
     assert (
         "Recording an accepted set is not treating another voter's revealed value as the answer: the rationale "
         "for the set is about the basis, never about which value another voter recorded."
     ) in item
     assert (
         "A re-vote rationale outside the pointing basis is challenged before the consensus is recorded, under "
-        "the same restate-or-retract rule as item 1, and a voter that retracts its re-vote rationale records a "
+        "the same restate-or-retract rule as item 2, and a voter that retracts its re-vote rationale records a "
         "replacement accepted set within that same re-vote, with a basis-driver rationale, or records no "
         "consensus."
     ) in item
@@ -907,9 +1249,11 @@ def test_anchoring_guardrail_makes_a_point_value_sizing_note_an_event_on_challen
         "together with a basis difference, is information the voters weigh, and the round continues." in body
     )
     assert (
-        "any other challenged ground that is neither restated as a basis driver nor retracted, or a sizing "
-        "comment the sm/em neither withdraws nor restates, is an anchoring event, and the recovery below is the "
-        "single void rule: it voids the consensus and every vote recorded after the anchor, and for a ground read "
+        "any other challenged ground that is neither restated as a basis driver nor retracted, or a sizing comment "
+        "the sm/em neither withdraws nor restates, is an anchoring event, and the recovery below is the "
+        "single void rule: it voids the recorded estimate, the `consensus check:` outcome, the consensus, the "
+        "residual variance derived values and their outcome, and every vote recorded after the anchor, and for a "
+        "ground read "
         "in a recorded rationale the anchor precedes that rationale, so the vote it grounds and every later vote "
         "are void, and the independent vote from step 3 is re-run in newly created voter contexts that exclude "
         "the tainted discussion and sizing comment" in body
@@ -955,8 +1299,10 @@ def test_anchoring_guardrail_explains_why_context_cannot_exclude_a_recorded_valu
 def test_anchoring_guardrail_places_the_anchor_and_the_single_void_rule() -> None:
     body = flat(section(SKILL.read_text(), GUARDRAIL))
     assert (
-        "and the recovery below is the single void rule: it voids the consensus and every vote recorded after "
-        "the anchor, and for a ground read in a recorded rationale the anchor precedes that rationale, so the "
+        "and the recovery below is the single void rule: it voids the recorded estimate, the `consensus "
+        "check:` outcome, the consensus, the residual variance derived values and their outcome, and every "
+        "vote recorded after the anchor, and for a ground read in a recorded rationale the anchor precedes "
+        "that rationale, so the "
         "vote it grounds and every later vote are void, and the independent vote from step 3 is re-run in newly "
         "created voter contexts that exclude the tainted discussion and sizing comment" in body
     )
@@ -965,9 +1311,11 @@ def test_anchoring_guardrail_places_the_anchor_and_the_single_void_rule() -> Non
 def test_anchoring_guardrail_recovery_mechanics_are_unchanged() -> None:
     body = spaced(section(SKILL.read_text(), GUARDRAIL))
     assert (
-        "On anchoring: stop the round, record the comment verbatim, void the consensus and any vote recorded "
-        "after the anchor, and re-run the independent vote with newly created voter contexts that exclude the "
-        "tainted discussion and sizing comment. Never reuse the sessions that saw the anchor. Record the recovery."
+        "On anchoring: stop the round, record the comment verbatim, void the recorded estimate, the `Consensus "
+        "check:` outcome, the consensus, the residual variance derived values and their outcome, and any vote "
+        "recorded after the anchor, and re-run the independent vote with newly created voter contexts that exclude "
+        "the tainted discussion and sizing comment. Never reuse the sessions that saw the anchor. Record the "
+        "recovery."
     ) in body
 
 
@@ -1094,7 +1442,8 @@ def test_phrasing_table_permitted_cells_state_no_target_value() -> None:
 def test_pointing_template_records_each_challenge_and_outcome() -> None:
     assert (
         "- Challenges: <none, or each ground challenged by kind, its author (a voter, or the SM/EM for a sizing "
-        "comment), the restatement, withdrawal or retraction, or the void; elide a pre-reveal value or a "
+        "comment), the restatement, withdrawal or retraction, and any replacement value it produced, or the void; "
+        "elide a pre-reveal value or a "
         "prescription>" in pointing_template()
     )
     assert (
@@ -1102,7 +1451,9 @@ def test_pointing_template_records_each_challenge_and_outcome() -> None:
         "with the verbatim comment in the raw session record and its base name cited here>" in pointing_template()
     )
     assert (
-        "- Superseded values after a void: <none, or the voided values, the voided consensus and the blind vote that replaced them>"
+        "- Superseded values after a void: <none, or the voided values, the voided estimate, the voided "
+        "`Consensus check:` outcome, the voided consensus, the voided derived values and their outcome, and the "
+        "blind vote that replaced them>"
         in pointing_template()
     )
     body = spaced(section(RECORD.read_text(), "Pointing record"))
@@ -1118,8 +1469,9 @@ def test_pointing_template_records_each_challenge_and_outcome() -> None:
         "A sizing comment that names a point value before the reveal, prescribes this story's value, or states "
         "elapsed time, effort or run cost voids the round under the Anchoring guardrail recovery "
         "as soon as the facilitator sees it, as does any ground that is neither restated nor retracted, and the "
-        "void records the voided consensus under Superseded values after a void, so the Consensus field always "
-        "carries the vote that stands."
+        "void records the voided consensus under Superseded values after a void, so the Consensus field carries "
+        "the vote that stands, or n/a when the consensus check or the residual variance rule recorded the "
+        "estimate."
     ) in body
 
 
@@ -1140,7 +1492,9 @@ def test_pointing_template_asks_for_complexity_rationales() -> None:
         "  - Engineer two: <value, or not recorded> - <short complexity rationale, or none when the value is not recorded>",
     ]
     assert [line for line in lines if line.startswith("- Re-vote:")] == [
-        "- Re-vote: <accepted set per voter, with complexity rationale, or none>"
+        "- Re-vote: <accepted set per voter, with complexity rationale; or no consensus, with its complexity "
+        "rationale, for a voter that records none; or none when it ran and recorded nothing; or skipped, when the "
+        "consensus check recorded the estimate>"
     ]
     assert not any("<short rationale>" in line for line in lines)
 
@@ -1148,14 +1502,14 @@ def test_pointing_template_asks_for_complexity_rationales() -> None:
 # SKL-54: every accept round's result is posted in its own comment; the refinement comment stays immutable.
 
 STEP_TWO = "Step 2: Reconciliation and the accept round"
-RESULT_ITEM = "After each accept round, including the Step 4 re-refine accept round,"
+RESULT_ITEM = "After each accept round,"
 SEE_RESULT = "see the Accept round result comment"
 
 
 def test_step_two_requires_an_accept_round_result_comment() -> None:
     item = process_item(STEP_TWO, RESULT_ITEM)
     assert (
-        "After each accept round, including the Step 4 re-refine accept round, the PO authors and posts "
+        "After each accept round, the PO authors and posts "
         "a separate Accept round result comment that names the refinement comment id it covers, the round number, "
         "each voter's `ACCEPT` or `OBJECT`, and the outcome: accepted, another round, or unpointed."
     ) in item
@@ -1198,7 +1552,7 @@ def test_record_has_the_accept_round_result_template_with_exactly_the_fields() -
         "## Accept round result",
         "",
         "- Refinement comment covered: <refinement comment id>",
-        "- Round: <1, 2, or re-refine>",
+        "- Round: <1 or 2>",
         "- Product owner: <ACCEPT or OBJECT>",
         "- Engineer one (<family or model>): <ACCEPT or OBJECT>",
         "- Engineer two (<family or model>): <ACCEPT or OBJECT>",
@@ -1209,7 +1563,7 @@ def test_record_has_the_accept_round_result_template_with_exactly_the_fields() -
 def test_record_says_the_result_comment_is_separate_and_posted_after_each_round() -> None:
     body = spaced(section(RECORD.read_text(), "Accept round result"))
     assert (
-        "Post this as a separate tracker comment after each accept round, including the Step 4 re-refine accept round, "
+        "Post this as a separate tracker comment after each accept round, "
         "authored by the product owner and posted by the product owner or, under the denied tracker writes fallback, "
         "by the facilitator verbatim."
     ) in body
@@ -1225,6 +1579,7 @@ def test_refinement_template_points_every_accept_round_line_at_the_result_commen
     ):
         assert line in lines, line
     assert not any("<ACCEPT or OBJECT" in line or "<accepted or unpointed>" in line for line in lines)
+    assert not any(line.startswith("- Re-refine") for line in lines), "the re-refine accept round is removed"
 
 
 def test_records_cite_base_names_and_include_needed_content() -> None:
@@ -1303,7 +1658,7 @@ def test_arguments_section_precedes_read_first() -> None:
     "sentence",
     [
         "The closing message is the facilitator's final message to the owner when the invocation ends, on every end state and every stop.",
-        "It names the outcome (the consensus value, unpointed, or split with the slice count) or the stop reason, including `needs input` on a denied tracker write.",
+        "It names the outcome (the recorded estimate, unpointed, or split with the slice count) or the stop reason, including each `needs input`: the denied tracker write of Step 1 and the unpointed variance stop of Step 4.",
         "It carries the `metrics: on` or `metrics: off` line.",
     ],
 )
@@ -1360,11 +1715,11 @@ def test_metrics_section_states_the_bindings(sentence: str) -> None:
         "the tracker-write preflight",
         "each Step 1 voter launch",
         "each PO launch that authors or applies a tracker write or record",
-        "each accept-round voter launch, including the re-refine accept round",
-        "each Step 3 pointing launch, including the re-run after a re-refine",
+        "each accept-round voter launch",
+        "each Step 3 pointing launch",
         "each Step 4 discussion launch",
+        "each Step 4 basis-challenge launch",
         "each Step 4 re-vote launch",
-        "each Step 4 no-consensus path-decision launch",
         "each anchoring recovery re-launch",
         "each slice estimate launch",
     ],
@@ -1488,9 +1843,8 @@ def test_metrics_section_orders_the_post_as_the_last_tracker_write() -> None:
     assert "When a pointing record exists, the comment is the invocation's last tracker write." in body
     assert (
         "It posts only after every voter round, including every slice estimate under the Split rule, has finished; "
-        "the pointing record (a consensus, an unpointed result, including one after a re-refine accept round, "
-        "or a split decision) and any split comment have been posted and read back; and the invocation's triage "
-        "writes have been applied and read back." in body
+        "the pointing record (a recorded estimate, an unpointed result, or a split decision) and any split comment "
+        "have been posted and read back; and the invocation's triage writes have been applied and read back." in body
     )
 
 
@@ -1512,8 +1866,8 @@ def test_metrics_section_attempts_no_post_before_the_step_one_inputs() -> None:
 
 def test_metrics_section_never_posts_during_an_anchoring_recovery() -> None:
     assert (
-        "The comment is never posted while an anchoring recovery, its Step 3 re-run and its Step 4 re-vote, "
-        "is still to run." in metrics_body()
+        "The comment is never posted while an anchoring recovery, its Step 3 re-run, or any Step 4 re-vote "
+        "that follows them, is still to run." in metrics_body()
     )
 
 

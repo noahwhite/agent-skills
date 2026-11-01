@@ -64,7 +64,7 @@ The `linear` CLI (schpet/linear-cli) is the primary tool; the Linear MCP server 
 - `linear issue view --json` omits `estimate`, as it omits relations, even when the issue carries one, and the plain view prints no estimate line.
   Read an estimate with `linear api 'query { issue(id: "ABC-123") { estimate } }'`, or through the Linear MCP `get_issue` with the `estimate` field.
   The team issue list renders it in its estimate column, which is a display path, not a read path for a script.
-- ⛔ Split a story estimated at 8 points or more (or the scale's equivalent) at refinement, without asking, and present the slices.
+- ⛔ Split a story estimated at 8 points or more (or, on a numeric scale, its equivalent) at refinement, without asking, and present the slices; a `tshirt` size is recorded as the estimate without a split.
   Keep the original issue for the core slice, create siblings for the rest, and wire blocked-by or related edges.
 - ⛔ Never split an issue at close time to carve off unfinished work; that is status laundering.
 

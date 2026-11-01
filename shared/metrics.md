@@ -51,11 +51,11 @@ What each runtime's usage report returns is in the "Read a subagent's usage (dur
 ### `story-refinement` extras
 
 - **Accept rounds:** the number of accept rounds run.
-- **Pointing rounds:** one per blind value collection: Step 3, the Step 3 re-run after a Step 4 re-refine, each split slice estimate under the Split rule, and each anchoring recovery re-run.
-- **Re-votes:** one per Step 4 re-vote, including the re-vote after a re-refine's Step 3 re-run.
-- **Re-refine:** whether re-refine ran.
+- **Pointing rounds:** one per blind value collection: Step 3, each split slice estimate under the Split rule, and each anchoring recovery re-run.
+  A Step 4 basis-challenge round is not a blind value collection, so it is not a pointing round: its launches are the timed-launch rows, counted like every other launch.
+- **Re-votes:** one per Step 4 re-vote.
 - **Anchoring events:** the number of anchoring events.
-- **Outcome:** the consensus value or size, unpointed, split with the slice count, or the stop reason, including `needs input` on a denied tracker write.
+- **Outcome:** one of: the recorded estimate or size; unpointed, which on the Step 4 residual variance rule is the variance stop that names the story and the derived values; split with the slice count, plus `needs input` for each slice that stopped unpointed; or the stop reason, including `needs input` on a denied tracker write, `missing valid value` on a Step 3 off-sequence stop, or the Step 4 unpointed variance stop.
 - **Denied tracker writes fallback:** whether the denied tracker writes fallback was used.
 
 ### `story-to-done` extras
@@ -119,7 +119,7 @@ With no launches, the table is replaced by the line `no launches`, the elapsed w
 - On a stop before such a record exists, the comment is posted only after the three Stage 1 voter inputs are recorded and every voter context launched in the round that stopped has finished or stopped.
 - Both are subject to the denied tracker writes fallback.
   While a tracker write is denied and the owner has not authorized the denied tracker writes fallback, no post is attempted.
-- The comment is never posted while an anchoring recovery re-vote is still to run in this invocation.
+- The comment is never posted while an anchoring recovery, its Step 3 re-run, or any Step 4 re-vote that follows them, is still to run in this invocation.
 
 ### `story-to-done`
 
