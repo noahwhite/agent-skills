@@ -2196,3 +2196,22 @@ def test_the_case_runner_survives_an_unreadable_untracked_entry(tmp_path: Path) 
     )
     assert result.returncode == 1, result.stdout + result.stderr
     assert "the agent changed" not in result.stderr, "a dangling untracked link is not an agent change"
+
+def test_the_case_runner_detects_a_retargeted_untracked_link(tmp_path: Path) -> None:
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=checkout, check=True)
+    (checkout / "tracked.txt").write_text("first\n")
+    subprocess.run(["git", "add", "tracked.txt"], cwd=checkout, check=True)
+    subprocess.run(["git", "-c", "user.name=check", "-c", "user.email=check@example.com",
+                    "commit", "-q", "-m", "base"], cwd=checkout, check=True)
+    (checkout / "relink").symlink_to("nowhere")
+    agent = tmp_path / "agent.sh"
+    agent.write_text("#!/bin/sh\nln -sfn somewhere-else " + str(checkout / "relink") + "\n")
+    agent.chmod(0o755)
+    result = subprocess.run(
+        ["bash", str(case_file("run.sh")), str(checkout), "own-steps", str(tmp_path / "run")],
+        capture_output=True, text=True, env={**os.environ, "EVAL_AGENT_CMD": str(agent)},
+    )
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "the agent changed" in result.stderr, result.stderr

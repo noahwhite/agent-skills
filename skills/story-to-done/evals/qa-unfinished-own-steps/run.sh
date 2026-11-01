@@ -47,7 +47,14 @@ state() {
   git -C "$1" ls-files --others --exclude-standard -z |
     while IFS= read -r -d '' file; do
       printf '%s\0' "$file"
-      sha256sum < "$1/$file" 2>/dev/null || printf 'unreadable\n'
+      entry="$1/$file"
+      if [ -L "$entry" ]; then
+        printf 'link %s\n' "$(readlink "$entry")"
+      elif [ -f "$entry" ]; then
+        sha256sum < "$entry" 2>/dev/null || printf 'unreadable\n'
+      else
+        printf 'other\n'
+      fi
     done
 }
 state_before="$(state "$checkout_real")"
