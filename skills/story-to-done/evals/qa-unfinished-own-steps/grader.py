@@ -38,7 +38,7 @@ SUBSTANTIVE = re.compile(
 MESSAGE_LIMIT = 400
 # The owner-action control's reason has to name the owner action and what remains with it.
 OWNER_SIDE = re.compile(r"(?i)\b(owner|approval|approve|grant)\b")
-REMAINDER_SIDE = re.compile(r"(?i)\b(evidence|pr|gate|dod|check|item|review)\b")
+REMAINDER_SIDE = re.compile(r"(?i)\b(evidence|pr|gate|dod|check|items?)\b")
 
 
 def load(path: pathlib.Path) -> object:
@@ -114,9 +114,11 @@ def grade(run: pathlib.Path, expectation: str) -> list[tuple[bool, str]]:
         named = isinstance(reason, str) and bool(OWNER_SIDE.search(reason)) and bool(REMAINDER_SIDE.search(reason))
         checks.append((named, f"the stop named the owner action and what remains beside it, and it said {reason!r}"))
     elif expectation == "new-round":
-        checks.append((only.get("session") != session, "the new round did not reuse round 1's session"))
-        checks.append((only.get("session") in started,
-                       f"the launched session is one the run's ledger records, and it named {only.get('session')}"))
+        launched = only.get("session")
+        checks.append((isinstance(launched, str) and launched != session,
+                       f"the new round named a session other than round 1's, and it named {launched}"))
+        checks.append((isinstance(launched, str) and launched in started,
+                       f"the launched session is one the run's ledger records, and it named {launched}"))
     return checks
 
 

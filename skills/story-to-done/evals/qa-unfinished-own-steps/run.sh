@@ -38,8 +38,14 @@ if [ -d "$run" ] && [ -n "$(ls -A "$run")" ]; then
   exit 2
 fi
 
-head_before="$(git -C "$checkout_real" rev-parse HEAD)"
-status_before="$(git -C "$checkout_real" status --porcelain --untracked-files=all)"
+# The checkout's whole state, content included: status alone repeats for a file that was
+# already modified and is modified again, so the diff against HEAD is part of the fingerprint.
+state() {
+  git -C "$1" rev-parse HEAD
+  git -C "$1" status --porcelain --untracked-files=all
+  git -C "$1" diff HEAD
+}
+state_before="$(state "$checkout_real")"
 
 mkdir -p "$run"
 cp "$case_dir/scenarios/$scenario/scenario.md" "$case_dir/scenarios/$scenario/qa-round-1.json" "$run/"
@@ -62,9 +68,8 @@ if [ "$status" -ne 0 ]; then
   exit 2
 fi
 # The checkout under test must be exactly as it was: a new commit is as much a change as a
-# dirty file, so both are compared against the state taken before the agent ran.
-if [ "$(git -C "$checkout_real" rev-parse HEAD)" != "$head_before" ] ||
-   [ "$(git -C "$checkout_real" status --porcelain --untracked-files=all)" != "$status_before" ]; then
+# dirty file, so the whole state taken before the agent ran is compared with the state after.
+if [ "$(state "$checkout_real")" != "$state_before" ]; then
   echo "HARNESS: the agent changed $checkout_real; that run is void and nothing was graded." >&2
   git -C "$checkout_real" status --porcelain --untracked-files=all >&2
   exit 2
