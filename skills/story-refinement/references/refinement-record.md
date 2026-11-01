@@ -68,14 +68,14 @@ A sizing comment that names a point value before the reveal, prescribes this sto
 - Tracker-write preflight: comment <id>
 - Refined story identifier: <latest refinement comment id after any amendment>
 - Estimate scale: <profile.tracker.estimate_scale>
-- Values, recorded before the discussion: <the three values, or the values recorded before a void>
+- Values, recorded before the discussion: <the three values that stand, which after a basis-challenge replacement are the values the consensus check re-ran on, or the values recorded before a void>
   - Product owner: <value, or not recorded> - <short complexity rationale, or none when the value is not recorded>
   - Engineer one: <value, or not recorded> - <short complexity rationale, or none when the value is not recorded>
   - Engineer two: <value, or not recorded> - <short complexity rationale, or none when the value is not recorded>
 - Consensus check: <identical | one step | more than one step>
 - SM/EM sizing context, after all three values: <file base name> or verbatim, eliding a pre-reveal value or a prescription, or none
 - Discussion: <high <value>, low <value>; or none when the discussion ran and recorded nothing; or skipped, when the consensus check recorded the estimate; the shared content names only the high and the low, while a voter's own recorded value and rationale are carried privately in that voter's prompt>
-- Re-vote: <accepted set per voter, with complexity rationale; or none when it ran and recorded nothing; or skipped, when the consensus check recorded the estimate>
+- Re-vote: <accepted set per voter, with complexity rationale; or no consensus, with its complexity rationale, for a voter that records none; or none when it ran and recorded nothing; or skipped, when the consensus check recorded the estimate>
 - Consensus: <the highest value in the intersection of the vote that stands, or n/a when the consensus check or the residual variance rule recorded the estimate, or none when the round stopped unpointed>
 - Residual variance: <each voter's derived value, the gap between the highest and the lowest in scale steps, the rule applied and the resulting value, or the unpointed variance stop; n/a only when all three voters recorded an accepted set and the intersection is not empty, or when the consensus check, or the re-run of it that supersedes that outcome, recorded the estimate>
 - Recorded estimate: <the value recorded, or unpointed with the gap between the highest and the lowest in scale steps when the round stopped there>

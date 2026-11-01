@@ -1492,8 +1492,9 @@ def test_pointing_template_asks_for_complexity_rationales() -> None:
         "  - Engineer two: <value, or not recorded> - <short complexity rationale, or none when the value is not recorded>",
     ]
     assert [line for line in lines if line.startswith("- Re-vote:")] == [
-        "- Re-vote: <accepted set per voter, with complexity rationale; or none when it ran and recorded nothing; "
-        "or skipped, when the consensus check recorded the estimate>"
+        "- Re-vote: <accepted set per voter, with complexity rationale; or no consensus, with its complexity "
+        "rationale, for a voter that records none; or none when it ran and recorded nothing; or skipped, when the "
+        "consensus check recorded the estimate>"
     ]
     assert not any("<short rationale>" in line for line in lines)
 
