@@ -95,17 +95,42 @@ def test_senior_engineer_uses_its_model_and_engineering_workflow() -> None:
         assert phrase in body, f"step 2 missing: {phrase}"
 
 
+# SKL-159: the new-round sentence is pinned exactly as the story quotes it, and the one
+# continuation a round may take is the sole exception to it.
+QA_ROUND_SENTENCE = (
+    "Spawn a new clean, neutral subagent on qa-model at qa-effort for every new QA round; never resume an "
+    "agent from an earlier round, since it carries that round's conclusions."
+)
+QA_ROUND_EXCEPTION = (
+    "Continuation of the current round under step 4 is the sole exception to that sentence, and a "
+    "continuation never increments the round count."
+)
+OLD_QA_ROUND_CLAUSE = "never resume an earlier QA agent, since it carries that round's conclusions"
+
+
 def test_each_qa_round_is_a_new_agent_with_a_minimal_brief() -> None:
     body = section(SKILL.read_text(), "3. QA agent: verify the deployed story")
+    assert QA_ROUND_SENTENCE in body.splitlines(), "step 3 must read the pinned new-round sentence exactly"
+    assert QA_ROUND_EXCEPTION in " ".join(body.split()), "step 3 must scope the exception a round may take"
+    assert OLD_QA_ROUND_CLAUSE not in body, "the clause that forbids resuming is replaced, not kept beside it"
     for phrase in (
-        "Spawn a new clean, neutral subagent on `qa-model` at `qa-effort` for every QA round",
-        "never resume an earlier QA agent",
         "load and follow `qa-verification`",
         "Never give it the senior engineer's handback beyond the environment",
         "an earlier round's verdicts",
         "the verdict you expect",
     ):
         assert phrase in body, f"step 3 missing: {phrase}"
+
+
+def test_an_owner_stop_ends_the_round_so_the_next_attempt_is_a_new_round() -> None:
+    body = " ".join(section(SKILL.read_text(), "3. QA agent: verify the deployed story").split())
+    assert "A stop for an owner action ends the round" in body, "a stop for an owner action must end the round"
+    assert (
+        "that round's work starts over as a new round under this step with a new QA agent" in body
+    ), "an owner stop leaves the next attempt a new round with a new agent"
+    assert (
+        "a fix/deploy cycle or an amended acceptance basis likewise starts a new round" in body
+    ), "a fix cycle or an amended acceptance basis must start a new round"
 
 
 def state_bullets(body: str) -> dict[str, str]:

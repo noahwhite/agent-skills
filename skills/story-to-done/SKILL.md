@@ -117,7 +117,9 @@ For a waived PR, compare the merged PR's `headRefOid` with the SHA recorded when
 
 ## 3. QA agent: verify the deployed story
 
-Spawn a new clean, neutral subagent on `qa-model` at `qa-effort` for every QA round; never resume an earlier QA agent, since it carries that round's conclusions.
+Spawn a new clean, neutral subagent on qa-model at qa-effort for every new QA round; never resume an agent from an earlier round, since it carries that round's conclusions.
+Continuation of the current round under step 4 is the sole exception to that sentence, and a continuation never increments the round count.
+A stop for an owner action ends the round: once the owner clears it, that round's work starts over as a new round under this step with a new QA agent, and a fix/deploy cycle or an amended acceptance basis likewise starts a new round.
 Brief it as a QA agent, with only:
 
 - The story identifier and the environment under test: the environment the senior engineer deployed to.
