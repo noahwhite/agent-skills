@@ -20,7 +20,15 @@ scenario="${2:?usage: run.sh CHECKOUT SCENARIO RUN_DIR}"
 run="${3:?usage: run.sh CHECKOUT SCENARIO RUN_DIR}"
 
 test -d "$checkout" || { echo "run.sh: no checkout at $checkout" >&2; exit 2; }
+case "$scenario" in
+  own-steps|owner-action|new-round) ;;
+  *) echo "run.sh: unknown scenario $scenario" >&2; exit 2 ;;
+esac
 test -d "$case_dir/scenarios/$scenario" || { echo "run.sh: no scenario $scenario" >&2; exit 2; }
+if [ -e "$run" ] && [ ! -d "$run" ]; then
+  echo "run.sh: RUN_DIR $run is not a directory" >&2
+  exit 2
+fi
 checkout_real="$(realpath "$checkout")"
 case "$(realpath -m "$run")/" in
   "$checkout_real"/*) echo "run.sh: RUN_DIR must sit outside CHECKOUT" >&2; exit 2 ;;
@@ -29,6 +37,9 @@ if [ -d "$run" ] && [ -n "$(ls -A "$run")" ]; then
   echo "run.sh: RUN_DIR $run is not empty; give each run its own directory" >&2
   exit 2
 fi
+
+head_before="$(git -C "$checkout_real" rev-parse HEAD)"
+status_before="$(git -C "$checkout_real" status --porcelain --untracked-files=all)"
 
 mkdir -p "$run"
 cp "$case_dir/scenarios/$scenario/scenario.md" "$case_dir/scenarios/$scenario/qa-round-1.json" "$run/"
@@ -50,7 +61,10 @@ if [ "$status" -ne 0 ]; then
   echo "HARNESS: the agent command exited $status (124 means it hit EVAL_TIMEOUT); nothing was graded." >&2
   exit 2
 fi
-if [ -n "$(git -C "$checkout_real" status --porcelain --untracked-files=all)" ]; then
+# The checkout under test must be exactly as it was: a new commit is as much a change as a
+# dirty file, so both are compared against the state taken before the agent ran.
+if [ "$(git -C "$checkout_real" rev-parse HEAD)" != "$head_before" ] ||
+   [ "$(git -C "$checkout_real" status --porcelain --untracked-files=all)" != "$status_before" ]; then
   echo "HARNESS: the agent changed $checkout_real; that run is void and nothing was graded." >&2
   git -C "$checkout_real" status --porcelain --untracked-files=all >&2
   exit 2

@@ -180,7 +180,8 @@ STEP4_OLD_SENTENCE = "Report exactly what remains and who owns it, and stop; res
 STEP4_OPEN = "QA is not finished: one or more items in its handback are outstanding."
 STEP4_CLASSIFY = "Classify each outstanding item by its owner."
 STEP4_RESUME = (
-    "When every outstanding item is work the current QA agent itself can finish under its existing authority "
+    "When at least one item is outstanding and every outstanding item is work the current QA agent itself can "
+    "finish under its existing authority "
     "in the current round, such as an evidence PR it opened that is still unmerged with its review-of-record "
     "gate in flight, or a QA step still to run, step 4 resumes that same QA agent with a clean, neutral "
     "continuation message that states only that the round is unfinished and names that round's scratch "
@@ -629,7 +630,8 @@ METRICS_EXTRAS = (
     "round in step 3; each round's **QA round durations** entry as the sum of that round's launch rows' "
     "recorded durations, each row's figure taken as returned, which for a round holding more than one launch "
     "row is that round's duration and replaces the single-row duration `references/metrics.md` states for a "
-    "round; **Failed items** from the step 4 "
+    "round, and a row whose duration the coordinator did not capture reads `not reported`, which makes that "
+    "round's entry `not reported` too since the sum never estimates a missing figure; **Failed items** from the step 4 "
     "read of "
     "each QA round's outcome, in round order; **Fix rounds** from the step 4 branch that hands the failed "
     "items back; and **End state** immediately before the end form, once the run's end state or stop reason is known."
@@ -1830,12 +1832,19 @@ def test_the_qa_unfinished_own_steps_case_ships_its_parts() -> None:
         assert (CASE / "scenarios" / scenario / "scenario.md").is_file(), scenario
         assert (CASE / "scenarios" / scenario / "qa-round-1.json").is_file(), scenario
     assert (CASE / "runtime" / "qa-runtime").is_file()
-    baseline = [path for path in (CASE / "results").glob("baseline-*.md")]
-    candidate = [path for path in (CASE / "results").glob("candidate-*.md")]
+    baseline = sorted(path for path in (CASE / "results").glob("baseline-*.md"))
+    candidate = sorted(path for path in (CASE / "results").glob("candidate-*.md"))
     assert baseline and candidate, "a baseline run and a candidate run are recorded"
-    recorded = candidate[0].read_text()
-    assert "deepseek/deepseek-v4-pro" in recorded, "the candidate record names its configuration"
-    assert re.search(r"`[0-9a-f]{7,40}`", recorded), "the candidate record names the commit it graded"
+    current = [path for path in candidate if "Superseded" not in path.read_text().splitlines()[0]]
+    assert current, "one candidate record is current, and the rest are marked superseded"
+    for path in current:
+        recorded = path.read_text()
+        assert "deepseek/deepseek-v4-pro" in recorded, "a current candidate record names its configuration"
+        assert re.search(r"`[0-9a-f]{7,40}`", recorded), "a current candidate record names the commit it graded"
+        calls = path.with_name(path.stem + "-calls.jsonl")
+        assert calls.is_file(), f"{calls.name} carries the calls its verdicts were read from"
+        grades = [json.loads(line) for line in calls.read_text().splitlines() if '"grade"' in line]
+        assert grades and {entry["grade"] for entry in grades} <= {"PASS", "FAIL"}, "the calls file records each grade"
 
 
 def test_the_case_prompt_states_the_harness_without_steering_the_run() -> None:
@@ -1907,7 +1916,8 @@ def test_the_case_fails_a_continuation_that_carries_substance_or_the_wrong_sessi
 
 
 def test_the_case_controls_grade_the_owner_stop_and_the_new_round(tmp_path: Path) -> None:
-    owner = case_run(tmp_path, {"action": "stop", "reason": "a maintainer's approval only the story owner can grant"})
+    owner = case_run(tmp_path, {"action": "stop", "reason": "the evidence PR and its gate remain, and a maintainer's "
+                                                            "approval only the story owner can grant"})
     assert graded(owner, "owner-action").returncode == 0
     unnamed_owner = case_run(tmp_path, {"action": "stop", "reason": "QA unfinished"})
     assert graded(unnamed_owner, "owner-action").returncode == 1, "the stop must name the owner action it leaves"
@@ -2005,3 +2015,71 @@ def test_the_multi_row_duration_rule_names_the_single_row_reference_it_replaces(
     assert (
         "replaces the single-row duration `references/metrics.md` states for a round" in protocol
     ), "the protocol must say its sum replaces the reference's single-row rule for a multi-row round"
+
+# SKL-159: the sentences this change replaces must stay gone from the whole bundle, not only from
+# the section that carries their replacement.
+REPLACED_SENTENCES = [
+    "never resume an earlier QA agent, since it carries that round's conclusions",
+    "Report exactly what remains and who owns it, and stop; resume at step 3 once it is cleared",
+    "each QA round is one launch in step 3",
+    "QA rounds at each spawn in step 3, each with its duration copied from that round's launch row",
+]
+
+
+def test_no_replaced_sentence_survives_anywhere_in_the_bundle() -> None:
+    text = f"{SKILL.read_text()}\n{PROTOCOL.read_text()}".lower()
+    for sentence in REPLACED_SENTENCES:
+        assert sentence.lower() not in text, f"the replaced sentence is back: {sentence}"
+
+
+def test_the_case_runner_voids_a_failed_agent_command_without_grading(tmp_path: Path) -> None:
+    run_dir = tmp_path / "run"
+    result = subprocess.run(
+        ["bash", str(case_file("run.sh")), str(ROOT), "own-steps", str(run_dir)],
+        capture_output=True, text=True, env={**os.environ, "EVAL_AGENT_CMD": "false"},
+    )
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "nothing was graded" in result.stderr
+    assert not (run_dir / "grader-output.txt").exists(), "a void run records no grade"
+
+
+def test_the_case_runner_refuses_an_unknown_scenario_and_a_reused_directory(tmp_path: Path) -> None:
+    unknown = subprocess.run(["bash", str(case_file("run.sh")), str(ROOT), "some-other-case", str(tmp_path / "x")],
+                             capture_output=True, text=True)
+    assert unknown.returncode == 2 and "unknown scenario" in unknown.stderr
+    reused = tmp_path / "reused"
+    reused.mkdir()
+    (reused / "actions.jsonl").write_text("{}\n")
+    result = subprocess.run(["bash", str(case_file("run.sh")), str(ROOT), "own-steps", str(reused)],
+                            capture_output=True, text=True)
+    assert result.returncode == 2 and "not empty" in result.stderr
+    inside = subprocess.run(["bash", str(case_file("run.sh")), str(ROOT), "own-steps",
+                             str(ROOT / "skills" / "story-to-done" / "evals" / "inside-run")],
+                            capture_output=True, text=True)
+    assert inside.returncode == 2 and "must sit outside CHECKOUT" in inside.stderr
+
+
+def test_the_case_grader_survives_a_ledger_of_the_wrong_shape(tmp_path: Path) -> None:
+    run = continuation_run(tmp_path, CLEAN_CONTINUATION)
+    (run / "sessions.json").write_text("[]")
+    result = graded(run, "own-steps")
+    assert result.returncode == 1 and "Traceback" not in result.stderr, result.stderr
+    assert "record is unreadable" in result.stdout
+    other = case_run(tmp_path, {"action": "launch", "session": "qa-round-2-session", "label": "qa-agent-round-2",
+                                "round": 2, "message": "the environment under test"})
+    (other / "sessions.json").write_text("7")
+    result = graded(other, "new-round")
+    assert result.returncode == 1 and "Traceback" not in result.stderr, result.stderr
+
+
+def test_the_case_fails_a_continuation_that_leaks_in_other_words_or_at_length(tmp_path: Path) -> None:
+    vague = continuation_run(
+        tmp_path,
+        "Round 1 is unfinished. Everything we discussed earlier still stands. "
+        "Scratch subdirectory qa-agent-round-1.",
+    )
+    assert graded(vague, "own-steps").returncode == 1, "a message may not carry an earlier discussion"
+    long_message = continuation_run(tmp_path, "QA round 1 is unfinished. " + "note. " * 80 + "qa-agent-round-1")
+    assert graded(long_message, "own-steps").returncode == 1, "a continuation states two facts, not a brief"
+    near_miss = continuation_run(tmp_path, "The round is unfinished; scratch subdirectory qa-agent-round-1-copy.")
+    assert graded(near_miss, "own-steps").returncode == 1, "the message must name that round's own directory"

@@ -42,3 +42,12 @@ own-steps 3: {"action": "resume", "session": "qa-round-1-session", "round": 1, "
 owner-action: {"action": "stop", "reason": "In Deployment Review - QA not finished: evidence PR unmerged (review-of-record gate still running, QA's own work) and a maintainer approval pending on the story owner"}
 new-round:    {"action": "launch", "session": "qa-round-2-session", "round": 2, "label": "qa-agent-round-2"}
 ```
+
+## History
+
+An earlier version of this file recorded five runs against the earlier grader: one stop and four
+resumes, each resume failing the older message check. The grader was then replaced, because it did
+not read the session ledger and its term list missed the handback and the merge rules, so all runs
+were repeated and re-graded at this head. The three runs above are the record of this branch; the
+earlier five are superseded, not deleted from history, and their shape is preserved here: one stop
+and four substantive resumes.

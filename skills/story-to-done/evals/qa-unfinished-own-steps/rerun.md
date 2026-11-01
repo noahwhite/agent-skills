@@ -57,9 +57,11 @@ run directory as `grader-output.txt`, with the agent's own output beside it as
 ## Recording a result
 
 Record one file per version under `results/`, named `<version>-<ref>.md`, with the
-configuration used, one line per scenario with its verdict, and the call record each
-verdict was read from. A rerun with a different model records its own file and names the
-model it used; it never overwrites an earlier result.
+configuration used and one line per scenario with its verdict, plus `<version>-<ref>-calls.jsonl`
+holding the calls and grades the verdicts were read from. A rerun with a different model or a
+later commit records its own file and names what it used; it never overwrites or deletes an
+earlier result. When a result stops being current, keep it and mark it superseded in its first
+paragraph, naming the record that replaces it, so the trail from run to claim stays readable.
 
 ## What the case shows
 

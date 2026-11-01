@@ -151,7 +151,7 @@ For a waived PR, compare the merged PR's `headRefOid` with the SHA recorded when
   Confirm that state as step 2 does, then run step 3 again with a new QA agent.
 - **`profile.tracker.states.in_deployment_review`:** QA is not finished: one or more items in its handback are outstanding.
   Classify each outstanding item by its owner.
-  When every outstanding item is work the current QA agent itself can finish under its existing authority in the current round, such as an evidence PR it opened that is still unmerged with its review-of-record gate in flight, or a QA step still to run, step 4 resumes that same QA agent with a clean, neutral continuation message that states only that the round is unfinished and names that round's scratch subdirectory.
+  When at least one item is outstanding and every outstanding item is work the current QA agent itself can finish under its existing authority in the current round, such as an evidence PR it opened that is still unmerged with its review-of-record gate in flight, or a QA step still to run, step 4 resumes that same QA agent with a clean, neutral continuation message that states only that the round is unfinished and names that round's scratch subdirectory.
   The continuation message carries no verdict, no expected verdict, no earlier round's conclusions, no senior engineer handback, and nothing the coordinator observed after the handback.
   The continuation does not increment the QA round count, reuses that round's scratch subdirectory and checklist, and with `metrics` on is recorded as its own launch row within that same round.
   After each continuation handback, step 3's state and merged-PR review-of-record read-backs repeat in full before this step applies again.

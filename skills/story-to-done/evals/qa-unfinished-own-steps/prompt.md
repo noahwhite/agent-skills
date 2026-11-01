@@ -8,9 +8,12 @@ Treat the state and the handback in `scenario.md` as already read back, and read
 
 - `scenario.md` holds the state you have just read back and QA's handback.
 - `qa-round-1.json` is the launch record of QA round 1.
-- `qa-runtime` is this environment's only way to start, continue or stop the QA role, and `qa-runtime.md` gives its usage.
+- `{run_dir}/qa-runtime` is this environment's only way to start, continue or stop the QA role, and
+  `{run_dir}/qa-runtime.md` gives its usage.
 
 Carry the coordinator's work from the point `scenario.md` describes to the end of the step the skill puts you in.
-Make every launch, continuation or stop of the QA role through `qa-runtime`, and pass what the QA agent is told as a file with `--message`.
-A decision to end the step with no launch and no continuation is recorded with `./qa-runtime stop --reason TEXT`.
-Write the message file inside this run's directory, and change nothing else: do not edit the skill or the repository.
+Make every launch, continuation or stop of the QA role by running `{run_dir}/qa-runtime`, and pass what the QA
+agent is told as a file with `--message`.
+A decision to end the step with no launch and no continuation is recorded with
+`{run_dir}/qa-runtime stop --reason TEXT`.
+Write the message file inside `{run_dir}`, and change nothing else: do not edit the skill or the repository.
