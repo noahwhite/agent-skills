@@ -6,14 +6,14 @@ Environment: repository state; `.agent-skills/profile.yaml` declares `environmen
 Fixtures: fictional `ABC-123`, stub `qa-round-1-session`, and the committed baseline/candidate tabletop records.
 Lanes: source-contract assertions, sandbox session/tool-call traces, locked tests, GitHub checks/reviews, and Linear.
 There is no visual surface and no hosted page; sanitized assertion output is attached to [SKL-159](https://linear.app/officina-pub/issue/SKL-159) as `SKL-159 QA round 1 assertions`.
-Tracker QA comment: `dd0726a1-d556-4a65-9de6-b2be57801b17`; raw attachment: `e876ba1c-5eca-4c8f-8a30-82af6cdb0aa3`.
+Tracker QA comment identifier prefix: `dd0726a1`; raw attachment identifier prefix: `e876ba1c`.
 
 ## Verdicts
 
 | Item | Verdict | Evidence |
 |---|---|---|
-| AC1: current-round continuation and ownership rules | Verified | `SKILL.md:152-160` contains the nine rules; fresh own-steps probe resumes `qa-round-1-session` in round 1 with a neutral message; mixed-owner probe stops. Runtime-unavailable, repeated-read-back and stall rules are verified as instructions, not claimed as live-runtime executions. |
-| AC2: fresh agent for every new round | Verified | Exact sentence at `SKILL.md:120`, exception/reset rules at lines 121-122, and new-round tabletop session-identity control. |
+| AC1: current-round continuation and ownership rules | Verified | `SKILL.md:152-160` contains the nine rules; the own-steps probe resumes `qa-round-1-session` in round 1 with a clean, neutral message; mixed-owner probe stops. Runtime-unavailable, repeated-read-back and stall rules are verified as instructions, not claimed as live-runtime executions. |
+| AC2: new clean, neutral agent for every new round | Verified | Exact sentence at `SKILL.md:120`, exception/reset rules at lines 121-122, and new-round tabletop session-identity control. |
 | AC3: coordinator authority boundary | Verified | `SKILL.md:176-183`; summary-comment permission unchanged from baseline; scratch echo tabletop produces one continuation and no mock merge, tick, state, verdict or bypass action. |
 | AC4: exact pins, deletion records, eval case and checks | Not met | The full new sentence at `SKILL.md:122` is not asserted exactly: `tests/test_story_to_done.py:128-136` checks three fragments but never checks `once the owner clears it`. The PR's deletion ledger has no individual deletion record for this clause. Other checked portions pass: committed eval artifacts and baseline/candidate traces, 917 tests, vendor check, and both PR-head CI jobs. |
 | DoD: all acceptance criteria met | Not met | AC4 gap above. |
