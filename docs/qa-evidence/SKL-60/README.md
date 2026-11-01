@@ -1,7 +1,7 @@
 # SKL-60 QA round 1
 
 - Date: 2026-11-01.
-- Story: [SKL-60](https://linear.app/officina-pub/issue/SKL-60/user-story-refine-the-scrum-master-and-story-refinement-flows-into-the).
+- Story: SKL-60.
 - Build: `5f3e33a7f361cfc3c7f5fa12905a8e609fef7089`, freshly fetched merged `main`.
 - Implementation: https://github.com/noahwhite/agent-skills/pull/126.
 - Environment: isolated checkout of the merged repository artifacts.
@@ -9,7 +9,7 @@
 - Method: read-only assertions on the delivered instructions, templates and contract-test structure, plus authoritative merged-main CI.
   No implementation changes, local suite rerun, live ceremony, deployment or account mutations were performed.
 - Fixtures: the four committed scale sequences, accepted-set and abstention examples, the SKL-13 `8/8/8` static fixture and the pointing-record template.
-- Raw evidence: six sanitized text attachments on the [QA evidence comment](https://linear.app/officina-pub/issue/SKL-60/user-story-refine-the-scrum-master-and-story-refinement-flows-into-the#comment-c917b24c).
+- Raw evidence: six sanitized text attachments on SKL-60, QA comment `c917b24c-498b-4482-9e1f-2f19dcba6a90`.
   No screenshot is applicable to this CLI/instruction-artifact surface.
 
 ## Verdicts
