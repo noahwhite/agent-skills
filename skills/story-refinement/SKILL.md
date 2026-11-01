@@ -192,7 +192,7 @@ Only the PO and the two engineers count toward the agreement.
      Challenging a ground is not comparing values or singling out a voter: the facilitator names the ground's kind, never its verbatim text; the facilitator never names another voter's value in the shared discussion, nor a voter's value to other voters, and the pointing record carries the author; a ground that embeds a point value is named by its kind alone.
      A challenged ground must be restated as a basis driver or retracted, except a prescription of this story's value, which is an anchoring event as soon as it is seen.
      A voter whose basis does not support its recorded value retracts an unsupported ground and records a replacement value with a basis-driver rationale under the Step 3 item 4 rationale rule, in the re-vote or, when the consensus check skips the re-vote, in the basis-challenge round of this item, and the facilitator records it in that voter's Step 3 file on either path; one basis-challenge round runs per voter per ceremony, so a replacement whose rationale is again off basis leaves the ground unresolved and voids the round rather than starting another; a replacement value is valid for `profile.tracker.estimate_scale` and present in the item 1 sequence, re-recorded otherwise.
-     The facilitator records a replacement value in that voter's Step 3 file, so the value recorded there is the value that stands, and the consensus check in item 1 then re-runs on the three standing values, because the value it recorded was set by a basis the voter has withdrawn.
+     The facilitator records a replacement value in that voter's Step 3 file, so the value recorded there is the value that stands, and, when the consensus check skipped the re-vote, it then re-runs on the three standing values, because the value it recorded was set by a basis the voter has withdrawn; on the re-vote branch items 5 and 6 are the only path to an estimate.
      The re-run's outcome supersedes the `Consensus check:` outcome in the pointing record, and when it is more than one step apart the discussion in item 3 and the re-vote in item 4 run before any estimate is written or posted.
      The SM/EM withdraws or restates its own sizing comment on the same terms, except a point value named before the reveal, a prescription of this story's value, treating another voter's revealed value as the answer, or a statement of elapsed time, effort or run cost, each of which is an anchoring event as soon as the facilitator sees it.
      A ground that is neither restated as a basis driver nor retracted is an anchoring event under the Anchoring guardrail.
@@ -205,6 +205,7 @@ Only the PO and the two engineers count toward the agreement.
      The re-vote prompt carries the pointing basis from Step 3.
      It also carries the Step 3 item 4 rationale rule and the fixed step sequence from item 1, since an accepted set is drawn from that sequence.
      Each voter records the set of values it accepts for this story (one or more, each valid for `profile.tracker.estimate_scale` and present in the item 1 sequence) or records no consensus, with a short complexity rationale under the Step 3 rationale rule.
+     An accepted-set value outside that sequence is re-recorded once under the Step 3 re-record rule, and a second off-sequence re-vote value from the same voter stops the round like a Step 3 off-sequence stop.
      Recording an accepted set is not treating another voter's revealed value as the answer: the rationale for the set is about the basis, never about which value another voter recorded.
      A re-vote rationale outside the pointing basis is challenged before the consensus is recorded, under the same restate-or-retract rule as item 2, and a voter that retracts its re-vote rationale records a replacement accepted set within that same re-vote, with a basis-driver rationale, or records no consensus.
   5. When the re-vote ran, consensus is the highest value in the intersection of the three accepted sets.
@@ -253,7 +254,7 @@ Do not resume the tainted discussion.
 
 The effective accepted maximum is `profile.refinement.point_cap` (default 5), with a schema maximum of 8.
 A story is split when its recorded estimate is above `profile.refinement.point_cap` or is 8 or more; the recorded estimate is the consensus, or the value the Step 4 consensus check or residual variance rule records.
-A recorded `tshirt` size never triggers this rule: Step 3 item 8 stops the cap step, and a size is recorded as the estimate without a split, so no size-to-points comparison is made anywhere.
+A recorded `tshirt` size never triggers this rule: Step 3 item 8 stops the cap step, and a size is recorded as the estimate without a split.
 The lower trigger applies, and the 8-point rule in [references/linear.md](references/linear.md) is never relaxed.
 
 If the split trigger is met, split the story.

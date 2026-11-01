@@ -371,7 +371,7 @@ def test_split_rule_never_compares_a_size() -> None:
     body = flat(section(SKILL.read_text(), "Split rule"))
     assert (
         "a recorded `tshirt` size never triggers this rule: step 3 item 8 stops the cap step, and a size is "
-        "recorded as the estimate without a split, so no size-to-points comparison is made anywhere" in body
+        "recorded as the estimate without a split" in body
     )
 
 
@@ -858,6 +858,32 @@ def test_step_three_tshirt_cap_step_does_not_stop_the_ceremony() -> None:
     )
 
 
+def test_step_three_re_records_an_off_sequence_value_before_the_reveal() -> None:
+    item = process_item(STEP_THREE, "Each voter submits one point value")
+    assert (
+        "and present in the fixed step sequence Step 4 item 1 states for that scale" in item
+    )
+    assert (
+        "A value outside that sequence is re-recorded before the reveal, in a launch that starts a new voter "
+        "context, so every value and every accepted set has a step position" in item
+    )
+    assert (
+        "a second off-sequence value from the same voter stops the round with a missing-valid-value stop reason"
+        in item
+    )
+    stop = bullet(operative_step(STEP_THREE), "Stop")
+    assert "a voter's second off-sequence value is a missing-valid-value stop" in stop
+
+
+def test_step_four_re_vote_recovers_an_off_sequence_accepted_value() -> None:
+    item = process_items(STEP_FOUR)[3]
+    assert (
+        "An accepted-set value outside that sequence is re-recorded once under the Step 3 re-record rule, and a "
+        "second off-sequence re-vote value from the same voter stops the round like a Step 3 off-sequence stop."
+        in item
+    )
+
+
 def test_step_four_records_a_value_outside_the_sequence_as_wider_than_one_step() -> None:
     item = process_items(STEP_FOUR)[0]
     assert (
@@ -1183,7 +1209,8 @@ def test_step_four_facilitator_challenges_every_off_basis_ground() -> None:
     )
     assert (
         "The facilitator records a replacement value in that voter's Step 3 file, so the value recorded there is "
-        "the value that stands, and the consensus check in item 1 then re-runs on the three standing values" in item
+        "the value that stands, and, when the consensus check skipped the re-vote, it then re-runs on the three "
+        "standing values" in item
     )
     assert (
         "The re-run's outcome supersedes the `Consensus check:` outcome in the pointing record, and when it is "
