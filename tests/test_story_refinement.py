@@ -377,8 +377,8 @@ def test_shared_linear_rule_has_no_size_clause() -> None:
     shared = (ROOT / "shared" / "linear.md").read_text()
     rule = flat(next(line for line in shared.splitlines() if "Split a story estimated at 8 points" in line))
     assert "tshirt" not in rule and "t-shirt" not in rule.lower()
-    assert "or, on a numeric scale, its equivalent" in rule
-    assert "or the scale's equivalent" not in rule
+    assert rule.endswith("at refinement, without asking, and present the slices.")
+    assert "equivalent" not in rule, "every numeric sequence in the skill contains 8, so no parenthetical is needed"
 
 
 def test_split_rule_keeps_the_split_mechanics() -> None:
@@ -759,7 +759,7 @@ def test_step_four_unpointed_record_follows_the_apply_rule() -> None:
 
 STEP_THREE = "Step 3: Secret pointing"
 POINTING_BASIS = (
-    "A point or size measures complexity - design difficulty, interacting constraints, unknowns, "
+    "A point measures complexity - design difficulty, interacting constraints, unknowns, "
     "and the risk of breaking existing behaviour - and never the amount of work or elapsed time; "
     "routine, well-understood work such as writing tests, opening a PR, review, running a fixture, "
     "or regenerating copies adds no points however long it takes."
@@ -831,13 +831,19 @@ def test_step_three_rationale_names_complexity_drivers_and_no_duration() -> None
     assert "design difficulty, an interacting constraint, an unknown" not in body
 
 
+def test_pointing_basis_names_no_size() -> None:
+    assert "size" not in POINTING_BASIS.lower(), "a story is given points, never a t-shirt size"
+    item = process_items(STEP_THREE)[1]
+    assert item.startswith("A point measures complexity")
+    assert "or size" not in item
+
+
 def test_step_three_does_not_restate_the_pointing_basis() -> None:
     items = process_items(STEP_THREE)
     assert squash(POINTING_BASIS) in squash(items[1]), "Step 3 item 2 carries the basis and belongs to SKL-60"
     without_basis_item = " ".join(items[:1] + items[2:])
     assert squash(POINTING_BASIS) not in squash(without_basis_item)
     for fragment in (
-        "A point or size measures",
         "A point measures",
         "measures design difficulty",
         "design difficulty",
