@@ -156,9 +156,9 @@ FIGURE_RULES = [
 REFINEMENT_EXTRAS = [
     pytest.param("- **Accept rounds:** the number of accept rounds run.", id="accept-rounds"),
     pytest.param(
-        "- **Pointing rounds:** one per blind value collection: Step 3, each Step 4 basis-challenge round that "
-        "records a replacement value, each split slice estimate under the Split rule, and each anchoring recovery "
-        "re-run.",
+        "- **Pointing rounds:** one per blind value collection: Step 3, each Step 4 basis-challenge round, each "
+        "split slice estimate under the Split rule, and each anchoring recovery re-run. A basis-challenge round "
+        "is one row here however many challenged voters it launches, and its launches are the timed-launch rows.",
         id="pointing-rounds",
     ),
     pytest.param(
@@ -167,9 +167,9 @@ REFINEMENT_EXTRAS = [
     ),
     pytest.param("- **Anchoring events:** the number of anchoring events.", id="anchoring-events"),
     pytest.param(
-        "- **Outcome:** the recorded estimate or size, unpointed, split with the slice count, or the "
-        "stop reason, including `needs input` on a denied tracker write and `needs input` on the "
-        "Step 4 unpointed variance stop, which names the story and the derived values.",
+        "- **Outcome:** one of: the recorded estimate or size; unpointed, which on the Step 4 residual "
+        "variance rule is the variance stop that names the story and the derived values; split with the "
+        "slice count; or the stop reason, including `needs input` on a denied tracker write.",
         id="outcome",
     ),
     pytest.param(

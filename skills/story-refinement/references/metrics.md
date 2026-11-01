@@ -53,10 +53,11 @@ What each runtime's usage report returns is in the "Read a subagent's usage (dur
 ### `story-refinement` extras
 
 - **Accept rounds:** the number of accept rounds run.
-- **Pointing rounds:** one per blind value collection: Step 3, each Step 4 basis-challenge round that records a replacement value, each split slice estimate under the Split rule, and each anchoring recovery re-run.
+- **Pointing rounds:** one per blind value collection: Step 3, each Step 4 basis-challenge round, each split slice estimate under the Split rule, and each anchoring recovery re-run.
+  A basis-challenge round is one row here however many challenged voters it launches, and its launches are the timed-launch rows.
 - **Re-votes:** one per Step 4 re-vote.
 - **Anchoring events:** the number of anchoring events.
-- **Outcome:** the recorded estimate or size, unpointed, split with the slice count, or the stop reason, including `needs input` on a denied tracker write and `needs input` on the Step 4 unpointed variance stop, which names the story and the derived values.
+- **Outcome:** one of: the recorded estimate or size; unpointed, which on the Step 4 residual variance rule is the variance stop that names the story and the derived values; split with the slice count; or the stop reason, including `needs input` on a denied tracker write.
 - **Denied tracker writes fallback:** whether the denied tracker writes fallback was used.
 
 ### `story-to-done` extras

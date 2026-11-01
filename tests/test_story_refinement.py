@@ -284,6 +284,10 @@ def test_step_four_empty_intersection_identical_derived_values_apply_the_toleran
 def test_step_four_residual_variance_one_step_apart_records_the_higher_value() -> None:
     item = process_items(STEP_FOUR)[5]
     assert (
+        "Every derived value comes from an accepted set or a Step 3 file, so it is on the sequence and its gap in "
+        "scale steps is measurable." in item
+    )
+    assert (
         "When those derived per-voter values are identical, or the highest and the lowest of them are one step "
         "apart on the sequence in item 1, the same tolerance rule applies to them: the highest derived value "
         "is the estimate" in item
@@ -304,7 +308,9 @@ def test_step_four_abstention_with_a_wide_step3_value_stops_unpointed() -> None:
         "value it recorded in its Step 3 file" in item
     )
     derived = (5, 5, 13)
-    stated = re.search(r"`fibonacci` ([0-9, ]+?);", process_items(STEP_FOUR)[0]).group(1)
+    match = re.search(r"`fibonacci` ([0-9, ]+?);", process_items(STEP_FOUR)[0])
+    assert match, "Step 4 item 1 states the fibonacci sequence"
+    stated = match.group(1)
     sequence = [int(value) for value in stated.split(",")]
     gap = sequence.index(max(derived)) - sequence.index(min(derived))
     assert gap > 1, "5 and 13 are more than one step apart on the fibonacci sequence the skill states"
@@ -324,7 +330,10 @@ def test_step_four_residual_variance_more_than_one_step_apart_stops_unpointed() 
         "`needs input` to the owner naming the story and the derived values." in item
     )
     assert (
-        "The owner decides that outcome in a later run, which records it: the product owner does not decide that "
+        "The owner decides that outcome in a later run: a new invocation of this ceremony on the same story "
+        "reads the posted unpointed variance record, takes the owner's decision for the estimate, and records "
+        "it, and it does not re-point before that decision. The decision is the owner's: the product owner does "
+        "not decide that "
         "outcome, under the estimator-ownership rule that the people doing the work estimate, and no facilitator "
         "and no voter chooses the value or the path." in item
     )
@@ -355,6 +364,14 @@ def test_split_rule_takes_the_recorded_estimate() -> None:
     )
     assert "if the split trigger is met, split the story" in body
     assert "group-decided" not in body
+
+
+def test_split_rule_never_compares_a_size() -> None:
+    body = flat(section(SKILL.read_text(), "Split rule"))
+    assert (
+        "a recorded `tshirt` size is never compared with `profile.refinement.point_cap` or with 8: the numeric "
+        "split trigger does not apply to a size, and step 3 item 8 stops the cap step" in body
+    )
 
 
 def test_split_rule_keeps_the_split_mechanics() -> None:
@@ -862,7 +879,10 @@ def test_step_three_defines_the_reveal() -> None:
 
 def test_step_four_re_vote_prompt_carries_the_rationale_rule() -> None:
     item = process_items(STEP_FOUR)[3]
-    assert "It also carries the Step 3 item 4 rationale rule." in item
+    assert (
+        "It also carries the Step 3 item 4 rationale rule and the fixed step sequence from item 1, since an "
+        "accepted set is drawn from that sequence." in item
+    )
 
 
 def test_pointing_template_notes_the_private_self_context_rule() -> None:
@@ -997,6 +1017,8 @@ def test_step_four_more_than_one_step_apart_runs_the_discussion() -> None:
 
 
 SKL13_VALUES = (8, 8, 8)
+SKL13_OFF_BASIS = "the tests took two days to write, so this is a 13"
+SPLIT_TRIGGER = 8
 SKIP_BRANCH_REVIEW = (
     "Review every rationale recorded in Step 3 against the pointing basis, after the consensus check and before "
     "the estimate is written to the tracker and before the pointing record is posted, so a void never leaves a "
@@ -1005,11 +1027,11 @@ SKIP_BRANCH_REVIEW = (
 )
 SKIP_BRANCH_CHALLENGE = (
     "When the consensus check skips the discussion and the re-vote, this review runs as a basis-challenge round "
-    "of its own: the facilitator launches, once per challenged ground, that ground's author in a newly created "
-    "voter context whose prompt carries the story, the refinement comment id, that voter's own recorded value and "
-    "rationale, the challenged ground, the Step 3 pointing basis and the Step 3 item 4 rationale rule, and an "
-    "unresolved ground voids the round under the Anchoring guardrail, so no estimate and no split action "
-    "survives an unresolved challenge."
+    "of its own: the facilitator launches each challenged voter once in a newly created voter context whose "
+    "prompt lists every ground challenged for that voter and carries the story, the refinement comment id, that "
+    "voter's own recorded value and rationale, the Step 3 pointing basis and the Step 3 item 4 rationale rule; "
+    "that launch records one replacement value for that voter, and an unresolved ground voids the round under "
+    "the Anchoring guardrail, so no estimate and no split action survives an unresolved challenge."
 )
 
 
@@ -1021,15 +1043,24 @@ def test_step_four_identical_values_skip_still_challenges_every_off_basis_ground
     assert "skip the basis review" not in check, "the skip branch must keep the basis review"
     assert SKIP_BRANCH_REVIEW in review
     assert SKIP_BRANCH_CHALLENGE in review
-    assert "A challenged ground must be restated as a basis driver or retracted" in review
+    assert "A challenged ground must be restated as a basis driver, retracted, or answered by a value its basis supports" in review
     assert "no estimate and no split action survives an unresolved challenge" in review
+    # The fixture: three identical 8s (SKL-13) with one off-basis rationale.
+    assert len(set(SKL13_VALUES)) == 1, "the fixture is three identical values"
+    recorded = max(SKL13_VALUES)
+    assert recorded >= SPLIT_TRIGGER, "SKL-13's recorded 8 reaches the eight-point split trigger"
+    # The challenge fires on that rationale, and the round cannot end on it.
+    assert "outside the pointing basis" in review
+    assert "recorded rationale" in review
+    assert "answered by a value its basis supports" in review
+    assert "an unresolved ground voids the round under the Anchoring guardrail" in review
+    assert "no estimate and no split action survives an unresolved challenge" in review
+    assert "before the estimate is written to the tracker" in review
+    # And the recorded value still meets the skill's own split trigger.
     split_rule = flat(section(SKILL.read_text(), "Split rule"))
     matches = re.findall(r"or is (\d+) or more", split_rule)
     assert len(matches) == 1, f"exactly one numeric split trigger, found {matches}"
-    threshold = re.match(r"(\d+)", matches[0])
-    assert threshold, "the split rule names no 8-point trigger"
-    assert SKL13_VALUES == (8, 8, 8), "the SKL-13 fixture is three identical values"
-    assert SKL13_VALUES[0] >= int(threshold.group(1)), "SKL-13's recorded 8 reaches the skill's split trigger"
+    assert recorded >= int(matches[0]), "the skill's split trigger catches SKL-13's 8"
 
 
 def test_step_four_one_step_skip_still_challenges_every_off_basis_ground() -> None:
@@ -1089,8 +1120,10 @@ def test_step_four_facilitator_challenges_every_off_basis_ground() -> None:
         "that embeds a point value is named by its kind alone."
     ) in item
     assert (
-        "A challenged ground must be restated as a basis driver or retracted, except a prescription of this "
-        "story's value, which is an anchoring event as soon as it is seen."
+        "A challenged ground must be restated as a basis driver, retracted, or answered by a value its basis "
+        "supports, except a prescription of this story's value, which is an anchoring event as soon as it is "
+        "seen; a value is supported when the restated ground admits it, and the facilitator judges that by the "
+        "same test it applies to a Step 3 rationale."
     ) in item
     assert (
         "The SM/EM withdraws or restates its own sizing comment on the same terms, except a point value named "
@@ -1139,7 +1172,8 @@ def test_anchoring_guardrail_makes_a_point_value_sizing_note_an_event_on_challen
         "any other challenged ground that is neither restated as a basis driver, retracted, nor answered by a "
         "supported value, or a sizing comment the sm/em neither withdraws nor restates, is an anchoring event, and "
         "the recovery below is the "
-        "single void rule: it voids the consensus and every vote recorded after the anchor, and for a ground read "
+        "single void rule: it voids the recorded estimate, the `consensus check:` outcome, the consensus and every "
+        "vote recorded after the anchor, and for a ground read "
         "in a recorded rationale the anchor precedes that rationale, so the vote it grounds and every later vote "
         "are void, and the independent vote from step 3 is re-run in newly created voter contexts that exclude "
         "the tainted discussion and sizing comment" in body
@@ -1185,8 +1219,9 @@ def test_anchoring_guardrail_explains_why_context_cannot_exclude_a_recorded_valu
 def test_anchoring_guardrail_places_the_anchor_and_the_single_void_rule() -> None:
     body = flat(section(SKILL.read_text(), GUARDRAIL))
     assert (
-        "and the recovery below is the single void rule: it voids the consensus and every vote recorded after "
-        "the anchor, and for a ground read in a recorded rationale the anchor precedes that rationale, so the "
+        "and the recovery below is the single void rule: it voids the recorded estimate, the `consensus "
+        "check:` outcome, the consensus and every vote recorded after the anchor, and for a ground read in a "
+        "recorded rationale the anchor precedes that rationale, so the "
         "vote it grounds and every later vote are void, and the independent vote from step 3 is re-run in newly "
         "created voter contexts that exclude the tainted discussion and sizing comment" in body
     )
@@ -1332,7 +1367,8 @@ def test_pointing_template_records_each_challenge_and_outcome() -> None:
         "with the verbatim comment in the raw session record and its base name cited here>" in pointing_template()
     )
     assert (
-        "- Superseded values after a void: <none, or the voided values, the voided consensus and the blind vote that replaced them>"
+        "- Superseded values after a void: <none, or the voided values, the voided estimate, the voided "
+        "`Consensus check:` outcome, the voided consensus and the blind vote that replaced them>"
         in pointing_template()
     )
     body = spaced(section(RECORD.read_text(), "Pointing record"))
@@ -1596,6 +1632,7 @@ def test_metrics_section_states_the_bindings(sentence: str) -> None:
         "each accept-round voter launch",
         "each Step 3 pointing launch",
         "each Step 4 discussion launch",
+        "each Step 4 basis-challenge launch",
         "each Step 4 re-vote launch",
         "each anchoring recovery re-launch",
         "each slice estimate launch",
