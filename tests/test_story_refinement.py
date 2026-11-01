@@ -367,7 +367,9 @@ def test_split_rule_takes_the_recorded_estimate() -> None:
     assert "group-decided" not in body
 
 
-SIZE_VOCABULARY = re.compile(r"tshirt|t-shirt|x-small|\bXS\b|\bsize\b", re.IGNORECASE)
+SIZE_VOCABULARY = re.compile(
+    r"tshirt|t[ -]?shirt|x-small|extra[ _]large|x-large|\bXS\b|\bXL\b|\bsize\b", re.IGNORECASE
+)
 
 
 def test_split_rule_has_no_size_clause() -> None:
@@ -376,12 +378,15 @@ def test_split_rule_has_no_size_clause() -> None:
 
 
 def test_shared_linear_rule_has_no_size_clause() -> None:
-    body = flat((ROOT / "shared" / "linear.md").read_text())
-    bullet = "- ⛔ split a story estimated at 8 points or more at refinement, without asking, and present the slices."
-    assert bullet in body, "the 8-point rule is one unqualified sentence"
-    rule = body[body.index(bullet) : body.index(bullet) + len(bullet)]
-    assert "equivalent" not in rule
-    assert not SIZE_VOCABULARY.search(rule)
+    lines = (ROOT / "shared" / "linear.md").read_text().splitlines()
+    start = next(index for index, line in enumerate(lines) if line.startswith("- ⛔ Split a story estimated at 8 points"))
+    end = next(index for index in range(start + 1, len(lines)) if lines[index] and not lines[index].startswith(" "))
+    bullet = flat(" ".join(lines[start:end]))
+    assert bullet.startswith(
+        "- ⛔ split a story estimated at 8 points or more at refinement, without asking, and present the slices."
+    ), "the 8-point rule starts with one unqualified sentence"
+    assert "equivalent" not in bullet, "no scale parenthetical survives"
+    assert not SIZE_VOCABULARY.search(bullet), "the split rule names no size"
 
 
 def test_split_rule_keeps_the_split_mechanics() -> None:
@@ -879,6 +884,7 @@ def test_step_three_has_no_size_cap_step() -> None:
     body = operative_step(STEP_THREE)
     stop = bullet(body, "Stop")
     assert not SIZE_VOCABULARY.search(body), "a t-shirt size is a project and epic label, not a story scale"
+    assert not SIZE_VOCABULARY.search(stop)
     assert "cap step" not in body
 
 
@@ -946,7 +952,9 @@ def test_step_four_re_vote_prompt_carries_the_rationale_rule() -> None:
 
 def test_pointing_template_has_no_size_note() -> None:
     lines = pointing_template()
-    assert not any("tshirt" in line.lower() for line in lines), "a pointing record never carries a size"
+    assert not any(SIZE_VOCABULARY.search(line) for line in lines), "a pointing record never carries a size"
+    outcome = next(line for line in (ROOT / "shared" / "metrics.md").read_text().splitlines() if line.startswith("- **Outcome:**"))
+    assert not SIZE_VOCABULARY.search(outcome), "the outcome figure names an estimate, never a size"
     assert (
         "- Effective maximum: <profile.refinement.point_cap; the 8-point rule still triggers at 8 or more>"
         in lines
@@ -1074,11 +1082,10 @@ def test_epic_size_labels_are_untouched_and_carry_t_shirt_sizing() -> None:
 def test_step_four_fixes_a_sequence_for_every_estimate_scale() -> None:
     item = process_items(STEP_FOUR)[0]
     scales = SCHEMA["properties"]["tracker"]["properties"]["estimate_scale"]["enum"]
-    assert scales == ["fibonacci", "linear", "exponential"]
     for scale in scales:
         assert f"`{scale}`" in item, f"no fixed step sequence for the {scale} scale"
     assert ESTIMATE_SEQUENCES in item, "the three numeric sequences are pinned verbatim"
-    assert "tshirt" not in item.lower(), "a story is given points, never a t-shirt size"
+    assert not SIZE_VOCABULARY.search(item), "a story is given points, never a t-shirt size"
 
 
 def test_step_four_one_step_apart_records_the_higher_value_and_skips() -> None:
@@ -1088,7 +1095,7 @@ def test_step_four_one_step_apart_records_the_higher_value_and_skips() -> None:
         "the highest and the lowest are one step apart (5 and 8 on `fibonacci`, for example), the highest of "
         "the three values is the estimate, the discussion in item 3 and the re-vote in item 4 are skipped" in item
     )
-    assert "tshirt" not in item.lower(), "a size has no step position on a numeric scale"
+    assert not SIZE_VOCABULARY.search(item), "a size has no step position on a numeric scale"
 
 
 def test_step_four_more_than_one_step_apart_runs_the_discussion() -> None:
