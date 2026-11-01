@@ -138,11 +138,32 @@ def owner_stop_lines() -> list[str]:
     return section(SKILL.read_text(), "3. QA agent: verify the deployed story").splitlines()
 
 
+def prose_lines(lines: list[str]) -> set[int]:
+    """The indexes of the lines an agent reads as instructions: not in a fence, not in a comment."""
+    prose: set[int] = set()
+    fenced = False
+    commented = False
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            fenced = not fenced
+        elif commented:
+            commented = "-->" not in stripped
+        elif stripped.startswith("<!--"):
+            commented = "-->" not in stripped
+        elif not fenced and stripped:
+            prose.add(index)
+    return prose
+
+
 def test_an_owner_stop_ends_the_round_so_the_next_attempt_is_a_new_round() -> None:
     lines = owner_stop_lines()
     assert QA_OWNER_STOP_SENTENCE in lines, "step 3 must read the whole owner-stop sentence exactly"
     assert SKILL.read_text().count(QA_OWNER_STOP_SENTENCE) == 1, (
         "the owner-stop sentence is stated once in the skill, not only once in step 3"
+    )
+    assert lines.index(QA_OWNER_STOP_SENTENCE) in prose_lines(lines), (
+        "the owner-stop sentence must be operative prose, not an example in a fence or a comment"
     )
 
 
