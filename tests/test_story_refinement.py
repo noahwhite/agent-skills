@@ -329,27 +329,13 @@ def test_step_four_residual_variance_more_than_one_step_apart_stops_unpointed() 
         "`needs input` to the owner naming the story and the derived values." in item
     )
     assert (
-        "The owner decides that outcome in a later run: a new invocation of this ceremony on the same story "
-        "reads the posted unpointed variance record, which may name the story or one of its slices, and replaces "
-        "its `pending` with the decision." in item
+        "The owner decides that outcome in a later run, which records it: the run takes the owner's decision, "
+        "applies the split rule to a recorded numeric value, records it as the estimate, and records the decision "
+        "and its reason as the `Owner decision:` line on the posted pointing record." in item
     )
     assert (
-        "The PO authors that amendment and applies it, or under the denied tracker writes fallback the facilitator "
-        "applies the PO-authored amendment verbatim, and the write is read back." in item
-    )
-    assert (
-        "A numeric decision is validated against `profile.tracker.estimate_scale` and the item 1 sequence, is "
-        "written to the story's estimate field and read back, and takes the split path of Step 4 alone when it "
-        "trips the split trigger: the slices it creates are pointed by their own later invocations, and this one "
-        "does not re-point." in item
-    )
-    assert (
-        "An owner decision to leave the story unpointed is an accepted outcome that no scale check applies to: it "
-        "is recorded on that line with its reason and ends the follow-up with no estimate. A numeric decision "
-        "outside the scale or the sequence is re-asked rather than recorded. The decision is the owner's: the "
-        "product owner does not decide that "
-        "outcome, under the estimator-ownership rule that the people doing the work estimate, and no facilitator "
-        "and no voter chooses the value or the path." in item
+        "The product owner does not decide that outcome, and no facilitator and no voter chooses the value or the "
+        "path." in item
     )
 
 
@@ -757,9 +743,8 @@ def test_fallback_never_reapplies_a_write_the_po_already_applied() -> None:
 def test_step_four_unpointed_record_follows_the_apply_rule() -> None:
     item = process_items(STEP_FOUR)[5]
     assert (
-        "The PO authors the unpointed variance record and applies it with its `Owner decision:` line reading "
-        "`pending`, or under the denied tracker writes fallback the facilitator applies the PO-authored record "
-        "verbatim." in item
+        "The PO authors the unpointed variance record and applies it, or under the denied tracker writes fallback "
+        "the facilitator applies the PO-authored record verbatim." in item
     )
 
 
@@ -1104,16 +1089,6 @@ def test_step_four_one_step_skip_still_challenges_every_off_basis_ground() -> No
     assert "no estimate and no split action survives an unresolved challenge" in review
 
 
-def test_invocation_entry_gates_the_owner_follow_up() -> None:
-    body = flat(section(SKILL.read_text(), "Invocation entry"))
-    assert (
-        "before stage 1, check whether the story carries a posted unpointed variance record whose "
-        "`owner decision:` line reads `pending`." in body
-    )
-    assert "runs only that record's follow-up in step 4 item 6 and skips stages 1 and 2" in body
-    assert "otherwise it runs the full ceremony" in body
-
-
 def test_step_four_ordering_puts_the_basis_review_before_any_write() -> None:
     review = process_items(STEP_FOUR)[1]
     assert review.index("before the estimate is written to the tracker") < review.index(
@@ -1125,7 +1100,7 @@ def test_step_four_ordering_puts_the_basis_review_before_any_write() -> None:
 
 def test_step_four_owner_never_chooses_the_derived_value() -> None:
     item = process_items(STEP_FOUR)[5]
-    assert "the product owner does not decide that outcome" in item
+    assert "The product owner does not decide that outcome" in item
     assert "no facilitator and no voter chooses the value or the path" in item
 
 

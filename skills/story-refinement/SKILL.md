@@ -38,11 +38,6 @@ Any other phrasing about metrics is asked about, never guessed.
 With `metrics` off or omitted, the facilitator does not open `references/metrics.md`, collects no figure, creates no metrics scratch file, posts no metrics comment, and adds no metrics content to any brief, record, report, todo list, closing message, or tracker write, other than the `metrics: off` line.
 Every other metrics instruction in this skill applies only when `metrics` is on.
 
-## Invocation entry
-
-Before Stage 1, check whether the story carries a posted unpointed variance record whose `Owner decision:` line reads `pending`.
-When it does, this invocation runs only that record's follow-up in Step 4 item 6 and skips Stages 1 and 2; otherwise it runs the full ceremony.
-
 ## Read first
 
 - [references/profile.md](references/profile.md) - find the profile and this skill's overlay before anything else.
@@ -221,12 +216,9 @@ Only the PO and the two engineers count toward the agreement.
      For example, accepted sets `{5}` and `{5}`, with no consensus from the voter whose Step 3 value was 5, derive 5, 5 and 5 from an empty intersection, so the ceremony records 5 as the estimate instead of stopping unpointed.
      When the highest and the lowest derived values are more than one step apart (1 and 5, for example), the ceremony records the result as unpointed and stops: it posts the three values, the derived values with the gap between the highest and the lowest in scale steps, and the three rationales, and reports `needs input` to the owner naming the story and the derived values.
      That unpointed variance stop is a `needs input` state of this skill, distinct from the `needs input` a denied tracker write produces.
-     The PO authors the unpointed variance record and applies it with its `Owner decision:` line reading `pending`, or under the denied tracker writes fallback the facilitator applies the PO-authored record verbatim.
-     The owner decides that outcome in a later run: a new invocation of this ceremony on the same story reads the posted unpointed variance record, which may name the story or one of its slices, and replaces its `pending` with the decision.
-     The PO authors that amendment and applies it, or under the denied tracker writes fallback the facilitator applies the PO-authored amendment verbatim, and the write is read back.
-     A numeric decision is validated against `profile.tracker.estimate_scale` and the item 1 sequence, is written to the story's estimate field and read back, and takes the split path of Step 4 alone when it trips the split trigger: the slices it creates are pointed by their own later invocations, and this one does not re-point.
-     An owner decision to leave the story unpointed is an accepted outcome that no scale check applies to: it is recorded on that line with its reason and ends the follow-up with no estimate. A numeric decision outside the scale or the sequence is re-asked rather than recorded.
-     The decision is the owner's: the product owner does not decide that outcome, under the estimator-ownership rule that the people doing the work estimate, and no facilitator and no voter chooses the value or the path.
+     The PO authors the unpointed variance record and applies it, or under the denied tracker writes fallback the facilitator applies the PO-authored record verbatim.
+     The owner decides that outcome in a later run, which records it: the run takes the owner's decision, applies the split rule to a recorded numeric value, records it as the estimate, and records the decision and its reason as the `Owner decision:` line on the posted pointing record.
+     The product owner does not decide that outcome, and no facilitator and no voter chooses the value or the path.
   7. Never average and never take a value silently, except the tolerance value the consensus check or the residual variance rule records.
   8. The facilitator records the estimate or the consensus; it does not declare it.
   9. Apply the split rule when the split trigger it defines is met by the recorded estimate.
