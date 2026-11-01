@@ -8,7 +8,7 @@ Environment: repository artifact only; the profile declares `environments: []`, 
 Fixtures: fictional `ABC-123`, committed baseline/candidate traces and scratch-only reconstructed grader inputs.
 Lanes: source contracts, recorded session/tool-call traces, read-only vendor drift check, GitHub CI/reviews and Linear.
 No visual surface, screenshots or hosted page apply.
-Raw evidence is attached to SKL-159 as [SKL-159 QA round 2 repository assertions](https://uploads.linear.app/7fbfc592-b1ef-432c-96af-87e5111c541e/b74495d7-61dd-41f7-b3b1-685dc27d7d78/047dddf5-6d4d-4279-8301-04d27873e4c7).
+Raw evidence is attached to SKL-159 as `SKL-159 QA round 2 repository assertions`.
 Tracker QA comment identifier prefix: `294639ab`.
 
 | Item | Verdict | Evidence |
