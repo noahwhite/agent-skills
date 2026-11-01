@@ -1,3 +1,9 @@
+# Superseded candidate run: cb9d9de
+
+Kept as history, not as current evidence. That head still carried the earlier scenarios, which
+labelled each outstanding item's owner, and the earlier grader; both were replaced, so the runs
+were repeated at `ac53428` and `candidate-ac53428.md` is the record this branch stands on.
+
 # Candidate run: `cb9d9de`
 
 The skill as committed at `cb9d9de`, the branch commit that carries the step 3, step 4,

@@ -13,7 +13,7 @@ baseline:
   commit: 7a6cb17
   note: the skill as committed on origin/main before this change; the baseline stops instead of continuing.
 candidate:
-  commit: cb9d9de
+  commit: ac53428
   note: >-
     the branch commit that carries the skill change and this case; the candidate continues the
     round it is in. The results file named for that commit is the run it records.
