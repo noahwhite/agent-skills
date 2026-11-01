@@ -68,7 +68,7 @@ A sizing comment that names a point value before the reveal, prescribes this sto
 - Tracker-write preflight: comment <id>
 - Refined story identifier: <latest refinement comment id after any amendment>
 - Estimate scale: <profile.tracker.estimate_scale>
-- Values, recorded before the discussion: <the three values that stand, which after a basis-challenge replacement are the values the consensus check re-ran on, or the values recorded before a void>
+- Values, recorded before the discussion: <the three values recorded before the discussion; when a basis-challenge replacement made the consensus check re-run they are the three values that re-run read; before a void, the values recorded before it>
   - Product owner: <value, or not recorded> - <short complexity rationale, or none when the value is not recorded>
   - Engineer one: <value, or not recorded> - <short complexity rationale, or none when the value is not recorded>
   - Engineer two: <value, or not recorded> - <short complexity rationale, or none when the value is not recorded>
