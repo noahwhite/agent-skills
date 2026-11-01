@@ -367,18 +367,21 @@ def test_split_rule_takes_the_recorded_estimate() -> None:
     assert "group-decided" not in body
 
 
+SIZE_VOCABULARY = re.compile(r"tshirt|t-shirt|x-small|\bXS\b|\bsize\b", re.IGNORECASE)
+
+
 def test_split_rule_has_no_size_clause() -> None:
-    body = flat(section(SKILL.read_text(), "Split rule"))
-    assert "tshirt" not in body, "the split rule reads a numeric estimate only"
-    assert "never compared" not in body and "without a split" not in body
+    body = section(SKILL.read_text(), "Split rule")
+    assert not SIZE_VOCABULARY.search(body), "the split rule reads a numeric estimate only"
 
 
 def test_shared_linear_rule_has_no_size_clause() -> None:
-    shared = (ROOT / "shared" / "linear.md").read_text()
-    rule = flat(next(line for line in shared.splitlines() if "Split a story estimated at 8 points" in line))
-    assert "tshirt" not in rule and "t-shirt" not in rule.lower()
-    assert rule.endswith("at refinement, without asking, and present the slices.")
-    assert "equivalent" not in rule, "every numeric sequence in the skill contains 8, so no parenthetical is needed"
+    body = flat((ROOT / "shared" / "linear.md").read_text())
+    bullet = "- ⛔ split a story estimated at 8 points or more at refinement, without asking, and present the slices."
+    assert bullet in body, "the 8-point rule is one unqualified sentence"
+    rule = body[body.index(bullet) : body.index(bullet) + len(bullet)]
+    assert "equivalent" not in rule
+    assert not SIZE_VOCABULARY.search(rule)
 
 
 def test_split_rule_keeps_the_split_mechanics() -> None:
@@ -834,6 +837,7 @@ def test_step_three_rationale_names_complexity_drivers_and_no_duration() -> None
 def test_pointing_basis_names_no_size() -> None:
     assert "size" not in POINTING_BASIS.lower(), "a story is given points, never a t-shirt size"
     item = process_items(STEP_THREE)[1]
+    assert item == POINTING_BASIS, "the pinned constant is the document's own sentence"
     assert item.startswith("A point measures complexity")
     assert "or size" not in item
 
@@ -860,12 +864,29 @@ def test_step_four_re_vote_carries_the_basis_by_reference_to_step_three() -> Non
     assert squash(POINTING_BASIS) not in squash(operative_step(STEP_FOUR))
 
 
+STEP_THREE_ITEM_PREFIXES = [
+    "Launch the PO and both engineers again in separate contexts on the same refined version.",
+    "A point measures complexity",
+    "The sentence above is the pointing basis.",
+    "Each voter submits one point value",
+    "No voter sees another voter's point value before its own value is recorded.",
+    "The facilitator records all three values before the SM/EM comments on sizing or the discussion opens.",
+    "After all three values are recorded, the SM/EM may provide factual, reference-only sizing context:",
+]
+
+
 def test_step_three_has_no_size_cap_step() -> None:
     body = operative_step(STEP_THREE)
     stop = bullet(body, "Stop")
-    assert "tshirt" not in body.lower(), "a t-shirt size is a project and epic label, not a story scale"
-    assert "tshirt" not in stop.lower()
-    assert "scale stops the cap step" not in body
+    assert not SIZE_VOCABULARY.search(body), "a t-shirt size is a project and epic label, not a story scale"
+    assert "cap step" not in body
+
+
+def test_step_three_process_items_keep_their_count_and_order() -> None:
+    items = process_items(STEP_THREE)
+    assert len(items) == 7, "the cap item is removed and no size option may be added"
+    for index, prefix in enumerate(STEP_THREE_ITEM_PREFIXES):
+        assert items[index].startswith(prefix), (index, prefix)
 
 
 def test_step_three_re_records_an_off_sequence_value_before_the_reveal() -> None:
@@ -999,9 +1020,9 @@ STEP_FOUR_ITEM_PREFIXES = [
 
 CONSENSUS_CHECK = "Run the consensus check first, on the three values recorded in Step 3."
 ESTIMATE_SEQUENCES = (
-    "The ordered step sequence is fixed here for each `profile.tracker.estimate_scale` value: "
+    "The ordered step sequence is fixed here for each `profile.tracker.estimate_scale` value, in the order given: "
     "`fibonacci` 1, 2, 3, 5, 8, 13; `linear` the ordinal list 1, 2, 3, 5, 8, 13; "
-    "`exponential` 1, 2, 4, 8, 16, in that order."
+    "`exponential` 1, 2, 4, 8, 16."
 )
 CONSENSUS_CHECK_BRANCHES = (
     "When the three values are identical, or the highest and the lowest are one step apart (5 and 8 on "
@@ -1046,6 +1067,7 @@ def test_schema_estimate_scale_is_numeric_only() -> None:
 def test_epic_size_labels_are_untouched_and_carry_t_shirt_sizing() -> None:
     labels = SCHEMA["properties"]["tracker"]["properties"]["epic"]["properties"]["size_labels"]
     assert labels["type"] == "object"
+    assert labels["additionalProperties"] is False
     assert set(labels["properties"]) == {"small", "medium", "large", "extra_large"}
 
 

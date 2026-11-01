@@ -145,7 +145,7 @@ Only the PO and the two engineers count toward the agreement.
 
 ### Step 3: Secret pointing
 
-- **Inputs:** the accepted refined story and its refinement comment id; `profile.tracker.estimate_scale`; `profile.refinement.point_cap` for the later cap check.
+- **Inputs:** the accepted refined story and its refinement comment id; `profile.tracker.estimate_scale`.
 - **Process:**
   1. Launch the PO and both engineers again in separate contexts on the same refined version.
   2. A point measures complexity - design difficulty, interacting constraints, unknowns, and the risk of breaking existing behaviour - and never the amount of work or elapsed time; routine, well-understood work such as writing tests, opening a PR, review, running a fixture, or regenerating copies adds no points however long it takes.
@@ -175,7 +175,7 @@ Only the PO and the two engineers count toward the agreement.
 - **Inputs:** the three recorded point values and any recorded SM/EM sizing context.
 - **Process:**
   1. Run the consensus check first, on the three values recorded in Step 3.
-     The ordered step sequence is fixed here for each `profile.tracker.estimate_scale` value: `fibonacci` 1, 2, 3, 5, 8, 13; `linear` the ordinal list 1, 2, 3, 5, 8, 13; `exponential` 1, 2, 4, 8, 16, in that order.
+     The ordered step sequence is fixed here for each `profile.tracker.estimate_scale` value, in the order given: `fibonacci` 1, 2, 3, 5, 8, 13; `linear` the ordinal list 1, 2, 3, 5, 8, 13; `exponential` 1, 2, 4, 8, 16.
      The tolerance is one step, and it is fixed in this skill: no profile key and no skill argument sets it.
      A value outside that sequence for the profile's scale has no step position, so two different values that involve one are more than one step apart; three identical values are identical, and Step 3 already re-records an off-sequence value before the reveal.
      When the three values are identical, or the highest and the lowest are one step apart (5 and 8 on `fibonacci`, for example), the highest of the three values is the estimate, the discussion in item 3 and the re-vote in item 4 are skipped, and the split rule in item 9 still applies to it.
