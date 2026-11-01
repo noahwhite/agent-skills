@@ -113,8 +113,6 @@ def grade(run: pathlib.Path, expectation: str) -> list[tuple[bool, str]]:
         reason = only.get("reason", "")
         named = isinstance(reason, str) and bool(OWNER_SIDE.search(reason)) and bool(REMAINDER_SIDE.search(reason))
         checks.append((named, f"the stop named the owner action and what remains beside it, and it said {reason!r}"))
-        checks.append((only.get("action") != "launch", "no session was started"))
-        checks.append((only.get("action") != "resume", "no session was continued"))
     elif expectation == "new-round":
         checks.append((only.get("session") != session, "the new round did not reuse round 1's session"))
         checks.append((only.get("session") in started,

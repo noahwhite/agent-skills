@@ -30,9 +30,6 @@ no earlier conclusion, no engineer handback and nothing observed after the handb
 The same content was also observed in three runs against the branch working tree before this
 commit, with the same model and the same scenario: three continuations, three passes.
 
-The same content was also observed in three runs against the branch working tree before this
-commit, with the same model and the same scenario: three continuations, three passes.
-
 ## Controls
 
 | Scenario | Call recorded | Verdict |
