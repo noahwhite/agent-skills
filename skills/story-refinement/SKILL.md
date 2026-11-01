@@ -167,9 +167,9 @@ Only the PO and the two engineers count toward the agreement.
      A prescription of this story's value, from the SM/EM or from a voter, is an anchoring event under the Anchoring guardrail.
      A statement of elapsed time or effort is an anchoring event under the Anchoring guardrail.
   8. A `tshirt` scale stops the cap step with a clear message.
-     Pointing still records the three values; the split rule's numeric cap does not apply.
+     Pointing still records the three values and Step 4 still runs and records the larger size of a pair one step apart; the split rule's numeric cap does not apply.
 - **Outputs:** three point value files and, when provided, a separate SM/EM sizing context file.
-- **Stop:** any voter value is missing; an SM/EM sizing comment appears before all three values are recorded (see the anchoring guardrail); the scale is `tshirt` at the cap step.
+- **Stop:** any voter value is missing; an SM/EM sizing comment appears before all three values are recorded (see the anchoring guardrail).
 
 ### Step 4: High/low discussion and consensus
 
@@ -178,40 +178,44 @@ Only the PO and the two engineers count toward the agreement.
   1. Run the consensus check first, on the three values recorded in Step 3.
      The ordered step sequence is fixed here for each `profile.tracker.estimate_scale` value: `fibonacci` 1, 2, 3, 5, 8, 13; `linear` the ordinal list 1, 2, 3, 5, 8, 13; `exponential` 1, 2, 4, 8, 16; `tshirt` XS, S, M, L, XL in that order.
      The tolerance is one step, and it is fixed in this skill: no profile key and no skill argument sets it.
-     When the three values are identical, or the highest and the lowest are one step apart (5 and 8 on `fibonacci`, for example), the highest of the three values is the estimate, the discussion in item 2 and the re-vote in item 3 are skipped, and the split rule in item 8 still applies to it.
+     A value outside that sequence for the profile's scale has no step position, so it is more than one step apart from every other value.
+     When the three values are identical, or the highest and the lowest are one step apart (5 and 8 on `fibonacci`, for example), the highest of the three values is the estimate, the discussion in item 3 and the re-vote in item 4 are skipped, and the split rule in item 9 still applies to it.
      The basis review in item 2 still runs on this branch, and nothing is written to the tracker and no pointing record is posted until it has run.
-     When the highest and the lowest are more than one step apart (1 and 5, for example), the discussion in item 2 and the re-vote in item 3 run, naming the high and the low.
-     On a `tshirt` scale a pair one step apart records the larger size, with the cap step still stopped under Step 3 item 8.
+     When the highest and the lowest are more than one step apart (1 and 5, for example), or either of them is outside the sequence, the discussion in item 3 and the re-vote in item 4 run, naming the high and the low.
+     On a `tshirt` scale a pair one step apart records the larger size, and the split rule's numeric cap does not apply to a size.
      Record the outcome in the pointing record as `Consensus check: <identical | one step | more than one step>`, so a skipped discussion and re-vote read as skipped and never as not run.
-  2. Hold one discussion round that names only the high and the low, when the consensus check calls for it.
-     Do not compare the other values or single out a voter.
-     In that round, and against the rationales recorded in Step 3, the facilitator challenges every ground outside the pointing basis, whether it is heard in the discussion or read in a recorded rationale, except a prescription of this story's value and, from the SM/EM, a statement of elapsed time, effort or run cost, which are anchoring events the moment they are seen.
+  2. Review every rationale recorded in Step 3 against the pointing basis, after the consensus check and before the estimate is written to the tracker and before the pointing record is posted, so a void never leaves a written estimate to unwind.
+     This review is not the discussion: it runs on both branches, and the discussion in item 3 only carries the challenges it raises.
+     The review challenges every ground outside the pointing basis, whether it is read in a recorded rationale or heard in the discussion of item 3, except a prescription of this story's value and, from the SM/EM, a statement of elapsed time, effort or run cost, which are anchoring events the moment they are seen.
      That rule governs the shared discussion content and other voters' values; a voter's own recorded value and rationale may be carried privately in that voter's own prompt, so it can speak to its own ground.
      Challenging a ground is not comparing values or singling out a voter: the facilitator names the ground's kind, never its verbatim text; the facilitator never names another voter's value in the shared discussion, nor a voter's value to other voters, and the pointing record carries the author; a ground that embeds a point value is named by its kind alone.
-     A challenged ground must be restated as a basis driver or retracted, except a prescription of this story's value, which is an anchoring event as soon as it is seen; a voter whose basis does not support its recorded value records that in the re-vote.
+     A challenged ground must be restated as a basis driver or retracted, except a prescription of this story's value, which is an anchoring event as soon as it is seen.
+     A voter whose basis does not support its recorded value records a replacement value in the re-vote; when the consensus check skips the re-vote, it records that replacement value in the basis-challenge round of this item, and a voter that neither restates nor retracts its ground, nor records a replacement value, leaves the ground unresolved.
      The SM/EM withdraws or restates its own sizing comment on the same terms, except a point value named before the reveal, a prescription of this story's value, treating another voter's revealed value as the answer, or a statement of elapsed time, effort or run cost, each of which is an anchoring event as soon as the facilitator sees it.
-     A ground that is neither is an anchoring event under the Anchoring guardrail.
-     Whether or not the discussion runs, the facilitator reviews every rationale recorded in Step 3 against the pointing basis, after the consensus check and before the estimate is written to the tracker and before the pointing record is posted, so a void never leaves a written estimate to unwind.
-     When the consensus check skips the discussion and the re-vote, that review still runs as a basis-challenge round of its own: the facilitator launches each challenged ground's author once in a newly created voter context to restate the ground as a basis driver or retract it, and an unresolved ground voids the round under the Anchoring guardrail, so no estimate and no split action survives an unresolved challenge.
-  3. Run one re-vote, when the consensus check calls for it.
+     A ground that is neither restated, retracted nor replaced is an anchoring event under the Anchoring guardrail.
+     When the consensus check skips the discussion and the re-vote, this review runs as a basis-challenge round of its own: the facilitator launches, once per challenged ground, that ground's author in a newly created voter context whose prompt carries the Step 3 pointing basis and the Step 3 item 4 rationale rule, and an unresolved ground voids the round under the Anchoring guardrail, so no estimate and no split action survives an unresolved challenge.
+  3. Hold one discussion round that names only the high and the low, when the consensus check calls for it.
+     Do not compare the other values or single out a voter.
+     The round carries the challenges item 2 raised, on the terms item 2 sets.
+  4. Run one re-vote, when the consensus check calls for it.
      The re-vote prompt carries the pointing basis from Step 3.
      It also carries the Step 3 item 4 rationale rule.
      Each voter records the set of values it accepts for this story (one or more) or records no consensus, with a short complexity rationale under the Step 3 rationale rule.
      Recording an accepted set is not treating another voter's revealed value as the answer: the rationale for the set is about the basis, never about which value another voter recorded.
      A re-vote rationale outside the pointing basis is challenged before the consensus is recorded, under the same restate-or-retract rule as item 2, and a voter that retracts its re-vote rationale records a replacement accepted set within that same re-vote, with a basis-driver rationale, or records no consensus.
-  4. Consensus is the highest value in the intersection of the three accepted sets.
-     When that intersection is empty, apply the residual variance rule in item 5.
-  5. Residual variance: when the re-vote leaves no value shared by all three accepted sets, each voter's re-vote value is the highest value in its accepted set.
-     A voter that records no consensus in item 3 has no accepted set, so its re-vote value is the standing value it recorded in its Step 3 file, which after a void is the re-run's value and never a voided one.
-     When those derived per-voter values are identical, or the highest and the lowest of them are one step apart on the sequence in item 1, the same tolerance rule applies to them: the highest derived value is the estimate, and the split rule in item 8 still applies to it.
+  5. Consensus is the highest value in the intersection of the three accepted sets.
+     When a voter recorded no accepted set, or that intersection is empty, apply the residual variance rule in item 6.
+  6. Residual variance: when the re-vote leaves no value shared by all three accepted sets, each voter's re-vote value is the highest value in its accepted set.
+     A voter that records no consensus in item 4 has no accepted set, so its re-vote value is the standing value it recorded in its Step 3 file, which after a void is the re-run's value and never a voided one.
+     When those derived per-voter values are identical, or the highest and the lowest of them are one step apart on the sequence in item 1, the same tolerance rule applies to them: the highest derived value is the estimate, and the split rule in item 9 still applies to it.
      For example, accepted sets `{5}` and `{5}`, with no consensus from the voter whose Step 3 value was 5, derive 5, 5 and 5 from an empty intersection, so the ceremony records 5 as the estimate instead of stopping unpointed.
      When the highest and the lowest derived values are more than one step apart (1 and 5, for example), the ceremony records the result as unpointed and stops: it posts the three values, the derived values with the gap between the highest and the lowest in scale steps, and the three rationales, and reports `needs input` to the owner naming the story and the derived values.
      That unpointed variance stop is the second `needs input` state of this skill, distinct from the denied-tracker-write `needs input` of Step 1.
      The PO authors the unpointed variance record and applies it, or under the denied tracker writes fallback the facilitator applies the PO-authored record verbatim.
-     The owner decides the outcome in a later run, which records it: the product owner does not decide it under the estimator-ownership rule that the people doing the work estimate, and no facilitator and no voter chooses the value or the path.
-  6. Never average and never take a value silently, except the tolerance value the consensus check or the residual variance rule records.
-  7. The facilitator records the estimate or the consensus; it does not declare it.
-  8. If the split trigger is met (the recorded estimate above `profile.refinement.point_cap` or at 8 or more), apply the split rule.
+     The owner decides that outcome in a later run, which records it: the product owner does not decide that outcome, under the estimator-ownership rule that the people doing the work estimate, and no facilitator and no voter chooses the value or the path.
+  7. Never average and never take a value silently, except the tolerance value the consensus check or the residual variance rule records.
+  8. The facilitator records the estimate or the consensus; it does not declare it.
+  9. If the split trigger is met (the recorded estimate above `profile.refinement.point_cap` or at 8 or more), apply the split rule.
      The recorded estimate is the value this step's consensus check or residual variance rule records, or the consensus.
 - **Outputs:** a recorded estimate with the split decision - the value the consensus check records, the consensus, or the highest derived value - or the unpointed variance stop with the three values, the derived values with the gap between the highest and the lowest in scale steps, and the three rationales; and the `Consensus check:` outcome in the pointing record.
 - **Stop:** the residual variance rule stops the ceremony unpointed because the derived values are more than one step apart, which reports `needs input` to the owner naming the story and the derived values; an anchoring event voids the round.
@@ -243,6 +247,7 @@ Do not resume the tainted discussion.
 
 The effective accepted maximum is `profile.refinement.point_cap` (default 5), with a schema maximum of 8.
 A story is split when its recorded estimate is above `profile.refinement.point_cap` or is 8 or more; the recorded estimate is the consensus, or the value the Step 4 consensus check or residual variance rule records.
+A recorded `tshirt` size is never compared with `profile.refinement.point_cap` or with 8: the numeric split trigger does not apply to a size, and Step 3 item 8 stops the cap step.
 The lower trigger applies, and the 8-point rule in [references/linear.md](references/linear.md) is never relaxed.
 
 If the split trigger is met, split the story.

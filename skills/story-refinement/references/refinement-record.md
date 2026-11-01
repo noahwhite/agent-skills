@@ -76,7 +76,7 @@ A sizing comment that names a point value before the reveal, prescribes this sto
 - SM/EM sizing context, after all three values: <file base name> or verbatim, eliding a pre-reveal value or a prescription, or none
 - Discussion: <high <value>, low <value>, or none; the shared content names only the high and the low, while a voter's own recorded value and rationale are carried privately in that voter's prompt>
 - Re-vote: <accepted set per voter, with complexity rationale, or none>
-- Consensus: <highest value in the intersection of the vote that stands, or none when the intersection is empty, or n/a when the consensus check recorded the estimate>
+- Consensus: <the highest value in the intersection of the vote that stands, or n/a when the consensus check or the residual variance rule recorded the estimate, or none when the round stopped unpointed>
 - Residual variance: <each voter's derived value, the gap between the highest and the lowest in scale steps, the rule applied and the resulting value, or the unpointed variance stop; n/a when the intersection is not empty or the consensus check recorded the estimate>
 - Recorded estimate: <the value recorded, or unpointed with the gap between the highest and the lowest in scale steps when the round stopped there>
 - Effective maximum: <profile.refinement.point_cap; the 8-point rule still triggers at 8 or more>
