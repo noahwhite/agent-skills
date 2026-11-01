@@ -190,6 +190,8 @@ Only the PO and the two engineers count toward the agreement.
      A challenged ground must be restated as a basis driver or retracted, except a prescription of this story's value, which is an anchoring event as soon as it is seen; a voter whose basis does not support its recorded value records that in the re-vote.
      The SM/EM withdraws or restates its own sizing comment on the same terms, except a point value named before the reveal, a prescription of this story's value, treating another voter's revealed value as the answer, or a statement of elapsed time, effort or run cost, each of which is an anchoring event as soon as the facilitator sees it.
      A ground that is neither is an anchoring event under the Anchoring guardrail.
+     Whether or not the discussion runs, the facilitator reviews every rationale recorded in Step 3 against the pointing basis, after the consensus check and before the estimate is written to the tracker and before the pointing record is posted, so a void never leaves a written estimate to unwind.
+     When the consensus check skips the discussion and the re-vote, that review still runs: a challenged ground takes the same restate-or-retract path, and an unresolved one voids the round under the Anchoring guardrail, so no estimate and no split action survives an unresolved challenge.
   3. Run one re-vote.
      The re-vote prompt carries the pointing basis from Step 3.
      It also carries the Step 3 item 4 rationale rule.

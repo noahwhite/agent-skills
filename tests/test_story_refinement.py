@@ -926,6 +926,43 @@ def test_step_four_more_than_one_step_apart_runs_the_discussion() -> None:
     assert "record the higher value as the estimate" in item
 
 
+SKL13_VALUES = (8, 8, 8)
+SKIP_BRANCH_REVIEW = (
+    "Whether or not the discussion runs, the facilitator reviews every rationale recorded in Step 3 against the "
+    "pointing basis, after the consensus check and before the estimate is written to the tracker and before the "
+    "pointing record is posted, so a void never leaves a written estimate to unwind."
+)
+SKIP_BRANCH_CHALLENGE = (
+    "When the consensus check skips the discussion and the re-vote, that review still runs: a challenged ground "
+    "takes the same restate-or-retract path, and an unresolved one voids the round under the Anchoring guardrail, "
+    "so no estimate and no split action survives an unresolved challenge."
+)
+
+
+def test_step_four_identical_values_skip_still_challenges_every_off_basis_ground() -> None:
+    discussion = process_items(STEP_FOUR)[1]
+    check = process_items(STEP_FOUR)[0]
+    assert len(set(SKL13_VALUES)) == 1, "the SKL-13 fixture is three identical values"
+    assert "When the three values are identical, or the highest and the lowest are one step apart" in check
+    assert "skip the discussion in item 2 and the re-vote in item 3" in check
+    assert SKIP_BRANCH_REVIEW in discussion
+    assert SKIP_BRANCH_CHALLENGE in discussion
+    assert "A challenged ground must be restated as a basis driver or retracted" in discussion
+    assert "no estimate and no split action survives an unresolved challenge" in discussion
+    split_rule = flat(section(SKILL.read_text(), "Split rule"))
+    assert "or is 8 or more" in split_rule
+    assert max(SKL13_VALUES) >= 8, "SKL-13's recorded 8 still meets the split trigger"
+
+
+def test_step_four_one_step_skip_still_challenges_every_off_basis_ground() -> None:
+    discussion = process_items(STEP_FOUR)[1]
+    check = process_items(STEP_FOUR)[0]
+    assert "the highest and the lowest are one step apart (5 and 8 on `fibonacci`, for example), record the higher value as the estimate, skip the discussion" in check
+    assert SKIP_BRANCH_REVIEW in discussion
+    assert SKIP_BRANCH_CHALLENGE in discussion
+    assert "no estimate and no split action survives an unresolved challenge" in discussion
+
+
 def test_step_four_process_items_keep_their_count_and_order() -> None:
     items = process_items(STEP_FOUR)
     assert len(items) == len(STEP_FOUR_ITEM_PREFIXES)
