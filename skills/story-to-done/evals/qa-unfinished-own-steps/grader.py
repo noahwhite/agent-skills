@@ -38,7 +38,7 @@ SUBSTANTIVE = re.compile(
 MESSAGE_LIMIT = 400
 # The owner-action control's reason has to name the owner action and what remains with it.
 OWNER_SIDE = re.compile(r"(?i)\b(owner|approval|approve|grant)\b")
-REMAINDER_SIDE = re.compile(r"(?i)\b(evidence|pr|gate|dod|check|items?)\b")
+REMAINDER_SIDE = re.compile(r"(?i)\b(evidence|pr|gate|dod|check)\b")
 
 
 def load(path: pathlib.Path) -> object:

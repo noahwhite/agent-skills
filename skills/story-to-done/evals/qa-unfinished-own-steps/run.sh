@@ -39,11 +39,13 @@ if [ -d "$run" ] && [ -n "$(ls -A "$run")" ]; then
 fi
 
 # The checkout's whole state, content included: status alone repeats for a file that was
-# already modified and is modified again, so the diff against HEAD is part of the fingerprint.
+# already modified and is modified again, and it says nothing about an untracked file's
+# contents, so the fingerprint carries the diff against HEAD and a hash per untracked file.
 state() {
   git -C "$1" rev-parse HEAD
-  git -C "$1" status --porcelain --untracked-files=all
   git -C "$1" diff HEAD
+  git -C "$1" ls-files --others --exclude-standard -z |
+    while IFS= read -r -d '' file; do printf '%s\0' "$file"; sha256sum < "$1/$file"; done
 }
 state_before="$(state "$checkout_real")"
 
