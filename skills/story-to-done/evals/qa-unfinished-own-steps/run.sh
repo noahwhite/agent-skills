@@ -45,7 +45,10 @@ state() {
   git -C "$1" rev-parse HEAD
   git -C "$1" diff HEAD
   git -C "$1" ls-files --others --exclude-standard -z |
-    while IFS= read -r -d '' file; do printf '%s\0' "$file"; sha256sum < "$1/$file"; done
+    while IFS= read -r -d '' file; do
+      printf '%s\0' "$file"
+      sha256sum < "$1/$file" 2>/dev/null || printf 'unreadable\n'
+    done
 }
 state_before="$(state "$checkout_real")"
 

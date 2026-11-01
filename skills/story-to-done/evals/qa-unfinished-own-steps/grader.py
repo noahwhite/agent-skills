@@ -36,8 +36,9 @@ SUBSTANTIVE = re.compile(
 )
 # The longest a message can be and still state only the two facts the story allows.
 MESSAGE_LIMIT = 400
-# The owner-action control's reason has to name the owner action and what remains with it.
-OWNER_SIDE = re.compile(r"(?i)\b(owner|approval|approve|grant)\b")
+# The owner-action control's reason has to name the action the scenario hands the owner and what
+# remains beside it, so a two-word reason cannot stand in for the report the story requires.
+OWNER_SIDE = re.compile(r"(?i)\bapproval\b")
 REMAINDER_SIDE = re.compile(r"(?i)\b(evidence|pr|gate|dod|check)\b")
 
 
