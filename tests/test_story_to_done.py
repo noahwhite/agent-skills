@@ -6,11 +6,14 @@ import re
 import shutil
 import signal
 import subprocess
+import sys
+import tempfile
 import time
 from decimal import Decimal
 from pathlib import Path
 
 import pytest
+import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
 SKILL = ROOT / "skills" / "story-to-done" / "SKILL.md"
@@ -95,17 +98,42 @@ def test_senior_engineer_uses_its_model_and_engineering_workflow() -> None:
         assert phrase in body, f"step 2 missing: {phrase}"
 
 
+# SKL-159: the new-round sentence is pinned exactly as the story quotes it, and the one
+# continuation a round may take is the sole exception to it.
+QA_ROUND_SENTENCE = (
+    "Spawn a new clean, neutral subagent on qa-model at qa-effort for every new QA round; never resume an "
+    "agent from an earlier round, since it carries that round's conclusions."
+)
+QA_ROUND_EXCEPTION = (
+    "Continuation of the current round under step 4 is the sole exception to that sentence, and a "
+    "continuation never increments the round count."
+)
+OLD_QA_ROUND_CLAUSE = "never resume an earlier QA agent, since it carries that round's conclusions"
+
+
 def test_each_qa_round_is_a_new_agent_with_a_minimal_brief() -> None:
     body = section(SKILL.read_text(), "3. QA agent: verify the deployed story")
+    assert QA_ROUND_SENTENCE in body.splitlines(), "step 3 must read the pinned new-round sentence exactly"
+    assert QA_ROUND_EXCEPTION in " ".join(body.split()), "step 3 must scope the exception a round may take"
+    assert OLD_QA_ROUND_CLAUSE not in body, "the clause that forbids resuming is replaced, not kept beside it"
     for phrase in (
-        "Spawn a new clean, neutral subagent on `qa-model` at `qa-effort` for every QA round",
-        "never resume an earlier QA agent",
         "load and follow `qa-verification`",
         "Never give it the senior engineer's handback beyond the environment",
         "an earlier round's verdicts",
         "the verdict you expect",
     ):
         assert phrase in body, f"step 3 missing: {phrase}"
+
+
+def test_an_owner_stop_ends_the_round_so_the_next_attempt_is_a_new_round() -> None:
+    body = " ".join(section(SKILL.read_text(), "3. QA agent: verify the deployed story").split())
+    assert "A stop for an owner action ends the round" in body, "a stop for an owner action must end the round"
+    assert (
+        "that round's work starts over as a new round under this step with a new QA agent" in body
+    ), "an owner stop leaves the next attempt a new round with a new agent"
+    assert (
+        "a fix/deploy cycle or an amended acceptance basis likewise starts a new round" in body
+    ), "a fix cycle or an amended acceptance basis must start a new round"
 
 
 def state_bullets(body: str) -> dict[str, str]:
@@ -141,11 +169,113 @@ def test_qa_outcome_has_one_branch_per_state() -> None:
     }
     assert "report it and stop" in bullets["Any other state"]
     assert "report the blocking story and stop" in bullets["`profile.tracker.states.blocked`"]
+    branch = " ".join(bullets["`profile.tracker.states.in_deployment_review`"].split())
+    assert in_order(branch, "QA is not finished", STEP4_CLASSIFY)
+    assert STEP4_OLD_SENTENCE not in branch, "the sentence that sent every outcome to a stop must be gone"
+
+
+# SKL-159: the in_deployment_review branch classifies the remainder by owner, continues the
+# current QA round only when every outstanding item is QA's own, and stops for anything else.
+STEP4_OLD_SENTENCE = "Report exactly what remains and who owns it, and stop; resume at step 3 once it is cleared."
+STEP4_OPEN = "QA is not finished: one or more items in its handback are outstanding."
+STEP4_CLASSIFY = "Classify each outstanding item by its owner."
+STEP4_RESUME = (
+    "When at least one item is outstanding and every outstanding item is work the current QA agent itself can "
+    "finish under its existing authority "
+    "in the current round, such as an evidence PR it opened that is still unmerged with its review-of-record "
+    "gate in flight, or a QA step still to run, step 4 resumes that same QA agent with a clean, neutral "
+    "continuation message that states only that the round is unfinished and names that round's scratch "
+    "subdirectory."
+)
+STEP4_CARRY = (
+    "The continuation message carries no verdict, no expected verdict, no earlier round's conclusions, no "
+    "senior engineer handback, and nothing the coordinator observed after the handback."
+)
+STEP4_ROUND = (
+    "The continuation does not increment the QA round count, reuses that round's scratch subdirectory and "
+    "checklist, and with `metrics` on is recorded as its own launch row within that same round."
+)
+STEP4_READBACKS = (
+    "After each continuation handback, step 3's state and merged-PR review-of-record read-backs repeat in full "
+    "before this step applies again."
+)
+STEP4_OTHER_OWNER = (
+    "If any outstanding item names any other owner - the owner, a maintainer's approval or access grant, a "
+    "human merge, an external deploy, a pending acceptance-basis ruling - report exactly what remains and who "
+    "owns it, and stop, even when QA-owned work also remains; a mixed remainder containing both an owner "
+    "action and QA's own steps is reported and stopped, never resumed."
+)
+STEP4_NO_RUNTIME = (
+    "If the runtime cannot resume that QA session, report the limitation and stop; never substitute a new "
+    "clean, neutral subagent for it as a continuation of that round."
+)
+STEP4_STALL = (
+    "A continuation is made at most once per observed change to the remainder: when a resumed handback leaves "
+    "the same remaining items with no observed progress, report the stall and stop."
+)
+STEP4_SENTENCES = [
+    STEP4_OPEN,
+    STEP4_CLASSIFY,
+    STEP4_RESUME,
+    STEP4_CARRY,
+    STEP4_ROUND,
+    STEP4_READBACKS,
+    STEP4_OTHER_OWNER,
+    STEP4_NO_RUNTIME,
+    STEP4_STALL,
+]
+
+
+def in_deployment_review_branch() -> str:
+    bullets = state_bullets(section(SKILL.read_text(), "4. Act on the QA outcome"))
+    return " ".join(bullets["`profile.tracker.states.in_deployment_review`"].split())
+
+
+def test_the_step_four_continuation_branch_is_pinned() -> None:
+    body = in_deployment_review_branch()
+    assert in_order(body, *STEP4_SENTENCES), "the continuation branch does not read its pinned sentences in order"
+    assert STEP4_OLD_SENTENCE not in body, "the stop sentence this branch replaces is still stated"
+
+
+def test_a_continuation_never_carries_a_verdict_or_an_earlier_conclusion() -> None:
+    body = in_deployment_review_branch()
+    for excluded in (
+        "no verdict",
+        "no expected verdict",
+        "no earlier round's conclusions",
+        "no senior engineer handback",
+        "nothing the coordinator observed after the handback",
+    ):
+        assert excluded in STEP4_CARRY, f"the continuation message must exclude {excluded}"
+    assert "states only that the round is unfinished and names that round's scratch subdirectory" in STEP4_RESUME
+    assert STEP4_CARRY in body
+
+
+def test_a_continuation_keeps_the_round_identity_and_its_own_launch_row() -> None:
+    body = in_deployment_review_branch()
     assert in_order(
-        bullets["`profile.tracker.states.in_deployment_review`"],
-        "QA is not finished",
-        "Report exactly what remains and who owns it, and stop",
-    )
+        body,
+        "does not increment the QA round count",
+        "reuses that round's scratch subdirectory and checklist",
+        "with `metrics` on is recorded as its own launch row within that same round",
+    ), "a continuation must keep the round, reuse its scratch subdirectory, and record its own launch row"
+    assert STEP4_READBACKS in body, "the post-handback read-backs must repeat before the branch applies again"
+
+
+def test_any_other_owner_stops_even_when_qa_work_remains() -> None:
+    body = in_deployment_review_branch()
+    assert in_order(
+        body,
+        "If any outstanding item names any other owner",
+        "a pending acceptance-basis ruling",
+        "report exactly what remains and who owns it, and stop, even when QA-owned work also remains",
+        "a mixed remainder containing both an owner action and QA's own steps is reported and stopped, never resumed",
+    ), "an owner action must take precedence over QA-owned work"
+    assert in_order(
+        body,
+        STEP4_NO_RUNTIME,
+        STEP4_STALL,
+    ), "a runtime that cannot resume must stop without a substitute agent, and a stall must be reported"
 
 
 def test_done_branch_checks_the_completion_record() -> None:
@@ -217,6 +347,45 @@ def test_only_qa_moves_the_story_to_done() -> None:
     body = section(SKILL.read_text(), "Boundaries")
     assert "Only a QA agent's closing decision moves the story to Done" in body
     assert "never mark it done yourself, and never on merge alone" in body
+
+
+# SKL-159: continuation grants no new authority, so the prohibition is pinned in Boundaries,
+# outside the step sections the state scan reads.
+BOUNDARIES_NO_NEW_AUTHORITY = (
+    "The coordinator never merges a PR, including the evidence PR; never ticks an AC or DoD box; never moves "
+    "the story state; never decides a QA verdict; and never bypasses a review gate."
+)
+BOUNDARIES_CONTINUATION_AUTHORITY = (
+    "A continuation grants no new authority: it leaves that prohibition, and the single permitted tracker "
+    "write above, exactly as they are."
+)
+STEP_SECTIONS = (
+    "0. Track everything on a todo list",
+    "1. Read the story and pick the starting point",
+    "2. Senior engineer: implement to deployment review",
+    "3. QA agent: verify the deployed story",
+    "4. Act on the QA outcome",
+    "5. Close out",
+)
+
+
+def test_boundaries_pin_the_prohibition_and_that_continuation_grants_no_authority() -> None:
+    text = SKILL.read_text()
+    body = " ".join(section(text, "Boundaries").split())
+    assert BOUNDARIES_NO_NEW_AUTHORITY in body, "Boundaries must pin the merge, tick, state, verdict and gate prohibition"
+    assert BOUNDARIES_CONTINUATION_AUTHORITY in body, "Boundaries must say a continuation grants no new authority"
+    for heading in STEP_SECTIONS:
+        assert BOUNDARIES_NO_NEW_AUTHORITY not in " ".join(section(text, heading).split()), (
+            f"the prohibition is pinned in Boundaries, not in {heading}"
+        )
+
+
+def test_the_continuation_leaves_the_metrics_summary_permission_unchanged() -> None:
+    body = " ".join(section(SKILL.read_text(), "Boundaries").split())
+    assert BOUNDARIES_ONLY_WRITE in body
+    assert in_order(body, BOUNDARIES_ONLY_WRITE, BOUNDARIES_CONTINUATION_AUTHORITY), (
+        "the no-new-authority sentence must leave the single permitted tracker write as it stands"
+    )
 
 
 def test_runtimes_maps_reasoning_effort() -> None:
@@ -440,8 +609,9 @@ METRICS_USAGE = (
     "section states no usage formula of its own."
 )
 METRICS_TIMED_LAUNCHES = (
-    "- **Timed launches:** time each senior engineer launch and each QA round, taking the start immediately "
-    "before the launch and the end when it returns, and record it as one row in launch order under a "
+    "- **Timed launches:** time each senior engineer launch and each QA launch row, meaning each QA round's "
+    "spawn in step 3 and each continuation of that round in step 4, taking the start immediately before that "
+    "launch and the end when it returns, and record it as one row in launch order under a "
     "label unique within the invocation, with its runtime, model, effort, duration, tokens, and tool "
     "calls as `references/metrics.md` defines; `not "
     "reported` stands for any figure the runtime does not return, and a resumed role's cumulative figure is "
@@ -449,14 +619,19 @@ METRICS_TIMED_LAUNCHES = (
 )
 METRICS_LAUNCH_POINTS = (
     "The senior engineer's timed launches are the first launch in step 2 and each resume or re-spawn in "
-    "step 4, and each QA round is one launch in step 3."
+    "step 4; each QA round is a launch row in step 3, and a continuation of that round under step 4 is a "
+    "further launch row within the same round."
 )
 METRICS_EXTRAS = (
     "- **Extras:** take each `story-to-done` extra at the step that observes it: **Start** from the step 1 "
     "state read and whether step 2 ran; **PRs merged** from every step 2, step 3, and step 4 read of a "
     "merged PR's head and merge commit; **Time to deployment review** from the recorded invocation start "
-    "to the read-back that confirms the deployment-review state; **QA rounds** at each spawn in step 3, "
-    "each with its **duration** copied from that round's launch row; **Failed items** from the step 4 "
+    "to the read-back that confirms the deployment-review state; **QA rounds** at the spawn of each new "
+    "round in step 3; each round's **QA round durations** entry as the sum of that round's launch rows' "
+    "recorded durations, each row's figure taken as returned, which for a round holding more than one launch "
+    "row is that round's duration and replaces the single-row duration `references/metrics.md` states for a "
+    "round, and a row whose duration the coordinator did not capture reads `not reported`, which makes that "
+    "round's entry `not reported` too since the sum never estimates a missing figure; **Failed items** from the step 4 "
     "read of "
     "each QA round's outcome, in round order; **Fix rounds** from the step 4 branch that hands the failed "
     "items back; and **End state** immediately before the end form, once the run's end state or stop reason is known."
@@ -622,10 +797,16 @@ METRICS_LINES = [
     METRICS_USAGE,
     METRICS_NOTHING_BEFORE_START,
     METRICS_STEP0,
+    # SKL-159: the step 4 continuation branch states the round-count and launch-row rule.
+    "  The continuation does not increment the QA round count, reuses that round's scratch subdirectory and "
+    "checklist, and with `metrics` on is recorded as its own launch row within that same round.",
     "Report the story identifier, its final state, the four resolved model and effort values and the "
     "`metrics: on|off` line, each PR, the number of QA rounds with the items fixed in each, where QA recorded "
     "its evidence, and any incidental defects left open.",
     BOUNDARIES_ONLY_WRITE,
+    # SKL-159: the Boundaries sentence that leaves the permitted tracker write unchanged.
+    "- A continuation grants no new authority: it leaves that prohibition, and the single permitted tracker "
+    "write above, exactly as they are.",
 ]
 
 PROTOCOL_LINES = [
@@ -791,6 +972,31 @@ def test_engineer_and_qa_launches_are_timed_and_recorded_as_one_row_each() -> No
 
 def test_each_story_to_done_extra_is_taken_at_the_step_that_observes_it() -> None:
     assert METRICS_EXTRAS in metrics_body(), "an extra's collection point is missing"
+
+
+# SKL-159: a round may hold more than one launch row, so the launch points and the
+# qa-round-durations derivation both have to name the continuation.
+OLD_LAUNCH_POINTS = "each QA round is one launch in step 3"
+OLD_QA_ROUND_DURATIONS = (
+    "QA rounds** at each spawn in step 3, each with its **duration** copied from that round's launch row"
+)
+
+
+def test_the_metrics_launch_points_cover_a_same_round_continuation() -> None:
+    body = metrics_body()
+    assert METRICS_LAUNCH_POINTS in body, "which launches are rows is not stated"
+    assert OLD_LAUNCH_POINTS not in body, "the one-launch-per-round sentence is replaced, not kept beside it"
+    assert (
+        "a continuation of that round under step 4 is a further launch row within the same round" in body
+    ), "a continuation must be stated as its own launch row inside the same round"
+
+
+def test_the_qa_round_durations_extra_derives_a_multi_row_round_from_its_rows() -> None:
+    body = metrics_body()
+    assert OLD_QA_ROUND_DURATIONS not in body, "the one-row duration sentence is replaced, not kept beside it"
+    assert (
+        "the sum of that round's launch rows' recorded durations, each row's figure taken as returned" in body
+    ), "a round holding more than one launch row must derive its duration as the sum of its rows"
 
 
 def test_the_metrics_file_lives_in_the_session_scratch_directory_outside_every_role_subdirectory() -> None:
@@ -1601,3 +1807,432 @@ def test_only_the_summary_post_and_the_hand_back_brief_name_content_on_the_story
         next(line.strip() for line in body.splitlines() if "add to the hand-back brief each failed item" in line),
         METRICS_POST,
     ], "a line outside the summary post and the hand-back brief puts content on the story"
+
+# SKL-159 AC 4: the qa-unfinished-own-steps case ships its prompt, case.yaml, grader and rerun
+# instructions, records a baseline and a candidate run, and grades tool-call evidence.
+CASE = ROOT / "skills" / "story-to-done" / "evals" / "qa-unfinished-own-steps"
+CASE_SCENARIOS = ("own-steps", "owner-action", "new-round")
+
+
+def case_file(name: str) -> Path:
+    path = CASE / name
+    assert path.is_file(), f"the case is missing {name}"
+    return path
+
+
+def test_the_qa_unfinished_own_steps_case_ships_its_parts() -> None:
+    for name in ("prompt.md", "case.yaml", "grader.py", "run.sh", "rerun.md"):
+        case_file(name)
+    case = yaml.safe_load(case_file("case.yaml").read_text())
+    assert case["case"] == "qa-unfinished-own-steps"
+    assert case["baseline"]["commit"] == "7a6cb17", "the baseline commit is recorded"
+    assert case["runtime"]["model"] == "deepseek/deepseek-v4-pro", "the runtime and model are recorded"
+    assert [scenario["name"] for scenario in case["scenarios"]] == list(CASE_SCENARIOS)
+    for scenario in CASE_SCENARIOS:
+        assert (CASE / "scenarios" / scenario / "scenario.md").is_file(), scenario
+        assert (CASE / "scenarios" / scenario / "qa-round-1.json").is_file(), scenario
+    assert (CASE / "runtime" / "qa-runtime").is_file()
+    baseline = sorted(path for path in (CASE / "results").glob("baseline-*.md"))
+    candidate = sorted(path for path in (CASE / "results").glob("candidate-*.md"))
+    assert baseline and candidate, "a baseline run and a candidate run are recorded"
+    current = [path for path in candidate if "Superseded" not in path.read_text().splitlines()[0]]
+    assert current, "one candidate record is current, and the rest are marked superseded"
+    for path in current:
+        recorded = path.read_text()
+        assert "deepseek/deepseek-v4-pro" in recorded, "a current candidate record names its configuration"
+        assert re.search(r"`[0-9a-f]{7,40}`", recorded), "a current candidate record names the commit it graded"
+        calls = path.with_name(path.stem + "-calls.jsonl")
+        assert calls.is_file(), f"{calls.name} carries the calls its verdicts were read from"
+        grades = [json.loads(line) for line in calls.read_text().splitlines() if '"grade"' in line]
+        assert grades and {entry["grade"] for entry in grades} <= {"PASS", "FAIL"}, "the calls file records each grade"
+
+
+def test_the_case_prompt_states_the_harness_without_steering_the_run() -> None:
+    steer = re.compile(r"(?i)\bresume\b|same session|new round|start a new|\bexpect(?:ed)?\b|\bshould\b")
+    for name in ("prompt.md", *(f"scenarios/{scenario}/scenario.md" for scenario in CASE_SCENARIOS)):
+        found = steer.findall(case_file(name).read_text())
+        assert not found, f"{name} steers the run: {found}"
+    prompt = case_file("prompt.md").read_text()
+    assert "{skill_dir}" in prompt and "{run_dir}" in prompt
+
+
+def case_run(tmp_path: Path, *actions: dict, session: str = "qa-round-1-session",
+             subdirectory: str = "qa-agent-round-1") -> Path:
+    run = Path(tempfile.mkdtemp(dir=tmp_path))
+    (run / "qa-round-1.json").write_text(json.dumps({
+        "session": session,
+        "label": "qa-agent-round-1",
+        "scratch_subdirectory": subdirectory,
+        "round": 1,
+    }))
+    (run / "actions.jsonl").write_text("".join(json.dumps(action, sort_keys=True) + "\n" for action in actions))
+    return run
+
+
+def graded(run: Path, expectation: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, str(case_file("grader.py")), "--run-dir", str(run), "--expectation", expectation],
+        capture_output=True, text=True,
+    )
+
+
+CLEAN_CONTINUATION = "QA round 1 is unfinished. Its scratch subdirectory is qa-agent-round-1."
+
+
+def continuation_run(tmp_path: Path, message: str, session: str = "qa-round-1-session",
+                     round_number: int = 1) -> Path:
+    return case_run(tmp_path, {"action": "resume", "session": session, "label": "qa-agent-round-1",
+                              "round": round_number, "message": message})
+
+
+def test_the_case_grades_the_same_round_continuation_on_session_identity(tmp_path: Path) -> None:
+    result = graded(continuation_run(tmp_path, CLEAN_CONTINUATION), "own-steps")
+    assert result.returncode == 0 and result.stdout.strip().endswith("PASS"), result.stdout
+
+
+def test_the_case_fails_a_run_that_stops_where_the_story_must_not(tmp_path: Path) -> None:
+    run = case_run(tmp_path, {"action": "stop", "reason": "QA is not finished"})
+    result = graded(run, "own-steps")
+    assert result.returncode == 1 and result.stdout.strip().endswith("FAIL"), result.stdout
+    assert "the call was stop, and it had to be resume" in result.stdout
+
+
+def test_the_case_fails_a_continuation_that_carries_substance_or_the_wrong_session(tmp_path: Path) -> None:
+    leaked = continuation_run(
+        tmp_path,
+        "The QA round is unfinished. Your handback left two items outstanding and the merge rules still apply. "
+        "Your scratch subdirectory is qa-agent-round-1.",
+    )
+    assert graded(leaked, "own-steps").returncode == 1, "a continuation must not restate the handback or the rules"
+    substituted = case_run(tmp_path, {"action": "launch", "session": "qa-round-2-session",
+                                      "label": "qa-agent-round-2", "round": 2, "message": CLEAN_CONTINUATION})
+    assert graded(substituted, "own-steps").returncode == 1, "a new agent is not a continuation"
+    wrong = continuation_run(tmp_path, CLEAN_CONTINUATION, session="qa-round-9-session")
+    assert graded(wrong, "own-steps").returncode == 1, "the continuation must name the round's own session"
+    other_round = continuation_run(tmp_path, CLEAN_CONTINUATION, round_number=2)
+    assert graded(other_round, "own-steps").returncode == 1, "the continuation must stay in the round it continues"
+    unnamed = continuation_run(tmp_path, "Continue your work.")
+    assert graded(unnamed, "own-steps").returncode == 1, "the message must name the round's scratch subdirectory"
+
+
+def test_the_case_controls_grade_the_owner_stop_and_the_new_round(tmp_path: Path) -> None:
+    owner = case_run(tmp_path, {"action": "stop", "reason": "the evidence PR and its gate remain, and a maintainer's "
+                                                            "approval only the story owner can grant"})
+    assert graded(owner, "owner-action").returncode == 0
+    unnamed_owner = case_run(tmp_path, {"action": "stop", "reason": "QA unfinished"})
+    assert graded(unnamed_owner, "owner-action").returncode == 1, "the stop must name the owner action it leaves"
+    resumed = continuation_run(tmp_path, CLEAN_CONTINUATION)
+    assert graded(resumed, "owner-action").returncode == 1, "an owner action must stop, never continue"
+    new_round = case_run(tmp_path, {"action": "launch", "session": "qa-round-2-session",
+                                    "label": "qa-agent-round-2", "round": 2, "message": "the environment under test"})
+    (new_round / "sessions.json").write_text(json.dumps({
+        "sessions": [{"session": "qa-round-1-session", "label": "qa-agent-round-1", "round": 1},
+                     {"session": "qa-round-2-session", "label": "qa-agent-round-2", "round": 2}],
+        "next_round": 3,
+    }))
+    assert graded(new_round, "new-round").returncode == 0
+    fabricated = case_run(tmp_path, {"action": "launch", "session": "fabricated",
+                                     "label": "qa-agent-round-2", "round": 2, "message": "the environment under test"})
+    assert graded(fabricated, "new-round").returncode == 1, "the launched session must be one this run started"
+    reused = case_run(tmp_path, {"action": "launch", "session": "qa-round-1-session",
+                                 "label": "qa-agent-round-2", "round": 2, "message": "the environment under test"})
+    assert graded(reused, "new-round").returncode == 1, "a new round must not reuse an earlier session"
+
+
+def test_the_case_grader_reports_a_malformed_record_instead_of_crashing(tmp_path: Path) -> None:
+    run = case_run(tmp_path, {"action": "launch", "label": "qa-agent-round-2"})
+    result = graded(run, "new-round")
+    assert result.returncode == 1 and "Traceback" not in result.stderr, result.stderr
+    broken = Path(tempfile.mkdtemp(dir=tmp_path))
+    assert graded(broken, "own-steps").returncode == 1, "a run with no record is a graded FAIL"
+
+
+def runtime_run(run: Path, *argv: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run([str(run / "qa-runtime"), *argv], capture_output=True, text=True)
+
+
+def runtime_case(tmp_path: Path) -> Path:
+    run = tmp_path / "run"
+    run.mkdir()
+    for name in ("qa-runtime", "qa-runtime.md"):
+        shutil.copy(CASE / "runtime" / name, run / name)
+    shutil.copy(CASE / "scenarios" / "own-steps" / "qa-round-1.json", run / "qa-round-1.json")
+    return run
+
+
+def test_the_case_runtime_records_a_launch_a_continuation_and_a_stop(tmp_path: Path) -> None:
+    run = runtime_case(tmp_path)
+    message = tmp_path / "message.txt"
+    message.write_text("The round is unfinished; scratch qa-agent-round-1.\n")
+    launched = runtime_run(run, "launch", "--label", "qa-agent-round-2", "--message", str(message))
+    assert launched.returncode == 0 and "qa-round-2-session" in launched.stdout
+    resumed = runtime_run(run, "resume", "--session", "qa-round-1-session",
+                          "--label", "qa-agent-round-1", "--message", str(message))
+    assert resumed.returncode == 0, resumed.stderr
+    refused = runtime_run(run, "resume", "--session", "qa-round-7-session",
+                          "--label", "qa-agent-round-1", "--message", str(message))
+    assert refused.returncode != 0 and "started no session" in refused.stderr
+    assert runtime_run(run, "stop", "--reason", "a maintainer's approval is outstanding").returncode == 0
+    recorded = [json.loads(line) for line in (run / "actions.jsonl").read_text().splitlines()]
+    assert [entry["action"] for entry in recorded] == ["launch", "resume", "stop"]
+    assert [(entry.get("session"), entry.get("round")) for entry in recorded] == [
+        ("qa-round-2-session", 2), ("qa-round-1-session", 1), (None, None)
+    ]
+
+
+def test_the_case_runtime_records_nothing_when_it_cannot_read_the_message(tmp_path: Path) -> None:
+    run = runtime_case(tmp_path)
+    failed = runtime_run(run, "launch", "--label", "qa-agent-round-2", "--message", str(tmp_path / "absent.txt"))
+    assert failed.returncode != 0 and "no message file" in failed.stderr
+    assert not (run / "actions.jsonl").exists(), "a launch that cannot read its message records no call"
+    message = tmp_path / "message.txt"
+    message.write_text("the environment under test\n")
+    assert runtime_run(run, "launch", "--label", "qa-agent-round-2", "--message", str(message)).returncode == 0
+    assert "qa-round-2-session" in (run / "sessions.json").read_text(), "a failed launch must not consume a round"
+
+
+def test_the_case_runtime_and_grader_agree_end_to_end(tmp_path: Path) -> None:
+    run = runtime_case(tmp_path)
+    message = tmp_path / "message.txt"
+    message.write_text(CLEAN_CONTINUATION + "\n")
+    assert runtime_run(run, "resume", "--session", "qa-round-1-session",
+                       "--label", "qa-agent-round-1", "--message", str(message)).returncode == 0
+    result = graded(run, "own-steps")
+    assert result.returncode == 0, "the grader must accept what the runtime recorded"
+
+
+def test_the_case_runner_refuses_a_void_run_and_a_reused_directory(tmp_path: Path) -> None:
+    script = case_file("run.sh").read_text()
+    assert "HARNESS: the agent command exited" in script, "a failed agent command must not be graded"
+    assert "git -C \"$checkout_real\" status --porcelain" in script, "a checkout the agent changed voids the run"
+    assert "is not empty; give each run its own directory" in script, "a reused run directory must be refused"
+
+
+def test_the_multi_row_duration_rule_names_the_single_row_reference_it_replaces() -> None:
+    reference = (ROOT / "skills" / "story-to-done" / "references" / "metrics.md").read_text()
+    assert "each QA round's duration, which is its launch row's duration" in reference
+    protocol = " ".join(PROTOCOL.read_text().split())
+    assert (
+        "replaces the single-row duration `references/metrics.md` states for a round" in protocol
+    ), "the protocol must say its sum replaces the reference's single-row rule for a multi-row round"
+
+# SKL-159: the sentences this change replaces must stay gone from the whole bundle, not only from
+# the section that carries their replacement.
+REPLACED_SENTENCES = [
+    "never resume an earlier QA agent, since it carries that round's conclusions",
+    "Report exactly what remains and who owns it, and stop; resume at step 3 once it is cleared",
+    "each QA round is one launch in step 3",
+    "QA rounds at each spawn in step 3, each with its duration copied from that round's launch row",
+]
+
+
+def test_no_replaced_sentence_survives_anywhere_in_the_bundle() -> None:
+    text = f"{SKILL.read_text()}\n{PROTOCOL.read_text()}".lower()
+    for sentence in REPLACED_SENTENCES:
+        assert sentence.lower() not in text, f"the replaced sentence is back: {sentence}"
+
+
+def test_the_case_runner_voids_a_failed_agent_command_without_grading(tmp_path: Path) -> None:
+    run_dir = tmp_path / "run"
+    result = subprocess.run(
+        ["bash", str(case_file("run.sh")), str(ROOT), "own-steps", str(run_dir)],
+        capture_output=True, text=True, env={**os.environ, "EVAL_AGENT_CMD": "false"},
+    )
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "nothing was graded" in result.stderr
+    assert not (run_dir / "grader-output.txt").exists(), "a void run records no grade"
+
+
+def test_the_case_runner_refuses_an_unknown_scenario_and_a_reused_directory(tmp_path: Path) -> None:
+    unknown = subprocess.run(["bash", str(case_file("run.sh")), str(ROOT), "some-other-case", str(tmp_path / "x")],
+                             capture_output=True, text=True)
+    assert unknown.returncode == 2 and "unknown scenario" in unknown.stderr
+    reused = tmp_path / "reused"
+    reused.mkdir()
+    (reused / "actions.jsonl").write_text("{}\n")
+    result = subprocess.run(["bash", str(case_file("run.sh")), str(ROOT), "own-steps", str(reused)],
+                            capture_output=True, text=True)
+    assert result.returncode == 2 and "not empty" in result.stderr
+    inside = subprocess.run(["bash", str(case_file("run.sh")), str(ROOT), "own-steps",
+                             str(ROOT / "skills" / "story-to-done" / "evals" / "inside-run")],
+                            capture_output=True, text=True)
+    assert inside.returncode == 2 and "must sit outside CHECKOUT" in inside.stderr
+
+
+def test_the_case_grader_survives_a_ledger_of_the_wrong_shape(tmp_path: Path) -> None:
+    run = continuation_run(tmp_path, CLEAN_CONTINUATION)
+    (run / "sessions.json").write_text("[]")
+    result = graded(run, "own-steps")
+    assert result.returncode == 1 and "Traceback" not in result.stderr, result.stderr
+    assert "record is unreadable" in result.stdout
+    other = case_run(tmp_path, {"action": "launch", "session": "qa-round-2-session", "label": "qa-agent-round-2",
+                                "round": 2, "message": "the environment under test"})
+    (other / "sessions.json").write_text("7")
+    result = graded(other, "new-round")
+    assert result.returncode == 1 and "Traceback" not in result.stderr, result.stderr
+
+
+def test_the_case_fails_a_continuation_that_leaks_in_other_words_or_at_length(tmp_path: Path) -> None:
+    vague = continuation_run(
+        tmp_path,
+        "Round 1 is unfinished. Everything we discussed earlier still stands. "
+        "Scratch subdirectory qa-agent-round-1.",
+    )
+    assert graded(vague, "own-steps").returncode == 1, "a message may not carry an earlier discussion"
+    long_message = continuation_run(tmp_path, "QA round 1 is unfinished. " + "note. " * 80 + "qa-agent-round-1")
+    assert graded(long_message, "own-steps").returncode == 1, "a continuation states two facts, not a brief"
+    near_miss = continuation_run(tmp_path, "The round is unfinished; scratch subdirectory qa-agent-round-1-copy.")
+    assert graded(near_miss, "own-steps").returncode == 1, "the message must name that round's own directory"
+
+def test_the_case_owner_stop_must_name_the_owner_action_and_what_remains(tmp_path: Path) -> None:
+    vague = case_run(tmp_path, {"action": "stop", "reason": "owner review"})
+    assert graded(vague, "owner-action").returncode == 1, "a bare noun does not report what remains"
+    both = case_run(tmp_path, {"action": "stop", "reason": "the evidence PR gate is still running and a "
+                                                          "maintainer's approval is the owner's to grant"})
+    assert graded(both, "owner-action").returncode == 0, "naming both sides passes the control"
+
+
+def test_the_case_grader_refuses_a_session_of_the_wrong_type(tmp_path: Path) -> None:
+    wrong = case_run(tmp_path, {"action": "launch", "session": [], "label": "qa-agent-round-2",
+                                "round": 2, "message": "the environment under test"})
+    result = graded(wrong, "new-round")
+    assert result.returncode == 1 and "Traceback" not in result.stderr, result.stderr
+
+
+def test_the_case_runner_detects_a_second_change_to_an_already_dirty_file(tmp_path: Path) -> None:
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=checkout, check=True)
+    tracked = checkout / "tracked.txt"
+    tracked.write_text("first\n")
+    subprocess.run(["git", "add", "tracked.txt"], cwd=checkout, check=True)
+    subprocess.run(["git", "-c", "user.name=check", "-c", "user.email=check@example.com",
+                    "commit", "-q", "-m", "base"], cwd=checkout, check=True)
+    tracked.write_text("first\nsecond\n")
+    agent = tmp_path / "agent.sh"
+    agent.write_text(f"#!/bin/sh\nprintf 'third\\n' >> {tracked}\n")
+    agent.chmod(0o755)
+    result = subprocess.run(
+        ["bash", str(case_file("run.sh")), str(checkout), "own-steps", str(tmp_path / "run")],
+        capture_output=True, text=True, env={**os.environ, "EVAL_AGENT_CMD": str(agent)},
+    )
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "the agent changed" in result.stderr, result.stderr
+
+@pytest.mark.parametrize("record", ["baseline-7a6cb17", "candidate-ac53428"])
+def test_the_recorded_calls_re_grade_to_the_recorded_verdicts(tmp_path: Path, record: str) -> None:
+    """The committed calls must reproduce the committed grades under the committed grader."""
+    lines = [json.loads(line) for line in (CASE / "results" / f"{record}-calls.jsonl").read_text().splitlines()]
+    calls: dict[str, list[dict]] = {}
+    grades: dict[str, str] = {}
+    for entry in lines:
+        if "call" in entry:
+            calls.setdefault(entry["run"], []).append(entry["call"])
+        else:
+            grades[entry["run"]] = entry["grade"]
+    assert calls and set(calls) == set(grades), "every recorded run has calls and a grade"
+    for name, run_calls in calls.items():
+        run = Path(tempfile.mkdtemp(dir=tmp_path))
+        (run / "qa-round-1.json").write_text(json.dumps({
+            "session": "qa-round-1-session", "label": "qa-agent-round-1",
+            "scratch_subdirectory": "qa-agent-round-1", "round": 1}))
+        (run / "actions.jsonl").write_text("".join(json.dumps(call, sort_keys=True) + "\n" for call in run_calls))
+        sessions = [{"session": "qa-round-1-session", "label": "qa-agent-round-1", "round": 1}]
+        sessions += [{"session": call["session"], "label": call["label"], "round": call.get("round")}
+                     for call in run_calls if call["action"] == "launch"]
+        (run / "sessions.json").write_text(json.dumps({"sessions": sessions, "next_round": 3}))
+        expectation = "owner-action" if name == "owner-action" else "new-round" if name == "new-round" else "own-steps"
+        result = graded(run, expectation)
+        assert result.stdout.strip().endswith(grades[name]), f"{record} {name}: {result.stdout}"
+
+def test_the_case_owner_stop_must_name_what_remains_and_not_a_bare_noun(tmp_path: Path) -> None:
+    bare = case_run(tmp_path, {"action": "stop", "reason": "owner item"})
+    assert graded(bare, "owner-action").returncode == 1, "a bare noun pair does not report what remains"
+    named = case_run(tmp_path, {"action": "stop", "reason": "the evidence PR gate is still running; "
+                                                           "a maintainer's approval is the owner's to grant"})
+    assert graded(named, "owner-action").returncode == 0
+
+
+def test_the_case_runner_detects_a_change_to_an_already_untracked_file(tmp_path: Path) -> None:
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=checkout, check=True)
+    (checkout / "tracked.txt").write_text("first\n")
+    subprocess.run(["git", "add", "tracked.txt"], cwd=checkout, check=True)
+    subprocess.run(["git", "-c", "user.name=check", "-c", "user.email=check@example.com",
+                    "commit", "-q", "-m", "base"], cwd=checkout, check=True)
+    scratch = checkout / "scratch.txt"
+    scratch.write_text("first\n")
+    agent = tmp_path / "agent.sh"
+    agent.write_text(f"#!/bin/sh\nprintf 'second\\n' >> {scratch}\n")
+    agent.chmod(0o755)
+    result = subprocess.run(
+        ["bash", str(case_file("run.sh")), str(checkout), "own-steps", str(tmp_path / "run")],
+        capture_output=True, text=True, env={**os.environ, "EVAL_AGENT_CMD": str(agent)},
+    )
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "the agent changed" in result.stderr, result.stderr
+
+def test_the_case_owner_stop_must_name_the_action_the_scenario_gives_the_owner(tmp_path: Path) -> None:
+    terse = case_run(tmp_path, {"action": "stop", "reason": "owner PR"})
+    assert graded(terse, "owner-action").returncode == 1, "a two-word reason does not report what remains"
+    full = case_run(tmp_path, {"action": "stop", "reason": "the evidence PR's gate is still running; a "
+                                                           "maintainer's approval is the owner's to grant"})
+    assert graded(full, "owner-action").returncode == 0
+
+
+def test_the_case_runner_survives_an_unreadable_untracked_entry(tmp_path: Path) -> None:
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=checkout, check=True)
+    (checkout / "tracked.txt").write_text("first\n")
+    subprocess.run(["git", "add", "tracked.txt"], cwd=checkout, check=True)
+    subprocess.run(["git", "-c", "user.name=check", "-c", "user.email=check@example.com",
+                    "commit", "-q", "-m", "base"], cwd=checkout, check=True)
+    (checkout / "dangling").symlink_to("nowhere")
+    result = subprocess.run(
+        ["bash", str(case_file("run.sh")), str(checkout), "own-steps", str(tmp_path / "run")],
+        capture_output=True, text=True, env={**os.environ, "EVAL_AGENT_CMD": "true"},
+    )
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "the agent changed" not in result.stderr, "a dangling untracked link is not an agent change"
+
+def test_the_case_runner_detects_a_retargeted_untracked_link(tmp_path: Path) -> None:
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=checkout, check=True)
+    (checkout / "tracked.txt").write_text("first\n")
+    subprocess.run(["git", "add", "tracked.txt"], cwd=checkout, check=True)
+    subprocess.run(["git", "-c", "user.name=check", "-c", "user.email=check@example.com",
+                    "commit", "-q", "-m", "base"], cwd=checkout, check=True)
+    (checkout / "relink").symlink_to("nowhere")
+    agent = tmp_path / "agent.sh"
+    agent.write_text("#!/bin/sh\nln -sfn somewhere-else " + str(checkout / "relink") + "\n")
+    agent.chmod(0o755)
+    result = subprocess.run(
+        ["bash", str(case_file("run.sh")), str(checkout), "own-steps", str(tmp_path / "run")],
+        capture_output=True, text=True, env={**os.environ, "EVAL_AGENT_CMD": str(agent)},
+    )
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "the agent changed" in result.stderr, result.stderr
+
+def test_the_case_runner_detects_a_change_made_through_an_untracked_link(tmp_path: Path) -> None:
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=checkout, check=True)
+    (checkout / ".gitignore").write_text("ignored.txt\n")
+    (checkout / "tracked.txt").write_text("first\n")
+    subprocess.run(["git", "add", "tracked.txt", ".gitignore"], cwd=checkout, check=True)
+    subprocess.run(["git", "-c", "user.name=check", "-c", "user.email=check@example.com",
+                    "commit", "-q", "-m", "base"], cwd=checkout, check=True)
+    (checkout / "ignored.txt").write_text("original\n")
+    (checkout / "alias").symlink_to("ignored.txt")
+    agent = tmp_path / "agent.sh"
+    agent.write_text(f"#!/bin/sh\nprintf 'changed\\n' >> {checkout / 'alias'}\n")
+    agent.chmod(0o755)
+    result = subprocess.run(
+        ["bash", str(case_file("run.sh")), str(checkout), "own-steps", str(tmp_path / "run")],
+        capture_output=True, text=True, env={**os.environ, "EVAL_AGENT_CMD": str(agent)},
+    )
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "the agent changed" in result.stderr, result.stderr
