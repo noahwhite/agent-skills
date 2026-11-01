@@ -175,7 +175,14 @@ Only the PO and the two engineers count toward the agreement.
 
 - **Inputs:** the three recorded point values and any recorded SM/EM sizing context.
 - **Process:**
-  1. Hold one discussion round that names only the high and the low.
+  1. Run the consensus check first, on the three values recorded in Step 3.
+     The ordered step sequence is fixed here for each `profile.tracker.estimate_scale` value: `fibonacci` 1, 2, 3, 5, 8, 13; `linear` the ordinal list 1, 2, 3, 5, 8, 13; `exponential` 1, 2, 4, 8, 16; `tshirt` XS, S, M, L, XL in that order.
+     The tolerance is one step, and it is fixed in this skill: no profile key and no skill argument sets it.
+     When the three values are identical, or the highest and the lowest are one step apart (5 and 8 on `fibonacci`, for example), record the higher value as the estimate, skip the discussion in item 2 and the re-vote in item 3, and apply the split rule to the recorded value.
+     When the highest and the lowest are more than one step apart (1 and 5, for example), the discussion in item 2 and the re-vote in item 3 run, naming the high and the low.
+     On a `tshirt` scale a pair one step apart records the larger size, with the cap step still stopped under Step 3 item 8.
+     Record the outcome in the pointing record as `Consensus check: <identical | one step | more than one step>`, so a skipped discussion and re-vote read as skipped and never as not run.
+  2. Hold one discussion round that names only the high and the low, when the consensus check calls for it.
      Do not compare the other values or single out a voter.
      In that round, and against the rationales recorded in Step 3, the facilitator challenges every ground outside the pointing basis, whether it is heard in the discussion or read in a recorded rationale, except a prescription of this story's value and, from the SM/EM, a statement of elapsed time, effort or run cost, which are anchoring events the moment they are seen.
      That rule governs the shared discussion content and other voters' values; a voter's own recorded value and rationale may be carried privately in that voter's own prompt, so it can speak to its own ground.
@@ -183,26 +190,26 @@ Only the PO and the two engineers count toward the agreement.
      A challenged ground must be restated as a basis driver or retracted, except a prescription of this story's value, which is an anchoring event as soon as it is seen; a voter whose basis does not support its recorded value records that in the re-vote.
      The SM/EM withdraws or restates its own sizing comment on the same terms, except a point value named before the reveal, a prescription of this story's value, treating another voter's revealed value as the answer, or a statement of elapsed time, effort or run cost, each of which is an anchoring event as soon as the facilitator sees it.
      A ground that is neither is an anchoring event under the Anchoring guardrail.
-  2. Run one re-vote.
+  3. Run one re-vote.
      The re-vote prompt carries the pointing basis from Step 3.
      It also carries the Step 3 item 4 rationale rule.
      Each voter records the set of values it accepts for this story (one or more) or records no consensus, with a short complexity rationale under the Step 3 rationale rule.
      Recording an accepted set is not treating another voter's revealed value as the answer: the rationale for the set is about the basis, never about which value another voter recorded.
-     A re-vote rationale outside the pointing basis is challenged before the consensus is recorded, under the same restate-or-retract rule as item 1, and a voter that retracts its re-vote rationale records a replacement accepted set within that same re-vote, with a basis-driver rationale, or records no consensus.
-  3. Consensus is the highest value in the intersection of the three accepted sets.
-     If the intersection is empty, record no consensus and run the no-consensus decision (item 7).
-  4. Never average and never take a value silently.
-  5. The facilitator records the consensus; it does not declare it.
-  6. If the split trigger is met (consensus above `profile.refinement.point_cap` or 8 or more), apply the split rule.
-  7. No-consensus decision: the facilitator presents only the empty intersection and the three paths: split, re-refine, or leave unpointed.
+     A re-vote rationale outside the pointing basis is challenged before the consensus is recorded, under the same restate-or-retract rule as item 2, and a voter that retracts its re-vote rationale records a replacement accepted set within that same re-vote, with a basis-driver rationale, or records no consensus.
+  4. Consensus is the highest value in the intersection of the three accepted sets.
+     If the intersection is empty, record no consensus and run the no-consensus decision (item 8).
+  5. Never average and never take a value silently.
+  6. The facilitator records the consensus; it does not declare it.
+  7. If the split trigger is met (consensus above `profile.refinement.point_cap` or 8 or more), apply the split rule.
+  8. No-consensus decision: the facilitator presents only the empty intersection and the three paths: split, re-refine, or leave unpointed.
      The facilitator does not recommend a path.
      Each voter (the PO and both engineers) records the set of paths it accepts; a voter that accepts re-refine also lists the amendments it needs.
      The chosen path is in the intersection of the three accepted path sets.
      When that intersection holds more than one path, the PO chooses among them and records why.
      When that intersection is empty, the story is left unpointed.
      The facilitator records the decision; it does not choose it.
-  8. Split applies the split rule as a group-decided split.
-  9. Re-refine returns to Step 2.
+  9. Split applies the split rule as a group-decided split.
+  10. Re-refine returns to Step 2.
      The PO authors the amendments and an updated refinement comment and applies both; otherwise, under the denied tracker writes fallback, the facilitator applies the amendments and the updated refinement comment verbatim.
      One accept round runs on the new comment id.
      If all three voters do not return `ACCEPT`, the PO records the story as unpointed, or under the denied tracker writes fallback the facilitator applies the PO-authored unpointed record verbatim.

@@ -73,6 +73,7 @@ A sizing comment that names a point value before the reveal, prescribes this sto
   - Product owner: <value, or not recorded> - <short complexity rationale, or none when the value is not recorded>
   - Engineer one: <value, or not recorded> - <short complexity rationale, or none when the value is not recorded>
   - Engineer two: <value, or not recorded> - <short complexity rationale, or none when the value is not recorded>
+- Consensus check: <identical | one step | more than one step>
 - SM/EM sizing context, after all three values: <file base name> or verbatim, eliding a pre-reveal value or a prescription, or none
 - Discussion: <high <value>, low <value>, or none; the shared content names only the high and the low, while a voter's own recorded value and rationale are carried privately in that voter's prompt>
 - Re-vote: <accepted set per voter, with complexity rationale, or none>

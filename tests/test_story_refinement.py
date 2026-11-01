@@ -329,6 +329,10 @@ def test_refinement_template_records_the_re_refine_accept_round() -> None:
     assert line in template("Refinement comment").splitlines()
 
 
+def test_pointing_template_records_the_consensus_check_outcome() -> None:
+    assert "- Consensus check: <identical | one step | more than one step>" in pointing_template()
+
+
 def test_pointing_template_records_the_no_consensus_decision() -> None:
     lines = pointing_template()
     for line in (
@@ -757,7 +761,7 @@ def test_step_three_does_not_restate_the_pointing_basis() -> None:
 
 
 def test_step_four_re_vote_carries_the_basis_by_reference_to_step_three() -> None:
-    item = process_items(STEP_FOUR)[1]
+    item = process_items(STEP_FOUR)[2]
     assert item.startswith("Run one re-vote.")
     assert "The re-vote prompt carries the pointing basis from Step 3." in item
     assert squash(POINTING_BASIS) not in squash(operative_step(STEP_FOUR))
@@ -772,7 +776,7 @@ def test_step_three_defines_the_reveal() -> None:
 
 
 def test_step_four_re_vote_prompt_carries_the_rationale_rule() -> None:
-    item = process_items(STEP_FOUR)[1]
+    item = process_items(STEP_FOUR)[2]
     assert "It also carries the Step 3 item 4 rationale rule." in item
 
 
@@ -792,7 +796,7 @@ def test_pointing_template_states_the_standing_consensus() -> None:
 
 
 def test_step_four_re_vote_requires_a_complexity_rationale() -> None:
-    item = process_items(STEP_FOUR)[1]
+    item = process_items(STEP_FOUR)[2]
     assert (
         "Each voter records the set of values it accepts for this story (one or more) or records no consensus, "
         "with a short complexity rationale under the Step 3 rationale rule."
@@ -826,7 +830,8 @@ def test_step_three_sizing_context_is_in_complexity_terms() -> None:
 
 
 STEP_FOUR_ITEM_PREFIXES = [
-    "Hold one discussion round that names only the high and the low.",
+    "Run the consensus check first, on the three values recorded in Step 3.",
+    "Hold one discussion round that names only the high and the low, when the consensus check calls for it.",
     "Run one re-vote.",
     "Consensus is the highest value in the intersection of the three accepted sets.",
     "Never average and never take a value silently.",
@@ -838,6 +843,59 @@ STEP_FOUR_ITEM_PREFIXES = [
 ]
 
 
+CONSENSUS_CHECK = "Run the consensus check first, on the three values recorded in Step 3."
+ESTIMATE_SEQUENCES = (
+    "The ordered step sequence is fixed here for each `profile.tracker.estimate_scale` value: "
+    "`fibonacci` 1, 2, 3, 5, 8, 13; `linear` the ordinal list 1, 2, 3, 5, 8, 13; "
+    "`exponential` 1, 2, 4, 8, 16; `tshirt` XS, S, M, L, XL in that order."
+)
+CONSENSUS_CHECK_BRANCHES = (
+    "When the three values are identical, or the highest and the lowest are one step apart (5 and 8 on "
+    "`fibonacci`, for example), record the higher value as the estimate, skip the discussion in item 2 and "
+    "the re-vote in item 3, and apply the split rule to the recorded value. "
+    "When the highest and the lowest are more than one step apart (1 and 5, for example), the discussion in "
+    "item 2 and the re-vote in item 3 run, naming the high and the low."
+)
+
+
+def test_step_four_identical_values_record_the_higher_value_and_skip() -> None:
+    item = process_items(STEP_FOUR)[0]
+    assert item.startswith(CONSENSUS_CHECK)
+    assert ESTIMATE_SEQUENCES in item
+    assert (
+        "The tolerance is one step, and it is fixed in this skill: no profile key and no skill argument sets it."
+    ) in item
+    assert CONSENSUS_CHECK_BRANCHES in item
+    assert (
+        "Record the outcome in the pointing record as `Consensus check: <identical | one step | more than one "
+        "step>`, so a skipped discussion and re-vote read as skipped and never as not run."
+    ) in item
+    assert process_items(STEP_FOUR)[1].startswith(
+        "Hold one discussion round that names only the high and the low, when the consensus check calls for it."
+    ), "an unconditional discussion would make an identical round run one"
+
+
+def test_step_four_one_step_apart_records_the_higher_value_and_skips() -> None:
+    item = process_items(STEP_FOUR)[0]
+    assert "`fibonacci` 1, 2, 3, 5, 8, 13" in item
+    assert (
+        "the highest and the lowest are one step apart (5 and 8 on `fibonacci`, for example), record the "
+        "higher value as the estimate, skip the discussion in item 2 and the re-vote in item 3" in item
+    )
+    assert (
+        "On a `tshirt` scale a pair one step apart records the larger size, with the cap step still stopped "
+        "under Step 3 item 8." in item
+    )
+
+
+def test_step_four_more_than_one_step_apart_runs_the_discussion() -> None:
+    item = process_items(STEP_FOUR)[0]
+    run_clause = "the discussion in item 2 and the re-vote in item 3 run, naming the high and the low."
+    assert "(1 and 5, for example), " + run_clause in item
+    assert item.count(run_clause) == 1, "the discussion must run on the wide branch only"
+    assert "record the higher value as the estimate" in item
+
+
 def test_step_four_process_items_keep_their_count_and_order() -> None:
     items = process_items(STEP_FOUR)
     assert len(items) == len(STEP_FOUR_ITEM_PREFIXES)
@@ -846,7 +904,7 @@ def test_step_four_process_items_keep_their_count_and_order() -> None:
 
 
 def test_step_four_facilitator_challenges_every_off_basis_ground() -> None:
-    item = process_items(STEP_FOUR)[0]
+    item = process_items(STEP_FOUR)[1]
     assert (
         "In that round, and against the rationales recorded in Step 3, the facilitator challenges every ground "
         "outside the pointing basis, whether it is heard in the discussion or read in a recorded rationale, "
@@ -878,14 +936,14 @@ def test_step_four_facilitator_challenges_every_off_basis_ground() -> None:
 
 
 def test_step_four_re_vote_challenges_an_off_basis_rationale() -> None:
-    item = process_items(STEP_FOUR)[1]
+    item = process_items(STEP_FOUR)[2]
     assert (
         "Recording an accepted set is not treating another voter's revealed value as the answer: the rationale "
         "for the set is about the basis, never about which value another voter recorded."
     ) in item
     assert (
         "A re-vote rationale outside the pointing basis is challenged before the consensus is recorded, under "
-        "the same restate-or-retract rule as item 1, and a voter that retracts its re-vote rationale records a "
+        "the same restate-or-retract rule as item 2, and a voter that retracts its re-vote rationale records a "
         "replacement accepted set within that same re-vote, with a basis-driver rationale, or records no "
         "consensus."
     ) in item
