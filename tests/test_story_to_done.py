@@ -114,7 +114,7 @@ OLD_QA_ROUND_CLAUSE = "never resume an earlier QA agent, since it carries that r
 def test_each_qa_round_is_a_new_agent_with_a_minimal_brief() -> None:
     body = section(SKILL.read_text(), "3. QA agent: verify the deployed story")
     assert QA_ROUND_SENTENCE in body.splitlines(), "step 3 must read the pinned new-round sentence exactly"
-    assert QA_ROUND_EXCEPTION in " ".join(body.split()), "step 3 must scope the exception a round may take"
+    assert QA_ROUND_EXCEPTION in body.splitlines(), "step 3 must scope the exception a round may take"
     assert OLD_QA_ROUND_CLAUSE not in body, "the clause that forbids resuming is replaced, not kept beside it"
     for phrase in (
         "load and follow `qa-verification`",
@@ -125,15 +125,70 @@ def test_each_qa_round_is_a_new_agent_with_a_minimal_brief() -> None:
         assert phrase in body, f"step 3 missing: {phrase}"
 
 
+# The owner-stop sentence is pinned whole: the fragment assertions this replaces let the
+# owner-clear clause be deleted with the suite still green (SKL-159 QA round 1).
+QA_OWNER_STOP_SENTENCE = (
+    "A stop for an owner action ends the round: once the owner clears it, that round's work starts over as a "
+    "new round under this step with a new QA agent, and a fix/deploy cycle or an amended acceptance basis "
+    "likewise starts a new round."
+)
+
+
+def owner_stop_lines() -> list[str]:
+    return section(SKILL.read_text(), "3. QA agent: verify the deployed story").splitlines()
+
+
+def prose_lines(lines: list[str]) -> set[int]:
+    """The indexes of the lines an agent reads as instructions: not in a fence, not in a comment.
+
+    A comment can open or close anywhere in a line, so each line is scanned for both markers
+    rather than only at its start, and a fence's contents are never prose.
+    """
+    prose: set[int] = set()
+    fenced = False
+    commented = False
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if fenced:
+            if stripped.startswith(("```", "~~~")):
+                fenced = False
+            continue
+        if not commented and stripped.startswith(("```", "~~~")):
+            fenced = True
+            continue
+        visible = ""
+        rest = line
+        while rest:
+            if commented:
+                end = rest.find("-->")
+                if end < 0:
+                    rest = ""
+                else:
+                    rest = rest[end + 3:]
+                    commented = False
+            else:
+                start = rest.find("<!--")
+                if start < 0:
+                    visible += rest
+                    rest = ""
+                else:
+                    visible += rest[:start]
+                    rest = rest[start + 4:]
+                    commented = True
+        if visible.strip():
+            prose.add(index)
+    return prose
+
+
 def test_an_owner_stop_ends_the_round_so_the_next_attempt_is_a_new_round() -> None:
-    body = " ".join(section(SKILL.read_text(), "3. QA agent: verify the deployed story").split())
-    assert "A stop for an owner action ends the round" in body, "a stop for an owner action must end the round"
-    assert (
-        "that round's work starts over as a new round under this step with a new QA agent" in body
-    ), "an owner stop leaves the next attempt a new round with a new agent"
-    assert (
-        "a fix/deploy cycle or an amended acceptance basis likewise starts a new round" in body
-    ), "a fix cycle or an amended acceptance basis must start a new round"
+    lines = owner_stop_lines()
+    assert QA_OWNER_STOP_SENTENCE in lines, "step 3 must read the whole owner-stop sentence exactly"
+    assert SKILL.read_text().count(QA_OWNER_STOP_SENTENCE) == 1, (
+        "the owner-stop sentence is stated once in the skill, not only once in step 3"
+    )
+    assert lines.index(QA_OWNER_STOP_SENTENCE) in prose_lines(lines), (
+        "the owner-stop sentence must be operative prose, not an example in a fence or a comment"
+    )
 
 
 def state_bullets(body: str) -> dict[str, str]:
