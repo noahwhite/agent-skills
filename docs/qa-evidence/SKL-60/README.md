@@ -9,7 +9,7 @@
 - Method: read-only assertions on the delivered instructions, templates and contract-test structure, plus authoritative merged-main CI.
   No implementation changes, local suite rerun, live ceremony, deployment or account mutations were performed.
 - Fixtures: the four committed scale sequences, accepted-set and abstention examples, the SKL-13 `8/8/8` static fixture and the pointing-record template.
-- Raw evidence: six sanitized text attachments on SKL-60, QA comment `c917b24c-498b-4482-9e1f-2f19dcba6a90`.
+- Raw evidence: six sanitized text attachments on SKL-60, QA comment `c917b24c`.
   No screenshot is applicable to this CLI/instruction-artifact surface.
 
 ## Verdicts
