@@ -121,7 +121,7 @@ With no launches, the table is replaced by the line `no launches`, the elapsed w
 - On a stop before such a record exists, the comment is posted only after the three Stage 1 voter inputs are recorded and every voter context launched in the round that stopped has finished or stopped.
 - Both are subject to the denied tracker writes fallback.
   While a tracker write is denied and the owner has not authorized the denied tracker writes fallback, no post is attempted.
-- The comment is never posted while an anchoring recovery re-vote is still to run in this invocation.
+- The comment is never posted while an anchoring recovery, its Step 3 re-run, or any Step 4 re-vote that follows them, is still to run in this invocation.
 
 ### `story-to-done`
 

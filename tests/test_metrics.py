@@ -419,8 +419,8 @@ INDEPENDENCE_AND_POSTING = [
         id="refinement-order-early-stop",
     ),
     pytest.param(
-        "The comment is never posted while an anchoring recovery re-vote is still to run in this "
-        "invocation.",
+        "The comment is never posted while an anchoring recovery, its Step 3 re-run, or any Step 4 re-vote "
+        "that follows them, is still to run in this invocation.",
         id="refinement-order-anchoring",
     ),
     pytest.param(

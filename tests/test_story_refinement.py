@@ -330,14 +330,24 @@ def test_step_four_residual_variance_more_than_one_step_apart_stops_unpointed() 
     )
     assert (
         "The owner decides that outcome in a later run: a new invocation of this ceremony on the same story "
-        "reads the posted unpointed variance record, which may name the story or one of its slices, edits that "
-        "record to add the `Owner decision:` line, reads the "
-        "edit back, validates the owner's decision against "
-        "`profile.tracker.estimate_scale` and the item 1 sequence, applies the split rule to it, records it as "
-        "the estimate, and adds the pointing record's `- Owner decision:` line, and it does not re-point before "
-        "that decision. An owner decision to leave the story unpointed is recorded on that line with its reason "
-        "and ends the follow-up with no estimate, and a decision outside the scale or the sequence is re-asked "
-        "rather than recorded. The decision is the owner's: the product owner does not decide that "
+        "reads the posted unpointed variance record, which may name the story or one of its slices, and replaces "
+        "its `pending` with the decision." in item
+    )
+    assert (
+        "The PO authors that amendment and applies it, or under the denied tracker writes fallback the facilitator "
+        "applies the PO-authored amendment verbatim, and the write is read back." in item
+    )
+    assert (
+        "A numeric decision is validated against `profile.tracker.estimate_scale` and the item 1 sequence, is "
+        "written to the story's estimate field and read back, and takes the split path of Step 4 alone when it "
+        "trips the split trigger: the slices it creates are pointed by their own later invocations, and this one "
+        "does not re-point." in item
+    )
+    assert (
+        "An owner decision to leave the story unpointed is an accepted outcome that no scale check applies to: it "
+        "is recorded on that line with its reason and ends the follow-up with no estimate. A numeric decision "
+        "outside the scale or the sequence is re-asked rather than recorded. The decision is the owner's: the "
+        "product owner does not decide that "
         "outcome, under the estimator-ownership rule that the people doing the work estimate, and no facilitator "
         "and no voter chooses the value or the path." in item
     )
@@ -747,8 +757,9 @@ def test_fallback_never_reapplies_a_write_the_po_already_applied() -> None:
 def test_step_four_unpointed_record_follows_the_apply_rule() -> None:
     item = process_items(STEP_FOUR)[5]
     assert (
-        "The PO authors the unpointed variance record and applies it, or under the denied tracker writes fallback "
-        "the facilitator applies the PO-authored record verbatim." in item
+        "The PO authors the unpointed variance record and applies it with its `Owner decision:` line reading "
+        "`pending`, or under the denied tracker writes fallback the facilitator applies the PO-authored record "
+        "verbatim." in item
     )
 
 
@@ -981,8 +992,14 @@ def test_step_four_identical_values_record_the_higher_value_and_skip() -> None:
     ) in item
     assert CONSENSUS_CHECK_BRANCHES in item
     assert (
+        "the record's values block keeps the values recorded before the discussion, and a replacement value "
+        "appears on its Challenges line and in the voter's file" in item
+    )
+    assert (
         "Record the outcome in the pointing record as `Consensus check: <identical | one step | more than one "
-        "step>`, so a skipped discussion and re-vote read as skipped and never as not run."
+        "step>`, so a skipped discussion and re-vote read as skipped and never as not run; the record's values "
+        "block keeps the values recorded before the discussion, and a replacement value appears on its Challenges "
+        "line and in the voter's file."
     ) in item
     assert process_items(STEP_FOUR)[2].startswith(
         "Hold one discussion round that names only the high and the low, when the consensus check calls for it."
@@ -1087,6 +1104,38 @@ def test_step_four_one_step_skip_still_challenges_every_off_basis_ground() -> No
     assert "no estimate and no split action survives an unresolved challenge" in review
 
 
+def test_invocation_entry_gates_the_owner_follow_up() -> None:
+    body = flat(section(SKILL.read_text(), "Invocation entry"))
+    assert (
+        "before stage 1, check whether the story carries a posted unpointed variance record whose "
+        "`owner decision:` line reads `pending`." in body
+    )
+    assert "runs only that record's follow-up in Step 4 item 6 and skips Stages 1 and 2" in body
+    assert "otherwise it runs the full ceremony" in body
+
+
+def test_step_four_ordering_puts_the_basis_review_before_any_write() -> None:
+    review = process_items(STEP_FOUR)[1]
+    assert review.index("before the estimate is written to the tracker") < review.index(
+        "before the pointing record is posted"
+    )
+    check = process_items(STEP_FOUR)[0]
+    assert "nothing is written to the tracker and no pointing record is posted until it has run" in check
+
+
+def test_step_four_owner_never_chooses_the_derived_value() -> None:
+    item = process_items(STEP_FOUR)[5]
+    assert "the product owner does not decide that outcome" in item
+    assert "no facilitator and no voter chooses the value or the path" in item
+
+
+def test_step_four_abstention_stop_reports_needs_input() -> None:
+    item = process_items(STEP_FOUR)[5]
+    assert (
+        "and reports `needs input` to the owner naming the story and the derived values" in item
+    )
+
+
 def test_step_four_process_items_keep_their_count_and_order() -> None:
     items = process_items(STEP_FOUR)
     assert len(items) == 9, "Step 4 has nine items: the check, the review, the discussion, the re-vote, the consensus, the residual variance, no averaging, the record, the split"
@@ -1149,8 +1198,10 @@ def test_step_four_facilitator_challenges_every_off_basis_ground() -> None:
     assert (
         "A voter whose basis does not support its recorded value retracts an unsupported ground and records a "
         "replacement value with a basis-driver rationale under the Step 3 item 4 rationale rule, in the re-vote or, "
-        "when the consensus check skips the re-vote, in the basis-challenge round of this item; a replacement value "
-        "is valid for `profile.tracker.estimate_scale` and present in the item 1 sequence, re-recorded otherwise." in item
+        "when the consensus check skips the re-vote, in the basis-challenge round of this item; one basis-challenge "
+        "round runs per voter per ceremony, so a replacement whose rationale is again off basis leaves the ground "
+        "unresolved and voids the round rather than starting another; a replacement value is valid for "
+        "`profile.tracker.estimate_scale` and present in the item 1 sequence, re-recorded otherwise." in item
     )
     assert (
         "The facilitator records a replacement value in that voter's Step 3 file, so the value recorded there is "
