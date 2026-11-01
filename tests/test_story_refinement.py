@@ -1110,7 +1110,7 @@ def test_invocation_entry_gates_the_owner_follow_up() -> None:
         "before stage 1, check whether the story carries a posted unpointed variance record whose "
         "`owner decision:` line reads `pending`." in body
     )
-    assert "runs only that record's follow-up in Step 4 item 6 and skips Stages 1 and 2" in body
+    assert "runs only that record's follow-up in step 4 item 6 and skips stages 1 and 2" in body
     assert "otherwise it runs the full ceremony" in body
 
 
