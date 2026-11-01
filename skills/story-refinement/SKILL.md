@@ -178,7 +178,8 @@ Only the PO and the two engineers count toward the agreement.
   1. Run the consensus check first, on the three values recorded in Step 3.
      The ordered step sequence is fixed here for each `profile.tracker.estimate_scale` value: `fibonacci` 1, 2, 3, 5, 8, 13; `linear` the ordinal list 1, 2, 3, 5, 8, 13; `exponential` 1, 2, 4, 8, 16; `tshirt` XS, S, M, L, XL in that order.
      The tolerance is one step, and it is fixed in this skill: no profile key and no skill argument sets it.
-     When the three values are identical, or the highest and the lowest are one step apart (5 and 8 on `fibonacci`, for example), record the higher value as the estimate, skip the discussion in item 2 and the re-vote in item 3, and apply the split rule to the recorded value.
+     When the three values are identical, or the highest and the lowest are one step apart (5 and 8 on `fibonacci`, for example), the highest of the three values is the estimate, the discussion in item 2 and the re-vote in item 3 are skipped, and the split rule in item 8 still applies to it.
+     The basis review in item 2 still runs on this branch, and nothing is written to the tracker and no pointing record is posted until it has run.
      When the highest and the lowest are more than one step apart (1 and 5, for example), the discussion in item 2 and the re-vote in item 3 run, naming the high and the low.
      On a `tshirt` scale a pair one step apart records the larger size, with the cap step still stopped under Step 3 item 8.
      Record the outcome in the pointing record as `Consensus check: <identical | one step | more than one step>`, so a skipped discussion and re-vote read as skipped and never as not run.
@@ -202,14 +203,14 @@ Only the PO and the two engineers count toward the agreement.
      When that intersection is empty, apply the residual variance rule in item 5.
   5. Residual variance: when the re-vote leaves no value shared by all three accepted sets, each voter's re-vote value is the highest value in its accepted set.
      A voter that records no consensus in item 3 has no accepted set, so its re-vote value is the value it recorded in its Step 3 file.
-     When those derived per-voter values are identical, or the highest and the lowest of them are one step apart on the sequence in item 1, the same tolerance rule applies to them: record the highest derived value as the estimate, and the split rule still applies to it.
-     For example, accepted sets `{5}`, `{5}` and no consensus from Step 3 values 1, 8 and 5 derive 5, 5 and 5 from an empty intersection, so the ceremony records 5 as the estimate instead of stopping unpointed.
+     When those derived per-voter values are identical, or the highest and the lowest of them are one step apart on the sequence in item 1, the same tolerance rule applies to them: the highest derived value is the estimate, and the split rule in item 8 still applies to it.
+     For example, accepted sets `{5}` and `{5}`, with no consensus from the voter whose Step 3 value was 5, derive 5, 5 and 5 from an empty intersection, so the ceremony records 5 as the estimate instead of stopping unpointed.
      When the highest and the lowest derived values are more than one step apart (1 and 5, for example), the ceremony records the result as unpointed and stops: it posts the three values, the derived values with the gap between the highest and the lowest in scale steps, and the three rationales, and reports `needs input` to the owner naming the story and the derived values.
      That unpointed variance stop is the second `needs input` state of this skill, distinct from the denied-tracker-write `needs input` of Step 1.
      The PO authors the unpointed variance record and applies it, or under the denied tracker writes fallback the facilitator applies the PO-authored record verbatim.
      The owner decides the outcome in a later run, which records it: the product owner does not decide it under the estimator-ownership rule that the people doing the work estimate, and no facilitator and no voter chooses the value or the path.
-  6. Never average and never take a value silently.
-  7. The facilitator records the consensus; it does not declare it.
+  6. Never average and never take a value silently, except the tolerance value the consensus check or the residual variance rule records.
+  7. The facilitator records the estimate or the consensus; it does not declare it.
   8. If the split trigger is met (the recorded estimate above `profile.refinement.point_cap` or at 8 or more), apply the split rule.
      The recorded estimate is the value this step's consensus check or residual variance rule records, or the consensus.
 - **Outputs:** a recorded estimate with the split decision - the value the consensus check records, the consensus, or the highest derived value - or the unpointed variance stop with the three values, the derived values with the gap between the highest and the lowest in scale steps, and the three rationales; and the `Consensus check:` outcome in the pointing record.
@@ -298,7 +299,7 @@ This section applies only when `metrics` is on.
   It posts only after every voter round, including every slice estimate under the Split rule, has finished; the pointing record (a recorded estimate, an unpointed result, or a split decision) and any split comment have been posted and read back; and the invocation's triage writes have been applied and read back.
 - **Stop before a record:** On a stop before a pointing record exists, the comment posts only after every Step 1 voter input is recorded - with the three-voter roster, all three Stage 1 voter inputs - and every launched voter has returned or been stopped, with its end timestamp taken; on that path no pointing record and no triage write is required.
   A stop before every Step 1 voter input is recorded attempts no post, because Step 1 allows no tracker comment before then except the preflight, and the summary stays in the closing message.
-- **Never during an anchoring recovery:** The comment is never posted while an anchoring recovery, its Step 3 re-run and its Step 4 re-vote, is still to run.
+- **Never during an anchoring recovery:** The comment is never posted while an anchoring recovery, its Step 3 re-run, or any Step 4 re-vote that follows them, is still to run.
 - **Resumed run:** A resumed run is a new invocation and posts its own comment covering only that invocation; a resume in the same session after the owner authorizes the denied tracker writes fallback is the same invocation and posts once.
 - **Denied post:** If the post is denied or unavailable, the closing message carries the summary and names the denied or unavailable write, and no other tool or server is tried.
   Where the run stopped on denied tracker writes without the owner's authorization, no post is attempted.

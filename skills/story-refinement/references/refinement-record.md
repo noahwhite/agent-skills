@@ -1,7 +1,7 @@
 # Refinement and pointing records
 
 Hand-written templates for the records the ceremony posts.
-Use the refinement comment to identify the refined story, the Accept round result to record each accept round, and the pointing record to capture the consensus.
+Use the refinement comment to identify the refined story, the Accept round result to record each accept round, and the pointing record to capture the recorded estimate, the consensus or the residual variance outcome.
 Replace every placeholder and keep the raw voter files in the session's scratch directory.
 The record never carries a local path; cite each raw voter file by its base name only.
 Quote or attach any file content a reader needs in the record.

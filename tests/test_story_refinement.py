@@ -270,9 +270,9 @@ def test_step_four_residual_variance_derives_one_value_per_voter() -> None:
 def test_step_four_empty_intersection_identical_derived_values_apply_the_tolerance_rule() -> None:
     item = process_items(STEP_FOUR)[4]
     assert (
-        "For example, accepted sets `{5}`, `{5}` and no consensus from Step 3 values 1, 8 and 5 derive 5, 5 "
-        "and 5 from an empty intersection, so the ceremony records 5 as the estimate instead of stopping "
-        "unpointed." in item
+        "For example, accepted sets `{5}` and `{5}`, with no consensus from the voter whose Step 3 value was "
+        "5, derive 5, 5 and 5 from an empty intersection, so the ceremony records 5 as the estimate instead "
+        "of stopping unpointed." in item
     )
     assert "the intersection of the vote that stands is empty" not in item
 
@@ -281,15 +281,16 @@ def test_step_four_residual_variance_one_step_apart_records_the_higher_value() -
     item = process_items(STEP_FOUR)[4]
     assert (
         "When those derived per-voter values are identical, or the highest and the lowest of them are one step "
-        "apart on the sequence in item 1, the same tolerance rule applies to them: record the highest derived "
-        "value as the estimate" in item
+        "apart on the sequence in item 1, the same tolerance rule applies to them: the highest derived value "
+        "is the estimate" in item
     )
-    assert item.count("one step apart") == 2, "both the identical and the one-step branch are named once each"
+    assert item.count("the highest and the lowest of them are one step apart") == 1, "the one-step branch is named once"
+    assert "When those derived per-voter values are identical" in item, "the identical branch is named"
 
 
 def test_step_four_residual_variance_pick_applies_the_split_rule() -> None:
     item = process_items(STEP_FOUR)[4]
-    assert "record the highest derived value as the estimate, and the split rule still applies to it" in item
+    assert "the highest derived value is the estimate, and the split rule in item 8 still applies to it" in item
 
 
 def test_step_four_residual_variance_more_than_one_step_apart_stops_unpointed() -> None:
@@ -867,8 +868,8 @@ STEP_FOUR_ITEM_PREFIXES = [
     "Run one re-vote.",
     "Consensus is the highest value in the intersection of the three accepted sets.",
     "Residual variance: when the re-vote leaves no value shared by all three accepted sets,",
-    "Never average and never take a value silently.",
-    "The facilitator records the consensus; it does not declare it.",
+    "Never average and never take a value silently, except the tolerance value the consensus check or the residual variance rule records.",
+    "The facilitator records the estimate or the consensus; it does not declare it.",
     "If the split trigger is met",
 ]
 
@@ -881,8 +882,10 @@ ESTIMATE_SEQUENCES = (
 )
 CONSENSUS_CHECK_BRANCHES = (
     "When the three values are identical, or the highest and the lowest are one step apart (5 and 8 on "
-    "`fibonacci`, for example), record the higher value as the estimate, skip the discussion in item 2 and "
-    "the re-vote in item 3, and apply the split rule to the recorded value. "
+    "`fibonacci`, for example), the highest of the three values is the estimate, the discussion in item 2 and "
+    "the re-vote in item 3 are skipped, and the split rule in item 8 still applies to it. "
+    "The basis review in item 2 still runs on this branch, and nothing is written to the tracker and no "
+    "pointing record is posted until it has run. "
     "When the highest and the lowest are more than one step apart (1 and 5, for example), the discussion in "
     "item 2 and the re-vote in item 3 run, naming the high and the low."
 )
@@ -905,17 +908,27 @@ def test_step_four_identical_values_record_the_higher_value_and_skip() -> None:
     ), "an unconditional discussion would make an identical round run one"
 
 
+def test_step_four_fixes_a_sequence_for_every_estimate_scale() -> None:
+    item = process_items(STEP_FOUR)[0]
+    scales = SCHEMA["properties"]["tracker"]["properties"]["estimate_scale"]["enum"]
+    assert scales == ["fibonacci", "linear", "exponential", "tshirt"]
+    for scale in scales:
+        assert f"`{scale}`" in item, f"no fixed step sequence for the {scale} scale"
+
+
 def test_step_four_one_step_apart_records_the_higher_value_and_skips() -> None:
     item = process_items(STEP_FOUR)[0]
     assert "`fibonacci` 1, 2, 3, 5, 8, 13" in item
     assert (
-        "the highest and the lowest are one step apart (5 and 8 on `fibonacci`, for example), record the "
-        "higher value as the estimate, skip the discussion in item 2 and the re-vote in item 3" in item
+        "the highest and the lowest are one step apart (5 and 8 on `fibonacci`, for example), the highest of "
+        "the three values is the estimate, the discussion in item 2 and the re-vote in item 3 are skipped" in item
     )
     assert (
         "On a `tshirt` scale a pair one step apart records the larger size, with the cap step still stopped "
         "under Step 3 item 8." in item
     )
+    cap = process_items(STEP_THREE)[7]
+    assert cap.startswith("A `tshirt` scale stops the cap step with a clear message."), "Step 3 item 8 moved"
 
 
 def test_step_four_more_than_one_step_apart_runs_the_discussion() -> None:
@@ -923,7 +936,7 @@ def test_step_four_more_than_one_step_apart_runs_the_discussion() -> None:
     run_clause = "the discussion in item 2 and the re-vote in item 3 run, naming the high and the low."
     assert "(1 and 5, for example), " + run_clause in item
     assert item.count(run_clause) == 1, "the discussion must run on the wide branch only"
-    assert "record the higher value as the estimate" in item
+    assert "is the estimate" in item
 
 
 SKL13_VALUES = (8, 8, 8)
@@ -944,20 +957,21 @@ def test_step_four_identical_values_skip_still_challenges_every_off_basis_ground
     check = process_items(STEP_FOUR)[0]
     assert len(set(SKL13_VALUES)) == 1, "the SKL-13 fixture is three identical values"
     assert "When the three values are identical, or the highest and the lowest are one step apart" in check
-    assert "skip the discussion in item 2 and the re-vote in item 3" in check
+    assert "the discussion in item 2 and the re-vote in item 3 are skipped" in check
     assert SKIP_BRANCH_REVIEW in discussion
     assert SKIP_BRANCH_CHALLENGE in discussion
     assert "A challenged ground must be restated as a basis driver or retracted" in discussion
     assert "no estimate and no split action survives an unresolved challenge" in discussion
     split_rule = flat(section(SKILL.read_text(), "Split rule"))
     assert "or is 8 or more" in split_rule
-    assert max(SKL13_VALUES) >= 8, "SKL-13's recorded 8 still meets the split trigger"
+    estimate = max(SKL13_VALUES)
+    assert estimate >= 8, "SKL-13's recorded 8 reaches the skill's 8-or-more split trigger"
 
 
 def test_step_four_one_step_skip_still_challenges_every_off_basis_ground() -> None:
     discussion = process_items(STEP_FOUR)[1]
     check = process_items(STEP_FOUR)[0]
-    assert "the highest and the lowest are one step apart (5 and 8 on `fibonacci`, for example), record the higher value as the estimate, skip the discussion" in check
+    assert "the highest and the lowest are one step apart (5 and 8 on `fibonacci`, for example), the highest of the three values is the estimate, the discussion in item 2 and the re-vote in item 3 are skipped" in check
     assert SKIP_BRANCH_REVIEW in discussion
     assert SKIP_BRANCH_CHALLENGE in discussion
     assert "no estimate and no split action survives an unresolved challenge" in discussion
@@ -1635,8 +1649,8 @@ def test_metrics_section_attempts_no_post_before_the_step_one_inputs() -> None:
 
 def test_metrics_section_never_posts_during_an_anchoring_recovery() -> None:
     assert (
-        "The comment is never posted while an anchoring recovery, its Step 3 re-run and its Step 4 re-vote, "
-        "is still to run." in metrics_body()
+        "The comment is never posted while an anchoring recovery, its Step 3 re-run, or any Step 4 re-vote "
+        "that follows them, is still to run." in metrics_body()
     )
 
 
