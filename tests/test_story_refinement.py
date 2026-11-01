@@ -330,7 +330,8 @@ def test_step_four_residual_variance_more_than_one_step_apart_stops_unpointed() 
     )
     assert (
         "The owner decides that outcome in a later run: a new invocation of this ceremony on the same story "
-        "reads the posted unpointed variance record, edits that record to add the `Owner decision:` line, reads the "
+        "reads the posted unpointed variance record, which may name the story or one of its slices, edits that "
+        "record to add the `Owner decision:` line, reads the "
         "edit back, validates the owner's decision against "
         "`profile.tracker.estimate_scale` and the item 1 sequence, applies the split rule to it, records it as "
         "the estimate, and adds the pointing record's `- Owner decision:` line, and it does not re-point before "
@@ -345,8 +346,8 @@ def test_step_four_residual_variance_more_than_one_step_apart_stops_unpointed() 
 def test_step_four_names_the_unpointed_variance_stop_apart_from_the_denied_write() -> None:
     item = process_items(STEP_FOUR)[5]
     assert (
-        "That unpointed variance stop is the second `needs input` state of this skill, distinct from the "
-        "denied-tracker-write `needs input` of Step 1." in item
+        "That unpointed variance stop is a `needs input` state of this skill, distinct from the `needs input` a "
+        "denied tracker write produces." in item
     )
     closing = flat(section(SKILL.read_text(), "Closing message"))
     assert "including each `needs input`" in closing
@@ -1031,12 +1032,13 @@ SKIP_BRANCH_REVIEW = (
 )
 SKIP_BRANCH_CHALLENGE = (
     "When the consensus check skips the discussion and the re-vote, this review runs as a basis-challenge round "
-    "of its own: the facilitator launches each challenged voter once in a newly created voter context whose "
-    "prompt lists every ground challenged for that voter and carries the story, the refinement comment id, that "
-    "voter's own recorded value and rationale, the Step 3 pointing basis and the Step 3 item 4 rationale rule; "
-    "that launch records a replacement value for that voter only when the voter's basis does not support its "
-    "recorded value, and otherwise the value that stands holds; an unresolved ground voids the round under the "
-    "Anchoring guardrail, so no estimate and no split action survives an unresolved challenge."
+    "of its own: the facilitator launches each challenged voter once per round in a newly created voter context "
+    "whose prompt lists every ground challenged for that voter and carries the story, the refinement comment id, "
+    "that voter's own recorded value and rationale, the Step 3 pointing basis and the Step 3 item 4 rationale "
+    "rule; an off-sequence replacement value is re-recorded in a second launch of that voter. That launch records "
+    "a replacement value for that voter only when the voter's basis does not support its recorded value, and "
+    "otherwise the value that stands holds. An unresolved ground voids the round under the Anchoring guardrail, "
+    "so no estimate and no split action survives an unresolved challenge."
 )
 
 
@@ -1049,6 +1051,10 @@ def test_step_four_identical_values_skip_still_challenges_every_off_basis_ground
     assert SKIP_BRANCH_REVIEW in review
     assert SKIP_BRANCH_CHALLENGE in review
     assert "A challenged ground must be restated as a basis driver or retracted" in review
+    assert (
+        "The basis-challenge round applies this same review to every rationale its launches record: an off-basis "
+        "replacement rationale is restated or retracted, and an unresolved one voids the round." in review
+    )
     assert "no estimate and no split action survives an unresolved challenge" in review
     # The fixture: three identical 8s (SKL-13) with one off-basis rationale.
     assert len(set(SKL13_VALUES)) == 1, "the fixture is three identical values"
@@ -1062,7 +1068,7 @@ def test_step_four_identical_values_skip_still_challenges_every_off_basis_ground
     assert "outside the pointing basis" in review
     assert "recorded rationale" in review
     assert "retracts an unsupported ground and records a replacement value" in review
-    assert "an unresolved ground voids the round under the Anchoring guardrail" in review
+    assert "An unresolved ground voids the round under the Anchoring guardrail" in review
     assert "no estimate and no split action survives an unresolved challenge" in review
     assert "before the estimate is written to the tracker" in review
     # And the recorded value still meets the skill's own split trigger.
@@ -1147,8 +1153,8 @@ def test_step_four_facilitator_challenges_every_off_basis_ground() -> None:
         "is valid for `profile.tracker.estimate_scale` and present in the item 1 sequence, re-recorded otherwise." in item
     )
     assert (
-        "A replacement value supersedes the value that stands for that voter, and the consensus check in item 1 "
-        "then re-runs on the three standing values" in item
+        "The facilitator records a replacement value in that voter's Step 3 file, so the value recorded there is "
+        "the value that stands, and the consensus check in item 1 then re-runs on the three standing values" in item
     )
     assert (
         "The re-run's outcome supersedes the `Consensus check:` outcome in the pointing record, and when it is "
