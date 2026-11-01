@@ -177,5 +177,7 @@ Report the story identifier, its final state, the four resolved model and effort
 
 - You resolve the arguments, spawn the two roles, relay QA's failed items, and confirm every state; the senior engineer implements and the QA agent verifies, each through its own skill.
 - Only a QA agent's closing decision moves the story to Done; never mark it done yourself, and never on merge alone.
+- The coordinator never merges a PR, including the evidence PR; never ticks an AC or DoD box; never moves the story state; never decides a QA verdict; and never bypasses a review gate.
 - With `metrics` on, the coordinator's single permitted tracker write is the summary comment, which it reads back and repeats in the closing report; with `metrics` off it makes no tracker write.
+- A continuation grants no new authority: it leaves that prohibition, and the single permitted tracker write above, exactly as they are.
 - The review of record and QA's own gates run in full inside each role's skill; this loop never shortens them.

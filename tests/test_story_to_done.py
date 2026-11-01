@@ -347,6 +347,45 @@ def test_only_qa_moves_the_story_to_done() -> None:
     assert "never mark it done yourself, and never on merge alone" in body
 
 
+# SKL-159: continuation grants no new authority, so the prohibition is pinned in Boundaries,
+# outside the step sections the state scan reads.
+BOUNDARIES_NO_NEW_AUTHORITY = (
+    "The coordinator never merges a PR, including the evidence PR; never ticks an AC or DoD box; never moves "
+    "the story state; never decides a QA verdict; and never bypasses a review gate."
+)
+BOUNDARIES_CONTINUATION_AUTHORITY = (
+    "A continuation grants no new authority: it leaves that prohibition, and the single permitted tracker "
+    "write above, exactly as they are."
+)
+STEP_SECTIONS = (
+    "0. Track everything on a todo list",
+    "1. Read the story and pick the starting point",
+    "2. Senior engineer: implement to deployment review",
+    "3. QA agent: verify the deployed story",
+    "4. Act on the QA outcome",
+    "5. Close out",
+)
+
+
+def test_boundaries_pin_the_prohibition_and_that_continuation_grants_no_authority() -> None:
+    text = SKILL.read_text()
+    body = " ".join(section(text, "Boundaries").split())
+    assert BOUNDARIES_NO_NEW_AUTHORITY in body, "Boundaries must pin the merge, tick, state, verdict and gate prohibition"
+    assert BOUNDARIES_CONTINUATION_AUTHORITY in body, "Boundaries must say a continuation grants no new authority"
+    for heading in STEP_SECTIONS:
+        assert BOUNDARIES_NO_NEW_AUTHORITY not in " ".join(section(text, heading).split()), (
+            f"the prohibition is pinned in Boundaries, not in {heading}"
+        )
+
+
+def test_the_continuation_leaves_the_metrics_summary_permission_unchanged() -> None:
+    body = " ".join(section(SKILL.read_text(), "Boundaries").split())
+    assert BOUNDARIES_ONLY_WRITE in body
+    assert in_order(body, BOUNDARIES_ONLY_WRITE, BOUNDARIES_CONTINUATION_AUTHORITY), (
+        "the no-new-authority sentence must leave the single permitted tracker write as it stands"
+    )
+
+
 def test_runtimes_maps_reasoning_effort() -> None:
     text = (ROOT / "shared" / "runtimes.md").read_text()
     assert "| Choose a subagent's reasoning effort | `effort` parameter" in text
@@ -757,6 +796,9 @@ METRICS_LINES = [
     "`metrics: on|off` line, each PR, the number of QA rounds with the items fixed in each, where QA recorded "
     "its evidence, and any incidental defects left open.",
     BOUNDARIES_ONLY_WRITE,
+    # SKL-159: the Boundaries sentence that leaves the permitted tracker write unchanged.
+    "- A continuation grants no new authority: it leaves that prohibition, and the single permitted tracker "
+    "write above, exactly as they are.",
 ]
 
 PROTOCOL_LINES = [
