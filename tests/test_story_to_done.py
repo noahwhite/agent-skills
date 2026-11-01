@@ -616,14 +616,16 @@ METRICS_TIMED_LAUNCHES = (
 )
 METRICS_LAUNCH_POINTS = (
     "The senior engineer's timed launches are the first launch in step 2 and each resume or re-spawn in "
-    "step 4, and each QA round is one launch in step 3."
+    "step 4; each QA round is a launch row in step 3, and a continuation of that round under step 4 is a "
+    "further launch row within the same round."
 )
 METRICS_EXTRAS = (
     "- **Extras:** take each `story-to-done` extra at the step that observes it: **Start** from the step 1 "
     "state read and whether step 2 ran; **PRs merged** from every step 2, step 3, and step 4 read of a "
     "merged PR's head and merge commit; **Time to deployment review** from the recorded invocation start "
-    "to the read-back that confirms the deployment-review state; **QA rounds** at each spawn in step 3, "
-    "each with its **duration** copied from that round's launch row; **Failed items** from the step 4 "
+    "to the read-back that confirms the deployment-review state; **QA rounds** at the spawn of each new "
+    "round in step 3; each round's **QA round durations** entry as the sum of that round's launch rows' "
+    "recorded durations, each row's figure taken as returned; **Failed items** from the step 4 "
     "read of "
     "each QA round's outcome, in round order; **Fix rounds** from the step 4 branch that hands the failed "
     "items back; and **End state** immediately before the end form, once the run's end state or stop reason is known."
@@ -964,6 +966,31 @@ def test_engineer_and_qa_launches_are_timed_and_recorded_as_one_row_each() -> No
 
 def test_each_story_to_done_extra_is_taken_at_the_step_that_observes_it() -> None:
     assert METRICS_EXTRAS in metrics_body(), "an extra's collection point is missing"
+
+
+# SKL-159: a round may hold more than one launch row, so the launch points and the
+# qa-round-durations derivation both have to name the continuation.
+OLD_LAUNCH_POINTS = "each QA round is one launch in step 3"
+OLD_QA_ROUND_DURATIONS = (
+    "QA rounds** at each spawn in step 3, each with its **duration** copied from that round's launch row"
+)
+
+
+def test_the_metrics_launch_points_cover_a_same_round_continuation() -> None:
+    body = metrics_body()
+    assert METRICS_LAUNCH_POINTS in body, "which launches are rows is not stated"
+    assert OLD_LAUNCH_POINTS not in body, "the one-launch-per-round sentence is replaced, not kept beside it"
+    assert (
+        "a continuation of that round under step 4 is a further launch row within the same round" in body
+    ), "a continuation must be stated as its own launch row inside the same round"
+
+
+def test_the_qa_round_durations_extra_derives_a_multi_row_round_from_its_rows() -> None:
+    body = metrics_body()
+    assert OLD_QA_ROUND_DURATIONS not in body, "the one-row duration sentence is replaced, not kept beside it"
+    assert (
+        "the sum of that round's launch rows' recorded durations, each row's figure taken as returned" in body
+    ), "a round holding more than one launch row must derive its duration as the sum of its rows"
 
 
 def test_the_metrics_file_lives_in_the_session_scratch_directory_outside_every_role_subdirectory() -> None:
