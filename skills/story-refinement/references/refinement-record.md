@@ -74,15 +74,15 @@ A sizing comment that names a point value before the reveal, prescribes this sto
   - Engineer two: <value, or not recorded> - <short complexity rationale, or none when the value is not recorded>
 - Consensus check: <identical | one step | more than one step>
 - SM/EM sizing context, after all three values: <file base name> or verbatim, eliding a pre-reveal value or a prescription, or none
-- Discussion: <high <value>, low <value>, or none; the shared content names only the high and the low, while a voter's own recorded value and rationale are carried privately in that voter's prompt>
-- Re-vote: <accepted set per voter, with complexity rationale, or none>
+- Discussion: <high <value>, low <value>; or none when the discussion ran and recorded nothing; or skipped, when the consensus check recorded the estimate; the shared content names only the high and the low, while a voter's own recorded value and rationale are carried privately in that voter's prompt>
+- Re-vote: <accepted set per voter, with complexity rationale; or none when it ran and recorded nothing; or skipped, when the consensus check recorded the estimate>
 - Consensus: <the highest value in the intersection of the vote that stands, or n/a when the consensus check or the residual variance rule recorded the estimate, or none when the round stopped unpointed>
-- Residual variance: <each voter's derived value, the gap between the highest and the lowest in scale steps, the rule applied and the resulting value, or the unpointed variance stop; n/a only when all three voters recorded an accepted set and the intersection is not empty, or when the consensus check recorded the estimate>
+- Residual variance: <each voter's derived value, the gap between the highest and the lowest in scale steps, the rule applied and the resulting value, or the unpointed variance stop; n/a only when all three voters recorded an accepted set and the intersection is not empty, or when the consensus check, or the re-run of it that supersedes that outcome, recorded the estimate>
 - Recorded estimate: <the value recorded, or unpointed with the gap between the highest and the lowest in scale steps when the round stopped there>
 - Effective maximum: <profile.refinement.point_cap; the 8-point rule still triggers at 8 or more; n/a on a `tshirt` scale, where a size is never compared>
 - Split: <none, or the slice mapping and sibling issue keys>
 - Challenges: <none, or each ground challenged by kind, its author (a voter, or the SM/EM for a sizing comment), the restatement, withdrawal or retraction, and any replacement value it produced, or the void; elide a pre-reveal value or a prescription>
-- Owner decision: <n/a when the round did not stop unpointed, otherwise the value the owner decided and the basis, or unpointed with the owner's reason>
+- Owner decision: <n/a when the round did not stop unpointed, otherwise pending owner decision in a later run until the later run edits this line, then the value the owner decided and the basis, or unpointed with the owner's reason>
 - Superseded values after a void: <none, or the voided values, the voided estimate, the voided `Consensus check:` outcome, the voided consensus, the voided derived values and their outcome, and the blind vote that replaced them>
 - Anchoring events: <none, or the comment and the recovery, including the newly created voter contexts, with the verbatim comment in the raw session record and its base name cited here>
 - Tracker writes: product owner

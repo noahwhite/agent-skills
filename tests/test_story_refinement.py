@@ -329,9 +329,10 @@ def test_step_four_residual_variance_more_than_one_step_apart_stops_unpointed() 
         "`needs input` to the owner naming the story and the derived values." in item
     )
     assert (
-        "The owner decides that outcome in a later run, which records it: the run takes the owner's decision, "
-        "applies the split rule to a recorded numeric value, records it as the estimate, and records the decision "
-        "and its reason as the `Owner decision:` line on the posted pointing record." in item
+        "The owner decides that outcome in a later run, which records it by editing the posted pointing record's "
+        "`Owner decision:` line, which the posting run leaves as `pending owner decision in a later run`: a numeric "
+        "decision is recorded as the estimate and the split rule applies to it, and a decision to leave the story "
+        "unpointed is recorded with the owner's reason and records no estimate." in item
     )
     assert (
         "The product owner does not decide that outcome, and no facilitator and no voter chooses the value or the "
@@ -409,8 +410,8 @@ def test_pointing_template_records_the_residual_variance() -> None:
     assert (
         "- Residual variance: <each voter's derived value, the gap between the highest and the lowest in scale "
         "steps, the rule applied and the resulting value, or the unpointed variance stop; n/a only when all three "
-        "voters recorded an accepted set and the intersection is not empty, or when the consensus check recorded "
-        "the estimate>" in lines
+        "voters recorded an accepted set and the intersection is not empty, or when the consensus check, or the "
+        "re-run of it that supersedes that outcome, recorded the estimate>" in lines
     )
     for removed in ("- No-consensus decision:", "- Paths accepted:", "- Decision rationale:"):
         assert not any(line.startswith(removed) for line in lines), f"removed line survived: {removed}"
@@ -888,8 +889,9 @@ def test_step_four_re_vote_prompt_carries_the_rationale_rule() -> None:
 
 def test_pointing_template_notes_the_private_self_context_rule() -> None:
     assert (
-        "- Discussion: <high <value>, low <value>, or none; the shared content names only the high and the low, "
-        "while a voter's own recorded value and rationale are carried privately in that voter's prompt>"
+        "- Discussion: <high <value>, low <value>; or none when the discussion ran and recorded nothing; or "
+        "skipped, when the consensus check recorded the estimate; the shared content names only the high and the "
+        "low, while a voter's own recorded value and rationale are carried privately in that voter's prompt>"
         in pointing_template()
     )
 
@@ -1173,7 +1175,8 @@ def test_step_four_facilitator_challenges_every_off_basis_ground() -> None:
     assert (
         "A voter whose basis does not support its recorded value retracts an unsupported ground and records a "
         "replacement value with a basis-driver rationale under the Step 3 item 4 rationale rule, in the re-vote or, "
-        "when the consensus check skips the re-vote, in the basis-challenge round of this item; one basis-challenge "
+        "when the consensus check skips the re-vote, in the basis-challenge round of this item, and the facilitator "
+        "records it in that voter's Step 3 file on either path; one basis-challenge "
         "round runs per voter per ceremony, so a replacement whose rationale is again off basis leaves the ground "
         "unresolved and voids the round rather than starting another; a replacement value is valid for "
         "`profile.tracker.estimate_scale` and present in the item 1 sequence, re-recorded otherwise." in item
@@ -1462,7 +1465,8 @@ def test_pointing_template_asks_for_complexity_rationales() -> None:
         "  - Engineer two: <value, or not recorded> - <short complexity rationale, or none when the value is not recorded>",
     ]
     assert [line for line in lines if line.startswith("- Re-vote:")] == [
-        "- Re-vote: <accepted set per voter, with complexity rationale, or none>"
+        "- Re-vote: <accepted set per voter, with complexity rationale; or none when it ran and recorded nothing; "
+        "or skipped, when the consensus check recorded the estimate>"
     ]
     assert not any("<short rationale>" in line for line in lines)
 
