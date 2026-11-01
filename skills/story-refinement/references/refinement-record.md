@@ -60,7 +60,7 @@ Never edit the refinement comment to add the result; its id keeps identifying on
 Post this once Step 4 has recorded the estimate, or record it as an unpointed result; the basis review in Step 4 item 2 always runs before it is posted.
 The three values are recorded before any SM/EM sizing comment or discussion; a void before all three exist leaves the values block at the values recorded so far and carries no superseded values, and once the blind re-run finishes the values block carries the three standing values while the superseded line carries the voided ones.
 Outside the recorded numeric values and the superseded-values line, no line of the posted record carries a point value named before the reveal or a prescription of this story's value: the Challenges and Anchoring events lines record a ground by its kind, its author (a voter, or the SM/EM for a sizing comment) and its outcome or recovery, and every field that could quote a participant elides those two classes permanently, because the posted record stays on the story surface that later voters read; the verbatim quote lives in the session's raw record, cited by its base name.
-A sizing comment that names a point value before the reveal, prescribes this story's value, or states elapsed time, effort or run cost voids the round under the Anchoring guardrail recovery as soon as the facilitator sees it, as does any ground that is neither restated nor retracted, and the void records the voided consensus under Superseded values after a void, so the Consensus field carries the vote that stands, or n/a when the consensus check or the residual variance rule recorded the estimate.
+A sizing comment that names a point value before the reveal, prescribes this story's value, or states elapsed time, effort or run cost voids the round under the Anchoring guardrail recovery as soon as the facilitator sees it, as does any ground that is neither restated, retracted nor answered by a supported value, and the void records the voided consensus under Superseded values after a void, so the Consensus field carries the vote that stands, or n/a when the consensus check or the residual variance rule recorded the estimate.
 
 ```markdown
 ## Pointing record
@@ -77,11 +77,11 @@ A sizing comment that names a point value before the reveal, prescribes this sto
 - Discussion: <high <value>, low <value>, or none; the shared content names only the high and the low, while a voter's own recorded value and rationale are carried privately in that voter's prompt>
 - Re-vote: <accepted set per voter, with complexity rationale, or none>
 - Consensus: <the highest value in the intersection of the vote that stands, or n/a when the consensus check or the residual variance rule recorded the estimate, or none when the round stopped unpointed>
-- Residual variance: <each voter's derived value, the gap between the highest and the lowest in scale steps, the rule applied and the resulting value, or the unpointed variance stop; n/a when the intersection is not empty or the consensus check recorded the estimate>
+- Residual variance: <each voter's derived value, the gap between the highest and the lowest in scale steps, the rule applied and the resulting value, or the unpointed variance stop; n/a only when all three voters recorded an accepted set and the intersection is not empty, or when the consensus check recorded the estimate>
 - Recorded estimate: <the value recorded, or unpointed with the gap between the highest and the lowest in scale steps when the round stopped there>
-- Effective maximum: <profile.refinement.point_cap; the 8-point rule still triggers at 8 or more>
+- Effective maximum: <profile.refinement.point_cap; the 8-point rule still triggers at 8 or more; n/a on a `tshirt` scale, where a size is never compared>
 - Split: <none, or the slice mapping and sibling issue keys>
-- Challenges: <none, or each ground challenged by kind, its author (a voter, or the SM/EM for a sizing comment), the restatement, withdrawal or retraction, or the void; elide a pre-reveal value or a prescription>
+- Challenges: <none, or each ground challenged by kind, its author (a voter, or the SM/EM for a sizing comment), the restatement, withdrawal, retraction, replacement value or the void; elide a pre-reveal value or a prescription>
 - Superseded values after a void: <none, or the voided values, the voided consensus and the blind vote that replaced them>
 - Anchoring events: <none, or the comment and the recovery, including the newly created voter contexts, with the verbatim comment in the raw session record and its base name cited here>
 - Tracker writes: product owner

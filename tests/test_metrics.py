@@ -156,8 +156,9 @@ FIGURE_RULES = [
 REFINEMENT_EXTRAS = [
     pytest.param("- **Accept rounds:** the number of accept rounds run.", id="accept-rounds"),
     pytest.param(
-        "- **Pointing rounds:** one per blind value collection: Step 3, each split slice estimate "
-        "under the Split rule, and each anchoring recovery re-run.",
+        "- **Pointing rounds:** one per blind value collection: Step 3, each Step 4 basis-challenge round that "
+        "records a replacement value, each split slice estimate under the Split rule, and each anchoring recovery "
+        "re-run.",
         id="pointing-rounds",
     ),
     pytest.param(
