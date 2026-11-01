@@ -13,14 +13,17 @@ baseline:
   commit: 7a6cb17
   note: the skill as committed on origin/main before this change; the baseline stops instead of continuing.
 candidate:
-  note: the head of the branch that carries this case; the candidate continues the round it is in.
+  commit: cb9d9de
+  note: >-
+    the branch commit that carries the skill change and this case; the candidate continues the
+    round it is in. The results file named for that commit is the run it records.
 runtime:
   command: opencode run --model deepseek/deepseek-v4-pro
   model: deepseek/deepseek-v4-pro
   reasoning_effort: default
   record: >-
-    Both recorded runs used this one configuration and no other. A rerun with a different
-    model records its own result and names the model it used.
+    Every recorded scenario used this one configuration. A rerun with a different model records
+    its own result file and names the model it used.
 scenarios:
   - name: own-steps
     expectation: own-steps
@@ -41,4 +44,6 @@ graded_on:
   - tool-call evidence, meaning the action, session and message file of every qa-runtime call
 not_graded_on:
   - the agent's prose
-  - the wording of the continuation message beyond the named scratch subdirectory and the terms it may not carry
+  - >-
+    the positive wording of the continuation message: the case grades the scratch subdirectory it names
+    and the terms it may not carry, not how it says the round is unfinished

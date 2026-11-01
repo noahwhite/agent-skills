@@ -39,6 +39,21 @@ Each run prints its assertions and ends in `PASS` or `FAIL`; the same output is 
 run directory as `grader-output.txt`, with the agent's own output beside it as
 `agent-output.txt` and the call record as `actions.jsonl`.
 
+## Configuration
+
+- `EVAL_AGENT_CMD` replaces the recorded agent command. It is split on whitespace, so it carries
+  no quoted argument; a model variant or a path with a space needs a wrapper script instead.
+- `EVAL_TIMEOUT` bounds the agent command in seconds, 900 by default.
+- Each run needs its own empty run directory.
+
+## Exit codes
+
+- `0` the run was graded and passed.
+- `1` the run was graded and failed.
+- `2` the run is void and nothing was graded: bad arguments, a run directory already in use, an
+  agent command that failed or hit `EVAL_TIMEOUT`, or a checkout the agent changed. A void run is
+  never recorded as a result.
+
 ## Recording a result
 
 Record one file per version under `results/`, named `<version>-<ref>.md`, with the
