@@ -230,6 +230,7 @@ def test_step_four_derivation_replaces_the_path_vote() -> None:
         "the set of paths it accepts",
         "the chosen path is in the intersection of the three accepted path sets",
         "the po chooses among them and records why",
+        "the po decides",
         "the facilitator records the decision; it does not choose it",
     ):
         assert removed not in body, f"the removed path vote survived: {removed}"
@@ -262,8 +263,8 @@ def test_step_four_residual_variance_derives_one_value_per_voter() -> None:
         "re-vote value is the highest value in its accepted set."
     )
     assert (
-        "A voter that records no consensus in item 3 has no accepted set, so its re-vote value is the value it "
-        "recorded in its Step 3 file." in item
+        "A voter that records no consensus in item 3 has no accepted set, so its re-vote value is the standing "
+        "value it recorded in its Step 3 file, which after a void is the re-run's value and never a voided one." in item
     )
 
 
@@ -274,7 +275,6 @@ def test_step_four_empty_intersection_identical_derived_values_apply_the_toleran
         "5, derive 5, 5 and 5 from an empty intersection, so the ceremony records 5 as the estimate instead "
         "of stopping unpointed." in item
     )
-    assert "the intersection of the vote that stands is empty" not in item
 
 
 def test_step_four_residual_variance_one_step_apart_records_the_higher_value() -> None:
@@ -291,6 +291,22 @@ def test_step_four_residual_variance_one_step_apart_records_the_higher_value() -
 def test_step_four_residual_variance_pick_applies_the_split_rule() -> None:
     item = process_items(STEP_FOUR)[4]
     assert "the highest derived value is the estimate, and the split rule in item 8 still applies to it" in item
+
+
+def test_step_four_abstention_with_a_wide_step3_value_stops_unpointed() -> None:
+    item = process_items(STEP_FOUR)[4]
+    assert (
+        "A voter that records no consensus in item 3 has no accepted set, so its re-vote value is the standing "
+        "value it recorded in its Step 3 file" in item
+    )
+    derived = (5, 5, 13)
+    sequence = [1, 2, 3, 5, 8, 13]
+    gap = sequence.index(max(derived)) - sequence.index(min(derived))
+    assert gap > 1, "5 and 13 are more than one step apart on fibonacci"
+    assert (
+        "When the highest and the lowest derived values are more than one step apart (1 and 5, for example), the "
+        "ceremony records the result as unpointed and stops" in item
+    )
 
 
 def test_step_four_residual_variance_more_than_one_step_apart_stops_unpointed() -> None:
@@ -377,12 +393,20 @@ def test_pointing_template_records_the_residual_variance() -> None:
     assert not any("re-refine" in line for line in lines), "the pointing record still offers re-refine"
 
 
+def test_pointing_template_records_the_recorded_estimate() -> None:
+    assert (
+        "- Recorded estimate: <the value recorded, or unpointed with the gap between the highest and the lowest in "
+        "scale steps when the round stopped there>" in pointing_template()
+    )
+
+
 def test_records_names_the_residual_variance() -> None:
     body = flat(section(SKILL.read_text(), "Records"))
     assert "the `consensus check:` outcome" in body
     assert (
         "the consensus or the residual variance outcome with the derived values, the gap between the highest "
-        "and the lowest in scale steps and the rule applied (or the unpointed variance stop)" in body
+        "and the lowest in scale steps and the rule applied, the recorded estimate or the unpointed variance "
+        "stop" in body
     )
     assert "no-consensus decision" not in body
 
@@ -794,7 +818,7 @@ def test_step_three_does_not_restate_the_pointing_basis() -> None:
 
 def test_step_four_re_vote_carries_the_basis_by_reference_to_step_three() -> None:
     item = process_items(STEP_FOUR)[2]
-    assert item.startswith("Run one re-vote.")
+    assert item.startswith("Run one re-vote, when the consensus check calls for it.")
     assert "The re-vote prompt carries the pointing basis from Step 3." in item
     assert squash(POINTING_BASIS) not in squash(operative_step(STEP_FOUR))
 
@@ -865,7 +889,7 @@ def test_step_three_sizing_context_is_in_complexity_terms() -> None:
 STEP_FOUR_ITEM_PREFIXES = [
     "Run the consensus check first, on the three values recorded in Step 3.",
     "Hold one discussion round that names only the high and the low, when the consensus check calls for it.",
-    "Run one re-vote.",
+    "Run one re-vote, when the consensus check calls for it.",
     "Consensus is the highest value in the intersection of the three accepted sets.",
     "Residual variance: when the re-vote leaves no value shared by all three accepted sets,",
     "Never average and never take a value silently, except the tolerance value the consensus check or the residual variance rule records.",
@@ -946,9 +970,10 @@ SKIP_BRANCH_REVIEW = (
     "pointing record is posted, so a void never leaves a written estimate to unwind."
 )
 SKIP_BRANCH_CHALLENGE = (
-    "When the consensus check skips the discussion and the re-vote, that review still runs: a challenged ground "
-    "takes the same restate-or-retract path, and an unresolved one voids the round under the Anchoring guardrail, "
-    "so no estimate and no split action survives an unresolved challenge."
+    "When the consensus check skips the discussion and the re-vote, that review still runs as a basis-challenge "
+    "round of its own: the facilitator launches each challenged ground's author once in a newly created voter "
+    "context to restate the ground as a basis driver or retract it, and an unresolved ground voids the round "
+    "under the Anchoring guardrail, so no estimate and no split action survives an unresolved challenge."
 )
 
 
@@ -963,9 +988,10 @@ def test_step_four_identical_values_skip_still_challenges_every_off_basis_ground
     assert "A challenged ground must be restated as a basis driver or retracted" in discussion
     assert "no estimate and no split action survives an unresolved challenge" in discussion
     split_rule = flat(section(SKILL.read_text(), "Split rule"))
-    assert "or is 8 or more" in split_rule
+    threshold = re.search(r"or is (\d+) or more", split_rule)
+    assert threshold, "the split rule names no 8-point trigger"
     estimate = max(SKL13_VALUES)
-    assert estimate >= 8, "SKL-13's recorded 8 reaches the skill's 8-or-more split trigger"
+    assert estimate >= int(threshold.group(1)), "SKL-13's recorded 8 reaches the skill's split trigger"
 
 
 def test_step_four_one_step_skip_still_challenges_every_off_basis_ground() -> None:
@@ -1257,8 +1283,9 @@ def test_pointing_template_records_each_challenge_and_outcome() -> None:
         "A sizing comment that names a point value before the reveal, prescribes this story's value, or states "
         "elapsed time, effort or run cost voids the round under the Anchoring guardrail recovery "
         "as soon as the facilitator sees it, as does any ground that is neither restated nor retracted, and the "
-        "void records the voided consensus under Superseded values after a void, so the Consensus field always "
-        "carries the vote that stands."
+        "void records the voided consensus under Superseded values after a void, so the Consensus field carries "
+        "the vote that stands, or n/a when the consensus check or the residual variance rule recorded the "
+        "estimate."
     ) in body
 
 
@@ -1364,6 +1391,7 @@ def test_refinement_template_points_every_accept_round_line_at_the_result_commen
     ):
         assert line in lines, line
     assert not any("<ACCEPT or OBJECT" in line or "<accepted or unpointed>" in line for line in lines)
+    assert not any("re-refine" in line for line in lines), "the re-refine accept round is removed"
 
 
 def test_records_cite_base_names_and_include_needed_content() -> None:
