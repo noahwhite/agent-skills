@@ -267,8 +267,9 @@ def test_step_four_residual_variance_derives_one_value_per_voter() -> None:
         "re-vote value is the highest value in its accepted set."
     )
     assert (
-        "A voter that records no consensus in item 4 has no accepted set, so its re-vote value is the standing "
-        "value it recorded in its Step 3 file, which after a void is the re-run's value and never a voided one." in item
+        "A voter that records no consensus in item 4 has no accepted set, so its re-vote value is the value that "
+        "stands for that voter: the replacement value it recorded in item 2 or item 4, or, when it recorded none, "
+        "the value in its Step 3 file." in item
     )
 
 
@@ -304,8 +305,8 @@ def test_step_four_residual_variance_pick_applies_the_split_rule() -> None:
 def test_step_four_abstention_with_a_wide_step3_value_stops_unpointed() -> None:
     item = process_items(STEP_FOUR)[5]
     assert (
-        "A voter that records no consensus in item 4 has no accepted set, so its re-vote value is the standing "
-        "value it recorded in its Step 3 file" in item
+        "A voter that records no consensus in item 4 has no accepted set, so its re-vote value is the value that "
+        "stands for that voter" in item
     )
     derived = (5, 5, 13)
     match = re.search(r"`fibonacci` ([0-9, ]+?);", process_items(STEP_FOUR)[0])
@@ -314,7 +315,7 @@ def test_step_four_abstention_with_a_wide_step3_value_stops_unpointed() -> None:
     sequence = [int(value) for value in stated.split(",")]
     gap = sequence.index(max(derived)) - sequence.index(min(derived))
     assert gap > 1, "5 and 13 are more than one step apart on the fibonacci sequence the skill states"
-    assert "or the highest and the lowest of them are one step apart on the sequence in item 1" in item
+    assert "the highest and the lowest of them are one step apart on the sequence in item 1" in item
     assert (
         "When the highest and the lowest derived values are more than one step apart (1 and 5, for example), the "
         "ceremony records the result as unpointed and stops" in item
@@ -331,9 +332,10 @@ def test_step_four_residual_variance_more_than_one_step_apart_stops_unpointed() 
     )
     assert (
         "The owner decides that outcome in a later run: a new invocation of this ceremony on the same story "
-        "reads the posted unpointed variance record, takes the owner's decision for the estimate, and records "
-        "it, and it does not re-point before that decision. The decision is the owner's: the product owner does "
-        "not decide that "
+        "reads the posted unpointed variance record, validates the owner's decision against "
+        "`profile.tracker.estimate_scale` and the item 1 sequence, applies the split rule to it, records it as "
+        "the estimate, and adds the pointing record's `- Owner decision:` line, and it does not re-point before "
+        "that decision. The decision is the owner's: the product owner does not decide that "
         "outcome, under the estimator-ownership rule that the people doing the work estimate, and no facilitator "
         "and no voter chooses the value or the path." in item
     )
@@ -369,8 +371,9 @@ def test_split_rule_takes_the_recorded_estimate() -> None:
 def test_split_rule_never_compares_a_size() -> None:
     body = flat(section(SKILL.read_text(), "Split rule"))
     assert (
-        "a recorded `tshirt` size is never compared with `profile.refinement.point_cap` or with 8: the numeric "
-        "split trigger does not apply to a size, and step 3 item 8 stops the cap step" in body
+        "a recorded `tshirt` size is not compared with `profile.refinement.point_cap`: step 3 item 8 stops the cap "
+        "step, and the 8-point rule in [references/linear.md](references/linear.md) reaches a size through its own "
+        "\"or the scale's equivalent\" clause, which this skill does not narrow" in body
     )
 
 
@@ -941,11 +944,11 @@ STEP_FOUR_ITEM_PREFIXES = [
     "Review every rationale recorded in Step 3 against the pointing basis,",
     "Hold one discussion round that names only the high and the low, when the consensus check calls for it.",
     "Run one re-vote, when the consensus check calls for it.",
-    "Consensus is the highest value in the intersection of the three accepted sets.",
+    "When the re-vote ran, consensus is the highest value in the intersection of the three accepted sets.",
     "Residual variance: when the re-vote leaves no value shared by all three accepted sets,",
     "Never average and never take a value silently, except the tolerance value the consensus check or the residual variance rule records.",
     "The facilitator records the estimate or the consensus; it does not declare it.",
-    "If the split trigger is met",
+    "Apply the split rule when the split trigger it defines is met by the recorded estimate.",
 ]
 
 
@@ -1086,7 +1089,8 @@ STEP_FOUR_CROSS_REFERENCES = {
     3: "Hold one discussion round",
     4: "Run one re-vote",
     6: "Residual variance:",
-    9: "If the split trigger is met",
+    5: "When the re-vote ran, consensus is the highest value in the intersection",
+    9: "Apply the split rule when the split trigger it defines is met",
 }
 
 
@@ -1096,9 +1100,9 @@ def test_step_four_item_cross_references_resolve() -> None:
     referenced = {int(number) for number in re.findall(r"item (\d+)", body)}
     assert referenced, "Step 4 refers to its own items"
     assert referenced <= set(range(1, len(items) + 1)), f"dangling item reference: {sorted(referenced)}"
+    assert {1, 2, 3, 4, 6, 9} <= referenced, f"a numbered step stopped being referenced: {sorted(referenced)}"
     for number, prefix in STEP_FOUR_CROSS_REFERENCES.items():
         assert items[number - 1].startswith(prefix), (number, prefix)
-        assert f"item {number}" in body, f"item {number} is no longer referenced"
 
 
 def test_step_four_facilitator_challenges_every_off_basis_ground() -> None:
@@ -1133,9 +1137,11 @@ def test_step_four_facilitator_challenges_every_off_basis_ground() -> None:
     ) in item
     assert "A ground that is neither restated as a basis driver, retracted, nor answered by a value its basis supports is an anchoring event under the Anchoring guardrail." in item
     assert (
-        "A voter whose basis does not support its recorded value records a replacement value in the re-vote; when "
-        "the consensus check skips the re-vote, it records that replacement value in the basis-challenge round of "
-        "this item, and the consensus check in item 1 then re-runs on the three standing values" in item
+        "A voter whose basis does not support its recorded value records a replacement value in the re-vote, and a "
+        "replacement value is valid for `profile.tracker.estimate_scale` and present in the item 1 sequence, "
+        "re-recorded otherwise; when the consensus check skips the re-vote, it records that replacement value in "
+        "the basis-challenge round of this item, and the consensus check in item 1 then re-runs on the three "
+        "standing values" in item
     )
 
 
@@ -1230,9 +1236,10 @@ def test_anchoring_guardrail_places_the_anchor_and_the_single_void_rule() -> Non
 def test_anchoring_guardrail_recovery_mechanics_are_unchanged() -> None:
     body = spaced(section(SKILL.read_text(), GUARDRAIL))
     assert (
-        "On anchoring: stop the round, record the comment verbatim, void the consensus and any vote recorded "
-        "after the anchor, and re-run the independent vote with newly created voter contexts that exclude the "
-        "tainted discussion and sizing comment. Never reuse the sessions that saw the anchor. Record the recovery."
+        "On anchoring: stop the round, record the comment verbatim, void the recorded estimate, the `Consensus "
+        "check:` outcome, the consensus and any vote recorded after the anchor, and re-run the independent vote "
+        "with newly created voter contexts that exclude the tainted discussion and sizing comment. Never reuse "
+        "the sessions that saw the anchor. Record the recovery."
     ) in body
 
 

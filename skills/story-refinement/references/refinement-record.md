@@ -82,6 +82,7 @@ A sizing comment that names a point value before the reveal, prescribes this sto
 - Effective maximum: <profile.refinement.point_cap; the 8-point rule still triggers at 8 or more; n/a on a `tshirt` scale, where a size is never compared>
 - Split: <none, or the slice mapping and sibling issue keys>
 - Challenges: <none, or each ground challenged by kind, its author (a voter, or the SM/EM for a sizing comment), the restatement, withdrawal, retraction, replacement value or the void; elide a pre-reveal value or a prescription>
+- Owner decision: <n/a, or the value the owner decided and the basis, applied by the follow-up run>
 - Superseded values after a void: <none, or the voided values, the voided estimate, the voided `Consensus check:` outcome, the voided consensus and the blind vote that replaced them>
 - Anchoring events: <none, or the comment and the recovery, including the newly created voter contexts, with the verbatim comment in the raw session record and its base name cited here>
 - Tracker writes: product owner
