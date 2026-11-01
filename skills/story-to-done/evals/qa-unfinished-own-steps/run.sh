@@ -50,6 +50,7 @@ state() {
       entry="$1/$file"
       if [ -L "$entry" ]; then
         printf 'link %s\n' "$(readlink "$entry")"
+        sha256sum < "$entry" 2>/dev/null || printf 'unreadable\n'
       elif [ -f "$entry" ]; then
         sha256sum < "$entry" 2>/dev/null || printf 'unreadable\n'
       else
