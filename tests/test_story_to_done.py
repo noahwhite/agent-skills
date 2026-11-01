@@ -169,8 +169,111 @@ def test_qa_outcome_has_one_branch_per_state() -> None:
     assert in_order(
         bullets["`profile.tracker.states.in_deployment_review`"],
         "QA is not finished",
-        "Report exactly what remains and who owns it, and stop",
+        STEP4_CLASSIFY,
     )
+
+
+# SKL-159: the in_deployment_review branch classifies the remainder by owner, continues the
+# current QA round only when every outstanding item is QA's own, and stops for anything else.
+STEP4_OLD_SENTENCE = "Report exactly what remains and who owns it, and stop; resume at step 3 once it is cleared."
+STEP4_OPEN = "QA is not finished: one or more items in its handback are outstanding."
+STEP4_CLASSIFY = "Classify each outstanding item by its owner."
+STEP4_RESUME = (
+    "When every outstanding item is work the current QA agent itself can finish under its existing authority "
+    "in the current round, such as an evidence PR it opened that is still unmerged with its review-of-record "
+    "gate in flight, or a QA step still to run, step 4 resumes that same QA agent with a clean, neutral "
+    "continuation message that states only that the round is unfinished and names that round's scratch "
+    "subdirectory."
+)
+STEP4_CARRY = (
+    "The continuation message carries no verdict, no expected verdict, no earlier round's conclusions, no "
+    "senior engineer handback, and nothing the coordinator observed after the handback."
+)
+STEP4_ROUND = (
+    "The continuation does not increment the QA round count, reuses that round's scratch subdirectory and "
+    "checklist, and with `metrics` on is recorded as its own launch row within that same round."
+)
+STEP4_READBACKS = (
+    "After each continuation handback, step 3's state and merged-PR review-of-record read-backs repeat in full "
+    "before this step applies again."
+)
+STEP4_OTHER_OWNER = (
+    "If any outstanding item names any other owner - the owner, a maintainer's approval or access grant, a "
+    "human merge, an external deploy, a pending acceptance-basis ruling - report exactly what remains and who "
+    "owns it, and stop, even when QA-owned work also remains; a mixed remainder containing both an owner "
+    "action and QA's own steps is reported and stopped, never resumed."
+)
+STEP4_NO_RUNTIME = (
+    "If the runtime cannot resume that QA session, report the limitation and stop; never substitute a new "
+    "clean, neutral subagent for it as a continuation of that round."
+)
+STEP4_STALL = (
+    "A continuation is made at most once per observed change to the remainder: when a resumed handback leaves "
+    "the same remaining items with no observed progress, report the stall and stop."
+)
+STEP4_SENTENCES = [
+    STEP4_OPEN,
+    STEP4_CLASSIFY,
+    STEP4_RESUME,
+    STEP4_CARRY,
+    STEP4_ROUND,
+    STEP4_READBACKS,
+    STEP4_OTHER_OWNER,
+    STEP4_NO_RUNTIME,
+    STEP4_STALL,
+]
+
+
+def in_deployment_review_branch() -> str:
+    bullets = state_bullets(section(SKILL.read_text(), "4. Act on the QA outcome"))
+    return " ".join(bullets["`profile.tracker.states.in_deployment_review`"].split())
+
+
+def test_the_step_four_continuation_branch_is_pinned() -> None:
+    body = in_deployment_review_branch()
+    assert in_order(body, *STEP4_SENTENCES), "the continuation branch does not read its pinned sentences in order"
+    assert STEP4_OLD_SENTENCE not in body, "the stop sentence this branch replaces is still stated"
+
+
+def test_a_continuation_never_carries_a_verdict_or_an_earlier_conclusion() -> None:
+    body = in_deployment_review_branch()
+    for excluded in (
+        "no verdict",
+        "no expected verdict",
+        "no earlier round's conclusions",
+        "no senior engineer handback",
+        "nothing the coordinator observed after the handback",
+    ):
+        assert excluded in STEP4_CARRY, f"the continuation message must exclude {excluded}"
+    assert "states only that the round is unfinished and names that round's scratch subdirectory" in STEP4_RESUME
+    assert STEP4_CARRY in body
+
+
+def test_a_continuation_keeps_the_round_identity_and_its_own_launch_row() -> None:
+    body = in_deployment_review_branch()
+    assert in_order(
+        body,
+        "does not increment the QA round count",
+        "reuses that round's scratch subdirectory and checklist",
+        "with `metrics` on is recorded as its own launch row within that same round",
+    ), "a continuation must keep the round, reuse its scratch subdirectory, and record its own launch row"
+    assert STEP4_READBACKS in body, "the post-handback read-backs must repeat before the branch applies again"
+
+
+def test_any_other_owner_stops_even_when_qa_work_remains() -> None:
+    body = in_deployment_review_branch()
+    assert in_order(
+        body,
+        "If any outstanding item names any other owner",
+        "a pending acceptance-basis ruling",
+        "report exactly what remains and who owns it, and stop, even when QA-owned work also remains",
+        "a mixed remainder containing both an owner action and QA's own steps is reported and stopped, never resumed",
+    ), "an owner action must take precedence over QA-owned work"
+    assert in_order(
+        body,
+        STEP4_NO_RUNTIME,
+        STEP4_STALL,
+    ), "a runtime that cannot resume must stop without a substitute agent, and a stall must be reported"
 
 
 def test_done_branch_checks_the_completion_record() -> None:
@@ -647,6 +750,9 @@ METRICS_LINES = [
     METRICS_USAGE,
     METRICS_NOTHING_BEFORE_START,
     METRICS_STEP0,
+    # SKL-159: the step 4 continuation branch states the round-count and launch-row rule.
+    "  The continuation does not increment the QA round count, reuses that round's scratch subdirectory and "
+    "checklist, and with `metrics` on is recorded as its own launch row within that same round.",
     "Report the story identifier, its final state, the four resolved model and effort values and the "
     "`metrics: on|off` line, each PR, the number of QA rounds with the items fixed in each, where QA recorded "
     "its evidence, and any incidental defects left open.",

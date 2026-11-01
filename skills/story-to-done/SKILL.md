@@ -149,8 +149,15 @@ For a waived PR, compare the merged PR's `headRefOid` with the SHA recorded when
   Hand them back to the senior engineer: resume the same subagent if the runtime can, else spawn a new clean, neutral one on the same model and effort with the step 2 brief.
   Either way, add to the hand-back brief each failed item as QA recorded it on the story (the item, its verdict, and the evidence it cites), and instruct the engineer to fix them through `engineering-workflow` on this story and take it back to `profile.tracker.states.in_deployment_review`.
   Confirm that state as step 2 does, then run step 3 again with a new QA agent.
-- **`profile.tracker.states.in_deployment_review`:** QA is not finished (a pending owner action, missing access, a live trigger still to run).
-  Report exactly what remains and who owns it, and stop; resume at step 3 once it is cleared.
+- **`profile.tracker.states.in_deployment_review`:** QA is not finished: one or more items in its handback are outstanding.
+  Classify each outstanding item by its owner.
+  When every outstanding item is work the current QA agent itself can finish under its existing authority in the current round, such as an evidence PR it opened that is still unmerged with its review-of-record gate in flight, or a QA step still to run, step 4 resumes that same QA agent with a clean, neutral continuation message that states only that the round is unfinished and names that round's scratch subdirectory.
+  The continuation message carries no verdict, no expected verdict, no earlier round's conclusions, no senior engineer handback, and nothing the coordinator observed after the handback.
+  The continuation does not increment the QA round count, reuses that round's scratch subdirectory and checklist, and with `metrics` on is recorded as its own launch row within that same round.
+  After each continuation handback, step 3's state and merged-PR review-of-record read-backs repeat in full before this step applies again.
+  If any outstanding item names any other owner - the owner, a maintainer's approval or access grant, a human merge, an external deploy, a pending acceptance-basis ruling - report exactly what remains and who owns it, and stop, even when QA-owned work also remains; a mixed remainder containing both an owner action and QA's own steps is reported and stopped, never resumed.
+  If the runtime cannot resume that QA session, report the limitation and stop; never substitute a new clean, neutral subagent for it as a continuation of that round.
+  A continuation is made at most once per observed change to the remainder: when a resumed handback leaves the same remaining items with no observed progress, report the stall and stop.
 - **`profile.tracker.states.blocked`:** report the blocking story and stop.
 - **Any other state:** report it and stop.
 
