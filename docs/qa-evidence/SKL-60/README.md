@@ -1,5 +1,9 @@
 # SKL-60 QA evidence
 
+**Current scope:** Round 3 below verifies the numeric-only AC1 amendment.
+It supersedes the historical t-shirt verdicts in rounds 1 and 2.
+The current closing decision is In Deployment Review pending the correction's independent-review evidence, not the historical Done decisions below.
+
 ## Round 1
 
 - Date: 2026-11-01.
@@ -77,3 +81,40 @@ The outgoing rollout, voter-set, effort-basis and re-point stories retain their 
 - The `skills-ref validate` command is not installed in this container, so the CI `Validate skills` step is the record for that check; it is green.
 - No required SKL-60 item remains outstanding; the story stays Done.
 - Live counterfactual ceremony measurement remains with SKL-173, not a blocker of SKL-60.
+
+## Round 3 (numeric-only amendment, 2026-11-01)
+
+- Build: `9cf409d4c53257c443f053e03ecf822685aad5f1`, freshly cloned `origin/main`, including https://github.com/noahwhite/agent-skills/pull/129.
+- Environment: isolated merged-main repository tree.
+  The authoritative `.agent-skills/profile.yaml` declares `environments: []`; nothing deploys.
+- Method: read-only assertions on the merged instructions, schema, templates and contract-test structure, plus merged-main CI.
+  These verdicts verify delivered instruction contracts, not execution by a live facilitator.
+  No implementation changes, local suite rerun, live ceremony or shared-checkout edits were performed.
+- Fixtures: three numeric scale sequences, accepted-set and abstention examples, SKL-13's `8/8/8` static fixture and the pointing-record template.
+- Raw evidence: seven `round3-*-assertions.txt` attachments on SKL-60, QA comment `eba51909`.
+  No visual surface exists, so no screenshot or hosted page applies.
+- Test record: [merged-main CI](https://github.com/noahwhite/agent-skills/actions/runs/41330551926), checks and discovery successful, **957 passed in 118.87s**.
+  The profile test command is `uv run pytest`; CI runs `uv run --locked pytest -q`.
+
+| Item | Verdict | Evidence attached to SKL-60 |
+| --- | --- | --- |
+| AC1: numeric-only consensus | Verified: schema has exactly fibonacci/linear/exponential; fixed sequences and one-step check; skip/wide branches and split preserved; removed t-shirt rules absent; epic size_labels unchanged from parent schema. | `round3-ac1-assertions.txt`; `SKILL.md:146-184,250-264`; `profile/schema.json:176-182` |
+| AC2: residual variance | Verified: accepted-set maximum or standing Step 3 fallback; identical/adjacent maximum with split; wide-gap owner needs-input stop distinct from denied writes; old path vote removed. | `round3-ac2-assertions.txt`; `SKILL.md:201-225`; `refinement-record.md:70-88` |
+| AC3: basis challenge survives skip | Verified: every rationale reviewed before writes; clean bounded challenge contexts; restate/retract, recomputation and unresolved void; both skip guards and SKL-13 split fixture present. | `round3-ac3-assertions.txt`; `SKILL.md:185-200,240-247`; `tests/test_story_refinement.py:1130-1181` |
+| DoD1: all AC met | Verified within the instruction-artifact scope above. | Per-AC attachments; `round3-dod-assertions.txt` |
+| DoD2: tests written and passing | Verified: committed contract guards inspected; merged-main CI checks/discovery green, 957 tests passed. | `round3-ci-assertions.txt`; `round3-dod-assertions.txt` |
+| DoD3: independently reviewed | Not covered for the correction: owner approval exists at final head `b9ff9fede3a4407ec130d3313f6627b3ef11cd6e`, but no configured reviewer/adjudicator review of record is posted there. | `round3-review-assertions.txt`; [correction approval](https://github.com/noahwhite/agent-skills/pull/129#pullrequestreview-5729304800) |
+| DoD4: docs updated | Verified: skill, schema, template and shared rules updated; all 20 vendored linear/metrics references match sources. | `round3-dod-assertions.txt`; correction diff |
+| DoD5: deployed verification if needed | Correct by design: no deployment exists or is needed; merged main is the named environment. | `round3-environment-assertions.txt` |
+| DoD6: no critical bugs/regressions | Verified within exercised scope: none observed; static assertions and merged-main CI green, not proof of universal absence or live execution. | Per-AC attachments; `round3-ci-assertions.txt`; `round3-dod-assertions.txt` |
+
+### Round 3 closing decision and limits
+
+Retain **In Deployment Review**: QA remains in flight pending the SKL-60 maintainer/PR129 owner's independent-review record or explicit policy disposition for DoD3.
+The original [implementation review](https://github.com/noahwhite/agent-skills/pull/126#pullrequestreview-5728133744) covers `1a1a7ddf26b31cd05ce9af70819d8aa7fdd86d1e`, not the correction delta.
+The correction PR body records arbitration unavailable and an owner hand review; an approval alone is not treated as an inferred review-policy waiver.
+No acceptance criterion failed, and no implementation fix or new bug is requested by this pass.
+The SKL-13 fixture mixes a duration with a value prescription rather than isolating the restatable duration-only path; the maintainer owns optional fixture clarification, with no functional defect established.
+Rejecting consumer profiles that still set `estimate_scale: tshirt` is the amendment's intentional contract change, not an incidental regression.
+Live counterfactual measurement remains owned by SKL-173 (Backlog), not an incoming blocker of SKL-60.
+Downstream voter-set, effort-basis, rollout and re-point stories retain their own scope.
