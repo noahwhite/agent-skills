@@ -13,15 +13,20 @@
 #
 # Usage:
 #   batched-diff-review.sh --base REF --agent-cmd TEMPLATE [--repo DIR] [--name LABEL]
-#                          [--line-budget N] [--timeout SECONDS] [--context N]
+#                          [--enabled true|false] [--line-budget N] [--timeout SECONDS] [--context N]
+#
+# --enabled is the seat entry's `enabled` value (absent means true): pass `false` for a seat the
+# profile configures but switches off. A disabled seat launches nothing, writes no report and
+# prints the one evidence line `LABEL: disabled`; it is never recorded as passed, skipped for
+# failure, or clean. Any other value is refused rather than guessed.
 #
 # TEMPLATE is a shell command with {prompt_file} (the batch input) and optionally {output_file}
 # (if absent, the command's stdout is the batch result). It runs in an empty scratch directory with
 # the batch input on stdin, under a SIGKILL timeout. Read the prompt from stdin (for codex:
 # `codex exec ... -`) or from {prompt_file}; never expand it into argv (argv is visible to other
 # processes and one argument is capped at 128 KiB).
-# Env equivalents: REVIEW_REPO, REVIEW_BASE, REVIEW_AGENT_CMD, REVIEW_NAME, REVIEW_LINE_BUDGET (800),
-# REVIEW_TIMEOUT (240), REVIEW_CONTEXT (30).
+# Env equivalents: REVIEW_REPO, REVIEW_BASE, REVIEW_AGENT_CMD, REVIEW_NAME, REVIEW_ENABLED (true),
+# REVIEW_LINE_BUDGET (800), REVIEW_TIMEOUT (240), REVIEW_CONTEXT (30).
 #
 # Report: $(git rev-parse --git-path batched-review)/<LABEL>/report.md, ending in a VERDICT of
 # PASS, FAIL or INCOMPLETE. Each batch must return exactly one PASS or FAIL verdict for every file it
@@ -35,6 +40,7 @@ REPO="${REVIEW_REPO:-}"
 BASE="${REVIEW_BASE:-}"
 AGENT_CMD="${REVIEW_AGENT_CMD:-}"
 NAME="${REVIEW_NAME:-optional-reviewer}"
+ENABLED="${REVIEW_ENABLED:-true}"
 LINE_BUDGET="${REVIEW_LINE_BUDGET:-800}"
 BATCH_TIMEOUT="${REVIEW_TIMEOUT:-240}"
 CONTEXT_LINES="${REVIEW_CONTEXT:-30}"
@@ -44,6 +50,7 @@ while [ $# -gt 0 ]; do
     --base) BASE="$2"; shift 2 ;;
     --agent-cmd) AGENT_CMD="$2"; shift 2 ;;
     --name) NAME="$2"; shift 2 ;;
+    --enabled) ENABLED="$2"; shift 2 ;;
     --line-budget) LINE_BUDGET="$2"; shift 2 ;;
     --timeout) BATCH_TIMEOUT="$2"; shift 2 ;;
     --context) CONTEXT_LINES="$2"; shift 2 ;;
@@ -51,9 +58,22 @@ while [ $# -gt 0 ]; do
     *) echo "ERROR: unknown option $1" >&2; usage ;;
   esac
 done
+[[ "$NAME" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "ERROR: --name must be [A-Za-z0-9._-]+" >&2; exit 2; }
+case "$ENABLED" in
+  true|false) ;;
+  *) echo "ERROR: --enabled must be 'true' or 'false', the seat entry's enabled value (absent means true); got '$ENABLED'." >&2; exit 2 ;;
+esac
+
+# A seat the profile configures but switches off: no process, no report file, one evidence line.
+# This runs before --base, --agent-cmd, the repository and the output directory are touched, so a
+# disabled seat needs neither a launcher nor a diff, and it leaves no trace a reader could mistake
+# for a review that ran.
+if [ "$ENABLED" = "false" ]; then
+  printf '%s: disabled\n' "$NAME"
+  exit 0
+fi
 [ -n "$BASE" ] || { echo "ERROR: --base is required (origin/<integration branch> after a fetch)." >&2; exit 2; }
 [ -n "$AGENT_CMD" ] || { echo "ERROR: --agent-cmd is required (built from the optional reviewer's profile entry)." >&2; exit 2; }
-[[ "$NAME" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "ERROR: --name must be [A-Za-z0-9._-]+" >&2; exit 2; }
 
 # The target repository: --repo, else the current directory. Never this script's location.
 if [ -n "$REPO" ]; then

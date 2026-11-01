@@ -150,6 +150,10 @@ When it is `forbid`, add no AI co-author trailer, session link or generated-by n
 ## 6. Optional reviewers (never blocking)
 
 For each entry in `profile.review.optional_reviewers`, run one review right after the PR opens.
+An entry whose `enabled` is `false` is skipped before any launch: no process, no subagent, no report file, and the evidence records "<name>: disabled".
+It is never recorded as passed, skipped for failure, or clean.
+Omission means enabled.
+Pass the entry's value to the launcher as `--enabled`, which refuses to launch and writes no report, so the skip is enforced rather than trusted to the caller.
 [scripts/batched-diff-review.sh](scripts/batched-diff-review.sh) is a generic launcher: build `--agent-cmd` from the entry and pass `--base origin/<integration branch>`.
 It batches the diff by a line budget with a cross-file blueprint, runs the reviewer in an empty directory with no repository access, and writes a report ending in PASS, FAIL or INCOMPLETE.
 Each batch must return exactly one PASS or FAIL verdict per file it was given; a missing, extra or unparseable verdict makes the batch INCOMPLETE.
@@ -165,6 +169,7 @@ The batch prompt reaches the agent on stdin (for codex, end the command with `-`
 Run the gate in `references/code-review.md` once the PR is open: `profile.review.reviewer` reviews the head in a throwaway worktree, then `profile.review.adjudicator`, a clean, neutral agent, verifies each finding against the code.
 Both agents are clean, neutral, and independent of the author; one agent reviewing and adjudicating its own findings does not pass.
 If `profile.review.shadow_adjudicators` is set, run each one as `references/code-review.md` describes; it records agreement only and never gates the merge.
+An entry there whose `enabled` is `false` is skipped the same way as an optional reviewer: no subagent, no report, and the evidence records "<name>: disabled" instead of an agreement.
 
 Monitor the PR for required checks, other protection checks, and human review threads.
 

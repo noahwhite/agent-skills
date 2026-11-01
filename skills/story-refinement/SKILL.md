@@ -63,6 +63,9 @@ Where this file and a capability file disagree, the capability file is authorita
   The PO and the two engineers are the voters in both the refinement agreement and the pointing round.
 - A `profile.refinement.facilitator`, `profile.refinement.product_owner`, or `profile.refinement.reviewers` that is unset stops the ceremony.
   Ask for the value; never substitute one.
+- An engineer voter whose `enabled` is `false` is skipped before any launch: no process, no subagent, no output file, and the record reads "<name>: disabled", never a vote, a failed vote, or a clean one.
+  Omission means enabled.
+  The rules above count the enabled entries: if fewer than two engineer voters are enabled, or the enabled ones share a model family, stop the ceremony and ask the owner for a different reviewer.
 - Stop when the configured facilitator runtime differs from the orchestrator runtime.
   The facilitator is always the top-level session.
 - When `metrics` is on, the metrics summary is the one comment the facilitator posts outside the denied tracker writes fallback.

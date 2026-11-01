@@ -76,12 +76,17 @@ When `profile.review.shadow_adjudicators` lists agents, run each after the adjud
 - The adjudicator alone decides what is fixed and what gates the merge; a shadow never changes a disposition.
 - Record each shadow's verdicts beside the adjudicator's in the review of record, under an "Adjudicator comparison" heading, with an agreement summary.
 - Never hold the merge on a shadow; if it fails or times out, record it as skipped and continue.
+- A shadow whose `enabled` is `false` is skipped before any launch: no subagent, no report, and the evidence records "<name>: disabled", never an agreement and never a comparison result.
+  Omission means enabled.
 
 ### Optional reviewers
 
 Agents in `profile.review.optional_reviewers` are non-blocking:
 
 - Make one attempt per head, after the PR opens or after a later push.
+- An entry whose `enabled` is `false` is skipped before any launch: no process, no subagent, no report file, and the evidence records "<name>: disabled".
+  It is never recorded as passed, skipped for failure, or clean.
+  Omission means enabled.
 - On any failure (rate limit, timeout, missing credential), record "<name>: skipped" and continue; never troubleshoot or retry.
 - Never hold a merge or deploy on one.
   Treat their findings like any other: verify, then fix or resolve with a reason.

@@ -83,6 +83,7 @@ Do not pre-empt its implementation choices beyond the plan and constraints, and 
 2. If `profile.review.shadow_adjudicators` is set, run each one on every gate this persona drives, without waiting to be asked.
    Spawn each as a clean, neutral subagent on its configured model, given exactly the diff reference and reviewer findings the adjudicator of record got.
    Never give it the adjudicator's verdicts, your triage, or your plan.
+   An entry whose `enabled` is `false` is skipped without a launch and recorded "<name>: disabled", never as agreement.
    If the runtime cannot run a configured model, say so and skip that shadow; never substitute a model.
 3. The adjudicator of record alone decides what gets fixed and what gates the merge.
    A shadow run is signal collection: never hold the merge on it, never let it change a finding's disposition, and skip it silently if it fails.

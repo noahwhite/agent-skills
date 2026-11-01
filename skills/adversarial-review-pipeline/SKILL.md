@@ -38,6 +38,8 @@ If a configured agent cannot run on this runtime, stop and say so (see `referenc
 
 The sweep is configurable: if `profile.review.pre_pr.sweeper` is unset, record "sweep: not configured" and run Phase 2 as hunt only.
 The hunter and the arbiter are required; if either is unset, the gate is blocked on it.
+A mandatory seat with `enabled: false` is the same blocked gate, and the schema refuses such a profile before any phase starts, so a report can never stand for a seat that never ran.
+Never substitute another seat for a disabled or unset one.
 The arbiter must be a different agent from the implementing agent.
 
 Phase 1 output is never the deliverable.

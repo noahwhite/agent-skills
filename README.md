@@ -94,6 +94,17 @@ The pre-PR adversarial gate has five roles under `review.pre_pr`: `sweeper`, `hu
 `sweeper` is optional, and `simplicity_reviewer` and `fixer` are used only when the gate escalates; see [`skills/adversarial-review-pipeline/SKILL.md`](skills/adversarial-review-pipeline/SKILL.md).
 A skill that needs a value the profile does not set stops and asks for it rather than guessing.
 
+### Switching a seat off
+
+Every seat entry takes an optional `enabled` boolean: a single role (`review.reviewer`) or one item of a seat list (`review.optional_reviewers`, `review.shadow_adjudicators`, `refinement.reviewers`).
+Omitted means enabled, so an existing profile keeps the seats it names.
+A seat set to `false` stays configured, and a skill that iterates a seat list launches nothing for it - no process, no subagent, no report - and records "<name>: disabled" rather than a pass, a failure or a clean result.
+The seats a gate cannot run without (`review.reviewer`, `review.adjudicator`, `review.pre_pr.hunter`, `review.pre_pr.arbiter`) may not be disabled: `profile/schema.json` refuses such a profile, so no gate reports a result with a mandatory seat absent.
+
+The profile is read as text, whole, so a disabled entry is still read and still costs its own tokens.
+That is the whole trade: `enabled: false` buys reversibility with a one-word edit for one extra line of profile text, deleting the entry saves that text but loses the seat's name, model and command until git history is read, and commenting the entry out costs the same text as disabling it while making the profile invalid to parse.
+Disable a seat that is expected back, such as one whose provider cannot currently run; delete one that is gone for good.
+
 ## Overlays
 
 An overlay is a Markdown file that adds a project's operational detail to one skill or shared capability: which workflow deploys, which host to check, which runbook applies.
