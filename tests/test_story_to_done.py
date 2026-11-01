@@ -145,7 +145,7 @@ def prose_lines(lines: list[str]) -> set[int]:
     commented = False
     for index, line in enumerate(lines):
         stripped = line.strip()
-        if stripped.startswith("```"):
+        if stripped.startswith(("```", "~~~")):
             fenced = not fenced
         elif commented:
             commented = "-->" not in stripped
