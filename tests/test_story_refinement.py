@@ -367,12 +367,26 @@ def test_split_rule_takes_the_recorded_estimate() -> None:
     assert "group-decided" not in body
 
 
-def test_split_rule_never_compares_a_size() -> None:
-    body = flat(section(SKILL.read_text(), "Split rule"))
-    assert (
-        "a recorded `tshirt` size never triggers this rule: step 3 item 8 stops the cap step, and a size is "
-        "recorded as the estimate without a split" in body
-    )
+SIZE_VOCABULARY = re.compile(
+    r"tshirt|t[ -]?shirt|x-small|extra[ _]large|x-large|\bXS\b|\bXL\b|\bsize\b", re.IGNORECASE
+)
+
+
+def test_split_rule_has_no_size_clause() -> None:
+    body = section(SKILL.read_text(), "Split rule")
+    assert not SIZE_VOCABULARY.search(body), "the split rule reads a numeric estimate only"
+
+
+def test_shared_linear_rule_has_no_size_clause() -> None:
+    lines = (ROOT / "shared" / "linear.md").read_text().splitlines()
+    start = next(index for index, line in enumerate(lines) if line.startswith("- ⛔ Split a story estimated at 8 points"))
+    end = next(index for index in range(start + 1, len(lines)) if lines[index] and not lines[index].startswith(" "))
+    bullet = flat(" ".join(lines[start:end]))
+    assert bullet.startswith(
+        "- ⛔ split a story estimated at 8 points or more at refinement, without asking, and present the slices."
+    ), "the 8-point rule starts with one unqualified sentence"
+    assert "equivalent" not in bullet, "no scale parenthetical survives"
+    assert not SIZE_VOCABULARY.search(bullet), "the split rule names no size"
 
 
 def test_split_rule_keeps_the_split_mechanics() -> None:
@@ -753,7 +767,7 @@ def test_step_four_unpointed_record_follows_the_apply_rule() -> None:
 
 STEP_THREE = "Step 3: Secret pointing"
 POINTING_BASIS = (
-    "A point or size measures complexity - design difficulty, interacting constraints, unknowns, "
+    "A point measures complexity - design difficulty, interacting constraints, unknowns, "
     "and the risk of breaking existing behaviour - and never the amount of work or elapsed time; "
     "routine, well-understood work such as writing tests, opening a PR, review, running a fixture, "
     "or regenerating copies adds no points however long it takes."
@@ -825,13 +839,20 @@ def test_step_three_rationale_names_complexity_drivers_and_no_duration() -> None
     assert "design difficulty, an interacting constraint, an unknown" not in body
 
 
+def test_pointing_basis_names_no_size() -> None:
+    assert "size" not in POINTING_BASIS.lower(), "a story is given points, never a t-shirt size"
+    item = process_items(STEP_THREE)[1]
+    assert item == POINTING_BASIS, "the pinned constant is the document's own sentence"
+    assert item.startswith("A point measures complexity")
+    assert "or size" not in item
+
+
 def test_step_three_does_not_restate_the_pointing_basis() -> None:
     items = process_items(STEP_THREE)
     assert squash(POINTING_BASIS) in squash(items[1]), "Step 3 item 2 carries the basis and belongs to SKL-60"
     without_basis_item = " ".join(items[:1] + items[2:])
     assert squash(POINTING_BASIS) not in squash(without_basis_item)
     for fragment in (
-        "A point or size measures",
         "A point measures",
         "measures design difficulty",
         "design difficulty",
@@ -848,14 +869,30 @@ def test_step_four_re_vote_carries_the_basis_by_reference_to_step_three() -> Non
     assert squash(POINTING_BASIS) not in squash(operative_step(STEP_FOUR))
 
 
-def test_step_three_tshirt_cap_step_does_not_stop_the_ceremony() -> None:
-    stop = bullet(operative_step(STEP_THREE), "Stop")
-    assert "tshirt" not in stop, "the cap step stops the cap, not the ceremony"
-    item = process_item(STEP_THREE, "A `tshirt` scale stops the cap step")
-    assert (
-        "Pointing still records the three values and Step 4 still runs and records the larger size of a pair one "
-        "step apart; the split rule's numeric cap does not apply." in item
-    )
+STEP_THREE_ITEM_PREFIXES = [
+    "Launch the PO and both engineers again in separate contexts on the same refined version.",
+    "A point measures complexity",
+    "The sentence above is the pointing basis.",
+    "Each voter submits one point value",
+    "No voter sees another voter's point value before its own value is recorded.",
+    "The facilitator records all three values before the SM/EM comments on sizing or the discussion opens.",
+    "After all three values are recorded, the SM/EM may provide factual, reference-only sizing context:",
+]
+
+
+def test_step_three_has_no_size_cap_step() -> None:
+    body = operative_step(STEP_THREE)
+    stop = bullet(body, "Stop")
+    assert not SIZE_VOCABULARY.search(body), "a t-shirt size is a project and epic label, not a story scale"
+    assert not SIZE_VOCABULARY.search(stop)
+    assert "cap step" not in body
+
+
+def test_step_three_process_items_keep_their_count_and_order() -> None:
+    items = process_items(STEP_THREE)
+    assert len(items) == 7, "the cap item is removed and no size option may be added"
+    for index, prefix in enumerate(STEP_THREE_ITEM_PREFIXES):
+        assert items[index].startswith(prefix), (index, prefix)
 
 
 def test_step_three_re_records_an_off_sequence_value_before_the_reveal() -> None:
@@ -910,6 +947,17 @@ def test_step_four_re_vote_prompt_carries_the_rationale_rule() -> None:
     assert (
         "It also carries the Step 3 item 4 rationale rule and the fixed step sequence from item 1, since an "
         "accepted set is drawn from that sequence." in item
+    )
+
+
+def test_pointing_template_has_no_size_note() -> None:
+    lines = pointing_template()
+    assert not any(SIZE_VOCABULARY.search(line) for line in lines), "a pointing record never carries a size"
+    outcome = next(line for line in (ROOT / "shared" / "metrics.md").read_text().splitlines() if line.startswith("- **Outcome:**"))
+    assert not SIZE_VOCABULARY.search(outcome), "the outcome figure names an estimate, never a size"
+    assert (
+        "- Effective maximum: <profile.refinement.point_cap; the 8-point rule still triggers at 8 or more>"
+        in lines
     )
 
 
@@ -980,9 +1028,9 @@ STEP_FOUR_ITEM_PREFIXES = [
 
 CONSENSUS_CHECK = "Run the consensus check first, on the three values recorded in Step 3."
 ESTIMATE_SEQUENCES = (
-    "The ordered step sequence is fixed here for each `profile.tracker.estimate_scale` value: "
+    "The ordered step sequence is fixed here for each `profile.tracker.estimate_scale` value, in the order given: "
     "`fibonacci` 1, 2, 3, 5, 8, 13; `linear` the ordinal list 1, 2, 3, 5, 8, 13; "
-    "`exponential` 1, 2, 4, 8, 16; `tshirt` XS, S, M, L, XL in that order."
+    "`exponential` 1, 2, 4, 8, 16."
 )
 CONSENSUS_CHECK_BRANCHES = (
     "When the three values are identical, or the highest and the lowest are one step apart (5 and 8 on "
@@ -1019,13 +1067,25 @@ def test_step_four_identical_values_record_the_higher_value_and_skip() -> None:
     ), "an unconditional discussion would make an identical round run one"
 
 
+def test_schema_estimate_scale_is_numeric_only() -> None:
+    scales = SCHEMA["properties"]["tracker"]["properties"]["estimate_scale"]["enum"]
+    assert scales == ["fibonacci", "linear", "exponential"], "story pointing runs on numeric scales only"
+
+
+def test_epic_size_labels_are_untouched_and_carry_t_shirt_sizing() -> None:
+    labels = SCHEMA["properties"]["tracker"]["properties"]["epic"]["properties"]["size_labels"]
+    assert labels["type"] == "object"
+    assert labels["additionalProperties"] is False
+    assert set(labels["properties"]) == {"small", "medium", "large", "extra_large"}
+
+
 def test_step_four_fixes_a_sequence_for_every_estimate_scale() -> None:
     item = process_items(STEP_FOUR)[0]
     scales = SCHEMA["properties"]["tracker"]["properties"]["estimate_scale"]["enum"]
-    assert scales == ["fibonacci", "linear", "exponential", "tshirt"]
     for scale in scales:
         assert f"`{scale}`" in item, f"no fixed step sequence for the {scale} scale"
-    assert ESTIMATE_SEQUENCES in item, "the four sequences are pinned verbatim"
+    assert ESTIMATE_SEQUENCES in item, "the three numeric sequences are pinned verbatim"
+    assert not SIZE_VOCABULARY.search(item), "a story is given points, never a t-shirt size"
 
 
 def test_step_four_one_step_apart_records_the_higher_value_and_skips() -> None:
@@ -1035,12 +1095,7 @@ def test_step_four_one_step_apart_records_the_higher_value_and_skips() -> None:
         "the highest and the lowest are one step apart (5 and 8 on `fibonacci`, for example), the highest of "
         "the three values is the estimate, the discussion in item 3 and the re-vote in item 4 are skipped" in item
     )
-    assert (
-        "On a `tshirt` scale a pair one step apart records the larger size, and the split rule's numeric cap "
-        "does not apply to a size." in item
-    )
-    cap = process_items(STEP_THREE)[7]
-    assert cap.startswith("A `tshirt` scale stops the cap step with a clear message."), "Step 3 item 8 moved"
+    assert not SIZE_VOCABULARY.search(item), "a size has no step position on a numeric scale"
 
 
 def test_step_four_more_than_one_step_apart_runs_the_discussion() -> None:

@@ -166,7 +166,7 @@ REFINEMENT_EXTRAS = [
     ),
     pytest.param("- **Anchoring events:** the number of anchoring events.", id="anchoring-events"),
     pytest.param(
-        "- **Outcome:** one of: the recorded estimate or size; unpointed, which on the Step 4 residual "
+        "- **Outcome:** one of: the recorded estimate; unpointed, which on the Step 4 residual "
         "variance rule is the variance stop that names the story and the derived values; split with the "
         "slice count, plus `needs input` for each slice that stopped unpointed; or the stop reason, including "
         "`needs input` on a denied tracker write, `missing valid value` on a Step 3 off-sequence stop, or the "

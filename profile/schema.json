@@ -174,11 +174,11 @@
           }
         },
         "estimate_scale": {
+          "description": "The story estimate scale. Stories are given points on a numeric scale; t-shirt sizing is a project and epic label, carried by profile.tracker.epic.size_labels, never a story estimate scale.",
           "enum": [
             "fibonacci",
             "linear",
-            "exponential",
-            "tshirt"
+            "exponential"
           ]
         },
         "cycle_weeks": {
