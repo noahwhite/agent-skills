@@ -29,7 +29,6 @@ Its comment id is the refined story identifier for both stages.
 - Non-blocking notes: <summary or none>
 - Accept round 1: see the Accept round result comment
 - Accept round 2 (only after a blocking amendment): see the Accept round result comment
-- Re-refine accept round (only after a Step 4 re-refine; one round): see the Accept round result comment
 - Result: see the Accept round result comment
 - Tracker writes: product owner
 ```
@@ -42,14 +41,14 @@ Under the denied tracker writes fallback in `SKILL.md`, replace the tracker-writ
 
 ## Accept round result
 
-Post this as a separate tracker comment after each accept round, including the Step 4 re-refine accept round, authored by the product owner and posted by the product owner or, under the denied tracker writes fallback, by the facilitator verbatim.
+Post this as a separate tracker comment after each accept round, authored by the product owner and posted by the product owner or, under the denied tracker writes fallback, by the facilitator verbatim.
 Never edit the refinement comment to add the result; its id keeps identifying one immutable refined version.
 
 ```markdown
 ## Accept round result
 
 - Refinement comment covered: <refinement comment id>
-- Round: <1, 2, or re-refine>
+- Round: <1 or 2>
 - Product owner: <ACCEPT or OBJECT>
 - Engineer one (<family or model>): <ACCEPT or OBJECT>
 - Engineer two (<family or model>): <ACCEPT or OBJECT>
@@ -58,7 +57,7 @@ Never edit the refinement comment to add the result; its id keeps identifying on
 
 ## Pointing record
 
-Post this after the re-vote, or record it as an unpointed result.
+Post this after the re-vote or after the consensus check records the estimate, or record it as an unpointed result.
 The three values are recorded before any SM/EM sizing comment or discussion; a void before all three exist leaves the values block at the values recorded so far and carries no superseded values, and once the blind re-run finishes the values block carries the three standing values while the superseded line carries the voided ones.
 Outside the recorded numeric values and the superseded-values line, no line of the posted record carries a point value named before the reveal or a prescription of this story's value: the Challenges and Anchoring events lines record a ground by its kind, its author (a voter, or the SM/EM for a sizing comment) and its outcome or recovery, and every field that could quote a participant elides those two classes permanently, because the posted record stays on the story surface that later voters read; the verbatim quote lives in the session's raw record, cited by its base name.
 A sizing comment that names a point value before the reveal, prescribes this story's value, or states elapsed time, effort or run cost voids the round under the Anchoring guardrail recovery as soon as the facilitator sees it, as does any ground that is neither restated nor retracted, and the void records the voided consensus under Superseded values after a void, so the Consensus field always carries the vote that stands.
@@ -77,10 +76,8 @@ A sizing comment that names a point value before the reveal, prescribes this sto
 - SM/EM sizing context, after all three values: <file base name> or verbatim, eliding a pre-reveal value or a prescription, or none
 - Discussion: <high <value>, low <value>, or none; the shared content names only the high and the low, while a voter's own recorded value and rationale are carried privately in that voter's prompt>
 - Re-vote: <accepted set per voter, with complexity rationale, or none>
-- Consensus: <highest value in the intersection of the vote that stands, or none when the intersection is empty>
-- No-consensus decision: <split, re-refine, or leave unpointed; n/a when there is a consensus>
-- Paths accepted: <set per voter, or n/a>
-- Decision rationale: <one line, or n/a>
+- Consensus: <highest value in the intersection of the vote that stands, or none when the intersection is empty, or n/a when the consensus check recorded the estimate>
+- Residual variance: <each voter's derived value, the gap between the highest and the lowest in scale steps, the rule applied and the resulting value, or the unpointed variance stop; n/a when the intersection is not empty or the consensus check recorded the estimate>
 - Effective maximum: <profile.refinement.point_cap; the 8-point rule still triggers at 8 or more>
 - Split: <none, or the slice mapping and sibling issue keys>
 - Challenges: <none, or each ground challenged by kind, its author (a voter, or the SM/EM for a sizing comment), the restatement, withdrawal or retraction, or the void; elide a pre-reveal value or a prescription>

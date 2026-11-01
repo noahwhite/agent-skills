@@ -222,72 +222,116 @@ def test_record_reference_has_templates_and_phrasing_table() -> None:
         assert phrase.lower() in text.lower(), phrase
 
 
-def test_step_four_presents_three_paths_without_a_recommendation() -> None:
+def test_step_four_derivation_replaces_the_path_vote() -> None:
     body = flat(section(SKILL.read_text(), STEP_FOUR, level=3))
-    assert "if the intersection is empty, record no consensus and run the no-consensus decision" in body
-    assert (
-        "the facilitator presents only the empty intersection and the three paths: "
-        "split, re-refine, or leave unpointed" in body
-    )
-    assert "the facilitator does not recommend a path" in body
-    assert "record no consensus and leave the story unpointed" not in body, "the bare stop is the original defect"
-
-
-def test_step_four_path_decision_is_the_intersection_with_a_po_tie_break() -> None:
-    body = flat(section(SKILL.read_text(), STEP_FOUR, level=3))
-    assert "each voter (the po and both engineers) records the set of paths it accepts" in body
-    assert "a voter that accepts re-refine also lists the amendments it needs" in body
-    assert "the chosen path is in the intersection of the three accepted path sets" in body
-    assert "when that intersection holds more than one path, the po chooses among them and records why" in body
-    assert "the facilitator records the decision; it does not choose it" in body
+    assert "each voter's re-vote value is the highest value in its accepted set" in body
+    for removed in (
+        "split, re-refine, or leave unpointed",
+        "the set of paths it accepts",
+        "the chosen path is in the intersection of the three accepted path sets",
+        "the po chooses among them and records why",
+        "the facilitator records the decision; it does not choose it",
+    ):
+        assert removed not in body, f"the removed path vote survived: {removed}"
 
 
 def test_step_four_empty_path_intersection_leaves_the_story_unpointed() -> None:
     body = flat(section(SKILL.read_text(), STEP_FOUR, level=3))
-    assert "when that intersection is empty, the story is left unpointed" in body
+    assert (
+        "when the highest and the lowest derived values are more than one step apart (1 and 5, for example), "
+        "the ceremony records the result as unpointed and stops" in body
+    )
 
 
-def test_step_four_split_path_applies_the_split_rule() -> None:
-    body = flat(section(SKILL.read_text(), STEP_FOUR, level=3))
-    assert "split applies the split rule as a group-decided split" in body
-
-
-def test_step_four_re_refine_returns_to_step_two_with_one_accept_round() -> None:
-    body = flat(section(SKILL.read_text(), STEP_FOUR, level=3))
-    assert "re-refine returns to step 2" in body
-    assert "the po authors the amendments and an updated refinement comment and applies both" in body
-    assert "under the denied tracker writes fallback, the facilitator applies the amendments and the updated refinement comment verbatim" in body
-    assert "one accept round runs on the new comment id" in body
-    assert "if all three voters do not return `accept`, the po records the story as unpointed" in body
-    assert "on acceptance, step 3 re-runs blind with newly created voter contexts, then this step runs again" in body
-
-
-def test_step_four_re_refine_is_offered_once() -> None:
-    body = flat(section(SKILL.read_text(), STEP_FOUR, level=3))
-    assert "re-refine is offered at most once per ceremony" in body
-    assert "a second empty intersection offers only split or leave unpointed" in body
-
-
-def test_step_four_outputs_and_stop_name_the_decision() -> None:
+def test_step_four_outputs_and_stop_name_the_variance_outcome() -> None:
     body = section(SKILL.read_text(), STEP_FOUR, level=3)
     outputs = bullet(body, "Outputs")
     stop = bullet(body, "Stop")
-    for line in (outputs, stop):
-        assert "no-consensus decision" in line
-        assert "leave unpointed" in line and "is the default when no path is in all three sets" in line
-        assert re.search(r"re-refine runs (at most|only) once per ceremony", line)
-    assert "the re-refine accept round ends without three `accept`" in stop
+    assert "the unpointed variance stop with the three values" in outputs
+    assert "the `consensus check:` outcome in the pointing record" in outputs
+    assert "the derived values are more than one step apart" in stop
+    assert "reports `needs input` to the owner naming the story and the derived values" in stop
+    for stale in ("no-consensus decision", "leave unpointed is the default", "re-refine"):
+        assert stale not in outputs and stale not in stop, stale
 
 
-def test_split_rule_adds_the_group_decided_trigger() -> None:
-    body = flat(section(SKILL.read_text(), "Split rule"))
-    assert "a story is also split when the step 4 no-consensus decision chooses split (a group-decided split)" in body
-    assert "this trigger adds to the consensus thresholds and does not change them" in body
-    assert "if either split trigger is met, split the story" in body
-    assert (
-        "a story is split when its consensus is above `profile.refinement.point_cap` or is 8 or more; "
-        "the lower trigger applies, and the 8-point rule in [references/linear.md](references/linear.md) is never relaxed" in body
+def test_step_four_residual_variance_derives_one_value_per_voter() -> None:
+    item = process_items(STEP_FOUR)[4]
+    assert item.startswith(
+        "Residual variance: when the re-vote leaves no value shared by all three accepted sets, each voter's "
+        "re-vote value is the highest value in its accepted set."
     )
+    assert (
+        "A voter that records no consensus in item 3 has no accepted set, so its re-vote value is the value it "
+        "recorded in its Step 3 file." in item
+    )
+
+
+def test_step_four_empty_intersection_identical_derived_values_apply_the_tolerance_rule() -> None:
+    item = process_items(STEP_FOUR)[4]
+    assert (
+        "For example, accepted sets `{5}`, `{5}` and no consensus from Step 3 values 1, 8 and 5 derive 5, 5 "
+        "and 5 from an empty intersection, so the ceremony records 5 as the estimate instead of stopping "
+        "unpointed." in item
+    )
+    assert "the intersection of the vote that stands is empty" not in item
+
+
+def test_step_four_residual_variance_one_step_apart_records_the_higher_value() -> None:
+    item = process_items(STEP_FOUR)[4]
+    assert (
+        "When those derived per-voter values are identical, or the highest and the lowest of them are one step "
+        "apart on the sequence in item 1, the same tolerance rule applies to them: record the highest derived "
+        "value as the estimate" in item
+    )
+    assert item.count("one step apart") == 2, "both the identical and the one-step branch are named once each"
+
+
+def test_step_four_residual_variance_pick_applies_the_split_rule() -> None:
+    item = process_items(STEP_FOUR)[4]
+    assert "record the highest derived value as the estimate, and the split rule still applies to it" in item
+
+
+def test_step_four_residual_variance_more_than_one_step_apart_stops_unpointed() -> None:
+    item = process_items(STEP_FOUR)[4]
+    assert (
+        "When the highest and the lowest derived values are more than one step apart (1 and 5, for example), the "
+        "ceremony records the result as unpointed and stops: it posts the three values, the derived values with "
+        "the gap between the highest and the lowest in scale steps, and the three rationales, and reports "
+        "`needs input` to the owner naming the story and the derived values." in item
+    )
+    assert (
+        "The owner decides the outcome in a later run, which records it: the product owner does not decide it "
+        "under the estimator-ownership rule that the people doing the work estimate, and no facilitator and no "
+        "voter chooses the value or the path." in item
+    )
+
+
+def test_step_four_names_the_unpointed_variance_stop_apart_from_the_denied_write() -> None:
+    item = process_items(STEP_FOUR)[4]
+    assert (
+        "That unpointed variance stop is the second `needs input` state of this skill, distinct from the "
+        "denied-tracker-write `needs input` of Step 1." in item
+    )
+    closing = flat(section(SKILL.read_text(), "Closing message"))
+    assert "including each `needs input`" in closing
+    assert "the denied tracker write of step 1" in closing
+    assert "the unpointed variance stop of step 4" in closing
+
+
+def test_split_rule_takes_the_recorded_estimate() -> None:
+    body = flat(section(SKILL.read_text(), "Split rule"))
+    assert (
+        "a story is split when its recorded estimate is above `profile.refinement.point_cap` or is 8 or more; "
+        "the recorded estimate is the consensus, or the value the step 4 consensus check or residual variance "
+        "rule records" in body
+    )
+    assert (
+        "the lower trigger applies, and the 8-point rule in [references/linear.md](references/linear.md) is never "
+        "relaxed" in body
+    )
+    assert "if the split trigger is met, split the story" in body
+    assert "group-decided" not in body
 
 
 def test_split_rule_keeps_the_split_mechanics() -> None:
@@ -299,14 +343,6 @@ def test_split_rule_keeps_the_split_mechanics() -> None:
         "every acceptance criterion is mapped to a slice in the split comment",
     ):
         assert rule in body, rule
-
-
-def test_split_rule_re_points_the_core_slice_after_a_group_decided_split() -> None:
-    body = flat(section(SKILL.read_text(), "Split rule"))
-    assert (
-        "after a group-decided split, the core slice has no consensus value of its own, so the core slice and each sibling "
-        "get their own blind three-voter estimate in one round, with newly created voter contexts" in body
-    )
 
 
 def pointing_template() -> list[str]:
@@ -324,29 +360,30 @@ def pointing_template() -> list[str]:
     return templates[0].splitlines()
 
 
-def test_refinement_template_records_the_re_refine_accept_round() -> None:
-    line = "- Re-refine accept round (only after a Step 4 re-refine; one round): see the Accept round result comment"
-    assert line in template("Refinement comment").splitlines()
-
-
 def test_pointing_template_records_the_consensus_check_outcome() -> None:
     assert "- Consensus check: <identical | one step | more than one step>" in pointing_template()
 
 
-def test_pointing_template_records_the_no_consensus_decision() -> None:
+def test_pointing_template_records_the_residual_variance() -> None:
     lines = pointing_template()
-    for line in (
-        "- No-consensus decision: <split, re-refine, or leave unpointed; n/a when there is a consensus>",
-        "- Paths accepted: <set per voter, or n/a>",
-        "- Decision rationale: <one line, or n/a>",
-    ):
-        assert line in lines, line
+    assert (
+        "- Residual variance: <each voter's derived value, the gap between the highest and the lowest in scale "
+        "steps, the rule applied and the resulting value, or the unpointed variance stop; n/a when the "
+        "intersection is not empty or the consensus check recorded the estimate>" in lines
+    )
+    for removed in ("- No-consensus decision:", "- Paths accepted:", "- Decision rationale:"):
+        assert not any(line.startswith(removed) for line in lines), f"removed line survived: {removed}"
+    assert not any("re-refine" in line for line in lines), "the pointing record still offers re-refine"
 
 
-def test_records_names_the_no_consensus_decision() -> None:
+def test_records_names_the_residual_variance() -> None:
     body = flat(section(SKILL.read_text(), "Records"))
-    assert "any no-consensus decision with each voter's accepted paths and the decision rationale" in body
-
+    assert "the `consensus check:` outcome" in body
+    assert (
+        "the consensus or the residual variance outcome with the derived values, the gap between the highest "
+        "and the lowest in scale steps and the rule applied (or the unpointed variance stop)" in body
+    )
+    assert "no-consensus decision" not in body
 
 
 def test_records_requires_every_challenge_with_its_outcome() -> None:
@@ -655,16 +692,11 @@ def test_fallback_never_reapplies_a_write_the_po_already_applied() -> None:
 
 
 def test_step_four_unpointed_record_follows_the_apply_rule() -> None:
-    body = flat(section(SKILL.read_text(), STEP_FOUR, level=3))
+    item = process_items(STEP_FOUR)[4]
     assert (
-        "the po records the story as unpointed, or under the denied tracker writes fallback "
-        "the facilitator applies the po-authored unpointed record verbatim"
-    ) in body
-
-
-def test_step_four_amendments_use_the_otherwise_apply_rule() -> None:
-    body = flat(section(SKILL.read_text(), STEP_FOUR, level=3))
-    assert "applies both; otherwise, under the denied tracker writes fallback, the facilitator applies the amendments and the updated refinement comment verbatim" in body
+        "The PO authors the unpointed variance record and applies it, or under the denied tracker writes fallback "
+        "the facilitator applies the PO-authored record verbatim." in item
+    )
 
 
 # SKL-51: a point measures complexity, never the amount of work or elapsed time.
@@ -719,8 +751,7 @@ def test_pointing_basis_is_its_own_item_right_after_the_launch_item() -> None:
 def test_step_three_requires_the_basis_in_every_pointing_prompt() -> None:
     assert process_items(STEP_THREE)[2] == (
         "The sentence above is the pointing basis. Every pointing prompt or prompt file carries it verbatim, and "
-        "carries the item 4 rationale rule, including the re-run after a Step 4 re-refine and each slice estimate "
-        "under the Split rule."
+        "carries the item 4 rationale rule, including each slice estimate under the Split rule."
     )
 
 
@@ -790,7 +821,8 @@ def test_pointing_template_notes_the_private_self_context_rule() -> None:
 
 def test_pointing_template_states_the_standing_consensus() -> None:
     assert (
-        "- Consensus: <highest value in the intersection of the vote that stands, or none when the intersection is empty>"
+        "- Consensus: <highest value in the intersection of the vote that stands, or none when the intersection is empty, "
+        "or n/a when the consensus check recorded the estimate>"
         in pointing_template()
     )
 
@@ -834,12 +866,10 @@ STEP_FOUR_ITEM_PREFIXES = [
     "Hold one discussion round that names only the high and the low, when the consensus check calls for it.",
     "Run one re-vote.",
     "Consensus is the highest value in the intersection of the three accepted sets.",
+    "Residual variance: when the re-vote leaves no value shared by all three accepted sets,",
     "Never average and never take a value silently.",
     "The facilitator records the consensus; it does not declare it.",
     "If the split trigger is met",
-    "No-consensus decision:",
-    "Split applies the split rule as a group-decided split.",
-    "Re-refine returns to Step 2.",
 ]
 
 
@@ -1206,14 +1236,14 @@ def test_pointing_template_asks_for_complexity_rationales() -> None:
 # SKL-54: every accept round's result is posted in its own comment; the refinement comment stays immutable.
 
 STEP_TWO = "Step 2: Reconciliation and the accept round"
-RESULT_ITEM = "After each accept round, including the Step 4 re-refine accept round,"
+RESULT_ITEM = "After each accept round,"
 SEE_RESULT = "see the Accept round result comment"
 
 
 def test_step_two_requires_an_accept_round_result_comment() -> None:
     item = process_item(STEP_TWO, RESULT_ITEM)
     assert (
-        "After each accept round, including the Step 4 re-refine accept round, the PO authors and posts "
+        "After each accept round, the PO authors and posts "
         "a separate Accept round result comment that names the refinement comment id it covers, the round number, "
         "each voter's `ACCEPT` or `OBJECT`, and the outcome: accepted, another round, or unpointed."
     ) in item
@@ -1256,7 +1286,7 @@ def test_record_has_the_accept_round_result_template_with_exactly_the_fields() -
         "## Accept round result",
         "",
         "- Refinement comment covered: <refinement comment id>",
-        "- Round: <1, 2, or re-refine>",
+        "- Round: <1 or 2>",
         "- Product owner: <ACCEPT or OBJECT>",
         "- Engineer one (<family or model>): <ACCEPT or OBJECT>",
         "- Engineer two (<family or model>): <ACCEPT or OBJECT>",
@@ -1267,7 +1297,7 @@ def test_record_has_the_accept_round_result_template_with_exactly_the_fields() -
 def test_record_says_the_result_comment_is_separate_and_posted_after_each_round() -> None:
     body = spaced(section(RECORD.read_text(), "Accept round result"))
     assert (
-        "Post this as a separate tracker comment after each accept round, including the Step 4 re-refine accept round, "
+        "Post this as a separate tracker comment after each accept round, "
         "authored by the product owner and posted by the product owner or, under the denied tracker writes fallback, "
         "by the facilitator verbatim."
     ) in body
@@ -1361,7 +1391,7 @@ def test_arguments_section_precedes_read_first() -> None:
     "sentence",
     [
         "The closing message is the facilitator's final message to the owner when the invocation ends, on every end state and every stop.",
-        "It names the outcome (the consensus value, unpointed, or split with the slice count) or the stop reason, including `needs input` on a denied tracker write.",
+        "It names the outcome (the recorded estimate, unpointed, or split with the slice count) or the stop reason, including each `needs input`: the denied tracker write of Step 1 and the unpointed variance stop of Step 4.",
         "It carries the `metrics: on` or `metrics: off` line.",
     ],
 )
@@ -1418,11 +1448,10 @@ def test_metrics_section_states_the_bindings(sentence: str) -> None:
         "the tracker-write preflight",
         "each Step 1 voter launch",
         "each PO launch that authors or applies a tracker write or record",
-        "each accept-round voter launch, including the re-refine accept round",
-        "each Step 3 pointing launch, including the re-run after a re-refine",
+        "each accept-round voter launch",
+        "each Step 3 pointing launch",
         "each Step 4 discussion launch",
         "each Step 4 re-vote launch",
-        "each Step 4 no-consensus path-decision launch",
         "each anchoring recovery re-launch",
         "each slice estimate launch",
     ],
@@ -1546,9 +1575,8 @@ def test_metrics_section_orders_the_post_as_the_last_tracker_write() -> None:
     assert "When a pointing record exists, the comment is the invocation's last tracker write." in body
     assert (
         "It posts only after every voter round, including every slice estimate under the Split rule, has finished; "
-        "the pointing record (a consensus, an unpointed result, including one after a re-refine accept round, "
-        "or a split decision) and any split comment have been posted and read back; and the invocation's triage "
-        "writes have been applied and read back." in body
+        "the pointing record (a recorded estimate, an unpointed result, or a split decision) and any split comment "
+        "have been posted and read back; and the invocation's triage writes have been applied and read back." in body
     )
 
 
