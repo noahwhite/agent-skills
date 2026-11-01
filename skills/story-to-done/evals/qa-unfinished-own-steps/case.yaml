@@ -1,0 +1,44 @@
+case: qa-unfinished-own-steps
+skill: story-to-done
+purpose: >-
+  Show that a QA round which hands back with only its own work outstanding is continued in
+  the same round by the same agent, instead of halting the loop, and that the stop and
+  new-round branches are unchanged for a remainder that is not wholly QA's own.
+split: >-
+  SKL-159 owns this case's content: its prompt, case.yaml, grader, scenarios and rerun
+  instructions, and the recorded baseline and candidate runs below. SKL-164 owns the suite
+  harness, the README and the repeat-run machinery; whichever of the two lands second folds
+  its copy into the other's layout.
+baseline:
+  commit: 7a6cb17
+  note: the skill as committed on origin/main before this change; the baseline stops instead of continuing.
+candidate:
+  note: the head of the branch that carries this case; the candidate continues the round it is in.
+runtime:
+  command: opencode run --model deepseek/deepseek-v4-pro
+  model: deepseek/deepseek-v4-pro
+  reasoning_effort: default
+  record: >-
+    Both recorded runs used this one configuration and no other. A rerun with a different
+    model records its own result and names the model it used.
+scenarios:
+  - name: own-steps
+    expectation: own-steps
+    baseline: stops, so no session is continued
+    candidate: continues round 1's session in the same round
+  - name: owner-action
+    expectation: owner-action
+    baseline: stops
+    candidate: stops
+    control: an owner action stops even when QA's own work also remains
+  - name: new-round
+    expectation: new-round
+    baseline: starts a new session
+    candidate: starts a new session and never reuses round 1's
+    control: a new round always gets a new agent
+graded_on:
+  - session identity, from the run's qa-round-1.json and the sessions its calls named
+  - tool-call evidence, meaning the action, session and message file of every qa-runtime call
+not_graded_on:
+  - the agent's prose
+  - the wording of the continuation message beyond the named scratch subdirectory and the terms it may not carry

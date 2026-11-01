@@ -1,0 +1,113 @@
+#!/usr/bin/env python3
+"""Record what the coordinator does with the QA role in this eval run.
+
+The case runs the skill's coordinator against a fixed scenario, so this script stands
+in for the runtime's QA role capabilities: a launch starts a session, a resume continues
+one this run started, and a stop ends the step with no further role work. Nothing is
+launched. Every call appends one line to `actions.jsonl` in this directory, and the
+grader reads only that file and `sessions.json`, so the case is graded on the calls the
+coordinator made, never on its prose.
+
+  qa-runtime launch --label LABEL --message FILE
+  qa-runtime resume --session SESSION --label LABEL --message FILE
+  qa-runtime stop --reason TEXT
+"""
+
+import argparse
+import datetime
+import json
+import pathlib
+import sys
+
+RUN = pathlib.Path(__file__).resolve().parent
+ACTIONS = RUN / "actions.jsonl"
+SESSIONS = RUN / "sessions.json"
+ROUND_ONE = RUN / "qa-round-1.json"
+
+
+def stamp() -> str:
+    now = datetime.datetime.now(datetime.timezone.utc)
+    return now.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def read_json(path: pathlib.Path) -> dict:
+    return json.loads(path.read_text())
+
+
+def sessions() -> dict:
+    """The sessions this run knows, seeded from QA round 1's launch record."""
+    if SESSIONS.is_file():
+        return read_json(SESSIONS)
+    state = {"sessions": [], "next_round": 2}
+    if ROUND_ONE.is_file():
+        record = read_json(ROUND_ONE)
+        state["sessions"].append({"session": record["session"], "label": record["label"], "round": record["round"]})
+        state["next_round"] = record["round"] + 1
+    return state
+
+
+def save(state: dict) -> None:
+    SESSIONS.write_text(json.dumps(state, indent=2, sort_keys=True) + "\n")
+
+
+def record(entry: dict) -> None:
+    entry = {"at": stamp(), **entry}
+    with ACTIONS.open("a") as handle:
+        handle.write(json.dumps(entry, sort_keys=True) + "\n")
+
+
+def message_text(path: str) -> str:
+    file = pathlib.Path(path)
+    if not file.is_file():
+        sys.exit(f"qa-runtime: there is no message file at {path}")
+    return file.read_text()
+
+
+def launch(args: argparse.Namespace) -> str:
+    state = sessions()
+    session = f"qa-round-{state['next_round']}-session"
+    state["sessions"].append({"session": session, "label": args.label, "round": state["next_round"]})
+    state["next_round"] += 1
+    save(state)
+    record({"action": "launch", "label": args.label, "session": session, "message": message_text(args.message)})
+    return session
+
+
+def resume(args: argparse.Namespace) -> str:
+    state = sessions()
+    known = {entry["session"] for entry in state["sessions"]}
+    if args.session not in known:
+        sys.exit(f"qa-runtime: this run started no session {args.session}")
+    record({"action": "resume", "label": args.label, "session": args.session, "message": message_text(args.message)})
+    return args.session
+
+
+def parsed() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Record a QA role launch, continuation or stop.")
+    commands = parser.add_subparsers(dest="command", required=True)
+    start = commands.add_parser("launch", help="start a new agent session")
+    start.add_argument("--label", required=True)
+    start.add_argument("--message", required=True)
+    continue_ = commands.add_parser("resume", help="continue an agent session this run started")
+    continue_.add_argument("--session", required=True)
+    continue_.add_argument("--label", required=True)
+    continue_.add_argument("--message", required=True)
+    stop = commands.add_parser("stop", help="end the step with no further QA role work")
+    stop.add_argument("--reason", required=True)
+    return parser.parse_args()
+
+
+def main() -> int:
+    args = parsed()
+    if args.command == "launch":
+        print(f"started {launch(args)}")
+    elif args.command == "resume":
+        print(f"resumed {resume(args)}")
+    else:
+        record({"action": "stop", "reason": args.reason})
+        print("recorded a stop")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
