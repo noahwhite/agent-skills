@@ -169,11 +169,9 @@ def test_qa_outcome_has_one_branch_per_state() -> None:
     }
     assert "report it and stop" in bullets["Any other state"]
     assert "report the blocking story and stop" in bullets["`profile.tracker.states.blocked`"]
-    assert in_order(
-        bullets["`profile.tracker.states.in_deployment_review`"],
-        "QA is not finished",
-        STEP4_CLASSIFY,
-    )
+    branch = " ".join(bullets["`profile.tracker.states.in_deployment_review`"].split())
+    assert in_order(branch, "QA is not finished", STEP4_CLASSIFY)
+    assert STEP4_OLD_SENTENCE not in branch, "the sentence that sent every outcome to a stop must be gone"
 
 
 # SKL-159: the in_deployment_review branch classifies the remainder by owner, continues the
