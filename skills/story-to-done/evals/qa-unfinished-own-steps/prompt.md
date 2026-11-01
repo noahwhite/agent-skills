@@ -13,4 +13,4 @@ Treat the state and the handback in `scenario.md` as already read back, and read
 Carry the coordinator's work from the point `scenario.md` describes to the end of the step the skill puts you in.
 Make every launch, continuation or stop of the QA role through `qa-runtime`, and pass what the QA agent is told as a file with `--message`.
 A decision to end the step with no launch and no continuation is recorded with `./qa-runtime stop --reason TEXT`.
-Change nothing else: do not edit the skill or the repository, and write no other file.
+Write the message file inside this run's directory, and change nothing else: do not edit the skill or the repository.
