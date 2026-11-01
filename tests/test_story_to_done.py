@@ -139,19 +139,43 @@ def owner_stop_lines() -> list[str]:
 
 
 def prose_lines(lines: list[str]) -> set[int]:
-    """The indexes of the lines an agent reads as instructions: not in a fence, not in a comment."""
+    """The indexes of the lines an agent reads as instructions: not in a fence, not in a comment.
+
+    A comment can open or close anywhere in a line, so each line is scanned for both markers
+    rather than only at its start, and a fence's contents are never prose.
+    """
     prose: set[int] = set()
     fenced = False
     commented = False
     for index, line in enumerate(lines):
         stripped = line.strip()
-        if stripped.startswith(("```", "~~~")):
-            fenced = not fenced
-        elif commented:
-            commented = "-->" not in stripped
-        elif stripped.startswith("<!--"):
-            commented = "-->" not in stripped
-        elif not fenced and stripped:
+        if fenced:
+            if stripped.startswith(("```", "~~~")):
+                fenced = False
+            continue
+        if not commented and stripped.startswith(("```", "~~~")):
+            fenced = True
+            continue
+        visible = ""
+        rest = line
+        while rest:
+            if commented:
+                end = rest.find("-->")
+                if end < 0:
+                    rest = ""
+                else:
+                    rest = rest[end + 3:]
+                    commented = False
+            else:
+                start = rest.find("<!--")
+                if start < 0:
+                    visible += rest
+                    rest = ""
+                else:
+                    visible += rest[:start]
+                    rest = rest[start + 4:]
+                    commented = True
+        if visible.strip():
             prose.add(index)
     return prose
 
