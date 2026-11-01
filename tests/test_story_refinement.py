@@ -372,6 +372,42 @@ SIZE_VOCABULARY = re.compile(
 )
 
 
+T_SHIRT_VOCABULARY = re.compile(
+    r"tshirt|t[ -]?shirt|x-small|extra[ _]large|x-large|\bXS\b|\bXL\b", re.IGNORECASE
+)
+
+
+def story_pointing_surfaces() -> list[Path]:
+    """Every file that can state a story-pointing rule, outside the epic sizing home."""
+    surfaces = [ROOT / "shared" / name for name in ("linear.md", "metrics.md", "todo-tracking.md")]
+    surfaces += [path for path in (ROOT / "shared").glob("*.md")]
+    for skill in sorted((ROOT / "skills").iterdir()):
+        if not (skill / "SKILL.md").is_file() or skill.name == "linear-epic":
+            continue
+        surfaces.append(skill / "SKILL.md")
+        surfaces += sorted((skill / "references").glob("*.md")) if (skill / "references").is_dir() else []
+    return sorted(set(surfaces))
+
+
+def test_no_story_pointing_surface_names_a_size() -> None:
+    offenders = [
+        f"{path.relative_to(ROOT)}:{number}: {line.strip()}"
+        for path in story_pointing_surfaces()
+        for number, line in enumerate(path.read_text().splitlines(), 1)
+        if T_SHIRT_VOCABULARY.search(line)
+    ]
+    assert not offenders, "\n".join(offenders)
+
+
+def test_the_epic_skill_is_the_one_home_for_t_shirt_sizing() -> None:
+    epic = (ROOT / "skills" / "linear-epic" / "SKILL.md").read_text()
+    assert "## T-shirt sizing" in epic
+    assert "profile.tracker.epic.size_labels" in epic
+    schema = SCHEMA["properties"]["tracker"]["properties"]
+    assert "size_labels" in schema["epic"]["properties"]
+    assert "tshirt" not in schema["estimate_scale"]["enum"]
+
+
 def test_split_rule_has_no_size_clause() -> None:
     body = section(SKILL.read_text(), "Split rule")
     assert not SIZE_VOCABULARY.search(body), "the split rule reads a numeric estimate only"
