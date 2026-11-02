@@ -298,6 +298,54 @@ def test_the_cleanup_removes_the_named_repositorys_report_not_the_callers(tmp_pa
     assert (own / "report.md").is_file(), "the caller's evidence was deleted"
 
 
+def test_an_inherited_git_dir_cannot_redirect_the_cleanup(tmp_path, reviewed_repo):
+    """AC2: `GIT_DIR` in the environment outranks `-C`, so the launcher must ignore it.
+
+    A wrapper that exports `GIT_DIR` (a hook, a CI step) would otherwise point every path at the
+    caller's repository and delete its evidence instead of the named one's.
+    """
+    spy = tmp_path / "spy.log"
+    assert launch(reviewed_repo, "--agent-cmd", spy_command(spy)).returncode == 0
+    target = reviewed_repo / ".git" / "batched-review" / "glm-seat"
+    assert (target / "report.md").is_file()
+
+    caller = tmp_path / "caller"
+    caller.mkdir()
+    subprocess.run(["git", "init", "-q", "-b", "main"], cwd=caller, check=True,
+                   capture_output=True, env={**os.environ, "HOME": str(tmp_path)})
+    own = caller / ".git" / "batched-review" / "glm-seat"
+    own.mkdir(parents=True)
+    (own / "report.md").write_text("# Overall\n\n### VERDICT\nPASS\n")
+
+    result = subprocess.run(
+        ["bash", str(LAUNCHER), "--repo", str(reviewed_repo), "--name", "glm-seat",
+         "--enabled", "false"],
+        cwd=caller, capture_output=True, text=True,
+        env={**os.environ, "GIT_DIR": str(caller / ".git")},
+    )
+    assert result.returncode == 0, result.stderr
+    assert not target.exists(), "the named repository's stale report survived an inherited GIT_DIR"
+    assert (own / "report.md").is_file(), "an inherited GIT_DIR made the launcher delete the caller's report"
+
+
+def test_an_inherited_git_dir_cannot_redirect_the_report(tmp_path, reviewed_repo):
+    """The enabled path writes its report into the repository `--repo` names, not the caller's."""
+    spy = tmp_path / "spy.log"
+    caller = tmp_path / "caller"
+    caller.mkdir()
+    subprocess.run(["git", "init", "-q", "-b", "main"], cwd=caller, check=True,
+                   capture_output=True, env={**os.environ, "HOME": str(tmp_path)})
+    result = subprocess.run(
+        ["bash", str(LAUNCHER), "--repo", str(reviewed_repo), "--base", "HEAD~1",
+         "--name", "glm-seat", "--agent-cmd", spy_command(spy)],
+        cwd=caller, capture_output=True, text=True,
+        env={**os.environ, "GIT_DIR": str(caller / ".git")},
+    )
+    assert result.returncode == 0, result.stderr
+    assert (reviewed_repo / ".git" / "batched-review" / "glm-seat" / "report.md").is_file()
+    assert not (caller / ".git" / "batched-review").exists(), "the report landed in the caller's repository"
+
+
 def test_a_dot_name_is_refused(tmp_path, reviewed_repo):
     """A name that would make the cleanup remove a whole directory is refused."""
     for name in (".", ".."):
