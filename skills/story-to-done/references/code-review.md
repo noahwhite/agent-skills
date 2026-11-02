@@ -22,6 +22,7 @@ Reviewer and adjudicator models, launchers, and the merge owner come from `profi
 ## Review of record
 
 The review of record is an independent reviewer, then a separate clean, neutral adjudicator, at the current head.
+Both seats are mandatory: `profile/schema.json` refuses `enabled: false` on either, and a session that finds such a profile stops before any review starts, so a review of record never stands with that seat absent.
 
 Every agent that judges work or takes delegated work (reviewer, adjudicator, shadow adjudicator, verifier, QA agent, delegated engineer) is clean and neutral; the two always go together:
 
@@ -76,11 +77,18 @@ When `profile.review.shadow_adjudicators` lists agents, run each after the adjud
 - The adjudicator alone decides what is fixed and what gates the merge; a shadow never changes a disposition.
 - Record each shadow's verdicts beside the adjudicator's in the review of record, under an "Adjudicator comparison" heading, with an agreement summary.
 - Never hold the merge on a shadow; if it fails or times out, record it as skipped and continue.
+- A shadow whose `enabled` is `false` is skipped before any launch: no subagent, no report, and the evidence records "<name>: disabled", never an agreement and never a comparison result.
+  Omission means enabled.
 
 ### Optional reviewers
 
 Agents in `profile.review.optional_reviewers` are non-blocking:
 
+- An entry whose `enabled` is `false` is skipped before any launch: no process, no subagent, no report file, and the evidence records "<name>: disabled".
+  It is never recorded as passed, skipped for failure, or clean.
+  A report an earlier head left under the same label is named where it sits, never deleted, so it cannot be read as the disabled seat's state.
+  Omission means enabled.
+  The entry is read once per head: it is skipped again on every later push, never launched because an earlier head ran it.
 - Make one attempt per head, after the PR opens or after a later push.
 - On any failure (rate limit, timeout, missing credential), record "<name>: skipped" and continue; never troubleshoot or retry.
 - Never hold a merge or deploy on one.

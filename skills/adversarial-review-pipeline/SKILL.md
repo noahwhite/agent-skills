@@ -37,7 +37,10 @@ If a configured agent cannot run on this runtime, stop and say so (see `referenc
 | 4 Fix and re-verify | the implementing agent | Fix in-scope findings, re-run each proving mutant (it must now fail), one bounded re-verify | Closes the loop without unbounded ping-pong |
 
 The sweep is configurable: if `profile.review.pre_pr.sweeper` is unset, record "sweep: not configured" and run Phase 2 as hunt only.
+A sweeper whose `enabled` is `false` is skipped the same way: record "<name>: disabled" and pass `--no-sweep` to the hunt and to arbitration, whose dossiers report the sweep as absent.
 The hunter and the arbiter are required; if either is unset, the gate is blocked on it.
+A mandatory seat with `enabled: false` is the same blocked gate: `profile/schema.json` refuses such a profile, and a session that finds one stops before any phase starts, so a report can never stand for a seat that never ran.
+Never substitute another seat for a disabled or unset one.
 The arbiter must be a different agent from the implementing agent.
 
 Phase 1 output is never the deliverable.

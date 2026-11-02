@@ -94,6 +94,18 @@ The pre-PR adversarial gate has five roles under `review.pre_pr`: `sweeper`, `hu
 `sweeper` is optional, and `simplicity_reviewer` and `fixer` are used only when the gate escalates; see [`skills/adversarial-review-pipeline/SKILL.md`](skills/adversarial-review-pipeline/SKILL.md).
 A skill that needs a value the profile does not set stops and asks for it rather than guessing.
 
+### Switching a seat off
+
+A seat entry that may be switched off takes an optional `enabled` boolean: one item of a seat list (`review.optional_reviewers`, `review.shadow_adjudicators`, `refinement.reviewers`) or a single role such as `review.pre_pr.sweeper`.
+Omitted means enabled, which is the canonical form: set the key only to switch a seat off, so an existing profile keeps the seats it names.
+A seat set to `false` stays configured, and the skill that reads it launches nothing - no process, no subagent, no report - and records "<name>: disabled" rather than a pass, a failure or a clean result.
+The seats a gate cannot run without (`review.reviewer`, `review.adjudicator`, `review.pre_pr.hunter`, `review.pre_pr.arbiter`) and the two refinement roles the ceremony cannot run without (`refinement.facilitator`, `refinement.product_owner`) may not be disabled: `profile/schema.json` refuses such a profile, and a session that finds one stops before the gate starts, so no gate or ceremony reports a result with a mandatory seat absent.
+
+The profile is read as text, whole, so a disabled entry is still read and still costs its own tokens.
+That is the whole trade, measured in the text a session reads: `enabled: false` keeps every word of the entry and adds one short key line, so it costs more than deleting the entry and about the same as commenting the entry out, which keeps the same words behind a comment prefix.
+What it buys over the other two is that the seat stays in the parsed profile and in the lists a skill iterates, so its switch-off is recorded as "<name>: disabled" and its return is a one-word edit; deleting the entry drops those words and the seat until git history is read, and commenting it out leaves the seat unset rather than disabled, which no skill can record.
+Disable a seat that is expected back, such as one whose provider cannot currently run; delete one that is gone for good.
+
 ## Overlays
 
 An overlay is a Markdown file that adds a project's operational detail to one skill or shared capability: which workflow deploys, which host to check, which runbook applies.

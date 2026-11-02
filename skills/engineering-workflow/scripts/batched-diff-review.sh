@@ -13,15 +13,28 @@
 #
 # Usage:
 #   batched-diff-review.sh --base REF --agent-cmd TEMPLATE [--repo DIR] [--name LABEL]
-#                          [--line-budget N] [--timeout SECONDS] [--context N]
+#                          [--enabled true|false] [--line-budget N] [--timeout SECONDS] [--context N]
+#
+# --enabled is the seat entry's `enabled` value (absent means true): pass `false` for a seat the
+# profile configures but switches off. A disabled seat launches nothing, writes no report and
+# prints the one evidence line `LABEL: disabled`; it is never recorded as passed, skipped for
+# failure, or clean. Any other value is refused rather than guessed, including an empty one, so a
+# value rendered from a profile can never mean "enabled" by accident. A report an earlier head left
+# under the same label is never deleted (this script is read-only, and a delete would have to resolve
+# a path a symlink or a swap can point outside the repository); it is named on stderr instead, so it
+# cannot be read as this seat's state.
+# The line is the only evidence a disabled seat produces and the exit status matches a completed
+# review, so a caller that gates on the status alone records a switched-off seat as one that ran.
+# The environment form (REVIEW_ENABLED) cannot be told apart from a profile value in the evidence
+# line; the profile stays the audited source of a seat's state.
 #
 # TEMPLATE is a shell command with {prompt_file} (the batch input) and optionally {output_file}
 # (if absent, the command's stdout is the batch result). It runs in an empty scratch directory with
 # the batch input on stdin, under a SIGKILL timeout. Read the prompt from stdin (for codex:
 # `codex exec ... -`) or from {prompt_file}; never expand it into argv (argv is visible to other
 # processes and one argument is capped at 128 KiB).
-# Env equivalents: REVIEW_REPO, REVIEW_BASE, REVIEW_AGENT_CMD, REVIEW_NAME, REVIEW_LINE_BUDGET (800),
-# REVIEW_TIMEOUT (240), REVIEW_CONTEXT (30).
+# Env equivalents: REVIEW_REPO, REVIEW_BASE, REVIEW_AGENT_CMD, REVIEW_NAME, REVIEW_ENABLED (true),
+# REVIEW_LINE_BUDGET (800), REVIEW_TIMEOUT (240), REVIEW_CONTEXT (30).
 #
 # Report: $(git rev-parse --git-path batched-review)/<LABEL>/report.md, ending in a VERDICT of
 # PASS, FAIL or INCOMPLETE. Each batch must return exactly one PASS or FAIL verdict for every file it
@@ -31,10 +44,18 @@ set -euo pipefail
 
 usage() { awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0" >&2; exit 2; }
 
+# The repository this script touches is the one `--repo` names or the current directory's, never the
+# one the caller's environment points at: an inherited GIT_DIR outranks `-C`, and GIT_CEILING_DIRECTORIES
+# can stop discovery below it, so both paths would then write into the wrong repository.
+unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE GIT_CEILING_DIRECTORIES
+
 REPO="${REVIEW_REPO:-}"
 BASE="${REVIEW_BASE:-}"
 AGENT_CMD="${REVIEW_AGENT_CMD:-}"
 NAME="${REVIEW_NAME:-optional-reviewer}"
+# Unset means enabled. An empty value is refused below rather than read as true, so a value
+# rendered from a profile (`enabled:` with no value) cannot launch a seat meant to be off.
+ENABLED="${REVIEW_ENABLED-true}"
 LINE_BUDGET="${REVIEW_LINE_BUDGET:-800}"
 BATCH_TIMEOUT="${REVIEW_TIMEOUT:-240}"
 CONTEXT_LINES="${REVIEW_CONTEXT:-30}"
@@ -44,6 +65,7 @@ while [ $# -gt 0 ]; do
     --base) BASE="$2"; shift 2 ;;
     --agent-cmd) AGENT_CMD="$2"; shift 2 ;;
     --name) NAME="$2"; shift 2 ;;
+    --enabled) ENABLED="$2"; shift 2 ;;
     --line-budget) LINE_BUDGET="$2"; shift 2 ;;
     --timeout) BATCH_TIMEOUT="$2"; shift 2 ;;
     --context) CONTEXT_LINES="$2"; shift 2 ;;
@@ -51,9 +73,43 @@ while [ $# -gt 0 ]; do
     *) echo "ERROR: unknown option $1" >&2; usage ;;
   esac
 done
+[[ "$NAME" =~ ^[A-Za-z0-9._-]+$ ]] && [ "$NAME" != "." ] && [ "$NAME" != ".." ] \
+  || { echo "ERROR: --name must be [A-Za-z0-9._-]+, and not '.' or '..'" >&2; exit 2; }
+case "$ENABLED" in
+  true|false) ;;
+  *) echo "ERROR: --enabled must be 'true' or 'false', the seat entry's enabled value (absent means true); got '$ENABLED'." >&2; exit 2 ;;
+esac
+
+# A seat the profile configures but switches off: no process, no report file, one evidence line.
+# This runs before --base, --agent-cmd and the diff are touched, so a disabled seat needs neither a
+# launcher nor a base. It reads the target repository only to name a report an earlier enabled run
+# left under this label, so the old report cannot pass for this seat's state; nothing is written or
+# removed. The path is resolved absolute: `--git-path` prints a repo-relative path in a plain
+# repository, which would point a caller standing elsewhere at its own report. Where the repository
+# cannot be resolved there is nothing to name and the disabled line is still recorded, so a
+# switched-off seat never goes unrecorded over a path mistake. Nothing is reviewed, so the
+# skills-repository guard below does not apply here.
+if [ "$ENABLED" = "false" ]; then
+  # Nothing is launched and nothing is written: the evidence is this one line. Git's trace variables
+  # are cleared for this branch only, because a caller's `GIT_TRACE2_EVENT` would have Git open a
+  # trace file on the way to the line; an enabled run keeps them, since its diagnostics are its own.
+  unset GIT_TRACE GIT_TRACE_PACKET GIT_TRACE_PERFORMANCE GIT_TRACE_SETUP GIT_TRACE_CURL \
+    GIT_TRACE2 GIT_TRACE2_EVENT GIT_TRACE2_PERF
+  printf '%s: disabled\n' "$NAME"
+  # An earlier head's report for this label is left exactly where it is and named on stderr instead
+  # of being deleted. This script is read-only, and deleting it would have to resolve a path that a
+  # symlink, a mount, or a concurrent swap can point outside the repository; a cleanup that cannot be
+  # done safely is not done at all, and the note is what stops the old report from being mistaken for
+  # this seat's state.
+  if stale="$(git -C "${REPO:-.}" rev-parse --path-format=absolute --git-path batched-review 2>/dev/null)" \
+     && [ -f "$stale/$NAME/report.md" ]; then
+    printf "note: an earlier report for '%s' is still at %s and does not describe this disabled seat.\n" \
+      "$NAME" "$stale/$NAME/report.md" >&2
+  fi
+  exit 0
+fi
 [ -n "$BASE" ] || { echo "ERROR: --base is required (origin/<integration branch> after a fetch)." >&2; exit 2; }
 [ -n "$AGENT_CMD" ] || { echo "ERROR: --agent-cmd is required (built from the optional reviewer's profile entry)." >&2; exit 2; }
-[[ "$NAME" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "ERROR: --name must be [A-Za-z0-9._-]+" >&2; exit 2; }
 
 # The target repository: --repo, else the current directory. Never this script's location.
 if [ -n "$REPO" ]; then
@@ -65,7 +121,7 @@ else
     exit 2
   fi
 fi
-cd "$ROOT"
+cd "$ROOT" || { echo "ERROR: cannot enter the repository at '$ROOT'." >&2; exit 11; }
 git rev-parse --verify -q "$BASE" >/dev/null || { echo "ERROR: base ref '$BASE' does not exist." >&2; exit 12; }
 
 mapfile -t FILES < <(git diff --name-only "$BASE"...HEAD)

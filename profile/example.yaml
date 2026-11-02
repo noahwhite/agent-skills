@@ -75,6 +75,10 @@ review:
     - name: Claude shadow adjudicator
       runtime: claude-code
       model: sonnet
+      # `enabled` is where a seat is switched off: this shadow stays configured but launches
+      # nothing, and records "<name>: disabled". Omitted is the canonical form and means enabled;
+      # the seats a gate cannot run without refuse `false`.
+      enabled: false
   # Optional: non-blocking extra reviewers, one attempt each. Delete the list to skip them.
   optional_reviewers:
     - name: Optional reviewer
@@ -84,7 +88,8 @@ review:
   # The pre-PR adversarial gate (skills/adversarial-review-pipeline/SKILL.md).
   # hunter and arbiter are required: the gate is blocked while either is unset.
   pre_pr:
-    # Optional: delete to skip the first-pass sweep and run the hunt only.
+    # Optional: delete to skip the first-pass sweep and run the hunt only, or set `enabled: false`
+    # to keep the entry and record "<name>: disabled" instead.
     sweeper:
       name: Sweeper
       runtime: opencode

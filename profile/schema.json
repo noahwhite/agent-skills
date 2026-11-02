@@ -304,24 +304,26 @@
       "description": "The review of record: an independent reviewer, then a separate clean, neutral adjudicator.",
       "properties": {
         "reviewer": {
-          "$ref": "#/$defs/agent"
+          "$ref": "#/$defs/required_agent",
+          "description": "The independent reviewer of record. Mandatory: a disabled seat here is refused, never reported as a gate with the reviewer absent."
         },
         "adjudicator": {
-          "$ref": "#/$defs/agent"
+          "$ref": "#/$defs/required_agent",
+          "description": "The clean, neutral adjudicator of record. Mandatory: a disabled seat here is refused, never reported as a gate with the adjudicator absent."
         },
         "shadow_adjudicators": {
           "type": "array",
           "items": {
             "$ref": "#/$defs/agent"
           },
-          "description": "Extra adjudicators run for comparison; never the decision of record."
+          "description": "Extra adjudicators run for comparison; never the decision of record. One with `enabled: false` is skipped without a launch and recorded as disabled."
         },
         "optional_reviewers": {
           "type": "array",
           "items": {
             "$ref": "#/$defs/agent"
           },
-          "description": "Non-blocking extra reviewers: one attempt, record a skip on failure."
+          "description": "Non-blocking extra reviewers: one attempt, record a skip on failure. One with `enabled: false` is skipped without a launch and recorded as disabled, never as passed, skipped for failure, or clean."
         },
         "merge_owner": {
           "enum": [
@@ -337,15 +339,15 @@
           "properties": {
             "sweeper": {
               "$ref": "#/$defs/agent",
-              "description": "Cheap long-context model for the whole-diff first-pass sweep. Optional: unset skips the sweep."
+              "description": "Cheap long-context model for the whole-diff first-pass sweep. Optional: unset or disabled skips the sweep."
             },
             "hunter": {
-              "$ref": "#/$defs/agent",
-              "description": "Empirical verify-and-hunt reviewer that mutates and runs code in a throwaway worktree; also the correctness lens of the escalation loop."
+              "$ref": "#/$defs/required_agent",
+              "description": "Empirical verify-and-hunt reviewer that mutates and runs code in a throwaway worktree; also the correctness lens of the escalation loop. Mandatory: the gate is blocked while it is unset, and a disabled seat here is refused."
             },
             "arbiter": {
-              "$ref": "#/$defs/agent",
-              "description": "Strong reviewer for the one bounded arbitration pass; also the verifier of the escalation loop."
+              "$ref": "#/$defs/required_agent",
+              "description": "Strong reviewer for the one bounded arbitration pass; also the verifier of the escalation loop. Mandatory: the gate is blocked while it is unset, and a disabled seat here is refused."
             },
             "simplicity_reviewer": {
               "$ref": "#/$defs/agent",
@@ -442,11 +444,11 @@
       "description": "Refinement and pointing roles. The product owner and two engineers vote; the facilitator does not vote.",
       "properties": {
         "facilitator": {
-          "$ref": "#/$defs/refinement_role",
+          "$ref": "#/$defs/required_refinement_role",
           "description": "The scrum master or engineering manager who orchestrates the ceremony and does not vote."
         },
         "product_owner": {
-          "$ref": "#/$defs/refinement_role",
+          "$ref": "#/$defs/required_refinement_role",
           "description": "The product owner voter and the only role that writes to the tracker."
         },
         "reviewers": {
@@ -520,6 +522,47 @@
         "command": {
           "type": "string",
           "description": "For runtime=command: the command line, with {prompt_file}, {output_file} and, where a skill says so, {checkout} placeholders."
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether the seat runs. Omitted means enabled, so an existing profile keeps working. A false value keeps the entry configured and reversible with one word, while a skill iterating a seat list launches nothing for it, writes no report, and records \"<name>: disabled\". The whole entry is still profile text a session reads. A seat the gate cannot run without may not be disabled: the schema refuses that, so no gate reports a result with a mandatory seat absent."
+        }
+      }
+    },
+    "required_refinement_role": {
+      "description": "A refinement role the ceremony cannot run without. It is a refinement role entry that may not be switched off: disabling the facilitator or the product owner is refused at validation, so no ceremony runs with that role absent.",
+      "allOf": [
+        {
+          "$ref": "#/$defs/refinement_role"
+        }
+      ],
+      "not": {
+        "required": [
+          "enabled"
+        ],
+        "properties": {
+          "enabled": {
+            "const": false
+          }
+        }
+      }
+    },
+    "required_agent": {
+      "description": "A seat a gate cannot run without. It is an agent entry that may not be switched off: disabling it is refused at validation, so no gate reports a result with the seat absent.",
+      "allOf": [
+        {
+          "$ref": "#/$defs/agent"
+        }
+      ],
+      "not": {
+        "required": [
+          "enabled"
+        ],
+        "properties": {
+          "enabled": {
+            "const": false
+          }
         }
       }
     },
@@ -560,6 +603,11 @@
         "family": {
           "type": "string",
           "description": "Optional model family label. The two reviewers must use different families or distinct model ids."
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether this voter runs. Omitted means enabled. A false value keeps the entry configured, and the ceremony skips it without a launch, records \"<name>: disabled\", and counts the enabled entries against its own rules."
         }
       },
       "allOf": [
