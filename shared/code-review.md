@@ -20,7 +20,7 @@ Reviewer and adjudicator models, launchers, and the merge owner come from `profi
 ## Review of record
 
 The review of record is an independent reviewer, then a separate clean, neutral adjudicator, at the current head.
-Both seats are mandatory: `profile/schema.json` refuses `enabled: false` on either, and a profile carrying one is a blocked gate before any review starts, never a review of record with that seat absent.
+Both seats are mandatory: `profile/schema.json` refuses `enabled: false` on either, and a session that finds such a profile stops before any review starts, so a review of record never stands with that seat absent.
 
 Every agent that judges work or takes delegated work (reviewer, adjudicator, shadow adjudicator, verifier, QA agent, delegated engineer) is clean and neutral; the two always go together:
 

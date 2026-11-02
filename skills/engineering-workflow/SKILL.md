@@ -155,7 +155,8 @@ For each entry in `profile.review.optional_reviewers`, run one review right afte
 A disabled entry launches nothing: no process, no subagent, no report file, and the evidence records "<name>: disabled".
 It is never recorded as passed, skipped for failure, or clean.
 Omission means enabled.
-Pass the entry's value to the launcher as `--enabled`, which refuses to launch and writes no report, so the skip is enforced rather than trusted to the caller.
+Pass the entry's value to the launcher as `--enabled true` or `--enabled false`, the lowercase literal its `enabled` key renders to, with an entry that omits the key passing `--enabled true`.
+The launcher refuses to launch and writes no report for the false value, so the skip is enforced rather than trusted to the caller.
 [scripts/batched-diff-review.sh](scripts/batched-diff-review.sh) is a generic launcher: build `--agent-cmd` from the entry and pass `--base origin/<integration branch>`.
 It batches the diff by a line budget with a cross-file blueprint, runs the reviewer in an empty directory with no repository access, and writes a report ending in PASS, FAIL or INCOMPLETE.
 Each batch must return exactly one PASS or FAIL verdict per file it was given; a missing, extra or unparseable verdict makes the batch INCOMPLETE.

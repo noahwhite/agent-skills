@@ -65,21 +65,24 @@ while [ $# -gt 0 ]; do
     *) echo "ERROR: unknown option $1" >&2; usage ;;
   esac
 done
-[[ "$NAME" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "ERROR: --name must be [A-Za-z0-9._-]+" >&2; exit 2; }
+[[ "$NAME" =~ ^[A-Za-z0-9._-]+$ ]] && [ "$NAME" != "." ] && [ "$NAME" != ".." ] \
+  || { echo "ERROR: --name must be [A-Za-z0-9._-]+, and not '.' or '..'" >&2; exit 2; }
 case "$ENABLED" in
   true|false) ;;
   *) echo "ERROR: --enabled must be 'true' or 'false', the seat entry's enabled value (absent means true); got '$ENABLED'." >&2; exit 2 ;;
 esac
 
 # A seat the profile configures but switches off: no process, no report file, one evidence line.
-# This runs before --base, --agent-cmd, the repository and the output directory are touched, so a
-# disabled seat needs neither a launcher nor a diff, and it leaves no trace a reader could mistake
-# for a review that ran.
+# This runs before --base, --agent-cmd and the diff are touched, so a disabled seat needs neither a
+# launcher nor a base. It still resolves the target repository, only to remove evidence an earlier
+# enabled run left under this label, so a switched-off seat never keeps a report a reader could
+# mistake for a review that ran. The path is resolved absolute: `--git-path` prints a repo-relative
+# path in a plain repository, and removing that from the caller's working directory would delete
+# another repository's evidence. Where the repository cannot be resolved there is nothing to remove
+# and the disabled line is still recorded, so a switched-off seat never goes unrecorded over a
+# path mistake. Nothing is reviewed, so the skills-repository guard below does not apply here.
 if [ "$ENABLED" = "false" ]; then
-  # Evidence an earlier enabled run left under this label is removed, so a switched-off seat never
-  # keeps a report a reader could mistake for a review that ran. A disabled seat needs neither
-  # --base nor --agent-cmd, and where the repository cannot be resolved there is nothing to remove.
-  if stale="$(git -C "${REPO:-.}" rev-parse --git-path batched-review 2>/dev/null)"; then
+  if stale="$(git -C "${REPO:-.}" rev-parse --path-format=absolute --git-path batched-review 2>/dev/null)"; then
     rm -rf -- "$stale/$NAME"
   fi
   printf '%s: disabled\n' "$NAME"

@@ -96,9 +96,6 @@ def test_a_mandatory_seat_cannot_be_disabled(path):
     found = errors(document)
     assert found, f"the schema accepted enabled: false on the mandatory seat {'.'.join(path)}"
     assert any(list(e.path)[: len(path)] == list(path) for e in found), validation_message(document)
-    # The discriminating half: an empty schema accepts the same document, so the refusal above is
-    # the guard and not a schema that rejects everything.
-    assert not list(jsonschema.Draft202012Validator({}).iter_errors(document))
 
 
 @pytest.mark.parametrize("path", MANDATORY_REFINEMENT_ROLES, ids=lambda p: ".".join(p))
@@ -109,7 +106,6 @@ def test_a_mandatory_refinement_role_cannot_be_disabled(path):
     seat(document, path)["enabled"] = False
     found = errors(document)
     assert found, f"the schema accepted enabled: false on {'.'.join(path)}"
-    assert not list(jsonschema.Draft202012Validator({}).iter_errors(document))
 
 
 def test_the_guard_covers_exactly_the_seats_that_may_not_be_disabled():
@@ -117,7 +113,7 @@ def test_the_guard_covers_exactly_the_seats_that_may_not_be_disabled():
     guarded = set()
 
     def walk(node, path=()):
-        """Every property path whose entry is guarded, following `properties` only."""
+        """Every property path whose entry is guarded, through `properties` and array `items`."""
         if not isinstance(node, dict):
             return
         ref = node.get("$ref", "")
@@ -125,6 +121,8 @@ def test_the_guard_covers_exactly_the_seats_that_may_not_be_disabled():
             guarded.add(".".join(path))
         for key, value in node.get("properties", {}).items():
             walk(value, (*path, key))
+        if "items" in node:
+            walk(node["items"], (*path, "[]"))
 
     walk(SCHEMA)
     expected = {".".join(path) for path in MANDATORY_SEATS + MANDATORY_REFINEMENT_ROLES}
@@ -267,6 +265,58 @@ def test_disabling_a_seat_removes_the_report_an_earlier_run_left(tmp_path, revie
     assert second.returncode == 0, second.stderr
     assert second.stdout.strip() == "glm-seat: disabled", second.stdout
     assert not report_dir.exists(), f"a stale report survived the disabled run: {sorted(report_dir.rglob('*'))}"
+
+
+def test_the_cleanup_removes_the_named_repositorys_report_not_the_callers(tmp_path, reviewed_repo):
+    """AC2: `--repo` names the repository whose evidence is cleaned, wherever the caller stands.
+
+    The launcher is run from a second repository, so a repo-relative report path would delete the
+    caller's evidence and leave the target's stale report in place.
+    """
+    spy = tmp_path / "spy.log"
+    first = launch(reviewed_repo, "--agent-cmd", spy_command(spy))
+    assert first.returncode == 0, first.stderr
+    target = reviewed_repo / ".git" / "batched-review" / "glm-seat"
+    assert (target / "report.md").is_file()
+
+    caller = tmp_path / "caller"
+    caller.mkdir()
+    subprocess.run(["git", "init", "-q", "-b", "main"], cwd=caller, check=True,
+                   capture_output=True, env={**os.environ, "HOME": str(tmp_path)})
+    own = caller / ".git" / "batched-review" / "glm-seat"
+    own.mkdir(parents=True)
+    (own / "report.md").write_text("# Overall\n\n### VERDICT\nPASS\n")
+
+    result = subprocess.run(
+        ["bash", str(LAUNCHER), "--repo", str(reviewed_repo), "--name", "glm-seat",
+         "--enabled", "false", "--agent-cmd", spy_command(spy)],
+        cwd=caller, capture_output=True, text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "glm-seat: disabled", result.stdout
+    assert not target.exists(), "the target repository's stale report survived"
+    assert (own / "report.md").is_file(), "the caller's evidence was deleted"
+
+
+def test_a_dot_name_is_refused(tmp_path, reviewed_repo):
+    """A name that would make the cleanup remove a whole directory is refused."""
+    for name in (".", ".."):
+        result = launch(reviewed_repo, "--enabled", "false", name=name)
+        assert result.returncode == 2, (name, result.returncode, result.stdout)
+        assert "--name" in result.stderr, result.stderr
+
+
+def test_the_environment_can_enable_a_seat_explicitly(tmp_path, reviewed_repo):
+    """The env equivalent carries the same two literals as the flag."""
+    spy = tmp_path / "spy.log"
+    result = subprocess.run(
+        ["bash", str(LAUNCHER), "--repo", str(reviewed_repo), "--base", "HEAD~1",
+         "--name", "glm-seat", "--agent-cmd", spy_command(spy)],
+        cwd=reviewed_repo, capture_output=True, text=True,
+        env={**os.environ, "REVIEW_ENABLED": "true"},
+    )
+    assert result.returncode == 0, result.stderr
+    assert spy.exists(), "an explicitly enabled seat through the environment did not launch"
 
 
 def test_an_empty_environment_value_is_refused_rather_than_read_as_enabled(tmp_path, reviewed_repo):
@@ -418,9 +468,8 @@ def test_the_profile_documentation_states_what_a_disabled_entry_costs():
     for alternative in ("tokens", "deleting the entry", "commenting it out"):
         assert alternative in body, alternative
     assert "one-word edit" in body, body
+    assert "costs more than deleting the entry" in body, body
+    assert "about the same as commenting the entry out" in body, body
     # Commenting out is legal YAML, so the honest difference is the unset seat, not a parse error.
     assert "invalid to parse" not in body, body
     assert "unset rather than disabled" in body, body
-
-
-
