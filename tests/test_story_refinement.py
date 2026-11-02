@@ -546,21 +546,22 @@ def step(text: str, heading: str) -> str:
 
 def test_step_one_probe_precedes_voter_launch() -> None:
     body = squash(step(SKILL.read_text(), "Step 1: Independent refinement"))
-    probe = body.find("tracker-write preflight")
+    probe = body.find("run the tracker-write preflight before any voter launches")
     launch = body.find("launch the three engineers")
     assert probe != -1, "missing tracker-write preflight"
     assert launch != -1, "missing voter launch"
     assert probe < launch, "the probe must precede the voter launch"
-    assert "run the tracker-write preflight before any voter launches" in body
+    assert "the po, in a separate context, posts one comment" in body, "the preflight is the PO's comment"
 
 
 def test_step_one_roster_check_precedes_the_probe_and_every_voter() -> None:
     """AC6: the roster check runs before the tracker-write preflight and before any voter launch."""
     body = squash(step(SKILL.read_text(), "Step 1: Independent refinement"))
     roster = body.find("validate the refinement roster before the tracker-write preflight and before any voter launch")
-    probe = body.find("tracker-write preflight")
+    probe = body.find("run the tracker-write preflight before any voter launches")
     launch = body.find("launch the three engineers")
     assert roster != -1, "missing the roster check"
+    assert probe != -1, "missing the preflight item"
     assert roster < probe < launch, "the roster check must precede the probe and every voter launch"
     assert "first-existing-file rule in [references/profile.md](references/profile.md)" in body
     assert "never a repository-only read" in body
@@ -695,6 +696,13 @@ def test_roles_make_the_po_the_only_author_of_tracker_writes() -> None:
     roles = squash(section(SKILL.read_text(), "Roles"))
     assert "the only author of tracker writes" in roles
     assert "only tracker mutator" not in roles
+
+
+def test_skill_states_the_product_owner_is_not_a_voter() -> None:
+    """AC6: the roles intro and the Roles bullet both say the product owner does not vote."""
+    assert "The product owner authors every tracker write and does not vote." in spaced(SKILL.read_text())
+    roles = squash(section(SKILL.read_text(), "Roles"))
+    assert "the po is not a voter" in roles
 
 
 def test_step_two_stop_and_triage_defer_to_the_fallback() -> None:
@@ -1615,6 +1623,10 @@ def test_pointing_template_asks_for_complexity_rationales() -> None:
         "  - Engineer two: <value, or not recorded> - <short complexity rationale, or none when the value is not recorded>",
         "  - Engineer three: <value, or not recorded> - <short complexity rationale, or none when the value is not recorded>",
     ]
+    assert lines[values + 4].startswith("- Consensus check:"), (
+        "the value block holds exactly the three engineer voters")
+    assert not any(line.strip().startswith("- Product owner:") for line in lines), (
+        "the product owner is not a pointing voter")
     assert [line for line in lines if line.startswith("- Re-vote:")] == [
         "- Re-vote: <accepted set per voter, with complexity rationale; or no consensus, with its complexity "
         "rationale, for a voter that records none; or none when it ran and recorded nothing; or skipped, when the "
@@ -1743,6 +1755,21 @@ def test_record_templates_cite_file_base_names(heading: str, line: str) -> None:
 @pytest.mark.parametrize("phrase", ["<scratch path>", "cite their paths"])
 def test_record_templates_never_request_local_paths(phrase: str) -> None:
     assert phrase not in RECORD.read_text()
+
+
+def test_refinement_template_voter_inputs_are_only_the_three_engineers() -> None:
+    """AC6: the refinement comment's voter-input block is exactly the three engineer voters."""
+    lines = template("Refinement comment").splitlines()
+    start = next(index for index, line in enumerate(lines) if line.startswith("- Voter inputs,"))
+    assert lines[start + 1 : start + 4] == [
+        "  - Engineer one (<family or model>): <file base name>",
+        "  - Engineer two (<family or model>): <file base name>",
+        "  - Engineer three (<family or model>): <file base name>",
+    ]
+    assert lines[start + 4].startswith("- SM/EM contribution (not a vote):"), (
+        "the voter-input block holds exactly the three engineer voters")
+    assert not any(line.strip().startswith("- Product owner:") for line in lines), (
+        "the product owner is not a voter")
 
 
 # --- SKL-47: the metrics switch, the closing message, and the run summary --------------------------
