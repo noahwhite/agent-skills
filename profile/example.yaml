@@ -147,6 +147,10 @@ refinement:
       runtime: opencode
       model: example/family-b
       family: family-b
+    - name: Engineer three
+      runtime: opencode
+      model: example/family-c
+      family: family-c
   point_cap: 5
 workspace:
   # A base directory only: each session creates one directory inside it with mktemp -d
