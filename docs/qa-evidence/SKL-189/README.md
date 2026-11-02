@@ -11,7 +11,7 @@ The prior signed README at `0a87d5cf33b81e724007167611ed0ca929abf0e3` was inspec
 
 ## Scope ruling
 
-The product owner ruled on 2026-11-02: "The consumer-side three-engineer roster gap between the two merged repositories is SKL-177's work, not SKL-189's. SKL-189 is assessed on its own criteria, and the roster gap is left to SKL-177."
+The product owner ruling, quoted verbatim in the linked round-four QA comment on 2026-11-02, is: "The consumer-side three-engineer roster gap between the two merged repositories is SKL-177's work, not SKL-189's. SKL-189 is assessed on its own criteria, and the roster gap is left to SKL-177."
 This supersedes the earlier QA rounds' use of that gap to withhold SKL-189 sign-off, not their raw observations.
 The current combined consumer profile still fails the later three-reviewer schema; this evidence does not claim that build is wholly green.
 The untouched owner-authorised run profile also fails that later schema because it still has two refinement reviewers; its refresh remains separately owned, not silently repaired for this evidence run.
@@ -22,7 +22,7 @@ Both were Backlog when read, and neither profile was silently repaired by QA.
 
 - Fresh detached fetched upstream `origin/main`: `f3ec7e9939d38271c25726b685084f0d7a2675db`, containing SKL-189 merge `cc869232b411c9728cd883f922dd1f062f0ea2bd` and later SKL-175.
 - Fresh detached fetched consumer `origin/main`: `f6ad11e29cebcc80214ff2814dbfa5d03500802e` in `officina-pub/opencode-dev-container`.
-- Fresh local image: `opencode-env:skl189-qa-round4`, ID `sha256:1966c507937c4c5727195d826fd6d8050f8fafc1fd13bc0860deff698c6a33ec`, built with the upstream SHA above and OpenCode CLI `2.2.5`.
+- Fresh local image: `opencode-env:skl189-qa-round4`, ID `sha256:1966c507937c4c5727195d826fd6d8050f8fafc1fd13bc0860deff698c6a33ec`, built with the upstream SHA above.
 - Fixtures: consumer GLM-5.3-Flash optional entry, omitted-flag sibling, two shadow entries and three distinct-family refinement entries with one disabled.
 - Seat commands are deterministic spies, not paid-provider availability checks or a full ceremony.
 - Original checkout HEAD/status and the consumer's existing `docker-compose.yml` modification were preserved, as recorded in `checkout-integrity.json`.
@@ -30,7 +30,7 @@ Both were Backlog when read, and neither profile was silently repaired by QA.
 
 ## Per-item verdicts
 
-Every evidence filename below is a section in the raw tracker attachment, not an additional repository file.
+Every evidence filename below is a section in the raw tracker attachment or the round-four ceremony supplement, not an additional repository file.
 
 | Item | Verdict | Evidence and limitation |
 |---|---|---|
@@ -40,7 +40,7 @@ Every evidence filename below is a section in the raw tracker attachment, not an
 | AC4 | Verified in story scope | README lines 99-106 explain whole-text reading and more tokens than deletion/about the same as commenting; inspected consumer policy retains missing-entry, unknown-key and stale-route guards; historical original-story-schema control passed 215 tests; later roster incompatibility remains SKL-177-owned. |
 | AC5 | Verified on bounded consumer-derived review ceremony | `ceremony-independent-assertions.json` in the supplement: GLM disabled 0 launches/no report versus re-enabled 2 batches/report; enabled sibling, mandatory reviewer/adjudicator, shadow and local posting/readback complete in both scenarios with identical remaining ledgers and output bytes. |
 | DoD: all acceptance criteria met | Verified in story scope | AC1-5 observations above, assessed under the explicit product owner ruling. |
-| DoD: tests written and passing | Verified in story scope | Upstream CI readback: 1017 passed; local evidence preflight: 999 passed; unchanged historical consumer regression: 8/9 scripts pass, optional suite 213 passed/2 roster failures; original-story-schema control 215 passed; no whole-build green claim. |
+| DoD: tests written and passing | Verified in story scope | Upstream CI readback: 1017 passed; unchanged historical consumer regression: 8/9 scripts pass, optional suite 213 passed/2 roster failures; original-story-schema control 215 passed; no whole-build green claim. |
 | DoD: independently reviewed | Verified | Fresh API records bind both implementation review comments to the exact final heads in both commit ID and first-line SHA. |
 | DoD: docs updated | Verified | Upstream README and consumer README/code-review/engineering-workflow overlays inspected on fetched main. |
 | DoD: deployed verification | Verified for delivered artifacts | Fresh `image-assertions.json`: seven baked/installed source hashes match; installed launcher prints GLM disabled without touching spy; roster compatibility is separately owned. |
@@ -64,7 +64,7 @@ Image verification ran the exact entrypoint agent-skills install block in a fres
 Installed profile SHA256 is `16b08c6ab6d7ba3951329c3a2db233e9eb8a63aeefab3e255bf611c20a71821e`; schema SHA256 is `19f0218a448825ed85c4f81854b07c24d2b7678b7468570948aecbc0f94162fa`.
 Upstream [implementation review](https://github.com/noahwhite/agent-skills/pull/132#pullrequestreview-5731312200) covers `cd09a9cc169c204179d64c52125aa23a4249d226`; [consumer implementation review](https://github.com/officina-pub/opencode-dev-container/pull/67#pullrequestreview-5731338579) covers `14b95f1e4f1984f5edef9ae80cb5083e3a151f96`.
 Upstream merged-main [CI run](https://github.com/noahwhite/agent-skills/actions/runs/41377883264) completed successfully with 1017 passed; status and logs were freshly read.
-The supplement records that run's head `f3ec7e9939d38271c25726b685084f0d7a2675db`, status `completed` and conclusion `success`; local evidence preflight separately collected 999 passing tests, and the 18-test collection difference has not been diagnosed or claimed equivalent coverage.
+The supplement records that run's head `f3ec7e9939d38271c25726b685084f0d7a2675db`, status `completed` and conclusion `success`; local evidence preflight passes separately, without a claim of equivalent test collection or coverage.
 All ten retained engineering regression/control log hashes match at unchanged source heads; the 215-pass original-story-schema control does not replace the two current-schema failures.
 Missing-entry guards are direct assertions, stale-route guards are lexical scans, and the accepted mid-sentence launch-verb blind spot remains a limitation, not a runtime safety proof.
 The consumer string-enabled negative control can be masked by the roster error; the independent schema probe avoids that by using a valid baseline.
