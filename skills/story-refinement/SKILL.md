@@ -4,7 +4,7 @@ description: >-
   Run independent-context story refinement and secret pointing as the scrum master or engineering manager (SM/EM).
   Three voters refine the story, agree, then point it blind through a consensus check and, where it calls for them, at most one discussion and one re-vote, with a fresh independent vote after an anchoring recovery.
   Use when asked to refine a story, run a refinement or pointing ceremony, decide Definition of Ready changes, estimate a story, split an oversized story, or record a refinement or pointing decision.
-  The SM/EM facilitates and never votes; the product owner and two engineers are the voters.
+  The SM/EM facilitates and never votes; the three engineer voters are the voters and the product owner authors every tracker write.
   Not for implementing the story (use engineering-workflow) or verifying a deployed story (use qa-verification).
 license: Apache-2.0
 compatibility: Requires a tracker CLI or MCP server (Linear by default), the configured facilitator, product owner, and reviewer roles, and a runtime that can run each role as its profile entry says.
@@ -14,7 +14,8 @@ compatibility: Requires a tracker CLI or MCP server (Linear by default), the con
 
 Run refinement and pointing as a facilitated ceremony with three voters and one facilitator.
 The facilitator is the scrum master or engineering manager (SM/EM).
-The voters are the product owner and two engineers.
+The voters are the three engineers.
+The product owner authors every tracker write and does not vote.
 The facilitator never votes and never declares consensus.
 
 The process has two stages and four steps.
@@ -55,19 +56,20 @@ Where this file and a capability file disagree, the capability file is authorita
 - `profile.refinement.facilitator` is the SM/EM and the orchestrator.
   It is the top-level session, loads `persona-scrum-master`, and runs the ceremony.
   It is non-voting: it submits no point value, does not count toward the agreement, and does not declare consensus.
-- `profile.refinement.product_owner` is the product owner (PO) voter and the only author of tracker writes.
+- `profile.refinement.product_owner` is the product owner (PO) and the only author of tracker writes.
   The PO authors the refinement comment and every other tracker write, applies each except under the denied tracker writes fallback, and reads each write back.
+  The PO is not a voter: it authors no refinement input file, records no accept-round `ACCEPT` or `OBJECT`, no point value and no accepted-set value.
   The facilitator applies tracker writes only under the denied tracker writes fallback.
-- `profile.refinement.reviewers` is exactly two engineer voters on different model families, recorded as optional `family` values or distinct model ids.
-  Both reviewers must set `family` or both must omit it. If exactly one sets `family`, stop and ask for a different reviewer. If both set `family`, the values must differ; if both omit `family`, the `model` ids must differ. Never run two voters from the same model family.
-  The PO and the two engineers are the voters in both the refinement agreement and the pointing round.
+- `profile.refinement.reviewers` is exactly three engineer voters on different model families, each with a non-empty explicit `family`, on pairwise-distinct family values and pairwise-distinct model ids.
+  A reviewer count other than three, a missing required role, a missing or empty reviewer `family`, a duplicate reviewer family or a duplicate reviewer model id stops the ceremony before any voter launch, and the roster check in Step 1 names the violated requirement.
+  The three engineers are the voters in both the refinement agreement and the pointing round.
 - A `profile.refinement.facilitator`, `profile.refinement.product_owner`, or `profile.refinement.reviewers` that is unset stops the ceremony.
   Ask for the value; never substitute one.
   A facilitator or product owner whose `enabled` is `false` stops the ceremony the same way, with a named error: neither is a launch this ceremony may skip, so no vote, tracker write or record follows.
 - An engineer voter whose `enabled` is `false` is skipped before any launch: no process, no subagent, no output file, and the evidence reads "<name>: disabled", never a vote, a failed vote, or a clean one.
   Omission means enabled.
-  The rules above count the enabled entries: if fewer than two engineer voters are enabled, or the enabled ones share a model family, stop the ceremony and name the disabled entry in the stop.
-  With `refinement.reviewers` at its two entries, disabling one therefore blocks the ceremony until that seat is re-enabled or an enabled entry replaces it, so the ceremony never runs short a voter and never records a disabled entry as a voter.
+  The rules above count the enabled entries: if fewer than three engineer voters are enabled, or the enabled ones share a family or a model id, stop the ceremony and name the disabled entry in the stop.
+  With `refinement.reviewers` at its three entries, disabling one therefore blocks the ceremony until that seat is re-enabled or an enabled entry replaces it, so the ceremony never runs short a voter and never records a disabled entry as a voter.
 - Stop when the configured facilitator runtime differs from the orchestrator runtime.
   The facilitator is always the top-level session.
 - When `metrics` is on, the metrics summary is the one comment the facilitator posts outside the denied tracker writes fallback.
@@ -97,30 +99,33 @@ Never retry a denied write through a different tool or server.
 - **Inputs:** the story description, acceptance criteria, comments, and formal relations; the profile; the capability references; the Definition of Ready and Definition of Done template from the matching filing skill.
 - **Process:**
   1. Create the todo list and read the story completely, including `linear issue relation list <ID>` for every blocker.
-  2. Run the tracker-write preflight before any voter launches.
+  2. Validate the refinement roster before the tracker-write preflight and before any voter launch.
+     Resolve the profile through the first-existing-file rule in [references/profile.md](references/profile.md) (the `shared/profile.md` rule), never a repository-only read.
+     Stop with a message naming the violated requirement when `profile.refinement.reviewers` does not hold exactly three entries, when fewer than three reviewers are enabled, when a required role (`facilitator`, `product_owner`, `reviewers`) is unset, when a reviewer `family` is missing or empty, when two reviewer families are equal, or when two reviewer model ids are equal.
+  3. Run the tracker-write preflight before any voter launches.
      The PO, in a separate context, posts one comment on the story under refinement that marks itself as the tracker-write preflight, and reads it back.
      On success the facilitator records the comment id for the refinement record.
      If the write is denied, no voter launches, and the facilitator reports `needs input` to the owner naming the denied write and pointing to the "Tracker writes from a subagent" rule in `references/runtimes.md`.
      The probe exercises comment add only; later write kinds fall under the denied tracker writes fallback, and the Step 2 stop stays as the backstop.
      After the owner acts, run the probe again; if the owner directly authorizes the facilitator under the denied tracker writes fallback, the facilitator applies the PO-authored probe verbatim, records its comment id, and the voters launch.
-  3. Launch the PO and both engineers in separate contexts with the same story surface.
+  4. Launch the three engineers in separate contexts with the same story surface.
      Give each voter only its own profile entry, the story, and the session's scratch directory it writes into; never give it another voter's file or a summary of another input.
      A voter runs in its own child context and cannot derive the parent's directory, so the brief carries the path.
-  4. Each voter writes only its own input file in the session's scratch directory (`references/runtimes.md`, Scratch files), under a subdirectory named after the story key and a role-specific name; never a path component outside that directory.
+  5. Each voter writes only its own input file in the session's scratch directory (`references/runtimes.md`, Scratch files), under a subdirectory named after the story key and a role-specific name; never a path component outside that directory.
      The session's directory sits inside `profile.workspace.scratch_dir` when that is the base the runtime or the profile gives (the runtime's base wins), and is a standalone `mktemp -d` when neither gives one.
      A voter may read its own file back but must not write another role's file.
-  5. The facilitator records its own SM/EM refinement contribution in a separate file.
+  6. The facilitator records its own SM/EM refinement contribution in a separate file.
      That contribution may challenge acceptance criteria, propose refinements, and identify gaps: missing ACs, gaps within an AC, and unobservable criteria.
-  6. No voter sees another voter's refinement input or value before its own input is recorded.
+  7. No voter sees another voter's refinement input or value before its own input is recorded.
      No tracker comment is posted until all three voter inputs are recorded, except the tracker-write preflight, which is the only exception.
 - **Reviewer output contract:** a refinement input includes a Definition of Ready verdict, per-AC gaps with exact proposed wording, scope and split, risks, refined AC deltas, and an `ACCEPT` or `OBJECT` position.
 - **Outputs:** three voter input files and one separate SM/EM contribution file in the session's scratch directory.
-- **Stop:** a required profile key is unset, a voter cannot run on its configured runtime and model, a voter file is missing, or the tracker-write preflight is denied and the owner has not authorized the denied tracker writes fallback.
+- **Stop:** the roster check fails (a reviewer count other than three, fewer than three reviewers enabled, a required role unset, a missing or empty reviewer family, or a duplicate reviewer family or model id), a required profile key is unset, a voter cannot run on its configured runtime and model, a voter file is missing, or the tracker-write preflight is denied and the owner has not authorized the denied tracker writes fallback.
   The scratch directory is never such a key: without one the documented standalone `mktemp -d` fallback applies.
   Never substitute a different model, a different voter, or a guessed value.
 
 The SM/EM contribution is not a vote.
-The PO and the two engineers decide whether an SM/EM concern is a blocking amendment.
+The three engineer voters decide whether an SM/EM concern is a blocking amendment.
 
 ### Step 2: Reconciliation and the accept round
 
@@ -145,7 +150,7 @@ The PO and the two engineers decide whether an SM/EM concern is a blocking amend
 - **Stop:** two accept rounds without all three `ACCEPT`; a voter is missing; the PO cannot write to the tracker and the owner has not authorized the denied tracker writes fallback.
 
 The SM/EM's refinement comments never substitute for a voter's `ACCEPT` or `OBJECT`.
-Only the PO and the two engineers count toward the agreement.
+Only the three engineer voters count toward the agreement.
 
 ## Stage 2: pointing
 
@@ -153,7 +158,7 @@ Only the PO and the two engineers count toward the agreement.
 
 - **Inputs:** the accepted refined story and its refinement comment id; `profile.tracker.estimate_scale`.
 - **Process:**
-  1. Launch the PO and both engineers again in separate contexts on the same refined version.
+  1. Launch the three engineers again in separate contexts on the same refined version.
   2. A point measures complexity - design difficulty, interacting constraints, unknowns, and the risk of breaking existing behaviour - and never the amount of work or elapsed time; routine, well-understood work such as writing tests, opening a PR, review, running a fixture, or regenerating copies adds no points however long it takes.
   3. The sentence above is the pointing basis.
      Every pointing prompt or prompt file carries it verbatim, and carries the item 4 rationale rule, including each slice estimate under the Split rule.

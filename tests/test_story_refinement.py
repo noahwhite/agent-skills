@@ -35,8 +35,8 @@ REQUIRED_PHRASES = [
     "refinement comment id",
     "high and the low",
     "different model families",
-    "never run two voters from the same model family",
-    "both reviewers must set `family` or both must omit it",
+    "exactly three engineer voters",
+    "pairwise-distinct family values and pairwise-distinct model ids",
     "complete refined story and acs",
     "newly created voter contexts",
     "split trigger is met",
@@ -142,6 +142,7 @@ def test_manifest_registers_skill() -> None:
 
 
 def test_schema_has_refinement_object() -> None:
+    """AC6: exactly three engineer reviewers, each required to carry a non-empty family."""
     refinement = SCHEMA["properties"]["refinement"]
     assert refinement["type"] == "object"
     assert refinement["additionalProperties"] is False
@@ -150,9 +151,12 @@ def test_schema_has_refinement_object() -> None:
     assert props["product_owner"]["$ref"] == "#/$defs/required_refinement_role"
     reviewers = props["reviewers"]
     assert reviewers["type"] == "array"
-    assert reviewers["minItems"] == 2
-    assert reviewers["maxItems"] == 2
-    assert reviewers["items"]["$ref"] == "#/$defs/refinement_role"
+    assert reviewers["minItems"] == 3, "the ceremony seats exactly three engineer voters"
+    assert reviewers["maxItems"] == 3, "the ceremony seats exactly three engineer voters"
+    items = reviewers["items"]
+    assert items["$ref"] == "#/$defs/refinement_role"
+    assert {"required": ["family"]} in items["allOf"], "each reviewer item must require family"
+    assert SCHEMA["$defs"]["refinement_role"]["properties"]["family"]["minLength"] == 1
     point_cap = props["point_cap"]
     assert point_cap["type"] == "integer"
     assert point_cap["minimum"] == 1
@@ -186,19 +190,27 @@ def test_example_sets_refinement_values() -> None:
         role = refinement[key]
         assert role["name"] and role["runtime"] and role["model"]
     reviewers = refinement["reviewers"]
-    assert len(reviewers) == 2
+    assert len(reviewers) == 3
     families = [role.get("family") for role in reviewers]
     models = [role["model"] for role in reviewers]
-    assert all(families) or not any(families), "reviewer family settings must be all-set or all-unset"
-    if all(families):
-        assert len(set(families)) == 2, "reviewer families must differ"
-    else:
-        assert len(set(models)) == 2, "reviewer models must differ"
+    assert all(families), "every reviewer must set a non-empty family"
+    assert len(set(families)) == 3, "reviewer families must be pairwise distinct"
+    assert len(set(models)) == 3, "reviewer models must be pairwise distinct"
     assert refinement["point_cap"] == 5
 
 
 def test_readme_lists_skill() -> None:
     assert "skills/story-refinement/SKILL.md" in (ROOT / "README.md").read_text()
+
+
+def test_readme_row_names_the_three_engineer_voters() -> None:
+    """AC6: the README row names the three engineer voters, not a product-owner vote."""
+    row = next(line for line in (ROOT / "README.md").read_text().splitlines()
+               if "skills/story-refinement/SKILL.md" in line)
+    lowered = row.lower()
+    assert "three engineers voting" in lowered, row
+    assert "po plus two engineers voting" not in lowered, row
+    assert "product owner authoring every tracker write" in lowered, row
 
 
 def test_todo_tracking_has_seed_entry() -> None:
@@ -535,11 +547,32 @@ def step(text: str, heading: str) -> str:
 def test_step_one_probe_precedes_voter_launch() -> None:
     body = squash(step(SKILL.read_text(), "Step 1: Independent refinement"))
     probe = body.find("tracker-write preflight")
-    launch = body.find("launch the po and both engineers")
+    launch = body.find("launch the three engineers")
     assert probe != -1, "missing tracker-write preflight"
     assert launch != -1, "missing voter launch"
     assert probe < launch, "the probe must precede the voter launch"
     assert "run the tracker-write preflight before any voter launches" in body
+
+
+def test_step_one_roster_check_precedes_the_probe_and_every_voter() -> None:
+    """AC6: the roster check runs before the tracker-write preflight and before any voter launch."""
+    body = squash(step(SKILL.read_text(), "Step 1: Independent refinement"))
+    roster = body.find("validate the refinement roster before the tracker-write preflight and before any voter launch")
+    probe = body.find("tracker-write preflight")
+    launch = body.find("launch the three engineers")
+    assert roster != -1, "missing the roster check"
+    assert roster < probe < launch, "the roster check must precede the probe and every voter launch"
+    assert "first-existing-file rule in [references/profile.md](references/profile.md)" in body
+    assert "never a repository-only read" in body
+    for requirement in (
+        "exactly three entries",
+        "fewer than three reviewers are enabled",
+        "a required role (`facilitator`, `product_owner`, `reviewers`) is unset",
+        "a reviewer `family` is missing or empty",
+        "two reviewer families are equal",
+        "two reviewer model ids are equal",
+    ):
+        assert requirement in body, requirement
 
 
 def test_step_one_probe_is_a_comment_the_po_posts_and_reads_back() -> None:
@@ -844,7 +877,7 @@ def test_pointing_basis_appears_once_in_the_skill_and_inside_step_three() -> Non
 
 def test_pointing_basis_is_its_own_item_right_after_the_launch_item() -> None:
     items = process_items(STEP_THREE)
-    assert items[0].startswith("Launch the PO and both engineers again in separate contexts")
+    assert items[0].startswith("Launch the three engineers again in separate contexts")
     assert items[1] == POINTING_BASIS
 
 
@@ -906,7 +939,7 @@ def test_step_four_re_vote_carries_the_basis_by_reference_to_step_three() -> Non
 
 
 STEP_THREE_ITEM_PREFIXES = [
-    "Launch the PO and both engineers again in separate contexts on the same refined version.",
+    "Launch the three engineers again in separate contexts on the same refined version.",
     "A point measures complexity",
     "The sentence above is the pointing basis.",
     "Each voter submits one point value",
@@ -1578,9 +1611,9 @@ def test_pointing_template_asks_for_complexity_rationales() -> None:
     lines = pointing_template()
     values = next(index for index, line in enumerate(lines) if line.startswith("- Values, recorded before the discussion:"))
     assert lines[values + 1 : values + 4] == [
-        "  - Product owner: <value, or not recorded> - <short complexity rationale, or none when the value is not recorded>",
         "  - Engineer one: <value, or not recorded> - <short complexity rationale, or none when the value is not recorded>",
         "  - Engineer two: <value, or not recorded> - <short complexity rationale, or none when the value is not recorded>",
+        "  - Engineer three: <value, or not recorded> - <short complexity rationale, or none when the value is not recorded>",
     ]
     assert [line for line in lines if line.startswith("- Re-vote:")] == [
         "- Re-vote: <accepted set per voter, with complexity rationale; or no consensus, with its complexity "
@@ -1644,9 +1677,9 @@ def test_record_has_the_accept_round_result_template_with_exactly_the_fields() -
         "",
         "- Refinement comment covered: <refinement comment id>",
         "- Round: <1 or 2>",
-        "- Product owner: <ACCEPT or OBJECT>",
         "- Engineer one (<family or model>): <ACCEPT or OBJECT>",
         "- Engineer two (<family or model>): <ACCEPT or OBJECT>",
+        "- Engineer three (<family or model>): <ACCEPT or OBJECT>",
         "- Outcome: <accepted, another round, or unpointed>",
     ]
 
@@ -1696,9 +1729,9 @@ def test_record_intro_excludes_local_paths_and_includes_needed_content() -> None
 @pytest.mark.parametrize(
     ("heading", "line"),
     [
-        ("Refinement comment", "- Product owner: <file base name>"),
         ("Refinement comment", "- Engineer one (<family or model>): <file base name>"),
         ("Refinement comment", "- Engineer two (<family or model>): <file base name>"),
+        ("Refinement comment", "- Engineer three (<family or model>): <file base name>"),
         ("Refinement comment", "- SM/EM contribution (not a vote): <file base name>"),
         ("Pointing record", "- SM/EM sizing context, after all three values: <file base name> or verbatim, eliding a pre-reveal value or a prescription, or none"),
     ],

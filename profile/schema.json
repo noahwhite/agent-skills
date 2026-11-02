@@ -441,7 +441,7 @@
     "refinement": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Refinement and pointing roles. The product owner and two engineers vote; the facilitator does not vote.",
+      "description": "Refinement and pointing roles. Three engineers, each on a distinct model family, vote; the product owner authors every tracker write and does not vote; the facilitator does not vote.",
       "properties": {
         "facilitator": {
           "$ref": "#/$defs/required_refinement_role",
@@ -449,15 +449,22 @@
         },
         "product_owner": {
           "$ref": "#/$defs/required_refinement_role",
-          "description": "The product owner voter and the only role that writes to the tracker."
+          "description": "The product owner, the only role that writes to the tracker; it does not vote."
         },
         "reviewers": {
           "type": "array",
-          "minItems": 2,
-          "maxItems": 2,
-          "description": "Exactly two engineer voters on different model families, recorded by family values or distinct model ids.",
+          "minItems": 3,
+          "maxItems": 3,
+          "description": "Exactly three engineer voters on three distinct model families; each entry sets a non-empty family, and the family values and model ids are pairwise distinct.",
           "items": {
-            "$ref": "#/$defs/refinement_role"
+            "$ref": "#/$defs/refinement_role",
+            "allOf": [
+              {
+                "required": [
+                  "family"
+                ]
+              }
+            ]
           }
         },
         "point_cap": {
@@ -602,7 +609,8 @@
         },
         "family": {
           "type": "string",
-          "description": "Optional model family label. The two reviewers must use different families or distinct model ids."
+          "minLength": 1,
+          "description": "Model family label. Every refinement.reviewers entry must set a non-empty one, and the three reviewer values must be pairwise distinct."
         },
         "enabled": {
           "type": "boolean",

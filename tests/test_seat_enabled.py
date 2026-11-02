@@ -625,15 +625,15 @@ def test_the_capability_file_covers_both_list_seats():
 
 
 def test_the_refinement_voters_count_the_enabled_entries():
-    """AC2: a disabled voter is skipped, and the two-voter rule is evaluated over the enabled set."""
+    """AC2: a disabled voter is skipped, and the three-voter rule is evaluated over the enabled set."""
     body = section(REFINEMENT.read_text(), "## Roles")
     assert DISABLED_EVIDENCE in body, body
-    assert "fewer than two engineer voters are enabled" in body, (
+    assert "fewer than three engineer voters are enabled" in body, (
         "the enabled-voter count rule is missing from the roles")
     assert "with a named error" in body, (
         "a disabled facilitator or product owner needs its own stop")
     assert "blocks the ceremony until that seat is re-enabled" in body, (
-        "the two-entry voter list makes a disabled voter block the ceremony; the prose has to say so")
+        "the three-entry voter list makes a disabled voter block the ceremony; the prose has to say so")
 
 
 @pytest.mark.parametrize("skill", ["persona-staff-engineer", "persona-staff-devops"])

@@ -20,9 +20,9 @@ Its comment id is the refined story identifier for both stages.
 - Refined story snapshot: <the complete refined story and ACs, or an immutable link/commit>
 - Refined story identifier after blocking amendments: <the new comment id, or none>
 - Voter inputs, each recorded in its own separate context:
-  - Product owner: <file base name>
   - Engineer one (<family or model>): <file base name>
   - Engineer two (<family or model>): <file base name>
+  - Engineer three (<family or model>): <file base name>
 - SM/EM contribution (not a vote): <file base name>
 - Definition of Ready verdicts: <verdict per voter>
 - Blocking amendments: <none, or the exact amendments>
@@ -49,9 +49,9 @@ Never edit the refinement comment to add the result; its id keeps identifying on
 
 - Refinement comment covered: <refinement comment id>
 - Round: <1 or 2>
-- Product owner: <ACCEPT or OBJECT>
 - Engineer one (<family or model>): <ACCEPT or OBJECT>
 - Engineer two (<family or model>): <ACCEPT or OBJECT>
+- Engineer three (<family or model>): <ACCEPT or OBJECT>
 - Outcome: <accepted, another round, or unpointed>
 ```
 
@@ -69,9 +69,9 @@ A sizing comment that names a point value before the reveal, prescribes this sto
 - Refined story identifier: <latest refinement comment id after any amendment>
 - Estimate scale: <profile.tracker.estimate_scale>
 - Values, recorded before the discussion: <the three values recorded before the discussion; when a basis-challenge replacement made the consensus check re-run they are the three values that re-run read; before a void, the values recorded before it>
-  - Product owner: <value, or not recorded> - <short complexity rationale, or none when the value is not recorded>
   - Engineer one: <value, or not recorded> - <short complexity rationale, or none when the value is not recorded>
   - Engineer two: <value, or not recorded> - <short complexity rationale, or none when the value is not recorded>
+  - Engineer three: <value, or not recorded> - <short complexity rationale, or none when the value is not recorded>
 - Consensus check: <identical | one step | more than one step>
 - SM/EM sizing context, after all three values: <file base name> or verbatim, eliding a pre-reveal value or a prescription, or none
 - Discussion: <high <value>, low <value>; or none when the discussion ran and recorded nothing; or skipped, when the consensus check recorded the estimate; the shared content names only the high and the low, while a voter's own recorded value and rationale are carried privately in that voter's prompt>
