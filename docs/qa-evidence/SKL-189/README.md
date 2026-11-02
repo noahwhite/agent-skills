@@ -9,7 +9,7 @@ Read it with SKL-189 correction comment `d2ec9c57` and its reproducibility suppl
 The supplement supplies probe sources, fixture inputs, the exact image-build invocation/log and the additional on-disk profile-flow observations.
 Its corrected `prior-execution-recheck.json` has SHA256 `d0ca02a13f8fb57c8a099f6ebed1b75b95359a90d2a2cce5c70335c4b68a498f`, distinct from the initial attachment's earlier file of the same name.
 The SKL-189 round-two tracker comment `7594fdb4` links the historical attachment, SHA256 `b865acdeb29b11a8835d8808d5647c1c08c72afd18e9fbd6574a05aaad993c1b`.
-Consumer workspace and repository locators remain on the tracker, not in this public repository.
+Direct consumer workspace and repository locators are omitted from this current file, not erased from history: earlier public PR commits retain previously published locators, and no history removal is claimed.
 Intended reviewers with tracker access can resolve the evidence route by running `linear issue view SKL-189 --json` with their normal authenticated CLI: its comments include `fec883d5`, `d2ec9c57` and `7594fdb4`, and its attachments include the exact titles and digests above.
 Download those attachments through the returned authenticated locators, then read the supplement's `source-assertions.json` review records and consumer-profile source section for the full consumer repository, commit and review URLs.
 Round three reused the checksum-anchored historical observations in the embedded round-two attachment after independent provenance checks; no interrupted gate phase was accepted.
@@ -17,7 +17,7 @@ Round three reused the checksum-anchored historical observations in the embedded
 ## Builds and fixtures
 
 - Upstream: fresh detached fetched `origin/main` at `f3ec7e9939d38271c25726b685084f0d7a2675db`, containing SKL-189 `cc869232b411c9728cd883f922dd1f062f0ea2bd` and the later SKL-175 schema change.
-- Consumer: fresh detached fetched `origin/main` at `f6ad11e29cebcc80214ff2814dbfa5d03500802e`; repository locator is retained in the private tracker evidence.
+- Consumer: fresh detached fetched `origin/main` at `f6ad11e29cebcc80214ff2814dbfa5d03500802e`; full repository locator is available through the authenticated tracker route above.
 - Round-three image: locally rebuilt `opencode-env:skl189-qa-round3`, ID `sha256:85fd4e7825bfb32e98beb82dc593ae5e4fb94d3324678eb9299596fb82408adc`, with the upstream SHA above and `OPENCODE_CLI_VERSION=2.2.5`.
 - Historical round-two image: `opencode-env:skl189-qa-round2`, ID `sha256:944b32cfb01a6d48023879350c2d1b58bdcde670c132d3e420ff80483b112f2b`.
 - Optional fixtures derive from the consumer GLM-5.3-Flash entry, with deterministic commands replacing provider launches and a synthetic omitted-enabled sibling appended.
@@ -62,7 +62,7 @@ Profile, schema, optional launcher, refinement skill, code-review reference and 
 ## Review and regression provenance
 
 - Upstream implementation: [review of record](https://github.com/noahwhite/agent-skills/pull/132#pullrequestreview-5731312200), head `cd09a9cc169c204179d64c52125aa23a4249d226`.
-- Consumer implementation: review record id `5731338579`, head `14b95f1e4f1984f5edef9ae80cb5083e3a151f96`; full locator is retained in the private tracker evidence.
+- Consumer implementation: review record id `5731338579`, head `14b95f1e4f1984f5edef9ae80cb5083e3a151f96`; full locator is available through the authenticated tracker route above.
 - Upstream merged-main [CI run](https://github.com/noahwhite/agent-skills/actions/runs/41377883264): completed successfully, 1017 passed; status and log freshly read in round three.
 - Retained engineering-owned regression: all nine consumer shell entrypoints ran at the same source heads; eight passed, one failed, zero skips; raw log hashes independently matched in round three.
 - The optional-reviewer suite reported 213 passed/2 failed at `refinement.reviewers`; labelled original-SKL-189-schema control reported 215 passed and does not replace the current-schema failure.
