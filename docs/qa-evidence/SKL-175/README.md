@@ -1,7 +1,7 @@
 # SKL-175 QA verification
 
 - Date: 2026-11-02.
-- Story: [SKL-175](https://linear.app/officina-pub/issue/SKL-175/user-story-seat-three-engineers-as-estimators).
+- Story: SKL-175.
 - Delivered build: `f3ec7e9939d38271c25726b685084f0d7a2675db`, merged by [implementation PR](https://github.com/noahwhite/agent-skills/pull/133).
 - Reviewed implementation head: `eb587a642ab33da2441ce88f21c567b4add1f10c`.
 - Lane: read-only source and JSON Schema probes in a detached worktree at that merge; `profile.environments: []`, so no deploy target or installed-container claim.
