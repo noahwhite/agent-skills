@@ -154,6 +154,7 @@ When it is `forbid`, add no AI co-author trailer, session link or generated-by n
 For each entry in `profile.review.optional_reviewers`, run one review right after the PR opens, skipping any entry whose `enabled` is `false`.
 A disabled entry launches nothing: no process, no subagent, no report file, and the evidence records "<name>: disabled".
 It is never recorded as passed, skipped for failure, or clean.
+A report an earlier head left under the same label is named where it sits, never deleted, so it cannot be read as the disabled seat's state.
 Omission means enabled.
 Pass the entry's value to the launcher as `--enabled true` or `--enabled false`, the lowercase literal its `enabled` key renders to, with an entry that omits the key passing `--enabled true`.
 The launcher refuses to launch and writes no report for the false value, so the skip is enforced rather than trusted to the caller.

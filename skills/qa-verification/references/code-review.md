@@ -86,6 +86,7 @@ Agents in `profile.review.optional_reviewers` are non-blocking:
 
 - An entry whose `enabled` is `false` is skipped before any launch: no process, no subagent, no report file, and the evidence records "<name>: disabled".
   It is never recorded as passed, skipped for failure, or clean.
+  A report an earlier head left under the same label is named where it sits, never deleted, so it cannot be read as the disabled seat's state.
   Omission means enabled.
   The entry is read once per head: it is skipped again on every later push, never launched because an earlier head ran it.
 - Make one attempt per head, after the PR opens or after a later push.

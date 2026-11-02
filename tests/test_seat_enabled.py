@@ -254,30 +254,37 @@ def test_an_explicitly_enabled_entry_launches(tmp_path, reviewed_repo):
     assert spy.exists(), "an entry with `enabled: true` did not launch"
 
 
-def test_disabling_a_seat_removes_the_report_an_earlier_run_left(tmp_path, reviewed_repo):
-    """AC2: a switched-off seat leaves no report behind, not even one from an earlier head."""
-    spy = tmp_path / "spy.log"
-    first = launch(reviewed_repo, "--agent-cmd", spy_command(spy))
-    assert first.returncode == 0, first.stderr
-    report_dir = reviewed_repo / ".git" / "batched-review" / "glm-seat"
-    assert (report_dir / "report.md").is_file(), "the enabled run wrote no report to remove"
-    second = launch(reviewed_repo, "--enabled", "false", "--agent-cmd", spy_command(spy))
-    assert second.returncode == 0, second.stderr
-    assert second.stdout.strip() == "glm-seat: disabled", second.stdout
-    assert not report_dir.exists(), f"a stale report survived the disabled run: {sorted(report_dir.rglob('*'))}"
+def test_disabling_a_seat_names_an_earlier_report_without_deleting_it(tmp_path, reviewed_repo):
+    """AC2: a switched-off seat writes nothing, and an earlier head's report is named, never removed.
 
-
-def test_the_cleanup_removes_the_named_repositorys_report_not_the_callers(tmp_path, reviewed_repo):
-    """AC2: `--repo` names the repository whose evidence is cleaned, wherever the caller stands.
-
-    The launcher is run from a second repository, so a repo-relative report path would delete the
-    caller's evidence and leave the target's stale report in place.
+    The launcher is read-only: deleting evidence would have to resolve a report path that a symlink
+    or a concurrent swap can point outside the repository, so the stale report is flagged on stderr
+    instead, which is what keeps it from being read as this seat's state.
     """
     spy = tmp_path / "spy.log"
     first = launch(reviewed_repo, "--agent-cmd", spy_command(spy))
     assert first.returncode == 0, first.stderr
-    target = reviewed_repo / ".git" / "batched-review" / "glm-seat"
-    assert (target / "report.md").is_file()
+    report = reviewed_repo / ".git" / "batched-review" / "glm-seat" / "report.md"
+    assert report.is_file(), "the enabled run wrote no report"
+    before = report.read_text()
+
+    second = launch(reviewed_repo, "--enabled", "false", "--agent-cmd", spy_command(spy))
+    assert second.returncode == 0, second.stderr
+    assert second.stdout.strip() == "glm-seat: disabled", second.stdout
+    assert report.read_text() == before, "the disabled run rewrote or removed the earlier report"
+    assert "an earlier report for 'glm-seat' is still at" in second.stderr, second.stderr
+
+
+def test_the_note_names_the_named_repositorys_report_not_the_callers(tmp_path, reviewed_repo):
+    """AC2: `--repo` names the repository the note is about, wherever the caller stands.
+
+    The launcher is run from a second repository, so a repo-relative path would point the note at the
+    caller's report and say nothing about the target's.
+    """
+    spy = tmp_path / "spy.log"
+    assert launch(reviewed_repo, "--agent-cmd", spy_command(spy)).returncode == 0
+    target = reviewed_repo / ".git" / "batched-review" / "glm-seat" / "report.md"
+    assert target.is_file()
 
     caller = tmp_path / "caller"
     caller.mkdir()
@@ -294,20 +301,21 @@ def test_the_cleanup_removes_the_named_repositorys_report_not_the_callers(tmp_pa
     )
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "glm-seat: disabled", result.stdout
-    assert not target.exists(), "the target repository's stale report survived"
-    assert (own / "report.md").is_file(), "the caller's evidence was deleted"
+    assert str(target) in result.stderr, result.stderr
+    assert str(own) not in result.stderr, result.stderr
+    assert own.is_dir(), "the caller's evidence was touched"
 
 
-def test_an_inherited_git_dir_cannot_redirect_the_cleanup(tmp_path, reviewed_repo):
+def test_an_inherited_git_dir_cannot_redirect_the_note(tmp_path, reviewed_repo):
     """AC2: `GIT_DIR` in the environment outranks `-C`, so the launcher must ignore it.
 
-    A wrapper that exports `GIT_DIR` (a hook, a CI step) would otherwise point every path at the
-    caller's repository and delete its evidence instead of the named one's.
+    A wrapper that exports `GIT_DIR` (a hook, a CI step) would otherwise report the caller's stale
+    report as the state of the repository `--repo` names.
     """
     spy = tmp_path / "spy.log"
     assert launch(reviewed_repo, "--agent-cmd", spy_command(spy)).returncode == 0
-    target = reviewed_repo / ".git" / "batched-review" / "glm-seat"
-    assert (target / "report.md").is_file()
+    target = reviewed_repo / ".git" / "batched-review" / "glm-seat" / "report.md"
+    assert target.is_file()
 
     caller = tmp_path / "caller"
     caller.mkdir()
@@ -324,8 +332,9 @@ def test_an_inherited_git_dir_cannot_redirect_the_cleanup(tmp_path, reviewed_rep
         env={**os.environ, "GIT_DIR": str(caller / ".git")},
     )
     assert result.returncode == 0, result.stderr
-    assert not target.exists(), "the named repository's stale report survived an inherited GIT_DIR"
-    assert (own / "report.md").is_file(), "an inherited GIT_DIR made the launcher delete the caller's report"
+    assert str(target) in result.stderr, result.stderr
+    assert str(own) not in result.stderr, result.stderr
+    assert own.is_dir() and target.is_file(), "the launcher removed evidence it must leave alone"
 
 
 def test_an_inherited_git_dir_cannot_redirect_the_report(tmp_path, reviewed_repo):
@@ -346,16 +355,16 @@ def test_an_inherited_git_dir_cannot_redirect_the_report(tmp_path, reviewed_repo
     assert not (caller / ".git" / "batched-review").exists(), "the report landed in the caller's repository"
 
 
-def test_a_discovery_ceiling_cannot_skip_the_cleanup(tmp_path, reviewed_repo):
-    """AC2: a subdirectory target is still resolved, so the stale evidence is still removed.
+def test_a_discovery_ceiling_cannot_hide_an_earlier_report(tmp_path, reviewed_repo):
+    """AC2: a subdirectory target is still resolved, so the note still names the stale report.
 
-    `GIT_CEILING_DIRECTORIES` stops Git walking up from a subdirectory, which would silently skip the
-    cleanup and leave a report behind a switched-off seat.
+    `GIT_CEILING_DIRECTORIES` stops Git walking up from a subdirectory, which would silently drop the
+    note and leave an old PASS looking like this seat's state.
     """
     spy = tmp_path / "spy.log"
     assert launch(reviewed_repo, "--agent-cmd", spy_command(spy)).returncode == 0
-    target = reviewed_repo / ".git" / "batched-review" / "glm-seat"
-    assert (target / "report.md").is_file()
+    target = reviewed_repo / ".git" / "batched-review" / "glm-seat" / "report.md"
+    assert target.is_file()
     subdir = reviewed_repo / "a-subdirectory"
     subdir.mkdir()
 
@@ -366,33 +375,33 @@ def test_a_discovery_ceiling_cannot_skip_the_cleanup(tmp_path, reviewed_repo):
     )
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "glm-seat: disabled", result.stdout
-    assert not target.exists(), "a discovery ceiling left the stale report in place"
+    assert str(target) in result.stderr, result.stderr
 
 
-def test_a_symlinked_report_directory_is_never_removed_through(tmp_path, reviewed_repo):
-    """AC2: removing a stale report must never delete content the repository does not own.
+def test_a_symlinked_report_directory_is_never_touched(tmp_path, reviewed_repo):
+    """AC2: a disabled seat writes nothing anywhere, a symlinked report directory included.
 
-    A repository whose `.git/batched-review` is a symlink elsewhere would otherwise have the
-    link target's `<name>/` directory deleted by a switched-off seat.
+    Nothing is deleted at all, so a report directory that links outside the repository can neither
+    have its target deleted nor be mistaken for this seat's evidence without the note naming it.
     """
     spy = tmp_path / "spy.log"
     external = tmp_path / "external"
     (external / "glm-seat").mkdir(parents=True)
     (external / "glm-seat" / "keep.txt").write_text("not this repository's file\n")
     (external / "keep.txt").write_text("nor this one\n")
-    report_dir = reviewed_repo / ".git" / "batched-review"
-    report_dir.symlink_to(external)
+    (reviewed_repo / ".git" / "batched-review").symlink_to(external)
 
     result = launch(reviewed_repo, "--enabled", "false", "--agent-cmd", spy_command(spy))
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "glm-seat: disabled", result.stdout
     assert (external / "glm-seat" / "keep.txt").is_file(), (
-        "the cleanup deleted content through a symlinked report directory")
+        "a disabled seat deleted content through a symlinked report directory")
     assert (external / "keep.txt").is_file()
+    assert sorted(p.name for p in external.iterdir()) == ["glm-seat", "keep.txt"]
 
 
-def test_a_bare_repository_still_has_its_stale_report_removed(tmp_path):
-    """The cleanup follows the report location a bare repository reports, not only a work tree."""
+def test_a_bare_repository_has_its_stale_report_named_too(tmp_path):
+    """The note follows the report location a bare repository reports, not only a work tree."""
     bare = tmp_path / "bare.git"
     subprocess.run(["git", "init", "-q", "--bare", str(bare)], check=True, capture_output=True,
                    env={**os.environ, "HOME": str(tmp_path)})
@@ -403,7 +412,8 @@ def test_a_bare_repository_still_has_its_stale_report_removed(tmp_path):
     result = launch(bare, "--enabled", "false")
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "glm-seat: disabled", result.stdout
-    assert not report.exists(), "a bare repository kept the stale report"
+    assert str(report) in result.stderr, result.stderr
+    assert report.is_file()
 
 
 def test_a_dot_name_is_refused(tmp_path, reviewed_repo):
@@ -530,6 +540,7 @@ def test_the_optional_reviewer_step_skips_a_disabled_seat():
     assert NEVER_A_RESULT in body, body
     assert "--enabled" in body, "step 6 does not hand the entry's value to the launcher"
     assert "Omission means enabled" in body, body
+    assert "never deleted" in body and "named where it sits" in body, body
 
 
 def test_the_shadow_adjudicator_step_skips_a_disabled_seat():

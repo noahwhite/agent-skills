@@ -19,7 +19,10 @@
 # profile configures but switches off. A disabled seat launches nothing, writes no report and
 # prints the one evidence line `LABEL: disabled`; it is never recorded as passed, skipped for
 # failure, or clean. Any other value is refused rather than guessed, including an empty one, so a
-# value rendered from a profile can never mean "enabled" by accident.
+# value rendered from a profile can never mean "enabled" by accident. A report an earlier head left
+# under the same label is never deleted (this script is read-only, and a delete would have to resolve
+# a path a symlink or a swap can point outside the repository); it is named on stderr instead, so it
+# cannot be read as this seat's state.
 # The line is the only evidence a disabled seat produces and the exit status matches a completed
 # review, so a caller that gates on the status alone records a switched-off seat as one that ran.
 # The environment form (REVIEW_ENABLED) cannot be told apart from a profile value in the evidence
@@ -87,19 +90,17 @@ esac
 # and the disabled line is still recorded, so a switched-off seat never goes unrecorded over a
 # path mistake. Nothing is reviewed, so the skills-repository guard below does not apply here.
 if [ "$ENABLED" = "false" ]; then
-  # The evidence line comes first, so a switched-off seat is always recorded, whatever the cleanup
-  # below makes of the repository.
+  # Nothing is launched and nothing is written: the evidence is this one line.
   printf '%s: disabled\n' "$NAME"
-  # Evidence an earlier enabled run left under this label is removed. `find -P` never follows a
-  # symbolic link, including the start point, so a report directory that is, or is swapped for, a
-  # link elsewhere is left alone instead of removing content this repository does not own. Only the
-  # label's own directory is removed, and a cleanup failure is reported rather than hidden; it does
-  # not change the line or the status a disabled seat reports.
-  if gitdir="$(git -C "${REPO:-.}" rev-parse --path-format=absolute --absolute-git-dir 2>/dev/null)" \
-     && stale="$(git -C "${REPO:-.}" rev-parse --path-format=absolute --git-path batched-review 2>/dev/null)" \
-     && [ "$stale" = "$gitdir/batched-review" ] && [ -d "$stale" ]; then
-    find -P "$stale" -mindepth 1 -maxdepth 1 -name "$NAME" -type d -exec rm -rf -- {} + \
-      || echo "WARNING: could not remove stale evidence for '$NAME' under $stale; a disabled seat still writes none of its own." >&2
+  # An earlier head's report for this label is left exactly where it is and named on stderr instead
+  # of being deleted. This script is read-only, and deleting it would have to resolve a path that a
+  # symlink, a mount, or a concurrent swap can point outside the repository; a cleanup that cannot be
+  # done safely is not done at all, and the note is what stops the old report from being mistaken for
+  # this seat's state.
+  if stale="$(git -C "${REPO:-.}" rev-parse --path-format=absolute --git-path batched-review 2>/dev/null)" \
+     && [ -e "$stale/$NAME/report.md" ]; then
+    printf "note: an earlier report for '%s' is still at %s and does not describe this disabled seat.\n" \
+      "$NAME" "$stale/$NAME/report.md" >&2
   fi
   exit 0
 fi
