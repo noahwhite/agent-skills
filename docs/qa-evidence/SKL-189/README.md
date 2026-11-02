@@ -21,7 +21,7 @@ Both were Backlog when read, and neither profile was silently repaired by QA.
 ## Builds and fixtures
 
 - Fresh detached fetched upstream `origin/main`: `f3ec7e9939d38271c25726b685084f0d7a2675db`, containing SKL-189 merge `cc869232b411c9728cd883f922dd1f062f0ea2bd` and later SKL-175.
-- Fresh detached fetched consumer `origin/main`: `f6ad11e29cebcc80214ff2814dbfa5d03500802e` in `opencode-dev-container`.
+- Fresh detached fetched consumer repository `origin/main`: `f6ad11e29cebcc80214ff2814dbfa5d03500802e`.
 - Fresh local image: `opencode-env:skl189-qa-round4`, ID `sha256:1966c507937c4c5727195d826fd6d8050f8fafc1fd13bc0860deff698c6a33ec`, built with the upstream SHA above.
 - Fixtures: consumer GLM-5.3-Flash optional entry, omitted-flag sibling, two shadow entries and three distinct-family refinement entries with one disabled.
 - Seat commands are deterministic spies, not paid-provider availability checks or a full ceremony.
