@@ -391,6 +391,21 @@ def test_a_symlinked_report_directory_is_never_removed_through(tmp_path, reviewe
     assert (external / "keep.txt").is_file()
 
 
+def test_a_bare_repository_still_has_its_stale_report_removed(tmp_path):
+    """The cleanup follows the report location a bare repository reports, not only a work tree."""
+    bare = tmp_path / "bare.git"
+    subprocess.run(["git", "init", "-q", "--bare", str(bare)], check=True, capture_output=True,
+                   env={**os.environ, "HOME": str(tmp_path)})
+    report = bare / "batched-review" / "glm-seat" / "report.md"
+    report.parent.mkdir(parents=True)
+    report.write_text("# Overall\n\n### VERDICT\nPASS\n")
+
+    result = launch(bare, "--enabled", "false")
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "glm-seat: disabled", result.stdout
+    assert not report.exists(), "a bare repository kept the stale report"
+
+
 def test_a_dot_name_is_refused(tmp_path, reviewed_repo):
     """A name that would make the cleanup remove a whole directory is refused."""
     for name in (".", ".."):

@@ -87,16 +87,20 @@ esac
 # and the disabled line is still recorded, so a switched-off seat never goes unrecorded over a
 # path mistake. Nothing is reviewed, so the skills-repository guard below does not apply here.
 if [ "$ENABLED" = "false" ]; then
-  # Never remove through a symlinked report directory: the target is content this repository does
-  # not own. `--git-path` resolves such a symlink, so the entry itself is checked in the git
-  # directory. `rm -rf` replaces a symlink rather than following it, so the label directory below it
-  # needs no check of its own.
-  if stale="$(git -C "${REPO:-.}" rev-parse --path-format=absolute --git-path batched-review 2>/dev/null)" \
-     && gitdir="$(git -C "${REPO:-.}" rev-parse --path-format=absolute --absolute-git-dir 2>/dev/null)" \
-     && [ -d "$stale" ] && [ ! -L "$gitdir/batched-review" ]; then
-    rm -rf -- "$stale/$NAME"
-  fi
+  # The evidence line comes first, so a switched-off seat is always recorded, whatever the cleanup
+  # below makes of the repository.
   printf '%s: disabled\n' "$NAME"
+  # Evidence an earlier enabled run left under this label is removed. `find -P` never follows a
+  # symbolic link, including the start point, so a report directory that is, or is swapped for, a
+  # link elsewhere is left alone instead of removing content this repository does not own. Only the
+  # label's own directory is removed, and a cleanup failure is reported rather than hidden; it does
+  # not change the line or the status a disabled seat reports.
+  if gitdir="$(git -C "${REPO:-.}" rev-parse --path-format=absolute --absolute-git-dir 2>/dev/null)" \
+     && stale="$(git -C "${REPO:-.}" rev-parse --path-format=absolute --git-path batched-review 2>/dev/null)" \
+     && [ "$stale" = "$gitdir/batched-review" ] && [ -d "$stale" ]; then
+    find -P "$stale" -mindepth 1 -maxdepth 1 -name "$NAME" -type d -exec rm -rf -- {} + \
+      || echo "WARNING: could not remove stale evidence for '$NAME' under $stale; a disabled seat still writes none of its own." >&2
+  fi
   exit 0
 fi
 [ -n "$BASE" ] || { echo "ERROR: --base is required (origin/<integration branch> after a fetch)." >&2; exit 2; }
