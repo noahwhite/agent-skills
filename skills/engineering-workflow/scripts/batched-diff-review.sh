@@ -46,12 +46,8 @@ usage() { awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' 
 
 # The repository this script touches is the one `--repo` names or the current directory's, never the
 # one the caller's environment points at: an inherited GIT_DIR outranks `-C`, and GIT_CEILING_DIRECTORIES
-# can stop discovery below it, so both paths would then write into the wrong repository. The trace
-# variables are cleared too, because a disabled seat promises to write nothing and `GIT_TRACE2_EVENT`
-# would have Git open a trace file on the way to printing its one evidence line.
-unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE GIT_CEILING_DIRECTORIES \
-  GIT_TRACE GIT_TRACE_PACKET GIT_TRACE_PERFORMANCE GIT_TRACE_SETUP GIT_TRACE_CURL \
-  GIT_TRACE2 GIT_TRACE2_EVENT GIT_TRACE2_PERF
+# can stop discovery below it, so both paths would then write into the wrong repository.
+unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE GIT_CEILING_DIRECTORIES
 
 REPO="${REVIEW_REPO:-}"
 BASE="${REVIEW_BASE:-}"
@@ -94,7 +90,11 @@ esac
 # switched-off seat never goes unrecorded over a path mistake. Nothing is reviewed, so the
 # skills-repository guard below does not apply here.
 if [ "$ENABLED" = "false" ]; then
-  # Nothing is launched and nothing is written: the evidence is this one line.
+  # Nothing is launched and nothing is written: the evidence is this one line. Git's trace variables
+  # are cleared for this branch only, because a caller's `GIT_TRACE2_EVENT` would have Git open a
+  # trace file on the way to the line; an enabled run keeps them, since its diagnostics are its own.
+  unset GIT_TRACE GIT_TRACE_PACKET GIT_TRACE_PERFORMANCE GIT_TRACE_SETUP GIT_TRACE_CURL \
+    GIT_TRACE2 GIT_TRACE2_EVENT GIT_TRACE2_PERF
   printf '%s: disabled\n' "$NAME"
   # An earlier head's report for this label is left exactly where it is and named on stderr instead
   # of being deleted. This script is read-only, and deleting it would have to resolve a path that a

@@ -272,6 +272,21 @@ def test_an_inherited_git_trace_cannot_make_the_disabled_seat_write(tmp_path, re
     assert not trace.exists(), "an inherited Git trace variable made the disabled seat write"
 
 
+def test_an_enabled_seat_keeps_the_callers_git_trace(tmp_path, reviewed_repo):
+    """The trace variables are cleared for the disabled branch only: an enabled run keeps its own
+    diagnostics, and only a switched-off seat promises to write nothing."""
+    spy = tmp_path / "spy.log"
+    trace = tmp_path / "trace.json"
+    result = subprocess.run(
+        ["bash", str(LAUNCHER), "--repo", str(reviewed_repo), "--base", "HEAD~1",
+         "--name", "glm-seat", "--agent-cmd", spy_command(spy)],
+        cwd=reviewed_repo, capture_output=True, text=True,
+        env={**os.environ, "GIT_TRACE2_EVENT": str(trace)},
+    )
+    assert result.returncode == 0, result.stderr
+    assert trace.exists(), "an enabled run lost the caller's Git trace"
+
+
 def test_a_seat_with_no_report_gets_no_note(tmp_path, reviewed_repo):
     """AC2: the note appears only when a report is actually there, and never for a directory."""
     result = launch(reviewed_repo, "--enabled", "false")
