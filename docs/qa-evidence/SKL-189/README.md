@@ -4,11 +4,12 @@ Date: 2026-11-02.
 This is a CLI/configuration change, with no visual surface, screenshots or hosted page.
 The [round-three QA comment](https://linear.app/officina-pub/issue/SKL-189/user-story-let-a-profile-seat-be-configured-but-disabled#comment-fec883d5) links the raw assertion attachment named `SKL-189 QA round 3 - fresh artifact assertions and retained regression proof`.
 Its SHA256 is `781feb1e4ee4439b0978dbab206b2aacb39cc3a03e876e2f3abaa5cda022ea1c`.
-That attachment is the raw record behind every table row: fresh assertions plus the complete checksum-verified round-two attachment, explicitly labelled historical.
+That initial attachment and the correction/reproducibility supplement jointly form the raw record behind the table; the initial attachment alone does not contain the additional profile-flow or corrected historical-recheck observations.
 Read it with the [correction comment and reproducibility supplement](https://linear.app/officina-pub/issue/SKL-189/user-story-let-a-profile-seat-be-configured-but-disabled#comment-d2ec9c57), SHA256 `c3c4d2f98e85a78b2db23a38bef482d298a36822d036a5b1f459d56a9b6cf7fc`.
 The supplement supplies probe sources, fixture inputs, the exact image-build invocation/log and the additional on-disk profile-flow observations.
+Its corrected `prior-execution-recheck.json` has SHA256 `d0ca02a13f8fb57c8a099f6ebed1b75b95359a90d2a2cce5c70335c4b68a498f`, distinct from the initial attachment's earlier file of the same name.
 The [round-two QA comment](https://linear.app/officina-pub/issue/SKL-189/user-story-let-a-profile-seat-be-configured-but-disabled#comment-7594fdb4) links that historical attachment, SHA256 `b865acdeb29b11a8835d8808d5647c1c08c72afd18e9fbd6574a05aaad993c1b`.
-Round three reused the round-two README's historical observations after independent provenance checks; no interrupted gate phase was accepted.
+Round three reused the checksum-anchored historical observations in the embedded round-two attachment after independent provenance checks; no interrupted gate phase was accepted.
 
 ## Builds and fixtures
 
@@ -27,13 +28,13 @@ Round three reused the round-two README's historical observations after independ
 | Item | Verdict | Evidence and limitation |
 |---|---|---|
 | AC1 | Verified | Fresh schema controls accept true/false/omission and reject string/null/numeric/unknown keys on a valid baseline; default true is a checked schema annotation, not a jsonschema-applied runtime value; the agent-interpreted Step 6 fixture additionally exercises omission. |
-| AC2 | Verified on bounded execution fixtures | Fresh `optional-assertions.json` plus `prior-execution-recheck.json`: disabled optional seat launches nothing; historical shadow/refinement source hashes, ledgers and report sets independently rechecked, with zero disabled launches/reports and named disabled evidence. |
+| AC2 | Verified on bounded execution fixtures | Fresh optional execution plus the supplement's corrected `prior-execution-recheck.json`, identified by its SHA256 section header: historical shadow/refinement source hashes, attachment-anchored ledgers and exact report contents checked; zero disabled launches/reports and named disabled evidence. The initial attachment's earlier file of the same name lacks those later checks. |
 | AC3 | Verified by schema refusal | Fresh schema probe rejects false for reviewer, adjudicator, hunter, arbiter and both mandatory refinement roles; no live mandatory-disabled gate session is claimed. |
 | AC4 | Docs/policy inspected; current integration blocked | Upstream README section Switching a seat off explains text/token cost; source retains presence, unknown-key and lexical stale-route guards; current acceptance loop stops at reviewer count before true/false candidates, whose acceptance is shown by the historical original-schema control only. |
 | AC5 | Verified on bounded agent-interpreted consumer fixture | QA read actual Step 6 and an on-disk fixture: GLM false gives 0 launches/no report while the omitted sibling runs 2 batches; QA physically edits only false to true, rereads the file and observes 2 GLM batches/report; see supplement profile-flow assertions/recipe. |
 | DoD: all acceptance criteria met | Not met in current combined build | AC4 current-schema consumer integration remains blocked on separately owned rollout. |
 | DoD: tests written and passing | Not met in current combined build | Fresh upstream CI read-back: 1017 tests passed; retained engineering-owned consumer regression at identical source heads has 8/9 scripts passing and 2 roster-related failures. |
-| DoD: independently reviewed | Verified | Supplement retains fresh GitHub review id, COMMENTED state, API commit ID, first-line full SHA and body for both exact implementation heads. |
+| DoD: independently reviewed | Verified for implementation | Supplement retains fresh GitHub review id, COMMENTED state, API commit ID, first-line full SHA and body for both exact implementation heads; this evidence PR separately requires its own current-head review of record before merge. |
 | DoD: documentation updated | Verified | Upstream README and consumer README/code-review/engineering-workflow overlays inspected on fetched main. |
 | DoD: deployed verification | Artifact delivery verified; integration blocked | Seven installed-source hash comparisons match; image launcher explicit disabled CLI branch leaves spy untouched, not an autonomous profile-resolution check; whole-profile compatibility remains invalid. |
 | DoD: no critical bugs/regressions | Combined-build sign-off withheld | No toggle failure found; later-schema roster incompatibility prevents green consumer integration sign-off. |
