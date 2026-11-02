@@ -212,6 +212,8 @@ def test_a_disabled_seat_launches_nothing_and_writes_no_report(tmp_path, reviewe
     assert not spy.exists(), "a disabled seat launched a process"
     report_dir = reviewed_repo / ".git" / "batched-review" / "glm-seat"
     assert not report_dir.exists(), f"a disabled seat wrote evidence: {sorted(report_dir.rglob('*'))}"
+    assert "an earlier report" not in result.stderr, (
+        f"a seat with no earlier report was told one exists: {result.stderr}")
 
 
 def test_a_disabled_seat_is_never_recorded_as_passed_skipped_or_clean(tmp_path, reviewed_repo):
@@ -235,6 +237,51 @@ def test_a_disabled_seat_needs_no_launcher_and_no_base(tmp_path, reviewed_repo):
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "glm-seat: disabled", result.stdout
     assert not spy.exists()
+
+
+def test_the_evidence_line_is_printed_before_the_note(tmp_path, reviewed_repo):
+    """AC2: the evidence line comes first in the combined output, whatever the note says."""
+    spy = tmp_path / "spy.log"
+    assert launch(reviewed_repo, "--agent-cmd", spy_command(spy)).returncode == 0
+    result = subprocess.run(
+        ["bash", str(LAUNCHER), "--repo", str(reviewed_repo), "--name", "glm-seat",
+         "--enabled", "false"],
+        cwd=reviewed_repo, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+    )
+    assert result.returncode == 0, result.stdout
+    lines = result.stdout.splitlines()
+    assert lines[0] == "glm-seat: disabled", lines
+    assert lines[1].startswith("note: an earlier report"), lines
+
+
+def test_an_inherited_git_trace_cannot_make_the_disabled_seat_write(tmp_path, reviewed_repo):
+    """AC2: a disabled seat writes nothing, including Git's own trace file.
+
+    `GIT_TRACE2_EVENT` would have Git open a trace file on the way to the evidence line, so the
+    launcher clears the trace variables with the repository selectors.
+    """
+    trace = tmp_path / "trace.json"
+    result = subprocess.run(
+        ["bash", str(LAUNCHER), "--repo", str(reviewed_repo), "--name", "glm-seat",
+         "--enabled", "false"],
+        cwd=reviewed_repo, capture_output=True, text=True,
+        env={**os.environ, "GIT_TRACE2_EVENT": str(trace)},
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "glm-seat: disabled", result.stdout
+    assert not trace.exists(), "an inherited Git trace variable made the disabled seat write"
+
+
+def test_a_seat_with_no_report_gets_no_note(tmp_path, reviewed_repo):
+    """AC2: the note appears only when a report is actually there, and never for a directory."""
+    result = launch(reviewed_repo, "--enabled", "false")
+    assert result.returncode == 0, result.stderr
+    assert "an earlier report" not in result.stderr, result.stderr
+    # A directory named like the report is not one.
+    (reviewed_repo / ".git" / "batched-review" / "glm-seat" / "report.md").mkdir(parents=True)
+    again = launch(reviewed_repo, "--enabled", "false")
+    assert again.returncode == 0, again.stderr
+    assert "an earlier report" not in again.stderr, again.stderr
 
 
 def test_an_entry_without_the_flag_launches(tmp_path, reviewed_repo):
@@ -301,7 +348,7 @@ def test_the_note_names_the_named_repositorys_report_not_the_callers(tmp_path, r
     )
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "glm-seat: disabled", result.stdout
-    assert str(target) in result.stderr, result.stderr
+    assert f"still at {target} and" in result.stderr, result.stderr
     assert str(own) not in result.stderr, result.stderr
     assert own.is_dir(), "the caller's evidence was touched"
 
@@ -332,7 +379,7 @@ def test_an_inherited_git_dir_cannot_redirect_the_note(tmp_path, reviewed_repo):
         env={**os.environ, "GIT_DIR": str(caller / ".git")},
     )
     assert result.returncode == 0, result.stderr
-    assert str(target) in result.stderr, result.stderr
+    assert f"still at {target} and" in result.stderr, result.stderr
     assert str(own) not in result.stderr, result.stderr
     assert own.is_dir() and target.is_file(), "the launcher removed evidence it must leave alone"
 
@@ -375,7 +422,7 @@ def test_a_discovery_ceiling_cannot_hide_an_earlier_report(tmp_path, reviewed_re
     )
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "glm-seat: disabled", result.stdout
-    assert str(target) in result.stderr, result.stderr
+    assert f"still at {target} and" in result.stderr, result.stderr
 
 
 def test_a_symlinked_report_directory_is_never_touched(tmp_path, reviewed_repo):
@@ -412,7 +459,7 @@ def test_a_bare_repository_has_its_stale_report_named_too(tmp_path):
     result = launch(bare, "--enabled", "false")
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "glm-seat: disabled", result.stdout
-    assert str(report) in result.stderr, result.stderr
+    assert f"still at {report} and" in result.stderr, result.stderr
     assert report.is_file()
 
 

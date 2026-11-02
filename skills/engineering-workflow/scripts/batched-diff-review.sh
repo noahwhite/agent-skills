@@ -46,8 +46,12 @@ usage() { awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' 
 
 # The repository this script touches is the one `--repo` names or the current directory's, never the
 # one the caller's environment points at: an inherited GIT_DIR outranks `-C`, and GIT_CEILING_DIRECTORIES
-# can stop discovery below it, so both paths would then write into, or clean, the wrong repository.
-unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE GIT_CEILING_DIRECTORIES
+# can stop discovery below it, so both paths would then write into the wrong repository. The trace
+# variables are cleared too, because a disabled seat promises to write nothing and `GIT_TRACE2_EVENT`
+# would have Git open a trace file on the way to printing its one evidence line.
+unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE GIT_CEILING_DIRECTORIES \
+  GIT_TRACE GIT_TRACE_PACKET GIT_TRACE_PERFORMANCE GIT_TRACE_SETUP GIT_TRACE_CURL \
+  GIT_TRACE2 GIT_TRACE2_EVENT GIT_TRACE2_PERF
 
 REPO="${REVIEW_REPO:-}"
 BASE="${REVIEW_BASE:-}"
@@ -82,13 +86,13 @@ esac
 
 # A seat the profile configures but switches off: no process, no report file, one evidence line.
 # This runs before --base, --agent-cmd and the diff are touched, so a disabled seat needs neither a
-# launcher nor a base. It still resolves the target repository, only to remove evidence an earlier
-# enabled run left under this label, so a switched-off seat never keeps a report a reader could
-# mistake for a review that ran. The path is resolved absolute: `--git-path` prints a repo-relative
-# path in a plain repository, and removing that from the caller's working directory would delete
-# another repository's evidence. Where the repository cannot be resolved there is nothing to remove
-# and the disabled line is still recorded, so a switched-off seat never goes unrecorded over a
-# path mistake. Nothing is reviewed, so the skills-repository guard below does not apply here.
+# launcher nor a base. It reads the target repository only to name a report an earlier enabled run
+# left under this label, so the old report cannot pass for this seat's state; nothing is written or
+# removed. The path is resolved absolute: `--git-path` prints a repo-relative path in a plain
+# repository, which would point a caller standing elsewhere at its own report. Where the repository
+# cannot be resolved there is nothing to name and the disabled line is still recorded, so a
+# switched-off seat never goes unrecorded over a path mistake. Nothing is reviewed, so the
+# skills-repository guard below does not apply here.
 if [ "$ENABLED" = "false" ]; then
   # Nothing is launched and nothing is written: the evidence is this one line.
   printf '%s: disabled\n' "$NAME"
@@ -98,7 +102,7 @@ if [ "$ENABLED" = "false" ]; then
   # done safely is not done at all, and the note is what stops the old report from being mistaken for
   # this seat's state.
   if stale="$(git -C "${REPO:-.}" rev-parse --path-format=absolute --git-path batched-review 2>/dev/null)" \
-     && [ -e "$stale/$NAME/report.md" ]; then
+     && [ -f "$stale/$NAME/report.md" ]; then
     printf "note: an earlier report for '%s' is still at %s and does not describe this disabled seat.\n" \
       "$NAME" "$stale/$NAME/report.md" >&2
   fi
