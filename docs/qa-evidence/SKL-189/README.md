@@ -10,6 +10,8 @@ The supplement supplies probe sources, fixture inputs, the exact image-build inv
 Its corrected `prior-execution-recheck.json` has SHA256 `d0ca02a13f8fb57c8a099f6ebed1b75b95359a90d2a2cce5c70335c4b68a498f`, distinct from the initial attachment's earlier file of the same name.
 The SKL-189 round-two tracker comment `7594fdb4` links the historical attachment, SHA256 `b865acdeb29b11a8835d8808d5647c1c08c72afd18e9fbd6574a05aaad993c1b`.
 Consumer workspace and repository locators remain on the tracker, not in this public repository.
+Intended reviewers with tracker access can resolve the evidence route by running `linear issue view SKL-189 --json` with their normal authenticated CLI: its comments include `fec883d5`, `d2ec9c57` and `7594fdb4`, and its attachments include the exact titles and digests above.
+Download those attachments through the returned authenticated locators, then read the supplement's `source-assertions.json` review records and consumer-profile source section for the full consumer repository, commit and review URLs.
 Round three reused the checksum-anchored historical observations in the embedded round-two attachment after independent provenance checks; no interrupted gate phase was accepted.
 
 ## Builds and fixtures
