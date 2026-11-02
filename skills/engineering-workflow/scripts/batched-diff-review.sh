@@ -41,10 +41,10 @@ set -euo pipefail
 
 usage() { awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0" >&2; exit 2; }
 
-# Resolve the target repository with Git's own repository-selection environment cleared: an inherited
-# GIT_DIR or GIT_WORK_TREE outranks `-C`, so without this every path the script writes or removes can
-# land in the caller's repository instead of the one `--repo` names.
-git_target() { env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE git -C "${1:-.}" "${@:2}"; }
+# The repository this script touches is the one `--repo` names or the current directory's, never the
+# one the caller's environment points at: an inherited GIT_DIR outranks `-C`, and GIT_CEILING_DIRECTORIES
+# can stop discovery below it, so both paths would then write into, or clean, the wrong repository.
+unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE GIT_CEILING_DIRECTORIES
 
 REPO="${REVIEW_REPO:-}"
 BASE="${REVIEW_BASE:-}"
@@ -87,7 +87,7 @@ esac
 # and the disabled line is still recorded, so a switched-off seat never goes unrecorded over a
 # path mistake. Nothing is reviewed, so the skills-repository guard below does not apply here.
 if [ "$ENABLED" = "false" ]; then
-  if stale="$(git_target "${REPO:-.}" rev-parse --path-format=absolute --git-path batched-review 2>/dev/null)"; then
+  if stale="$(git -C "${REPO:-.}" rev-parse --path-format=absolute --git-path batched-review 2>/dev/null)"; then
     rm -rf -- "$stale/$NAME"
   fi
   printf '%s: disabled\n' "$NAME"
@@ -98,18 +98,15 @@ fi
 
 # The target repository: --repo, else the current directory. Never this script's location.
 if [ -n "$REPO" ]; then
-  ROOT="$(git_target "$REPO" rev-parse --show-toplevel 2>/dev/null)" || { echo "ERROR: --repo '$REPO' is not inside a Git repository." >&2; exit 11; }
+  ROOT="$(git -C "$REPO" rev-parse --show-toplevel 2>/dev/null)" || { echo "ERROR: --repo '$REPO' is not inside a Git repository." >&2; exit 11; }
 else
-  ROOT="$(git_target . rev-parse --show-toplevel 2>/dev/null)" || { echo "ERROR: not inside a Git repository (cd into the repository under review, or pass --repo)." >&2; exit 11; }
+  ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || { echo "ERROR: not inside a Git repository (cd into the repository under review, or pass --repo)." >&2; exit 11; }
   if [ -f "$ROOT/skills.json" ] && [ -f "$ROOT/shared/runtimes.md" ]; then
     echo "ERROR: the current directory is the skills repository ($ROOT), not a repository under review; cd into the consumer repository, or pass --repo to review the skills repository itself." >&2
     exit 2
   fi
 fi
 cd "$ROOT" || { echo "ERROR: cannot enter the repository at '$ROOT'." >&2; exit 11; }
-# The repository under review is now fixed, so the inherited repository selectors are cleared for the
-# rest of the run: every diff, write and removal below belongs to ROOT.
-unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
 git rev-parse --verify -q "$BASE" >/dev/null || { echo "ERROR: base ref '$BASE' does not exist." >&2; exit 12; }
 
 mapfile -t FILES < <(git diff --name-only "$BASE"...HEAD)

@@ -346,6 +346,29 @@ def test_an_inherited_git_dir_cannot_redirect_the_report(tmp_path, reviewed_repo
     assert not (caller / ".git" / "batched-review").exists(), "the report landed in the caller's repository"
 
 
+def test_a_discovery_ceiling_cannot_skip_the_cleanup(tmp_path, reviewed_repo):
+    """AC2: a subdirectory target is still resolved, so the stale evidence is still removed.
+
+    `GIT_CEILING_DIRECTORIES` stops Git walking up from a subdirectory, which would silently skip the
+    cleanup and leave a report behind a switched-off seat.
+    """
+    spy = tmp_path / "spy.log"
+    assert launch(reviewed_repo, "--agent-cmd", spy_command(spy)).returncode == 0
+    target = reviewed_repo / ".git" / "batched-review" / "glm-seat"
+    assert (target / "report.md").is_file()
+    subdir = reviewed_repo / "a-subdirectory"
+    subdir.mkdir()
+
+    result = subprocess.run(
+        ["bash", str(LAUNCHER), "--repo", str(subdir), "--name", "glm-seat", "--enabled", "false"],
+        cwd=subdir, capture_output=True, text=True,
+        env={**os.environ, "GIT_CEILING_DIRECTORIES": str(reviewed_repo)},
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "glm-seat: disabled", result.stdout
+    assert not target.exists(), "a discovery ceiling left the stale report in place"
+
+
 def test_a_dot_name_is_refused(tmp_path, reviewed_repo):
     """A name that would make the cleanup remove a whole directory is refused."""
     for name in (".", ".."):
