@@ -369,6 +369,28 @@ def test_a_discovery_ceiling_cannot_skip_the_cleanup(tmp_path, reviewed_repo):
     assert not target.exists(), "a discovery ceiling left the stale report in place"
 
 
+def test_a_symlinked_report_directory_is_never_removed_through(tmp_path, reviewed_repo):
+    """AC2: removing a stale report must never delete content the repository does not own.
+
+    A repository whose `.git/batched-review` is a symlink elsewhere would otherwise have the
+    link target's `<name>/` directory deleted by a switched-off seat.
+    """
+    spy = tmp_path / "spy.log"
+    external = tmp_path / "external"
+    (external / "glm-seat").mkdir(parents=True)
+    (external / "glm-seat" / "keep.txt").write_text("not this repository's file\n")
+    (external / "keep.txt").write_text("nor this one\n")
+    report_dir = reviewed_repo / ".git" / "batched-review"
+    report_dir.symlink_to(external)
+
+    result = launch(reviewed_repo, "--enabled", "false", "--agent-cmd", spy_command(spy))
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "glm-seat: disabled", result.stdout
+    assert (external / "glm-seat" / "keep.txt").is_file(), (
+        "the cleanup deleted content through a symlinked report directory")
+    assert (external / "keep.txt").is_file()
+
+
 def test_a_dot_name_is_refused(tmp_path, reviewed_repo):
     """A name that would make the cleanup remove a whole directory is refused."""
     for name in (".", ".."):
@@ -441,6 +463,7 @@ def test_one_disabled_seat_leaves_the_rest_of_the_step_running(tmp_path, reviewe
     document = copy.deepcopy(MIXED_SEATS)
 
     first = run_step(document, reviewed_repo, spy)
+    assert first["underfunded-seat"].returncode == 0, first["underfunded-seat"].stderr
     assert first["underfunded-seat"].stdout.strip() == "underfunded-seat: disabled", \
         first["underfunded-seat"].stdout
     assert first["funded-seat"].returncode == 0, first["funded-seat"].stderr
@@ -452,6 +475,7 @@ def test_one_disabled_seat_leaves_the_rest_of_the_step_running(tmp_path, reviewe
     # The re-enable path is the same one-word edit, exercised in the same run.
     document["review"]["optional_reviewers"][0]["enabled"] = True
     second = run_step(document, reviewed_repo, spy)
+    assert second["underfunded-seat"].returncode == 0, second["underfunded-seat"].stderr
     assert "disabled" not in second["underfunded-seat"].stdout
     assert len(spy.read_text().splitlines()) == 3, "both seats should have launched after re-enable"
     assert (review_dir / "underfunded-seat" / "report.md").is_file()

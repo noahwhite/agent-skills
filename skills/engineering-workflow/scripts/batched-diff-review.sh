@@ -87,7 +87,13 @@ esac
 # and the disabled line is still recorded, so a switched-off seat never goes unrecorded over a
 # path mistake. Nothing is reviewed, so the skills-repository guard below does not apply here.
 if [ "$ENABLED" = "false" ]; then
-  if stale="$(git -C "${REPO:-.}" rev-parse --path-format=absolute --git-path batched-review 2>/dev/null)"; then
+  # Never remove through a symlinked report directory: the target is content this repository does
+  # not own. `--git-path` resolves such a symlink, so the entry itself is checked in the git
+  # directory. `rm -rf` replaces a symlink rather than following it, so the label directory below it
+  # needs no check of its own.
+  if stale="$(git -C "${REPO:-.}" rev-parse --path-format=absolute --git-path batched-review 2>/dev/null)" \
+     && gitdir="$(git -C "${REPO:-.}" rev-parse --path-format=absolute --absolute-git-dir 2>/dev/null)" \
+     && [ -d "$stale" ] && [ ! -L "$gitdir/batched-review" ]; then
     rm -rf -- "$stale/$NAME"
   fi
   printf '%s: disabled\n' "$NAME"
