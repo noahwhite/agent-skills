@@ -544,25 +544,30 @@ def step(text: str, heading: str) -> str:
     return rest[: following.start()] if following else rest
 
 
+def step_one_item_index(prefix: str) -> int:
+    """The index of the one Step 1 process item that starts with the given text."""
+    items = process_items("Step 1: Independent refinement")
+    found = [index for index, item in enumerate(items) if item.startswith(prefix)]
+    assert len(found) == 1, f"expected one Step 1 item starting {prefix!r}, found {len(found)}"
+    return found[0]
+
+
 def test_step_one_probe_precedes_voter_launch() -> None:
-    body = squash(step(SKILL.read_text(), "Step 1: Independent refinement"))
-    probe = body.find("run the tracker-write preflight before any voter launches")
-    launch = body.find("launch the three engineers")
-    assert probe != -1, "missing tracker-write preflight"
-    assert launch != -1, "missing voter launch"
+    probe = step_one_item_index("Run the tracker-write preflight before any voter launches")
+    launch = step_one_item_index("Launch the three engineers in separate contexts")
     assert probe < launch, "the probe must precede the voter launch"
-    assert "the po, in a separate context, posts one comment" in body, "the preflight is the PO's comment"
+    assert "the po, in a separate context, posts one comment" in squash(
+        step(SKILL.read_text(), "Step 1: Independent refinement"))
 
 
 def test_step_one_roster_check_precedes_the_probe_and_every_voter() -> None:
     """AC6: the roster check runs before the tracker-write preflight and before any voter launch."""
-    body = squash(step(SKILL.read_text(), "Step 1: Independent refinement"))
-    roster = body.find("validate the refinement roster before the tracker-write preflight and before any voter launch")
-    probe = body.find("run the tracker-write preflight before any voter launches")
-    launch = body.find("launch the three engineers")
-    assert roster != -1, "missing the roster check"
-    assert probe != -1, "missing the preflight item"
+    roster = step_one_item_index(
+        "Validate the refinement roster before the tracker-write preflight and before any voter launch")
+    probe = step_one_item_index("Run the tracker-write preflight before any voter launches")
+    launch = step_one_item_index("Launch the three engineers in separate contexts")
     assert roster < probe < launch, "the roster check must precede the probe and every voter launch"
+    body = squash(step(SKILL.read_text(), "Step 1: Independent refinement"))
     assert "first-existing-file rule in [references/profile.md](references/profile.md)" in body
     assert "never a repository-only read" in body
     for requirement in (
