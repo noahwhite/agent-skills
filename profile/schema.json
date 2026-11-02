@@ -444,11 +444,11 @@
       "description": "Refinement and pointing roles. The product owner and two engineers vote; the facilitator does not vote.",
       "properties": {
         "facilitator": {
-          "$ref": "#/$defs/refinement_role",
+          "$ref": "#/$defs/required_refinement_role",
           "description": "The scrum master or engineering manager who orchestrates the ceremony and does not vote."
         },
         "product_owner": {
-          "$ref": "#/$defs/refinement_role",
+          "$ref": "#/$defs/required_refinement_role",
           "description": "The product owner voter and the only role that writes to the tracker."
         },
         "reviewers": {
@@ -527,6 +527,24 @@
           "type": "boolean",
           "default": true,
           "description": "Whether the seat runs. Omitted means enabled, so an existing profile keeps working. A false value keeps the entry configured and reversible with one word, while a skill iterating a seat list launches nothing for it, writes no report, and records \"<name>: disabled\". The whole entry is still profile text a session reads. A seat the gate cannot run without may not be disabled: the schema refuses that, so no gate reports a result with a mandatory seat absent."
+        }
+      }
+    },
+    "required_refinement_role": {
+      "description": "A refinement role the ceremony cannot run without. It is a refinement role entry that may not be switched off: disabling the facilitator or the product owner is refused at validation, so no ceremony runs with that role absent.",
+      "allOf": [
+        {
+          "$ref": "#/$defs/refinement_role"
+        }
+      ],
+      "not": {
+        "required": [
+          "enabled"
+        ],
+        "properties": {
+          "enabled": {
+            "const": false
+          }
         }
       }
     },

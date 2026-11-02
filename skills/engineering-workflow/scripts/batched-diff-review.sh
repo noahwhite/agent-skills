@@ -18,7 +18,12 @@
 # --enabled is the seat entry's `enabled` value (absent means true): pass `false` for a seat the
 # profile configures but switches off. A disabled seat launches nothing, writes no report and
 # prints the one evidence line `LABEL: disabled`; it is never recorded as passed, skipped for
-# failure, or clean. Any other value is refused rather than guessed.
+# failure, or clean. Any other value is refused rather than guessed, including an empty one, so a
+# value rendered from a profile can never mean "enabled" by accident.
+# The line is the only evidence a disabled seat produces and the exit status matches a completed
+# review, so a caller that gates on the status alone records a switched-off seat as one that ran.
+# The environment form (REVIEW_ENABLED) cannot be told apart from a profile value in the evidence
+# line; the profile stays the audited source of a seat's state.
 #
 # TEMPLATE is a shell command with {prompt_file} (the batch input) and optionally {output_file}
 # (if absent, the command's stdout is the batch result). It runs in an empty scratch directory with
@@ -40,7 +45,9 @@ REPO="${REVIEW_REPO:-}"
 BASE="${REVIEW_BASE:-}"
 AGENT_CMD="${REVIEW_AGENT_CMD:-}"
 NAME="${REVIEW_NAME:-optional-reviewer}"
-ENABLED="${REVIEW_ENABLED:-true}"
+# Unset means enabled. An empty value is refused below rather than read as true, so a value
+# rendered from a profile (`enabled:` with no value) cannot launch a seat meant to be off.
+ENABLED="${REVIEW_ENABLED-true}"
 LINE_BUDGET="${REVIEW_LINE_BUDGET:-800}"
 BATCH_TIMEOUT="${REVIEW_TIMEOUT:-240}"
 CONTEXT_LINES="${REVIEW_CONTEXT:-30}"
@@ -69,6 +76,12 @@ esac
 # disabled seat needs neither a launcher nor a diff, and it leaves no trace a reader could mistake
 # for a review that ran.
 if [ "$ENABLED" = "false" ]; then
+  # Evidence an earlier enabled run left under this label is removed, so a switched-off seat never
+  # keeps a report a reader could mistake for a review that ran. A disabled seat needs neither
+  # --base nor --agent-cmd, and where the repository cannot be resolved there is nothing to remove.
+  if stale="$(git -C "${REPO:-.}" rev-parse --git-path batched-review 2>/dev/null)"; then
+    rm -rf -- "$stale/$NAME"
+  fi
   printf '%s: disabled\n' "$NAME"
   exit 0
 fi

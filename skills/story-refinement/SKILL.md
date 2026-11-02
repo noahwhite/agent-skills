@@ -63,15 +63,17 @@ Where this file and a capability file disagree, the capability file is authorita
   The PO and the two engineers are the voters in both the refinement agreement and the pointing round.
 - A `profile.refinement.facilitator`, `profile.refinement.product_owner`, or `profile.refinement.reviewers` that is unset stops the ceremony.
   Ask for the value; never substitute one.
-- An engineer voter whose `enabled` is `false` is skipped before any launch: no process, no subagent, no output file, and the record reads "<name>: disabled", never a vote, a failed vote, or a clean one.
+  A facilitator or product owner whose `enabled` is `false` stops the ceremony the same way, with a named error: neither is a launch this ceremony may skip, so no vote, tracker write or record follows.
+- An engineer voter whose `enabled` is `false` is skipped before any launch: no process, no subagent, no output file, and the evidence reads "<name>: disabled", never a vote, a failed vote, or a clean one.
   Omission means enabled.
-  The rules above count the enabled entries: if fewer than two engineer voters are enabled, or the enabled ones share a model family, stop the ceremony and ask the owner for a different reviewer.
+  The rules above count the enabled entries: if fewer than two engineer voters are enabled, or the enabled ones share a model family, stop the ceremony and name the disabled entry in the stop.
+  With `refinement.reviewers` at its two entries, disabling one therefore blocks the ceremony until that seat is re-enabled or an enabled entry replaces it, so the ceremony never runs short a voter and never records a disabled entry as a voter.
 - Stop when the configured facilitator runtime differs from the orchestrator runtime.
   The facilitator is always the top-level session.
 - When `metrics` is on, the metrics summary is the one comment the facilitator posts outside the denied tracker writes fallback.
   It is the facilitator's own SM/EM comment, never a PO-authored write.
 
-Launch each non-facilitator role in a separate context with the runtime, model, optional `agent`, optional `command`, and optional `family` from its profile entry.
+Launch each non-facilitator role in a separate context with the runtime, model, optional `agent`, optional `command`, optional `family` and `enabled` (omitted means enabled) from its profile entry.
 A `command` runtime gets its prompt in a file and writes its result to an output file.
 When the command carries a `{session_title}` placeholder, the facilitator replaces it on every launch with a title unique to that launch: the story key, the word `launch`, the launch's number in this invocation, a UTC timestamp to the nanosecond taken with `date -u +%Y%m%dT%H%M%S%NZ`, and 16 random hexadecimal characters taken with `od -An -N8 -tx1 /dev/urandom | tr -d ' \n'`, joined by `-`, which carries no secret and no path.
 Every launch counts toward that number, a re-launch or retry included, so no two launches of one invocation share a title, and the random part keeps launches of concurrent invocations of one story apart even when their clocks give the same timestamp.

@@ -6,6 +6,7 @@ launcher that must skip a disabled seat without launching a process or writing e
 
 import copy
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -18,7 +19,6 @@ SCHEMA = json.loads((ROOT / "profile" / "schema.json").read_text())
 EXAMPLE = yaml.safe_load((ROOT / "profile" / "example.yaml").read_text())
 VALIDATOR = jsonschema.Draft202012Validator(SCHEMA)
 OPTIONAL_SEAT = ("review", "optional_reviewers", 0)
-REVIEWER = ("review", "reviewer")
 
 # Every seat a gate cannot run without (AC3). Disabling one is a profile that claims a gate it
 # cannot run, so the schema refuses it instead of letting a phase report clean with no seat.
@@ -28,15 +28,9 @@ MANDATORY_SEATS = [
     ("review", "pre_pr", "hunter"),
     ("review", "pre_pr", "arbiter"),
 ]
-
-
-def profile_at(path) -> dict:
-    """A copy of the example profile with the nested path resolved to the mapping it names."""
-    document = copy.deepcopy(EXAMPLE)
-    node = document
-    for step in path:
-        node = node[step]
-    return document
+# Roles the refinement ceremony cannot run without either: it has no vote or tracker write without
+# the product owner, and the facilitator is the orchestrating session itself.
+MANDATORY_REFINEMENT_ROLES = [("refinement", "facilitator"), ("refinement", "product_owner")]
 
 
 def seat(document, path):
@@ -65,7 +59,7 @@ def test_agent_accepts_an_enabled_boolean(value):
 def test_agent_enabled_is_optional_and_means_enabled_when_omitted():
     """AC1: an entry without the key passes, and the schema documents omission as enabled."""
     document = copy.deepcopy(EXAMPLE)
-    assert "enabled" not in seat(document, OPTIONAL_SEAT)
+    seat(document, OPTIONAL_SEAT).pop("enabled", None)
     assert not errors(document), validation_message(document)
     node = SCHEMA["$defs"]["agent"]["properties"]["enabled"]
     assert node["type"] == "boolean", node
@@ -105,6 +99,36 @@ def test_a_mandatory_seat_cannot_be_disabled(path):
     # The discriminating half: an empty schema accepts the same document, so the refusal above is
     # the guard and not a schema that rejects everything.
     assert not list(jsonschema.Draft202012Validator({}).iter_errors(document))
+
+
+@pytest.mark.parametrize("path", MANDATORY_REFINEMENT_ROLES, ids=lambda p: ".".join(p))
+def test_a_mandatory_refinement_role_cannot_be_disabled(path):
+    """AC3: a role the ceremony cannot run without is refused rather than silently skipped."""
+    document = copy.deepcopy(EXAMPLE)
+    assert not errors(document), validation_message(document)
+    seat(document, path)["enabled"] = False
+    found = errors(document)
+    assert found, f"the schema accepted enabled: false on {'.'.join(path)}"
+    assert not list(jsonschema.Draft202012Validator({}).iter_errors(document))
+
+
+def test_the_guard_covers_exactly_the_seats_that_may_not_be_disabled():
+    """AC3: the guard is one rule, so a seat swapped to a plain agent entry fails this check."""
+    guarded = set()
+
+    def walk(node, path=()):
+        """Every property path whose entry is guarded, following `properties` only."""
+        if not isinstance(node, dict):
+            return
+        ref = node.get("$ref", "")
+        if ref.endswith("required_agent") or ref.endswith("required_refinement_role"):
+            guarded.add(".".join(path))
+        for key, value in node.get("properties", {}).items():
+            walk(value, (*path, key))
+
+    walk(SCHEMA)
+    expected = {".".join(path) for path in MANDATORY_SEATS + MANDATORY_REFINEMENT_ROLES}
+    assert guarded == expected, (sorted(guarded), sorted(expected))
 
 
 @pytest.mark.parametrize("path", MANDATORY_SEATS, ids=lambda p: ".".join(p))
@@ -195,7 +219,8 @@ def test_a_disabled_seat_launches_nothing_and_writes_no_report(tmp_path, reviewe
 def test_a_disabled_seat_is_never_recorded_as_passed_skipped_or_clean(tmp_path, reviewed_repo):
     """AC2: the only line a disabled seat produces is the disabled one, so no verdict can be read."""
     spy = tmp_path / "spy.log"
-    result = launch(reviewed_repo, "--enabled", "false", "--agent-cmd", spy_command(spy))
+    result = launch(reviewed_repo, "--enabled", "false", "--agent-cmd", spy_command(spy),
+                    name="seat")
     text = (result.stdout + result.stderr).lower()
     for word in ("verdict", "pass", "fail", "incomplete", "skipped"):
         assert word not in text, f"the disabled seat recorded `{word}`: {result.stdout}{result.stderr}"
@@ -231,6 +256,33 @@ def test_an_explicitly_enabled_entry_launches(tmp_path, reviewed_repo):
     assert spy.exists(), "an entry with `enabled: true` did not launch"
 
 
+def test_disabling_a_seat_removes_the_report_an_earlier_run_left(tmp_path, reviewed_repo):
+    """AC2: a switched-off seat leaves no report behind, not even one from an earlier head."""
+    spy = tmp_path / "spy.log"
+    first = launch(reviewed_repo, "--agent-cmd", spy_command(spy))
+    assert first.returncode == 0, first.stderr
+    report_dir = reviewed_repo / ".git" / "batched-review" / "glm-seat"
+    assert (report_dir / "report.md").is_file(), "the enabled run wrote no report to remove"
+    second = launch(reviewed_repo, "--enabled", "false", "--agent-cmd", spy_command(spy))
+    assert second.returncode == 0, second.stderr
+    assert second.stdout.strip() == "glm-seat: disabled", second.stdout
+    assert not report_dir.exists(), f"a stale report survived the disabled run: {sorted(report_dir.rglob('*'))}"
+
+
+def test_an_empty_environment_value_is_refused_rather_than_read_as_enabled(tmp_path, reviewed_repo):
+    """A value rendered from a profile as empty must fail closed, not launch the seat."""
+    spy = tmp_path / "spy.log"
+    result = subprocess.run(
+        ["bash", str(LAUNCHER), "--repo", str(reviewed_repo), "--base", "HEAD~1",
+         "--name", "glm-seat", "--agent-cmd", spy_command(spy)],
+        cwd=reviewed_repo, capture_output=True, text=True,
+        env={**os.environ, "REVIEW_ENABLED": ""},
+    )
+    assert result.returncode == 2, (result.returncode, result.stdout, result.stderr)
+    assert "--enabled" in result.stderr, result.stderr
+    assert not spy.exists(), "an empty value launched the seat"
+
+
 @pytest.mark.parametrize("value", ["maybe", "0", "", "FALSE "])
 def test_an_unrecognised_enabled_value_is_refused(tmp_path, reviewed_repo, value):
     """A value that is neither true nor false stops the run rather than guessing the seat's state."""
@@ -239,6 +291,49 @@ def test_an_unrecognised_enabled_value_is_refused(tmp_path, reviewed_repo, value
     assert result.returncode == 2, (result.returncode, result.stdout, result.stderr)
     assert "--enabled" in result.stderr, result.stderr
     assert not spy.exists(), "an unrecognised value still launched"
+
+
+MIXED_SEATS = {
+    "review": {
+        "optional_reviewers": [
+            {"name": "underfunded-seat", "runtime": "command", "model": "example/family-b",
+             "enabled": False},
+            {"name": "funded-seat", "runtime": "command", "model": "example/family-c"},
+        ]
+    }
+}
+
+
+def run_step(document: dict, repo: Path, spy: Path) -> dict[str, subprocess.CompletedProcess]:
+    """Step 6 of engineering-workflow: one launcher call per entry, with the entry's own value."""
+    results = {}
+    for entry in document["review"]["optional_reviewers"]:
+        enabled = str(entry.get("enabled", True)).lower()
+        results[entry["name"]] = launch(
+            repo, "--enabled", enabled, "--agent-cmd", spy_command(spy), name=entry["name"])
+    return results
+
+
+def test_one_disabled_seat_leaves_the_rest_of_the_step_running(tmp_path, reviewed_repo):
+    """AC5: on a fixture profile, the step skips one seat and still runs the other, then re-enables."""
+    spy = tmp_path / "spy.log"
+    document = copy.deepcopy(MIXED_SEATS)
+
+    first = run_step(document, reviewed_repo, spy)
+    assert first["underfunded-seat"].stdout.strip() == "underfunded-seat: disabled", \
+        first["underfunded-seat"].stdout
+    assert first["funded-seat"].returncode == 0, first["funded-seat"].stderr
+    assert spy.read_text().splitlines() == ["launched"], "the disabled seat broke the iteration"
+    review_dir = reviewed_repo / ".git" / "batched-review"
+    assert not (review_dir / "underfunded-seat").exists()
+    assert (review_dir / "funded-seat" / "report.md").is_file()
+
+    # The re-enable path is the same one-word edit, exercised in the same run.
+    document["review"]["optional_reviewers"][0]["enabled"] = True
+    second = run_step(document, reviewed_repo, spy)
+    assert "disabled" not in second["underfunded-seat"].stdout
+    assert len(spy.read_text().splitlines()) == 3, "both seats should have launched after re-enable"
+    assert (review_dir / "underfunded-seat" / "report.md").is_file()
 
 
 # ---------------------------------------------------------------------------
@@ -300,8 +395,12 @@ def test_the_refinement_voters_count_the_enabled_entries():
     """AC2: a disabled voter is skipped, and the two-voter rule is evaluated over the enabled set."""
     body = section(REFINEMENT.read_text(), "## Roles")
     assert DISABLED_EVIDENCE in body, body
-    assert "enabled" in body, body
-    assert "stops the ceremony" in body, body
+    assert "fewer than two engineer voters are enabled" in body, (
+        "the enabled-voter count rule is missing from the roles")
+    assert "with a named error" in body, (
+        "a disabled facilitator or product owner needs its own stop")
+    assert "blocks the ceremony until that seat is re-enabled" in body, (
+        "the two-entry voter list makes a disabled voter block the ceremony; the prose has to say so")
 
 
 @pytest.mark.parametrize("skill", ["persona-staff-engineer", "persona-staff-devops"])
@@ -316,10 +415,12 @@ def test_the_profile_documentation_states_what_a_disabled_entry_costs():
     """AC4: a disabled entry is still read, and the toggle is priced against the alternatives."""
     body = section((ROOT / "README.md").read_text(), "### Switching a seat off")
     assert "read as text" in body, body
-    for alternative in ("tokens", "deleting the entry", "commenting the entry out"):
+    for alternative in ("tokens", "deleting the entry", "commenting it out"):
         assert alternative in body, alternative
-    assert "reversibility" in body, body
-    assert "invalid to parse" in body, body
+    assert "one-word edit" in body, body
+    # Commenting out is legal YAML, so the honest difference is the unset seat, not a parse error.
+    assert "invalid to parse" not in body, body
+    assert "unset rather than disabled" in body, body
 
 
 

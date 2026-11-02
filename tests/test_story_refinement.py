@@ -146,8 +146,8 @@ def test_schema_has_refinement_object() -> None:
     assert refinement["type"] == "object"
     assert refinement["additionalProperties"] is False
     props = refinement["properties"]
-    assert props["facilitator"]["$ref"] == "#/$defs/refinement_role"
-    assert props["product_owner"]["$ref"] == "#/$defs/refinement_role"
+    assert props["facilitator"]["$ref"] == "#/$defs/required_refinement_role"
+    assert props["product_owner"]["$ref"] == "#/$defs/required_refinement_role"
     reviewers = props["reviewers"]
     assert reviewers["type"] == "array"
     assert reviewers["minItems"] == 2

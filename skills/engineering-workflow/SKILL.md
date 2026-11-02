@@ -104,6 +104,8 @@ Roles, all from the profile:
 - Verifier: `profile.review.pre_pr.arbiter`.
 - Fixer: `profile.review.pre_pr.fixer`.
 
+A disabled simplicity reviewer or fixer blocks the escalation rather than skipping it: record "<name>: disabled" and stop with the escalation unresolved, because the loop cannot complete a round without both seats.
+
 One round has three stages:
 
 1. **Review.** Both lenses review `git diff origin/<integration branch>...HEAD` in parallel; the hunter works in a throwaway detached worktree.
@@ -149,8 +151,8 @@ When it is `forbid`, add no AI co-author trailer, session link or generated-by n
 
 ## 6. Optional reviewers (never blocking)
 
-For each entry in `profile.review.optional_reviewers`, run one review right after the PR opens.
-An entry whose `enabled` is `false` is skipped before any launch: no process, no subagent, no report file, and the evidence records "<name>: disabled".
+For each entry in `profile.review.optional_reviewers`, run one review right after the PR opens, skipping any entry whose `enabled` is `false`.
+A disabled entry launches nothing: no process, no subagent, no report file, and the evidence records "<name>: disabled".
 It is never recorded as passed, skipped for failure, or clean.
 Omission means enabled.
 Pass the entry's value to the launcher as `--enabled`, which refuses to launch and writes no report, so the skip is enforced rather than trusted to the caller.
@@ -162,7 +164,7 @@ The batch prompt reaches the agent on stdin (for codex, end the command with `-`
 - One attempt.
   On INCOMPLETE (rate limit, timeout, missing credential) record "<name>: skipped" and proceed; never troubleshoot it and never hold a merge or deploy on it.
 - When a review completes, verify every finding against the code before acting: resolve Critical and High before merge; resolve valid Medium findings or document why not; resolve Low findings when clearly useful; reject false positives explicitly.
-- After code changes, re-run the relevant tests and the optional reviewer at the new head.
+- After code changes, re-run the relevant tests and the optional reviewer at the new head, over its enabled entries only.
 
 ## 7. Review of record (required)
 
@@ -272,7 +274,7 @@ Report:
 - tests and checks run;
 - pre-PR gate result (phases run, escalation rounds if any, findings resolved or justified);
 - the PR link;
-- each optional reviewer's result, or "skipped";
+- each optional reviewer's result, "skipped", or "<name>: disabled";
 - the review of record result, with models, and findings resolved or rejected;
 - the merge result (or that it awaits a human merge);
 - the deployment and verification result.

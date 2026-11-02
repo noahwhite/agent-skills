@@ -96,13 +96,13 @@ A skill that needs a value the profile does not set stops and asks for it rather
 
 ### Switching a seat off
 
-Every seat entry takes an optional `enabled` boolean: a single role (`review.reviewer`) or one item of a seat list (`review.optional_reviewers`, `review.shadow_adjudicators`, `refinement.reviewers`).
-Omitted means enabled, so an existing profile keeps the seats it names.
-A seat set to `false` stays configured, and a skill that iterates a seat list launches nothing for it - no process, no subagent, no report - and records "<name>: disabled" rather than a pass, a failure or a clean result.
-The seats a gate cannot run without (`review.reviewer`, `review.adjudicator`, `review.pre_pr.hunter`, `review.pre_pr.arbiter`) may not be disabled: `profile/schema.json` refuses such a profile, so no gate reports a result with a mandatory seat absent.
+A seat entry that may be switched off takes an optional `enabled` boolean: one item of a seat list (`review.optional_reviewers`, `review.shadow_adjudicators`, `refinement.reviewers`) or a single role such as `review.pre_pr.sweeper`.
+Omitted means enabled, which is the canonical form: set the key only to switch a seat off, so an existing profile keeps the seats it names.
+A seat set to `false` stays configured, and the skill that reads it launches nothing - no process, no subagent, no report - and records "<name>: disabled" rather than a pass, a failure or a clean result.
+The seats a gate cannot run without (`review.reviewer`, `review.adjudicator`, `review.pre_pr.hunter`, `review.pre_pr.arbiter`) and the two refinement roles the ceremony cannot run without (`refinement.facilitator`, `refinement.product_owner`) may not be disabled: `profile/schema.json` refuses such a profile, so no gate or ceremony reports a result with a mandatory seat absent.
 
 The profile is read as text, whole, so a disabled entry is still read and still costs its own tokens.
-That is the whole trade: `enabled: false` buys reversibility with a one-word edit for one extra line of profile text, deleting the entry saves that text but loses the seat's name, model and command until git history is read, and commenting the entry out costs the same text as disabling it while making the profile invalid to parse.
+That is the whole trade: `enabled: false` keeps the seat's name, model and command in the file and buys its return with a one-word edit, for the price of one line of profile text; deleting the entry saves that text but loses the seat until git history is read; commenting it out costs exactly the same text as disabling it and leaves the seat unset rather than disabled, so it disappears from the lists a skill iterates and its switch-off is never recorded.
 Disable a seat that is expected back, such as one whose provider cannot currently run; delete one that is gone for good.
 
 ## Overlays
