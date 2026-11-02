@@ -2,9 +2,9 @@
 
 Date: 2026-11-02.
 This CLI/configuration change has no visual surface, screenshots or hosted page.
-The round-four QA comment on SKL-189 (ID `29ba9431-861d-4971-a000-9fc0f32936f9`) carries the raw assertion attachment `SKL-189-qa-round-4-assertions.txt`, SHA256 `65a2b87c2c84a83884781e97793e2fb02e0ff01fca64e63e86730249a26271bb`.
+The story comment titled "SKL-189 QA round 4 - 2026-11-02" carries the raw assertion attachment `SKL-189-qa-round-4-assertions.txt`, SHA256 `65a2b87c2c84a83884781e97793e2fb02e0ff01fca64e63e86730249a26271bb`.
 It includes fresh assertions and the checksum-verified historical round-three attachment (`781feb1e4ee4439b0978dbab206b2aacb39cc3a03e876e2f3abaa5cda022ea1c`), which includes round two (`b865acdeb29b11a8835d8808d5647c1c08c72afd18e9fbd6574a05aaad993c1b`).
-The AC5 ceremony supplement comment on SKL-189 (ID `f5d40c4f-5337-497d-984f-cba79575c8f2`) carries `SKL-189-qa-round-4-ceremony-supplement.txt`, SHA256 `99fd8a911970a00066d2b5d9505e47672c8371ccfbed93b3f2a33e3854ffbe7d`.
+The story comment titled "SKL-189 QA round 4 - AC5 ceremony supplement" carries `SKL-189-qa-round-4-ceremony-supplement.txt`, SHA256 `99fd8a911970a00066d2b5d9505e47672c8371ccfbed93b3f2a33e3854ffbe7d`.
 It adds fresh bounded review-ceremony observations, independent ledger/file assertions, CI head/status/conclusion and gate attempt history through the first accepted arbitration.
 Historical shadow/refinement execution and engineering regression are retained observations, not newly executed ceremonies or tests.
 The prior signed README at `0a87d5cf33b81e724007167611ed0ca929abf0e3` was inspected; no interrupted gate phase from earlier rounds is accepted.
