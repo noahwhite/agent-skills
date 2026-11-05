@@ -8,7 +8,7 @@ description: >-
   gate, the pre-PR pipeline, or the sweep, hunt and arbitrate review. The two-lens loop in
   engineering-workflow is its escalation path, not an alternative.
 license: Apache-2.0
-compatibility: Requires git, bash and the CLIs of the agents configured for each review role.
+compatibility: Requires git (also for repository-root discovery), bash, python3, PyYAML>=6 and the CLIs of the agents configured for each review role.
 ---
 
 # Pre-PR adversarial gate (sweep, hunt, arbitrate)
