@@ -196,6 +196,39 @@ def test_inherited_git_variables_do_not_move_the_repository_root(tmp_path, home,
     assert res.stdout == lines("review.reviewer", "codex", "gpt-test", repo_profile)
 
 
+def test_an_unsearchable_repository_profile_directory_fails_without_falling_through(tmp_path, home):
+    repo = git_repo(tmp_path / "repo")
+    write(repo / ".agent-skills" / "profile.yaml", PROFILE)
+    home_profile = write(home / ".config" / "agent-skills" / "profile.yaml", PROFILE.replace("gpt-test", "from-home"))
+    (repo / ".agent-skills").chmod(0)
+    try:
+        if os.access(repo / ".agent-skills", os.X_OK):
+            pytest.skip("running as a user that ignores directory permissions")
+        line = assert_fails(
+            resolve("--role", "review.reviewer", cwd=repo, env=base_env(home)),
+            "review.reviewer", str(repo / ".agent-skills" / "profile.yaml"), "cannot check",
+        )
+        assert str(home_profile) not in line
+    finally:
+        (repo / ".agent-skills").chmod(0o755)
+
+
+def test_a_repository_root_that_is_not_utf8_resolves(tmp_path, home):
+    raw = os.fsencode(tmp_path) + b"/repo-\xff"
+    os.mkdir(raw)
+    repo = git_repo(Path(os.fsdecode(raw)))
+    write(repo / ".agent-skills" / "profile.yaml", PROFILE)
+    write(home / ".config" / "agent-skills" / "profile.yaml", PROFILE.replace("gpt-test", "from-home"))
+    res = subprocess.run(
+        [sys.executable, str(RESOLVER), "--role", "review.reviewer"],
+        cwd=raw, env=base_env(home), capture_output=True, timeout=60,
+    )
+    assert res.returncode == 0, res.stderr
+    out = res.stdout.decode()
+    assert "model: gpt-test\n" in out
+    assert "source: " + str(tmp_path) + "/repo-\\udcff/.agent-skills/profile.yaml\n" in out
+
+
 def test_a_repository_path_ending_in_a_space_keeps_it(tmp_path, home):
     repo = git_repo(tmp_path / "repo ")
     repo_profile = write(repo / ".agent-skills" / "profile.yaml", PROFILE)
@@ -284,6 +317,13 @@ def test_a_command_without_a_runtime_resolves_as_a_command_entry(home, home_prof
     assert res.stdout == lines(
         "refinement.reviewers[2]", "command", "unresolved", home_profile, 'third-cli --file "{prompt_file}"',
     )
+
+
+def test_a_null_runtime_with_a_command_resolves_as_a_command_entry(home, outside):
+    profile = write(home / ".config" / "agent-skills" / "profile.yaml", "r:\n  name: R\n  runtime: null\n  command: cli go\n")
+    res = resolve("--role", "r", cwd=outside, env=base_env(home))
+    assert res.returncode == 0, res.stderr
+    assert res.stdout == lines("r", "command", "unresolved", profile, "cli go")
 
 
 def test_the_profile_prefix_is_accepted_and_stripped(home, home_profile, outside):
@@ -389,6 +429,12 @@ def test_an_unreadable_profile_fails(tmp_path, home, home_profile, outside):
     assert_fails(resolve("--role", "review.reviewer", cwd=outside, env=env), str(bad), "unreadable")
 
 
+def test_a_too_deeply_nested_profile_fails(tmp_path, home, outside):
+    deep = write(tmp_path / "deep.yaml", "r: " + "[" * 5000 + "]" * 5000 + "\n")
+    env = base_env(home) | {"AGENT_SKILLS_PROFILE": str(deep)}
+    assert_fails(resolve("--role", "r", cwd=outside, env=env), str(deep), "not valid YAML")
+
+
 @pytest.mark.parametrize("kind", ["fifo", "device"])
 def test_a_profile_that_is_not_a_regular_file_fails_without_reading_it(tmp_path, home, home_profile, outside, kind):
     if kind == "fifo":
@@ -464,7 +510,8 @@ log = open(sys.argv[1], "w")
 LAUNCHES = ("subprocess.", "socket.", "os.system", "os.exec", "os.posix_spawn", "os.fork", "os.spawn")
 def hook(event, args):
     if event.startswith(LAUNCHES):
-        log.write(event + "\\n")
+        argv = args[1] if event == "subprocess.Popen" else args
+        log.write(f"{event} {argv!r}\\n")
         log.flush()
 sys.addaudithook(hook)
 script = sys.argv[2]
@@ -491,31 +538,30 @@ def test_dry_run_matches_a_normal_run_and_launches_nothing(tmp_path, outside, mo
     }
     hook = tmp_path / "audit.py"
     hook.write_text(AUDIT)
-    outputs = []
-    for extra in ([], ["--dry-run"]):
-        log = tmp_path / f"audit{len(outputs)}.log"
-        res = subprocess.run(
-            [sys.executable, str(hook), str(log), str(RESOLVER), "--role", "refinement.reviewers[1]",
-             "--repo", str(repo), *mode, *extra],
-            cwd=outside, env=env, capture_output=True, text=True, timeout=60,
-        )
-        assert res.returncode == 0, res.stderr
-        assert res.stderr == ""
-        assert log.read_text() == "", "the resolver spawned a process or opened a socket"
-        outputs.append(res.stdout)
-    assert outputs[0] == outputs[1]
-    assert "second-cli" in outputs[1]
+    write(repo / ".agent-skills" / "profile.yaml", PROFILE)
+    git_launch = "subprocess.Popen ['git', '-C', %r, 'rev-parse', '--show-toplevel']\n" % str(repo)
+    # With --repo the resolver starts nothing; without it, the only launch is git finding the
+    # work tree, which also shows the hook does see a launch, so an empty log is evidence.
+    for discovery, cwd, run_env, launches in (
+        (["--repo", str(repo)], outside, env, ""),
+        ([], repo, {k: v for k, v in env.items() if k != "AGENT_SKILLS_PROFILE"}, git_launch),
+    ):
+        outputs = []
+        for extra in ([], ["--dry-run"]):
+            log = tmp_path / f"audit{len(outputs)}.log"
+            res = subprocess.run(
+                [sys.executable, str(hook), str(log), str(RESOLVER), "--role", "refinement.reviewers[1]",
+                 *discovery, *mode, *extra],
+                cwd=cwd, env=run_env, capture_output=True, text=True, timeout=60,
+            )
+            assert res.returncode == 0, res.stderr
+            assert res.stderr == ""
+            assert log.read_text() == launches, "the resolver spawned a process or opened a socket"
+            outputs.append(res.stdout)
+        assert outputs[0] == outputs[1]
+        assert "second-cli" in outputs[1]
+        assert "gpt-test" not in outputs[1]
     assert not marker.exists()
-    # Control: the hook does see a launch, so an empty log above is evidence. Without --repo the
-    # resolver asks git for the work tree, which is the one process it may start.
-    log = tmp_path / "control.log"
-    control_env = {k: v for k, v in env.items() if k != "AGENT_SKILLS_PROFILE"}
-    res = subprocess.run(
-        [sys.executable, str(hook), str(log), str(RESOLVER), "--role", "review.reviewer", *mode],
-        cwd=repo, env=control_env, capture_output=True, text=True, timeout=60,
-    )
-    assert res.returncode == 0, res.stderr
-    assert "subprocess.Popen" in log.read_text()
 
 
 def test_dry_run_needs_no_credential(home, home_profile, outside):
@@ -552,8 +598,10 @@ def test_a_missing_pyyaml_is_reported_even_with_no_profile(tmp_path, home, outsi
     [
         ("__version__ = '5.4.1'\n", "PyYAML 5.4.1 is too old"),
         ("raise RuntimeError('broken install')\n", "PyYAML could not be imported"),
+        ("raise SystemExit(0)\n", "PyYAML could not be imported"),
+        ("__version__ = '6.0'\n", "PyYAML 6.0 lacks safe_load"),
     ],
-    ids=["too-old", "broken"],
+    ids=["too-old", "broken", "exits-on-import", "no-safe-load"],
 )
 def test_an_unusable_pyyaml_fails_with_an_actionable_line(tmp_path, home, home_profile, outside, module, fragment):
     shadow = tmp_path / "bad-yaml"
@@ -630,6 +678,49 @@ def test_the_header_is_written_in_each_executable_language(vendor_tree):
     assert (scripts / "tool.sh").read_text() == f"# GENERATED from shared/tool.sh {tail}#!/bin/sh\necho tool\n"
     assert (scripts / "tool.js").read_text() == f"// GENERATED from shared/tool.js {tail}console.log('tool');\n"
     assert vendor(vendor_tree, "--check").returncode == 0
+
+
+def test_a_symlinked_copy_is_replaced_without_touching_its_target(vendor_tree, tmp_path):
+    assert vendor(vendor_tree).returncode == 0
+    copy = vendor_tree / "skills" / "alpha" / "scripts" / "resolve-model-role.py"
+    victim = tmp_path / "victim.txt"
+    victim.write_bytes(copy.read_bytes())
+    copy.unlink()
+    copy.symlink_to(victim)
+    res = vendor(vendor_tree, "--check")
+    assert res.returncode == 1
+    assert "stale or missing: skills/alpha/scripts/resolve-model-role.py" in res.stdout.splitlines()
+    victim.write_text("keep me\n")
+    assert vendor(vendor_tree).returncode == 0
+    assert victim.read_text() == "keep me\n"
+    assert not copy.is_symlink()
+    assert copy.read_bytes() == EXEC_HEADER + RESOLVER.read_bytes()
+
+
+def test_a_script_carrying_the_exact_header_but_other_content_is_never_deleted(vendor_tree):
+    hand = write(
+        vendor_tree / "skills" / "beta" / "scripts" / "hand.py",
+        "# GENERATED from shared/hand.py by scripts/vendor_shared.py. Edit the source, then rerun the script.\n"
+        "print('mine')\n",
+    )
+    res = vendor(vendor_tree)
+    assert res.returncode == 1
+    assert "skills/beta/scripts/hand.py" in res.stderr
+    assert hand.read_text().endswith("print('mine')\n")
+    res = vendor(vendor_tree, "--check")
+    assert res.returncode == 1
+    assert "orphaned generated file: skills/beta/scripts/hand.py" in res.stdout.splitlines()
+
+
+@pytest.mark.parametrize("skill", ["../rogue", "alpha/../beta", ""])
+def test_an_executable_skill_key_must_name_a_skill_directory(vendor_tree, skill):
+    manifest = json.loads((vendor_tree / "skills.json").read_text())
+    manifest["executables"] = {skill: ["resolve-model-role.py"]}
+    (vendor_tree / "skills.json").write_text(json.dumps(manifest))
+    res = vendor(vendor_tree)
+    assert res.returncode == 1
+    assert "skill name" in res.stderr
+    assert not (vendor_tree / "rogue").exists()
 
 
 def test_a_hand_written_script_that_only_resembles_a_header_is_kept(vendor_tree):
@@ -725,7 +816,8 @@ def test_the_profile_reference_documents_the_resolver():
     fail_closed = section(doc, "- **Fail closed.**").split("- **No execution.**")[0]
     for bullet in (
         "- no profile at any of the three locations;",
-        "- a selected profile that is not a regular file (a FIFO or a device is never read), unreadable, not valid YAML, or not a mapping;",
+        "- a location whose existence cannot be checked, such as one under a directory without search permission, which never reads as absent;",
+        "- a selected profile that is not a regular file (a FIFO or a device is never read), unreadable, not valid YAML (including YAML nested too deeply to parse), or not a mapping;",
         "- a working directory that no longer exists, when the repository root must be found from it;",
         "- a role key absent from the profile, or a role path that does not resolve to an agent entry;",
         "- an entry with neither `runtime` nor `command`;",
@@ -742,7 +834,7 @@ def test_the_readmes_and_the_pipeline_compatibility_name_the_resolver():
     contributing = section((ROOT / "README.md").read_text(), "## Contributing")
     assert "shared/resolve-model-role.py" in contributing
     assert "after stripping that first line" in contributing
-    assert "treats a copy with an executable bit as stale" in contributing
+    assert "treats a copy with an executable bit, or a symlink, as stale" in contributing
     skill = (ROOT / "skills" / "adversarial-review-pipeline" / "SKILL.md").read_text()
     compat = next(line for line in skill.splitlines() if line.startswith("compatibility:"))
     for dep in ("python3", "git", "PyYAML>=6"):

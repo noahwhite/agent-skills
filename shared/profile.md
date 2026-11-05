@@ -48,13 +48,14 @@ python3 <path>/resolve-model-role.py --role <role-key> [--repo DIR] [--json] [--
 - **Output.** On success it prints five fields in this order, and nothing else on stdout: `role`, `runtime`, `model` (the effective model), `source` (the absolute path of the profile it read), and `command` only when the entry sets one.
   Text mode prints `key: value` lines, with each backslash, line feed and carriage return in a value escaped as `\\`, `\n` and `\r`, a tab as `\t`, any other control character as `\xNN`, and a lone surrogate as `\uNNNN`; the stderr line is escaped the same way.
   `--json` prints exactly one JSON object with those keys, `command` absent when the entry sets none, and the command text unchanged.
-- **Entry classification.** An entry with a `command` and no `runtime` is read as `runtime: command`.
+- **Entry classification.** An entry with a `command` and no `runtime` (or a null one) is read as `runtime: command`.
   A `runtime: command` entry is launched by its `command`: the resolver prints that command as the effective launch, with its `model` as the effective model when it sets one and `unresolved` when it does not.
   On any other runtime a `command` is ignored, so it never stands in for a missing model.
   The runtimes are the ones `profile/schema.json` defines for an agent entry; the resolver does not interpret `enabled`.
 - **Fail closed.** Each of these exits with code 16 before any model call, with one line on stderr naming the profile key and every path searched (the selected path included where the selected file is at fault), nothing on stdout, and no substitute model:
   - no profile at any of the three locations;
-  - a selected profile that is not a regular file (a FIFO or a device is never read), unreadable, not valid YAML, or not a mapping;
+  - a location whose existence cannot be checked, such as one under a directory without search permission, which never reads as absent;
+  - a selected profile that is not a regular file (a FIFO or a device is never read), unreadable, not valid YAML (including YAML nested too deeply to parse), or not a mapping;
   - a working directory that no longer exists, when the repository root must be found from it;
   - a role key absent from the profile, or a role path that does not resolve to an agent entry;
   - an entry with neither `runtime` nor `command`;

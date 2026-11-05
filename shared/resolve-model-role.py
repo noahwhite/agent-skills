@@ -92,17 +92,19 @@ def work_tree(cwd: str) -> str | None:
     try:
         res = subprocess.run(
             ["git", "-C", cwd, "rev-parse", "--show-toplevel"],
-            env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True, check=False,
+            env=env, stdin=subprocess.DEVNULL, capture_output=True, check=False,
         )
     except OSError as exc:
         raise Unresolved(f"cannot run git to find the repository root: {exc}") from exc
-    top = res.stdout[:-1] if res.stdout.endswith("\n") else res.stdout
+    # Path bytes decode as the filesystem does, so a root that is not valid UTF-8 still resolves.
+    top = os.fsdecode(res.stdout[:-1] if res.stdout.endswith(b"\n") else res.stdout)
+    err = res.stderr.decode("utf-8", "replace")
     if res.returncode == 0 and top:
         return top
     # The two benign misses: outside any repository, and inside a git directory with no work tree.
-    if "not a git repository" in res.stderr or "must be run in a work tree" in res.stderr:
+    if "not a git repository" in err or "must be run in a work tree" in err:
         return None
-    raise Unresolved(f"git could not find the repository root: {res.stderr.strip()}")
+    raise Unresolved(f"git could not find the repository root: {err.strip()}")
 
 
 def select(repo: str | None, searched: list[str]) -> str:
@@ -119,11 +121,23 @@ def select(repo: str | None, searched: list[str]) -> str:
         if path is None:
             searched.append(label)
             continue
-        if os.path.lexists(path):
+        if present(path, searched):
             searched.append(f"{path} (selected)")
             return path
         searched.append(f"{path} (not found)")
     raise Unresolved("no profile found")
+
+
+def present(path: str, searched: list[str]) -> bool:
+    """Whether a location exists; one that cannot be checked fails rather than reading as absent."""
+    try:
+        os.lstat(path)
+    except (FileNotFoundError, NotADirectoryError):
+        return False
+    except OSError as exc:
+        searched.append(f"{path} (cannot check)")
+        raise Unresolved(f"cannot check whether {path} exists: {exc.strerror or exc}") from exc
+    return True
 
 
 def repo_profile(repo: str | None) -> str | None:
@@ -154,6 +168,8 @@ def load(path: str, yaml) -> dict:
         doc = yaml.safe_load(text)
     except yaml.YAMLError as exc:
         raise Unresolved(f"the selected profile is not valid YAML: {exc}") from exc
+    except RecursionError as exc:
+        raise Unresolved("the selected profile is not valid YAML: it is nested too deeply") from exc
     if not isinstance(doc, dict):
         raise Unresolved("the selected profile is not a mapping")
     return doc
@@ -187,9 +203,12 @@ def text_value(entry: dict, key: str, role: str) -> str | None:
 
 def classify(entry: dict, role: str) -> tuple[str, str, str | None]:
     """(runtime, effective model, command or None) for a usable entry."""
-    if "runtime" not in entry and "command" not in entry:
+    if entry.get("runtime") is None and entry.get("command") is None:
         raise Unresolved(f"role {role} sets neither runtime nor command")
-    runtime = entry.get("runtime", "command")
+    # A null runtime is an unset one, so an entry with only a command reads as runtime: command.
+    runtime = entry.get("runtime")
+    if runtime is None:
+        runtime = "command"
     if not isinstance(runtime, str) or runtime not in RUNTIMES:
         raise Unresolved(f"role {role} has runtime {runtime!r}, which the profile schema does not define")
     model = text_value(entry, "model", role)
@@ -217,13 +236,16 @@ def import_yaml():
         import yaml
     except ImportError as exc:
         raise Unresolved(f"{YAML_NOT_FOUND} ({exc}); {here} needs PyYAML>=6; {action}") from exc
-    except Exception as exc:  # a broken installation can raise anything at import
+    except (Exception, SystemExit) as exc:  # a broken installation can raise anything at import
         raise Unresolved(
             f"PyYAML could not be imported ({type(exc).__name__}: {exc}); {here} needs PyYAML>=6; {action}"
         ) from exc
     major = str(getattr(yaml, "__version__", "0")).split(".")[0]
     if not major.isdigit() or int(major) < 6:
         raise Unresolved(f"PyYAML {getattr(yaml, '__version__', 'unknown')} is too old; {here} needs PyYAML>=6; {action}")
+    error = getattr(yaml, "YAMLError", None)
+    if not callable(getattr(yaml, "safe_load", None)) or not (isinstance(error, type) and issubclass(error, Exception)):
+        raise Unresolved(f"PyYAML {yaml.__version__} lacks safe_load or YAMLError; {here} needs PyYAML>=6; {action}")
     return yaml
 
 
