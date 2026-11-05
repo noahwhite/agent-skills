@@ -7,6 +7,7 @@ That commit is the baseline the findings name and was also the `main` head durin
 The deliverables under test are the SKL-74 findings comment `4a9597af`, the implementation note `dfc1aa0b` and the SKL-150 note `2a818bd6`, checked against Linear (`linear api`), GitHub (`gh api` on PRs #49 to #63) and git at `6bce8e6`.
 No fixture was used.
 There is no visual surface, so the raw assertions are the evidence; they are attached to SKL-74 as "SKL-74 QA round 1 assertions (2026-11-05)", and the QA comment is `7b089ce3`.
+The attachment is `SKL-74-qa-round-1-assertions.txt`, SHA256 `ef670d5f3ed85198bb3eab531ba469e21689043ad672cbecf52bf485e3c28c19`.
 
 | Item | Verdict | Evidence |
 |---|---|---|
