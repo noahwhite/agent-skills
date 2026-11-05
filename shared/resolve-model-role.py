@@ -17,7 +17,8 @@ through to the next one:
 
 On success it prints role, runtime, model (the effective model), source (the absolute
 profile path read) and, when the entry sets one, command, and nothing else: as "key: value"
-lines in that order with backslashes, control characters and lone surrogates escaped, or
+lines in that order with backslashes, control characters, lone surrogates and Unicode
+line and paragraph separators escaped, or
 with --json as one JSON object. It only reads files; it never runs the command text or starts
 a model, and --dry-run prints exactly what a normal run prints. Every resolution failure exits
 16 with one line on stderr and nothing on stdout; a malformed command line exits 2 with
@@ -30,6 +31,7 @@ import argparse
 import json
 import os
 import re
+import stat
 import subprocess
 import sys
 
@@ -53,7 +55,8 @@ ESCAPES = {"\\": "\\\\", "\n": "\\n", "\r": "\\r", "\t": "\\t"}
 
 def escape(value: str) -> str:
     """One printable line: backslash, line feed, carriage return and tab as \\, \\n, \\r and
-    \\t, any other control character as \\xNN, and a lone surrogate as \\uNNNN."""
+    \\t, any other control character as \\xNN, and a lone surrogate or a Unicode line or
+    paragraph separator as \\uNNNN."""
     out = []
     for ch in value:
         code = ord(ch)
@@ -61,7 +64,7 @@ def escape(value: str) -> str:
             out.append(ESCAPES[ch])
         elif code < 0x20 or 0x7F <= code < 0xA0:
             out.append(f"\\x{code:02x}")
-        elif 0xD800 <= code < 0xE000:
+        elif 0xD800 <= code < 0xE000 or code in (0x2028, 0x2029):
             out.append(f"\\u{code:04x}")
         else:
             out.append(ch)
@@ -156,13 +159,29 @@ def repo_profile(repo: str | None) -> str | None:
 
 
 def load(path: str, yaml) -> dict:
-    # A FIFO or device would block or never end; only a regular file is read.
-    if os.path.exists(path) and not os.path.isfile(path) and not os.path.isdir(path):
-        raise Unresolved("the selected profile is not a regular file")
+    # A FIFO or device would block or never end; only a regular file is read. The type is
+    # checked on the opened file, which is opened without blocking, so a path swapped to a
+    # FIFO after discovery is refused too.
     try:
-        with open(path, encoding="utf-8") as fh:
-            text = fh.read()
-    except (OSError, UnicodeDecodeError) as exc:
+        fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
+    except OSError as exc:
+        raise Unresolved(f"the selected profile is unreadable: {exc}") from exc
+    try:
+        mode = os.fstat(fd).st_mode
+        if stat.S_ISDIR(mode):
+            raise Unresolved("the selected profile is unreadable: it is a directory")
+        if not stat.S_ISREG(mode):
+            raise Unresolved("the selected profile is not a regular file")
+        chunks = []
+        while chunk := os.read(fd, 65536):
+            chunks.append(chunk)
+    except OSError as exc:
+        raise Unresolved(f"the selected profile is unreadable: {exc}") from exc
+    finally:
+        os.close(fd)
+    try:
+        text = b"".join(chunks).decode("utf-8")
+    except UnicodeDecodeError as exc:
         raise Unresolved(f"the selected profile is unreadable: {exc}") from exc
     try:
         doc = yaml.safe_load(text)

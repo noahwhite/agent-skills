@@ -379,6 +379,17 @@ def test_control_characters_and_lone_surrogates_are_escaped_in_text_mode(home, o
     assert json.loads(res.stdout)["command"] == "a\tb\x1b[31mc\x7fd\x9be\ud800f\u00e9"
 
 
+def test_unicode_line_breaks_are_escaped_so_each_field_stays_one_line(home, outside):
+    profile = write(
+        home / ".config" / "agent-skills" / "profile.yaml",
+        'r:\n  name: R\n  runtime: command\n  command: "a\\u2028b\\u2029c\\x85d\\x0be\\x0cf\\x1cg"\n',
+    )
+    res = resolve("--role", "r", cwd=outside, env=base_env(home))
+    assert res.returncode == 0, res.stderr
+    assert res.stdout == lines("r", "command", "unresolved", profile, "a\\u2028b\\u2029c\\x85d\\x0be\\x0cf\\x1cg")
+    assert len(res.stdout.splitlines()) == 5
+
+
 def test_an_unencodable_role_key_still_fails_with_one_line(home, home_profile, outside):
     line = assert_fails(resolve("--role", "review.missing\udcff", cwd=outside, env=base_env(home)), "\\udcff")
     assert str(home_profile) in line
@@ -426,7 +437,7 @@ def test_an_unreadable_profile_fails(tmp_path, home, home_profile, outside):
     bad = tmp_path / "dir.yaml"
     bad.mkdir()
     env = base_env(home) | {"AGENT_SKILLS_PROFILE": str(bad)}
-    assert_fails(resolve("--role", "review.reviewer", cwd=outside, env=env), str(bad), "unreadable")
+    assert_fails(resolve("--role", "review.reviewer", cwd=outside, env=env), str(bad), "the selected profile is unreadable")
 
 
 def test_a_too_deeply_nested_profile_fails(tmp_path, home, outside):
@@ -444,6 +455,31 @@ def test_a_profile_that_is_not_a_regular_file_fails_without_reading_it(tmp_path,
         special = Path("/dev/null")
     env = base_env(home) | {"AGENT_SKILLS_PROFILE": str(special)}
     line = assert_fails(resolve("--role", "review.reviewer", cwd=outside, env=env), str(special), "not a regular file")
+    assert str(home_profile) not in line
+
+
+def test_a_profile_swapped_to_a_fifo_after_the_type_check_is_never_read(tmp_path, home, home_profile, outside):
+    # Simulates a symlink retargeted between a path-based type check and the open: every
+    # path-based check reports a regular file, so only a check on the opened file can refuse it.
+    fifo = tmp_path / "profile.fifo"
+    os.mkfifo(fifo)
+    hook = tmp_path / "hook"
+    write(
+        hook / "sitecustomize.py",
+        "import os.path\n"
+        "os.path.isfile = lambda p: True\n"
+        "os.path.isdir = lambda p: False\n"
+        "os.path.exists = lambda p: True\n",
+    )
+    env = base_env(home) | {"AGENT_SKILLS_PROFILE": str(fifo), "PYTHONPATH": str(hook)}
+    try:
+        res = subprocess.run(
+            [sys.executable, str(RESOLVER), "--role", "review.reviewer"],
+            cwd=outside, env=env, capture_output=True, text=True, timeout=15,
+        )
+    except subprocess.TimeoutExpired:
+        pytest.fail("the resolver blocked opening a FIFO")
+    line = assert_fails(res, str(fifo), "not a regular file")
     assert str(home_profile) not in line
 
 
@@ -808,7 +844,7 @@ def test_the_profile_reference_documents_the_resolver():
         "`refinement.reviewers[1]`", "`profile.`", "git rev-parse --show-toplevel", "`--repo DIR`",
         "`role`, `runtime`, `model` (the effective model), `source`", "`command` only when",
         "`unresolved`", "code 16", "never falls through", "byte-identical", "`PyYAML>=6`", "`git`", "`python3`",
-        "`override`", "SKL-68", "inherited `GIT_*` variable removed", "a tab as `\\t`", "a lone surrogate as `\\uNNNN`",
+        "`override`", "SKL-68", "inherited `GIT_*` variable removed", "a tab as `\\t`", "a lone surrogate or a Unicode line or paragraph separator (U+2028, U+2029) as `\\uNNNN`",
         "through `python3`", "is not executable", "exits 2",
     ):
         assert fragment in doc, fragment

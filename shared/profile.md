@@ -46,7 +46,7 @@ python3 <path>/resolve-model-role.py --role <role-key> [--repo DIR] [--json] [--
   When git reports no work tree, the repository-local candidate does not exist.
   It is never read from the working directory path itself or from the resolver's own installation directory.
 - **Output.** On success it prints five fields in this order, and nothing else on stdout: `role`, `runtime`, `model` (the effective model), `source` (the absolute path of the profile it read), and `command` only when the entry sets one.
-  Text mode prints `key: value` lines, with each backslash, line feed and carriage return in a value escaped as `\\`, `\n` and `\r`, a tab as `\t`, any other control character as `\xNN`, and a lone surrogate as `\uNNNN`; the stderr line is escaped the same way.
+  Text mode prints `key: value` lines, with each backslash, line feed and carriage return in a value escaped as `\\`, `\n` and `\r`, a tab as `\t`, any other control character as `\xNN`, and a lone surrogate or a Unicode line or paragraph separator (U+2028, U+2029) as `\uNNNN`, so each field stays on one line; the stderr line is escaped the same way.
   `--json` prints exactly one JSON object with those keys, `command` absent when the entry sets none, and the command text unchanged.
 - **Entry classification.** An entry with a `command` and no `runtime` (or a null one) is read as `runtime: command`.
   A `runtime: command` entry is launched by its `command`: the resolver prints that command as the effective launch, with its `model` as the effective model when it sets one and `unresolved` when it does not.
