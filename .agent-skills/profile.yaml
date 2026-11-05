@@ -127,6 +127,12 @@ refinement:
         --title "{session_title}"
         --file "{prompt_file}" > "{output_file}"
       family: openai
+    # Third voter: a Claude Code subagent. The profile has no effort key, so the facilitator
+    # passes effort medium on every launch of this seat.
+    - name: Opus 5.5
+      runtime: claude-code
+      model: claude-opus-5-5
+      family: anthropic
   point_cap: 5
 
 workspace:
