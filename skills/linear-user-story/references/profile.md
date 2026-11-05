@@ -31,7 +31,8 @@ Skills cite values as `profile.<path>`, for example `profile.git.integration_bra
 ## Resolve a model role
 
 `shared/resolve-model-role.py` in the agent-skills repository is the one resolver that maps a model-launching role to its profile agent entry.
-A skill whose scripts call it carries a vendored copy at `scripts/resolve-model-role.py`; callers and tests run it as a subprocess, never import it, and no script parses the profile itself.
+A skill whose scripts call it carries a vendored copy at `scripts/resolve-model-role.py`; callers and tests run it as a subprocess through `python3`, never import it, and no script parses the profile itself.
+The copy is not executable, because its generated header sits above the shebang.
 A model-launching script either calls it or takes the launch command or model as a required argument its caller resolved with it.
 
 ```bash
@@ -43,11 +44,11 @@ python3 <path>/resolve-model-role.py --role <role-key> [--repo DIR] [--json] [--
   A leading `profile.` is accepted and stripped from the reported role.
 - **Which profile.** It reads the first of the three locations in Find the profile that exists, and a later location is never consulted.
   The repository-local candidate is `.agent-skills/profile.yaml` at the root of the repository under review, and only there.
-  That root is `--repo DIR` when given; otherwise it is the git work tree holding the working directory, found with `git rev-parse --show-toplevel`.
+  That root is `--repo DIR` when given; otherwise it is the git work tree holding the working directory, found with `git rev-parse --show-toplevel` with every inherited `GIT_*` variable removed, so a caller's `GIT_DIR`, `GIT_WORK_TREE` or `GIT_CEILING_DIRECTORIES` cannot move it.
   When git reports no work tree, the repository-local candidate does not exist.
   It is never read from the working directory path itself or from the resolver's own installation directory.
 - **Output.** On success it prints five fields in this order, and nothing else on stdout: `role`, `runtime`, `model` (the effective model), `source` (the absolute path of the profile it read), and `command` only when the entry sets one.
-  Text mode prints `key: value` lines, with each backslash, line feed and carriage return in a value escaped as `\\`, `\n` and `\r`.
+  Text mode prints `key: value` lines, with each backslash, line feed and carriage return in a value escaped as `\\`, `\n` and `\r`, a tab as `\t`, any other control character as `\xNN`, and a lone surrogate as `\uNNNN`; the stderr line is escaped the same way.
   `--json` prints exactly one JSON object with those keys, `command` absent when the entry sets none, and the command text unchanged.
 - **Entry classification.** An entry with a `command` and no `runtime` is read as `runtime: command`.
   A `runtime: command` entry is launched by its `command`: the resolver prints that command as the effective launch, with its `model` as the effective model when it sets one and `unresolved` when it does not.
@@ -55,15 +56,17 @@ python3 <path>/resolve-model-role.py --role <role-key> [--repo DIR] [--json] [--
   The runtimes are the ones `profile/schema.json` defines for an agent entry; the resolver does not interpret `enabled`.
 - **Fail closed.** Each of these exits with code 16 before any model call, with one line on stderr naming the profile key and every path searched (the selected path included where the selected file is at fault), nothing on stdout, and no substitute model:
   - no profile at any of the three locations;
-  - a selected profile that is unreadable, not valid YAML, or not a mapping;
+  - a selected profile that is not a regular file (a FIFO or a device is never read), unreadable, not valid YAML, or not a mapping;
+  - a working directory that no longer exists, when the repository root must be found from it;
   - a role key absent from the profile, or a role path that does not resolve to an agent entry;
   - an entry with neither `runtime` nor `command`;
   - a runtime the profile schema does not define;
   - a model-launching runtime (`claude-code`, `opencode`, `codex`) with no `model`;
   - a `runtime: command` entry with no non-empty `command`;
-  - a missing or older PyYAML, with an installation action and the resolver's own path.
+  - a missing, older or broken PyYAML, with an installation action and the resolver's own path, reported even when no profile exists.
 
   A selected file's failure never falls through to a lower-priority profile.
+  A malformed command line, such as a missing `--role`, exits 2 with the usage message instead.
 - **No execution.** The resolver only reads local files: it never runs the command text, starts a provider process, or makes a network request.
   `--dry-run` declares that intent for a caller, and its output is byte-identical to a normal run over the same profile and role.
 - **Dependencies.** `python3`, `git` (for the repository root) and `PyYAML>=6`, installed as the consumer installs the other skill prerequisites.

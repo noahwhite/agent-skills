@@ -17,11 +17,14 @@ through to the next one:
 
 On success it prints role, runtime, model (the effective model), source (the absolute
 profile path read) and, when the entry sets one, command, and nothing else: as "key: value"
-lines in that order with backslashes and line breaks escaped, or with --json as one JSON
-object. It only reads files; it never runs the command text or starts a model, and --dry-run
-prints exactly what a normal run prints. Every failure exits 16 with one line on stderr and
-nothing on stdout. Documented in shared/profile.md, "Resolve a model role".
+lines in that order with backslashes, control characters and lone surrogates escaped, or
+with --json as one JSON object. It only reads files; it never runs the command text or starts
+a model, and --dry-run prints exactly what a normal run prints. Every resolution failure exits
+16 with one line on stderr and nothing on stdout; a malformed command line exits 2 with
+argparse's usage message. Documented in shared/profile.md, "Resolve a model role".
 """
+
+from __future__ import annotations
 
 import argparse
 import json
@@ -45,8 +48,24 @@ class Unresolved(Exception):
     """A fail-closed stop: one stderr line, exit 16."""
 
 
+ESCAPES = {"\\": "\\\\", "\n": "\\n", "\r": "\\r", "\t": "\\t"}
+
+
 def escape(value: str) -> str:
-    return value.replace("\\", "\\\\").replace("\n", "\\n").replace("\r", "\\r")
+    """One printable line: backslash, line feed, carriage return and tab as \\, \\n, \\r and
+    \\t, any other control character as \\xNN, and a lone surrogate as \\uNNNN."""
+    out = []
+    for ch in value:
+        code = ord(ch)
+        if ch in ESCAPES:
+            out.append(ESCAPES[ch])
+        elif code < 0x20 or 0x7F <= code < 0xA0:
+            out.append(f"\\x{code:02x}")
+        elif 0xD800 <= code < 0xE000:
+            out.append(f"\\u{code:04x}")
+        else:
+            out.append(ch)
+    return "".join(out)
 
 
 def parse_role(key: str) -> tuple[str, list[str | int]]:
@@ -63,8 +82,13 @@ def parse_role(key: str) -> tuple[str, list[str | int]]:
 
 
 def work_tree(cwd: str) -> str | None:
-    """The top of the git work tree holding cwd, or None when git reports no work tree."""
-    env = dict(os.environ, LC_ALL="C", LANG="C")
+    """The top of the git work tree holding cwd, or None when git reports no work tree.
+
+    Every inherited GIT_* variable is dropped, so a caller's GIT_DIR, GIT_WORK_TREE or
+    GIT_CEILING_DIRECTORIES (a git hook or a CI job sets them) cannot point discovery at a
+    tree that does not hold cwd."""
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    env.update(LC_ALL="C", LANG="C")
     try:
         res = subprocess.run(
             ["git", "-C", cwd, "rev-parse", "--show-toplevel"],
@@ -72,8 +96,9 @@ def work_tree(cwd: str) -> str | None:
         )
     except OSError as exc:
         raise Unresolved(f"cannot run git to find the repository root: {exc}") from exc
-    if res.returncode == 0 and res.stdout.strip():
-        return res.stdout.strip()
+    top = res.stdout[:-1] if res.stdout.endswith("\n") else res.stdout
+    if res.returncode == 0 and top:
+        return top
     # The two benign misses: outside any repository, and inside a git directory with no work tree.
     if "not a git repository" in res.stderr or "must be run in a work tree" in res.stderr:
         return None
@@ -105,11 +130,21 @@ def repo_profile(repo: str | None) -> str | None:
     """The repository-local candidate: read only at the root of the repository under review."""
     if repo is not None and not os.path.isdir(repo):
         raise Unresolved(f"--repo {repo} is not a directory")
-    root = os.path.abspath(repo) if repo is not None else work_tree(os.getcwd())
+    if repo is not None:
+        root = os.path.abspath(repo)
+    else:
+        try:
+            cwd = os.getcwd()
+        except OSError as exc:
+            raise Unresolved(f"cannot read the working directory to find the repository root: {exc}") from exc
+        root = work_tree(cwd)
     return os.path.join(root, ".agent-skills", "profile.yaml") if root else None
 
 
 def load(path: str, yaml) -> dict:
+    # A FIFO or device would block or never end; only a regular file is read.
+    if os.path.exists(path) and not os.path.isfile(path) and not os.path.isdir(path):
+        raise Unresolved("the selected profile is not a regular file")
     try:
         with open(path, encoding="utf-8") as fh:
             text = fh.read()
@@ -182,6 +217,10 @@ def import_yaml():
         import yaml
     except ImportError as exc:
         raise Unresolved(f"{YAML_NOT_FOUND} ({exc}); {here} needs PyYAML>=6; {action}") from exc
+    except Exception as exc:  # a broken installation can raise anything at import
+        raise Unresolved(
+            f"PyYAML could not be imported ({type(exc).__name__}: {exc}); {here} needs PyYAML>=6; {action}"
+        ) from exc
     major = str(getattr(yaml, "__version__", "0")).split(".")[0]
     if not major.isdigit() or int(major) < 6:
         raise Unresolved(f"PyYAML {getattr(yaml, '__version__', 'unknown')} is too old; {here} needs PyYAML>=6; {action}")
@@ -197,19 +236,30 @@ def main(argv: list[str]) -> int:
     args = parser.parse_args(argv)
     searched: list[str] = []
     try:
-        source = select(args.repo, searched)
+        try:
+            source = select(args.repo, searched)
+        except Unresolved:
+            import_yaml()  # a missing PyYAML is the more actionable report, profile or not
+            raise
         yaml = import_yaml()
         role, path = parse_role(args.role)
         runtime, model, command = classify(entry_at(load(source, yaml), role, path), role)
     except Unresolved as exc:
         where = "; searched: " + ", ".join(searched) if searched else ""
-        sys.stderr.write(escape(f"{NAME}: {exc}; profile key {args.role}{where}") + "\n")
+        emit(sys.stderr, escape(f"{NAME}: {exc}; profile key {args.role}{where}") + "\n")
         return EXIT_UNRESOLVED
     fields = {"role": role, "runtime": runtime, "model": model, "source": source}
     if command is not None:
         fields["command"] = command
-    sys.stdout.write(render(fields, args.json))
+    emit(sys.stdout, render(fields, args.json))
     return 0
+
+
+def emit(stream, text: str) -> None:
+    """Write UTF-8 whatever the locale; escape() and json.dumps leave nothing unencodable."""
+    stream.flush()
+    stream.buffer.write(text.encode("utf-8"))
+    stream.buffer.flush()
 
 
 if __name__ == "__main__":

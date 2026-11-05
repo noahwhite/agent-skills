@@ -133,6 +133,7 @@ Review roles run as subagents or as shell-launched CLIs (for example `codex exec
   Edit the source in `shared/`, then run `python3 scripts/vendor_shared.py`.
 - The model-role resolver `shared/resolve-model-role.py` is vendored the same way, beside the Markdown copies: `skills.json` lists it under `executables` for each skill whose scripts call it, and it lands in that skill's `scripts/`.
   The generator's header is a first-line comment in the copy's own language (`#` for Python), and `--check` drift-verifies an executable copy by comparing it, after stripping that first line, with the source byte for byte.
+  The header masks the shebang, so the copy is written without an executable bit, callers run it through `python3`, and `--check` treats a copy with an executable bit as stale.
 - `uv run pytest` checks spec frontmatter, links that stay inside each skill, runtime-neutral wording, profile keys against the schema, vendored copies, and the leak scan.
 - `scripts/leak_scan.py` rejects personal data, internal addresses and credential shapes; the public patterns are generic.
   Names to keep out (consumers, their hosts, vendors, issue keys) are private patterns, one regex per line, from the `LEAK_DENYLIST` repository secret or a file named by `LEAK_DENYLIST_FILE`; matches are reported by pattern number only.

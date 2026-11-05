@@ -12,7 +12,9 @@ Each lands in skills/<skill>/scripts/<file> as a byte-for-byte copy of the sourc
 one generated first-line header comment in the file's own language (# for .py and .sh,
 // for .js). --check compares the copy with that header plus the source, so a copy whose
 content after its first line differs from the source, or whose first line is not the
-header, is stale.
+header, is stale. The header sits above any shebang, so a copy is never executable: callers
+run it through its interpreter (python3 <copy>), and a copy with an executable bit is stale.
+Only a file whose first line is exactly the header for its own name counts as generated.
 
   scripts/vendor_shared.py          write the copies
   scripts/vendor_shared.py --check  exit 1 if any copy is missing or stale
@@ -30,7 +32,6 @@ MANIFEST = ROOT / "skills.json"
 ALWAYS = ["profile", "runtimes"]
 REF_RE = re.compile(r"references/([a-z0-9-]+)\.md")
 COMMENT = {".py": "#", ".sh": "#", ".js": "//"}
-EXEC_PREFIXES = tuple(f"{c} GENERATED from shared/".encode() for c in sorted(set(COMMENT.values())))
 
 
 def closure(caps: list[str]) -> list[str]:
@@ -80,9 +81,10 @@ def expected_executables(manifest: dict) -> dict[Path, bytes]:
     return out
 
 
-def expected() -> dict[Path, str]:
+def expected() -> dict[Path, str | bytes]:
+    """Every vendored file and its content: Markdown copies as text, executables as bytes."""
     manifest = json.loads(MANIFEST.read_text())
-    out: dict[Path, str] = {}
+    out: dict[Path, str | bytes] = {}
     for skill, caps in manifest["skills"].items():
         if not (SKILLS / skill / "SKILL.md").is_file():
             sys.exit(f"skills.json names {skill}, which has no SKILL.md")
@@ -94,6 +96,7 @@ def expected() -> dict[Path, str]:
     )
     if unlisted:
         sys.exit(f"skills missing from skills.json: {', '.join(unlisted)}")
+    out.update(expected_executables(manifest))
     return out
 
 
@@ -106,18 +109,26 @@ def generated_files() -> set[Path]:
 
 
 def generated_executables() -> set[Path]:
-    return {p for p in SKILLS.glob("*/scripts/*") if p.is_file() and p.read_bytes().startswith(EXEC_PREFIXES)}
+    return {
+        p
+        for p in SKILLS.glob("*/scripts/*")
+        if p.is_file() and p.suffix in COMMENT and p.read_bytes().startswith(exec_header(p.name))
+    }
+
+
+def is_stale(p: Path, body: str | bytes) -> bool:
+    if not p.is_file():
+        return True
+    if isinstance(body, str):
+        return p.read_text() != body
+    return p.read_bytes() != body or p.stat().st_mode & 0o111 != 0
 
 
 def main() -> int:
     check = "--check" in sys.argv[1:]
     want = expected()
-    stale = [p for p, body in want.items() if not p.is_file() or p.read_text() != body]
-    orphans = sorted(generated_files() - set(want))
-    want_exec = expected_executables(json.loads(MANIFEST.read_text()))
-    stale_exec = [p for p, body in want_exec.items() if not p.is_file() or p.read_bytes() != body]
-    orphans += sorted(generated_executables() - set(want_exec))
-    stale += stale_exec
+    stale = [p for p, body in want.items() if is_stale(p, body)]
+    orphans = sorted((generated_files() | generated_executables()) - set(want))
     if check:
         for p in stale:
             print(f"stale or missing: {p.relative_to(ROOT)}")
@@ -126,11 +137,12 @@ def main() -> int:
         return 1 if stale or orphans else 0
     for p in stale:
         p.parent.mkdir(parents=True, exist_ok=True)
-        if p in want_exec:
-            p.write_bytes(want_exec[p])
-            p.chmod((SHARED / p.name).stat().st_mode & 0o777)
+        body = want[p]
+        if isinstance(body, bytes):
+            p.write_bytes(body)
+            p.chmod(p.stat().st_mode & 0o666)
         else:
-            p.write_text(want[p])
+            p.write_text(body)
     for p in orphans:
         p.unlink()
     return 0

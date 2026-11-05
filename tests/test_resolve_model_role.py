@@ -5,6 +5,7 @@ AGENT_SKILLS_PROFILE pointed at fixtures under tmp_path and no provider credenti
 environment, so neither this repository's own profile nor the user's is ever read.
 """
 
+import ast
 import json
 import os
 import shutil
@@ -175,6 +176,35 @@ def test_a_subdirectory_of_the_repository_reads_the_repository_root(tmp_path, ho
     assert res.stdout == lines("review.reviewer", "codex", "gpt-test", repo_profile)
 
 
+@pytest.mark.parametrize(
+    "inherited",
+    [
+        lambda repo, sub: {"GIT_DIR": str(repo / ".git"), "GIT_WORK_TREE": str(sub)},
+        lambda repo, sub: {"GIT_CEILING_DIRECTORIES": str(repo)},
+        lambda repo, sub: {"GIT_DIR": ".git"},
+    ],
+    ids=["git-dir-and-work-tree", "ceiling", "relative-git-dir-as-in-a-hook"],
+)
+def test_inherited_git_variables_do_not_move_the_repository_root(tmp_path, home, inherited):
+    repo = git_repo(tmp_path / "repo")
+    repo_profile = write(repo / ".agent-skills" / "profile.yaml", PROFILE)
+    sub = repo / "a"
+    write(sub / ".agent-skills" / "profile.yaml", PROFILE.replace("gpt-test", "from-subdirectory"))
+    write(home / ".config" / "agent-skills" / "profile.yaml", PROFILE.replace("gpt-test", "from-home"))
+    res = resolve("--role", "review.reviewer", cwd=sub, env=base_env(home) | inherited(repo, sub))
+    assert res.returncode == 0, res.stderr
+    assert res.stdout == lines("review.reviewer", "codex", "gpt-test", repo_profile)
+
+
+def test_a_repository_path_ending_in_a_space_keeps_it(tmp_path, home):
+    repo = git_repo(tmp_path / "repo ")
+    repo_profile = write(repo / ".agent-skills" / "profile.yaml", PROFILE)
+    write(home / ".config" / "agent-skills" / "profile.yaml", PROFILE.replace("gpt-test", "from-home"))
+    res = resolve("--role", "review.reviewer", cwd=repo, env=base_env(home))
+    assert res.returncode == 0, res.stderr
+    assert res.stdout == lines("review.reviewer", "codex", "gpt-test", repo_profile)
+
+
 def test_the_working_directory_profile_is_not_read_when_repo_names_another(tmp_path, home):
     cwd = git_repo(tmp_path / "cwd-repo")
     write(cwd / ".agent-skills" / "profile.yaml", PROFILE.replace("gpt-test", "from-cwd"))
@@ -296,6 +326,24 @@ def test_newlines_in_values_are_escaped_in_text_mode_and_kept_in_json(home, outs
     assert not (outside / "x").exists()
 
 
+def test_control_characters_and_lone_surrogates_are_escaped_in_text_mode(home, outside):
+    profile = write(
+        home / ".config" / "agent-skills" / "profile.yaml",
+        'r:\n  name: R\n  runtime: command\n  command: "a\\tb\\e[31mc\\x7fd\\x9be\\uD800f\\u00e9"\n',
+    )
+    res = resolve("--role", "r", cwd=outside, env=base_env(home))
+    assert res.returncode == 0, res.stderr
+    assert res.stdout == lines("r", "command", "unresolved", profile, "a\\tb\\x1b[31mc\\x7fd\\x9be\\ud800f\u00e9")
+    res = resolve("--role", "r", "--json", cwd=outside, env=base_env(home))
+    assert res.returncode == 0, res.stderr
+    assert json.loads(res.stdout)["command"] == "a\tb\x1b[31mc\x7fd\x9be\ud800f\u00e9"
+
+
+def test_an_unencodable_role_key_still_fails_with_one_line(home, home_profile, outside):
+    line = assert_fails(resolve("--role", "review.missing\udcff", cwd=outside, env=base_env(home)), "\\udcff")
+    assert str(home_profile) in line
+
+
 # --- Fail closed ---------------------------------------------------------------------------
 
 
@@ -341,6 +389,29 @@ def test_an_unreadable_profile_fails(tmp_path, home, home_profile, outside):
     assert_fails(resolve("--role", "review.reviewer", cwd=outside, env=env), str(bad), "unreadable")
 
 
+@pytest.mark.parametrize("kind", ["fifo", "device"])
+def test_a_profile_that_is_not_a_regular_file_fails_without_reading_it(tmp_path, home, home_profile, outside, kind):
+    if kind == "fifo":
+        special = tmp_path / "profile.fifo"
+        os.mkfifo(special)
+    else:
+        special = Path("/dev/null")
+    env = base_env(home) | {"AGENT_SKILLS_PROFILE": str(special)}
+    line = assert_fails(resolve("--role", "review.reviewer", cwd=outside, env=env), str(special), "not a regular file")
+    assert str(home_profile) not in line
+
+
+def test_a_deleted_working_directory_fails_with_one_line(tmp_path, home, home_profile):
+    gone = tmp_path / "gone"
+    gone.mkdir()
+    res = subprocess.run(
+        ["sh", "-c", 'cd "$1" && rmdir "$1" && exec "$2" "$3" --role review.reviewer',
+         "sh", str(gone), sys.executable, str(RESOLVER)],
+        cwd=tmp_path, env=base_env(home), capture_output=True, text=True, timeout=60,
+    )
+    assert_fails(res, "review.reviewer", "working directory")
+
+
 @pytest.mark.parametrize(
     "role",
     ["review.missing", "review.pre_pr", "review.reviewer.model", "refinement.reviewers[3]", "review[0]", "a..b", ""],
@@ -376,6 +447,13 @@ def test_the_runtimes_the_resolver_accepts_are_the_schema_runtimes(home, outside
         write(home / ".config" / "agent-skills" / "profile.yaml", f"r:\n  name: R\n  runtime: {runtime}\n  model: m\n")
         res = resolve("--role", "r", cwd=outside, env=base_env(home))
         assert res.returncode == 0, (runtime, res.stderr)
+    # The converse: a runtime dropped from the schema is dropped from the resolver too.
+    tree = ast.parse(RESOLVER.read_text())
+    declared = next(
+        ast.literal_eval(node.value) for node in tree.body
+        if isinstance(node, ast.Assign) and [t.id for t in node.targets if isinstance(t, ast.Name)] == ["MODEL_RUNTIMES"]
+    )
+    assert set(declared) | {"command"} == runtimes
 
 
 # --- Dry run and no execution --------------------------------------------------------------
@@ -461,6 +539,30 @@ def test_a_missing_pyyaml_fails_with_an_actionable_line(tmp_path, home, home_pro
     assert "install" in line
 
 
+def test_a_missing_pyyaml_is_reported_even_with_no_profile(tmp_path, home, outside):
+    shadow = tmp_path / "no-yaml"
+    write(shadow / "yaml.py", "raise ImportError('No module named yaml')\n")
+    env = base_env(home) | {"PYTHONPATH": str(shadow)}
+    line = assert_fails(resolve("--role", "review.reviewer", cwd=outside, env=env), "PyYAML>=6", str(RESOLVER))
+    assert str(home / ".config" / "agent-skills" / "profile.yaml") in line
+
+
+@pytest.mark.parametrize(
+    ("module", "fragment"),
+    [
+        ("__version__ = '5.4.1'\n", "PyYAML 5.4.1 is too old"),
+        ("raise RuntimeError('broken install')\n", "PyYAML could not be imported"),
+    ],
+    ids=["too-old", "broken"],
+)
+def test_an_unusable_pyyaml_fails_with_an_actionable_line(tmp_path, home, home_profile, outside, module, fragment):
+    shadow = tmp_path / "bad-yaml"
+    write(shadow / "yaml.py", module)
+    env = base_env(home) | {"PYTHONPATH": str(shadow)}
+    line = assert_fails(resolve("--role", "review.reviewer", cwd=outside, env=env), fragment, "PyYAML>=6", str(RESOLVER))
+    assert "install" in line
+
+
 # --- Vendoring -----------------------------------------------------------------------------
 
 EXEC_HEADER = (
@@ -508,6 +610,39 @@ def test_the_generator_vendors_the_resolver_with_a_comment_header(vendor_tree):
     assert (res.returncode, res.stdout) == (0, "")
 
 
+def test_a_vendored_copy_is_not_executable_because_its_header_masks_the_shebang(vendor_tree):
+    source = vendor_tree / "shared" / "resolve-model-role.py"
+    source.chmod(0o755)
+    assert vendor(vendor_tree).returncode == 0
+    copy = vendor_tree / "skills" / "alpha" / "scripts" / "resolve-model-role.py"
+    assert copy.stat().st_mode & 0o111 == 0
+
+
+def test_the_header_is_written_in_each_executable_language(vendor_tree):
+    write(vendor_tree / "shared" / "tool.sh", "#!/bin/sh\necho tool\n")
+    write(vendor_tree / "shared" / "tool.js", "console.log('tool');\n")
+    manifest = json.loads((vendor_tree / "skills.json").read_text())
+    manifest["executables"]["beta"] = ["tool.sh", "tool.js"]
+    (vendor_tree / "skills.json").write_text(json.dumps(manifest))
+    assert vendor(vendor_tree).returncode == 0
+    scripts = vendor_tree / "skills" / "beta" / "scripts"
+    tail = "by scripts/vendor_shared.py. Edit the source, then rerun the script.\n"
+    assert (scripts / "tool.sh").read_text() == f"# GENERATED from shared/tool.sh {tail}#!/bin/sh\necho tool\n"
+    assert (scripts / "tool.js").read_text() == f"// GENERATED from shared/tool.js {tail}console.log('tool');\n"
+    assert vendor(vendor_tree, "--check").returncode == 0
+
+
+def test_a_hand_written_script_that_only_resembles_a_header_is_kept(vendor_tree):
+    hand = write(
+        vendor_tree / "skills" / "alpha" / "scripts" / "hand.py",
+        "# GENERATED from shared/ templates by hand, then edited; not a vendored copy\nprint('mine')\n",
+    )
+    assert vendor(vendor_tree).returncode == 0
+    assert hand.is_file()
+    res = vendor(vendor_tree, "--check")
+    assert (res.returncode, res.stdout) == (0, "")
+
+
 def test_a_vendored_copy_runs_from_a_single_copied_skill_directory(vendor_tree, tmp_path, home, home_profile, outside):
     assert vendor(vendor_tree).returncode == 0
     lone = tmp_path / "lone-skill"
@@ -535,10 +670,11 @@ def flip_a_byte(copy: Path) -> None:
         (lambda c: c.write_bytes(EXEC_HEADER.replace(b"rerun", b"re-run") + RESOLVER.read_bytes()),
          "stale or missing: skills/alpha/scripts/resolve-model-role.py"),
         (lambda c: c.unlink(), "stale or missing: skills/alpha/scripts/resolve-model-role.py"),
+        (lambda c: c.chmod(0o755), "stale or missing: skills/alpha/scripts/resolve-model-role.py"),
         (lambda c: write(c.parents[2] / "beta" / "scripts" / "resolve-model-role.py", c.read_text()),
          "orphaned generated file: skills/beta/scripts/resolve-model-role.py"),
     ],
-    ids=["flipped-byte", "missing-header", "stale-header", "missing-copy", "orphaned-copy"],
+    ids=["flipped-byte", "missing-header", "stale-header", "missing-copy", "executable-bit", "orphaned-copy"],
 )
 def test_the_drift_check_catches_each_defect(vendor_tree, mutate, message):
     assert vendor(vendor_tree).returncode == 0
@@ -548,6 +684,7 @@ def test_the_drift_check_catches_each_defect(vendor_tree, mutate, message):
     assert message in res.stdout.splitlines()
     assert vendor(vendor_tree).returncode == 0, "a write run repairs every defect"
     assert vendor(vendor_tree, "--check").returncode == 0
+    assert (vendor_tree / "skills" / "alpha" / "scripts" / "resolve-model-role.py").stat().st_mode & 0o111 == 0
     assert not (vendor_tree / "skills" / "beta" / "scripts" / "resolve-model-role.py").exists()
 
 
@@ -580,9 +717,24 @@ def test_the_profile_reference_documents_the_resolver():
         "`refinement.reviewers[1]`", "`profile.`", "git rev-parse --show-toplevel", "`--repo DIR`",
         "`role`, `runtime`, `model` (the effective model), `source`", "`command` only when",
         "`unresolved`", "code 16", "never falls through", "byte-identical", "`PyYAML>=6`", "`git`", "`python3`",
-        "`override`", "SKL-68",
+        "`override`", "SKL-68", "inherited `GIT_*` variable removed", "a tab as `\\t`", "a lone surrogate as `\\uNNNN`",
+        "through `python3`", "is not executable", "exits 2",
     ):
         assert fragment in doc, fragment
+    # Every fail-closed case is listed, one bullet each.
+    fail_closed = section(doc, "- **Fail closed.**").split("- **No execution.**")[0]
+    for bullet in (
+        "- no profile at any of the three locations;",
+        "- a selected profile that is not a regular file (a FIFO or a device is never read), unreadable, not valid YAML, or not a mapping;",
+        "- a working directory that no longer exists, when the repository root must be found from it;",
+        "- a role key absent from the profile, or a role path that does not resolve to an agent entry;",
+        "- an entry with neither `runtime` nor `command`;",
+        "- a runtime the profile schema does not define;",
+        "- a model-launching runtime (`claude-code`, `opencode`, `codex`) with no `model`;",
+        "- a `runtime: command` entry with no non-empty `command`;",
+        "- a missing, older or broken PyYAML, with an installation action and the resolver's own path, reported even when no profile exists.",
+    ):
+        assert bullet in fail_closed, bullet
 
 
 def test_the_readmes_and_the_pipeline_compatibility_name_the_resolver():
@@ -590,6 +742,7 @@ def test_the_readmes_and_the_pipeline_compatibility_name_the_resolver():
     contributing = section((ROOT / "README.md").read_text(), "## Contributing")
     assert "shared/resolve-model-role.py" in contributing
     assert "after stripping that first line" in contributing
+    assert "treats a copy with an executable bit as stale" in contributing
     skill = (ROOT / "skills" / "adversarial-review-pipeline" / "SKILL.md").read_text()
     compat = next(line for line in skill.splitlines() if line.startswith("compatibility:"))
     for dep in ("python3", "git", "PyYAML>=6"):
