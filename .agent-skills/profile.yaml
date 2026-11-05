@@ -127,12 +127,16 @@ refinement:
         --title "{session_title}"
         --file "{prompt_file}" > "{output_file}"
       family: openai
-    # Third voter: a Claude Code subagent. The profile has no effort key, so the facilitator
-    # passes effort medium on every launch of this seat.
-    - name: Opus 5.5
-      runtime: claude-code
-      model: claude-opus-5-5
-      family: anthropic
+    # Third voter, the bare minimum roster. Resolves through the OpenRouter provider, which needs
+    # OPENROUTER_API_KEY; without it the seat fails closed.
+    - name: GLM-5.3-Flash
+      runtime: command
+      model: openrouter/z-ai/glm-5.3-flash
+      command: >-
+        opencode run --model openrouter/z-ai/glm-5.3-flash "Follow the instructions in the attached file exactly. Do not modify any file."
+        --title "{session_title}"
+        --file "{prompt_file}" > "{output_file}"
+      family: zhipu
   point_cap: 5
 
 workspace:
