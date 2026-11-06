@@ -12,9 +12,6 @@ compatibility: Requires a runtime that can spawn subagents and set each one's mo
 # Story to Done: implement, QA, fix until Done
 
 You run the loop; you do not write the code or run the QA yourself.
-A senior engineer implements the story through `engineering-workflow` and takes it to deployment review.
-A QA agent verifies it through `qa-verification`.
-Every item QA rules not met goes back to the senior engineer, and the loop repeats until the story is Done.
 
 ## Arguments
 
@@ -45,7 +42,7 @@ Five arguments are optional, given as `key=value` or in plain words ("QA on Opus
 ## Read first
 
 - [references/profile.md](references/profile.md) - find the profile and this skill's overlay as soon as the story ID is known.
-- [references/runtimes.md](references/runtimes.md) - maps todo list, spawn a subagent, choose a subagent's model and reasoning effort, scratch directory, and ask the user to your runtime; read its nesting rule before step 2.
+- [references/runtimes.md](references/runtimes.md) - maps todo list, subagents, model and effort, scratch directory and asking the user to your runtime; read its nesting rule before step 2.
 
 Read each of these at the step that needs it:
 
@@ -71,9 +68,9 @@ With `metrics` on, launch no command before the start form, not even to read a f
 Once the story ID is known and the profile is read, before step 1, create a fine-grained todo list per `references/todo-tracking.md`.
 Seed it with at least: resolve the arguments, read the story state, spawn the senior engineer, each check on its checklist until it hands back, read back the deployment-review state, each QA round, each read-back of QA's resulting state, each failed item handed back, each fix round, and the final state read-back.
 With `metrics` on, seed two more items: collect the metrics figures; then post the metrics summary on the story and read it back before giving the summary in the closing report.
-Add an item for every new round the moment it starts, and mark each item done the moment its outcome is observed.
+Add an item for each new round as it starts, and mark each item done once its outcome is observed.
 Every subagent brief requires a checklist file in that subagent's own subdirectory of the scratch directory; read it from there and mirror it into your list whenever you check on the subagent.
-If your own todo tool is unavailable, use the primary-session checklist fallback in `references/todo-tracking.md`; do not block on the missing tool.
+If your todo tool is unavailable, use the primary-session checklist fallback in `references/todo-tracking.md` rather than block.
 
 ## 1. Read the story and pick the starting point
 
@@ -84,28 +81,29 @@ Read the story and its current state with the `linear` CLI, or the Linear MCP se
 - `profile.tracker.states.blocked`, `profile.tracker.states.canceled`, or `profile.tracker.states.duplicate`: report the state and stop.
 - Any other state: go to step 2.
 
-Do not triage the story yourself: `engineering-workflow` triages it and checks the Definition of Ready.
+Do not triage the story yourself; `engineering-workflow` does, including the Definition of Ready.
 
 ## 2. Senior engineer: implement to deployment review
 
 Spawn a clean, neutral subagent (not a fork of yours) on `engineer-model` at `engineer-effort`, and brief it as a senior engineer working this story.
 It spawns reviewers of its own, and so does the QA agent in step 3, so check the nesting rule in `references/runtimes.md` before spawning either.
-Where nesting is restricted, give both delegated agents nesting per that runtime map, or launch their review roles as shell commands (`runtime: codex` or `runtime: command`).
-The nesting rule's other option, where the primary session runs the review roles after the PR handback, does not fit this skill, since each role finishes its own gates before it hands back.
+Where nesting is restricted, give both delegated agents nesting per that runtime map, or launch their review roles as shell commands (`runtime: command`, `codex` or `opencode`).
+The nesting rule's primary-session option does not fit this skill, since each role finishes its own gates first.
 If neither works, stop and say so.
-The brief carries facts and constraints, never your expectations about the outcome.
 It must include:
 
 - The story identifier.
-- An instruction to load and follow `engineering-workflow` for the whole story: triage, slice-based TDD, the pre-PR gate, the PR to `profile.git.integration_branch`, the review of record, remediation, the merge per `profile.review.merge_owner`, the deploy, and the move to `profile.tracker.states.in_deployment_review`.
-- What to hand back: the story state, each PR link, the head SHA each PR's review of record covered, the merged commit, and the environment and deployed build it verified; or, if it stops, that it is blocked and why.
+- An instruction to load and follow `engineering-workflow` for the whole story, from triage to the merge per `profile.review.merge_owner`, the deploy, and the move to `profile.tracker.states.in_deployment_review`.
+- What to hand back: the story state, each PR link, the head SHA each PR's review of record covered, the merged commit, and the environment and deployed build it verified; or, if it stops, that it is blocked and why, including when no arbiter can launch; a missing arbitration is never clean or converged.
 - The merge rules: a review of record binds only to the exact head it reviewed, so any change to the head, including an update-branch, needs a delta review posted before merging; every merge must run the merge guard in `references/code-review.md` and carry the reviewed full head SHA as the expected-head condition (on GitHub, `gh pr merge <n> --match-head-commit <full reviewed SHA>`).
+- The engineer never performs pre-PR arbitration (`adversarial-review-pipeline` Phase 3, `engineering-workflow` step 4 Verify stage) or rules a finding valid, invalid or accepted risk or the gate converged (applying its scope guard is not arbitration), and fixes what QA or the adjudicator ruled without overturning it; a separate clean, neutral arbiter on `profile.review.pre_pr.arbiter`, independent of the engineer and coordinator, arbitrates every head.
 - The secrets rule (never write secrets to files or argv) and the attribution rule from `profile.git.ai_attribution`.
 - Its own subdirectory of the scratch directory, `<scratch>/senior-engineer/`, which you create and hand it in place of the scratch directory itself, never another role's files.
 - A "Track your work" paragraph: before starting, write a fine-grained checklist file at the full path you give it in that subdirectory (`<scratch>/senior-engineer/senior-engineer-todo.md`, `- [ ]` and `- [x]` items, one per slice step, test, gate round, review round, remediation, deploy, verification, and wait, the current step marked `(in progress)`) and update it at every step.
 
 This skill assigns merge approval to no manager, so `engineering-workflow`'s own merge rules apply.
 Let the senior engineer do the engineering; do not pre-empt its choices.
+The engineer never performs pre-PR arbitration (`adversarial-review-pipeline` Phase 3, `engineering-workflow` step 4 Verify stage) or rules a finding valid, invalid or accepted risk or the gate converged (applying its scope guard is not arbitration), and fixes what QA or the adjudicator ruled without overturning it; a separate clean, neutral arbiter on `profile.review.pre_pr.arbiter`, independent of the engineer and coordinator, arbitrates every head.
 
 When it hands back, read the story yourself and confirm it is in `profile.tracker.states.in_deployment_review`; a handback is a claim, the tracker is the record.
 If it handed back blocked, or the story is not in deployment review, stop and report why.
@@ -161,7 +159,7 @@ For a waived PR, compare the merged PR's `headRefOid` with the SHA recorded when
 - **`profile.tracker.states.blocked`:** report the blocking story and stop.
 - **Any other state:** report it and stop.
 
-If the senior engineer disputes a failed verdict (for example as correct by design or out of scope), do not relay its argument to a QA agent and do not rule on it yourself.
+If the senior engineer disputes a failed verdict or an adjudicator's ruling, do not relay its argument to a QA agent and do not rule on it yourself.
 Stop and put the item, QA's evidence, and the engineer's evidence to the user, since what an AC means is the product owner's decision.
 
 Incidental defects QA noted that do not keep the story from Done are not fixed in this loop; report them to the user.

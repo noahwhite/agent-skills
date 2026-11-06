@@ -487,6 +487,57 @@ def test_nesting_guidance_stays_runtime_neutral() -> None:
     assert "On opencode" not in body
 
 
+# SKL-50: the engineer never arbitrates the pre-PR gate; one sentence states the rule in step 2
+# and the brief carries it word for word as its own bullet right after the merge-rules bullet.
+ARBITRATION_RULE = (
+    "The engineer never performs pre-PR arbitration (`adversarial-review-pipeline` Phase 3, "
+    "`engineering-workflow` step 4 Verify stage) or rules a finding valid, invalid or accepted risk or the gate "
+    "converged (applying its scope guard is not arbitration), and fixes what QA or the adjudicator ruled without "
+    "overturning it; a separate clean, neutral arbiter on `profile.review.pre_pr.arbiter`, independent of the "
+    "engineer and coordinator, arbitrates every head."
+)
+STEP_2 = "2. Senior engineer: implement to deployment review"
+
+
+def test_one_sentence_states_the_arbitration_rule_and_the_brief_repeats_it_verbatim() -> None:
+    lines = section(SKILL.read_text(), STEP_2).splitlines()
+    assert ARBITRATION_RULE in lines, "step 2 must state the rule as its own prose line"
+    assert lines.index(ARBITRATION_RULE) in prose_lines(lines), "the rule must be operative prose"
+    merge_rules = next(i for i, line in enumerate(lines) if line.startswith("- The merge rules:"))
+    assert lines[merge_rules + 1] == "- " + ARBITRATION_RULE, "the brief bullet must follow the merge rules verbatim"
+    assert SKILL.read_text().count(ARBITRATION_RULE) == 2, "exactly one wording, stated once and briefed once"
+
+
+def test_the_arbitration_rule_names_both_stages_and_the_profile_arbiter() -> None:
+    for phrase in (
+        "`adversarial-review-pipeline` Phase 3",
+        "`engineering-workflow` step 4 Verify stage",
+        "valid, invalid or accepted risk or the gate converged",
+        "applying its scope guard is not arbitration",
+        "without overturning it",
+        "a separate clean, neutral arbiter on `profile.review.pre_pr.arbiter`",
+        "independent of the engineer and coordinator",
+        "arbitrates every head",
+    ):
+        assert phrase in ARBITRATION_RULE, phrase
+
+
+def test_no_launchable_arbiter_hands_back_blocked() -> None:
+    body = section(SKILL.read_text(), STEP_2)
+    hand_back = next(line for line in body.splitlines() if line.startswith("- What to hand back:"))
+    assert (
+        "or, if it stops, that it is blocked and why, including when no arbiter can launch; "
+        "a missing arbitration is never clean or converged."
+    ) in hand_back
+    assert "launch their review roles as shell commands (`runtime: command`, `codex` or `opencode`)" in body
+    assert "(`runtime: codex` or `runtime: command`)" not in body
+
+
+def test_an_adjudicator_ruling_dispute_goes_to_the_user() -> None:
+    body = section(SKILL.read_text(), "4. Act on the QA outcome")
+    assert "If the senior engineer disputes a failed verdict or an adjudicator's ruling" in body
+
+
 # SKL-48: the `metrics` switch, its off path, and its wiring.
 
 METRICS_ROW = "| `metrics` | whether the run collects and reports run metrics | `off` |"
