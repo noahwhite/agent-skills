@@ -307,6 +307,14 @@ def test_the_default_key_command_runs_a_path_program_not_a_bash_builtin(rig):
     assert_ok(rig.check(rig.fp_a))
 
 
+def test_a_dash_leading_default_key_command_word_is_a_program_name_not_an_exec_option(rig):
+    rig.add(rig.a)
+    rig.emitter("-c", f"printf 'key::%s\\n' \"$(cat {rig.a}.pub)\"")
+    rig.env["PATH"] = f"{rig.root}:{rig.env['PATH']}"
+    rig.config("gpg.ssh.defaultKeyCommand", "-c")
+    assert_ok(rig.check(rig.fp_a))
+
+
 @pytest.mark.parametrize("template", ["{s} 'open", '{s} "open', "{s} trailing\\"], ids=["single", "double", "backslash"])
 def test_an_unparseable_default_key_command_fails(rig, template):
     rig.add(rig.a)

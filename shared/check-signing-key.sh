@@ -114,7 +114,7 @@ else
   # without a shell, so exec keeps bash builtins and functions from shadowing a PATH program.
   words=()
   split_cmdline "$command" && [ "${#words[@]}" -gt 0 ] || fail "gpg.ssh.defaultKeyCommand cannot be parsed"
-  output=$(exec "${words[@]}" 2>/dev/null </dev/null) || fail "gpg.ssh.defaultKeyCommand failed"
+  output=$(exec -- "${words[@]}" 2>/dev/null </dev/null) || fail "gpg.ssh.defaultKeyCommand failed"
   first=${output%%$'\n'*}
   case $first in
     key::*) first=${first#key::} ;;
