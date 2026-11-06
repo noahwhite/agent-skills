@@ -269,8 +269,9 @@ The lower trigger applies, and the 8-point rule in [references/linear.md](refere
 If the split trigger is met, split the story.
 
 - The original issue stays the core slice.
-- Siblings are created from the `linear-user-story` template.
 - Siblings are created in the team of `STORY_ID`, as Team resolution in [references/linear.md](references/linear.md) states.
+- When the team of `STORY_ID` differs from `profile.tracker.team_key`, confirm `profile.tracker.states.backlog` and each sibling label on that team before creating any sibling, under the differing-team rule in Team resolution in [references/linear.md](references/linear.md).
+- Siblings are created from the `linear-user-story` template.
 - The original issue blocks each sibling.
 - Every acceptance criterion is mapped to a slice in the split comment.
 - Each slice gets its own three-voter estimate in the same blind round, with newly created voter contexts, and that round runs the same Step 4 consensus check, basis review and residual variance rule, so a slice records an estimate or takes the unpointed variance stop on the same terms.

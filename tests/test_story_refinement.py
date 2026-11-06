@@ -1841,6 +1841,17 @@ def test_split_siblings_are_created_in_the_team_of_the_story() -> None:
     ) in body
 
 
+def test_split_confirms_the_differing_team_before_creating_siblings() -> None:
+    body = spaced(section(SKILL.read_text(), "Split rule"))
+    confirm = (
+        "- When the team of `STORY_ID` differs from `profile.tracker.team_key`, confirm "
+        "`profile.tracker.states.backlog` and each sibling label on that team before creating any sibling, "
+        f"{DIFFERING_TEAM_CITE}."
+    )
+    assert confirm in body
+    assert body.index(confirm) < body.index("- Siblings are created from the `linear-user-story` template.")
+
+
 def test_triage_cites_the_differing_team_rule() -> None:
     body = spaced(section(SKILL.read_text(), "Triage"))
     assert (

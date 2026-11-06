@@ -43,7 +43,9 @@ INTRO_TEAM = (
 )
 NAMED_ISSUE_TEAM = (
     "For any operation on or for an issue the caller named by key, the team is that key's prefix "
-    "(`ABC` in `ABC-123`): the CLI `--team` takes the prefix, and MCP calls take the team name resolved "
+    "(`ABC` in `ABC-123`): the CLI `--team` takes the prefix on a command that accepts `--team` "
+    "(a command addressed by the issue key, such as `linear issue view <key>`, takes the key and no `--team`), "
+    "and MCP calls take the team name resolved "
     "from that key (the team in the team list, `linear team list` or the Linear MCP list_teams tool, "
     "whose key matches the prefix), never `profile.tracker.team_name`."
 )
@@ -56,7 +58,7 @@ DIFFERING_TEAM = (
     "Differing team: when the named issue's team differs from `profile.tracker.team_key`, each profile state "
     "or label name (including `profile.tracker.states.ready` and `profile.tracker.states.backlog`, and the "
     "labels on split siblings) is used only after it is confirmed on that team with `linear team states <KEY>` "
-    "and `linear label list --team <KEY>`, where `<KEY>` is the team key, the issue key's prefix; use the "
+    "and `linear label list --team <KEY>` (whose listing includes the workspace labels), where `<KEY>` is the team key, the issue key's prefix; use the "
     "Linear MCP list_issue_statuses and list_issue_labels tools if the CLI fails."
 )
 DIFFERING_TEAM_STOP = (
