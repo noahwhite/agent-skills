@@ -259,6 +259,43 @@ def test_a_quoted_default_key_command_argument_is_one_argument(rig):
     assert_ok(rig.check(rig.fp_a))
 
 
+@pytest.mark.parametrize(
+    "template",
+    [
+        "{s} 'a b'",
+        '{s} "a b"',
+        "{s} a\\ b",
+        "{s} a' 'b",
+        '{s}   "a\\" b" ',
+        "{s} 'x\\y'",
+        '{s} "x\\y"',
+        "{s} '' z",
+    ],
+    ids=["single", "double", "escaped-space", "mixed", "escaped-quote", "single-keeps-backslash", "double-drops-backslash", "empty-word"],
+)
+def test_the_default_key_command_is_split_like_gits_split_cmdline(rig, template):
+    rig.add(rig.a)
+    # The emitter succeeds only when its arguments are exactly what git's parser would pass.
+    expected = {
+        "{s} 'a b'": "a b", '{s} "a b"': "a b", "{s} a\\ b": "a b", "{s} a' 'b": "a b",
+        '{s}   "a\\" b" ': 'a" b', "{s} 'x\\y'": "x\\y", '{s} "x\\y"': "xy", "{s} '' z": " z",
+    }[template]
+    script = rig.emitter(
+        "emit-split",
+        f"[ \"$*\" = '{expected}' ] || [ \"$(printf '%s\\n' \"$@\")\" = '{expected}' ] || exit 1\n"
+        f"printf 'key::%s\\n' \"$(cat {rig.a}.pub)\"",
+    )
+    rig.config("gpg.ssh.defaultKeyCommand", template.format(s=script))
+    assert_ok(rig.check(rig.fp_a))
+
+
+@pytest.mark.parametrize("template", ["{s} 'open", '{s} "open', "{s} trailing\\"], ids=["single", "double", "backslash"])
+def test_an_unparseable_default_key_command_fails(rig, template):
+    rig.add(rig.a)
+    rig.config("gpg.ssh.defaultKeyCommand", template.format(s=rig.key_command(rig.a)))
+    assert_fails(rig.check(rig.fp_a), rig.fp_a, "unresolved", "defaultKeyCommand")
+
+
 def test_only_the_first_line_of_the_command_output_counts(rig):
     rig.add(rig.a)
     rig.add(rig.b)
