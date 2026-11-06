@@ -824,7 +824,8 @@ def test_the_repository_vendoring_is_current():
 
 
 def test_no_production_skill_carries_a_resolver_copy_yet():
-    assert json.loads((ROOT / "skills.json").read_text()).get("executables", {}) == {}
+    executables = json.loads((ROOT / "skills.json").read_text()).get("executables", {})
+    assert not [skill for skill, names in executables.items() if "resolve-model-role.py" in names]
     assert not list((ROOT / "skills").glob("*/scripts/resolve-model-role.py"))
 
 

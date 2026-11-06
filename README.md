@@ -94,6 +94,22 @@ The pre-PR adversarial gate has five roles under `review.pre_pr`: `sweeper`, `hu
 `sweeper` is optional, and `simplicity_reviewer` and `fixer` are used only when the gate escalates; see [`skills/adversarial-review-pipeline/SKILL.md`](skills/adversarial-review-pipeline/SKILL.md).
 A skill that needs a value the profile does not set stops and asks for it rather than guessing.
 
+### Commit signing key
+
+`git.signed_commits` says commits must be signed.
+`git.signing_key` is optional and names the key: the OpenSSH SHA256 fingerprint of the key registered for signing, unpadded (`SHA256:` and 43 characters; `ssh-add -l` shows it).
+When `git.signed_commits` is true and `git.signing_key` is set, the skills run the preflight before the first commit of a task, and again after any change to git config, from inside the target repository:
+
+```bash
+bash <skill dir>/scripts/check-signing-key.sh <git.signing_key>
+```
+
+It resolves the key git would sign with (`gpg.format` must be `ssh`; then `user.signingkey`, or when that is unset the first output line of `gpg.ssh.defaultKeyCommand`, which must be a `key::` or `ssh-` key and is run without a shell, as git runs it), compares its fingerprint with the argument, and for a public-key resolution also requires the key to be loaded in the ssh agent.
+It prints nothing and exits 0 on a match; otherwise it exits non-zero with one line on stderr, and the skill stops instead of committing.
+The script is vendored into every skill that receives `references/github.md`, as a copy with a generated header above the shebang, so it is run through `bash` and never as an executable.
+A `gpg.ssh.program` wrapper that signs with another key than git selected is not detected.
+When `git.signing_key` is unset, nothing is checked by fingerprint and the skills only confirm that `user.signingkey` resolves to the registered key.
+
 ### Switching a seat off
 
 A seat entry that may be switched off takes an optional `enabled` boolean: one item of a seat list (`review.optional_reviewers`, `review.shadow_adjudicators`, `refinement.reviewers`) or a single role such as `review.pre_pr.sweeper`.

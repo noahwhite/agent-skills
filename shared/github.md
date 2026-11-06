@@ -39,7 +39,12 @@ When `profile.git.signed_commits` is true:
 - ⛔ Never create commits through API file-write tools (an MCP server's push_files or create_or_update_file tool); they produce unsigned commits that fail or silently block the PR.
 - Select the signing key that is registered on the account, by its fingerprint or agent comment (`ssh-add -l`), never by trusting whichever public key file is on disk.
   The consumer overlay supplies the registered key's identity.
-- Confirm `user.signingkey` resolves to that key before committing, and check the result after push: `gh api repos/<owner>/<repo>/commits/<sha> --jq '.commit.verification'`.
+- When `profile.git.signing_key` is set, it is the OpenSSH SHA256 fingerprint of the key registered for signing.
+  Before the first commit of a task, and again after any change to git config, run `bash <skill dir>/scripts/check-signing-key.sh <profile.git.signing_key>` from inside the target repository.
+  On a non-zero exit, stop and fix the configuration.
+  Never commit with a per-commit key override, and never fall back to another key.
+- When `profile.git.signing_key` is unset, confirm `user.signingkey` resolves to that key before committing.
+- Check the result after push: `gh api repos/<owner>/<repo>/commits/<sha> --jq '.commit.verification'`.
 - Workflows that create commits must sign them (for example `sign-commits: true` on a create-pull-request action).
 
 Always:

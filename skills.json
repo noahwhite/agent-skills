@@ -106,5 +106,45 @@
       "metrics"
     ]
   },
-  "executables": {}
+  "executables": {
+    "adversarial-review-pipeline": [
+      "check-signing-key.sh"
+    ],
+    "cleanup": [
+      "check-signing-key.sh"
+    ],
+    "engineering-workflow": [
+      "check-signing-key.sh"
+    ],
+    "linear-bug": [
+      "check-signing-key.sh"
+    ],
+    "linear-user-story": [
+      "check-signing-key.sh"
+    ],
+    "persona-architect": [
+      "check-signing-key.sh"
+    ],
+    "persona-platform-sre": [
+      "check-signing-key.sh"
+    ],
+    "persona-release-manager": [
+      "check-signing-key.sh"
+    ],
+    "persona-scrum-master": [
+      "check-signing-key.sh"
+    ],
+    "persona-staff-devops": [
+      "check-signing-key.sh"
+    ],
+    "persona-staff-engineer": [
+      "check-signing-key.sh"
+    ],
+    "qa-verification": [
+      "check-signing-key.sh"
+    ],
+    "story-to-done": [
+      "check-signing-key.sh"
+    ]
+  }
 }
