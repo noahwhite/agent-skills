@@ -289,6 +289,24 @@ def test_the_default_key_command_is_split_like_gits_split_cmdline(rig, template)
     assert_ok(rig.check(rig.fp_a))
 
 
+def test_trailing_whitespace_in_the_default_key_command_is_an_empty_argument_as_in_git(rig):
+    rig.add(rig.a)
+    script = rig.emitter(
+        "emit-edge",
+        f"[ \"$#\" = 2 ] && [ \"$1\" = a ] && [ -z \"$2\" ] || exit 1\nprintf 'key::%s\\n' \"$(cat {rig.a}.pub)\"",
+    )
+    rig.config("gpg.ssh.defaultKeyCommand", f"{script} a  ")
+    assert_ok(rig.check(rig.fp_a))
+
+
+def test_the_default_key_command_runs_a_path_program_not_a_bash_builtin(rig):
+    rig.add(rig.a)
+    rig.emitter("echo", f"printf 'key::%s\\n' \"$(cat {rig.a}.pub)\"")
+    rig.env["PATH"] = f"{rig.root}:{rig.env['PATH']}"
+    rig.config("gpg.ssh.defaultKeyCommand", "echo")
+    assert_ok(rig.check(rig.fp_a))
+
+
 @pytest.mark.parametrize("template", ["{s} 'open", '{s} "open', "{s} trailing\\"], ids=["single", "double", "backslash"])
 def test_an_unparseable_default_key_command_fails(rig, template):
     rig.add(rig.a)

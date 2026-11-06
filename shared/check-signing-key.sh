@@ -37,11 +37,12 @@ if [ "$#" -ne 1 ] || ! [[ $expected =~ $pattern ]]; then
 fi
 
 # Split a command line into the global array words the way git does (alias.c split_cmdline):
-# whitespace separates words, single and double quotes group, a backslash escapes the next
+# an unquoted run of whitespace ends the current word (empty or not), so trailing whitespace
+# yields a final empty word; single and double quotes group; a backslash escapes the next
 # character outside quotes and inside double quotes. Fails on an unmatched quote or a trailing
 # backslash.
 split_cmdline() {
-  local line=$1 i c quote= word= have=0
+  local line=$1 i c quote= word=
   words=()
   for ((i = 0; i < ${#line}; i++)); do
     c=${line:i:1}
@@ -56,22 +57,21 @@ split_cmdline() {
         word+=$c
       fi
     elif [[ $c == [[:space:]] ]]; then
-      if [ "$have" = 1 ]; then words+=("$word"); word=; have=0; fi
+      words+=("$word")
+      word=
+      while [[ ${line:i+1:1} == [[:space:]] ]]; do i=$((i + 1)); done
     elif [ "$c" = "'" ] || [ "$c" = '"' ]; then
       quote=$c
-      have=1
     elif [ "$c" = '\' ]; then
       i=$((i + 1))
       [ "$i" -lt "${#line}" ] || return 1
       word+=${line:i:1}
-      have=1
     else
       word+=$c
-      have=1
     fi
   done
   [ -z "$quote" ] || return 1
-  if [ "$have" = 1 ]; then words+=("$word"); fi
+  words+=("$word")
 }
 
 # Print the SHA256 fingerprint of the public key on stdin; fail when it is not one.
@@ -110,10 +110,11 @@ if signing_key=$(git config --get user.signingkey 2>/dev/null); then
 else
   command=$(git config --get gpg.ssh.defaultKeyCommand 2>/dev/null) || command=
   [ -n "$command" ] || fail "no signing key is configured"
-  # Git splits the command into arguments (quotes group, no expansion) and runs it without a shell.
+  # Git splits the command into arguments (quotes group, no expansion) and execs the program
+  # without a shell, so exec keeps bash builtins and functions from shadowing a PATH program.
   words=()
   split_cmdline "$command" && [ "${#words[@]}" -gt 0 ] || fail "gpg.ssh.defaultKeyCommand cannot be parsed"
-  output=$("${words[@]}" 2>/dev/null </dev/null) || fail "gpg.ssh.defaultKeyCommand failed"
+  output=$(exec "${words[@]}" 2>/dev/null </dev/null) || fail "gpg.ssh.defaultKeyCommand failed"
   first=${output%%$'\n'*}
   case $first in
     key::*) first=${first#key::} ;;
