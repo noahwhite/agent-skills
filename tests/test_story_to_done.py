@@ -487,6 +487,73 @@ def test_nesting_guidance_stays_runtime_neutral() -> None:
     assert "On opencode" not in body
 
 
+# SKL-50: the engineer never arbitrates the pre-PR gate; one sentence states the rule in step 2
+# and the brief carries it word for word as its own bullet right after the merge-rules bullet.
+ARBITRATION_RULE = (
+    "The engineer never does pre-PR arbitration (`adversarial-review-pipeline` Phase 3, "
+    "`engineering-workflow` step 4 Verify stage) or rules a finding valid, invalid or accepted risk or the gate "
+    "converged (applying the gate's scope guard is not arbitration), and fixes what QA ruled not met or the "
+    "adjudicator ruled valid without overturning those rulings; a separate clean, neutral arbiter on "
+    "`profile.review.pre_pr.arbiter`, independent of engineer and coordinator, arbitrates every head."
+)
+STEP_2 = "2. Senior engineer: implement to deployment review"
+
+
+def step_2_lines() -> list[str]:
+    return section(SKILL.read_text(), STEP_2).splitlines()
+
+
+def test_one_sentence_states_the_arbitration_rule_and_the_brief_repeats_it_verbatim() -> None:
+    lines = step_2_lines()
+    assert ARBITRATION_RULE in lines, "step 2 must state the rule as its own prose line"
+    assert lines.index(ARBITRATION_RULE) in prose_lines(lines), "the rule must be operative prose"
+    merge_rules = [i for i, line in enumerate(lines) if line.startswith("- The merge rules:")]
+    assert len(merge_rules) == 1, "step 2's brief must carry exactly one merge-rules bullet"
+    assert lines[merge_rules[0] + 1] == "- " + ARBITRATION_RULE, "the brief bullet must follow the merge rules verbatim"
+    assert SKILL.read_text().count(ARBITRATION_RULE) == 2, "exactly one wording, stated once and briefed once"
+
+
+def test_the_arbitration_rule_names_both_stages_and_the_profile_arbiter() -> None:
+    # Read from the skill itself, so dropping a phrase from both the skill and the constant still fails.
+    rules = [line.removeprefix("- ") for line in step_2_lines() if line.removeprefix("- ").startswith("The engineer never does")]
+    assert len(rules) == 2, "the rule is stated once and briefed once"
+    for rule in rules:
+        for phrase in (
+            "`adversarial-review-pipeline` Phase 3",
+            "`engineering-workflow` step 4 Verify stage",
+            "valid, invalid or accepted risk or the gate converged",
+            "applying the gate's scope guard is not arbitration",
+            "fixes what QA ruled not met or the adjudicator ruled valid without overturning those rulings",
+            "a separate clean, neutral arbiter on `profile.review.pre_pr.arbiter`",
+            "independent of engineer and coordinator",
+            "arbitrates every head",
+        ):
+            assert phrase in rule, phrase
+
+
+def test_no_launchable_arbiter_hands_back_blocked() -> None:
+    body = section(SKILL.read_text(), STEP_2)
+    hand_back = next(line for line in body.splitlines() if line.startswith("- What to hand back:"))
+    assert (
+        "or, if it stops, that it is blocked and why, including when no arbiter can launch; "
+        "a missing arbitration is never clean or converged."
+    ) in hand_back
+    assert "launch their review roles as shell commands (`runtime: command`, `codex` or `opencode`)" in body
+    assert "(`runtime: codex` or `runtime: command`)" not in body
+
+
+def test_an_adjudicator_ruling_dispute_goes_to_the_user() -> None:
+    body = section(SKILL.read_text(), "4. Act on the QA outcome")
+    assert "If the senior engineer disputes a failed verdict or an adjudicator's ruling" in body
+    assert "Stop and put the item, its evidence, and the engineer's evidence to the user" in body
+
+
+def test_the_engineer_brief_stays_neutral_and_names_the_gate_and_branch() -> None:
+    body = section(SKILL.read_text(), STEP_2)
+    assert "The brief carries facts and constraints, never your expectations about the outcome." in body.splitlines()
+    assert "the pre-PR gate and the PR to `profile.git.integration_branch`" in body
+
+
 # SKL-48: the `metrics` switch, its off path, and its wiring.
 
 METRICS_ROW = "| `metrics` | whether the run collects and reports run metrics | `off` |"
