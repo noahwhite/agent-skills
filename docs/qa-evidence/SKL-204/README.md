@@ -9,7 +9,7 @@ CI: run 42307999904 on the reviewed head and run 42308451512 on the build SHA, b
 
 Fixtures: none; the probes are read-only text assertions over the changed skills, `shared/linear.md` and its vendored copies, the test suite, and three read-only `linear` CLI calls against team SKL.
 There is no visual surface, so the evidence is structured assertions and raw output; no screenshot applies.
-The assertion file `SKL-204-qa-assertions.txt` is attached to SKL-204.
+The assertion file `SKL-204-qa-assertions.txt` is attached to SKL-204 as "SKL-204 QA assertions (main f5be1cc)", SHA-256 `76e52618e0f7f0e0f371f144099579704fb62a672922f398faf14786efc0024c`, and the QA evidence comment `84d2ef1e-fabb-4f08-8620-fedb335d334f` cites it.
 
 | Item | Verdict | Evidence |
 |---|---|---|
