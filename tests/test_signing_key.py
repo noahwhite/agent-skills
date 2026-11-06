@@ -129,6 +129,16 @@ class Rig:
         res = run(["ssh-add", str(key)], env=self.env)
         assert res.returncode == 0, res.stderr
 
+    def emitter(self, name: str, body: str) -> str:
+        """An executable the default key command can name, since git runs it without a shell."""
+        path = self.root / name
+        path.write_text("#!/bin/sh\n" + body + "\n")
+        path.chmod(0o755)
+        return str(path)
+
+    def key_command(self, key: Path, name: str = "emit") -> str:
+        return self.emitter(name, f"printf 'key::%s\\n' \"$(cat {key}.pub)\"")
+
     def check(self, *args, script=SOURCE):
         return run(["bash", str(script), *args], env=self.env, cwd=self.repo)
 
@@ -225,7 +235,27 @@ def test_a_matching_private_key_file_passes_without_the_agent(rig):
 
 def test_a_matching_default_key_command_passes(rig):
     rig.add(rig.a)
+    rig.config("gpg.ssh.defaultKeyCommand", rig.key_command(rig.a))
+    assert_ok(rig.check(rig.fp_a))
+
+
+def test_the_default_key_command_runs_without_a_shell_like_git(rig):
+    rig.add(rig.a)
+    # Git passes $(...) through as a literal argument, so the key is never produced.
     rig.config("gpg.ssh.defaultKeyCommand", f"printf 'key::%s\\n' \"$(cat {rig.a}.pub)\"")
+    assert_fails(rig.check(rig.fp_a), rig.fp_a, "unresolved", "defaultKeyCommand")
+
+
+def test_a_default_key_command_that_prints_an_ssh_key_passes_like_ssh_add_l(rig):
+    rig.add(rig.a)
+    rig.config("gpg.ssh.defaultKeyCommand", "ssh-add -L")
+    assert_ok(rig.check(rig.fp_a))
+
+
+def test_a_quoted_default_key_command_argument_is_one_argument(rig):
+    rig.add(rig.a)
+    script = rig.emitter("emit-arg", f"[ \"$1\" = 'a b' ] && printf 'key::%s\\n' \"$(cat {rig.a}.pub)\"")
+    rig.config("gpg.ssh.defaultKeyCommand", f"{script} 'a b'")
     assert_ok(rig.check(rig.fp_a))
 
 
@@ -234,7 +264,7 @@ def test_only_the_first_line_of_the_command_output_counts(rig):
     rig.add(rig.b)
     rig.config(
         "gpg.ssh.defaultKeyCommand",
-        f"printf 'key::%s\\nkey::%s\\n' \"$(cat {rig.a}.pub)\" \"$(cat {rig.b}.pub)\"",
+        rig.emitter("emit-two", f"printf 'key::%s\\nkey::%s\\n' \"$(cat {rig.a}.pub)\" \"$(cat {rig.b}.pub)\""),
     )
     assert_ok(rig.check(rig.fp_a))
     res = rig.check(rig.fp_b)
@@ -255,7 +285,7 @@ def test_a_different_key_fails_for_every_signingkey_form(rig, form):
 def test_a_different_key_fails_through_the_default_key_command(rig):
     rig.add(rig.a)
     rig.add(rig.b)
-    rig.config("gpg.ssh.defaultKeyCommand", f"printf 'key::%s\\n' \"$(cat {rig.b}.pub)\"")
+    rig.config("gpg.ssh.defaultKeyCommand", rig.key_command(rig.b, "emit-b"))
     assert_fails(rig.check(rig.fp_a), rig.fp_a, rig.fp_b, "mismatch")
 
 
@@ -267,7 +297,7 @@ def test_no_resolvable_key_fails(rig):
 @pytest.mark.parametrize("value", ["", str("/nonexistent/key.pub"), "key::not a key", "key::"])
 def test_an_unresolvable_signingkey_fails_without_falling_back(rig, value):
     rig.add(rig.a)
-    rig.config("gpg.ssh.defaultKeyCommand", f"printf 'key::%s\\n' \"$(cat {rig.a}.pub)\"")
+    rig.config("gpg.ssh.defaultKeyCommand", rig.key_command(rig.a))
     rig.config("user.signingkey", value)
     assert_fails(rig.check(rig.fp_a), rig.fp_a, "unresolved", "user.signingkey")
 
@@ -292,7 +322,7 @@ def test_a_gpg_format_other_than_ssh_fails(rig, fmt):
 def test_a_public_key_that_is_not_loaded_in_the_agent_fails(rig, form):
     rig.add(rig.b)
     if form == "command":
-        rig.config("gpg.ssh.defaultKeyCommand", f"printf 'key::%s\\n' \"$(cat {rig.a}.pub)\"")
+        rig.config("gpg.ssh.defaultKeyCommand", rig.key_command(rig.a))
     else:
         rig.config("user.signingkey", "key::" + rig.pub(rig.a) if form == "literal" else str(rig.a) + ".pub")
     assert_fails(rig.check(rig.fp_a), rig.fp_a, rig.fp_a, "agent")
@@ -330,12 +360,15 @@ def test_an_unreachable_agent_fails_for_a_public_key(rig):
         "printf 'KEY::x\\n'",
         "printf 'key::garbage\\n'",
         "printf '\\nkey::x\\n'",
-        "printf 'key::x\\n'; exit 3",
+        "FAILS",
+        "printf 'unterminated",
     ],
-    ids=["empty", "blank", "no-prefix", "case", "garbage-key", "leading-blank", "command-fails"],
+    ids=["empty", "blank", "no-prefix", "case", "garbage-key", "leading-blank", "command-fails", "bad-quoting"],
 )
 def test_malformed_default_key_command_output_fails(rig, command):
     rig.add(rig.a)
+    if command == "FAILS":
+        command = rig.emitter("emit-fail", "echo key::x; exit 3")
     rig.config("gpg.ssh.defaultKeyCommand", command)
     assert_fails(rig.check(rig.fp_a), rig.fp_a, "unresolved", "defaultKeyCommand")
 
@@ -344,7 +377,7 @@ def test_the_signingkey_wins_over_the_default_key_command(rig):
     rig.add(rig.a)
     rig.add(rig.b)
     rig.config("user.signingkey", "key::" + rig.pub(rig.b))
-    rig.config("gpg.ssh.defaultKeyCommand", f"printf 'key::%s\\n' \"$(cat {rig.a}.pub)\"")
+    rig.config("gpg.ssh.defaultKeyCommand", rig.key_command(rig.a))
     assert_fails(rig.check(rig.fp_a), rig.fp_a, rig.fp_b, "mismatch")
 
 

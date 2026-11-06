@@ -10,7 +10,10 @@
 #   2. When user.signingkey is set it is a key:: or ssh- literal, a public-key file or a
 #      private-key file; a value that cannot be resolved fails, with no fallback to another source.
 #   3. When user.signingkey is unset, the first output line of gpg.ssh.defaultKeyCommand must
-#      begin with key::.
+#      begin with key:: (or ssh-, the other form git accepts, as `ssh-add -L` prints). The command
+#      is split into arguments and run without a shell, as git runs it.
+# gpg.ssh.program is not inspected: a wrapper that signs with another key than git selected is
+# outside what this check can see.
 # A public-key resolution (literal, public-key file, command output) must also be loaded in the
 # agent (ssh-add -l). Exit 0 and no output on a match. Any other outcome exits 1 with exactly one
 # line on stderr naming the expected fingerprint, the resolved fingerprint or "unresolved", and a
@@ -70,10 +73,16 @@ if signing_key=$(git config --get user.signingkey 2>/dev/null); then
 else
   command=$(git config --get gpg.ssh.defaultKeyCommand 2>/dev/null) || command=
   [ -n "$command" ] || fail "no signing key is configured"
-  output=$(sh -c "$command" 2>/dev/null </dev/null) || fail "gpg.ssh.defaultKeyCommand failed"
+  # Git splits the command into arguments (quotes group, no expansion) and runs it without a shell.
+  output=$(printf '%s\n' "$command" | xargs -r sh -c 'exec "$@"' _ 2>/dev/null) ||
+    fail "gpg.ssh.defaultKeyCommand failed"
   first=${output%%$'\n'*}
-  [[ $first == key::* ]] || fail "gpg.ssh.defaultKeyCommand output is malformed"
-  resolved=$(printf '%s\n' "${first#key::}" | fingerprint) || resolved=
+  case $first in
+    key::*) first=${first#key::} ;;
+    ssh-*) ;;
+    *) fail "gpg.ssh.defaultKeyCommand output is malformed" ;;
+  esac
+  resolved=$(printf '%s\n' "$first" | fingerprint) || resolved=
   [ -n "$resolved" ] || { resolved=unresolved; fail "gpg.ssh.defaultKeyCommand output is malformed"; }
 fi
 

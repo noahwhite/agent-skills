@@ -104,9 +104,10 @@ When `git.signed_commits` is true and `git.signing_key` is set, the skills run t
 bash <skill dir>/scripts/check-signing-key.sh <git.signing_key>
 ```
 
-It resolves the key git would sign with (`gpg.format` must be `ssh`; then `user.signingkey`, or when that is unset the first `key::` line of `gpg.ssh.defaultKeyCommand`), compares its fingerprint with the argument, and for a public-key resolution also requires the key to be loaded in the ssh agent.
+It resolves the key git would sign with (`gpg.format` must be `ssh`; then `user.signingkey`, or when that is unset the first output line of `gpg.ssh.defaultKeyCommand`, which must be a `key::` or `ssh-` key and is run without a shell, as git runs it), compares its fingerprint with the argument, and for a public-key resolution also requires the key to be loaded in the ssh agent.
 It prints nothing and exits 0 on a match; otherwise it exits non-zero with one line on stderr, and the skill stops instead of committing.
 The script is vendored into every skill that receives `references/github.md`, as a copy with a generated header above the shebang, so it is run through `bash` and never as an executable.
+A `gpg.ssh.program` wrapper that signs with another key than git selected is not detected.
 When `git.signing_key` is unset, nothing is checked by fingerprint and the skills only confirm that `user.signingkey` resolves to the registered key.
 
 ### Switching a seat off
