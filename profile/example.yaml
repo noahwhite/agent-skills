@@ -54,6 +54,7 @@ git:
   promotion: whole-branch
   merge_method: squash
   signed_commits: true
+  signing_key: SHA256:Kj2Cb8r6b1YQ5hksGDH0FeiivWj1DZ8puXI8+IlN9l0
   ai_attribution: forbid
   branch_prefixes:
     feature: feat/
