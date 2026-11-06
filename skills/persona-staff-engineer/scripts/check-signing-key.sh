@@ -54,12 +54,13 @@ if signing_key=$(git config --get user.signingkey 2>/dev/null); then
     ssh-*) resolved=$(printf '%s\n' "$signing_key" | fingerprint) ;;
     *)
       path=$signing_key
-      case $path in "~/"*) path=$HOME/${path#"~/"} ;; esac
+      case $path in "~/"*) path=${HOME:+$HOME/${path#"~/"}} ;; esac
       if [ -z "$path" ] || [ ! -f "$path" ] || [ ! -r "$path" ]; then
         resolved=
       elif IFS= read -r first <"$path" && [[ $first == *"PRIVATE KEY"* ]]; then
         public=0
-        resolved=$(ssh-keygen -y -P '' -f "$path" 2>/dev/null </dev/null | fingerprint)
+        derived=$(ssh-keygen -y -P '' -f "$path" 2>/dev/null </dev/null) || derived=
+        resolved=$(printf '%s\n' "$derived" | fingerprint)
       else
         resolved=$(head -n 1 "$path" | fingerprint)
       fi
@@ -80,8 +81,9 @@ fi
 
 if [ "$public" = 1 ]; then
   loaded=$(ssh-add -l 2>/dev/null </dev/null) || fail "the key is not loaded in the ssh agent (agent unavailable or empty)"
-  case $'\n'$loaded$'\n' in
-    *" $expected "*) ;;
-    *) fail "the key is not loaded in the ssh agent" ;;
-  esac
+  found=0
+  while read -r _ agent_fingerprint _; do
+    [ "$agent_fingerprint" = "$expected" ] && found=1
+  done <<<"$loaded"
+  [ "$found" = 1 ] || fail "the key is not loaded in the ssh agent"
 fi

@@ -298,6 +298,21 @@ def test_a_public_key_that_is_not_loaded_in_the_agent_fails(rig, form):
     assert_fails(rig.check(rig.fp_a), rig.fp_a, rig.fp_a, "agent")
 
 
+def test_an_agent_comment_naming_the_fingerprint_does_not_count_as_loading_the_key(rig):
+    spoof = rig.root / "spoof"
+    keygen(spoof, f"x {rig.fp_a} y")
+    rig.add(spoof)
+    rig.config("user.signingkey", "key::" + rig.pub(rig.a))
+    assert rig.fp_a in run(["ssh-add", "-l"], env=rig.env).stdout
+    assert_fails(rig.check(rig.fp_a), rig.fp_a, rig.fp_a, "agent")
+
+
+def test_an_unset_home_with_a_tilde_path_fails_with_the_diagnostic_line(rig):
+    rig.config("user.signingkey", "~/.ssh/registered.pub")
+    del rig.env["HOME"]
+    assert_fails(rig.check(rig.fp_a), rig.fp_a, "unresolved", "user.signingkey")
+
+
 def test_an_unreachable_agent_fails_for_a_public_key(rig):
     rig.config("user.signingkey", "key::" + rig.pub(rig.a))
     rig.env["SSH_AUTH_SOCK"] = str(rig.root / "no-such.sock")
@@ -370,6 +385,7 @@ def test_a_failure_is_one_line_and_leaks_no_private_key_material(rig):
     ]
     pub_body = rig.pub(rig.b).split()[1]
     for res in (rig.check(rig.fp_a), rig.check(rig.fp_b + "x"), rig.check()):
+        assert res.returncode != 0 and res.stdout == ""
         assert res.stderr.count("\n") == 1
         for secret in body:
             assert secret not in res.stdout + res.stderr
@@ -387,6 +403,19 @@ def test_success_never_prints_the_resolved_key(rig):
     rig.config("user.signingkey", str(rig.a))
     res = rig.check(rig.fp_a)
     assert (res.returncode, res.stdout, res.stderr) == (0, "", "")
+
+
+def test_the_readme_documents_the_key_and_the_preflight():
+    readme = (ROOT / "README.md").read_text()
+    start = readme.index("### Commit signing key")
+    body = readme[start : readme.index("\n### ", start + 1)]
+    for needle in (
+        "`git.signing_key`",
+        "`git.signed_commits`",
+        "bash <skill dir>/scripts/check-signing-key.sh <git.signing_key>",
+        "When `git.signing_key` is unset",
+    ):
+        assert needle in body, needle
 
 
 def test_the_script_is_a_bash_script_with_a_shebang_and_no_secrets_in_argv():
