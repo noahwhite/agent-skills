@@ -26,8 +26,8 @@ After the story exists, triage and implementation follow the shared lifecycle in
 
 | Placeholder | Profile key |
 |---|---|
-| `ABC` (team key, for the CLI) | `profile.tracker.team_key` |
-| team name (for the MCP server) | `profile.tracker.team_name` |
+| `ABC` (team key, for the CLI) | the prefix of the named issue's key when a caller supplies one (Team resolution in [references/linear.md](references/linear.md)), else `profile.tracker.team_key` |
+| team name (for the MCP server) | the name of that issue's team, resolved from its key, when a caller supplies a named issue, else `profile.tracker.team_name` |
 | assignee | `profile.tracker.assignee` |
 | creation state | `profile.tracker.states.backlog` |
 | story label | `profile.tracker.labels.user_story` |
@@ -113,7 +113,7 @@ cat > "$story" <<'EOF'
 <filled-in template>
 EOF
 
-# ABC = profile.tracker.team_key (the CLI resolves the key, not the team name)
+# ABC = the team key from Profile values (the CLI resolves the key, not the team name)
 linear issue create \
   --team ABC \
   --title "<title prefix> <concise capability>" \
@@ -143,7 +143,7 @@ linear issue comment add <ID> --body "Worked by agent <session label> at $(date 
 Fall back only when the **create itself** fails.
 If creation succeeded and a later step failed (stamp, label), resume that step against the returned id; never re-create, or you duplicate the issue.
 
-1. The Linear MCP server's save_issue tool, in one call: `team` = `profile.tracker.team_name` (the MCP takes the name, not the key, and never a team id), `title`, `description` (the filled template), `labels` by name (story label, type label, operational label if any), `state` = the backlog state, `assignee` (for `self` the MCP takes `me`), plus `project` and `priority` as needed.
+1. The Linear MCP server's save_issue tool, in one call: `team` = the team name from Profile values (the MCP takes the name, not the key, and never a team id), `title`, `description` (the filled template), `labels` by name (story label, type label, operational label if any), `state` = the backlog state, `assignee` (for `self` the MCP takes `me`), plus `project` and `priority` as needed.
    Use `state` and `assignee`, never status, state id, or assignee id fields.
    If the combined call is rejected, create with team, title, and description only, then update by the returned id.
 2. The save_comment tool for the agent stamp, when enabled.

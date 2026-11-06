@@ -3,8 +3,17 @@
 # Linear and issue lifecycle discipline
 
 Read this before triaging, updating, estimating, closing, or filing Linear issues and epics.
-The team is `profile.tracker.team_key`; state and label names come from `profile.tracker.states.*` and `profile.tracker.labels.*` (see `references/profile.md`).
+The team for an operation on or for an issue named by key is that key's prefix, and `profile.tracker.team_key` is the team only when no issue is named (Team resolution, below).
+State and label names come from `profile.tracker.states.*` and `profile.tracker.labels.*` (see `references/profile.md`).
 The `linear` CLI (schpet/linear-cli) is the primary tool; the Linear MCP server is the fallback when a CLI command fails.
+
+## Team resolution
+
+- For any operation on or for an issue the caller named by key, the team is that key's prefix (`ABC` in `ABC-123`): the CLI `--team` takes the prefix on a command that accepts `--team` (a command addressed by the issue key, such as `linear issue view <key>`, takes the key and no `--team`), and MCP calls take the team name resolved from that key (the team in the team list, `linear team list` or the Linear MCP list_teams tool, whose key matches the prefix), never `profile.tracker.team_name`.
+  A failed resolution stops the step and asks.
+- `profile.tracker.team_key` and `profile.tracker.team_name` apply only to operations that name no issue and follow no invoked key: standalone filing, listing or searching the backlog.
+- Differing team: when the named issue's team differs from `profile.tracker.team_key`, each profile state or label name (including `profile.tracker.states.ready` and `profile.tracker.states.backlog`, and the labels on split siblings) is used only after it is confirmed on that team with `linear team states <KEY>` and `linear label list --team <KEY>` (whose listing includes the workspace labels), where `<KEY>` is the team key, the issue key's prefix; use the Linear MCP list_issue_statuses and list_issue_labels tools if the CLI fails.
+  A missing name, an unknown team or a failed listing stops the step before any write and asks; no other name is substituted.
 
 ## Status lifecycle
 
@@ -103,6 +112,7 @@ The `linear` CLI (schpet/linear-cli) is the primary tool; the Linear MCP server 
 - ⛔ Load the matching filing skill and follow it; never copy structure from sibling issues:
   `linear-user-story`, `linear-bug`, `linear-spike`, `linear-investigation`, `linear-epic`.
 - Search the team backlog and existing epics before creating (`linear issue list` with a query, or the Linear MCP server's list_issues tool with a filter); the issue may already exist.
+- Filing or searching on behalf of a named issue (a split sibling of it, a backlog or epic search for it) uses that issue's team (Team resolution); the profile's team applies only when no issue is named.
 - Assign every new issue to `profile.tracker.assignee`.
   Filter by `profile.tracker.assignee_email`, never by display name, since two accounts can share one.
 - When `profile.tracker.agent_stamp` is true, comment `Worked by agent <session label> at <YYYY-MM-DD HH:MM> UTC` on each issue you pick up, before coding.
@@ -115,7 +125,7 @@ The `linear` CLI (schpet/linear-cli) is the primary tool; the Linear MCP server 
 
 - Tool names: save_issue, get_issue, list_issues, save_project, get_project.
 - The status field of save_issue is `state` (for example `state: "Done"`), not `status` or `stateId`; wrong names silently do nothing.
-- Tools take `team` as the team name (`profile.tracker.team_name`); the CLI takes `--team` with `profile.tracker.team_key`.
+- Tools take `team` as the team name and the CLI takes `--team` with the team key, both resolved as Team resolution states: from the named issue's key, else `profile.tracker.team_name` and `profile.tracker.team_key`.
 - Use `project:` and `assignee:` (not `projectId:` or `assigneeId:`); `labels:` takes names.
   Create with team, title, and description only, then update by id to set project, assignee, labels, state, priority, estimate, and cycle.
 - `cycle:` sets an issue's cycle; use the cycle id or name the tracker accepts, then read the issue back.

@@ -25,7 +25,9 @@ Each step names its inputs, outputs, and stop conditions.
 
 ## Arguments
 
-`STORY_ID` is required: a Linear issue key (for example `ABC-123`, with the team key `profile.tracker.team_key`).
+`STORY_ID` is required: any Linear issue key (for example `ABC-123`).
+Its team prefix is the team for every read and write this skill performs on or for that issue, and it need not equal `profile.tracker.team_key`.
+Any backlog or epic search this skill performs runs in the team of `STORY_ID`.
 If none was given, ask the owner for one before doing anything else; never guess an issue key.
 
 `metrics` is optional, given as `metrics=on` or `metrics=off` or in plain words, and defaults to `off`.
@@ -267,6 +269,8 @@ The lower trigger applies, and the 8-point rule in [references/linear.md](refere
 If the split trigger is met, split the story.
 
 - The original issue stays the core slice.
+- Siblings are created in the team of `STORY_ID`, as Team resolution in [references/linear.md](references/linear.md) states.
+- When the team of `STORY_ID` differs from `profile.tracker.team_key`, confirm `profile.tracker.states.backlog` and each sibling label on that team before creating any sibling, under the differing-team rule in Team resolution in [references/linear.md](references/linear.md).
 - Siblings are created from the `linear-user-story` template.
 - The original issue blocks each sibling.
 - Every acceptance criterion is mapped to a slice in the split comment.
@@ -284,6 +288,7 @@ When `metrics` is on, the metrics summary is the one comment the SM/EM posts out
 
 - The PO ticks a Definition of Ready box only after verifying the condition and records the evidence for every ticked box.
   An unverified box stays unticked.
+- When the team of `STORY_ID` differs from `profile.tracker.team_key`, confirm `profile.tracker.states.ready`, `profile.tracker.states.backlog` and each label name on that team before writing it, under the differing-team rule in Team resolution in [references/linear.md](references/linear.md).
 - Set `profile.tracker.states.ready` only when no blocker remains.
 - Leave blocked siblings in `profile.tracker.states.backlog` with the blocker Definition of Ready box unchecked.
 - Priority comes from the PO's decision.

@@ -14,7 +14,8 @@ compatibility: Requires a runtime that can spawn subagents, plus the linear CLI 
 You own the infrastructure story end to end, but you do not hand-edit the estate yourself.
 You triage it, decide the design and blast radius, plan the slices, hand execution to a platform engineer who works the story through `persona-platform-sre` and `engineering-workflow`, and own the gate and the story record.
 
-This skill takes one argument: a Linear story identifier (for example `ABC-123`, with the team key `profile.tracker.team_key`).
+This skill takes one argument, `STORY_ID`: any Linear issue key (for example `ABC-123`).
+Its team prefix is the team for every read and write this skill performs on or for that issue, and it need not equal `profile.tracker.team_key`.
 If none was given, ask the user for one before doing anything else; never guess a story number.
 
 ## Read first

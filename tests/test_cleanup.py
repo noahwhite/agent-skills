@@ -95,13 +95,17 @@ def test_every_key_is_resolved_against_the_tracker_before_anything_is_touched() 
     for phrase in (
         "before anything is touched",
         "Resolve each key with `linear issue view <story-key> --no-download`, so resolving a key writes no file",
-        "the key's own team prefix is not `profile.tracker.team_key`",
-        "The view's team field carries no key, so the prefix is the check",
+        "A key does not resolve only when that lookup fails",
+        "the tracker lookup alone decides",
+        "a key whose team prefix differs from `profile.tracker.team_key` resolves like any other",
         "Report an unresolved key as `unresolved` and skip it",
         "The other keys still run",
         "Never invent, guess, or shorten a key",
     ):
         assert phrase in body, phrase
+    # SKL-204: a differing team prefix is no longer a reason to treat a key as unresolved.
+    for stale in ("team prefix is not `profile.tracker.team_key`", "so the prefix is the check"):
+        assert stale not in body, stale
 
 
 def test_inventory_prints_before_anything_is_removed_and_finds_artifacts_by_key() -> None:

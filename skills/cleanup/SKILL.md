@@ -48,8 +48,7 @@ Give it one item per named story key, per inventory source, per removal, per tra
 Do this before anything is touched, so a mistyped key removes nothing.
 
 - Resolve each key with `linear issue view <story-key> --no-download`, so resolving a key writes no file.
-  A key does not resolve when that lookup fails, or when the key's own team prefix is not `profile.tracker.team_key`: an issue identifier carries its team key, which is what makes the check applyable without a team field.
-  The view's team field carries no key, so the prefix is the check, never a guess about the returned object.
+  A key does not resolve only when that lookup fails: the tracker lookup alone decides, and a key whose team prefix differs from `profile.tracker.team_key` resolves like any other.
 - Report an unresolved key as `unresolved` and skip it.
   The other keys still run: one bad key never stops the run, and no artifact is attributed to it.
 - Never invent, guess, or shorten a key, and never take one from the current branch, a worktree path, or the session's own history.
