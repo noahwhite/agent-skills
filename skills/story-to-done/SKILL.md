@@ -30,7 +30,7 @@ Five arguments are optional, given as `key=value` or in plain words ("QA on Opus
 
 - An argument left out takes its default.
 - Effort is one of `low`, `medium`, `high`, `xhigh`, or `max`.
-- If a value is ambiguous (an unknown model name, an effort outside that list), ask the user; never guess.
+- If a value is ambiguous (an unknown model, an effort outside that list), ask the user; never guess.
 - Map each model and effort to your runtime with `references/runtimes.md`.
   If the runtime cannot run that exact model or effort level, stop and say so; never substitute another model or level.
 - Each role keeps the same model and effort in every round.
@@ -42,7 +42,7 @@ Five arguments are optional, given as `key=value` or in plain words ("QA on Opus
 ## Read first
 
 - [references/profile.md](references/profile.md) - find the profile and this skill's overlay as soon as the story ID is known.
-- [references/runtimes.md](references/runtimes.md) - maps todo list, subagents, model and effort, scratch directory and asking the user to your runtime; read its nesting rule before step 2.
+- [references/runtimes.md](references/runtimes.md) - maps todo list, subagents, model and effort, scratch directory and asking the user to your runtime.
 
 Read each of these at the step that needs it:
 
@@ -66,9 +66,9 @@ With `metrics` on, launch no command before the start form, not even to read a f
 ## 0. Track everything on a todo list
 
 Once the story ID is known and the profile is read, create a fine-grained todo list per `references/todo-tracking.md`.
-Seed it with at least: resolve the arguments, read the story state, spawn the senior engineer, each check on its checklist until it hands back, read back the deployment-review state, each QA round, each read-back of QA's resulting state, each failed item handed back, each fix round, and the final state read-back.
+Seed it with at least: resolve the arguments, read the story state, spawn the senior engineer, each check on its checklist until it hands back, read back the deployment-review state, each QA round, each read-back of QA's state, each failed item handed back, each fix round, and the final state read-back.
 With `metrics` on, seed two more items: collect the metrics figures; then post the metrics summary on the story and read it back before giving the summary in the closing report.
-Add an item for each new round as it starts; mark each item done once its outcome is observed.
+Add an item for each new round as it starts; mark each done once its outcome is observed.
 Every subagent brief requires a checklist file in that subagent's own subdirectory of the scratch directory; read it from there and mirror it into your list whenever you check on the subagent.
 If your todo tool is unavailable, use the primary-session checklist fallback in `references/todo-tracking.md`; never block.
 
@@ -85,7 +85,7 @@ Do not triage the story yourself; `engineering-workflow` does, including the Def
 
 ## 2. Senior engineer: implement to deployment review
 
-Spawn a clean, neutral subagent (not a fork of yours) on `engineer-model` at `engineer-effort`, and brief it as a senior engineer working this story.
+Spawn a clean, neutral subagent on `engineer-model` at `engineer-effort`, and brief it as a senior engineer working this story.
 It spawns reviewers of its own, and so does the QA agent in step 3, so check the nesting rule in `references/runtimes.md` first.
 Where nesting is restricted, give both delegated agents nesting per that runtime map, or launch their review roles as shell commands (`runtime: command`, `codex` or `opencode`).
 The nesting rule's primary-session option does not fit this skill, since each role finishes its own gates first.
@@ -97,17 +97,17 @@ It must include:
 - An instruction to load and follow `engineering-workflow` for the whole story, from triage, the pre-PR gate and the PR to `profile.git.integration_branch` to the merge per `profile.review.merge_owner`, the deploy, and the move to `profile.tracker.states.in_deployment_review`.
 - What to hand back: the story state, each PR link, the head SHA each PR's review of record covered, the merged commit, and the environment and deployed build it verified; or, if it stops, that it is blocked and why, including when no arbiter can launch; a missing arbitration is never clean or converged.
 - The merge rules: a review of record binds only to the exact head it reviewed, so any change to the head, including an update-branch, needs a delta review posted before merging; every merge must run the merge guard in `references/code-review.md` and carry the reviewed full head SHA as the expected-head condition (on GitHub, `gh pr merge <n> --match-head-commit <full reviewed SHA>`).
-- The engineer never does pre-PR arbitration (`adversarial-review-pipeline` Phase 3, `engineering-workflow` step 4 Verify stage) or rules a finding valid, invalid or accepted risk or the gate converged (applying its scope guard is not arbitration), and fixes QA and adjudicator rulings without overturning them; a separate clean, neutral arbiter on `profile.review.pre_pr.arbiter`, independent of engineer and coordinator, arbitrates every head.
+- The engineer never does pre-PR arbitration (`adversarial-review-pipeline` Phase 3, `engineering-workflow` step 4 Verify stage) or rules a finding valid, invalid or accepted risk or the gate converged (applying the gate's scope guard is not arbitration), and fixes what QA ruled not met or the adjudicator ruled valid without overturning those rulings; a separate clean, neutral arbiter on `profile.review.pre_pr.arbiter`, independent of engineer and coordinator, arbitrates every head.
 - The secrets rule (never write secrets to files or argv) and the attribution rule from `profile.git.ai_attribution`.
 - Its own subdirectory of the scratch directory, `<scratch>/senior-engineer/`, which you create and hand it in place of the scratch directory itself, never another role's files.
 - A "Track your work" paragraph: before starting, write a fine-grained checklist file at the full path you give it in that subdirectory (`<scratch>/senior-engineer/senior-engineer-todo.md`, `- [ ]` and `- [x]` items, one per slice step, test, gate round, review round, remediation, deploy, verification, and wait, the current step marked `(in progress)`) and update it at every step.
 
 This skill assigns merge approval to no manager, so `engineering-workflow`'s own merge rules apply.
 Let the senior engineer do the engineering; do not pre-empt its choices.
-The engineer never does pre-PR arbitration (`adversarial-review-pipeline` Phase 3, `engineering-workflow` step 4 Verify stage) or rules a finding valid, invalid or accepted risk or the gate converged (applying its scope guard is not arbitration), and fixes QA and adjudicator rulings without overturning them; a separate clean, neutral arbiter on `profile.review.pre_pr.arbiter`, independent of engineer and coordinator, arbitrates every head.
+The engineer never does pre-PR arbitration (`adversarial-review-pipeline` Phase 3, `engineering-workflow` step 4 Verify stage) or rules a finding valid, invalid or accepted risk or the gate converged (applying the gate's scope guard is not arbitration), and fixes what QA ruled not met or the adjudicator ruled valid without overturning those rulings; a separate clean, neutral arbiter on `profile.review.pre_pr.arbiter`, independent of engineer and coordinator, arbitrates every head.
 
 When it hands back, read the story yourself and confirm it is in `profile.tracker.states.in_deployment_review`; a handback is a claim, the tracker is the record.
-If it handed back blocked, or the story is not in deployment review, stop and report why.
+If it handed back blocked or the story is not in deployment review, stop and report why.
 Then, for every PR it merged, read the PR yourself with `gh pr view <n> --json headRefOid,mergeCommit` and `gh api --paginate repos/<owner>/<repo>/pulls/<n>/reviews`.
 Select the review of record as the merge guard in `references/code-review.md` does (the `COMMENTED` review whose body begins with `Review of record` and has the greatest `submitted_at`).
 Compare the merged PR's `headRefOid` (its head at merge, not the merge commit) separately with that review's `commit_id` and with the full head SHA on its first line.
