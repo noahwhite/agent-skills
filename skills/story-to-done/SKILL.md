@@ -15,7 +15,8 @@ You run the loop; you do not write the code or run the QA yourself.
 
 ## Arguments
 
-`STORY_ID` is required: a Linear story identifier (for example `ABC-123`, with the team key `profile.tracker.team_key`).
+`STORY_ID` is required: any Linear issue key (for example `ABC-123`).
+Its team prefix is the team for every read and write this skill performs on or for that issue, and it need not equal `profile.tracker.team_key`.
 If none was given, ask the user for one before doing anything else; never guess a story number.
 
 Five arguments are optional, given as `key=value` or in plain words ("QA on Opus 5.5 at max" sets `qa-model` and `qa-effort`):
@@ -75,6 +76,7 @@ If your todo tool is unavailable, use the primary-session checklist fallback in 
 ## 1. Read the story and pick the starting point
 
 Read the story and its state with the `linear` CLI, or the Linear MCP server if it fails.
+When the team of `STORY_ID` differs from `profile.tracker.team_key`, confirm each state name below on that team before comparing against it, under the differing-team rule in Team resolution in [references/linear.md](references/linear.md).
 
 - `profile.tracker.states.in_deployment_review`: implementation already reached deployment review; go to step 3.
 - `profile.tracker.states.done`: report that there is nothing to do and stop.

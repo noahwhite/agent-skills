@@ -1791,7 +1791,10 @@ def skill_section(heading: str) -> str:
 @pytest.mark.parametrize(
     "sentence",
     [
-        "`STORY_ID` is required: a Linear issue key (for example `ABC-123`, with the team key `profile.tracker.team_key`).",
+        "`STORY_ID` is required: any Linear issue key (for example `ABC-123`).",
+        "Its team prefix is the team for every read and write this skill performs on or for that issue, "
+        "and it need not equal `profile.tracker.team_key`.",
+        "Any backlog or epic search this skill performs runs in the team of `STORY_ID`.",
         "If none was given, ask the owner for one before doing anything else; never guess an issue key.",
         "`metrics` is optional, given as `metrics=on` or `metrics=off` or in plain words, and defaults to `off`.",
         "`with metrics` and `metrics on` mean on; `without metrics` and `metrics off` mean off.",
@@ -1803,6 +1806,57 @@ def skill_section(heading: str) -> str:
 )
 def test_arguments_section_defines_the_story_identifier_and_the_metrics_switch(sentence: str) -> None:
     assert sentence in skill_section(ARGUMENTS)
+
+
+# --- SKL-204: the team comes from the invoked issue key, not the profile --------------------------
+
+OLD_TEAM_PARENTHETICAL = "with the team key `profile.tracker.team_key`"
+INVOCATION_KEY_TEAM = (
+    "Its team prefix is the team for every read and write this skill performs on or for that issue, "
+    "and it need not equal `profile.tracker.team_key`."
+)
+STORY_ID_SENTENCES = {
+    "story-refinement": "`STORY_ID` is required: any Linear issue key (for example `ABC-123`).",
+    "story-to-done": "`STORY_ID` is required: any Linear issue key (for example `ABC-123`).",
+    "persona-staff-engineer": "This skill takes one argument, `STORY_ID`: any Linear issue key (for example `ABC-123`).",
+    "persona-staff-devops": "This skill takes one argument, `STORY_ID`: any Linear issue key (for example `ABC-123`).",
+}
+DIFFERING_TEAM_CITE = (
+    "under the differing-team rule in Team resolution in [references/linear.md](references/linear.md)"
+)
+
+
+@pytest.mark.parametrize("name", sorted(STORY_ID_SENTENCES))
+def test_story_id_team_is_the_invoked_key_prefix(name: str) -> None:
+    text = spaced((ROOT / "skills" / name / "SKILL.md").read_text())
+    assert OLD_TEAM_PARENTHETICAL not in text, f"{name} still ties STORY_ID to the profile's team key"
+    assert f"{STORY_ID_SENTENCES[name]} {INVOCATION_KEY_TEAM}" in text, f"{name} lacks the invocation-key sentence"
+
+
+def test_split_siblings_are_created_in_the_team_of_the_story() -> None:
+    body = spaced(section(SKILL.read_text(), "Split rule"))
+    assert (
+        "- Siblings are created in the team of `STORY_ID`, as Team resolution in "
+        "[references/linear.md](references/linear.md) states."
+    ) in body
+
+
+def test_triage_cites_the_differing_team_rule() -> None:
+    body = spaced(section(SKILL.read_text(), "Triage"))
+    assert (
+        "- When the team of `STORY_ID` differs from `profile.tracker.team_key`, confirm "
+        "`profile.tracker.states.ready`, `profile.tracker.states.backlog` and each label name on that team "
+        f"before writing it, {DIFFERING_TEAM_CITE}."
+    ) in body
+
+
+def test_story_to_done_cites_the_differing_team_rule() -> None:
+    text = (ROOT / "skills" / "story-to-done" / "SKILL.md").read_text()
+    body = spaced(section(text, "1. Read the story and pick the starting point"))
+    assert (
+        "When the team of `STORY_ID` differs from `profile.tracker.team_key`, confirm each state name below "
+        f"on that team before comparing against it, {DIFFERING_TEAM_CITE}."
+    ) in body
 
 
 def test_arguments_section_precedes_read_first() -> None:
