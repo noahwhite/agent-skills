@@ -490,10 +490,10 @@ def test_nesting_guidance_stays_runtime_neutral() -> None:
 # SKL-50: the engineer never arbitrates the pre-PR gate; one sentence states the rule in step 2
 # and the brief carries it word for word as its own bullet right after the merge-rules bullet.
 ARBITRATION_RULE = (
-    "The engineer never performs pre-PR arbitration (`adversarial-review-pipeline` Phase 3, "
+    "The engineer never does pre-PR arbitration (`adversarial-review-pipeline` Phase 3, "
     "`engineering-workflow` step 4 Verify stage) or rules a finding valid, invalid or accepted risk or the gate "
-    "converged (applying its scope guard is not arbitration), and fixes what QA or the adjudicator ruled without "
-    "overturning it; a separate clean, neutral arbiter on `profile.review.pre_pr.arbiter`, independent of the "
+    "converged (applying its scope guard is not arbitration), and fixes QA and adjudicator rulings without "
+    "overturning them; a separate clean, neutral arbiter on `profile.review.pre_pr.arbiter`, independent of "
     "engineer and coordinator, arbitrates every head."
 )
 STEP_2 = "2. Senior engineer: implement to deployment review"
@@ -514,9 +514,9 @@ def test_the_arbitration_rule_names_both_stages_and_the_profile_arbiter() -> Non
         "`engineering-workflow` step 4 Verify stage",
         "valid, invalid or accepted risk or the gate converged",
         "applying its scope guard is not arbitration",
-        "without overturning it",
+        "fixes QA and adjudicator rulings without overturning them",
         "a separate clean, neutral arbiter on `profile.review.pre_pr.arbiter`",
-        "independent of the engineer and coordinator",
+        "independent of engineer and coordinator",
         "arbitrates every head",
     ):
         assert phrase in ARBITRATION_RULE, phrase
@@ -536,6 +536,13 @@ def test_no_launchable_arbiter_hands_back_blocked() -> None:
 def test_an_adjudicator_ruling_dispute_goes_to_the_user() -> None:
     body = section(SKILL.read_text(), "4. Act on the QA outcome")
     assert "If the senior engineer disputes a failed verdict or an adjudicator's ruling" in body
+    assert "Stop and put the item, its evidence, and the engineer's evidence to the user" in body
+
+
+def test_the_engineer_brief_stays_neutral_and_names_the_gate_and_branch() -> None:
+    body = section(SKILL.read_text(), STEP_2)
+    assert "The brief carries facts and constraints, never your expectations about the outcome." in body.splitlines()
+    assert "the pre-PR gate and the PR to `profile.git.integration_branch`" in body
 
 
 # SKL-48: the `metrics` switch, its off path, and its wiring.
