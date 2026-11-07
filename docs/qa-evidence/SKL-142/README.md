@@ -3,11 +3,11 @@
 ## Round 2
 
 Date: 2026-11-07 UTC, independent QA round 2.
-Acceptance basis: the product owner (noahwhite) ruled that the acceptance criteria and Definition of Done stand exactly as written and no AC is amended, so every item is judged against its text.
+Acceptance basis: the product owner ruled that the acceptance criteria and Definition of Done stand exactly as written and no AC is amended, so every item is judged against its text.
 Build under test: `main` at `a73ef64c527beba8ffb8fb9f59c6e4e123dbb787`, whose SKL-142 code is the PR 144 squash merge `f9ba006e4f5392d57e81be3b2ea38a1d547dd61f` (reviewed head `b37f71325bdfa475e355378c64e3cec91e15b9bd`), unchanged since.
 Environment: the profile lists no environments, so verification ran against the merged code on `main`.
 Fixtures for C2: generated ed25519 test keys and a probe-owned ssh-agent, with a temporary `HOME` and `GIT_CONFIG_GLOBAL`.
-Fixtures for C6: the real agent holding the registered key `SHA256:Kj2Cb8r6b1YQ5hksGDH0FeiivWj1DZ8puXI8+IlN9l0` and the unregistered key `SHA256:Mr7r0feKeSqWjnxw0JQa1kywdtfK+hhp8sBn3nfX6XM`, in a throwaway clone at the PR head.
+Fixtures for C6: the real agent holding the registered key `SHA256:Kj2Cb8r6b1YQ5hksGDH0FeiivWj1DZ8puXI8+IlN9l0` and the unregistered key `SHA256:Mr7r0feKeSqWjnxw0JQa1kywdtfK+hhp8sBn3nfX6XM`, in a throwaway clone at PR 144's head `b37f71325bdfa475e355378c64e3cec91e15b9bd`.
 There is no visual surface, so the evidence is structured assertions and raw output; no screenshot applies.
 The raw probe output is attached to SKL-142 as the "QA r2" attachments.
 
@@ -17,7 +17,7 @@ The raw probe output is attached to SKL-142 as the "QA r2" attachments.
 | C2: preflight | Not met | Vendoring, the `bash` invocation and 27 of 30 hermetic cases behave as specified. A `gpg.ssh.defaultKeyCommand` first line beginning `ssh-` (for example `ssh-add -L`) exits 0 for a matching loaded key, where AC (3) requires the line to begin with `key::` and malformed command output to exit non-zero. A bare `ssh-` `user.signingkey` literal exits 0, which is none of the three forms AC (2) lists. |
 | C3: skills use it | Verified | The Commits and signing section of `shared/github.md` states the rule once with the stop and no-override sentences, all 13 `references/github.md` copies match it, and no `SKILL.md` or other `shared/` file mentions the script. |
 | C4: docs | Verified | The README "Commit signing key" section gives the meaning, the relation to `git.signed_commits`, the unset behaviour and the preflight command, and `profile/example.yaml` shows `signing_key` under `signed_commits`. |
-| C5: tests | Verified | `uv run --locked pytest -q` reports 1216 passed, `vendor_shared.py --check` exits 0, CI run 42309941844 succeeded on the PR head, and the PR body records the mutations. |
+| C5: tests | Verified | `uv run --locked pytest -q` reports 1216 passed, `vendor_shared.py --check` exits 0, CI run 42309941844 succeeded on PR 144's head `b37f713`, and the PR 144 body records the mutations. |
 | C6: verified end to end | Verified | With the unregistered key selected the preflight exits 1 on both paths and no commit is made. With the registered key it exits 0 on both paths, and fixture commits `6c0564d4b6b54693ede46273cd838ae8e8a57df2` and `555213312c2dac97c5dc8e36af61a25b776878af` report `verified=true reason=valid`. All fixture branches were deleted and return 404. |
 | DoD1: all acceptance criteria met | Not met | C2 is not met. |
 | DoD2: tests written and passing | Verified | See C5. |
