@@ -366,11 +366,15 @@ def test_an_unknown_tilde_user_is_unresolved_as_it_is_for_git(rig):
     agree_with_git(rig, None, rig.fp_b)
 
 
+@pytest.mark.parametrize("via", ["literal", "command"])
 @pytest.mark.parametrize("kind", ["ed25519", "rsa", "ecdsa"])
-def test_a_key_literal_and_command_output_of_each_key_type_pass(rig, kind):
+def test_a_key_literal_and_command_output_of_each_key_type_pass(rig, kind, via):
     path, fp = make_key(rig, "typed", kind)
     load_into_agent(rig, path)
-    rig.config("user.signingkey", "key::" + path.with_suffix(".pub").read_text().strip())
+    if via == "literal":
+        rig.config("user.signingkey", "key::" + path.with_suffix(".pub").read_text().strip())
+    else:
+        rig.config("gpg.ssh.defaultKeyCommand", rig.key_command(path))
     assert_ok(rig.check(fp))
     agree_with_git(rig, fp, rig.fp_b)
 
@@ -671,7 +675,8 @@ def test_a_setup_failure_prints_exactly_one_line(rig):
     assert str(rig.root) not in res.stderr
 
 
-def test_a_failure_to_remove_the_temporary_directory_is_not_reported_as_success(rig):
+@pytest.mark.parametrize("registered", ["match", "mismatch"])
+def test_a_failure_to_remove_the_temporary_directory_is_reported_once_never_as_success(rig, registered):
     rig.add(rig.a)
     rig.config("user.signingkey", "key::" + rig.pub(rig.a))
     shim = rig.root / "shim"
@@ -681,7 +686,7 @@ def test_a_failure_to_remove_the_temporary_directory_is_not_reported_as_success(
     rm.chmod(0o755)
     tmp = Path(tempfile.mkdtemp(dir=rig.root))
     res = run(
-        ["bash", str(SOURCE), rig.fp_a],
+        ["bash", str(SOURCE), rig.fp_a if registered == "match" else rig.fp_b],
         env={**rig.env, "PATH": f"{shim}:{rig.env['PATH']}", "TMPDIR": str(tmp)},
         cwd=rig.repo,
     )

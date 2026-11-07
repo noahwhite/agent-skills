@@ -33,29 +33,32 @@ pattern='^SHA256:[A-Za-z0-9+/]{43}$'
 expected="${1-}"
 resolved=unresolved
 work=
-signer_pid=
-reported=
+reason=
 
+# The only place a line is printed: after the signer is stopped and the temporary directory is
+# removed, so a failed removal is never reported as success and no run prints two lines.
 cleanup() {
-  if [ -n "$signer_pid" ]; then
-    kill -- "-$signer_pid" 2>/dev/null
-    wait "$signer_pid" 2>/dev/null
-    signer_pid=
+  status=$?
+  trap - EXIT
+  local pid
+  for pid in $(jobs -p); do
+    kill -- "-$pid" 2>/dev/null
+    wait "$pid" 2>/dev/null
+  done
+  if [ -n "$work" ] && ! rm -rf "$work" 2>/dev/null; then
+    reason="cannot remove the temporary directory"
+    status=1
   fi
-  if [ -n "$work" ] && ! rm -rf "$work" 2>/dev/null && [ -z "$reported" ]; then
-    reported=1
-    printf 'check-signing-key: expected %s, resolved %s: %s\n' "$expected" "$resolved" "cannot remove the temporary directory" >&2
-    exit 1
+  if [ "$status" -ne 0 ]; then
+    printf 'check-signing-key: expected %s, resolved %s: %s\n' "$expected" "$resolved" "${reason:-failed}" >&2
   fi
+  exit "$status"
 }
 trap cleanup EXIT
-trap 'fail "interrupted"' HUP INT TERM
+trap 'reason=interrupted; exit 1' HUP INT TERM
 
 fail() {
-  if [ -z "$reported" ]; then
-    reported=1
-    printf 'check-signing-key: expected %s, resolved %s: %s\n' "$expected" "$resolved" "$1" >&2
-  fi
+  reason=$1
   exit 1
 }
 
@@ -87,12 +90,9 @@ tree=$(git hash-object -t tree -w --stdin </dev/null 2>/dev/null) || fail "canno
 # kills the signer (and anything it started) before the temporary directory is removed.
 set -m
 git commit-tree -S -m preflight "$tree" >"$work/oid" 2>/dev/null </dev/null &
-signer_pid=$!
-if ! wait "$signer_pid"; then
-  signer_pid=
+if ! wait "$!"; then
   fail "git cannot sign with the configured key (unresolvable, or not loaded in the ssh agent)"
 fi
-signer_pid=
 set +m
 read -r commit <"$work/oid" || fail "cannot read the throwaway commit"
 git cat-file commit "$commit" >"$work/commit" 2>/dev/null || fail "cannot read the throwaway commit"
