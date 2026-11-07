@@ -9,6 +9,8 @@
 #   2. When user.signingkey is set it is a key:: literal, a public-key file or a private-key
 #      file; a value that cannot be resolved fails, with no fallback to another source. A bare
 #      ssh- literal, which git also accepts, is none of those forms and fails.
+#      A private-key file is read without its passphrase (the public part is stored in the clear),
+#      and a relative path is relative to the top of the work tree, where git commit runs.
 #   3. When user.signingkey is unset, the first output line of gpg.ssh.defaultKeyCommand must
 #      begin with key::; any other line, including the bare ssh- line `ssh-add -L` prints, is
 #      malformed output. The command is split into arguments and run without a shell, as git
@@ -76,10 +78,18 @@ split_cmdline() {
   words+=("$word")
 }
 
-# Print the SHA256 fingerprint of the public key on stdin; fail when it is not one.
+# Print the SHA256 fingerprint of the first key ssh-keygen reads from the file or stdin (a public
+# key, or a private key whose public part it can read without a passphrase, as git's signer does);
+# fail when it is not one.
 fingerprint() {
   local out
-  out=$(ssh-keygen -E sha256 -lf /dev/stdin 2>/dev/null) || return 1
+  if [ "$#" -gt 0 ]; then
+    # -P '' keeps ssh-keygen from prompting for a passphrase it does not need to read the public part.
+    out=$(ssh-keygen -E sha256 -P '' -lf "$1" 2>/dev/null </dev/null) || return 1
+  else
+    out=$(ssh-keygen -E sha256 -lf /dev/stdin 2>/dev/null) || return 1
+  fi
+  out=${out%%$'\n'*}
   out=${out#* }
   out=${out%% *}
   [[ $out =~ $pattern ]] || return 1
@@ -97,14 +107,17 @@ if signing_key=$(git config --get user.signingkey 2>/dev/null); then
     *)
       path=$signing_key
       case $path in "~/"*) path=${HOME:+$HOME/${path#"~/"}} ;; esac
+      # git commit runs from the top of the work tree, so a relative path is relative to it.
+      case $path in
+        /*) ;;
+        *) top=$(git rev-parse --show-toplevel 2>/dev/null) && [ -n "$top" ] && path=$top/$path ;;
+      esac
       if [ -z "$path" ] || [ ! -f "$path" ] || [ ! -r "$path" ]; then
         resolved=
-      elif IFS= read -r first <"$path" && [[ $first == *"PRIVATE KEY"* ]]; then
-        public=0
-        derived=$(ssh-keygen -y -P '' -f "$path" 2>/dev/null </dev/null) || derived=
-        resolved=$(printf '%s\n' "$derived" | fingerprint)
       else
-        resolved=$(head -n 1 "$path" | fingerprint)
+        # A private-key file resolves without the agent; any other file is a public-key file.
+        grep -q -e '^-----BEGIN .*PRIVATE KEY-----' "$path" && public=0
+        resolved=$(fingerprint "$path") || resolved=
       fi
       ;;
   esac

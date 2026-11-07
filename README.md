@@ -106,6 +106,7 @@ bash <skill dir>/scripts/check-signing-key.sh <git.signing_key>
 
 It resolves the key git would sign with (`gpg.format` must be `ssh`; then `user.signingkey`, or when that is unset the first output line of `gpg.ssh.defaultKeyCommand`, which must begin with `key::` and is run without a shell, as git runs it), compares its fingerprint with the argument, and for a public-key resolution also requires the key to be loaded in the ssh agent.
 A `user.signingkey` must be a `key::` literal, a public-key file or a private-key file; a bare `ssh-` literal fails.
+A private-key file is read without its passphrase and needs no agent; a relative path is relative to the top of the work tree, as for `git commit`; the first key of a public-key file counts, as for git.
 It prints nothing and exits 0 on a match; otherwise it exits non-zero with one line on stderr, and the skill stops instead of committing.
 The script is vendored into every skill that receives `references/github.md`, as a copy with a generated header above the shebang, so it is run through `bash` and never as an executable.
 A `gpg.ssh.program` wrapper that signs with another key than git selected is not detected.
