@@ -75,9 +75,9 @@ MCP_TEAM = (
     "`profile.tracker.team_key`."
 )
 BACKLOG_SEARCH = (
-    "Search the team backlog and existing epics before creating (`linear issue query --search <term> --team <KEY>`, "
-    "with `<KEY>` the team key from Team resolution, or the Linear MCP server's list_issues tool with a filter); "
-    "the issue may already exist."
+    "Search the team backlog and existing epics before creating (`linear issue query --search <term> --team <KEY>` "
+    "for issues and `linear project list --team <KEY>` for epics, with `<KEY>` the team key from Team resolution, "
+    "or the Linear MCP server's list_issues and list_projects tools with a filter); the issue may already exist."
 )
 OLD_BACKLOG_SEARCH = "`linear issue list` with a query"
 OLD_MCP_TEAM = "the CLI takes `--team` with `profile.tracker.team_key`."

@@ -109,7 +109,7 @@ The `linear` CLI (schpet/linear-cli) is the primary tool; the Linear MCP server 
 
 - ⛔ Load the matching filing skill and follow it; never copy structure from sibling issues:
   `linear-user-story`, `linear-bug`, `linear-spike`, `linear-investigation`, `linear-epic`.
-- Search the team backlog and existing epics before creating (`linear issue query --search <term> --team <KEY>`, with `<KEY>` the team key from Team resolution, or the Linear MCP server's list_issues tool with a filter); the issue may already exist.
+- Search the team backlog and existing epics before creating (`linear issue query --search <term> --team <KEY>` for issues and `linear project list --team <KEY>` for epics, with `<KEY>` the team key from Team resolution, or the Linear MCP server's list_issues and list_projects tools with a filter); the issue may already exist.
 - Filing or searching on behalf of a named issue (a split sibling of it, a backlog or epic search for it) uses that issue's team (Team resolution); the profile's team applies only when no issue is named.
 - Assign every new issue to `profile.tracker.assignee`.
   Filter by `profile.tracker.assignee_email`, never by display name, since two accounts can share one.

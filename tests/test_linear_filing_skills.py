@@ -32,7 +32,7 @@ EPIC_ONE_TEAM = "- **One team:** an epic belongs to exactly one team, the `ABC` 
 # team, unless it is negated or states the one-team rule.
 MULTI_TEAM_WORDS = re.compile(
     r"\bspan|cross[- ]team|multi[- ]team|multiple teams|several teams|more than one team|\bother teams?\b"
-    r"|another team|across teams|setTeams",
+    r"|another team|across teams|two teams|both teams|setTeams",
     re.IGNORECASE,
 )
 ONE_TEAM_WORDS = re.compile(r"\bnever\b|\bnot\b|n't\b|\bno\b|\bexactly one team\b", re.IGNORECASE)
@@ -104,6 +104,7 @@ def test_no_skill_or_shared_file_implies_a_cross_team_epic() -> None:
         ("Attach the project to another team too.", True),
         ("Cross-team epics are sized XL.", True),
         ("Attach the epic's teams through setTeams.", True),
+        ("An epic can belong to two teams.", True),
         ("An epic does not span teams.", False),
         ("An epic belongs to exactly one team, the `ABC` team, and never spans teams.", False),
         ("Cross-team collaboration can help diagnose the bug.", False),
