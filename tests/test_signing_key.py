@@ -664,7 +664,8 @@ def test_an_interrupted_run_stops_the_signer_removes_its_temporary_directory_and
 
 
 @pytest.mark.parametrize("sig", [signal.SIGTERM, signal.SIGHUP, signal.SIGINT], ids=["term", "hup", "int"])
-def test_a_signal_during_cleanup_still_prints_one_line_and_exits_nonzero(rig, sig):
+@pytest.mark.parametrize("target", ["shell", "group"])
+def test_a_signal_during_cleanup_cannot_skip_the_removal_or_the_single_line(rig, sig, target):
     rig.add(rig.a)
     rig.config("user.signingkey", "key::" + rig.pub(rig.a))
     shim, marker = rig.root / "shim", rig.root / "rm-started"
@@ -680,6 +681,7 @@ def test_a_signal_during_cleanup_still_prints_one_line_and_exits_nonzero(rig, si
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
+        start_new_session=True,
     )
     try:
         for _ in range(200):
@@ -687,13 +689,16 @@ def test_a_signal_during_cleanup_still_prints_one_line_and_exits_nonzero(rig, si
                 break
             time.sleep(0.02)
         assert marker.exists(), "cleanup never started"
-        proc.send_signal(sig)
+        if target == "group":
+            os.killpg(proc.pid, sig)
+        else:
+            proc.send_signal(sig)
         out, err = proc.communicate(timeout=10)
     finally:
         if proc.poll() is None:
-            proc.kill()
-    assert proc.returncode == 1 and out == ""
-    assert err.count("\n") == 1 and "interrupted" in err, err
+            os.killpg(proc.pid, signal.SIGKILL)
+    # The run had already succeeded when the signal arrived: cleanup finishes, silently, exit 0.
+    assert (proc.returncode, out, err) == (0, "", "")
     assert list(tmp.iterdir()) == []
 
 

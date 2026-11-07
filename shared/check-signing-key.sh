@@ -40,8 +40,9 @@ reason=
 cleanup() {
   status=$?
   trap - EXIT
-  # A signal during cleanup must not skip the line below: note it and finish.
-  trap 'reason=interrupted' HUP INT TERM
+  # Cleanup is not interruptible (children, such as rm, inherit the ignore): a signal that
+  # arrives now cannot skip the removal or the single line below.
+  trap '' HUP INT TERM
   local pid
   for pid in $(jobs -p); do
     kill -- "-$pid" 2>/dev/null
@@ -51,7 +52,6 @@ cleanup() {
     reason="cannot remove the temporary directory"
     status=1
   fi
-  [ "$reason" = interrupted ] && status=1
   if [ "$status" -ne 0 ]; then
     printf 'check-signing-key: expected %s, resolved %s: %s\n' "$expected" "$resolved" "${reason:-failed}" >&2
   fi
