@@ -897,7 +897,7 @@ OFF_PATH = (
 
 # Every line of the skill that touches metrics, the closing report, or a tracker write, pinned exactly: adding, extending, or rewording
 # metrics content anywhere (Arguments and Metrics included) fails until it is pinned here.
-METRICS_WORDS = re.compile(r"metric|figure|token|tool.call|wall-clock|duration|usage|summar|total|cost|switch|\btim(?:e|ing|er|estamp)\w*|elapsed|clock|latency|closing report|tracker write|\bbackground\b", re.IGNORECASE)
+METRICS_WORDS = re.compile(r"metric|\bfigures?\b|token|tool.call|wall-clock|duration|usage|summar|total|cost|switch|\btim(?:e|ing|er|estamp)\w*|elapsed|clock|latency|closing report|tracker write|\bbackground\b", re.IGNORECASE)
 METRICS_POINTER = (
     "The run rules for a `metrics=on` run - where the figures live, timed launches, extras, the start form, the "
     "command wrapper, the end form, the summary post, and the closing report - are in "
@@ -1132,7 +1132,7 @@ def test_the_metrics_file_is_never_named_in_a_brief() -> None:
 # A brief leak can be phrased without the word `metrics`, so the two brief sections are scanned for the
 # vocabulary a cost figure or a comparison with another launch would use.
 BRIEF_LEAK = re.compile(
-    r"metric|figure|token|tool.call|wall-clock|duration|elapsed|usage|summar|total|cost|switch"
+    r"metric|\bfigures?\b|token|tool.call|wall-clock|duration|elapsed|usage|summar|total|cost|switch"
     r"|\btim(?:e|ing|er|estamp)\w*|\bhow long\b|\btook\b|\bprevious\b"
     r"|\bclock\b|latency|closing report|tracker write",
     re.IGNORECASE,
