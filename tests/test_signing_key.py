@@ -848,7 +848,7 @@ def commits_and_signing() -> list[str]:
 RULE_SENTENCES = (
     "- When `profile.git.signing_key` is set, it is the OpenSSH SHA256 fingerprint of the key registered for signing.",
     "Before the first commit of a task, and again after any change to git config, run `bash <skill dir>/scripts/check-signing-key.sh <profile.git.signing_key>` from inside the target repository.",
-    "On a non-zero exit, stop and fix the configuration.",
+    "A non-zero exit is a configuration fault, handled as the Always list below says.",
     "Never commit with a per-commit key override, and never fall back to another key.",
     "- When `profile.git.signing_key` is unset, confirm `user.signingkey` resolves to that key before committing.",
     "- Check the result after push: `gh api repos/<owner>/<repo>/commits/<sha> --jq '.commit.verification'`.",
