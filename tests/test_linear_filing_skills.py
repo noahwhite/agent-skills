@@ -1,5 +1,6 @@
 """Contract checks for the team rows of the linear-* filing skills and the epic's one-team rule (SKL-204)."""
 
+import re
 from pathlib import Path
 
 import pytest
@@ -26,11 +27,33 @@ EPIC_SEARCH = (
     "team when a caller supplies one, else `profile.tracker.team_key`); the epic may already exist under a sibling name."
 )
 EPIC_ONE_TEAM = "- **One team:** an epic belongs to exactly one team, the `ABC` team, and never spans teams."
-CROSS_TEAM_PHRASES = ("cross-team", "spans teams", "span teams", "multiple teams", "across teams")
+
+# A sentence about an epic (or project) and teams that uses one of these words puts an epic in more than one
+# team, unless it is negated or states the one-team rule.
+MULTI_TEAM_WORDS = re.compile(
+    r"\bspan|cross[- ]team|multi[- ]team|multiple teams|several teams|more than one team|\bother teams?\b"
+    r"|another team|across teams|setTeams",
+    re.IGNORECASE,
+)
+ONE_TEAM_WORDS = re.compile(r"\bnever\b|\bnot\b|n't\b|\bno\b|\bexactly one team\b", re.IGNORECASE)
+EPIC_WORDS = re.compile(r"\bepics?\b|\bprojects?\b", re.IGNORECASE)
+TEAM_WORDS = re.compile(r"\bteams?\b|setTeams", re.IGNORECASE)
+SENTENCE = re.compile(r"[^.\n]+")
 
 
 def skill_text(name: str) -> str:
     return (ROOT / "skills" / name / "SKILL.md").read_text()
+
+
+def epic_multi_team_sentences(text: str) -> list[str]:
+    return [
+        sentence.strip()
+        for sentence in SENTENCE.findall(text)
+        if EPIC_WORDS.search(sentence)
+        and TEAM_WORDS.search(sentence)
+        and MULTI_TEAM_WORDS.search(sentence)
+        and not ONE_TEAM_WORDS.search(sentence)
+    ]
 
 
 @pytest.mark.parametrize("name", FILING_SKILLS)
@@ -40,6 +63,8 @@ def test_team_rows_take_a_named_issue_team_and_otherwise_keep_the_profile(name: 
     assert TEAM_NAME_ROW in lines, f"{name} lacks the named-issue team name row"
     assert "| `ABC` (team key, for the CLI) | `profile.tracker.team_key` |" not in lines
     assert "| team name (for the MCP server) | `profile.tracker.team_name` |" not in lines
+    assert "| Placeholder | Value |" in lines, f"{name} table header still reads as profile keys only"
+    assert "| Placeholder | Profile key |" not in lines
 
 
 @pytest.mark.parametrize("name", FILING_SKILLS)
@@ -62,12 +87,27 @@ def test_epic_search_is_scoped_to_one_team() -> None:
 def test_epic_belongs_to_exactly_one_team() -> None:
     text = EPIC.read_text()
     assert EPIC_ONE_TEAM in text.splitlines()
-    assert "setTeams" not in text, "the MCP step still offers replacing the team set"
+    assert "| **Extra Large (XL)** | Cross-team" not in text, "the XL size row still describes a cross-team epic"
 
 
 def test_no_skill_or_shared_file_implies_a_cross_team_epic() -> None:
-    paths = [ROOT / "shared" / "linear.md", *sorted((ROOT / "skills").glob("*/SKILL.md"))]
+    paths = [*sorted((ROOT / "shared").glob("*.md")), *sorted((ROOT / "skills").rglob("*.md"))]
     for path in paths:
-        text = path.read_text().lower().replace("never spans teams", "")
-        for phrase in CROSS_TEAM_PHRASES:
-            assert phrase not in text, f"{path.relative_to(ROOT)} implies a cross-team epic: {phrase!r}"
+        hits = epic_multi_team_sentences(path.read_text())
+        assert not hits, f"{path.relative_to(ROOT)} implies an epic in more than one team: {hits}"
+
+
+@pytest.mark.parametrize(
+    ("sentence", "flagged"),
+    [
+        ("An epic can span other teams.", True),
+        ("Attach the project to another team too.", True),
+        ("Cross-team epics are sized XL.", True),
+        ("Attach the epic's teams through setTeams.", True),
+        ("An epic does not span teams.", False),
+        ("An epic belongs to exactly one team, the `ABC` team, and never spans teams.", False),
+        ("Cross-team collaboration can help diagnose the bug.", False),
+    ],
+)
+def test_the_multi_team_scan_flags_only_multi_team_epics(sentence: str, flagged: bool) -> None:
+    assert bool(epic_multi_team_sentences(sentence)) is flagged

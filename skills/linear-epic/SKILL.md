@@ -23,7 +23,7 @@ Stories are then filed into the epic with the other `linear-*` skills through th
 
 ## Profile values
 
-| Placeholder | Profile key |
+| Placeholder | Value |
 |---|---|
 | `ABC` (team key, for the CLI) | the prefix of the named issue's key when a caller supplies one (Team resolution in [references/linear.md](references/linear.md)), else `profile.tracker.team_key` |
 | team name (for the MCP server) | the name of that issue's team, resolved from its key, when a caller supplies a named issue, else `profile.tracker.team_name` |

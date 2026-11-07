@@ -74,6 +74,12 @@ MCP_TEAM = (
     "Team resolution states: from the named issue's key, else `profile.tracker.team_name` and "
     "`profile.tracker.team_key`."
 )
+BACKLOG_SEARCH = (
+    "Search the team backlog and existing epics before creating (`linear issue query --search <term> --team <KEY>`, "
+    "with `<KEY>` the team key from Team resolution, or the Linear MCP server's list_issues tool with a filter); "
+    "the issue may already exist."
+)
+OLD_BACKLOG_SEARCH = "`linear issue list` with a query"
 OLD_MCP_TEAM = "the CLI takes `--team` with `profile.tracker.team_key`."
 OLD_INTRO_TEAM = "The team is `profile.tracker.team_key`;"
 
@@ -88,7 +94,10 @@ def test_named_issue_key_decides_the_team(path: Path) -> None:
     resolution = spaced(section(text, "Team resolution"))
     for sentence in (NAMED_ISSUE_TEAM, FAILED_RESOLUTION, PROFILE_FALLBACK, DIFFERING_TEAM, DIFFERING_TEAM_STOP):
         assert sentence in resolution, sentence
-    assert FILING_ON_BEHALF in spaced(section(text, "Filing issues"))
+    filing = spaced(section(text, "Filing issues"))
+    assert FILING_ON_BEHALF in filing
+    assert BACKLOG_SEARCH in filing, "the backlog search does not name a command that searches a team"
+    assert OLD_BACKLOG_SEARCH not in flat, "`linear issue list` has no query option"
     assert MCP_TEAM in spaced(section(text, "Linear MCP fallback"))
 
 
