@@ -88,7 +88,7 @@ fingerprint() {
     # -P '' keeps ssh-keygen from prompting for a passphrase it does not need to read the public part.
     out=$(ssh-keygen -E sha256 -P '' -lf "$1" 2>/dev/null </dev/null) || return 1
   else
-    out=$(ssh-keygen -E sha256 -lf /dev/stdin 2>/dev/null) || return 1
+    out=$(ssh-keygen -E sha256 -P '' -lf /dev/stdin 2>/dev/null) || return 1
   fi
   out=${out%%$'\n'*}
   out=${out#* }
@@ -110,17 +110,12 @@ is_private_key() {
   fi
 }
 
-# Fingerprint of a private-key file read from a copy with no sibling .pub, removed on any exit.
-own_fingerprint() (
-  tmp=$(mktemp -d 2>/dev/null) || exit 1
-  trap 'rm -rf -- "$tmp"' EXIT
-  trap 'exit 1' HUP INT TERM
-  cp -- "$1" "$tmp/key" 2>/dev/null || exit 1
-  fingerprint "$tmp/key"
-)
+# Fingerprint of a private-key file read through stdin, where ssh-keygen finds no sibling .pub and
+# the secret is never copied.
+own_fingerprint() { fingerprint < "$1"; }
 
 # Fingerprint of the key git signs with for a private-key file. ssh-keygen -l prefers the sibling
-# <file>.pub over the private file, so read the private file on its own and compare it with the
+# <file>.pub over the private file, so read the private file through stdin and compare it with the
 # sibling, as git does: a mismatch is refused. A legacy PEM file holds no public half and needs its
 # .pub; an OpenSSH file that cannot be read on its own is not signable. An encrypted PEM file cannot
 # be read without its passphrase, so its .pub is trusted as the identity.
@@ -155,7 +150,7 @@ if signing_key=$(git config --get user.signingkey 2>/dev/null); then
       # git commit runs from the top of the work tree, so a relative path is relative to it.
       case $path in
         /*) ;;
-        *) top=$(git rev-parse --show-toplevel 2>/dev/null) && [ -n "$top" ] && path=$top/$path ;;
+        *) top=$(git rev-parse --show-toplevel 2>/dev/null && echo x) && top=${top%x} && top=${top%$'\n'} && [ -n "$top" ] && path=$top/$path ;;
       esac
       if [ -z "$path" ] || [ ! -f "$path" ] || [ ! -r "$path" ]; then
         resolved=

@@ -669,7 +669,10 @@ PRIVATE_FORMS = [
 @pytest.mark.parametrize("kind,passphrase,fmt", PRIVATE_FORMS)
 @pytest.mark.parametrize("loaded", [True, False], ids=["agent-loaded", "agent-empty"])
 def test_a_private_key_file_resolves_to_the_key_git_signs_with(rig, kind, passphrase, fmt, loaded):
-    """A private-key file of any type, format or passphrase state needs no passphrase and no agent."""
+    """A private-key file of any type, format or passphrase state resolves with no passphrase and no agent.
+
+    Git itself signs with a passphrase-protected file only when the agent holds it, so only then is git compared.
+    """
     path, fp = make_key(rig, "priv", kind, passphrase, fmt)
     rig.config("user.signingkey", str(path))
     if loaded:
