@@ -210,10 +210,11 @@ def test_a_matching_key_literal_passes(rig):
     assert_ok(rig.check(rig.fp_a))
 
 
-def test_a_matching_ssh_literal_passes(rig):
+def test_a_bare_ssh_literal_is_not_an_accepted_signing_key_form(rig):
+    # git accepts it, but the contract lists only a key:: literal, a public-key file or a private-key file.
     rig.add(rig.a)
     rig.config("user.signingkey", rig.pub(rig.a))
-    assert_ok(rig.check(rig.fp_a))
+    assert_fails(rig.check(rig.fp_a), rig.fp_a, "unresolved", "user.signingkey")
 
 
 def test_a_matching_public_key_file_passes(rig):
@@ -246,10 +247,11 @@ def test_the_default_key_command_runs_without_a_shell_like_git(rig):
     assert_fails(rig.check(rig.fp_a), rig.fp_a, "unresolved", "defaultKeyCommand")
 
 
-def test_a_default_key_command_that_prints_an_ssh_key_passes_like_ssh_add_l(rig):
+def test_a_default_key_command_that_prints_a_bare_ssh_key_is_malformed_output(rig):
+    # `ssh-add -L` prints this form; the contract requires the first line to begin with key::.
     rig.add(rig.a)
     rig.config("gpg.ssh.defaultKeyCommand", "ssh-add -L")
-    assert_ok(rig.check(rig.fp_a))
+    assert_fails(rig.check(rig.fp_a), rig.fp_a, "unresolved", "defaultKeyCommand")
 
 
 def test_a_quoted_default_key_command_argument_is_one_argument(rig):
