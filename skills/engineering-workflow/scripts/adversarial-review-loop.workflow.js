@@ -64,6 +64,7 @@ const specBlock = spec
   ? `\n\nSPEC / ACCEPTANCE CRITERIA (the reference for scope: anything outside this is out of scope, not a defect):\n${spec}\n`
   : '\n\n(No spec was provided; judge scope conservatively and prefer the smallest change.)\n'
 const SECRETS = 'Never write secrets to files or command arguments.'
+const GIT_RULE = 'Run every commit-creating git command with the git identity already configured and, when `profile.git.signed_commits` is true, the signing already configured; never pass `-c user.name`, `-c user.email`, `--author`, `GIT_AUTHOR_*` or `GIT_COMMITTER_*`, never write `user.name` or `user.email` with `git config`, and when signing is on never pass `-c user.signingkey`, `-c gpg.*` or `-c commit.gpgsign`; a missing identity, a failed signing check or a pushed commit whose `.commit.verification.verified` is false is a configuration fault, so stop, do not override per command or write git config, make no further commits, and report it to the user.'
 
 const IMPORTANT = new Set(['critical', 'high'])
 
@@ -173,7 +174,7 @@ Rules:
 - SCOPE CAP: do NOT add new modules, classes, database tables/migrations, persistence, or abstractions. If a finding genuinely requires that, put it in "escalated" with why (it needs a human design decision), and leave the code as is.
 - Do not touch code this diff only consumes (another component's endpoint, a shared library, another story's surface).
 - Prefer the smallest change; where a finding is about weak coverage, add a focused test.
-Then run the repository's focused tests for the changed area and set tests_passed. If you changed anything, commit on the current branch following the repository's commit-signing and attribution rules, with message "fix: address verified review findings (round ${round})"; set committed=true only if a commit actually happened. Never push and never force-push. ${SECRETS}
+Then run the repository's focused tests for the changed area and set tests_passed. If you changed anything, commit on the current branch following the repository's commit-signing and attribution rules, with message "fix: address verified review findings (round ${round})"; set committed=true only if a commit actually happened. Never push and never force-push. ${GIT_RULE} ${SECRETS}
 Return {summary, fixed, rejected, escalated, tests_passed, committed}.`
 }
 

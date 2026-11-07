@@ -123,6 +123,7 @@ Exits: converged (nothing blocking after review, or nothing survived a complete 
 
 [scripts/adversarial-review-loop.workflow.js](scripts/adversarial-review-loop.workflow.js) is an **optional, runtime-specific accelerator** for runtimes that execute workflow scripts; its header lists its arguments, all taken from the profile.
 Everywhere else, drive the rounds by hand as above: spawn the two reviewers in parallel, then a clean, neutral verifier subagent, then fix (or spawn the fixer) and repeat only while new verified blocking findings appear.
+Brief the fixer with the git rule: run every commit-creating git command with the git identity already configured and, when `profile.git.signed_commits` is true, the signing already configured; never pass `-c user.name`, `-c user.email`, `--author`, `GIT_AUTHOR_*` or `GIT_COMMITTER_*`, never write `user.name` or `user.email` with `git config`, and when signing is on never pass `-c user.signingkey`, `-c gpg.*` or `-c commit.gpgsign`; a missing identity, a failed signing check or a pushed commit whose `.commit.verification.verified` is false is a configuration fault, so stop, do not override per command or write git config, make no further commits, and report it to the user.
 
 ### Review the fixer's commits
 

@@ -47,14 +47,21 @@ When `profile.git.signed_commits` is true:
   The consumer overlay supplies the registered key's identity.
 - When `profile.git.signing_key` is set, it is the OpenSSH SHA256 fingerprint of the key registered for signing.
   Before the first commit of a task, and again after any change to git config, run `bash <skill dir>/scripts/check-signing-key.sh <profile.git.signing_key>` from inside the target repository.
-  On a non-zero exit, stop and fix the configuration.
+  A non-zero exit is a configuration fault, handled as the Always list below says.
   Never commit with a per-commit key override, and never fall back to another key.
+- Never pass `-c user.signingkey`, `-c gpg.*` or `-c commit.gpgsign` to a commit-creating git command; rely on the configured signing.
 - When `profile.git.signing_key` is unset, confirm `user.signingkey` resolves to that key before committing.
 - Check the result after push: `gh api repos/<owner>/<repo>/commits/<sha> --jq '.commit.verification'`.
+  A pushed commit whose `.commit.verification.verified` is false is a configuration fault, handled as the Always list below says.
 - Workflows that create commits must sign them (for example `sign-commits: true` on a create-pull-request action).
 
 Always:
 
+- Run every commit-creating git command (`commit`, `commit --amend`, `merge`, `rebase`, `cherry-pick`, `revert`, `am`) with the git identity already configured, whether or not `profile.git.signed_commits` is true.
+  Never pass `-c user.name` or `-c user.email`, never pass `--author`, never set `GIT_AUTHOR_*` or `GIT_COMMITTER_*`, and never write `user.name` or `user.email` with `git config` at any scope.
+  Ordinary commit options such as `-m` and `-F` stay permitted, and workflow files that create commits are out of scope.
+- A missing configured identity is a configuration fault.
+- On any configuration fault, stop: do not override per command, do not write git config, make no further commits, and report the fault to the user.
 - Verify committed content after any commit that matters: `git show HEAD:<file>` or `git diff HEAD -- <file>` must show what you intended.
   Staging can capture a stale copy when a concurrent git operation ran; local tests read the working tree and hide it.
 
