@@ -178,6 +178,14 @@ def test_the_fixer_spawn_prose_carries_the_same_sentence_and_no_list_is_added():
     assert "It must include:" not in text
 
 
+def test_the_accelerator_fixer_prompt_carries_the_same_sentence():
+    script = read("skills/engineering-workflow/scripts/adversarial-review-loop.workflow.js")
+    rule = COMMON[0].upper() + COMMON[1:] + "."
+    assert f"const GIT_RULE = '{rule}'" in script
+    fix_prompt = script[script.index("function fixPrompt(") : script.index("function lensProblem(")]
+    assert "${GIT_RULE}" in fix_prompt
+
+
 # ---- S4: no consumer literal ----------------------------------------------------------------
 
 LITERAL = re.compile(
