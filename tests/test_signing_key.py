@@ -812,11 +812,9 @@ def test_a_private_key_header_after_the_first_line_does_not_make_a_public_file_p
     assert_fails(rig.check(rig.fp_a), rig.fp_a, rig.fp_a, "not loaded")
 
 
-@pytest.mark.parametrize("lead", ["\n", "# a comment\n", "\n\n# note\n"], ids=["blank", "comment", "blank-and-comment"])
-def test_a_pem_private_key_with_leading_lines_resolves_without_the_agent(rig, lead):
-    """OpenSSL skips leading lines, so git signs with it from an empty agent; its .pub gives the identity."""
+def test_a_pem_private_key_with_leading_lines_fails_closed(rig):
+    """Only a file whose first line is the private-key header counts as a private-key file."""
     path, fp = make_key(rig, "priv", "rsa", "", "PEM")
-    path.write_text(lead + path.read_text())
+    path.write_text("\n" + path.read_text())
     rig.config("user.signingkey", str(path))
-    assert git_signs_with(rig) == fp
-    assert_ok(rig.check(fp))
+    assert_fails(rig.check(fp), fp, "unresolved", "user.signingkey")

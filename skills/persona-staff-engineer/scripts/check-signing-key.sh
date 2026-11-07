@@ -106,12 +106,8 @@ is_private_key() {
   first=${first%$'\r'}
   if [ "$kind" = openssh ]; then
     [ "$first" = '-----BEGIN OPENSSH PRIV''ATE KEY-----' ]
-  elif [[ $first == '-----BEGIN '*'PRIV''ATE KEY-----' ]]; then
-    return 0
   else
-    # OpenSSL skips leading blank, comment or certificate lines of a PEM private key; a file that
-    # starts with a public key stays a public-key file even if a private-key header follows.
-    grep -q -e '^-----BEGIN .*PRIV''ATE KEY-----' "$1" 2>/dev/null && ! fingerprint "$1" >/dev/null
+    [[ $first == '-----BEGIN '*'PRIV''ATE KEY-----' ]]
   fi
 }
 
