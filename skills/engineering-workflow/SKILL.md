@@ -117,6 +117,7 @@ One round has three stages:
 3. **Fix.** The fixer fixes the verified findings it agrees with, rejects the rest with a reason, runs the focused tests and commits.
    A fix whose tests did not pass is not a fix: the gate is unresolved.
    It must not add modules, tables or migrations, persistence or abstractions; a finding that needs them is escalated to a human.
+   Put the rule that an agent runs each shell step as one simple command with literal values (`references/github.md`, Tooling) in the prompt you give the fixer, including a prompt file when the fixer runs as a shell command.
 
 Exits: converged (nothing blocking after review, or nothing survived a complete verification); no progress (the verified count did not shrink after a fix: stop and review by hand); escalated scope (take it to the owner); a blind lens, an incomplete verification, a fix with failing tests, the round cap, all rejected, or no commit (unresolved: resolve by hand rather than skip the gate).
 

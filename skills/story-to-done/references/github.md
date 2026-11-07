@@ -12,6 +12,10 @@ Branch names, merge method, promotion model, signing, and attribution come from 
 - If HTTPS git auth is not wired in the environment, run `gh auth setup-git` before the first HTTPS fetch, push, or clone.
 - Use only the credential meant for GitHub; a container-registry or other service token is never a GitHub API credential.
 - Prefer `git -C <path> ...` over `cd <path> && git ...`; compound commands can trigger permission prompts.
+- An agent runs each shell step as one simple command with literal values, because the permission checker cannot verify the forms below before they run, so they trigger a manual prompt.
+  It never assigns a shell variable and uses it in the same command (`W=<path>; git -C $W ...`); it writes the literal path.
+  It never feeds a command substitution result into a later argument of the same command (`SHA=$(...) && gh api .../$SHA`); it runs the inner command as its own call and uses its literal output in the next call.
+  It never prefixes a command with an inline environment assignment that expands a secret variable (`VAR="$SECRET" cmd ...`); it relies on the credential the session environment or the tool's own credential configuration already provides (for `gh`, its stored auth), and never sets a credential per command.
 
 ## Branching and worktrees
 
