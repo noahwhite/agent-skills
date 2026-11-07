@@ -1,10 +1,12 @@
-"""Contract checks for the one-simple-command-with-literal-values rule (SKL-207)."""
+"""SKL-207: the base shell guidance and every delegation brief tell agents to run each shell step as one simple command with literal values."""
 
 import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 GITHUB = ROOT / "shared" / "github.md"
+SKILLS = ROOT / "skills"
+SCRIPT = SKILLS / "engineering-workflow" / "scripts" / "adversarial-review-loop.workflow.js"
 PHRASE = "one simple command with literal values"
 
 GIT_C_BULLET = "- Prefer `git -C <path> ...` over `cd <path> && git ...`; compound commands can trigger permission prompts."
@@ -32,26 +34,70 @@ EXPECTED_VENDORED = {
     "story-to-done",
 }
 
-# Consumer-specific literals the added text must not carry (S3).
-CONSUMER_LITERALS = ("GH_TOKEN", "GITHUB_", "GHCR", "noahwhite", "officina", "@", "OFF-")
+# The three forbidden forms and the prohibitive marker each statement must carry.
+# The brief bullets and the accelerator sentence state all of these in one line.
+PROHIBITIONS = (
+    "never assign a variable and use it in the same command",
+    "never feed a `$(...)` result into a later argument of the same command",
+    'never prefix a command with an inline `VAR="$SECRET"` assignment',
+    "never set a credential per command",
+)
+
+# Shapes of consumer identity the added text must not carry (S3). The names themselves live only in
+# the private denylist that CI's leak scan loads, never in this tracked file.
+LITERAL = re.compile(
+    r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[a-z]{2,}"
+    r"|SHA256:[A-Za-z0-9+/]{43}"
+    r"|ssh-(ed25519|rsa) AAAA"
+    r"|\bgh[pousr]_[A-Za-z0-9]{20,}"
+    r"|\bgithub_pat_[A-Za-z0-9_]{20,}"
+)
+
+BRIEF_LISTS = (
+    ("story-to-done", "It must include:"),
+    ("story-to-done", "Brief it as a QA agent, with only:"),
+    ("persona-staff-engineer", "It must include:"),
+    ("persona-staff-devops", "It must include:"),
+)
+SECRETS_BULLET_PREFIX = "- The secrets rule"
+BRIEF_PREFIX = "- The shell rule: "
 
 
-def bullet_block(lines: list[str], index: int) -> list[str]:
-    """The bullet starting at `index`, plus its indented continuation lines."""
-    block = [lines[index]]
-    for follow in lines[index + 1:]:
+def read(rel: str) -> str:
+    return (ROOT / rel).read_text()
+
+
+def skill_lines(name: str) -> list[str]:
+    return (SKILLS / name / "SKILL.md").read_text().splitlines()
+
+
+def list_block(name: str, intro: str) -> list[str]:
+    """The bullet list that follows `intro` in a skill: lines up to the next blank line."""
+    lines = skill_lines(name)
+    assert lines.count(intro) >= 1, f"{name}: no list introduced by {intro!r}"
+    start = lines.index(intro)
+    while not lines[start + 1].strip():
+        start += 1
+    end = start + 1
+    while end < len(lines) and lines[end].strip():
+        end += 1
+    return lines[start + 1 : end]
+
+
+def base_bullet() -> list[str]:
+    lines = GITHUB.read_text().splitlines()
+    assert GIT_C_BULLET in lines, "the `git -C` bullet moved: update the anchor"
+    following = lines.index(GIT_C_BULLET) + 1
+    assert PHRASE in lines[following], "the rule bullet must directly follow the `git -C` bullet"
+    block = [lines[following]]
+    for follow in lines[following + 1 :]:
         if not follow.startswith("  "):
             break
         block.append(follow)
     return block
 
 
-def base_bullet() -> list[str]:
-    lines = GITHUB.read_text().splitlines()
-    first = lines.index(GIT_C_BULLET)
-    following = first + 1
-    assert PHRASE in lines[following], "the rule bullet must directly follow the `git -C` bullet"
-    return bullet_block(lines, following)
+# ---- S1: base rule ---------------------------------------------------------------------------
 
 
 def test_base_bullet_directly_follows_git_c_bullet_with_phrase_on_one_line() -> None:
@@ -61,110 +107,108 @@ def test_base_bullet_directly_follows_git_c_bullet_with_phrase_on_one_line() -> 
     assert block[0].count(". ") == 0 and block[0].endswith("."), "first line is one sentence"
 
 
-def test_base_bullet_names_the_three_forms_and_their_replacements() -> None:
-    text = "\n".join(base_bullet())
-    assert "W=<path>; git -C $W" in text
-    assert "SHA=$(...) && gh api .../$SHA" in text
-    assert 'VAR="$SECRET" cmd' in text
-    assert "writes the literal path" in text
-    assert "runs the inner command as its own call and uses its literal output in the next call" in text
-    assert "its stored auth" in text and "never sets a credential per command" in text
-    assert "permission checker cannot verify" in text and "manual prompt" in text
+def test_base_bullet_prohibits_the_three_forms_and_gives_their_replacements() -> None:
+    block = base_bullet()
+    assert len(block) == 4, "one lead sentence plus one line per form"
+    forms = (
+        ("W=<path>; git -C $W", "writes the literal path"),
+        ("SHA=$(...) && gh api .../$SHA", "runs the inner command as its own call and uses its literal output in the next call"),
+        ('VAR="$SECRET" cmd', "never sets a credential per command"),
+    )
+    for line, (example, replacement) in zip(block[1:], forms):
+        assert line.startswith("  It never "), line
+        assert example in line and replacement in line, line
+    assert "its stored auth" in block[3]
+    assert "permission checker cannot verify" in block[0] and "manual prompt" in block[0]
 
 
 def test_base_bullet_covers_only_the_three_forms() -> None:
     text = "\n".join(base_bullet()).lower()
-    for other in ("heredoc", "pipe", "cd <path>", "chain"):
+    for other in ("heredoc", "pipe", "cd <path>"):
         assert other not in text, other
-    assert len(base_bullet()) == 4, "one lead sentence plus one line per form"
 
 
-def test_base_bullet_names_no_consumer_literal() -> None:
-    text = "\n".join(base_bullet())
-    for literal in CONSUMER_LITERALS:
-        assert literal not in text, literal
+def test_base_bullet_names_no_consumer_identity() -> None:
+    assert not LITERAL.search("\n".join(base_bullet()))
 
 
-def skill_lines(name: str) -> list[str]:
-    return (ROOT / "skills" / name / "SKILL.md").read_text().splitlines()
+# ---- S2: the briefs carry it -------------------------------------------------------------------
 
 
-def test_phrase_appears_in_exactly_the_four_skill_files() -> None:
-    found = {
-        path.parent.name
-        for path in (ROOT / "skills").glob("*/SKILL.md")
-        if PHRASE in path.read_text()
-    }
+def test_phrase_appears_in_exactly_the_four_skill_files_and_twice_in_story_to_done() -> None:
+    found = {path.parent.name for path in SKILLS.glob("*/SKILL.md") if PHRASE in path.read_text()}
     assert found == EXPECTED_SKILL_FILES
+    assert (SKILLS / "story-to-done" / "SKILL.md").read_text().count(PHRASE) == 2
 
 
-def test_story_to_done_carries_the_phrase_once_per_list() -> None:
-    assert (ROOT / "skills" / "story-to-done" / "SKILL.md").read_text().count(PHRASE) == 2
+def shell_bullets(block: list[str]) -> list[str]:
+    return [line for line in block if line.startswith(BRIEF_PREFIX)]
 
 
-def phrase_lines(name: str) -> list[int]:
-    return [i for i, line in enumerate(skill_lines(name)) if PHRASE in line]
-
-
-def test_brief_bullets_sit_directly_after_the_secrets_bullet() -> None:
-    expected = {
-        "story-to-done": ("- The secrets rule (never write secrets to files or argv) and the attribution rule", "- The secrets rule and a \"Track your work\" paragraph"),
-        "persona-staff-engineer": ("- The secrets rule (never write secrets to files or argv) and the attribution rule",),
-        "persona-staff-devops": ("- The secrets rule (never write secrets to files or argv) and the attribution rule",),
-    }
-    for name, prefixes in expected.items():
-        lines = skill_lines(name)
-        hits = phrase_lines(name)
-        assert len(hits) == len(prefixes), name
-        for hit, prefix in zip(hits, prefixes):
-            assert lines[hit - 1].startswith(prefix), f"{name}: line {hit + 1}"
-            assert lines[hit].startswith("- "), name
-            assert hit + 1 >= len(lines) or not lines[hit + 1].startswith("  "), f"{name}: bullet must be one physical line"
-
-
-def test_brief_bullets_name_the_three_forms_without_consumer_literals() -> None:
-    for name in ("story-to-done", "persona-staff-engineer", "persona-staff-devops"):
-        lines = skill_lines(name)
-        for hit in phrase_lines(name):
-            line = lines[hit]
-            assert "W=<path>; git -C $W" in line, name
-            assert "$(...)" in line, name
-            assert 'VAR="$SECRET"' in line, name
-            for literal in CONSUMER_LITERALS:
-                assert literal not in line, (name, literal)
+def test_each_brief_list_gains_one_shell_bullet_directly_after_its_secrets_bullet() -> None:
+    for name, intro in BRIEF_LISTS:
+        block = list_block(name, intro)
+        bullets = shell_bullets(block)
+        assert len(bullets) == 1, (name, intro)
+        bullet = bullets[0]
+        position = block.index(bullet)
+        assert block[position - 1].startswith(SECRETS_BULLET_PREFIX), (name, intro)
+        assert PHRASE in bullet and bullet.endswith("."), (name, intro)
+        assert not LITERAL.search(bullet), (name, intro)
+        for prohibition in PROHIBITIONS:
+            assert prohibition in bullet, (name, intro, prohibition)
 
 
 def test_fix_stage_tells_the_orchestrator_to_pass_the_rule_to_the_fixer() -> None:
     lines = skill_lines("engineering-workflow")
-    hits = phrase_lines("engineering-workflow")
+    hits = [i for i, line in enumerate(lines) if PHRASE in line]
     assert len(hits) == 1
-    start = next(i for i, line in enumerate(lines) if line.startswith("3. **Fix.**"))
+    starts = [i for i, line in enumerate(lines) if line.startswith("3. **Fix.**")]
+    assert len(starts) == 1
+    start = starts[0]
     end = next(i for i in range(start + 1, len(lines)) if not lines[i].startswith("   "))
     assert start < hits[0] < end, "the sentence belongs to the Fix stage"
-    assert "fixer" in lines[hits[0]] and "prompt file" in lines[hits[0]]
-    assert "references/github.md" in lines[hits[0]]
+    sentence = lines[hits[0]]
+    assert "fixer" in sentence and "prompt file" in sentence and "references/github.md" in sentence
+
+
+# ---- S4: vendored copies and the accelerator ------------------------------------------------------
 
 
 def test_vendored_copies_carry_the_base_bullet() -> None:
     found = {
-        path.parent.parent.name
-        for path in (ROOT / "skills").glob("*/references/github.md")
-        if PHRASE in path.read_text()
+        path.parent.parent.name for path in SKILLS.glob("*/references/github.md") if PHRASE in path.read_text()
     }
     assert found == EXPECTED_VENDORED
 
 
-def test_phrase_is_not_in_other_files_of_the_shared_tree() -> None:
-    hits = [p.name for p in (ROOT / "shared").glob("*.md") if PHRASE in p.read_text()]
-    assert hits == ["github.md"]
-    assert re.search(r"\bsimple command\b", GITHUB.read_text())
+def test_phrase_is_in_no_other_shared_file() -> None:
+    hits = [str(p.relative_to(ROOT)) for p in (ROOT / "shared").rglob("*.md") if PHRASE in p.read_text()]
+    assert hits == ["shared/github.md"]
+
+
+def accelerator_rule() -> str:
+    script = SCRIPT.read_text()
+    assert script.count(PHRASE) == 1, "the rule is defined once, as SHELL_RULE"
+    definitions = [line for line in script.splitlines() if line.startswith("const SHELL_RULE = '")]
+    assert len(definitions) == 1
+    return definitions[0][len("const SHELL_RULE = '") : -1].replace("\\'", "'")
 
 
 def test_accelerator_fixer_prompt_carries_the_rule() -> None:
-    script = (ROOT / "skills" / "engineering-workflow" / "scripts" / "adversarial-review-loop.workflow.js").read_text()
-    assert script.count(PHRASE) == 1, "the rule is defined once, as SHELL_RULE"
-    definition = next(line for line in script.splitlines() if line.startswith("const SHELL_RULE = '"))
-    assert PHRASE in definition
-    assert "W=<path>; git -C $W" in definition and "$(...)" in definition and 'VAR="$SECRET"' in definition
+    rule = accelerator_rule()
+    for prohibition in PROHIBITIONS:
+        assert prohibition in rule, prohibition
+    script = SCRIPT.read_text()
+    assert script.count("function fixPrompt(") == 1 and script.count("function lensProblem(") == 1
     fix_prompt = script[script.index("function fixPrompt(") : script.index("function lensProblem(")]
-    assert "${SHELL_RULE}" in fix_prompt
+    assert fix_prompt.count("${SHELL_RULE}") == 1
+    assert not re.search(r"^\s*return\b", fix_prompt.split("return `")[0], re.MULTILINE), "no early return before the prompt"
+
+
+def test_accelerator_sentence_is_the_brief_sentence() -> None:
+    """The accelerator restates the briefs' sentence verbatim, so the two cannot drift apart."""
+    rule = accelerator_rule()
+    for name, intro in BRIEF_LISTS:
+        bullet = shell_bullets(list_block(name, intro))[0]
+        assert bullet[len(BRIEF_PREFIX) :] == rule[0].lower() + rule[1:], (name, intro)
