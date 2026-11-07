@@ -6,11 +6,13 @@
 # The fingerprint is profile.git.signing_key. The script resolves the key git would sign with,
 # in git's order, and compares its SHA256 fingerprint with the argument:
 #   1. gpg.format must be ssh.
-#   2. When user.signingkey is set it is a key:: or ssh- literal, a public-key file or a
-#      private-key file; a value that cannot be resolved fails, with no fallback to another source.
+#   2. When user.signingkey is set it is a key:: literal, a public-key file or a private-key
+#      file; a value that cannot be resolved fails, with no fallback to another source. A bare
+#      ssh- literal, which git also accepts, is none of those forms and fails.
 #   3. When user.signingkey is unset, the first output line of gpg.ssh.defaultKeyCommand must
-#      begin with key:: (or ssh-, the other form git accepts, as `ssh-add -L` prints). The command
-#      is split into arguments and run without a shell, as git runs it.
+#      begin with key::; any other line, including the bare ssh- line `ssh-add -L` prints, is
+#      malformed output. The command is split into arguments and run without a shell, as git
+#      runs it.
 # gpg.ssh.program is not inspected: a wrapper that signs with another key than git selected is
 # outside what this check can see.
 # A public-key resolution (literal, public-key file, command output) must also be loaded in the
@@ -91,7 +93,7 @@ public=1
 if signing_key=$(git config --get user.signingkey 2>/dev/null); then
   case $signing_key in
     key::*) resolved=$(printf '%s\n' "${signing_key#key::}" | fingerprint) ;;
-    ssh-*) resolved=$(printf '%s\n' "$signing_key" | fingerprint) ;;
+    ssh-*) resolved= ;;
     *)
       path=$signing_key
       case $path in "~/"*) path=${HOME:+$HOME/${path#"~/"}} ;; esac
@@ -118,7 +120,6 @@ else
   first=${output%%$'\n'*}
   case $first in
     key::*) first=${first#key::} ;;
-    ssh-*) ;;
     *) fail "gpg.ssh.defaultKeyCommand output is malformed" ;;
   esac
   resolved=$(printf '%s\n' "$first" | fingerprint) || resolved=
