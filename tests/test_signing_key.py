@@ -251,7 +251,9 @@ def test_a_default_key_command_that_prints_a_bare_ssh_key_is_malformed_output(ri
     # `ssh-add -L` prints this form; the contract requires the first line to begin with key::.
     rig.add(rig.a)
     rig.config("gpg.ssh.defaultKeyCommand", "ssh-add -L")
-    assert_fails(rig.check(rig.fp_a), rig.fp_a, "unresolved", "defaultKeyCommand")
+    res = rig.check(rig.fp_a)
+    assert_fails(res, rig.fp_a, "unresolved", "defaultKeyCommand")
+    assert "output is malformed" in res.stderr, res.stderr
 
 
 def test_a_quoted_default_key_command_argument_is_one_argument(rig):
