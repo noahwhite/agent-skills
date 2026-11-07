@@ -43,6 +43,14 @@ PROHIBITIONS = (
     "never set a credential per command",
 )
 
+# The replacement for each prohibition, stated in every brief bullet and in the accelerator sentence.
+REPLACEMENTS = (
+    "write the literal path",
+    "run the inner command as its own call and use its literal output in the next call",
+    "rely on the credential the session environment or the tool's own credential configuration already provides",
+    "(for `gh`, its stored auth)",
+)
+
 # Shapes of consumer identity the added text must not carry (S3). The names themselves live only in
 # the private denylist that CI's leak scan loads, never in this tracked file.
 LITERAL = re.compile(
@@ -152,8 +160,8 @@ def test_each_brief_list_gains_one_shell_bullet_directly_after_its_secrets_bulle
         assert position > 0 and block[position - 1].startswith(SECRETS_BULLET_PREFIX), (name, intro)
         assert PHRASE in bullet and bullet.endswith("."), (name, intro)
         assert not LITERAL.search(bullet), (name, intro)
-        for prohibition in PROHIBITIONS:
-            assert prohibition in bullet, (name, intro, prohibition)
+        for clause in PROHIBITIONS + REPLACEMENTS:
+            assert clause in bullet, (name, intro, clause)
 
 
 def test_fix_stage_tells_the_orchestrator_to_pass_the_rule_to_the_fixer() -> None:
@@ -167,6 +175,8 @@ def test_fix_stage_tells_the_orchestrator_to_pass_the_rule_to_the_fixer() -> Non
     assert start < hits[0] < end, "the sentence belongs to the Fix stage"
     sentence = lines[hits[0]].strip()
     assert re.match(r"^Put the rule that an agent runs each shell step as .+ in the prompt you give the fixer, including a prompt file", sentence), sentence
+    assert "when the fixer runs as a shell command" in sentence
+    assert not LITERAL.search(sentence)
     assert "references/github.md" in sentence
 
 
@@ -178,6 +188,9 @@ def test_vendored_copies_carry_the_base_bullet() -> None:
         path.parent.parent.name for path in SKILLS.glob("*/references/github.md") if PHRASE in path.read_text()
     }
     assert found == EXPECTED_VENDORED
+    bullet = "\n".join(base_bullet())
+    for name in EXPECTED_VENDORED:
+        assert bullet in (SKILLS / name / "references" / "github.md").read_text(), name
 
 
 def test_phrase_is_in_no_other_shared_file() -> None:
@@ -195,13 +208,15 @@ def accelerator_rule() -> str:
 
 def test_accelerator_fixer_prompt_carries_the_rule() -> None:
     rule = accelerator_rule()
-    for prohibition in PROHIBITIONS:
-        assert prohibition in rule, prohibition
+    for clause in PROHIBITIONS + REPLACEMENTS:
+        assert clause in rule, clause
+    assert not LITERAL.search(rule)
     script = SCRIPT.read_text()
     assert script.count("function fixPrompt(") == 1 and script.count("function lensProblem(") == 1
     fix_prompt = script[script.index("function fixPrompt(") : script.index("function lensProblem(")]
     assert fix_prompt.count("${SHELL_RULE}") == 1
-    assert not re.search(r"^\s*return\b", fix_prompt.split("return `")[0], re.MULTILINE), "no early return before the prompt"
+    assert not re.search(r"\breturn\b", fix_prompt.split("return `")[0]), "no early return before the prompt"
+    assert script.count("agent(fixPrompt(") == 1, "the fixer is launched with this prompt"
 
 
 def test_accelerator_sentence_is_the_brief_sentence() -> None:
