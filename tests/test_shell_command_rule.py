@@ -51,6 +51,7 @@ LITERAL = re.compile(
     r"|ssh-(ed25519|rsa) AAAA"
     r"|\bgh[pousr]_[A-Za-z0-9]{20,}"
     r"|\bgithub_pat_[A-Za-z0-9_]{20,}"
+    r"|\b[A-Z][A-Z0-9]*_(?:TOKEN|KEY|SECRET)\b"
 )
 
 BRIEF_LISTS = (
@@ -61,10 +62,6 @@ BRIEF_LISTS = (
 )
 SECRETS_BULLET_PREFIX = "- The secrets rule"
 BRIEF_PREFIX = "- The shell rule: "
-
-
-def read(rel: str) -> str:
-    return (ROOT / rel).read_text()
 
 
 def skill_lines(name: str) -> list[str]:
@@ -136,9 +133,9 @@ def test_base_bullet_names_no_consumer_identity() -> None:
 
 
 def test_phrase_appears_in_exactly_the_four_skill_files_and_twice_in_story_to_done() -> None:
-    found = {path.parent.name for path in SKILLS.glob("*/SKILL.md") if PHRASE in path.read_text()}
-    assert found == EXPECTED_SKILL_FILES
-    assert (SKILLS / "story-to-done" / "SKILL.md").read_text().count(PHRASE) == 2
+    counts = {path.parent.name: path.read_text().count(PHRASE) for path in SKILLS.glob("*/SKILL.md")}
+    found = {name: count for name, count in counts.items() if count}
+    assert found == {name: (2 if name == "story-to-done" else 1) for name in EXPECTED_SKILL_FILES}
 
 
 def shell_bullets(block: list[str]) -> list[str]:
@@ -152,7 +149,7 @@ def test_each_brief_list_gains_one_shell_bullet_directly_after_its_secrets_bulle
         assert len(bullets) == 1, (name, intro)
         bullet = bullets[0]
         position = block.index(bullet)
-        assert block[position - 1].startswith(SECRETS_BULLET_PREFIX), (name, intro)
+        assert position > 0 and block[position - 1].startswith(SECRETS_BULLET_PREFIX), (name, intro)
         assert PHRASE in bullet and bullet.endswith("."), (name, intro)
         assert not LITERAL.search(bullet), (name, intro)
         for prohibition in PROHIBITIONS:
@@ -168,8 +165,9 @@ def test_fix_stage_tells_the_orchestrator_to_pass_the_rule_to_the_fixer() -> Non
     start = starts[0]
     end = next(i for i in range(start + 1, len(lines)) if not lines[i].startswith("   "))
     assert start < hits[0] < end, "the sentence belongs to the Fix stage"
-    sentence = lines[hits[0]]
-    assert "fixer" in sentence and "prompt file" in sentence and "references/github.md" in sentence
+    sentence = lines[hits[0]].strip()
+    assert re.match(r"^Put the rule that an agent runs each shell step as .+ in the prompt you give the fixer, including a prompt file", sentence), sentence
+    assert "references/github.md" in sentence
 
 
 # ---- S4: vendored copies and the accelerator ------------------------------------------------------
@@ -190,9 +188,9 @@ def test_phrase_is_in_no_other_shared_file() -> None:
 def accelerator_rule() -> str:
     script = SCRIPT.read_text()
     assert script.count(PHRASE) == 1, "the rule is defined once, as SHELL_RULE"
-    definitions = [line for line in script.splitlines() if line.startswith("const SHELL_RULE = '")]
+    definitions = re.findall(r"^const SHELL_RULE = '(.*)';?$", script, re.MULTILINE)
     assert len(definitions) == 1
-    return definitions[0][len("const SHELL_RULE = '") : -1].replace("\\'", "'")
+    return definitions[0].replace("\\'", "'")
 
 
 def test_accelerator_fixer_prompt_carries_the_rule() -> None:
