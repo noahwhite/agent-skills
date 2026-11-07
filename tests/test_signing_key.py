@@ -199,7 +199,7 @@ def assert_fails(res, expected, resolved, reason):
     assert res.stderr.endswith("\n") and res.stderr.count("\n") == 1, res.stderr
     assert expected in res.stderr
     assert f"resolved {resolved}" in res.stderr, res.stderr
-    assert reason in res.stderr, res.stderr
+    assert reason and reason in res.stderr, res.stderr
 
 
 
@@ -284,7 +284,7 @@ def agree_with_git(rig, expect_fp, other_fp, cwd=None):
     if git_fp is None:
         for fp in (rig.fp_a, other_fp):
             res = run(["bash", str(SOURCE), fp], env=rig.env, cwd=run_in)
-            assert_fails(res, fp, "unresolved", "")
+            assert_fails(res, fp, "unresolved", "git cannot sign")
     else:
         assert_ok(run(["bash", str(SOURCE), git_fp], env=rig.env, cwd=run_in))
         other = other_fp if other_fp != git_fp else rig.fp_b
@@ -409,7 +409,7 @@ def test_an_unresolvable_signingkey_fails_without_falling_back(rig, value):
     rig.add(rig.a)
     rig.config("user.signingkey", value)
     rig.config("gpg.ssh.defaultKeyCommand", rig.key_command(rig.a))
-    assert_fails(rig.check(rig.fp_a), rig.fp_a, "unresolved", "")
+    assert_fails(rig.check(rig.fp_a), rig.fp_a, "unresolved", "git cannot sign")
     agree_with_git(rig, None, rig.fp_b)
 
 
@@ -421,14 +421,14 @@ def test_a_directory_as_signingkey_fails(rig):
 
 def test_no_resolvable_key_fails(rig):
     rig.add(rig.a)
-    assert_fails(rig.check(rig.fp_a), rig.fp_a, "unresolved", "")
+    assert_fails(rig.check(rig.fp_a), rig.fp_a, "unresolved", "git cannot sign")
 
 
 @pytest.mark.parametrize("command", ["false", "echo", "echo not-a-key", "echo key::bogus"])
 def test_a_failing_or_malformed_default_key_command_fails(rig, command):
     rig.add(rig.a)
     rig.config("gpg.ssh.defaultKeyCommand", command)
-    assert_fails(rig.check(rig.fp_a), rig.fp_a, "unresolved", "")
+    assert_fails(rig.check(rig.fp_a), rig.fp_a, "unresolved", "git cannot sign")
     agree_with_git(rig, None, rig.fp_b)
 
 
@@ -499,7 +499,7 @@ def test_a_private_key_file_agrees_with_what_git_signs_with(rig, kind, passphras
         assert_ok(rig.check(fp))
         assert_fails(rig.check(rig.fp_b), rig.fp_b, fp, "mismatch")
     else:
-        assert_fails(rig.check(fp), fp, "unresolved", "")
+        assert_fails(rig.check(fp), fp, "unresolved", "git cannot sign")
     if (loaded or not passphrase) and not (fmt == "PEM" and not pub_beside):
         assert git_fp == fp, "git must sign with a loaded or unencrypted key file"
 
@@ -530,7 +530,7 @@ def test_a_foreign_public_file_beside_a_private_key_signs_with_the_foreign_key_o
         assert_fails(rig.check(fp), fp, other_fp, "mismatch")
     else:
         assert git_fp is None
-        assert_fails(rig.check(fp), fp, "unresolved", "")
+        assert_fails(rig.check(fp), fp, "unresolved", "git cannot sign")
 
 
 # gpg.format, argument, output contract, repository untouched, cleanup.
@@ -565,6 +565,9 @@ def test_a_malformed_argument_fails(rig, args):
     res = rig.check(*args)
     assert res.returncode != 0 and res.stdout == ""
     assert res.stderr.count("\n") == 1 and "argument" in res.stderr
+    assert "expected invalid" in res.stderr
+    for arg in args:
+        assert not arg.strip() or arg not in res.stderr
 
 
 def test_the_check_outside_a_repository_fails_with_one_line(rig):
@@ -611,20 +614,21 @@ def test_the_temporary_directory_is_removed_on_success_and_on_failure(rig):
         assert left == [], res.stderr
 
 
-def test_the_temporary_directory_is_removed_when_the_run_is_interrupted(rig):
+@pytest.mark.parametrize("target", ["group-sigint", "shell-sigterm", "shell-sighup", "shell-sigint"])
+def test_an_interrupted_run_stops_the_signer_removes_its_temporary_directory_and_prints_one_line(rig, target):
     rig.add(rig.a)
-    started = rig.root / "started"
-    program = rig.emitter("slow-sign", f": > {started}\nsleep 30")
+    started, pidfile = rig.root / "started", rig.root / "signer.pid"
+    program = rig.emitter("slow-sign", f"echo $$ > {pidfile}\n: > {started}\nexec sleep 30")
     rig.config("gpg.ssh.program", program)
     rig.config("user.signingkey", "key::" + rig.pub(rig.a))
-    tmp = rig.root / "tmp"
-    tmp.mkdir()
+    tmp = Path(tempfile.mkdtemp(dir=rig.root))
     proc = subprocess.Popen(
         ["bash", str(SOURCE), rig.fp_a],
         env={**rig.env, "TMPDIR": str(tmp)},
         cwd=rig.repo,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
+        text=True,
         start_new_session=True,
     )
     try:
@@ -633,19 +637,62 @@ def test_the_temporary_directory_is_removed_when_the_run_is_interrupted(rig):
                 break
             time.sleep(0.05)
         assert started.exists(), "the signing program never started"
-        os.killpg(proc.pid, signal.SIGINT)
-        proc.wait(timeout=20)
+        if target == "group-sigint":
+            os.killpg(proc.pid, signal.SIGINT)
+        else:
+            proc.send_signal({"sigterm": signal.SIGTERM, "sighup": signal.SIGHUP, "sigint": signal.SIGINT}[target.split("-")[1]])
+        out, err = proc.communicate(timeout=10)
     finally:
         if proc.poll() is None:
             os.killpg(proc.pid, signal.SIGKILL)
+    assert proc.returncode == 1 and out == ""
+    assert err.count("\n") == 1 and err.startswith("check-signing-key: expected "), err
     assert list(tmp.iterdir()) == []
-    assert proc.returncode != 0
+    pid = int(pidfile.read_text())
+    for _ in range(100):
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            break
+        time.sleep(0.05)
+    else:
+        raise AssertionError("the signer is still running")
+
+
+def test_a_setup_failure_prints_exactly_one_line(rig):
+    rig.add(rig.a)
+    rig.config("user.signingkey", "key::" + rig.pub(rig.a))
+    res = run(
+        ["bash", str(SOURCE), rig.fp_a],
+        env={**rig.env, "TMPDIR": str(rig.root / "missing")},
+        cwd=rig.repo,
+    )
+    assert res.returncode == 1 and res.stdout == "" and res.stderr.count("\n") == 1
+    assert str(rig.root) not in res.stderr
+
+
+def test_a_failure_to_remove_the_temporary_directory_is_not_reported_as_success(rig):
+    rig.add(rig.a)
+    rig.config("user.signingkey", "key::" + rig.pub(rig.a))
+    shim = rig.root / "shim"
+    shim.mkdir()
+    rm = shim / "rm"
+    rm.write_text("#!/bin/sh\nexit 1\n")
+    rm.chmod(0o755)
+    tmp = Path(tempfile.mkdtemp(dir=rig.root))
+    res = run(
+        ["bash", str(SOURCE), rig.fp_a],
+        env={**rig.env, "PATH": f"{shim}:{rig.env['PATH']}", "TMPDIR": str(tmp)},
+        cwd=rig.repo,
+    )
+    assert res.returncode == 1 and res.stdout == "" and res.stderr.count("\n") == 1
+    assert "temporary directory" in res.stderr
 
 
 def test_an_encrypted_private_key_that_the_agent_does_not_hold_fails_without_prompting(rig):
     path, fp = make_key(rig, "priv", "ed25519", "secret")
     rig.config("user.signingkey", str(path))
-    assert_fails(rig.check(fp), fp, "unresolved", "")
+    assert_fails(rig.check(fp), fp, "unresolved", "git cannot sign")
 
 
 

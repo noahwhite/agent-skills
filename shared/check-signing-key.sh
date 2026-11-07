@@ -33,15 +33,29 @@ pattern='^SHA256:[A-Za-z0-9+/]{43}$'
 expected="${1-}"
 resolved=unresolved
 work=
+signer_pid=
+reported=
 
 cleanup() {
-  [ -n "$work" ] && rm -rf "$work"
+  if [ -n "$signer_pid" ]; then
+    kill -- "-$signer_pid" 2>/dev/null
+    wait "$signer_pid" 2>/dev/null
+    signer_pid=
+  fi
+  if [ -n "$work" ] && ! rm -rf "$work" 2>/dev/null && [ -z "$reported" ]; then
+    reported=1
+    printf 'check-signing-key: expected %s, resolved %s: %s\n' "$expected" "$resolved" "cannot remove the temporary directory" >&2
+    exit 1
+  fi
 }
 trap cleanup EXIT
-trap 'exit 1' HUP INT TERM
+trap 'fail "interrupted"' HUP INT TERM
 
 fail() {
-  printf 'check-signing-key: expected %s, resolved %s: %s\n' "$expected" "$resolved" "$1" >&2
+  if [ -z "$reported" ]; then
+    reported=1
+    printf 'check-signing-key: expected %s, resolved %s: %s\n' "$expected" "$resolved" "$1" >&2
+  fi
   exit 1
 }
 
@@ -55,7 +69,7 @@ git rev-parse --git-dir >/dev/null 2>&1 || fail "not inside a git repository"
 format=$(git config --get gpg.format 2>/dev/null) || format=
 [ "$format" = ssh ] || fail "gpg.format is not ssh"
 
-work=$(mktemp -d "${TMPDIR:-/tmp}/check-signing-key.XXXXXX") || fail "no temporary directory"
+work=$(mktemp -d "${TMPDIR:-/tmp}/check-signing-key.XXXXXX" 2>/dev/null) || fail "no temporary directory"
 
 # A private key whose passphrase git would ask for must not prompt here: no tty, askpass fails.
 export SSH_ASKPASS=/bin/false SSH_ASKPASS_REQUIRE=force
@@ -67,10 +81,20 @@ export GIT_COMMITTER_NAME=preflight GIT_COMMITTER_EMAIL=preflight@invalid
 export GIT_AUTHOR_DATE="1000000000 +0000" GIT_COMMITTER_DATE="1000000000 +0000"
 unset GIT_ALTERNATE_OBJECT_DIRECTORIES
 
-mkdir "$GIT_OBJECT_DIRECTORY" || fail "no temporary directory"
+mkdir "$GIT_OBJECT_DIRECTORY" 2>/dev/null || fail "no temporary directory"
 tree=$(git hash-object -t tree -w --stdin </dev/null 2>/dev/null) || fail "cannot create the throwaway commit"
-commit=$(git commit-tree -S -m preflight "$tree" 2>/dev/null </dev/null) \
-  || fail "git cannot sign with the configured key (unresolvable, or not loaded in the ssh agent)"
+# Run git in its own process group and wait for it, so a signal is handled at once: the trap
+# kills the signer (and anything it started) before the temporary directory is removed.
+set -m
+git commit-tree -S -m preflight "$tree" >"$work/oid" 2>/dev/null </dev/null &
+signer_pid=$!
+if ! wait "$signer_pid"; then
+  signer_pid=
+  fail "git cannot sign with the configured key (unresolvable, or not loaded in the ssh agent)"
+fi
+signer_pid=
+set +m
+read -r commit <"$work/oid" || fail "cannot read the throwaway commit"
 git cat-file commit "$commit" >"$work/commit" 2>/dev/null || fail "cannot read the throwaway commit"
 
 # Split the commit into its signed payload and the armoured signature (the gpgsig header).
@@ -78,7 +102,7 @@ awk -v sig="$work/sig" -v payload="$work/payload" '
   /^gpgsig /      { sub(/^gpgsig /, ""); print > sig; insig = 1; next }
   insig && /^ /   { sub(/^ /, ""); print > sig; next }
                   { insig = 0; print > payload }
-' "$work/commit"
+' "$work/commit" 2>/dev/null || fail "cannot read the throwaway commit"
 [ -s "$work/sig" ] || fail "git did not sign the throwaway commit"
 
 verdict=$(ssh-keygen -Y check-novalidate -n git -s "$work/sig" <"$work/payload" 2>/dev/null) \
