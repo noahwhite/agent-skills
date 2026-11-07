@@ -663,6 +663,40 @@ def test_an_interrupted_run_stops_the_signer_removes_its_temporary_directory_and
         raise AssertionError("the signer is still running")
 
 
+@pytest.mark.parametrize("sig", [signal.SIGTERM, signal.SIGHUP, signal.SIGINT], ids=["term", "hup", "int"])
+def test_a_signal_during_cleanup_still_prints_one_line_and_exits_nonzero(rig, sig):
+    rig.add(rig.a)
+    rig.config("user.signingkey", "key::" + rig.pub(rig.a))
+    shim, marker = rig.root / "shim", rig.root / "rm-started"
+    shim.mkdir()
+    rm = shim / "rm"
+    rm.write_text(f"#!/bin/sh\n: > {marker}\nsleep 1\nexec /bin/rm \"$@\"\n")
+    rm.chmod(0o755)
+    tmp = Path(tempfile.mkdtemp(dir=rig.root))
+    proc = subprocess.Popen(
+        ["bash", str(SOURCE), rig.fp_a],
+        env={**rig.env, "PATH": f"{shim}:{rig.env['PATH']}", "TMPDIR": str(tmp)},
+        cwd=rig.repo,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        for _ in range(200):
+            if marker.exists():
+                break
+            time.sleep(0.02)
+        assert marker.exists(), "cleanup never started"
+        proc.send_signal(sig)
+        out, err = proc.communicate(timeout=10)
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+    assert proc.returncode == 1 and out == ""
+    assert err.count("\n") == 1 and "interrupted" in err, err
+    assert list(tmp.iterdir()) == []
+
+
 def test_a_setup_failure_prints_exactly_one_line(rig):
     rig.add(rig.a)
     rig.config("user.signingkey", "key::" + rig.pub(rig.a))
