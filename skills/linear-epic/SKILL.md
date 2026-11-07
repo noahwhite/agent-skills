@@ -23,10 +23,10 @@ Stories are then filed into the epic with the other `linear-*` skills through th
 
 ## Profile values
 
-| Placeholder | Profile key |
+| Placeholder | Value |
 |---|---|
-| `ABC` (team key, for the CLI) | `profile.tracker.team_key` |
-| team name (for the MCP server) | `profile.tracker.team_name` |
+| `ABC` (team key, for the CLI) | the prefix of the named issue's key when a caller supplies one (Team resolution in [references/linear.md](references/linear.md)), else `profile.tracker.team_key` |
+| team name (for the MCP server) | the name of that issue's team, resolved from its key, when a caller supplies a named issue, else `profile.tracker.team_name` |
 | name prefix | `profile.tracker.epic.name_prefix` |
 | epic label | `profile.tracker.epic.label` |
 | project lead | `profile.tracker.epic.lead` |
@@ -36,7 +36,8 @@ Stories are then filed into the epic with the other `linear-*` skills through th
 
 ## Epic rules
 
-- **Search first:** run `linear project list`; the epic may already exist under a sibling name.
+- **Search first:** run `linear project list --team ABC`, with `ABC` from Profile values (the named issue's team when a caller supplies one, else `profile.tracker.team_key`); the epic may already exist under a sibling name.
+- **One team:** an epic belongs to exactly one team, the `ABC` team, and never spans teams.
 - **Name:** the name prefix, then the epic name, e.g. `[EPIC] Self-serve onboarding`.
 - **Labels:** the epic label **plus** exactly one size label.
   Pass the size label's full name from the profile, not a short form like `Medium`.
@@ -56,7 +57,7 @@ A cycle is `profile.tracker.cycle_weeks` weeks long.
 | **Small (S)** | Well-understood, minor dependencies, low risk | 1-2 cycles |
 | **Medium (M)** | Standard feature, some integration, moderate unknowns | 3-4 cycles |
 | **Large (L)** | Complex logic, multiple touchpoints, significant risk | about a quarter |
-| **Extra Large (XL)** | Cross-team, large architectural shifts | multiple quarters - break down first |
+| **Extra Large (XL)** | Large architectural shifts, many dependencies | multiple quarters - break down first |
 
 Break an XL epic into smaller epics before starting it.
 
@@ -104,7 +105,7 @@ cat > "$epic" <<'EOF'
 <filled-in overview>
 EOF
 
-# ABC = profile.tracker.team_key (the CLI resolves the key, not the team name)
+# ABC = the team key from Profile values (the CLI resolves the key, not the team name)
 linear project create \
   --team ABC \
   --name "[EPIC] <epic name>" \
@@ -117,7 +118,7 @@ linear project create \
 
 ## MCP fallback (only if the CLI create fails)
 
-The Linear MCP server's save_project tool: `name` (with the prefix), `addTeams` = [`profile.tracker.team_name`] (the tool has **no** team field; attach the team through `addTeams` or `setTeams`, which take the name), the overview as `description` (**not** `content`; `summary` is the 255-character short field), `lead` (for `@me` the MCP takes `me`), `icon`, and `labels` (epic label and size label, by name).
+The Linear MCP server's save_project tool: `name` (with the prefix), `addTeams` = [the team name from Profile values] (the tool has **no** team field; attach the one team through `addTeams`, which takes the name), the overview as `description` (**not** `content`; `summary` is the 255-character short field), `lead` (for `@me` the MCP takes `me`), `icon`, and `labels` (epic label and size label, by name).
 save_project exposes only the project lead, not arbitrary members.
 If creation succeeded and a later step failed, update by the returned id; never re-create.
 

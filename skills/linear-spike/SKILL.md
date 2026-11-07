@@ -23,10 +23,10 @@ For an implementation story use `linear-user-story`; for an alert or page diagno
 
 ## Profile values
 
-| Placeholder | Profile key |
+| Placeholder | Value |
 |---|---|
-| `ABC` (team key, for the CLI) | `profile.tracker.team_key` |
-| team name (for the MCP server) | `profile.tracker.team_name` |
+| `ABC` (team key, for the CLI) | the prefix of the named issue's key when a caller supplies one (Team resolution in [references/linear.md](references/linear.md)), else `profile.tracker.team_key` |
+| team name (for the MCP server) | the name of that issue's team, resolved from its key, when a caller supplies a named issue, else `profile.tracker.team_name` |
 | assignee | `profile.tracker.assignee` |
 | creation state | `profile.tracker.states.backlog` |
 | closing state | `profile.tracker.states.done` |
@@ -94,7 +94,7 @@ cat > "$spike" <<'EOF'
 <filled-in template>
 EOF
 
-# ABC = profile.tracker.team_key (the CLI resolves the key, not the team name)
+# ABC = the team key from Profile values (the CLI resolves the key, not the team name)
 linear issue create \
   --team ABC \
   --title "<title prefix> <research question or goal>" \
@@ -120,7 +120,7 @@ linear issue comment add <ID> --body "Worked by agent <session label> at $(date 
 
 Fall back only when the **create itself** fails; if creation succeeded, resume the failed step against the returned id rather than re-creating.
 
-1. The Linear MCP server's save_issue tool, in one call: `team` = `profile.tracker.team_name` (name, not key), `title`, `description` (the filled template), `labels` (the spike label, by name), `state` = the backlog state, `assignee` (for `self` the MCP takes `me`).
+1. The Linear MCP server's save_issue tool, in one call: `team` = the team name from Profile values (name, not key), `title`, `description` (the filled template), `labels` (the spike label, by name), `state` = the backlog state, `assignee` (for `self` the MCP takes `me`).
    Do not set an estimate.
    If the combined call is rejected, create with team, title, and description only, then update by the returned id.
 2. The save_comment tool for the agent stamp, when enabled.
