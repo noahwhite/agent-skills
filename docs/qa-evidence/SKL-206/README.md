@@ -17,7 +17,7 @@ The raw probe output is attached to SKL-206 as `SKL-206-qa-round-1-assertions.tx
 | S3: briefs carry it | Verified | One git-rule bullet sits next to the secrets rule bullet (and the attribution rule, where the list has it) in `story-to-done` steps 2 and 3, `persona-staff-engineer` and `persona-staff-devops`, and the `engineering-workflow` fixer prose carries the same sentence. `grep -l 'with the git identity already configured' skills/*/SKILL.md` lists exactly those four files, and `grep -c` on `skills/story-to-done/SKILL.md` prints 2. |
 | S4: no consumer literal | Verified | The S4 scan over the lines PR 157 added under `shared` and `skills` prints nothing, with grep exit status 1. |
 | S5: vendored copies in step | Verified | `python3 scripts/vendor_shared.py --check` exits 0, and the S3 phrase is in 13 of the 13 `skills/*/references/github.md` copies. `uv run --locked pytest -q` reports 1300 passed with exit 0. `uv run --locked python scripts/leak_scan.py` exits 0, reporting INCOMPLETE because this container loads no private patterns; CI run 42415037991 on the build ran it with `--require-private` and succeeded. The CI loop of `skills-ref validate` exits 0 for all 18 skills. |
-| S6: observed | Not met | No story-to-done run on a throwaway story is recorded. The PR 157 body says "S6 (observed run): not yet done", no PR 157 comment records a run, and no throwaway SKL story exists. OFF-1420 is in Backlog, and its refinement says the end-to-end check stays with SKL-206 S6. |
+| S6: observed | Not met | No story-to-done run on a throwaway story is recorded. The PR 157 body says "S6 (observed run): not yet done", no PR 157 comment records a run, and no throwaway SKL story exists. The linked consumer story is in Backlog, and its refinement says the end-to-end check stays with SKL-206 S6. |
 | S7: gate | Not met | The PR 157 body records the S5 commands and outputs, the S4 output and the head `5366ec3`, CI run 42414771579 on that head succeeded, and the review of record's `commit_id` and first line both name `5366ec3`, with its one finding ruled invalid. The S6 evidence that S7 requires is absent from the PR body. |
 | DoD1: all acceptance criteria met | Not met | S6 and S7 are not met. |
 | DoD2: tests written and passing | Verified | `tests/test_git_identity_rule.py` reports 19 passed, and the full suite 1300 passed. |
@@ -27,5 +27,6 @@ The raw probe output is attached to SKL-206 as `SKL-206-qa-round-1-assertions.tx
 | DoD6: no critical bugs or regressions | Verified | The full suite passes, and CI run 42415037991 on the build succeeded. |
 
 Incidental, non-blocking: the first CI run on the PR 157 head, 42414331232, failed in the `discovery` job because `opencode` kept returning a truncated skill list for the global-agents layout until the deadline; run 42414771579 on the same head passed.
+The same failure hit the global-opencode layout in run 42416140490 on this evidence PR.
 
 Closing decision: In Progress, because S6 and S7 as written need an observed story-to-done run on a throwaway story, recorded in PR 157, and none exists.
