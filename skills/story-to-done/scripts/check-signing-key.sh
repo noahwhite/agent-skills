@@ -98,20 +98,40 @@ fingerprint() {
   printf '%s\n' "$out"
 }
 
+# True when the first line of the file is a private-key header, as ssh-keygen identifies one.
+# $1 is the file, $2 optionally the exact kind ("openssh") to require.
+is_private_key() {
+  local first kind=${2:-}
+  IFS= read -r first < "$1" 2>/dev/null || [ -n "$first" ] || return 1
+  first=${first%$'\r'}
+  if [ "$kind" = openssh ]; then
+    [ "$first" = '-----BEGIN OPENSSH PRIV''ATE KEY-----' ]
+  else
+    [[ $first == '-----BEGIN '*'PRIV''ATE KEY-----' ]]
+  fi
+}
+
+# Fingerprint of a private-key file read from a copy with no sibling .pub, removed on any exit.
+own_fingerprint() (
+  tmp=$(mktemp -d 2>/dev/null) || exit 1
+  trap 'rm -rf -- "$tmp"' EXIT
+  trap 'exit 1' HUP INT TERM
+  cp -- "$1" "$tmp/key" 2>/dev/null || exit 1
+  fingerprint "$tmp/key"
+)
+
 # Fingerprint of the key git signs with for a private-key file. ssh-keygen -l prefers the sibling
-# <file>.pub over the private file, so read the private file from a copy that has no sibling and
-# compare it with the sibling, as git does: a mismatch is refused. A legacy PEM file holds no public
-# half and needs its .pub; an OpenSSH file that cannot be read on its own is not signable.
+# <file>.pub over the private file, so read the private file on its own and compare it with the
+# sibling, as git does: a mismatch is refused. A legacy PEM file holds no public half and needs its
+# .pub; an OpenSSH file that cannot be read on its own is not signable. An encrypted PEM file cannot
+# be read without its passphrase, so its .pub is trusted as the identity.
 private_fingerprint() {
-  local file=$1 tmp own= sib= pem=1
-  grep -q -e '^-----BEGIN OPENSSH PRIV''ATE KEY-----' "$file" && pem=0
-  tmp=$(mktemp -d 2>/dev/null) || return 1
-  if cp -- "$file" "$tmp/key" 2>/dev/null; then own=$(fingerprint "$tmp/key") || own=; fi
-  rm -rf -- "$tmp"
+  local file=$1 own= sib=
+  own=$(own_fingerprint "$file") || own=
   if [ -e "$file.pub" ]; then
     sib=$(fingerprint "$file.pub") || return 1
   fi
-  if [ "$pem" -eq 0 ]; then
+  if is_private_key "$file" openssh; then
     [ -n "$own" ] || return 1
     [ -z "$sib" ] || [ "$sib" = "$own" ] || return 1
     printf '%s\n' "$own"
@@ -142,7 +162,7 @@ if signing_key=$(git config --get user.signingkey 2>/dev/null); then
         resolved=
       else
         # A private-key file resolves without the agent; any other file is a public-key file.
-        if grep -q -e '^-----BEGIN .*PRIVATE KEY-----' "$path"; then
+        if is_private_key "$path"; then
           public=0
           resolved=$(private_fingerprint "$path") || resolved=
         else

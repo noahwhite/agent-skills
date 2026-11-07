@@ -674,6 +674,7 @@ def test_a_private_key_file_resolves_to_the_key_git_signs_with(rig, kind, passph
     rig.config("user.signingkey", str(path))
     if loaded:
         load_into_agent(rig, path, passphrase)
+    if loaded or not passphrase:
         assert git_signs_with(rig) == fp  # git agrees with what the preflight is about to say
     assert_ok(rig.check(fp))
     assert_fails(rig.check(rig.fp_a), rig.fp_a, fp, "mismatch")
@@ -789,3 +790,23 @@ def test_an_agentless_private_key_file_signs_as_the_preflight_says(rig, kind, pa
     rig.config("user.signingkey", str(path))
     assert git_signs_with(rig) == fp
     assert_ok(rig.check(fp))
+
+
+def test_a_foreign_public_file_beside_an_encrypted_openssh_key_is_not_trusted(rig):
+    path, fp = make_key(rig, "priv", "ed25519", "secret")
+    other, other_fp = make_key(rig, "foreign", "ed25519")
+    Path(str(path) + ".pub").write_text(Path(str(other) + ".pub").read_text())
+    rig.config("user.signingkey", str(path))
+    assert_fails(rig.check(fp), fp, "unresolved", "user.signingkey")
+    assert_fails(rig.check(other_fp), other_fp, "unresolved", "user.signingkey")
+
+
+def test_a_private_key_header_after_the_first_line_does_not_make_a_public_file_private(rig):
+    """git reads this as a public-key file, which needs the agent; an empty agent must fail."""
+    rig.add(rig.b)  # agent holds another key only
+    header = "-----BEGIN OPENSSH PRIV" + "ATE KEY-----"
+    pub = rig.root / "mixed.pub"
+    pub.write_text(rig.pub(rig.a) + "\n" + header + "\n")
+    rig.config("user.signingkey", str(pub))
+    assert git_signs_with(rig) is None
+    assert_fails(rig.check(rig.fp_a), rig.fp_a, rig.fp_a, "not loaded")
