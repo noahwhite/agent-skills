@@ -603,3 +603,221 @@ def test_the_rule_is_stated_once_and_nowhere_else():
     for path in [*(ROOT / "shared").glob("*.md"), *(ROOT / "skills").glob("*/SKILL.md")]:
         if path != GITHUB:
             assert "check-signing-key" not in path.read_text(), path
+
+
+# --- C2 class: every resolvable form, checked against what git 2.43 itself signs with --------
+
+
+def make_key(rig, name, kind="ed25519", passphrase="", fmt=None):
+    """Generate a key under HOME/.ssh; return (private path, SHA256 fingerprint)."""
+    path = rig.root / "home" / ".ssh" / name
+    cmd = ["ssh-keygen", "-q", "-t", kind, "-N", passphrase, "-C", name, "-f", str(path)]
+    if kind == "rsa":
+        cmd[1:1] = ["-b", "2048"]
+    if fmt:
+        cmd[1:1] = ["-m", fmt]
+    res = run(cmd)
+    assert res.returncode == 0, res.stderr
+    out = run(["ssh-keygen", "-E", "sha256", "-lf", str(path) + ".pub"]).stdout
+    return path, out.split()[1]
+
+
+def load_into_agent(rig, path, passphrase=""):
+    """ssh-add a key, answering a passphrase prompt through a test-owned askpass program."""
+    env = dict(rig.env)
+    if passphrase:
+        askpass = rig.root / "askpass"
+        askpass.write_text(f"#!/bin/sh\necho '{passphrase}'\n")
+        askpass.chmod(0o755)
+        env.update(SSH_ASKPASS=str(askpass), SSH_ASKPASS_REQUIRE="force")
+    res = run(["ssh-add", str(path)], env=env, stdin=subprocess.DEVNULL)
+    assert res.returncode == 0, res.stderr
+
+
+def git_signs_with(rig, cwd=None):
+    """The SHA256 fingerprint of the key git actually signs a commit with, or None when it cannot sign."""
+    allowed = rig.root / "allowed_signers"
+    lines = []
+    for pub in sorted((rig.root / "home" / ".ssh").glob("*.pub")):
+        lines.append("* " + " ".join(pub.read_text().split()[:2]))
+    allowed.write_text("\n".join(lines) + "\n")
+    rig.config("gpg.ssh.allowedSignersFile", str(allowed))
+    rig.config("user.name", "t")
+    rig.config("user.email", "t@example.com")
+    work = cwd or rig.repo
+    res = run(["git", "commit", "-q", "--allow-empty", "-S", "-m", "x"], env=rig.env, cwd=work, stdin=subprocess.DEVNULL)
+    if res.returncode != 0:
+        return None
+    out = run(["git", "log", "-1", "--format=%GF"], env=rig.env, cwd=work).stdout.strip()
+    return out or None
+
+
+PRIVATE_FORMS = [
+    pytest.param("ed25519", "", None, id="ed25519"),
+    pytest.param("ed25519", "secret", None, id="ed25519-passphrase"),
+    pytest.param("rsa", "", None, id="rsa"),
+    pytest.param("rsa", "secret", None, id="rsa-passphrase"),
+    pytest.param("rsa", "", "PEM", id="rsa-pem"),
+    pytest.param("rsa", "secret", "PEM", id="rsa-pem-passphrase"),
+    pytest.param("ecdsa", "", None, id="ecdsa"),
+    pytest.param("ecdsa", "secret", None, id="ecdsa-passphrase"),
+    pytest.param("ecdsa", "", "PEM", id="ecdsa-pem"),
+    pytest.param("ecdsa", "secret", "PEM", id="ecdsa-pem-passphrase"),
+]
+
+
+@pytest.mark.parametrize("kind,passphrase,fmt", PRIVATE_FORMS)
+@pytest.mark.parametrize("loaded", [True, False], ids=["agent-loaded", "agent-empty"])
+def test_a_private_key_file_resolves_to_the_key_git_signs_with(rig, kind, passphrase, fmt, loaded):
+    """A private-key file of any type, format or passphrase state resolves with no passphrase and no agent.
+
+    Git itself signs with a passphrase-protected file only when the agent holds it, so only then is git compared.
+    """
+    path, fp = make_key(rig, "priv", kind, passphrase, fmt)
+    rig.config("user.signingkey", str(path))
+    if loaded:
+        load_into_agent(rig, path, passphrase)
+    if loaded or not passphrase:
+        assert git_signs_with(rig) == fp  # git agrees with what the preflight is about to say
+    assert_ok(rig.check(fp))
+    assert_fails(rig.check(rig.fp_a), rig.fp_a, fp, "mismatch")
+
+
+@pytest.mark.parametrize("pub_beside", [True, False], ids=["pub-beside", "no-pub-beside"])
+def test_a_passphrase_private_key_file_is_resolved_with_or_without_its_public_file(rig, pub_beside):
+    path, fp = make_key(rig, "priv", "ed25519", "secret")
+    load_into_agent(rig, path, "secret")
+    if not pub_beside:
+        Path(str(path) + ".pub").unlink()
+    rig.config("user.signingkey", str(path))
+    assert_ok(rig.check(fp))
+
+
+def test_an_unreadable_passphrase_pem_key_without_a_public_file_stays_unresolved(rig):
+    """Git cannot sign with it either without the passphrase, so failing closed is correct."""
+    path, fp = make_key(rig, "priv", "rsa", "secret", "PEM")
+    Path(str(path) + ".pub").unlink()
+    rig.config("user.signingkey", str(path))
+    assert_fails(rig.check(fp), fp, "unresolved", "user.signingkey")
+
+
+PUBLIC_LAYOUTS = {
+    "comment-first": lambda k, o: f"# a comment\n{k}\n",
+    "blank-first": lambda k, o: f"\n{k}\n",
+    "crlf": lambda k, o: f"{k}\r\n",
+    "indented": lambda k, o: f"  {k}\n",
+    "no-newline": lambda k, o: k,
+    "two-keys-first-wins": lambda k, o: f"{k}\n{o}\n",
+}
+
+
+@pytest.mark.parametrize("layout", PUBLIC_LAYOUTS)
+def test_a_public_key_file_layout_resolves_to_the_key_git_signs_with(rig, layout):
+    rig.add(rig.a)
+    rig.add(rig.b)
+    body = PUBLIC_LAYOUTS[layout](rig.pub(rig.a), rig.pub(rig.b))
+    pub = rig.root / "layout.pub"
+    pub.write_text(body)
+    rig.config("user.signingkey", str(pub))
+    assert git_signs_with(rig) == rig.fp_a
+    assert_ok(rig.check(rig.fp_a))
+    assert_fails(rig.check(rig.fp_b), rig.fp_b, rig.fp_a, "mismatch")
+
+
+@pytest.mark.parametrize("kind", ["rsa", "ecdsa"])
+def test_a_key_literal_and_command_output_of_other_key_types_pass(rig, kind):
+    path, fp = make_key(rig, "typed", kind)
+    load_into_agent(rig, path)
+    pub = Path(str(path) + ".pub").read_text().strip()
+    rig.config("user.signingkey", "key::" + pub)
+    assert git_signs_with(rig) == fp
+    assert_ok(rig.check(fp))
+    rig.git("config", "--global", "--unset", "user.signingkey")
+    rig.config("gpg.ssh.defaultKeyCommand", rig.emitter("emit-typed", f"printf 'key::%s\\n' \"$(cat {path}.pub)\""))
+    assert git_signs_with(rig) == fp
+    assert_ok(rig.check(fp))
+
+
+@pytest.mark.parametrize("form", ["public", "private", "tilde"])
+def test_a_relative_or_tilde_key_path_resolves_from_a_subdirectory_as_git_does(rig, form):
+    """git commit runs from the work tree top, so a relative path is relative to it, wherever the check runs."""
+    rig.add(rig.a)
+    sub = rig.repo / "deep" / "er"
+    sub.mkdir(parents=True)
+    if form == "tilde":
+        rig.config("user.signingkey", "~/.ssh/registered.pub")
+    else:
+        src = Path(str(rig.a) + (".pub" if form == "public" else ""))
+        (rig.repo / "key").write_text(src.read_text())
+        (rig.repo / "key").chmod(0o600)
+        rig.config("user.signingkey", "key")
+    assert git_signs_with(rig, cwd=sub) == rig.fp_a
+    assert_ok(run(["bash", str(SOURCE), rig.fp_a], env=rig.env, cwd=sub))
+
+
+@pytest.mark.parametrize("kind,fmt", [("ed25519", None), ("rsa", None), ("rsa", "PEM"), ("ecdsa", None)])
+def test_a_foreign_public_file_beside_a_private_key_is_not_trusted(rig, kind, fmt):
+    """ssh-keygen -l prefers <file>.pub; git refuses a mismatch, so neither fingerprint may pass."""
+    path, fp = make_key(rig, "priv", kind, "", fmt)
+    other, other_fp = make_key(rig, "foreign", "ed25519")
+    Path(str(path) + ".pub").write_text(Path(str(other) + ".pub").read_text())
+    rig.config("user.signingkey", str(path))
+    assert git_signs_with(rig) is None
+    assert_fails(rig.check(fp), fp, "unresolved", "user.signingkey")
+    assert_fails(rig.check(other_fp), other_fp, "unresolved", "user.signingkey")
+
+
+@pytest.mark.parametrize("damage", ["truncated", "crlf"])
+def test_an_unreadable_openssh_private_file_does_not_fall_back_to_its_public_file(rig, damage):
+    path, fp = make_key(rig, "priv", "ed25519")
+    data = path.read_bytes()
+    path.write_bytes(data[: len(data) // 2] if damage == "truncated" else data.replace(b"\n", b"\r\n"))
+    rig.config("user.signingkey", str(path))
+    assert git_signs_with(rig) is None
+    assert_fails(rig.check(fp), fp, "unresolved", "user.signingkey")
+
+
+@pytest.mark.parametrize("kind", ["rsa", "ecdsa"])
+def test_an_unencrypted_pem_private_key_without_a_public_file_stays_unresolved(rig, kind):
+    """A legacy PEM file holds no public half: git needs the .pub beside it."""
+    path, fp = make_key(rig, "priv", kind, "", "PEM")
+    Path(str(path) + ".pub").unlink()
+    rig.config("user.signingkey", str(path))
+    assert git_signs_with(rig) is None
+    assert_fails(rig.check(fp), fp, "unresolved", "user.signingkey")
+
+
+@pytest.mark.parametrize("kind,passphrase,fmt", [p.values for p in PRIVATE_FORMS if not p.values[1]])
+def test_an_agentless_private_key_file_signs_as_the_preflight_says(rig, kind, passphrase, fmt):
+    path, fp = make_key(rig, "priv", kind, passphrase, fmt)
+    rig.config("user.signingkey", str(path))
+    assert git_signs_with(rig) == fp
+    assert_ok(rig.check(fp))
+
+
+def test_a_foreign_public_file_beside_an_encrypted_openssh_key_is_not_trusted(rig):
+    path, fp = make_key(rig, "priv", "ed25519", "secret")
+    other, other_fp = make_key(rig, "foreign", "ed25519")
+    Path(str(path) + ".pub").write_text(Path(str(other) + ".pub").read_text())
+    rig.config("user.signingkey", str(path))
+    assert_fails(rig.check(fp), fp, "unresolved", "user.signingkey")
+    assert_fails(rig.check(other_fp), other_fp, "unresolved", "user.signingkey")
+
+
+def test_a_private_key_header_after_the_first_line_does_not_make_a_public_file_private(rig):
+    """git reads this as a public-key file, which needs the agent; an empty agent must fail."""
+    rig.add(rig.b)  # agent holds another key only
+    header = "-----BEGIN OPENSSH PRIV" + "ATE KEY-----"
+    pub = rig.root / "mixed.pub"
+    pub.write_text(rig.pub(rig.a) + "\n" + header + "\n")
+    rig.config("user.signingkey", str(pub))
+    assert git_signs_with(rig) is None
+    assert_fails(rig.check(rig.fp_a), rig.fp_a, rig.fp_a, "not loaded")
+
+
+def test_a_pem_private_key_with_leading_lines_fails_closed(rig):
+    """Only a file whose first line is the private-key header counts as a private-key file."""
+    path, fp = make_key(rig, "priv", "rsa", "", "PEM")
+    path.write_text("\n" + path.read_text())
+    rig.config("user.signingkey", str(path))
+    assert_fails(rig.check(fp), fp, "unresolved", "user.signingkey")
