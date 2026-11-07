@@ -1,5 +1,41 @@
 # SKL-142 QA evidence
 
+## Round 5
+
+Date: 2026-11-07 UTC, independent QA round 5.
+Acceptance basis: the live acceptance criteria and Definition of Done, with C2 as amended by the owner ruling of 2026-11-07, which accepts a bare `ssh-` literal and `ssh-` command output and requires the agent only where git needs it.
+Build under test: `main` at `6de9bd1a5e6c6a54a93fa2e8bd2e4d74b76e16b7`, the squash merge of PR 155, whose reviewed head `489aeb00b97ae5db78243743d44d311e11b2ce11` has the identical tree.
+Environment: the profile lists no environments, so C1 to C5 were verified against the merged code on `main`, and C6 ran at PR 155's head, as C6 requires.
+Tool versions: git 2.43.0 and OpenSSH 9.6p1.
+Fixtures for C2: generated ed25519, rsa, ecdsa and PEM test keys, some passphrase-protected, and a probe-owned ssh-agent, with a temporary `HOME`, `GIT_CONFIG_GLOBAL` and `SSH_AUTH_SOCK`; each case is compared with `git commit -S` under the same configuration.
+Fixtures for C6: the real agent holding the registered key `SHA256:Kj2Cb8r6b1YQ5hksGDH0FeiivWj1DZ8puXI8+IlN9l0` and the unregistered key `SHA256:Mr7r0feKeSqWjnxw0JQa1kywdtfK+hhp8sBn3nfX6XM`, in a throwaway clone at `489aeb00b97ae5db78243743d44d311e11b2ce11`.
+There is no visual surface, so the evidence is structured assertions and raw output; no screenshot applies.
+The raw probe output is attached to SKL-142 as the "QA r5" attachments.
+
+| Item | Verdict | Evidence |
+|---|---|---|
+| C1: profile key | Verified | 30 of 30 schema checks pass: the pattern is exactly `^SHA256:[A-Za-z0-9+/]{43}$`, both descriptions are present, the key is not required, 3 valid values are accepted, 18 malformed values fail (including empty, whitespace and `null`), a profile without the key validates, and `profile/example.yaml` validates. |
+| C2: preflight | Verified | The 13 skills listed for the script in `skills.json` are exactly the skills that receive `shared/github.md`, and each vendored copy is the generated header plus the source, mode 0644. 59 of 59 hermetic cases agree with `git commit -S`: every `user.signingkey` form (`key::` and bare `ssh-` literals, public-key files including `~/` and `~<user>/` paths and a relative path from a subdirectory, private-key files including a passphrase-protected key and PEM with a line before its header), no fallback when `user.signingkey` cannot be resolved, the `gpg.ssh.defaultKeyCommand` path (`key::` and `ssh-` output, a relative command run from a subdirectory, malformed, empty and failing output), and the agent required only where git needs it. In every tested failure case the preflight prints exactly one stderr line with public fingerprints only and nothing on stdout, success prints nothing, and the repository is left unchanged; the signal race under the observations below is the one known exception. The three round 4 gaps (a `~<user>/` public-key path, a PEM private-key file with a leading line, and a relative default key command run from a subdirectory) now resolve as git does. |
+| C3: skills use it | Verified | The Commits and signing section of `shared/github.md` states each rule sentence once, all 13 `references/github.md` copies match it, and no `SKILL.md` or other `shared/` file restates the rule. |
+| C4: docs | Verified | The README "Commit signing key" section under "Profile" gives the meaning, the relation to `git.signed_commits`, the unset behaviour and the preflight command, and `profile/example.yaml` shows `signing_key` directly under `signed_commits`. |
+| C5: tests | Verified | `uv run --locked pytest -q` reports 1281 passed, `tests/test_signing_key.py` 143 passed, `vendor_shared.py --check` exits 0, CI succeeded on PR 155's head `489aeb0` (run 42346282341), the PR 144 body records the mutations, and a diff read confirms the rewritten comparison is still guarded by `test_a_matching_key_literal_passes`. |
+| C6: verified end to end | Verified | With the unregistered key selected the preflight exits 1 on both paths and HEAD is unchanged. With the registered key it exits 0 on both paths, and fixture commits `74882d0e297b1c30a9879256eb0f849cad89def6` (`user.signingkey` public-key file) and `8b43f9bc5eb9dbc87c96d1718fed638bdbbd9432` (container default key command, `user.signingkey` unset) report `verified=true reason=valid`. Both fixture branches were deleted by an exit trap and return 404. |
+| DoD1: all acceptance criteria met | Verified | C1 to C6 are verified. |
+| DoD2: tests written and passing | Verified | See C5. |
+| DoD3: independently reviewed | Verified | PR 144 review 5808241571 at `b37f71325bdfa475e355378c64e3cec91e15b9bd`, PR 149 review 5809477523 at `b130f9246c69dec570b79186ec5408856b856e01`, PR 153 review 5810010818 at `6fd16c57cd48deb018237f73d428b6ff6385af3a` and PR 155 review 5810552467 at `489aeb00b97ae5db78243743d44d311e11b2ce11` are the reviews of record at the merged heads, with no Critical or High finding open. |
+| DoD4: docs updated | Verified | See C1 and C4. |
+| DoD5: verified in a deployed environment | Not applicable, covered by C6 | The profile lists no environments. |
+| DoD6: no critical bugs or regressions | Verified | The full suite and CI are green. |
+
+Observations, not AC gaps:
+
+- A malformed argument fails with `expected invalid`, since there is no fingerprint to name.
+- A bare `ecdsa-sha2-` `user.signingkey` line is read by git 2.43.0 as a path, so git and the preflight both fail; the AC names `ssh-` literals only.
+- python-jsonschema still accepts a valid fingerprint followed by a trailing newline, as recorded in round 1, and the preflight rejects that argument.
+- PR 155's review of record accepted one Low finding as a residual limitation: a second signal between the signal handler and the cleanup trap can skip both the scratch-directory removal and the stderr line, while the exit status stays 1.
+
+Closing decision: Done once this evidence PR merges, since every acceptance criterion and Definition of Done item is verified.
+
 ## Round 4
 
 Date: 2026-11-07 UTC, independent QA round 4.
