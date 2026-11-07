@@ -5,7 +5,7 @@
 Date: 2026-11-07 UTC, independent QA round 2.
 Acceptance basis: the product owner ruled that the acceptance criteria and Definition of Done stand exactly as written and no AC is amended, so every item is judged against its text.
 Build under test: `main` at `a73ef64c527beba8ffb8fb9f59c6e4e123dbb787`, whose SKL-142 code is the PR 144 squash merge `f9ba006e4f5392d57e81be3b2ea38a1d547dd61f` (reviewed head `b37f71325bdfa475e355378c64e3cec91e15b9bd`), unchanged since.
-Environment: the profile lists no environments, so verification ran against the merged code on `main`.
+Environment: the profile lists no environments, so C1 to C5 were verified against the merged code on `main`, and C6 ran at PR 144's head, as C6 requires; the SKL-142 files are identical at both commits.
 Fixtures for C2: generated ed25519 test keys and a probe-owned ssh-agent, with a temporary `HOME` and `GIT_CONFIG_GLOBAL`.
 Fixtures for C6: the real agent holding the registered key `SHA256:Kj2Cb8r6b1YQ5hksGDH0FeiivWj1DZ8puXI8+IlN9l0` and the unregistered key `SHA256:Mr7r0feKeSqWjnxw0JQa1kywdtfK+hhp8sBn3nfX6XM`, in a throwaway clone at PR 144's head `b37f71325bdfa475e355378c64e3cec91e15b9bd`.
 There is no visual surface, so the evidence is structured assertions and raw output; no screenshot applies.
