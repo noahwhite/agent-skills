@@ -1,5 +1,34 @@
 # SKL-142 QA evidence
 
+## Round 4
+
+Date: 2026-11-07 UTC, independent QA round 4.
+Acceptance basis: the product owner ruled that the acceptance criteria and Definition of Done stand exactly as written and no AC is amended, so every item is judged against its text.
+Build under test: `main` at `db0db290b79920ff7513ed897bc48eb23acc2e4c`, the squash merge of PR 153, whose reviewed head is `6fd16c57cd48deb018237f73d428b6ff6385af3a`; no SKL-142 file differs between the two.
+Environment: the profile lists no environments, so C1 to C5 were verified against the merged code on `main`, and C6 ran at PR 153's head, as C6 requires.
+Tool versions: git 2.43.0 and OpenSSH 9.6p1.
+Fixtures for C2: generated ed25519, rsa, ecdsa and PEM test keys, some passphrase-protected, and a probe-owned ssh-agent, with a temporary `HOME` and `GIT_CONFIG_GLOBAL`; each case is compared with `git commit -S` under the same configuration.
+Fixtures for C6: the real agent holding the registered key `SHA256:Kj2Cb8r6b1YQ5hksGDH0FeiivWj1DZ8puXI8+IlN9l0` and the unregistered key `SHA256:Mr7r0feKeSqWjnxw0JQa1kywdtfK+hhp8sBn3nfX6XM`, in a throwaway clone at `6fd16c57cd48deb018237f73d428b6ff6385af3a`.
+There is no visual surface, so the evidence is structured assertions and raw output; no screenshot applies.
+The raw probe output is attached to SKL-142 as the "QA r4" attachments.
+
+| Item | Verdict | Evidence |
+|---|---|---|
+| C1: profile key | Verified | 25 of 25 schema cases pass: the pattern is exactly `^SHA256:[A-Za-z0-9+/]{43}$`, both descriptions are present, the key is not required, the malformed values fail, and a profile without the key validates. |
+| C2: preflight | Not met | Vendoring to all 13 skills and the `bash` invocation behave as specified, and 56 of 59 hermetic cases behave as specified. Those 56 include the round 3 passphrase-protected private-key file, which now resolves with and without its `.pub`, and the round 2 bare `ssh-` forms (a `user.signingkey` literal and an `ssh-add -L` default key command), which exit 1 as AC (2) and (3) require although git signs with them. Three cases exit 1 with `resolved unresolved` although git 2.43.0 signs with that key (`git commit -S` exits 0, signature status `G` by that key): U27, a public-key file in `user.signingkey` reached through a `~<user>/` path, which the script does not expand (`shared/check-signing-key.sh` line 149 expands only `~/`); U29, a PEM private-key file with a line before its header and a matching `.pub`; and D16, a relative `gpg.ssh.defaultKeyCommand` with the preflight run from a subdirectory, which git runs from the top of the work tree and the script runs from the current directory (line 176). AC (2) and (3) require the script to resolve the key git would sign with, and none of these is a mismatch, an unresolvable key, or an unloaded key. The verdict rests on U27 and U29, which run from the top of the work tree. No case exits 0 where git would sign with another key. |
+| C3: skills use it | Verified | The Commits and signing section of `shared/github.md` states each rule sentence once, all 13 `references/github.md` copies match it, and no `SKILL.md` or other `shared/` file restates the rule. |
+| C4: docs | Verified | The README "Commit signing key" section under "Profile" covers the key, and `profile/example.yaml` shows `signing_key` directly under `signed_commits`. |
+| C5: tests | Verified | `uv run --locked pytest -q` reports 1285 passed, `tests/test_signing_key.py` 147 passed, `vendor_shared.py --check` exits 0, CI succeeded on PR 153's head `6fd16c5` (run 42337045516), the PR 144 body records the mutations, and a diff read confirms the new passphrase tests drive the script and compare with git. |
+| C6: verified end to end | Verified | With the unregistered key selected the preflight exits 1 on both paths and HEAD is unchanged. With the registered key it exits 0 on both paths, and fixture commits `c4d863212d5c40dd05cd9fbe72f9e0e5c597beee` (`user.signingkey` `key::` literal) and `12dd93c7941d1bab5426b4c78356eafd11751997` (container default key command, `user.signingkey` unset) report `verified=true reason=valid`. Both fixture branches were deleted by an exit trap and are absent. |
+| DoD1: all acceptance criteria met | Not met | C2 is not met. |
+| DoD2: tests written and passing | Verified | See C5. |
+| DoD3: independently reviewed | Verified | PR 144 review 5808241571 at `b37f71325bdfa475e355378c64e3cec91e15b9bd`, PR 149 review 5809477523 at `b130f9246c69dec570b79186ec5408856b856e01` and PR 153 review 5810010818 at `6fd16c57cd48deb018237f73d428b6ff6385af3a` are the reviews of record at the merged heads, by the profile's reviewer and adjudicator. |
+| DoD4: docs updated | Verified | See C1 and C4. |
+| DoD5: verified in a deployed environment | Not applicable, covered by C6 | The profile lists no environments. |
+| DoD6: no critical bugs or regressions | Verified | The full suite and CI are green; the C2 gaps fail closed. |
+
+Closing decision: In Progress, because the delivered preflight refuses a `~<user>/` public-key path and a PEM private-key file with a leading line, both of which git signs with and C2 as written requires the script to resolve.
+
 ## Round 3
 
 Date: 2026-11-07 UTC, independent QA round 3.
