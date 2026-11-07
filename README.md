@@ -104,12 +104,16 @@ When `git.signed_commits` is true and `git.signing_key` is set, the skills run t
 bash <skill dir>/scripts/check-signing-key.sh <git.signing_key>
 ```
 
-It resolves the key git would sign with (`gpg.format` must be `ssh`; then `user.signingkey`, or when that is unset the first output line of `gpg.ssh.defaultKeyCommand`, which must begin with `key::` and is run without a shell, as git runs it), compares its fingerprint with the argument, and for a public-key resolution also requires the key to be loaded in the ssh agent.
-A `user.signingkey` must be a `key::` literal, a public-key file or a private-key file; a bare `ssh-` literal fails.
-A private-key file is read without its passphrase and needs no agent (signing with a passphrase-protected file still needs the passphrase, and an encrypted PEM file is identified by its `.pub`), and a `.pub` file beside it must match it (a legacy PEM file needs that `.pub` for its public half); a relative path is relative to the top of the work tree, as for `git commit`; the first key of a public-key file counts, as for git; a private-key file whose header is not its first line is not recognised and fails as unresolved.
+Git resolves the key itself: the script asks git to sign a throwaway commit under the effective git config of the repository it runs in, reads the signer's fingerprint back from the signature, and compares it with the argument.
+So `gpg.format` must be `ssh`, and `user.signingkey` (a `key::` or bare `ssh-` literal, a public-key file or a private-key file, with `~`, `~user` and relative paths as git resolves them) or, when that is unset, `gpg.ssh.defaultKeyCommand` (run as git runs it) is resolved exactly as for `git commit`.
+The script parses no key file and no command output.
+A key that git can only sign with through the agent (a literal, command output, or a public-key file with no private key beside it) fails when it is not loaded in the ssh agent.
+A public-key file whose matching private key sits beside it, and a private-key file without a passphrase, sign without the agent and pass.
+A `.pub` file beside a private-key file that holds a different key is not a mismatch for git: git signs with the key the `.pub` names when the agent holds it, and the preflight reports that key.
+The throwaway commit is made with `git commit-tree` into a temporary object directory, so the repository gains no commit, ref, object or config change, and the temporary directory is removed on exit and on interrupt.
 It prints nothing and exits 0 on a match; otherwise it exits non-zero with one line on stderr, and the skill stops instead of committing.
 The script is vendored into every skill that receives `references/github.md`, as a copy with a generated header above the shebang, so it is run through `bash` and never as an executable.
-A `gpg.ssh.program` wrapper that signs with another key than git selected is not detected.
+A `gpg.ssh.program` wrapper is honoured as git honours it, so the signature it produces is the one checked.
 When `git.signing_key` is unset, nothing is checked by fingerprint and the skills only confirm that `user.signingkey` resolves to the registered key.
 
 ### Switching a seat off
