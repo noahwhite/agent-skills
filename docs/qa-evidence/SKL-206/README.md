@@ -61,3 +61,34 @@ Notes, non-blocking:
 - The `discovery` job failure from round 1 recurs: runs 42416754248, 42417057949 and 42417329558 on this PR's round 1 head and run 42418896884 on the first round 2 head failed it, each with `skill API returned undecodable JSON: Unterminated string` at about character 242,800, in the project-claude, global-agents or global-claude layout.
 
 Closing decision: In Progress, because S6 as written needs a story-to-done run on a throwaway story, and the recorded run is a hand-composed single-agent brief that exercised neither `engineering-workflow` to deployment review nor the step 3 QA brief; S7 and DoD1 follow S6.
+
+## Round 3
+
+Date: 2026-11-07 UTC, independent QA round 3, after the second rework for S6 and S7.
+Build under test: `main` at `c5c745a2d586579332377067035230336ebe3bc8`, which contains the PR 157 squash `f7171eb99bf0d3cc3c7635946c76aead8592cf10`; PR 157 head `5366ec3ebb4784f7502263235fb7415c92d84300`.
+Environment: none, as in rounds 1 and 2; every item was checked on the repository, tracker, transcript and GitHub lanes, in a detached worktree of the build.
+Fixtures: throwaway story SKL-211 (Done), its PRs 160 and 161, and the transcripts of the four agents its story-to-done run delegated.
+There is no visual surface, so the evidence is structured assertions and raw output; no screenshot applies.
+The raw probe output is attached to SKL-206 as `SKL-206-qa-round-3-assertions.txt`.
+
+| Item | Verdict | Evidence |
+|---|---|---|
+| S1: base rule | Verified | Each S1 phrase appears once in "Commits and signing" of `shared/github.md` at `c5c745a`. |
+| S2: fault path | Verified | Both fault lines, the stop line and "Never commit with a per-commit key override" appear once each; "On a non-zero exit, stop and fix the configuration" appears 0 times. |
+| S3: briefs carry it | Verified | `grep -l 'with the git identity already configured' skills/*/SKILL.md` lists exactly the four files, and `grep -c` on `skills/story-to-done/SKILL.md` prints 2. |
+| S4: no consumer literal | Verified | The S4 scan over `f7171eb^..f7171eb -- shared skills` prints nothing, with grep exit status 1. |
+| S5: vendored copies in step | Verified | `vendor_shared.py --check` exit 0; 13 of 13 copies; `uv run --locked pytest -q` 1300 passed, exit 0; `leak_scan.py` exit 0 (INCOMPLETE locally, no private patterns); `skills-ref validate` exit 0 for all 18 skills. |
+| S6: observed | Verified | The installed `story-to-done` skill is identical to `main`, and the senior engineer and QA briefs carry its git-rule bullet verbatim. The container's global git config sets identity and SSH signing (key names read, values not shown). The four delegated agents' transcripts hold 45, 98, 25 and 5 distinct Bash calls, 3 of them commit-creating, with 0 S1-forbidden actions; the scanner flagged 10 of 10 forbidden samples in a self-test. The three agent commits and the squash merges of PRs 157, 160 and 161 all report `verified: true`, reason `valid`. |
+| S7: gate | Verified | The PR 157 body records the S5 commands and outputs, the S4 output, the head `5366ec3`, and the SKL-211 run with no identity or key value. CI run 42414771579 on `5366ec3` succeeded, and review of record 5815043900 has `commit_id` and first line `5366ec3`, with its one finding ruled invalid. |
+| DoD1: all acceptance criteria met | Verified | S1 to S7. |
+| DoD2: tests written and passing | Verified | The full suite reports 1300 passed at `c5c745a`. |
+| DoD3: independently reviewed | Verified | Unchanged from round 1. |
+| DoD4: docs updated | Verified | Unchanged from round 1. |
+| DoD5: verified in a deployed environment | Not needed | The profile lists no environments; S6 is the runtime observation. |
+| DoD6: no critical bugs or regressions | Verified | Full suite green, and the `checks` and `discovery` jobs succeeded on `c5c745a`. |
+
+Notes, non-blocking:
+- The `discovery` job failure from rounds 1 and 2 still recurs; it failed on this PR's previous head `ef24a8d` in run 42419209267.
+- SKL-211's description says its content is removed after the evidence is recorded, but `docs/throwaway/s6-note.md` and `docs/qa-evidence/SKL-211/` remain on `main`.
+
+Closing decision: Done, once this evidence merges.
