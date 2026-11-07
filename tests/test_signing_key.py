@@ -643,7 +643,7 @@ def git_signs_with(rig, cwd=None):
     allowed.write_text("\n".join(lines) + "\n")
     rig.config("gpg.ssh.allowedSignersFile", str(allowed))
     rig.config("user.name", "t")
-    rig.config("user.email", "t@example.test")
+    rig.config("user.email", "t@example.com")
     work = cwd or rig.repo
     res = run(["git", "commit", "-q", "--allow-empty", "-S", "-m", "x"], env=rig.env, cwd=work, stdin=subprocess.DEVNULL)
     if res.returncode != 0:
