@@ -16,7 +16,7 @@ The raw probe output is attached to SKL-211 as the "QA r1 raw assertion output" 
 | A2: tests on `main` | Verified | `uv run --locked pytest -q` at `db1ad8a` reports 1300 passed and exits 0. |
 | DoD1: all acceptance criteria met | Verified | A1 and A2 are verified. |
 | DoD2: tests pass | Verified | See A2; the `checks` job (Repository tests) of `main` push run 42421793060 succeeded. |
-| DoD3: independently reviewed | Verified | PR 160 review 5815382655 at `a0d19cffab9755a65a7aa9fd89a6cb9118323c6f`, the final head, is the review of record, with no findings. |
+| DoD3: independently reviewed | Verified | PR 160 review 5815382655 at `a0d19cffab9755a65a7aa9fd89a6cb9118323c6f`, the final head, is the review of record (Codex GPT-6 Sol reviewer, DeepSeek V4 Pro adjudicator), with no findings. |
 | DoD4: verified in a deployed environment | Not needed | The profile lists no environments, as the item states. |
 
 Observations, not AC gaps:
