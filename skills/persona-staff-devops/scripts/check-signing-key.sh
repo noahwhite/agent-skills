@@ -11,6 +11,7 @@
 #      file; a value that cannot be resolved fails, with no fallback to another source. A bare
 #      ssh- literal, which git also accepts, is none of those forms and fails.
 #      A private-key file is read without its passphrase (the public part is stored in the clear),
+#      a .pub beside it must match it (a legacy PEM file takes its public half from that .pub),
 #      and a relative path is relative to the top of the work tree, where git commit runs.
 #   3. When user.signingkey is unset, the first output line of gpg.ssh.defaultKeyCommand must
 #      begin with key::; any other line, including the bare ssh- line `ssh-add -L` prints, is
@@ -97,6 +98,30 @@ fingerprint() {
   printf '%s\n' "$out"
 }
 
+# Fingerprint of the key git signs with for a private-key file. ssh-keygen -l prefers the sibling
+# <file>.pub over the private file, so read the private file from a copy that has no sibling and
+# compare it with the sibling, as git does: a mismatch is refused. A legacy PEM file holds no public
+# half and needs its .pub; an OpenSSH file that cannot be read on its own is not signable.
+private_fingerprint() {
+  local file=$1 tmp own= sib= pem=1
+  grep -q -e '^-----BEGIN OPENSSH PRIV''ATE KEY-----' "$file" && pem=0
+  tmp=$(mktemp -d 2>/dev/null) || return 1
+  if cp -- "$file" "$tmp/key" 2>/dev/null; then own=$(fingerprint "$tmp/key") || own=; fi
+  rm -rf -- "$tmp"
+  if [ -e "$file.pub" ]; then
+    sib=$(fingerprint "$file.pub") || return 1
+  fi
+  if [ "$pem" -eq 0 ]; then
+    [ -n "$own" ] || return 1
+    [ -z "$sib" ] || [ "$sib" = "$own" ] || return 1
+    printf '%s\n' "$own"
+  else
+    [ -n "$sib" ] || return 1
+    [ -z "$own" ] || [ "$sib" = "$own" ] || return 1
+    printf '%s\n' "$sib"
+  fi
+}
+
 format=$(git config --get gpg.format 2>/dev/null) || format=
 [ "$format" = ssh ] || fail "gpg.format is not ssh"
 
@@ -117,8 +142,12 @@ if signing_key=$(git config --get user.signingkey 2>/dev/null); then
         resolved=
       else
         # A private-key file resolves without the agent; any other file is a public-key file.
-        grep -q -e '^-----BEGIN .*PRIVATE KEY-----' "$path" && public=0
-        resolved=$(fingerprint "$path") || resolved=
+        if grep -q -e '^-----BEGIN .*PRIVATE KEY-----' "$path"; then
+          public=0
+          resolved=$(private_fingerprint "$path") || resolved=
+        else
+          resolved=$(fingerprint "$path") || resolved=
+        fi
       fi
       ;;
   esac

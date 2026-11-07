@@ -749,3 +749,43 @@ def test_a_relative_or_tilde_key_path_resolves_from_a_subdirectory_as_git_does(r
         rig.config("user.signingkey", "key")
     assert git_signs_with(rig, cwd=sub) == rig.fp_a
     assert_ok(run(["bash", str(SOURCE), rig.fp_a], env=rig.env, cwd=sub))
+
+
+@pytest.mark.parametrize("kind,fmt", [("ed25519", None), ("rsa", None), ("rsa", "PEM"), ("ecdsa", None)])
+def test_a_foreign_public_file_beside_a_private_key_is_not_trusted(rig, kind, fmt):
+    """ssh-keygen -l prefers <file>.pub; git refuses a mismatch, so neither fingerprint may pass."""
+    path, fp = make_key(rig, "priv", kind, "", fmt)
+    other, other_fp = make_key(rig, "foreign", "ed25519")
+    Path(str(path) + ".pub").write_text(Path(str(other) + ".pub").read_text())
+    rig.config("user.signingkey", str(path))
+    assert git_signs_with(rig) is None
+    assert_fails(rig.check(fp), fp, "unresolved", "user.signingkey")
+    assert_fails(rig.check(other_fp), other_fp, "unresolved", "user.signingkey")
+
+
+@pytest.mark.parametrize("damage", ["truncated", "crlf"])
+def test_an_unreadable_openssh_private_file_does_not_fall_back_to_its_public_file(rig, damage):
+    path, fp = make_key(rig, "priv", "ed25519")
+    data = path.read_bytes()
+    path.write_bytes(data[: len(data) // 2] if damage == "truncated" else data.replace(b"\n", b"\r\n"))
+    rig.config("user.signingkey", str(path))
+    assert git_signs_with(rig) is None
+    assert_fails(rig.check(fp), fp, "unresolved", "user.signingkey")
+
+
+@pytest.mark.parametrize("kind", ["rsa", "ecdsa"])
+def test_an_unencrypted_pem_private_key_without_a_public_file_stays_unresolved(rig, kind):
+    """A legacy PEM file holds no public half: git needs the .pub beside it."""
+    path, fp = make_key(rig, "priv", kind, "", "PEM")
+    Path(str(path) + ".pub").unlink()
+    rig.config("user.signingkey", str(path))
+    assert git_signs_with(rig) is None
+    assert_fails(rig.check(fp), fp, "unresolved", "user.signingkey")
+
+
+@pytest.mark.parametrize("kind,passphrase,fmt", [p.values for p in PRIVATE_FORMS if not p.values[1]])
+def test_an_agentless_private_key_file_signs_as_the_preflight_says(rig, kind, passphrase, fmt):
+    path, fp = make_key(rig, "priv", kind, passphrase, fmt)
+    rig.config("user.signingkey", str(path))
+    assert git_signs_with(rig) == fp
+    assert_ok(rig.check(fp))
