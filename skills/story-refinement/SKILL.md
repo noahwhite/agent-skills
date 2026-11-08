@@ -292,7 +292,7 @@ When `metrics` is on, the metrics summary is the one comment the SM/EM posts out
 - Set `profile.tracker.states.ready` only when no blocker remains.
 - Leave blocked siblings in `profile.tracker.states.backlog` with the blocker Definition of Ready box unchecked.
 - Priority is the PO's decision on every refinement outcome: the story moving to `profile.tracker.states.ready`, the story staying in `profile.tracker.states.backlog`, and each split sibling.
-  The PO decides a priority before the invocation ends and before any move to `profile.tracker.states.ready`, unless the ceremony stops on priority as this bullet states.
+  The PO decides, applies and reads back a priority before the invocation ends and before any move to `profile.tracker.states.ready`, unless the ceremony stops on priority as this bullet states.
   The PO chooses the priority by comparing the story with at least one comparable story already prioritised in the team of `STORY_ID`.
   The PO applies the priority and reads it back as a PO-authored tracker write.
   "No priority" counts as unset and is never a decided value.
