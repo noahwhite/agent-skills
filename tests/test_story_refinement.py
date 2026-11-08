@@ -2223,7 +2223,8 @@ def test_triage_replaces_the_bare_priority_bullet() -> None:
         # AC1: every outcome, decided before the invocation ends and before ready.
         "Priority is the PO's decision on every refinement outcome: the story moving to "
         "`profile.tracker.states.ready`, the story staying in `profile.tracker.states.backlog`, and each split sibling.",
-        "The PO decides a priority before the invocation ends and before any move to `profile.tracker.states.ready`",
+        "The PO decides a priority before the invocation ends and before any move to `profile.tracker.states.ready`, "
+        "unless the ceremony stops on priority as this bullet states.",
         # AC1: the comparison basis.
         "The PO chooses the priority by comparing the story with at least one comparable story already prioritised "
         "in the team of `STORY_ID`.",
@@ -2278,5 +2279,9 @@ def test_record_says_the_triage_record_is_a_po_triage_write() -> None:
         "Post this as a tracker comment authored by the product owner as a triage write, on every refinement "
         "outcome and on each split sibling, and posted by the product owner or, under the denied tracker writes "
         "fallback, by the facilitator verbatim."
+    ) in body
+    assert (
+        "The priority is the value read back after the PO applied it; when the PO could not decide, the priority "
+        "stays unset and the comparison line carries `needs input` with the open question."
     ) in body
     assert WRITES_FACILITATOR_LINE in fallback_alternative("Triage record").splitlines()
