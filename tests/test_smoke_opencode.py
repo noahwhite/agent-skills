@@ -261,18 +261,32 @@ def test_version_file_is_checked_out_with_lf_endings():
 
 
 PIN_REFERENCE = "the version in `.opencode-version` at the root of the agent-skills repository"
-# Versions the docs record as observations, not as the pin; they stay when the pin moves.
-OBSERVED_VERSIONS = {"0.163.0", "1.19.3", "2.1.312", "2.2.0"}
-VERSION = re.compile(r"(?<![\d.])\d+\.\d+\.\d+(?![\d.])")
+# A dotted version, also before sentence punctuation, but not inside a longer dotted number.
+VERSION = re.compile(r"(?<![\d.])\d+\.\d+\.\d+(?!\.?\d)")
+# The docs keep version-tied observations ("observed on v2.2.0", "codex-cli 0.163.0"); they are
+# written as a v-prefixed version or after "observed on" or "codex-cli", and stay when the pin moves.
+OBSERVATION_PREFIX = re.compile(r"(?:\bv|\b[Oo]bserved on |\bcodex-cli )$")
+
+
+def bare_versions(text):
+    """Versions in text that are not written as an observation, such as a pin number."""
+    return [match.group() for match in VERSION.finditer(text)
+            if not OBSERVATION_PREFIX.search(text[:match.start()])]
+
+
+@pytest.mark.parametrize("text,bare", [
+    ("targets OpenCode 2.2.6.", ["2.2.6"]),
+    ("guidance targets 2.2.0, observed on v2.2.0", ["2.2.0"]),
+    ("Observed on 2.1.312: and codex-cli 0.163.0 and 10.2.3.4", []),
+])
+def test_bare_versions_finds_a_pin_but_not_an_observation(text, bare):
+    assert bare_versions(text) == bare
 
 
 @pytest.mark.parametrize("doc", ["README.md", "shared/runtimes.md"])
 def test_docs_name_the_version_file_instead_of_the_pin_number(doc):
     text = (ROOT / doc).read_text()
-    assert set(VERSION.findall(text)) <= OBSERVED_VERSIONS
-    pin = (ROOT / ".opencode-version").read_text().strip()
-    if pin not in OBSERVED_VERSIONS:
-        assert pin not in VERSION.findall(text)
+    assert bare_versions(text) == []
     assert PIN_REFERENCE in text
     assert re.findall(r"@opencode/cli@\d", text) == []
 
@@ -291,6 +305,9 @@ def test_timeout_requires_a_finite_positive_deadline(timeout, tmp_path):
     )
     assert result.returncode == 2
     assert "--timeout must be finite and positive" in result.stderr
+
+
+FIFO = object()
 
 
 @pytest.fixture
@@ -337,15 +354,18 @@ def wrapper_cli(tmp_path, bundle):
     elsewhere = tmp_path / "elsewhere"
     elsewhere.mkdir()
 
-    def run(*, installed, requested, force=False, failure=None, pin=None, script=None):
+    def run(*, installed, requested, force=False, failure=None, pin=None, script=None,
+            timeout=30):
         """Run a copy of the wrapper in a temporary repository root.
 
-        requested=None leaves OPENCODE_VERSION unset; pin=None leaves no .opencode-version;
+        requested=None leaves OPENCODE_VERSION unset; pin=None leaves no .opencode-version, and
+        pin=FIFO makes it a named pipe that blocks any read;
         script runs another path to the wrapper, such as a symlink.
         """
-        if pin is None:
-            (repo / ".opencode-version").unlink(missing_ok=True)
-        else:
+        (repo / ".opencode-version").unlink(missing_ok=True)
+        if pin is FIFO:
+            os.mkfifo(repo / ".opencode-version")
+        elif pin is not None:
             (repo / ".opencode-version").write_text(pin)
         opencode = bin_dir / "opencode"
         opencode.write_text(cli.replace("__VERSION__", installed))
@@ -379,7 +399,7 @@ def wrapper_cli(tmp_path, bundle):
         result = subprocess.run(
             ["bash", str(script or repo / "scripts/smoke-opencode.sh"),
              "--root", str(bundle), "--timeout", "1"],
-            env=env, text=True, capture_output=True, timeout=30, cwd=elsewhere,
+            env=env, text=True, capture_output=True, timeout=timeout, cwd=elsewhere,
         )
         lines = log.read_text().splitlines() if log.exists() else []
         return result, [json.loads(line) for line in lines]
@@ -448,9 +468,11 @@ def test_wrapper_installs_the_version_file_pin_without_an_override(wrapper_cli, 
     assert result.stdout.count("opencode discovered all 2 skills") == 6
 
 
-@pytest.mark.parametrize("pin", [None, f"{OTHER_PIN}\n"], ids=["file-missing", "file-present"])
+@pytest.mark.parametrize("pin", [None, f"{OTHER_PIN}\n", FIFO],
+                         ids=["file-missing", "file-present", "file-unreadable"])
 def test_wrapper_override_wins_over_the_version_file(wrapper_cli, pin):
-    result, calls = wrapper_cli(installed="0.0.1", requested="2.3.4", pin=pin)
+    # A read of the FIFO would block until the timeout, so passing proves the file is not read.
+    result, calls = wrapper_cli(installed="0.0.1", requested="2.3.4", pin=pin, timeout=15)
     assert result.returncode == 0, result.stderr
     assert npm_targets(calls) == ["@opencode/cli@2.3.4"]
     assert result.stdout.count("opencode discovered all 2 skills") == 6
