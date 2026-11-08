@@ -3,7 +3,16 @@
 # Extra arguments are forwarded to smoke_opencode.py (see its --root and --timeout).
 set -euo pipefail
 
-root="$(cd "$(dirname "$0")/.." && pwd)"
+# Follow symlinks to the script itself, so a link on PATH still finds this repository's root.
+self="$0"
+while [ -L "$self" ]; do
+  link="$(readlink "$self")"
+  case "$link" in
+    /*) self="$link" ;;
+    *) self="$(dirname "$self")/$link" ;;
+  esac
+done
+root="$(cd "$(dirname "$self")/.." && pwd)"
 # The pinned version lives only in .opencode-version at the repository root; a non-empty
 # OPENCODE_VERSION overrides it without reading the file.
 version="${OPENCODE_VERSION:-}"

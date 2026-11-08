@@ -11,6 +11,7 @@ import textwrap
 from pathlib import Path
 
 import pytest
+import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -201,20 +202,42 @@ def test_manifest_prevents_deleted_skill_from_shrinking_expectation(smoke, bundl
         smoke.check_layout(bundle, tmp_path / "fixture", "project-agents", "opencode", timeout=.01)
 
 
+def ci_workflow():
+    return yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
+
+
+def discovery_steps():
+    steps = ci_workflow()["jobs"]["discovery"]["steps"]
+    return [step for step in steps if "scripts/smoke-opencode.sh" in step.get("run", "")]
+
+
 def test_ci_uses_the_v2_package_and_not_the_v1_package():
     script = (ROOT / "scripts/smoke-opencode.sh").read_text()
-    ci = (ROOT / ".github/workflows/ci.yml").read_text()
     assert '@opencode/cli@$version' in script
     assert '"allowScripts":{"@opencode/cli":true}' in script
     assert 'opencode-ai@' not in script
     assert 'debug skill' not in script
-    assert 'OPENCODE_FORCE_INSTALL: "1"' in ci
+    [step] = discovery_steps()
+    assert step["run"].strip() == "bash scripts/smoke-opencode.sh"
+    assert step["env"]["OPENCODE_FORCE_INSTALL"] == "1"
 
 
 # SKL-214: the pinned OpenCode version lives only in .opencode-version.
+def env_blocks(node):
+    if isinstance(node, dict):
+        if isinstance(node.get("env"), dict):
+            yield node["env"]
+        for value in node.values():
+            yield from env_blocks(value)
+    elif isinstance(node, list):
+        for value in node:
+            yield from env_blocks(value)
+
+
 def test_ci_sets_no_opencode_version_so_the_script_default_applies():
-    ci = (ROOT / ".github/workflows/ci.yml").read_text()
-    assert "OPENCODE_VERSION" not in ci
+    blocks = list(env_blocks(ci_workflow()))
+    assert any("OPENCODE_FORCE_INSTALL" in block for block in blocks)
+    assert [block for block in blocks if "OPENCODE_VERSION" in block] == []
 
 
 def test_smoke_script_holds_no_literal_version():
@@ -226,17 +249,30 @@ def test_smoke_script_holds_no_literal_version():
 def test_version_file_is_one_version_and_one_newline():
     path = ROOT / ".opencode-version"
     assert path.is_file(), f"{path} is missing"
-    assert re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+\n", path.read_text()), repr(path.read_text())
+    content = path.read_bytes()
+    assert re.fullmatch(rb"[0-9]+\.[0-9]+\.[0-9]+\n", content), repr(content)
+
+
+def test_version_file_is_checked_out_with_lf_endings():
+    result = subprocess.run(["git", "check-attr", "text", "eol", "--", ".opencode-version"],
+                            cwd=ROOT, capture_output=True, text=True, check=True)
+    assert result.stdout.splitlines() == [".opencode-version: text: set",
+                                          ".opencode-version: eol: lf"]
 
 
 PIN_REFERENCE = "the version in `.opencode-version` at the root of the agent-skills repository"
+# Versions the docs record as observations, not as the pin; they stay when the pin moves.
+OBSERVED_VERSIONS = {"0.163.0", "1.19.3", "2.1.312", "2.2.0"}
+VERSION = re.compile(r"(?<![\d.])\d+\.\d+\.\d+(?![\d.])")
 
 
 @pytest.mark.parametrize("doc", ["README.md", "shared/runtimes.md"])
 def test_docs_name_the_version_file_instead_of_the_pin_number(doc):
     text = (ROOT / doc).read_text()
+    assert set(VERSION.findall(text)) <= OBSERVED_VERSIONS
     pin = (ROOT / ".opencode-version").read_text().strip()
-    assert pin not in text
+    if pin not in OBSERVED_VERSIONS:
+        assert pin not in VERSION.findall(text)
     assert PIN_REFERENCE in text
     assert re.findall(r"@opencode/cli@\d", text) == []
 
@@ -301,12 +337,15 @@ def wrapper_cli(tmp_path, bundle):
     elsewhere = tmp_path / "elsewhere"
     elsewhere.mkdir()
 
-    def run(*, installed, requested, force=False, failure=None, pin=None):
+    def run(*, installed, requested, force=False, failure=None, pin=None, script=None):
         """Run a copy of the wrapper in a temporary repository root.
 
-        requested=None leaves OPENCODE_VERSION unset; pin=None leaves no .opencode-version.
+        requested=None leaves OPENCODE_VERSION unset; pin=None leaves no .opencode-version;
+        script runs another path to the wrapper, such as a symlink.
         """
-        if pin is not None:
+        if pin is None:
+            (repo / ".opencode-version").unlink(missing_ok=True)
+        else:
             (repo / ".opencode-version").write_text(pin)
         opencode = bin_dir / "opencode"
         opencode.write_text(cli.replace("__VERSION__", installed))
@@ -338,7 +377,7 @@ def wrapper_cli(tmp_path, bundle):
         if force:
             env["OPENCODE_FORCE_INSTALL"] = "1"
         result = subprocess.run(
-            ["bash", str(repo / "scripts/smoke-opencode.sh"),
+            ["bash", str(script or repo / "scripts/smoke-opencode.sh"),
              "--root", str(bundle), "--timeout", "1"],
             env=env, text=True, capture_output=True, timeout=30, cwd=elsewhere,
         )
@@ -392,7 +431,8 @@ OTHER_PIN = "7.8.9"
 
 
 def npm_targets(calls):
-    return [call["argv"][-1] for call in calls if call["tool"] == "npm"]
+    return [arg for call in calls if call["tool"] == "npm"
+            for arg in call["argv"] if arg.startswith("@opencode/cli@")]
 
 
 def test_other_pin_differs_from_the_real_one():
@@ -432,3 +472,30 @@ def test_wrapper_rejects_a_cli_that_is_not_the_version_file_pin(wrapper_cli):
     assert result.returncode == 1
     assert f"Expected OpenCode {OTHER_PIN}" in result.stderr
     assert "opencode discovered" not in result.stdout
+
+
+# CI runs with OPENCODE_FORCE_INSTALL=1 and no override, so the forced path must honour the file.
+@pytest.mark.parametrize("requested,target", [(None, OTHER_PIN), ("2.3.4", "2.3.4")],
+                         ids=["file-pin", "override"])
+def test_forced_install_resolves_the_same_version_as_an_unforced_one(
+        wrapper_cli, requested, target):
+    result, calls = wrapper_cli(installed=target, requested=requested, force=True,
+                                pin=f"{OTHER_PIN}\n")
+    assert result.returncode == 0, result.stderr
+    assert npm_targets(calls) == [f"@opencode/cli@{target}"]
+    assert result.stdout.count("opencode discovered all 2 skills") == 6
+
+
+@pytest.mark.parametrize("hops", [1, 2], ids=["symlink", "chained-symlink"])
+def test_wrapper_finds_the_version_file_when_run_through_a_symlink(wrapper_cli, tmp_path, hops):
+    target = tmp_path / "repo/scripts/smoke-opencode.sh"
+    links = tmp_path / "links"
+    links.mkdir()
+    for hop in range(hops):
+        link = links / f"hop{hop}"
+        link.symlink_to(target if hop == 0 else f"hop{hop - 1}")
+    result, calls = wrapper_cli(installed="0.0.1", requested=None, pin=f"{OTHER_PIN}\n",
+                                script=link)
+    assert result.returncode == 0, result.stderr
+    assert npm_targets(calls) == [f"@opencode/cli@{OTHER_PIN}"]
+    assert result.stdout.count("opencode discovered all 2 skills") == 6
