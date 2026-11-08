@@ -3,6 +3,7 @@
 import importlib.util
 import json
 import os
+import re
 import subprocess
 import sys
 import textwrap
@@ -199,16 +200,32 @@ def test_manifest_prevents_deleted_skill_from_shrinking_expectation(smoke, bundl
         smoke.check_layout(bundle, tmp_path / "fixture", "project-agents", "opencode", timeout=.01)
 
 
-def test_ci_pins_v2_and_does_not_use_the_v1_package():
+def pinned_version():
+    return (ROOT / ".opencode-version").read_text()
+
+
+def test_pinned_version_file_holds_one_semver_line():
+    assert re.fullmatch(r"\d+\.\d+\.\d+\n", pinned_version()), repr(pinned_version())
+
+
+def test_ci_uses_v2_package_and_takes_the_version_from_the_pin_file():
     script = (ROOT / "scripts/smoke-opencode.sh").read_text()
     ci = (ROOT / ".github/workflows/ci.yml").read_text()
-    assert 'OPENCODE_VERSION:-2.1.2' in script
+    assert '.opencode-version' in script
     assert '@opencode/cli@$version' in script
     assert '"allowScripts":{"@opencode/cli":true}' in script
     assert 'opencode-ai@' not in script
     assert 'debug skill' not in script
-    assert 'OPENCODE_VERSION: 2.1.2' in ci
+    assert 'OPENCODE_VERSION' not in ci
     assert 'OPENCODE_FORCE_INSTALL: "1"' in ci
+
+
+def test_only_the_pin_file_states_the_pinned_number():
+    sources = [ROOT / "README.md", *(ROOT / "scripts").glob("*"), *(ROOT / ".github").rglob("*.yml"),
+               *(ROOT / "shared").glob("*.md"), *ROOT.glob("skills/*/references/runtimes.md")]
+    literal = re.compile(r"@opencode/cli@\d|OPENCODE_VERSION(:-|[:=]\s*)\d")
+    assert sources and [str(path) for path in sources if path.is_file()
+                        and literal.search(path.read_text())] == []
 
 
 @pytest.mark.parametrize("timeout", ["0", "-1", "nan", "inf"])
@@ -282,8 +299,10 @@ def wrapper_cli(tmp_path, bundle):
             target.chmod(0o755)
         """))
         npm.chmod(0o755)
-        env = dict(os.environ, PATH=f"{bin_dir}:{os.environ['PATH']}",
-                   OPENCODE_VERSION=requested)
+        env = dict(os.environ, PATH=f"{bin_dir}:{os.environ['PATH']}")
+        env.pop("OPENCODE_VERSION", None)
+        if requested is not None:
+            env["OPENCODE_VERSION"] = requested
         env.pop("OPENCODE_FORCE_INSTALL", None)
         if force:
             env["OPENCODE_FORCE_INSTALL"] = "1"
@@ -320,6 +339,14 @@ def test_wrapper_selects_requested_version_and_runs_discovery(
     assert sum(call["argv"] == ["service", "stop"] for call in calls) == 6
     for call in discovery:
         assert ("node_modules/.bin/opencode" in call["binary"]) == installs
+
+
+def test_wrapper_installs_the_version_in_the_pin_file_when_none_is_requested(wrapper_cli):
+    pinned = pinned_version().strip()
+    result, calls = wrapper_cli(installed="0.0.1", requested=None)
+    assert result.returncode == 0, result.stderr
+    installs = [call for call in calls if call["tool"] == "npm"]
+    assert [call["argv"][-1] for call in installs] == [f"@opencode/cli@{pinned}"]
 
 
 @pytest.mark.parametrize("failure", ["npm", "version"])

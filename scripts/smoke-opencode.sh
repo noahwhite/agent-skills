@@ -4,7 +4,12 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
-version="${OPENCODE_VERSION:-2.1.2}"
+# The pinned version lives only in .opencode-version; OPENCODE_VERSION overrides it.
+version="${OPENCODE_VERSION:-$(tr -d '[:space:]' < "$root/.opencode-version")}"
+if [ -z "$version" ]; then
+  echo "No OpenCode version: set OPENCODE_VERSION or fill $root/.opencode-version" >&2
+  exit 1
+fi
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
