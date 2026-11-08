@@ -600,8 +600,9 @@ def test_usage_row_no_longer_marks_v2_opencode_run_not_observed():
 
 OPENCODE_ROW_FACTS = [
     pytest.param(
-        "V2 `opencode run`, observed on v2.2.0 (the 2.1.2 pin above is the discovery pin, not the "
-        "version this was observed on):",
+        "V2 `opencode run`, observed on v2.2.0 (the discovery pin above, the version in "
+        "`.opencode-version` at the root of the agent-skills repository, is not the version this "
+        "was observed on):",
         id="observation-version-not-discovery-pin",
     ),
     pytest.param("`opencode session export <session id>`", id="export-command"),
