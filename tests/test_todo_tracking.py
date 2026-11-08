@@ -144,8 +144,9 @@ def test_the_file_reaches_all_eighteen_bundles() -> None:
 
 def test_story_refinement_seed_sets_priority_before_the_tracker_writes() -> None:
     """SKL-215: the priority item sits immediately before the PO tracker-write item."""
-    seed = next(line for line in section(TODO.read_text(), "## Seed lists").splitlines()
-                if line.startswith("- **story-refinement:**"))
+    seed = next((line for line in section(TODO.read_text(), "## Seed lists").splitlines()
+                 if line.startswith("- **story-refinement:**")), None)
+    assert seed is not None, "the Seed lists section has no story-refinement entry"
     assert (
         "set priority (the PO's decision, the comparison it rests on, and the read-back), "
         "each PO tracker write and read-back"

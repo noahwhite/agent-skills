@@ -2206,7 +2206,8 @@ PRIORITY_BULLET_LEAD = "- Priority is the PO's decision on every refinement outc
 def priority_bullet() -> str:
     """The Triage bullet that carries the priority step, from its lead to the next bullet."""
     lines = section(SKILL.read_text(), "Triage").splitlines()
-    start = next(i for i, line in enumerate(lines) if line.startswith(PRIORITY_BULLET_LEAD))
+    start = next((i for i, line in enumerate(lines) if line.startswith(PRIORITY_BULLET_LEAD)), None)
+    assert start is not None, f"Triage has no bullet starting {PRIORITY_BULLET_LEAD!r}"
     end = next((i for i in range(start + 1, len(lines)) if lines[i].startswith("- ")), len(lines))
     return spaced("\n".join(lines[start:end]))
 
@@ -2248,6 +2249,22 @@ def test_triage_priority_bullet_carries_the_phrase(phrase: str) -> None:
     assert phrase in priority_bullet()
 
 
+def test_triage_priority_bullet_orders_decide_apply_stop_then_tick() -> None:
+    """The decision precedes the write, the write precedes the stop path, and the tick comes after both."""
+    bullet = priority_bullet()
+    order = [
+        "The PO decides a priority before the invocation ends",
+        "The PO chooses the priority by comparing the story",
+        "The PO applies the priority and reads it back",
+        "When the PO cannot decide",
+        "The PO never guesses a priority.",
+        'The PO ticks "Priority is clear" only after the priority is read back',
+    ]
+    positions = [bullet.find(phrase) for phrase in order]
+    assert -1 not in positions, dict(zip(order, positions))
+    assert positions == sorted(positions), dict(zip(order, positions))
+
+
 def test_triage_priority_stop_is_the_closing_stop_reason() -> None:
     """The priority stop is a stop reason the Closing message already names; Closing stays unedited."""
     assert "the closing message names that stop as its stop reason" in priority_bullet()
@@ -2273,8 +2290,23 @@ def test_record_has_the_triage_record_template_with_exactly_the_fields() -> None
     ]
 
 
+def record_triage_section() -> str:
+    """The Triage record section of the record reference, fenced template and fallback included.
+
+    `section()` would stop at the template's own `## Triage record` line inside the fence, so this slices from the
+    section heading to the next real section heading instead.
+    """
+    text = RECORD.read_text()
+    start = re.search(r"^## Triage record\s*$", text, re.MULTILINE)
+    end = re.search(r"^## Permitted and forbidden phrasing\s*$", text, re.MULTILINE)
+    assert start and end and start.end() < end.start(), "the Triage record section precedes the phrasing table"
+    return text[start.end(): end.start()]
+
+
 def test_record_says_the_triage_record_is_a_po_triage_write() -> None:
-    body = spaced(section(RECORD.read_text(), "Triage record"))
+    raw = record_triage_section()
+    body = spaced(raw)
+    assert "- Priority comparison: <" in raw, "the section holds its own template"
     assert (
         "Post this as a tracker comment authored by the product owner as a triage write, on every refinement "
         "outcome and on each split sibling, and posted by the product owner or, under the denied tracker writes "
@@ -2283,5 +2315,8 @@ def test_record_says_the_triage_record_is_a_po_triage_write() -> None:
     assert (
         "The priority is the value read back after the PO applied it; when the PO could not decide, the priority "
         "stays unset and the comparison line carries `needs input` with the open question."
+    ) in body
+    assert (
+        "Under the denied tracker writes fallback in `SKILL.md`, replace the tracker-writes line with:"
     ) in body
     assert WRITES_FACILITATOR_LINE in fallback_alternative("Triage record").splitlines()
