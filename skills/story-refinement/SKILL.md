@@ -299,7 +299,7 @@ When `metrics` is on, the metrics summary is the one comment the SM/EM posts out
   When the PO cannot decide, including when the team has no comparable prioritised story, the ceremony stops with the priority unset and "Priority is clear" unticked, and reports `needs input` to the owner naming the story; the closing message names that stop as its stop reason.
   The PO never guesses a priority.
   The PO ticks "Priority is clear" only after the priority is read back and equals the decided value.
-  The PO posts the Triage record from [references/refinement-record.md](references/refinement-record.md) as a triage write on every outcome, the stop included.
+  The PO posts the Triage record from [references/refinement-record.md](references/refinement-record.md) as a triage write on every outcome, the priority stop included.
 
 ## Records
 

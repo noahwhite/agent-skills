@@ -2246,7 +2246,7 @@ def test_triage_replaces_the_bare_priority_bullet() -> None:
         'The PO ticks "Priority is clear" only after the priority is read back and equals the decided value.',
         # AC4: the triage record the bullet points at.
         "The PO posts the Triage record from [references/refinement-record.md](references/refinement-record.md) "
-        "as a triage write on every outcome, the stop included.",
+        "as a triage write on every outcome, the priority stop included.",
     ],
 )
 def test_triage_priority_bullet_carries_the_phrase(phrase: str) -> None:
