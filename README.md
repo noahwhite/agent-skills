@@ -71,7 +71,7 @@ Each skill is self-contained: the files it references live in its own `reference
 
 ### OpenCode V2 setup
 
-Install the pinned CLI with `npm install -g @opencode/cli@<version>`, where `<version>` is the one in `.opencode-version`, allowing that package's install script under your npm policy.
+Install the pinned CLI with `npm install -g "@opencode/cli@$(cat .opencode-version)"` from the repository root, allowing that package's install script under your npm policy.
 Use the V2 configuration and invocation examples in [`shared/runtimes.md`](shared/runtimes.md), not V1 tool names or root-TUI flags.
 Visible todos are off by default in V2; enable `experimental.todo` or use the checklist-file fallback.
 Delegated agents that launch reviewers need `experimental.subagent_depth: 2` and a custom child agent whose `permissions` allow the required `subagent` roles.

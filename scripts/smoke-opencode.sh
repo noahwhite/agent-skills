@@ -5,7 +5,10 @@ set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
 # The pinned version lives only in .opencode-version; OPENCODE_VERSION overrides it.
-version="${OPENCODE_VERSION:-$(tr -d '[:space:]' < "$root/.opencode-version")}"
+version="${OPENCODE_VERSION:-}"
+if [ -z "$version" ] && [ -r "$root/.opencode-version" ]; then
+  version="$(tr -d '[:space:]' < "$root/.opencode-version")"
+fi
 if [ -z "$version" ]; then
   echo "No OpenCode version: set OPENCODE_VERSION or fill $root/.opencode-version" >&2
   exit 1

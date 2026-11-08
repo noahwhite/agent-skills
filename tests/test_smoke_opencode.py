@@ -223,9 +223,21 @@ def test_ci_uses_v2_package_and_takes_the_version_from_the_pin_file():
 def test_only_the_pin_file_states_the_pinned_number():
     sources = [ROOT / "README.md", *(ROOT / "scripts").glob("*"), *(ROOT / ".github").rglob("*.yml"),
                *(ROOT / "shared").glob("*.md"), *ROOT.glob("skills/*/references/runtimes.md")]
+    pin = pinned_version().strip()
     literal = re.compile(r"@opencode/cli@\d|OPENCODE_VERSION(:-|[:=]\s*)\d")
-    assert sources and [str(path) for path in sources if path.is_file()
-                        and literal.search(path.read_text())] == []
+    texts = {path: path.read_text() for path in sources if path.is_file()}
+    assert texts
+    assert [str(path) for path, text in texts.items() if literal.search(text) or pin in text] == []
+
+
+def test_wrapper_without_a_version_or_pin_file_says_so(tmp_path):
+    (tmp_path / "scripts").mkdir()
+    script = tmp_path / "scripts/smoke-opencode.sh"
+    script.write_text((ROOT / "scripts/smoke-opencode.sh").read_text())
+    env = {name: value for name, value in os.environ.items() if name != "OPENCODE_VERSION"}
+    result = subprocess.run(["bash", str(script)], env=env, text=True, capture_output=True, timeout=30)
+    assert result.returncode == 1
+    assert "No OpenCode version: set OPENCODE_VERSION or fill" in result.stderr
 
 
 @pytest.mark.parametrize("timeout", ["0", "-1", "nan", "inf"])
