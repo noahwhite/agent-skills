@@ -4,7 +4,21 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
-version="${OPENCODE_VERSION:-2.1.2}"
+# The pinned version lives only in .opencode-version at the repository root; a non-empty
+# OPENCODE_VERSION overrides it without reading the file.
+version="${OPENCODE_VERSION:-}"
+if [ -z "$version" ]; then
+  pin="$root/.opencode-version"
+  if [ -f "$pin" ] && [ -r "$pin" ]; then
+    version="$(cat "$pin")"
+    version="${version#"${version%%[![:space:]]*}"}"
+    version="${version%"${version##*[![:space:]]}"}"
+  fi
+  if [ -z "$version" ]; then
+    echo "No OpenCode version: set OPENCODE_VERSION or put one in $pin (.opencode-version is missing, empty or whitespace-only)" >&2
+    exit 1
+  fi
+fi
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 

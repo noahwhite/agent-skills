@@ -3,6 +3,8 @@
 import importlib.util
 import json
 import os
+import re
+import shutil
 import subprocess
 import sys
 import textwrap
@@ -199,16 +201,49 @@ def test_manifest_prevents_deleted_skill_from_shrinking_expectation(smoke, bundl
         smoke.check_layout(bundle, tmp_path / "fixture", "project-agents", "opencode", timeout=.01)
 
 
-def test_ci_pins_v2_and_does_not_use_the_v1_package():
+def test_ci_uses_the_v2_package_and_not_the_v1_package():
     script = (ROOT / "scripts/smoke-opencode.sh").read_text()
     ci = (ROOT / ".github/workflows/ci.yml").read_text()
-    assert 'OPENCODE_VERSION:-2.1.2' in script
     assert '@opencode/cli@$version' in script
     assert '"allowScripts":{"@opencode/cli":true}' in script
     assert 'opencode-ai@' not in script
     assert 'debug skill' not in script
-    assert 'OPENCODE_VERSION: 2.1.2' in ci
     assert 'OPENCODE_FORCE_INSTALL: "1"' in ci
+
+
+# SKL-214: the pinned OpenCode version lives only in .opencode-version.
+def test_ci_sets_no_opencode_version_so_the_script_default_applies():
+    ci = (ROOT / ".github/workflows/ci.yml").read_text()
+    assert "OPENCODE_VERSION" not in ci
+
+
+def test_smoke_script_holds_no_literal_version():
+    script = (ROOT / "scripts/smoke-opencode.sh").read_text()
+    assert re.findall(r"\d+\.\d+\.\d+", script) == []
+    assert ".opencode-version" in script
+
+
+def test_version_file_is_one_version_and_one_newline():
+    path = ROOT / ".opencode-version"
+    assert path.is_file(), f"{path} is missing"
+    assert re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+\n", path.read_text()), repr(path.read_text())
+
+
+PIN_REFERENCE = "the version in `.opencode-version` at the root of the agent-skills repository"
+
+
+@pytest.mark.parametrize("doc", ["README.md", "shared/runtimes.md"])
+def test_docs_name_the_version_file_instead_of_the_pin_number(doc):
+    text = (ROOT / doc).read_text()
+    pin = (ROOT / ".opencode-version").read_text().strip()
+    assert pin not in text
+    assert PIN_REFERENCE in text
+    assert re.findall(r"@opencode/cli@\d", text) == []
+
+
+def test_readme_install_command_reads_the_version_file():
+    readme = (ROOT / "README.md").read_text()
+    assert 'npm install -g "@opencode/cli@$(cat .opencode-version)"' in readme
 
 
 @pytest.mark.parametrize("timeout", ["0", "-1", "nan", "inf"])
@@ -259,7 +294,20 @@ def wrapper_cli(tmp_path, bundle):
             raise SystemExit("Unexpected opencode command: " + repr(args))
     """)
 
-    def run(*, installed, requested, force=False, failure=None):
+    repo = tmp_path / "repo"
+    (repo / "scripts").mkdir(parents=True)
+    for name in ("smoke-opencode.sh", "smoke_opencode.py"):
+        shutil.copy(ROOT / "scripts" / name, repo / "scripts" / name)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+
+    def run(*, installed, requested, force=False, failure=None, pin=None):
+        """Run a copy of the wrapper in a temporary repository root.
+
+        requested=None leaves OPENCODE_VERSION unset; pin=None leaves no .opencode-version.
+        """
+        if pin is not None:
+            (repo / ".opencode-version").write_text(pin)
         opencode = bin_dir / "opencode"
         opencode.write_text(cli.replace("__VERSION__", installed))
         opencode.chmod(0o755)
@@ -282,17 +330,20 @@ def wrapper_cli(tmp_path, bundle):
             target.chmod(0o755)
         """))
         npm.chmod(0o755)
-        env = dict(os.environ, PATH=f"{bin_dir}:{os.environ['PATH']}",
-                   OPENCODE_VERSION=requested)
+        env = dict(os.environ, PATH=f"{bin_dir}:{os.environ['PATH']}")
+        env.pop("OPENCODE_VERSION", None)
+        if requested is not None:
+            env["OPENCODE_VERSION"] = requested
         env.pop("OPENCODE_FORCE_INSTALL", None)
         if force:
             env["OPENCODE_FORCE_INSTALL"] = "1"
         result = subprocess.run(
-            ["bash", str(ROOT / "scripts/smoke-opencode.sh"),
+            ["bash", str(repo / "scripts/smoke-opencode.sh"),
              "--root", str(bundle), "--timeout", "1"],
-            env=env, text=True, capture_output=True, timeout=30,
+            env=env, text=True, capture_output=True, timeout=30, cwd=elsewhere,
         )
-        return result, [json.loads(line) for line in log.read_text().splitlines()]
+        lines = log.read_text().splitlines() if log.exists() else []
+        return result, [json.loads(line) for line in lines]
 
     return run
 
@@ -333,3 +384,51 @@ def test_wrapper_install_failure_never_starts_discovery(wrapper_cli, failure):
         assert result.returncode == 42
     else:
         assert "Expected OpenCode 2.3.4" in result.stderr
+
+
+# SKL-214: version resolution. OPENCODE_VERSION wins when non-empty; otherwise the trimmed
+# content of <repo root>/.opencode-version; otherwise exit 1 before any npm or opencode call.
+OTHER_PIN = "7.8.9"
+
+
+def npm_targets(calls):
+    return [call["argv"][-1] for call in calls if call["tool"] == "npm"]
+
+
+def test_other_pin_differs_from_the_real_one():
+    assert OTHER_PIN != (ROOT / ".opencode-version").read_text().strip()
+
+
+@pytest.mark.parametrize("requested", [None, ""], ids=["unset", "empty"])
+@pytest.mark.parametrize("pin", [f"{OTHER_PIN}\n", f"  {OTHER_PIN} \n\n"], ids=["plain", "padded"])
+def test_wrapper_installs_the_version_file_pin_without_an_override(wrapper_cli, requested, pin):
+    result, calls = wrapper_cli(installed="0.0.1", requested=requested, pin=pin)
+    assert result.returncode == 0, result.stderr
+    assert npm_targets(calls) == [f"@opencode/cli@{OTHER_PIN}"]
+    assert result.stdout.count("opencode discovered all 2 skills") == 6
+
+
+@pytest.mark.parametrize("pin", [None, f"{OTHER_PIN}\n"], ids=["file-missing", "file-present"])
+def test_wrapper_override_wins_over_the_version_file(wrapper_cli, pin):
+    result, calls = wrapper_cli(installed="0.0.1", requested="2.3.4", pin=pin)
+    assert result.returncode == 0, result.stderr
+    assert npm_targets(calls) == ["@opencode/cli@2.3.4"]
+    assert result.stdout.count("opencode discovered all 2 skills") == 6
+
+
+@pytest.mark.parametrize("requested", [None, ""], ids=["unset", "empty"])
+@pytest.mark.parametrize("pin", [None, "", " \n\t\n"], ids=["missing", "empty", "whitespace"])
+def test_wrapper_without_any_version_exits_before_npm_or_opencode(wrapper_cli, requested, pin):
+    result, calls = wrapper_cli(installed="0.0.1", requested=requested, pin=pin)
+    assert result.returncode == 1
+    assert ".opencode-version" in result.stderr
+    assert calls == []
+    assert "opencode discovered" not in result.stdout
+
+
+def test_wrapper_rejects_a_cli_that_is_not_the_version_file_pin(wrapper_cli):
+    result, calls = wrapper_cli(installed="0.0.1", requested=None, pin=f"{OTHER_PIN}\n",
+                                failure="version")
+    assert result.returncode == 1
+    assert f"Expected OpenCode {OTHER_PIN}" in result.stderr
+    assert "opencode discovered" not in result.stdout
