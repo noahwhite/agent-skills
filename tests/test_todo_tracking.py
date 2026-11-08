@@ -142,6 +142,16 @@ def test_the_file_reaches_all_eighteen_bundles() -> None:
     assert [copy.parent.parent.name for copy in COPIES] == expected
 
 
+def test_story_refinement_seed_sets_priority_before_the_tracker_writes() -> None:
+    """SKL-215: the priority item sits immediately before the PO tracker-write item."""
+    seed = next(line for line in section(TODO.read_text(), "## Seed lists").splitlines()
+                if line.startswith("- **story-refinement:**"))
+    assert (
+        "set priority (the PO's decision, the comparison it rests on, and the read-back), "
+        "each PO tracker write and read-back"
+    ) in seed
+
+
 @pytest.mark.parametrize("copy", COPIES, ids=lambda path: path.parent.parent.name)
 def test_every_vendored_copy_carries_the_rules(copy: Path) -> None:
     text = copy.read_text()

@@ -2196,3 +2196,87 @@ def test_readme_row_says_the_summary_is_posted_on_the_story() -> None:
                if "skills/story-refinement/SKILL.md" in line)
     assert "run summary in the closing message" in row
     assert "posts it on the story" in row
+
+
+# --- SKL-215: priority is an explicit PO step with a recorded comparison --------------------------
+
+PRIORITY_BULLET_LEAD = "- Priority is the PO's decision on every refinement outcome:"
+
+
+def priority_bullet() -> str:
+    """The Triage bullet that carries the priority step, from its lead to the next bullet."""
+    lines = section(SKILL.read_text(), "Triage").splitlines()
+    start = next(i for i, line in enumerate(lines) if line.startswith(PRIORITY_BULLET_LEAD))
+    end = next((i for i in range(start + 1, len(lines)) if lines[i].startswith("- ")), len(lines))
+    return spaced("\n".join(lines[start:end]))
+
+
+def test_triage_replaces_the_bare_priority_bullet() -> None:
+    triage = section(SKILL.read_text(), "Triage")
+    assert "Priority comes from the PO's decision." not in triage
+    assert sum(line.startswith(PRIORITY_BULLET_LEAD) for line in triage.splitlines()) == 1
+
+
+@pytest.mark.parametrize(
+    "phrase",
+    [
+        # AC1: every outcome, decided before the invocation ends and before ready.
+        "Priority is the PO's decision on every refinement outcome: the story moving to "
+        "`profile.tracker.states.ready`, the story staying in `profile.tracker.states.backlog`, and each split sibling.",
+        "The PO decides a priority before the invocation ends and before any move to `profile.tracker.states.ready`",
+        # AC1: the comparison basis.
+        "The PO chooses the priority by comparing the story with at least one comparable story already prioritised "
+        "in the team of `STORY_ID`.",
+        # AC1: the PO-authored write and its read-back.
+        "The PO applies the priority and reads it back as a PO-authored tracker write.",
+        # AC1: "No priority" is unset.
+        '"No priority" counts as unset and is never a decided value.',
+        # AC2: the stop-and-ask path.
+        "When the PO cannot decide, including when the team has no comparable prioritised story, the ceremony stops "
+        'with the priority unset and "Priority is clear" unticked, and reports `needs input` to the owner naming '
+        "the story",
+        "The PO never guesses a priority.",
+        # AC4: the tick rule.
+        'The PO ticks "Priority is clear" only after the priority is read back and equals the decided value.',
+        # AC4: the triage record the bullet points at.
+        "The PO posts the Triage record from [references/refinement-record.md](references/refinement-record.md) "
+        "as a triage write on every outcome, the stop included.",
+    ],
+)
+def test_triage_priority_bullet_carries_the_phrase(phrase: str) -> None:
+    assert phrase in priority_bullet()
+
+
+def test_triage_priority_stop_is_the_closing_stop_reason() -> None:
+    """The priority stop is a stop reason the Closing message already names; Closing stays unedited."""
+    assert "the closing message names that stop as its stop reason" in priority_bullet()
+    assert "or the stop reason, including each `needs input`" in skill_section(CLOSING)
+
+
+def test_records_lists_the_triage_record_template() -> None:
+    body = spaced(section(SKILL.read_text(), "Records"))
+    assert (
+        "Use the Triage record template in the same file for the triage write that records the priority and the "
+        "comparison it rests on."
+    ) in body
+
+
+def test_record_has_the_triage_record_template_with_exactly_the_fields() -> None:
+    assert template("Triage record").splitlines() == [
+        "## Triage record",
+        "",
+        "- Priority: <the decided value, read back; or unset when the PO could not decide>",
+        "- Priority comparison: <each comparable story's identifier and priority; or `needs input` with the open "
+        "question when the PO could not decide>",
+        "- Tracker writes: product owner",
+    ]
+
+
+def test_record_says_the_triage_record_is_a_po_triage_write() -> None:
+    body = spaced(section(RECORD.read_text(), "Triage record"))
+    assert (
+        "Post this as a tracker comment authored by the product owner as a triage write, on every refinement "
+        "outcome and on each split sibling, and posted by the product owner or, under the denied tracker writes "
+        "fallback, by the facilitator verbatim."
+    ) in body
+    assert WRITES_FACILITATOR_LINE in fallback_alternative("Triage record").splitlines()

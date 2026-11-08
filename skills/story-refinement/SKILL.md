@@ -291,11 +291,20 @@ When `metrics` is on, the metrics summary is the one comment the SM/EM posts out
 - When the team of `STORY_ID` differs from `profile.tracker.team_key`, confirm `profile.tracker.states.ready`, `profile.tracker.states.backlog` and each label name on that team before writing it, under the differing-team rule in Team resolution in [references/linear.md](references/linear.md).
 - Set `profile.tracker.states.ready` only when no blocker remains.
 - Leave blocked siblings in `profile.tracker.states.backlog` with the blocker Definition of Ready box unchecked.
-- Priority comes from the PO's decision.
+- Priority is the PO's decision on every refinement outcome: the story moving to `profile.tracker.states.ready`, the story staying in `profile.tracker.states.backlog`, and each split sibling.
+  The PO decides a priority before the invocation ends and before any move to `profile.tracker.states.ready`, unless the ceremony stops on priority as this bullet states.
+  The PO chooses the priority by comparing the story with at least one comparable story already prioritised in the team of `STORY_ID`.
+  The PO applies the priority and reads it back as a PO-authored tracker write.
+  "No priority" counts as unset and is never a decided value.
+  When the PO cannot decide, including when the team has no comparable prioritised story, the ceremony stops with the priority unset and "Priority is clear" unticked, and reports `needs input` to the owner naming the story; the closing message names that stop as its stop reason.
+  The PO never guesses a priority.
+  The PO ticks "Priority is clear" only after the priority is read back and equals the decided value.
+  The PO posts the Triage record from [references/refinement-record.md](references/refinement-record.md) as a triage write on every outcome, the stop included.
 
 ## Records
 
 Use [references/refinement-record.md](references/refinement-record.md) for the refinement-comment template, the Accept round result template, the pointing-record template, and the permitted and forbidden phrasing table.
+Use the Triage record template in the same file for the triage write that records the priority and the comparison it rests on.
 Keep the raw voter files in the session's scratch directory and cite each file by its base name only (never a directory path) in the record.
 Quote or attach any file content a reader needs in the record.
 Record the refinement comment id, every accept round, all three point values, the SM/EM sizing context, the `Consensus check:` outcome, the discussion result, every challenge with its outcome, the consensus or the residual variance outcome with the derived values, the gap between the highest and the lowest in scale steps and the rule applied, the recorded estimate or the unpointed variance stop, and any split.
