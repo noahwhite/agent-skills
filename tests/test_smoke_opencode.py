@@ -235,6 +235,7 @@ def env_blocks(node):
 
 
 def test_ci_sets_no_opencode_version_so_the_script_default_applies():
+    assert "OPENCODE_VERSION" not in (ROOT / ".github/workflows/ci.yml").read_text()
     blocks = list(env_blocks(ci_workflow()))
     assert any("OPENCODE_FORCE_INSTALL" in block for block in blocks)
     assert [block for block in blocks if "OPENCODE_VERSION" in block] == []
