@@ -94,6 +94,25 @@ Under the denied tracker writes fallback in `SKILL.md`, replace the tracker-writ
 - Tracker writes: facilitator on the product owner's behalf (owner's direct authorization: "<verbatim quote>", <date>)
 ```
 
+## Triage record
+
+Post this as a tracker comment authored by the product owner as a triage write, on every refinement outcome and on each split sibling, and posted by the product owner or, under the denied tracker writes fallback, by the facilitator verbatim.
+The priority is the value read back after the PO applied it; when the PO could not decide, the priority stays unset and the comparison line carries `needs input` with the open question.
+
+```markdown
+## Triage record
+
+- Priority: <the decided value, read back; or unset when the PO could not decide>
+- Priority comparison: <each comparable story's identifier and priority; or `needs input` with the open question when the PO could not decide>
+- Tracker writes: product owner
+```
+
+Under the denied tracker writes fallback in `SKILL.md`, replace the tracker-writes line with:
+
+```markdown
+- Tracker writes: facilitator on the product owner's behalf (owner's direct authorization: "<verbatim quote>", <date>)
+```
+
 ## Permitted and forbidden phrasing
 
 The SM/EM may give factual, reference-only sizing context after all three values are recorded.

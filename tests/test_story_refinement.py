@@ -2196,3 +2196,143 @@ def test_readme_row_says_the_summary_is_posted_on_the_story() -> None:
                if "skills/story-refinement/SKILL.md" in line)
     assert "run summary in the closing message" in row
     assert "posts it on the story" in row
+
+
+# --- SKL-215: priority is an explicit PO step with a recorded comparison --------------------------
+
+PRIORITY_BULLET_LEAD = "- Priority is the PO's decision on every refinement outcome:"
+
+
+def priority_bullet() -> str:
+    """The Triage bullet that carries the priority step: its lead line and its indented continuation lines only.
+
+    A blank line, the next bullet or a loose paragraph ends the bullet, so a rule moved out of it is not counted.
+    """
+    lines = section(SKILL.read_text(), "Triage").splitlines()
+    start = next((i for i, line in enumerate(lines) if line.startswith(PRIORITY_BULLET_LEAD)), None)
+    assert start is not None, f"Triage has no bullet starting {PRIORITY_BULLET_LEAD!r}"
+    end = next((i for i in range(start + 1, len(lines)) if not lines[i].startswith("  ")), len(lines))
+    return spaced("\n".join(lines[start:end]))
+
+
+def test_triage_replaces_the_bare_priority_bullet() -> None:
+    triage = section(SKILL.read_text(), "Triage")
+    assert "Priority comes from the PO's decision." not in triage
+    assert sum(line.startswith(PRIORITY_BULLET_LEAD) for line in triage.splitlines()) == 1
+
+
+@pytest.mark.parametrize(
+    "phrase",
+    [
+        # AC1: every outcome, decided before the invocation ends and before ready.
+        "Priority is the PO's decision on every refinement outcome: the story moving to "
+        "`profile.tracker.states.ready`, the story staying in `profile.tracker.states.backlog`, and each split sibling.",
+        "The PO decides, applies and reads back a priority before the invocation ends and before any move to "
+        "`profile.tracker.states.ready`, "
+        "unless the ceremony stops on priority as this bullet states.",
+        # AC1: the comparison basis.
+        "The PO chooses the priority by comparing the story with at least one comparable story already prioritised "
+        "in the team of `STORY_ID`.",
+        # AC1: the PO-authored write and its read-back.
+        "The PO applies the priority and reads it back as a PO-authored tracker write.",
+        # AC1: "No priority" is unset.
+        '"No priority" counts as unset and is never a decided value.',
+        # AC2: the stop-and-ask path.
+        "When the PO cannot decide, including when the team has no comparable prioritised story, the ceremony stops "
+        'with the priority unset and "Priority is clear" unticked, and reports `needs input` to the owner naming '
+        "the story",
+        "The PO never guesses a priority.",
+        # AC4: the tick rule.
+        'The PO ticks "Priority is clear" only after the priority is read back and equals the decided value.',
+        # AC4: the triage record the bullet points at.
+        "The PO posts the Triage record from [references/refinement-record.md](references/refinement-record.md) "
+        "as a triage write on every outcome, the priority stop included.",
+    ],
+)
+def test_triage_priority_bullet_carries_the_phrase(phrase: str) -> None:
+    assert phrase in priority_bullet()
+
+
+def test_triage_priority_bullet_orders_decide_apply_stop_then_tick() -> None:
+    """The decision precedes the write, the write precedes the stop path, and the tick comes after both."""
+    bullet = priority_bullet()
+    order = [
+        "The PO decides, applies and reads back a priority before the invocation ends",
+        "The PO chooses the priority by comparing the story",
+        "The PO applies the priority and reads it back",
+        "When the PO cannot decide",
+        "The PO never guesses a priority.",
+        'The PO ticks "Priority is clear" only after the priority is read back',
+    ]
+    counts = {phrase: bullet.count(phrase) for phrase in order}
+    assert all(count == 1 for count in counts.values()), counts
+    positions = [bullet.find(phrase) for phrase in order]
+    assert positions == sorted(positions), dict(zip(order, positions))
+
+
+def test_triage_priority_stop_names_itself_as_the_closing_stop_reason() -> None:
+    """The bullet names its stop as the closing stop reason, relying on Closing's existing `needs input` clause.
+
+    The second assertion does not prove a link; it keeps the Closing clause the bullet relies on, which this
+    story leaves unedited.
+    """
+    assert "the closing message names that stop as its stop reason" in priority_bullet()
+    assert "or the stop reason, including each `needs input`" in skill_section(CLOSING)
+
+
+def test_records_lists_the_triage_record_template() -> None:
+    body = spaced(section(SKILL.read_text(), "Records"))
+    assert (
+        "Use the Triage record template in the same file for the triage write that records the priority and the "
+        "comparison it rests on."
+    ) in body
+
+
+def test_record_has_the_triage_record_template_with_exactly_the_fields() -> None:
+    assert template("Triage record").splitlines() == [
+        "## Triage record",
+        "",
+        "- Priority: <the decided value, read back; or unset when the PO could not decide>",
+        "- Priority comparison: <each comparable story's identifier and priority; or `needs input` with the open "
+        "question when the PO could not decide>",
+        "- Tracker writes: product owner",
+    ]
+
+
+def record_triage_section() -> str:
+    """The Triage record section of the record reference, fenced template and fallback included.
+
+    `section()` would stop at the template's own `## Triage record` line inside the fence, so this slices from the
+    section heading to the next `## ` heading outside a code fence, whichever section that is.
+    """
+    lines = RECORD.read_text().splitlines()
+    start = next((i for i, line in enumerate(lines) if line.rstrip() == "## Triage record"), None)
+    assert start is not None, "the record reference has a Triage record section"
+    in_fence = False
+    end = len(lines)
+    for i in range(start + 1, len(lines)):
+        if lines[i].startswith("```"):
+            in_fence = not in_fence
+        elif not in_fence and lines[i].startswith("## "):
+            end = i
+            break
+    return "\n".join(lines[start + 1: end])
+
+
+def test_record_says_the_triage_record_is_a_po_triage_write() -> None:
+    raw = record_triage_section()
+    body = spaced(raw)
+    assert "- Priority comparison: <" in raw, "the section holds its own template"
+    assert (
+        "Post this as a tracker comment authored by the product owner as a triage write, on every refinement "
+        "outcome and on each split sibling, and posted by the product owner or, under the denied tracker writes "
+        "fallback, by the facilitator verbatim."
+    ) in body
+    assert (
+        "The priority is the value read back after the PO applied it; when the PO could not decide, the priority "
+        "stays unset and the comparison line carries `needs input` with the open question."
+    ) in body
+    assert (
+        "Under the denied tracker writes fallback in `SKILL.md`, replace the tracker-writes line with:"
+    ) in body
+    assert WRITES_FACILITATOR_LINE in fallback_alternative("Triage record").splitlines()
