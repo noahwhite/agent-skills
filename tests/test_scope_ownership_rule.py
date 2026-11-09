@@ -129,7 +129,9 @@ OTHER_STORY = re.compile(
     re.IGNORECASE,
 )
 PERMISSIVE = re.compile(r"\b(?:may|might|can|could|is allowed|are allowed|permitted)\b", re.IGNORECASE)
-SEGMENT_SPLIT = re.compile(r"[,;]|\band\b|\bor\b", flags=re.IGNORECASE)
+AC_SEGMENT_SPLIT = re.compile(r"[,;]|\band\b", flags=re.IGNORECASE)
+SKIP_SEGMENT_SPLIT = re.compile(r";|\band\b(?=\s+(?:may|might|can|could|is allowed|are allowed|permitted)\b)", flags=re.IGNORECASE)
+SKIP_KEY_MAX_GAP = 40
 
 
 def sentences(text: str) -> list[str]:
@@ -140,44 +142,42 @@ def sentences(text: str) -> list[str]:
 def permissive_inversions(text: str) -> list[str]:
     """Sentences that permit an engineer to change an AC, or that permit a skip keyed on another story.
 
-    A permissive marker must govern an unnegated AC change or skip in the same segment, while the other-story
-    reference may sit in a sibling segment; shared negations such as "never adds or moves" stay clean.
+    AC changes are affirmative once an unnegated change verb appears outside a negated and/or segment. Skip keys
+    pair only with a story reference within a short gap in the same segment, so coordinated negations and permanent
+    exemptions that depend on no other story stay clean.
     """
     hits = []
     for sentence in sentences(text):
-        segments = [segment for segment in SEGMENT_SPLIT.split(sentence) if segment.strip()]
         hit = False
-        if ENGINEER.search(sentence):
-            for segment in segments:
-                for permissive in PERMISSIVE.finditer(segment):
-                    for ac in AC_CHANGE.finditer(segment, permissive.end()):
-                        if not NEGATION.search(segment[permissive.end() : ac.start()]):
+        for segment in AC_SEGMENT_SPLIT.split(sentence):
+            if not (ENGINEER.search(segment) or PERMISSIVE.search(segment)):
+                continue
+            for ac in AC_CHANGE.finditer(segment):
+                if not NEGATION.search(segment[: ac.end()]):
+                    hit = True
+                    break
+            if hit:
+                break
+        if not hit:
+            for segment in SKIP_SEGMENT_SPLIT.split(sentence):
+                skips = [(m.start(), m.end()) for m in SKIP_TERM.finditer(segment)]
+                others = [(m.start(), m.end()) for m in OTHER_STORY.finditer(segment)]
+                for skip in skips:
+                    for other in others:
+                        gap = max(other[0] - skip[1], skip[0] - other[1], 0)
+                        if gap > SKIP_KEY_MAX_GAP:
+                            continue
+                        first, second = sorted((skip, other), key=lambda span: span[0])
+                        negated = bool(NEGATION.search(segment[: first[0]]))
+                        if not negated and second[0] >= first[1]:
+                            negated = bool(NEGATION.search(segment[first[1] : second[0]]))
+                        if not negated:
                             hit = True
                             break
                     if hit:
                         break
                 if hit:
                     break
-        if not hit:
-            other_hit = False
-            for segment in segments:
-                for other in OTHER_STORY.finditer(segment):
-                    if not NEGATION.search(segment[: other.start()]):
-                        other_hit = True
-                        break
-                if other_hit:
-                    break
-            if other_hit:
-                for segment in segments:
-                    for permissive in PERMISSIVE.finditer(segment):
-                        for skip in SKIP_TERM.finditer(segment, permissive.end()):
-                            if not NEGATION.search(segment[permissive.end() : skip.start()]):
-                                hit = True
-                                break
-                        if hit:
-                            break
-                    if hit:
-                        break
         if hit:
             hits.append(sentence)
     return hits
@@ -272,6 +272,7 @@ def test_false_positive_probe_passes() -> None:
             "The engineer never rewords an AC on any story.",
             "An engineer never adds an AC or moves an AC.",
             "Code never carries skips, pending lists, or exemptions keyed on another story landing later.",
+            "SKL-123 is blocked, but code may carry a permanent exemption for vendored files.",
             "# Permanent exemption: generated references/ copies are skipped by the scan; this depends on no other story.",
             'EXEMPT = ("references",)  # why: vendored output, never hand-edited',
             *carve_out,
@@ -294,6 +295,9 @@ def test_true_positive_probe_flags_permissive_inversions() -> None:
         "Code never carries a skip keyed on SKL-123 and may carry a skip keyed on SKL-456.",
         "For SKL-123, code may carry a skip.",
         "Code may skip checks for this story and another story.",
+        "The engineer may add or move an AC.",
+        "An engineer adds an AC to another story.",
+        "Tests xfail for another story.",
     )
     missed = [fixture for fixture in fixtures if not permissive_inversions(fixture)]
     assert not missed, missed
