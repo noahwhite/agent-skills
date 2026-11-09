@@ -3,14 +3,16 @@
 
 The case runs the skill's coordinator against a fixed scenario, so this script stands
 in for the runtime's QA role capabilities: a launch starts a session, a resume continues
-one this run started in the round it belongs to, and a stop ends the step with no further
-role work. Nothing is launched. Every call appends one line to `actions.jsonl` in this
-directory and updates `sessions.json`, so the grader can read the calls the coordinator
-made and the sessions they named, never its prose.
+one this run started in the round it belongs to, a stop ends the step with no further
+role work, and a read records that the coordinator read a run file. Nothing is launched.
+Every call appends one line to `actions.jsonl` in this directory and updates `sessions.json`,
+so the grader can read the calls the coordinator made and the sessions they named, never
+its prose.
 
   qa-runtime launch --label LABEL --message FILE
   qa-runtime resume --session SESSION --label LABEL --message FILE
   qa-runtime stop --reason TEXT
+  qa-runtime read --path FILE
 """
 
 import argparse
@@ -91,8 +93,25 @@ def resume(args: argparse.Namespace) -> str:
     return args.session
 
 
+def read_file(args: argparse.Namespace) -> str:
+    """Read a run file, record that it was read, and return its text."""
+    path = pathlib.Path(args.path)
+    if not path.is_file():
+        sys.exit(f"qa-runtime: there is no file at {args.path}")
+    try:
+        content = path.read_text()
+    except (OSError, UnicodeDecodeError) as error:
+        sys.exit(f"qa-runtime: cannot read the file {args.path}: {error}")
+    # A file inside the run is recorded relative to it, so a committed record re-grades in any
+    # directory; anything else keeps its resolved absolute path and never matches a run file.
+    resolved = path.resolve()
+    recorded = str(resolved.relative_to(RUN)) if resolved.is_relative_to(RUN) else str(resolved)
+    record({"action": "read", "path": recorded})
+    return content
+
+
 def parsed() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Record a QA role launch, continuation or stop.")
+    parser = argparse.ArgumentParser(description="Record a QA role launch, continuation, stop or checklist read.")
     commands = parser.add_subparsers(dest="command", required=True)
     start = commands.add_parser("launch", help="start a new agent session")
     start.add_argument("--label", required=True)
@@ -103,6 +122,8 @@ def parsed() -> argparse.Namespace:
     continue_.add_argument("--message", required=True)
     stop = commands.add_parser("stop", help="end the step with no further QA role work")
     stop.add_argument("--reason", required=True)
+    read_parser = commands.add_parser("read", help="read a run file and record the read")
+    read_parser.add_argument("--path", required=True)
     return parser.parse_args()
 
 
@@ -112,6 +133,8 @@ def main() -> int:
         print(f"started {launch(args)}")
     elif args.command == "resume":
         print(f"resumed {resume(args)}")
+    elif args.command == "read":
+        print(read_file(args))
     else:
         record({"action": "stop", "reason": args.reason})
         print("recorded a stop")

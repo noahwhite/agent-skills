@@ -67,10 +67,19 @@ With `metrics` on, launch no command before the start form, not even to read a f
 ## 0. Track everything on a todo list
 
 Once the story ID is known and the profile is read, create a fine-grained todo list per `references/todo-tracking.md`.
-Seed it with at least: resolve the arguments, read the story state, spawn the senior engineer, each check on its checklist until it hands back, read back the deployment-review state, each QA round, each read-back of QA's state, each failed item handed back, each fix round, and the final state read-back.
+Seed it with at least: resolve the arguments, read the story state, spawn the senior engineer, each check on its checklist until it hands back, the checklist read-back at each handback with each subagent's read-back resume count, read back the deployment-review state, each QA round, each read-back of QA's state, each failed item handed back, each fix round, and the final state read-back.
 With `metrics` on, seed two more items: collect the metrics figures; then post the metrics summary on the story and read it back before giving the summary in the closing report.
 Add an item for each new round as it starts; mark each done once its outcome is observed.
 Every subagent brief requires a checklist file in that subagent's own subdirectory of the scratch directory; read it from there and mirror it into your list whenever you check on the subagent.
+When a senior engineer or QA agent hands back, read that subagent's checklist file before acting on the result; a missing or unreadable checklist counts as open items.
+If items remain open with no stated blocker, resume that subagent with "Your checklist still has open items. Continue with them; if one is blocked, say what blocks it", at most twice per subagent, and then record the remaining items in your report and continue with this skill's existing step logic.
+An open item the handback itself names, with what it waits on or who owns it, has a stated blocker.
+The tracker state remains the record of completion; the checklist is never evidence that work is done.
+A read-back never overrides the tracker state: after a read-back resume, the next step reads the state again and acts on it.
+If the runtime cannot resume the subagent, record the open items and continue with this skill's existing step logic; spawn no new subagent for the read-back.
+A read-back resume of the QA agent happens before step 4 handling, carries no verdict, does not increment the round count, and has a cap separate from step 4's "once per observed change to the remainder".
+The items QA's handback names as outstanding with what they wait on or who owns them go to step 4's classification and never to a read-back resume, so a mixed remainder is reported and stopped as step 4 says; a read-back resume of QA applies to every other open checklist item, including one the handback names with no stated blocker.
+With `metrics` on, each read-back resume is its own launch row.
 If your todo tool is unavailable, use the primary-session checklist fallback in `references/todo-tracking.md`; never block.
 
 ## 1. Read the story and pick the starting point
@@ -98,6 +107,10 @@ It must include:
 - The story identifier.
 - An instruction to load and follow `engineering-workflow` for the whole story, from triage, the pre-PR gate and the PR to `profile.git.integration_branch` to the merge per `profile.review.merge_owner`, the deploy, and the move to `profile.tracker.states.in_deployment_review`.
 - What to hand back: the story state, each PR link, the head SHA each PR's review of record covered, the merged commit, and the environment and deployed build it verified; or, if it stops, that it is blocked and why, including when no arbiter can launch; a missing arbitration is never clean or converged.
+- Keep working until everything the brief asks for is done, and only stop to ask when you can't go on without the coordinator or before a risky step. The stop this brief already defines still holds: if you must stop, hand back blocked and say why.
+- The real-check rule: report a change done only with the output of a real check that exercises it (tests, type-checker, build, the changed command, or for infrastructure a plan or dry run against the target); a syntax-only check, or a check that failed to start, does not count. Install declared dependencies only with the project's own package manager and lockfile, never with sudo or the system package manager. If no real check can run, the report names the check not run and why.
+- When the work in the brief is done, stop and report. Don't add features, tests, files, docs or refactors the brief or the story's acceptance criteria don't call for. The tests the real-check rule needs are called for by this brief.
+- Don't start review or hardening rounds, or launch reviewer subagents, beyond the review gates this brief and the skills it tells you to load define. The pre-PR gate and the review of record that `engineering-workflow` defines stay allowed.
 - The merge rules: a review of record binds only to the exact head it reviewed, so any change to the head, including an update-branch, needs a delta review posted before merging; every merge must run the merge guard in `references/code-review.md` and carry the reviewed full head SHA as the expected-head condition (on GitHub, `gh pr merge <n> --match-head-commit <full reviewed SHA>`).
 - The engineer never does pre-PR arbitration (`adversarial-review-pipeline` Phase 3, `engineering-workflow` step 4 Verify stage) or rules a finding valid, invalid or accepted risk or the gate converged (applying the gate's scope guard is not arbitration), and fixes what QA ruled not met or the adjudicator ruled valid without overturning those rulings; a separate clean, neutral arbiter on `profile.review.pre_pr.arbiter`, independent of engineer and coordinator, arbitrates every head.
 - The git rule: run every commit-creating git command with the git identity already configured and, when `profile.git.signed_commits` is true, the signing already configured; never pass `-c user.name`, `-c user.email`, `--author`, `GIT_AUTHOR_*` or `GIT_COMMITTER_*`, never write `user.name` or `user.email` with `git config`, and when signing is on never pass `-c user.signingkey`, `-c gpg.*` or `-c commit.gpgsign`; a missing identity, a failed signing check or a pushed commit whose `.commit.verification.verified` is false is a configuration fault, so stop, do not override per command or write git config, make no further commits, and report it to the user.
@@ -110,7 +123,7 @@ This skill assigns merge approval to no manager, so `engineering-workflow`'s own
 Let the senior engineer do the engineering; do not pre-empt its choices.
 The engineer never does pre-PR arbitration (`adversarial-review-pipeline` Phase 3, `engineering-workflow` step 4 Verify stage) or rules a finding valid, invalid or accepted risk or the gate converged (applying the gate's scope guard is not arbitration), and fixes what QA ruled not met or the adjudicator ruled valid without overturning those rulings; a separate clean, neutral arbiter on `profile.review.pre_pr.arbiter`, independent of engineer and coordinator, arbitrates every head.
 
-When it hands back, read the story yourself and confirm it is in `profile.tracker.states.in_deployment_review`; a handback is a claim, the tracker is the record.
+When it hands back, do the step 0 checklist read-back first, then read the story yourself and confirm it is in `profile.tracker.states.in_deployment_review`; a handback is a claim, the tracker is the record.
 If it handed back blocked or the story is not in deployment review, stop and report why.
 Then, for every PR it merged, read the PR yourself with `gh pr view <n> --json headRefOid,mergeCommit` and `gh api --paginate repos/<owner>/<repo>/pulls/<n>/reviews`.
 Select the review of record as the merge guard in `references/code-review.md` does (the `COMMENTED` review whose body begins with `Review of record` and has the greatest `submitted_at`).
@@ -121,7 +134,7 @@ For a waived PR, compare the merged PR's `headRefOid` with the SHA recorded when
 ## 3. QA agent: verify the deployed story
 
 Spawn a new clean, neutral subagent on qa-model at qa-effort for every new QA round; never resume an agent from an earlier round, since it carries that round's conclusions.
-Continuation of the current round under step 4 is the sole exception to that sentence, and a continuation never increments the round count.
+Continuation of the current round under step 4 and the step 0 checklist read-back resume of the current round's QA agent are the only exceptions to that sentence, and neither increments the round count.
 A stop for an owner action ends the round: once the owner clears it, that round's work starts over as a new round under this step with a new QA agent, and a fix/deploy cycle or an amended acceptance basis likewise starts a new round.
 Brief it as a QA agent, with only:
 
@@ -129,6 +142,8 @@ Brief it as a QA agent, with only:
   When step 2 did not run in this engagement, use the environment the user named; if they named none, leave it out so `qa-verification` picks its default.
 - An instruction to load and follow `qa-verification` for the story, including its evidence and its closing status decision.
 - What to hand back: the story's final state, the verdict and evidence for each AC and DoD item, any item left outstanding with its owner, any incidental defect it noted, and each PR it merged with the head SHA its review of record covered.
+- Keep working until everything the brief asks for is done, and only stop to ask when you can't go on without the coordinator or before a risky step. The stop this brief already defines still holds: hand back any item left outstanding with its owner.
+- Don't start review or hardening rounds, or launch reviewer subagents, beyond the review gates this brief and the skills it tells you to load define. The pre-PR gate and the review of record that `engineering-workflow` defines, and the evidence PR's review of record that `qa-verification` defines, stay allowed.
 - The merge rules: a review of record binds only to the exact head it reviewed, so any change to the head, including an update-branch, needs a delta review posted before merging; every merge must run the merge guard in `references/code-review.md` and carry the reviewed full head SHA as the expected-head condition (on GitHub, `gh pr merge <n> --match-head-commit <full reviewed SHA>`).
 - Its own subdirectory of the scratch directory, `<scratch>/qa-agent-round-<n>/`, which you create and hand it in place of the scratch directory itself, never another role's files.
 - The git rule: run every commit-creating git command with the git identity already configured and, when `profile.git.signed_commits` is true, the signing already configured; never pass `-c user.name`, `-c user.email`, `--author`, `GIT_AUTHOR_*` or `GIT_COMMITTER_*`, never write `user.name` or `user.email` with `git config`, and when signing is on never pass `-c user.signingkey`, `-c gpg.*` or `-c commit.gpgsign`; a missing identity, a failed signing check or a pushed commit whose `.commit.verification.verified` is false is a configuration fault, so stop, do not override per command or write git config, make no further commits, and report it to the user.
@@ -137,7 +152,7 @@ Brief it as a QA agent, with only:
 
 Never give it the senior engineer's handback beyond the environment, the PR's rationale, the fixes made, an earlier round's verdicts, or the verdict you expect.
 
-When it hands back, read the story's state yourself.
+When it hands back, do the step 0 checklist read-back first, then read the story's state yourself.
 For every PR it merged, such as the evidence PR, read the PR yourself with `gh pr view <n> --json headRefOid,mergeCommit` and `gh api --paginate repos/<owner>/<repo>/pulls/<n>/reviews`.
 Select the review of record as the merge guard in `references/code-review.md` does (the `COMMENTED` review whose body begins with `Review of record` and has the greatest `submitted_at`).
 Compare the merged PR's `headRefOid` (its head at merge, not the merge commit) separately with that review's `commit_id` and with the full head SHA on its first line.
@@ -156,6 +171,7 @@ For a waived PR, compare the merged PR's `headRefOid` with the SHA recorded when
   Confirm that state as step 2 does, then run step 3 again with a new QA agent.
 - **`profile.tracker.states.in_deployment_review`:** QA is not finished: one or more items in its handback are outstanding.
   Classify each outstanding item by its owner.
+  This classification covers only the items QA's handback names with what they wait on or who owns them: an open item with no stated blocker or owner goes to step 0's read-back resume first, even when QA could finish it itself, and is never step 4's continuation.
   When at least one item is outstanding and every outstanding item is work the current QA agent itself can finish under its existing authority in the current round, such as an evidence PR it opened that is still unmerged with its review-of-record gate in flight, or a QA step still to run, step 4 resumes that same QA agent with a clean, neutral continuation message that states only that the round is unfinished and names that round's scratch subdirectory.
   The continuation message carries no verdict, no expected verdict, no earlier round's conclusions, no senior engineer handback, and nothing the coordinator observed after the handback.
   The continuation does not increment the QA round count, reuses that round's scratch subdirectory and checklist, and with `metrics` on is recorded as its own launch row within that same round.

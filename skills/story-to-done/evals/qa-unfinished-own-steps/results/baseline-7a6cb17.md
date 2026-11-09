@@ -1,3 +1,10 @@
+# Superseded baseline run: 7a6cb17
+
+Kept as history, not as current evidence. Its runs predate the checklist read-back rule and the
+grader's requirement that every scenario read QA round 1's checklist file before its role call, so
+they no longer re-grade to the verdicts below; the baseline was rerun with the harness at `4a622c1`
+and `baseline-7a6cb17-harness-4a622c1.md` is the current baseline record.
+
 # Baseline run: 7a6cb17
 
 The skill as committed on the integration branch before this case, read from a detached

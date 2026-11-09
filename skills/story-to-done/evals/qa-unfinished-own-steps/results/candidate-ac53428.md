@@ -1,3 +1,10 @@
+# Superseded candidate run: ac53428
+
+Kept as history, not as current evidence. Its runs predate the checklist read-back rule and the
+grader's requirement that every scenario read QA round 1's checklist file before its role call, so
+they no longer re-grade to the verdicts below; the runs were repeated at `4a622c1` and
+`candidate-4a622c1.md` is the record this branch stands on.
+
 # Candidate run: `ac53428`
 
 The skill as committed at `ac53428`, the branch commit that carries the step 3, step 4,

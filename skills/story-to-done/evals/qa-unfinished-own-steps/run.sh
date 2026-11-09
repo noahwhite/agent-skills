@@ -4,12 +4,13 @@
 #   run.sh CHECKOUT SCENARIO RUN_DIR
 #
 # CHECKOUT is the repository checkout holding the skill to test, SCENARIO one of
-# own-steps, owner-action or new-round, and RUN_DIR the empty directory this run writes to,
+# own-steps, read-back, owner-action or new-round, and RUN_DIR the empty directory this run writes to,
 # which must sit outside CHECKOUT. EVAL_AGENT_CMD overrides the agent command and is split
 # on whitespace, so it carries no quoted argument; the prompt is attached to it as a file
 # and never put in argv. EVAL_TIMEOUT bounds the agent command in seconds.
 #
-# Exit codes: 0 the run was graded and passed, 1 the run was graded and failed, 2 the run
+# Exit codes: 0 the run was graded and passed (for new-round, both its grades), 1 the run was
+# graded and failed, 2 the run
 # itself is void (bad arguments, a run directory already in use, an agent command that
 # failed or timed out, or a checkout the agent changed), and in that case nothing is graded.
 set -euo pipefail
@@ -21,7 +22,7 @@ run="${3:?usage: run.sh CHECKOUT SCENARIO RUN_DIR}"
 
 test -d "$checkout" || { echo "run.sh: no checkout at $checkout" >&2; exit 2; }
 case "$scenario" in
-  own-steps|owner-action|new-round) ;;
+  own-steps|read-back|owner-action|new-round) ;;
   *) echo "run.sh: unknown scenario $scenario" >&2; exit 2 ;;
 esac
 test -d "$case_dir/scenarios/$scenario" || { echo "run.sh: no scenario $scenario" >&2; exit 2; }
@@ -64,6 +65,12 @@ mkdir -p "$run"
 cp "$case_dir/scenarios/$scenario/scenario.md" "$case_dir/scenarios/$scenario/qa-round-1.json" "$run/"
 cp "$case_dir/runtime/qa-runtime" "$case_dir/runtime/qa-runtime.md" "$run/"
 chmod +x "$run/qa-runtime"
+# The checklist files the scenario's subagents left, each at the path its brief gives it.
+if [ ! -d "$case_dir/scenarios/$scenario/checklists" ]; then
+  echo "run.sh: scenario $scenario ships no checklists" >&2
+  exit 2
+fi
+cp -R "$case_dir/scenarios/$scenario/checklists/." "$run/" || { echo "run.sh: cannot copy the checklists" >&2; exit 2; }
 # The paths go into the prompt through sed, so escape what sed reads specially.
 escape() { printf '%s' "$1" | sed -e 's/[\\&|]/\\&/g'; }
 sed -e "s|{skill_dir}|$(escape "$checkout_real/skills/story-to-done")|g" \
@@ -88,4 +95,12 @@ if [ "$(state "$checkout_real")" != "$state_before" ]; then
   exit 2
 fi
 
-python3 "$case_dir/grader.py" --run-dir "$run" --expectation "$scenario" | tee "$run/grader-output.txt"
+# The new-round run is graded twice: the control on session identity alone, then the same run
+# with the engineer checklist read added, kept as grader-read-output.txt. Either FAIL fails the run.
+graded=0
+python3 "$case_dir/grader.py" --run-dir "$run" --expectation "$scenario" | tee "$run/grader-output.txt" || graded=$?
+if [ "$scenario" = new-round ]; then
+  python3 "$case_dir/grader.py" --run-dir "$run" --expectation new-round-read |
+    tee "$run/grader-read-output.txt" || graded=$?
+fi
+exit "$graded"

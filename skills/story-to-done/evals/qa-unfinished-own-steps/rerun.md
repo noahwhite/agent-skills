@@ -1,15 +1,17 @@
 # Rerun instructions
 
 The case is one directory: `skills/story-to-done/evals/qa-unfinished-own-steps/`.
-It holds the prompt, three scenarios, a graded tool-call record and the recorded runs under `results/`.
+It holds the prompt, four scenarios, a graded tool-call record and the recorded runs under `results/`.
 
 ## What a run does
 
-`run.sh` copies one scenario and the run's `qa-runtime` into a run directory outside the
+`run.sh` copies one scenario, its QA round 1 checklist file (into the run's
+`qa-agent-round-1/` subdirectory) and the run's `qa-runtime` into a run directory outside the
 checkout, fills the prompt's two placeholders, launches the agent command from the
 checkout, and then grades the record. The agent never launches a real QA role: `qa-runtime`
-records the launch, continuation or stop it decided on, and `grader.py` grades only that
-record, so the result turns on session identity and tool-call evidence, never on prose.
+records the launch, continuation, stop or checklist read it decided on, and `grader.py` grades
+only that record, so the result turns on session identity, tool-call evidence and the checklist
+read, never on prose.
 
 ## Baseline
 
@@ -29,7 +31,7 @@ The candidate is the checkout that carries this case.
 
 ```sh
 scratch="$(mktemp -d)"
-for scenario in own-steps owner-action new-round; do
+for scenario in own-steps read-back owner-action new-round; do
   bash skills/story-to-done/evals/qa-unfinished-own-steps/run.sh \
     <checkout> "$scenario" "$scratch/runs/candidate-$scenario"
 done
@@ -58,16 +60,28 @@ run directory as `grader-output.txt`, with the agent's own output beside it as
 
 Record one file per version under `results/`, named `<version>-<ref>.md`, with the
 configuration used and one line per scenario with its verdict, plus `<version>-<ref>-calls.jsonl`
-holding the calls and grades the verdicts were read from. A rerun with a different model or a
+holding the calls and grades the verdicts were read from, each grade under the expectation it
+was graded on. A rerun with a different model or a
 later commit records its own file and names what it used; it never overwrites or deletes an
 earlier result. When a result stops being current, keep it and mark it superseded in its first
 paragraph, naming the record that replaces it, so the trail from run to claim stays readable.
 
 ## What the case shows
 
-- `own-steps` is the discriminating scenario: the baseline stops, and the candidate
-  continues the session it is already in, in the same round, with a message that carries
-  only that the round is unfinished and the round's scratch subdirectory.
+- `own-steps` and `read-back` are the discriminating scenarios, each with one open item and
+  one role call.
+  In `own-steps` the handback states what the item waits on, so the baseline stops and the
+  candidate resumes the session it is already in, in the same round, with step 4's continuation:
+  a message that carries only that the round is unfinished and the round's scratch subdirectory.
+  In `read-back` the handback names the item with no stated blocker, so the candidate resumes the
+  same session in the same round with step 0's checklist read-back resume, SKILL.md's prescribed
+  message word for word.
+  Each scenario holds one kind of open item, because a resume hands control back to QA and the
+  next handback is a later step's input, so one step never owes both messages.
 - `owner-action` and `new-round` are controls: both versions must stop for an owner action
   that sits beside QA's own work, and both must start a new session for a new round rather
   than reuse an earlier one.
+  The new-round control grades session identity alone.
+  `run.sh` grades the same new-round run again as `new-round-read`, which adds the read of the
+  senior engineer's checklist before the launch, into `grader-read-output.txt`; that read is the
+  candidate's rule, so the baseline is not expected to pass it.

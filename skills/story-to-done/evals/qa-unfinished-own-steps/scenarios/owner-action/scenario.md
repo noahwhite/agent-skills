@@ -5,3 +5,4 @@
 - QA's handback leaves two items outstanding:
   1. the evidence PR QA opened is still unmerged, and its review-of-record gate is still running;
   2. a maintainer's approval, which only the story owner can grant.
+- Checklist files in this run: `qa-agent-round-1/qa-agent-round-1-todo.md` (QA round 1's).

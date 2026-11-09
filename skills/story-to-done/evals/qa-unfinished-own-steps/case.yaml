@@ -13,22 +13,36 @@ baseline:
   commit: 7a6cb17
   note: the skill as committed on origin/main before this change; the baseline stops instead of continuing.
 candidate:
-  commit: ac53428
+  commit: 1f24df1
   note: >-
-    the branch commit that carries the skill change and this case; the candidate continues the
-    round it is in. The results file named for that commit is the run it records.
+    the branch commit that carries the skill change, the checklist read-back rule and this case;
+    the candidate continues the round it is in. The results file named for that commit is the
+    run it records, and the current baseline record is baseline-7a6cb17-harness-1f24df1.
 runtime:
-  command: opencode run --model deepseek/deepseek-v4-pro
+  command: opencode run --standalone --auto --archived --model deepseek/deepseek-v4-pro
   model: deepseek/deepseek-v4-pro
   reasoning_effort: default
   record: >-
-    Every recorded scenario used this one configuration. A rerun with a different model records
-    its own result file and names the model it used.
+    Every current recorded scenario used this one configuration; superseded records name the
+    configuration they used. A rerun with a different model records its own result file and
+    names the model it used.
 scenarios:
   - name: own-steps
     expectation: own-steps
     baseline: stops, so no session is continued
-    candidate: continues round 1's session in the same round
+    candidate: >-
+      makes one role call, resuming round 1's session in round 1 with step 4's continuation, naming
+      only that the round is unfinished and its scratch subdirectory, for the one open item, whose
+      handback states what it waits on (the evidence PR whose review-of-record gate is still running)
+  - name: read-back
+    expectation: read-back
+    baseline: >-
+      has no checklist read-back rule, so it stops or continues without step 0's prescribed message
+    candidate: >-
+      makes one role call, resuming round 1's session in round 1 with step 0's checklist read-back
+      resume, SKILL.md's prescribed message word for word, for the one open item, which the handback
+      names with no stated blocker or owner (removing the temporary test data the round created), and
+      which is neither a QA step still to run, nor an evidence PR in its gate, nor an owner's decision
   - name: owner-action
     expectation: owner-action
     baseline: stops
@@ -38,12 +52,32 @@ scenarios:
     expectation: new-round
     baseline: starts a new session
     candidate: starts a new session and never reuses round 1's
-    control: a new round always gets a new agent
+    control: a new round always gets a new agent, graded on session identity alone
+    read: >-
+      the same run is graded again as new-round-read, on every control check plus a read of the
+      senior engineer's checklist before the launch; the baseline has no read-back rule, so only the
+      candidate is held to it
 graded_on:
   - session identity, from the run's qa-round-1.json and the sessions its calls named
   - tool-call evidence, meaning the action, session and message file of every qa-runtime call
+  - >-
+    each scenario makes exactly one role call: one coordinator step acts on one handback, and a
+    resume hands control back to QA, so whatever QA hands back next is a later step's input
+  - >-
+    the resume message: own-steps' step 4 continuation names the round's scratch subdirectory and
+    carries none of the grader's excluded terms; read-back's resume carries SKILL.md step 0's
+    prescribed text and nothing else. The excluded terms apply to the step 4 continuation only,
+    since the prescribed read-back text names open items and a blocker by design
+  - >-
+    the checklist read: before its role call the run read, through qa-runtime, the checklist
+    file of the handback it acts on, present in the run directory: QA round 1's for own-steps,
+    read-back and owner-action, the senior engineer's for new-round-read; the new-round control
+    grades session identity without it
 not_graded_on:
   - the agent's prose
   - >-
-    the positive wording of the continuation message: the case grades the scratch subdirectory it names
-    and the terms it may not carry, not how it says the round is unfinished
+    the text of the new round's launch brief: new-round grades session identity and the checklist
+    read, so it is no evidence of what a QA brief carries
+  - >-
+    the positive wording of the step 4 continuation message: the case grades the scratch subdirectory
+    it names and the terms it may not carry, not how it says the round is unfinished
