@@ -8,7 +8,7 @@ Treat the state and the handback in `scenario.md` as already read back, and read
 
 - `scenario.md` holds the state you have just read back and QA's handback.
 - `qa-round-1.json` is the launch record of QA round 1.
-- `{run_dir}/qa-agent-round-1/qa-agent-round-1-todo.md` is QA round 1's checklist file, as the QA agent left it.
+- `{run_dir}/qa-agent-round-1/qa-agent-round-1-todo.md` is QA round 1's checklist file, as the QA agent left it; read it with `{run_dir}/qa-runtime read --path {run_dir}/qa-agent-round-1/qa-agent-round-1-todo.md`.
 - `{run_dir}/qa-runtime` is this environment's only way to start, continue or stop the QA role, and
   `{run_dir}/qa-runtime.md` gives its usage.
 

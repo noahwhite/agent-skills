@@ -9,8 +9,9 @@ It holds the prompt, three scenarios, a graded tool-call record and the recorded
 `qa-agent-round-1/` subdirectory) and the run's `qa-runtime` into a run directory outside the
 checkout, fills the prompt's two placeholders, launches the agent command from the
 checkout, and then grades the record. The agent never launches a real QA role: `qa-runtime`
-records the launch, continuation or stop it decided on, and `grader.py` grades only that
-record, so the result turns on session identity and tool-call evidence, never on prose.
+records the launch, continuation, stop or checklist read it decided on, and `grader.py` grades
+only that record, so the result turns on session identity, tool-call evidence and the checklist
+read, never on prose.
 
 ## Baseline
 

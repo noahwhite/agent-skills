@@ -73,8 +73,10 @@ READ_BACK_QA = (
     "remainder\"."
 )
 READ_BACK_QA_OUTSTANDING = (
-    "The items QA's handback names as outstanding go to step 4's classification, never to a read-back resume, "
-    "so a mixed remainder is reported and stopped as step 4 says."
+    "The items QA's handback names as outstanding, whether or not the handback states what they wait on or who "
+    "owns them, go to step 4's classification and never to a read-back resume, so a mixed remainder is reported "
+    "and stopped as step 4 says; a read-back resume of QA applies only to an open checklist item the handback "
+    "does not name."
 )
 READ_BACK_METRICS = "With `metrics` on, each read-back resume is its own launch row."
 READ_BACK_HANDBACK = {

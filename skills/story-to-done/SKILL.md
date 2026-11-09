@@ -78,7 +78,7 @@ The tracker state remains the record of completion; the checklist is never evide
 A read-back never overrides the tracker state: after a read-back resume, the next step reads the state again and acts on it.
 If the runtime cannot resume the subagent, record the open items and continue with this skill's existing step logic; spawn no new subagent for the read-back.
 A read-back resume of the QA agent happens before step 4 handling, carries no verdict, does not increment the round count, and has a cap separate from step 4's "once per observed change to the remainder".
-The items QA's handback names as outstanding go to step 4's classification, never to a read-back resume, so a mixed remainder is reported and stopped as step 4 says.
+The items QA's handback names as outstanding, whether or not the handback states what they wait on or who owns them, go to step 4's classification and never to a read-back resume, so a mixed remainder is reported and stopped as step 4 says; a read-back resume of QA applies only to an open checklist item the handback does not name.
 With `metrics` on, each read-back resume is its own launch row.
 If your todo tool is unavailable, use the primary-session checklist fallback in `references/todo-tracking.md`; never block.
 

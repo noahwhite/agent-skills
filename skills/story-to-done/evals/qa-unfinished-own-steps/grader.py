@@ -4,7 +4,9 @@
 The grade reads the tool-call record only: `actions.jsonl` and `sessions.json`, which the
 run's `qa-runtime` wrote, and the scenario's `qa-round-1.json`. It never reads the agent's
 prose, so a run passes on the calls it made and on what the calls carried, not on how the
-agent described them.
+agent described them. A run that acts on a QA handback without first reading round 1's
+checklist file fails: `qa-runtime read` records that read, and the own-steps and owner-action
+scenarios require it before their role call is credited.
 
   grader.py --run-dir DIR --expectation own-steps|owner-action|new-round
 
@@ -46,7 +48,8 @@ def load(path: pathlib.Path) -> object:
     return json.loads(path.read_text())
 
 
-def calls_of(run: pathlib.Path) -> list[dict]:
+def records_of(run: pathlib.Path) -> list[dict]:
+    """Every record the run's qa-runtime wrote, in the order it wrote them."""
     actions = run / "actions.jsonl"
     if not actions.is_file():
         return []
@@ -58,6 +61,16 @@ def calls_of(run: pathlib.Path) -> list[dict]:
                 raise TypeError(f"a call record is {type(recorded).__name__}, not an object")
             records.append(recorded)
     return records
+
+
+def calls_of(run: pathlib.Path) -> list[dict]:
+    """The role calls - launch, resume and stop - leaving the checklist read out."""
+    return [record for record in records_of(run) if record.get("action") in ("launch", "resume", "stop")]
+
+
+def reads_of(run: pathlib.Path) -> list[dict]:
+    """The checklist reads the coordinator made before acting on a handback."""
+    return [record for record in records_of(run) if record.get("action") == "read"]
 
 
 def started_sessions(run: pathlib.Path) -> set[str]:
@@ -86,6 +99,7 @@ def grade(run: pathlib.Path, expectation: str) -> list[tuple[bool, str]]:
         round_one = load(run / "qa-round-1.json")
         session, subdirectory, number = round_one["session"], round_one["scratch_subdirectory"], round_one["round"]
         calls = calls_of(run)
+        reads = reads_of(run)
         started = started_sessions(run)
         if not isinstance(subdirectory, str):
             raise TypeError("the scratch subdirectory is not text")
@@ -98,6 +112,13 @@ def grade(run: pathlib.Path, expectation: str) -> list[tuple[bool, str]]:
     only = calls[0]
     wanted = {"own-steps": "resume", "owner-action": "stop", "new-round": "launch"}[expectation]
     checks.append((only.get("action") == wanted, f"the call was {only.get('action')}, and it had to be {wanted}"))
+
+    if expectation in ("own-steps", "owner-action"):
+        checklist = f"{subdirectory}-todo.md"
+        read = any(isinstance(record.get("path"), str) and record["path"].endswith(checklist)
+                   for record in reads)
+        checks.append((read, f"the run read round {number}'s checklist file {checklist} before acting, "
+                             f"and it {'did' if read else 'did not'}"))
 
     if expectation == "own-steps":
         checks.append((only.get("session") == session,
