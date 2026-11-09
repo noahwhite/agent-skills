@@ -130,11 +130,15 @@ OTHER_STORY = re.compile(
 )
 PERMISSIVE = re.compile(r"\b(?:may|might|can|could|is allowed|are allowed|permitted)\b", re.IGNORECASE)
 AC_SEGMENT_SPLIT = re.compile(r"[,;]|\band\b", flags=re.IGNORECASE)
-SKIP_LINK = re.compile(
-    r"\b(?:keyed on|naming|named|for|if|while|when|because|until|depends on|supplied by|supplies|needed by|lands|landing|later|blocked by|after|once)\b",
+SKIP_LINK_STRONG = re.compile(
+    r"\b(?:keyed on|key|naming|named|tied to|if|while|when|because|until|depends on|supplied by|supplies|needed by|lands|landing|later|blocked by|after|once)\b",
     re.IGNORECASE,
 )
+SKIP_LINK_WEAK = re.compile(r"\b(?:for|on)\b", re.IGNORECASE)
+SKIP_IMMEDIATE_LINK = re.compile(r"\b(?:for|until|when|if|while|because|keyed on|depends on|blocked by|tied to|after|once)\s*$", re.IGNORECASE)
 SKIP_STRICT_LINK = re.compile(r"\b(?:until|when|once|after|lands|landing)\b", re.IGNORECASE)
+SKIP_BOUNDARY = re.compile(r";|\bbut\b", re.IGNORECASE)
+STORY_KEY = re.compile(r"^[A-Z]{2,}-\d+$")
 
 
 def sentences(text: str) -> list[str]:
@@ -157,7 +161,7 @@ def permissive_inversions(text: str) -> list[str]:
                 continue
             for ac in AC_CHANGE.finditer(segment):
                 before = segment[: ac.start()]
-                if re.search(r"\bto\s+$", before) and re.search(r"\b(?:product owner|coordinator|reviewer|arbiter|developer|team|anyone)\b", before, re.IGNORECASE):
+                if re.search(r"\bto\s+$", before) and re.search(r"\b(?:product owner|coordinator|reviewer|arbiter)\b", before, re.IGNORECASE):
                     continue
                 if not NEGATION.search(segment[: ac.end()]):
                     hit = True
@@ -182,13 +186,31 @@ def permissive_inversions(text: str) -> list[str]:
                 return not NEGATION.search(sentence[scope_start(span[0]) : span[0]])
 
             def linked(skip: tuple[int, int], other: tuple[int, int]) -> bool:
+                other_text = sentence[other[0] : other[1]]
+                other_is_key = bool(STORY_KEY.match(other_text))
+
+                def crosses_boundary(start: int, end: int) -> bool:
+                    return bool(SKIP_BOUNDARY.search(sentence[start:end]))
+
+                def weak_link_ok(text: str) -> bool:
+                    return bool(SKIP_LINK_WEAK.search(text)) and not other_is_key
+
                 if other[0] >= skip[1]:
-                    return bool(SKIP_LINK.search(sentence[skip[1] : other[0]]))
+                    gap = sentence[skip[1] : other[0]]
+                    if crosses_boundary(skip[1], other[0]):
+                        return False
+                    return bool(SKIP_LINK_STRONG.search(gap)) or weak_link_ok(gap)
                 if skip[0] >= other[1]:
                     before_other = sentence[max(0, other[0] - 40) : other[0]]
                     between = sentence[other[1] : skip[0]]
                     after_skip = sentence[skip[1] :]
-                    return bool(SKIP_LINK.search(before_other) or SKIP_LINK.search(between) or SKIP_STRICT_LINK.search(after_skip))
+                    if SKIP_IMMEDIATE_LINK.search(before_other):
+                        return True
+                    if not crosses_boundary(other[1], skip[0]) and (
+                        SKIP_LINK_STRONG.search(between) or weak_link_ok(between)
+                    ):
+                        return True
+                    return bool(SKIP_STRICT_LINK.search(after_skip))
                 return False
 
             for skip in skip_spans:
@@ -293,6 +315,7 @@ def test_false_positive_probe_passes() -> None:
             "An engineer never adds an AC or moves an AC.",
             "Code never carries skips, pending lists, or exemptions keyed on another story landing later.",
             "SKL-123 is blocked, but code may carry a permanent exemption for vendored files.",
+            "Code may carry a permanent exemption for generated files; SKL-123 supplies the fixtures.",
             "# Permanent exemption: generated references/ copies are skipped by the scan; this depends on no other story.",
             'EXEMPT = ("references",)  # why: vendored output, never hand-edited',
             *carve_out,
@@ -317,6 +340,9 @@ def test_true_positive_probe_flags_permissive_inversions() -> None:
         "Code may skip checks for this story and another story.",
         "For SKL-123; code may carry a skip until it lands.",
         "Code may carry a skip for the integration checks while the API contract and credentials needed by those checks are supplied by another story.",
+        "Tests may xfail on another story.",
+        "Code may carry exemptions tied to another story.",
+        "The engineer may direct a developer to add an AC.",
         "The engineer may add or move an AC.",
         "An engineer adds an AC to another story.",
         "Tests xfail for another story.",
