@@ -14,7 +14,7 @@ identity and the checklist read, so it is no evidence of what a brief carries.
 Every scenario makes exactly one role call. own-steps leaves one QA-owned item with a stated
 blocker (the evidence PR whose gate is still running), which step 4 continues with a message
 naming only that the round is unfinished and its scratch subdirectory. read-back leaves one item
-with no stated blocker (a DoD check QA had not yet run), which step 0's checklist read-back
+with no stated blocker or owner (whether the change needs a release-notes entry), which step 0's checklist read-back
 resume reaches with SKILL.md's prescribed message word for word; the read-back's handback comes
 after that resume, so nothing more is graded in that run.
 

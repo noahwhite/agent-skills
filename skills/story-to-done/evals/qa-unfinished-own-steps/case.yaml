@@ -41,7 +41,8 @@ scenarios:
     candidate: >-
       makes one role call, resuming round 1's session in round 1 with step 0's checklist read-back
       resume, SKILL.md's prescribed message word for word, for the one open item, which the handback
-      names with no stated blocker (a DoD check QA had not yet run)
+      names with no stated blocker or owner (whether the change needs a release-notes entry), and
+      which is neither a QA step still to run nor an evidence PR in its gate
   - name: owner-action
     expectation: owner-action
     baseline: stops
