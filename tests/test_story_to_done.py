@@ -99,14 +99,15 @@ def test_senior_engineer_uses_its_model_and_engineering_workflow() -> None:
 
 
 # SKL-159: the new-round sentence is pinned exactly as the story quotes it, and the one
-# continuation a round may take is the sole exception to it.
+# continuation a round may take is an exception to it. SKL-219 adds the step 0 checklist
+# read-back resume of the current round's QA agent as the second and last exception.
 QA_ROUND_SENTENCE = (
     "Spawn a new clean, neutral subagent on qa-model at qa-effort for every new QA round; never resume an "
     "agent from an earlier round, since it carries that round's conclusions."
 )
 QA_ROUND_EXCEPTION = (
-    "Continuation of the current round under step 4 is the sole exception to that sentence, and a "
-    "continuation never increments the round count."
+    "Continuation of the current round under step 4 and the step 0 checklist read-back resume of the current "
+    "round's QA agent are the only exceptions to that sentence, and neither increments the round count."
 )
 OLD_QA_ROUND_CLAUSE = "never resume an earlier QA agent, since it carries that round's conclusions"
 
@@ -2169,6 +2170,28 @@ def test_the_case_runner_voids_a_failed_agent_command_without_grading(tmp_path: 
     assert result.returncode == 2, result.stdout + result.stderr
     assert "nothing was graded" in result.stderr
     assert not (run_dir / "grader-output.txt").exists(), "a void run records no grade"
+
+
+# SKL-219: step 0 reads QA's checklist at each handback and treats a missing one as open items, so
+# each scenario ships round 1's checklist at the path the QA brief gives it; its open items are
+# exactly the ones the handback names, so step 4's classification still decides the run.
+CASE_OPEN_ITEMS = {"own-steps": 2, "owner-action": 2, "new-round": 0}
+
+
+@pytest.mark.parametrize("scenario", CASE_SCENARIOS)
+def test_the_case_runner_places_qa_round_1_checklist_where_the_brief_puts_it(tmp_path: Path, scenario: str) -> None:
+    shipped = case_file(f"scenarios/{scenario}/qa-agent-round-1-todo.md").read_text()
+    subdirectory = json.loads(case_file(f"scenarios/{scenario}/qa-round-1.json").read_text())["scratch_subdirectory"]
+    assert subdirectory == "qa-agent-round-1"
+    assert sum(line.startswith("- [ ] ") for line in shipped.splitlines()) == CASE_OPEN_ITEMS[scenario], scenario
+    run_dir = tmp_path / "run"
+    result = subprocess.run(
+        ["bash", str(case_file("run.sh")), str(ROOT), scenario, str(run_dir)],
+        capture_output=True, text=True, env={**os.environ, "EVAL_AGENT_CMD": "false"},
+    )
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert (run_dir / subdirectory / "qa-agent-round-1-todo.md").read_text() == shipped
+    assert "{run_dir}/qa-agent-round-1/qa-agent-round-1-todo.md" in case_file("prompt.md").read_text()
 
 
 def test_the_case_runner_refuses_an_unknown_scenario_and_a_reused_directory(tmp_path: Path) -> None:

@@ -58,8 +58,12 @@ READ_BACK = (
     "read that subagent's checklist file before acting on the result; a missing or unreadable checklist "
     "counts as open items.",
     "If items remain open with no stated blocker, resume that subagent with " + RESUME_MESSAGE
-    + ", at most twice per subagent, and then record the remaining items in your report.",
+    + ", at most twice per subagent, and then record the remaining items in your report and continue with this "
+    "skill's existing step logic.",
+    "An open item the handback itself names, with what it waits on or who owns it, has a stated blocker.",
     "The tracker state remains the record of completion; the checklist is never evidence that work is done.",
+    "A read-back never overrides the tracker state: after a read-back resume, the next step reads the state "
+    "again and acts on it.",
     "If the runtime cannot resume the subagent, record the open items and continue with this skill's existing "
     "step logic; spawn no new subagent for the read-back.",
 )
@@ -68,6 +72,10 @@ READ_BACK_QA = (
     "increment the round count, and has a cap separate from step 4's \"once per observed change to the "
     "remainder\"."
 )
+READ_BACK_QA_OUTSTANDING = (
+    "The items QA's handback names as outstanding go to step 4's classification, never to a read-back resume, "
+    "so a mixed remainder is reported and stopped as step 4 says."
+)
 READ_BACK_METRICS = "With `metrics` on, each read-back resume is its own launch row."
 READ_BACK_HANDBACK = {
     STORY_TO_DONE: "When a senior engineer or QA agent hands back, ",
@@ -75,7 +83,18 @@ READ_BACK_HANDBACK = {
     STAFF_DEVOPS: "When the platform engineer hands back, ",
 }
 MIRRORING = "read it from there and mirror it into your list whenever you check on the subagent."
-SEED_ITEM = "the checklist read-back at each handback"
+SEED_ITEM = "the checklist read-back at each handback with each subagent's read-back resume count"
+# Steps 2 and 3 of story-to-done run the step 0 read-back before their own read-backs.
+READ_BACK_FIRST = {
+    "2. Senior engineer: implement to deployment review":
+        "When it hands back, do the step 0 checklist read-back first, then read the story yourself and confirm",
+    "3. QA agent: verify the deployed story":
+        "When it hands back, do the step 0 checklist read-back first, then read the story's state yourself.",
+}
+QA_EXCEPTIONS = (
+    "Continuation of the current round under step 4 and the step 0 checklist read-back resume of the current "
+    "round's QA agent are the only exceptions to that sentence, and neither increments the round count."
+)
 
 
 def section(text: str, heading: str) -> str:
@@ -161,7 +180,8 @@ def test_the_qa_brief_is_out_of_the_real_check_and_scope_rules() -> None:
 def test_each_sentence_lives_only_in_the_briefs(path: Path) -> None:
     text = path.read_text()
     named = [brief for name, brief in briefs().items() if brief in text]
-    for sentence in (KEEP_GOING, NO_SELF_REVIEW, SCOPE, *REAL_CHECK):
+    for sentence in (KEEP_GOING, NO_SELF_REVIEW, SCOPE, SCOPE_TESTS, GATES_ALLOWED, *REAL_CHECK,
+                     *STOP_POINTS.values()):
         in_briefs = sum(brief.count(sentence) for brief in named)
         assert text.count(sentence) == in_briefs, f"{path.parent.name}: {sentence!r} appears outside a brief"
 
@@ -197,17 +217,32 @@ def test_step_0_seeds_a_todo_item_for_the_read_back(path: Path) -> None:
 
 
 def test_story_to_done_scopes_the_qa_read_back_apart_from_the_step_4_continuation() -> None:
-    step_0 = section(STORY_TO_DONE.read_text(), "0. Track everything on a todo list").splitlines()
+    text = STORY_TO_DONE.read_text()
+    step_0 = section(text, "0. Track everything on a todo list").splitlines()
     last = step_0.index(READ_BACK[-1])
-    assert step_0[last + 1] == READ_BACK_QA
-    assert step_0[last + 2] == READ_BACK_METRICS
-    assert STORY_TO_DONE.read_text().count(READ_BACK_QA) == 1
+    assert step_0[last + 1: last + 4] == [READ_BACK_QA, READ_BACK_QA_OUTSTANDING, READ_BACK_METRICS]
+    for sentence in (READ_BACK_QA, READ_BACK_QA_OUTSTANDING, READ_BACK_METRICS):
+        assert text.count(sentence) == 1, sentence
+
+
+@pytest.mark.parametrize("heading", list(READ_BACK_FIRST))
+def test_story_to_done_handbacks_run_the_checklist_read_back_before_the_state_read(heading: str) -> None:
+    body = section(STORY_TO_DONE.read_text(), heading)
+    assert body.count(READ_BACK_FIRST[heading]) == 1, heading
+
+
+def test_story_to_done_step_3_names_the_read_back_resume_as_a_round_exception() -> None:
+    text = STORY_TO_DONE.read_text()
+    assert text.count(QA_EXCEPTIONS) == 1
+    assert QA_EXCEPTIONS in section(text, "3. QA agent: verify the deployed story")
+    assert "is the sole exception" not in text
 
 
 @pytest.mark.parametrize("path", [STAFF_ENGINEER, STAFF_DEVOPS])
 def test_the_personas_carry_no_story_to_done_qa_or_metrics_read_back_rule(path: Path) -> None:
     text = path.read_text()
-    assert READ_BACK_QA not in text and READ_BACK_METRICS not in text
+    for sentence in (READ_BACK_QA, READ_BACK_QA_OUTSTANDING, READ_BACK_METRICS):
+        assert sentence not in text
 
 
 def test_the_vendored_references_are_unchanged() -> None:

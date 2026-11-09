@@ -37,12 +37,14 @@ Where this file and a capability file disagree, the capability file is authorita
 ## 0. Track everything on a todo list
 
 Before anything else, create a fine-grained todo list per `references/todo-tracking.md`: one item per concrete step, not per phase.
-Seed it with at least: each triage check (description, AC, comments, relation graph, DoR), the design and blast-radius decision, each slice, the delegation, each check on the delegated work until the PR opens, the checklist read-back at each handback, each gate step (staff gate, review of record, each shadow adjudication, comparison), each remediation round, each deploy and estate verification, posting the adjudications to the story, and confirming the final story state.
+Seed it with at least: each triage check (description, AC, comments, relation graph, DoR), the design and blast-radius decision, each slice, the delegation, each check on the delegated work until the PR opens, the checklist read-back at each handback with each subagent's read-back resume count, each gate step (staff gate, review of record, each shadow adjudication, comparison), each remediation round, each deploy and estate verification, posting the adjudications to the story, and confirming the final story state.
 Add items as work appears and mark each done the moment it is.
 Subagents have no todo tool, so every brief requires a checklist file in that subagent's own subdirectory of the scratch directory; read it from there and mirror it into your list whenever you check on the subagent.
 When the platform engineer hands back, read that subagent's checklist file before acting on the result; a missing or unreadable checklist counts as open items.
-If items remain open with no stated blocker, resume that subagent with "Your checklist still has open items. Continue with them; if one is blocked, say what blocks it", at most twice per subagent, and then record the remaining items in your report.
+If items remain open with no stated blocker, resume that subagent with "Your checklist still has open items. Continue with them; if one is blocked, say what blocks it", at most twice per subagent, and then record the remaining items in your report and continue with this skill's existing step logic.
+An open item the handback itself names, with what it waits on or who owns it, has a stated blocker.
 The tracker state remains the record of completion; the checklist is never evidence that work is done.
+A read-back never overrides the tracker state: after a read-back resume, the next step reads the state again and acts on it.
 If the runtime cannot resume the subagent, record the open items and continue with this skill's existing step logic; spawn no new subagent for the read-back.
 
 ## 1. Triage the story yourself

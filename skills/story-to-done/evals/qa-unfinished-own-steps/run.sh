@@ -64,6 +64,9 @@ mkdir -p "$run"
 cp "$case_dir/scenarios/$scenario/scenario.md" "$case_dir/scenarios/$scenario/qa-round-1.json" "$run/"
 cp "$case_dir/runtime/qa-runtime" "$case_dir/runtime/qa-runtime.md" "$run/"
 chmod +x "$run/qa-runtime"
+# QA round 1's checklist file, at the path the skill's QA brief gives it.
+mkdir "$run/qa-agent-round-1"
+cp "$case_dir/scenarios/$scenario/qa-agent-round-1-todo.md" "$run/qa-agent-round-1/"
 # The paths go into the prompt through sed, so escape what sed reads specially.
 escape() { printf '%s' "$1" | sed -e 's/[\\&|]/\\&/g'; }
 sed -e "s|{skill_dir}|$(escape "$checkout_real/skills/story-to-done")|g" \

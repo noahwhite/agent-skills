@@ -5,7 +5,8 @@ It holds the prompt, three scenarios, a graded tool-call record and the recorded
 
 ## What a run does
 
-`run.sh` copies one scenario and the run's `qa-runtime` into a run directory outside the
+`run.sh` copies one scenario, its QA round 1 checklist file (into the run's
+`qa-agent-round-1/` subdirectory) and the run's `qa-runtime` into a run directory outside the
 checkout, fills the prompt's two placeholders, launches the agent command from the
 checkout, and then grades the record. The agent never launches a real QA role: `qa-runtime`
 records the launch, continuation or stop it decided on, and `grader.py` grades only that
