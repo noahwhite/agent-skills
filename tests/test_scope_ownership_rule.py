@@ -200,7 +200,10 @@ def permissive_inversions(text: str) -> list[str]:
 
                 if other[0] >= skip[1]:
                     gap = sentence[skip[1] : other[0]]
-                    if SKIP_LINK_STRONG.search(gap):
+                    last_boundary = 0
+                    for boundary in SKIP_BOUNDARY.finditer(gap):
+                        last_boundary = boundary.end()
+                    if SKIP_LINK_STRONG.search(gap[last_boundary:]):
                         return True
                     if crosses_boundary(skip[1], other[0]):
                         return False
@@ -322,6 +325,7 @@ def test_false_positive_probe_passes() -> None:
             "SKL-123 is blocked, but code may carry a permanent exemption for vendored files.",
             "Code may carry a permanent exemption for generated files; SKL-123 supplies the fixtures.",
             "Code may carry a permanent exemption for generated files and SKL-123 supplies the fixtures.",
+            "Code may carry a permanent exemption because the files are generated; SKL-123 supplies the fixtures.",
             "# Permanent exemption: generated references/ copies are skipped by the scan; this depends on no other story.",
             'EXEMPT = ("references",)  # why: vendored output, never hand-edited',
             *carve_out,
