@@ -130,8 +130,11 @@ OTHER_STORY = re.compile(
 )
 PERMISSIVE = re.compile(r"\b(?:may|might|can|could|is allowed|are allowed|permitted)\b", re.IGNORECASE)
 AC_SEGMENT_SPLIT = re.compile(r"[,;]|\band\b", flags=re.IGNORECASE)
-SKIP_SEGMENT_SPLIT = re.compile(r";|\band\b(?=\s+(?:may|might|can|could|is allowed|are allowed|permitted)\b)", flags=re.IGNORECASE)
-SKIP_KEY_MAX_GAP = 40
+SKIP_LINK = re.compile(
+    r"\b(?:keyed on|naming|named|for|if|while|when|because|until|depends on|supplied by|supplies|needed by|lands|landing|later|blocked by|after|once)\b",
+    re.IGNORECASE,
+)
+SKIP_STRICT_LINK = re.compile(r"\b(?:until|when|once|after|lands|landing)\b", re.IGNORECASE)
 
 
 def sentences(text: str) -> list[str]:
@@ -153,28 +156,45 @@ def permissive_inversions(text: str) -> list[str]:
             if not (ENGINEER.search(segment) or PERMISSIVE.search(segment)):
                 continue
             for ac in AC_CHANGE.finditer(segment):
+                before = segment[: ac.start()]
+                if re.search(r"\bto\s+$", before) and re.search(r"\b(?:product owner|coordinator|reviewer|arbiter|developer|team|anyone)\b", before, re.IGNORECASE):
+                    continue
                 if not NEGATION.search(segment[: ac.end()]):
                     hit = True
                     break
             if hit:
                 break
         if not hit:
-            for segment in SKIP_SEGMENT_SPLIT.split(sentence):
-                skips = [(m.start(), m.end()) for m in SKIP_TERM.finditer(segment)]
-                others = [(m.start(), m.end()) for m in OTHER_STORY.finditer(segment)]
-                for skip in skips:
-                    for other in others:
-                        gap = max(other[0] - skip[1], skip[0] - other[1], 0)
-                        if gap > SKIP_KEY_MAX_GAP:
-                            continue
-                        first, second = sorted((skip, other), key=lambda span: span[0])
-                        negated = bool(NEGATION.search(segment[: first[0]]))
-                        if not negated and second[0] >= first[1]:
-                            negated = bool(NEGATION.search(segment[first[1] : second[0]]))
-                        if not negated:
-                            hit = True
-                            break
-                    if hit:
+            skip_spans = [(m.start(), m.end()) for m in SKIP_TERM.finditer(sentence)]
+            other_spans = [(m.start(), m.end()) for m in OTHER_STORY.finditer(sentence)]
+            permissive_ends = [m.end() for m in PERMISSIVE.finditer(sentence)]
+
+            def scope_start(pos: int) -> int:
+                start = 0
+                for end in permissive_ends:
+                    if end <= pos:
+                        start = end
+                    else:
+                        break
+                return start
+
+            def unnegated(span: tuple[int, int]) -> bool:
+                return not NEGATION.search(sentence[scope_start(span[0]) : span[0]])
+
+            def linked(skip: tuple[int, int], other: tuple[int, int]) -> bool:
+                if other[0] >= skip[1]:
+                    return bool(SKIP_LINK.search(sentence[skip[1] : other[0]]))
+                if skip[0] >= other[1]:
+                    before_other = sentence[max(0, other[0] - 40) : other[0]]
+                    between = sentence[other[1] : skip[0]]
+                    after_skip = sentence[skip[1] :]
+                    return bool(SKIP_LINK.search(before_other) or SKIP_LINK.search(between) or SKIP_STRICT_LINK.search(after_skip))
+                return False
+
+            for skip in skip_spans:
+                for other in other_spans:
+                    if unnegated(skip) and unnegated(other) and linked(skip, other):
+                        hit = True
                         break
                 if hit:
                     break
@@ -295,6 +315,8 @@ def test_true_positive_probe_flags_permissive_inversions() -> None:
         "Code never carries a skip keyed on SKL-123 and may carry a skip keyed on SKL-456.",
         "For SKL-123, code may carry a skip.",
         "Code may skip checks for this story and another story.",
+        "For SKL-123; code may carry a skip until it lands.",
+        "Code may carry a skip for the integration checks while the API contract and credentials needed by those checks are supplied by another story.",
         "The engineer may add or move an AC.",
         "An engineer adds an AC to another story.",
         "Tests xfail for another story.",
