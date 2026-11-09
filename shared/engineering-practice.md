@@ -21,6 +21,14 @@ Read this when diagnosing, implementing, testing, or fixing code, or when changi
 - Before changing a working credential, auth, or transport path, find a recent successful run.
   If one exists, look for what differs between the passing and failing runs, and test the risky step in isolation under the failing conditions before opening a PR around it.
 - When a fix fails and you need a new theory to explain why, stop and report; do not layer theory on theory.
+- ⛔ Code never carries skips, pending lists, or exemptions keyed on another story landing later (for example "skip if directory X is absent" or an exemption entry naming another tracker story's key).
+  A story that needs another story's artifact is blocked by that story; a guard spanning several stories' files belongs in a story blocked by all of them.
+  The only exceptions allowed are permanent exemptions that depend on no other story and carry a comment stating why; that allowance covers test, lint, and build exemptions and does not relax "Do not hide failures".
+- An engineer who meets a scope limit has only two permitted responses, the two exits below.
+  Exit one, a refinement proposal: a downstream requirement the engineer discovers is posted as a comment on the target story headed "Refinement proposal (not an AC)" and listed in its handback (the completion summary, in `engineering-workflow`).
+  Exit two, blocked: when an AC cannot be met or the work needs another story's artifact, the engineer stops and reports itself blocked, naming the story that supplies the precondition or, where no story does, the criterion and why it cannot be met so the product owner can re-refine it, and the story moves to `profile.tracker.states.blocked`.
+  The engineer makes that move where it has tracker write access, and otherwise states in its handback that the move is required.
+  A proposal never substitutes for blocking when a current AC cannot be met.
 - Do not over-engineer: accept low-risk operational tradeoffs instead of adding supervisors, sidecars, or restart wrappers for unlikely failures.
 
 ## Fix the whole class, not the first instance

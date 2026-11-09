@@ -57,7 +57,8 @@ It runs the independent refinement, the accept round, the secret pointing, the c
 2. Identify the desired behavior, acceptance criteria, constraints, likely affected components and test strategy.
 3. Enumerate dependencies from the formal relation graph, not just prose: `linear issue relation list <ID>` lists an issue's relations, while `linear issue view --json` does not include them (see `references/linear.md`, Triage).
 4. Confirm the story belongs in this repository.
-5. Move it to `profile.tracker.states.in_progress` and read it back to confirm.
+5. Apply the scope rules: no acceptance criterion changed on any story ([references/linear.md](references/linear.md) "Acceptance criteria and scope"), no skip keyed on another story ([references/engineering-practice.md](references/engineering-practice.md) "Make minimal, durable changes"), and the only two exits are a "Refinement proposal (not an AC)" or reporting the story blocked, as those sections state; step 5, "Prepare the PR", item 4, "Self-review against the acceptance criteria", checks them again.
+6. Move it to `profile.tracker.states.in_progress` and read it back to confirm.
    Use the exact state names from the profile; never invent one.
 
 If the tracker cannot be updated, stop and say the transition was not performed; never claim it was.
@@ -143,7 +144,7 @@ Reviewers never modify code; only the implementing agent or the loop's fixer com
 1. Run the complete applicable test suite, plus the repository's formatters, linters, type checks, static analysis and build.
 2. Inspect `git diff origin/<integration branch>...HEAD` after a fetch.
 3. Confirm there are no unrelated changes and no secrets.
-4. Self-review against the acceptance criteria.
+4. Self-review against the acceptance criteria, and against the scope rules of step 1, "Triage the story": no acceptance criterion changed on any story, no skip keyed on another story, and every discovered requirement or unmet criterion taken through one of the two exits those sections state.
 5. Open the PR against `profile.git.integration_branch` with `gh pr create --base`, following the repository's PR template.
    Describe the user-visible change, the implementation, the testing performed, and anything accepted or deferred by the gate.
 6. Move the story to `profile.tracker.states.in_review` per `references/linear.md`.

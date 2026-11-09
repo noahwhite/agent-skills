@@ -1,0 +1,294 @@
+"""SKL-27: engineers never change acceptance criteria or ship skips keyed on another story; two exits only."""
+
+import re
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+SHARED = ROOT / "shared"
+SKILLS = ROOT / "skills"
+
+AC1_RULE = (
+    "Only the product owner or the refinement process adds, moves, or rewords acceptance criteria on any story.",
+    'An implementing engineer never adds an AC to any story, never moves its own unmet AC onto another story, '
+    'never rewords an AC, never records its own "accepted deviation", and never accepts an AC as met by any means '
+    'other than the completion tick in "Completion (AC and DoD checkboxes)".',
+)
+AC1_CARVE_OUT = (
+    'Ticking an AC box after observing the behaviour in the deployed environment, per "Completion (AC and DoD checkboxes)", '
+    "is the verification record and not an AC change.",
+    "The two edits this section already directs remain permitted and are not engineer-added scope: amending one criterion "
+    "with a dated note when a deployment-review finding reopens that same story, and deleting the later-environment lines "
+    "the user has decided not to promote.",
+    "Neither licence extends to another story, and neither lets an engineer reword a criterion it cannot meet "
+    "or use a dated note to make an unmet criterion pass.",
+)
+AC2_RULE = (
+    "Code never carries skips, pending lists, or exemptions keyed on another story landing later "
+    '(for example "skip if directory X is absent" or an exemption entry naming another tracker story\'s key).'
+)
+AC2_SEQUENCING = (
+    "A story that needs another story's artifact is blocked by that story; "
+    "a guard spanning several stories' files belongs in a story blocked by all of them.",
+    "The only exceptions allowed are permanent exemptions that depend on no other story and carry a comment stating why; "
+    'that allowance covers test, lint, and build exemptions and does not relax "Do not hide failures".',
+)
+EXITS = (
+    "An engineer who meets a scope limit has only two permitted responses, the two exits below.",
+    "Exit one, a refinement proposal: a downstream requirement the engineer discovers is posted as a comment on the target "
+    'story headed "Refinement proposal (not an AC)" and listed in its handback (the completion summary, in `engineering-workflow`).',
+    "Exit two, blocked: when an AC cannot be met or the work needs another story's artifact, the engineer stops and reports "
+    "itself blocked, naming the story that supplies the precondition or, where no story does, the criterion and why it cannot "
+    "be met so the product owner can re-refine it, and the story moves to `profile.tracker.states.blocked`.",
+    "The engineer makes that move where it has tracker write access, and otherwise states in its handback that the move is required.",
+    "A proposal never substitutes for blocking when a current AC cannot be met.",
+)
+AC7_RULE = (
+    "An AC that requires another story's output (an artifact, credential, stack, or behaviour that story delivers) "
+    "requires a formal blocked-by relation to that story.",
+    'The template DoR box "No blocking stories, no unresolved external dependencies, and no other story already owns this scope" '
+    "stays unticked until that relation exists and the blocker is in `profile.tracker.states.done`.",
+    "This refines, and does not replace, the relation-graph rules above, including the dated downgrade of a blocker that does "
+    "not gate the criteria from `blocks` to `related`.",
+    "Before adding the relation, triage checks it creates no cycle; where it would (the other story consumes this one), "
+    "the product owner or the refinement process sets the delivery order, the cross-story check moves to whichever story "
+    "that order lands last, and that story gets the blocked-by relations instead.",
+    "An implementing engineer never moves an acceptance criterion between stories to resolve a cycle.",
+)
+
+EXIT_POINTER = 'the only two exits are a "Refinement proposal (not an AC)" or reporting the story blocked'
+LINEAR_LINK = '[references/linear.md](references/linear.md) "Acceptance criteria and scope"'
+PRACTICE_LINK = '[references/engineering-practice.md](references/engineering-practice.md) "Make minimal, durable changes"'
+POINTER_SKILLS = ("engineering-workflow", "story-to-done", "persona-staff-engineer", "persona-staff-devops")
+BRIEF_SKILLS = ("story-to-done", "persona-staff-engineer", "persona-staff-devops")
+BRIEF_PREFIX = "- The scope rule: "
+
+
+def spaced(text: str) -> str:
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def section(text: str, heading: str) -> str:
+    assert f"\n## {heading}\n" in text, f"missing section: {heading}"
+    return text.split(f"\n## {heading}\n", 1)[1].split("\n## ", 1)[0]
+
+
+def linear_files() -> list[Path]:
+    return [SHARED / "linear.md", *sorted(SKILLS.glob("*/references/linear.md"))]
+
+
+def practice_files() -> list[Path]:
+    return [SHARED / "engineering-practice.md", *sorted(SKILLS.glob("*/references/engineering-practice.md"))]
+
+
+def skill_file(name: str) -> Path:
+    return SKILLS / name / "SKILL.md"
+
+
+def pointer_phrases(name: str) -> tuple[str, ...]:
+    links = (LINEAR_LINK,) if name == "story-to-done" else (LINEAR_LINK, PRACTICE_LINK)
+    return (EXIT_POINTER, *links)
+
+
+def required_phrases() -> dict[Path, tuple[str, ...]]:
+    """Every file in the guarded set and the phrases it must carry."""
+    required: dict[Path, tuple[str, ...]] = {}
+    for path in linear_files():
+        required[path] = (*AC1_RULE, *EXITS)
+    for path in practice_files():
+        required[path] = (AC2_RULE, *EXITS)
+    for name in POINTER_SKILLS:
+        required[skill_file(name)] = pointer_phrases(name)
+    required[skill_file("story-to-done")] += (AC2_RULE,)
+    return required
+
+
+def missing(text: str, phrases: tuple[str, ...]) -> list[str]:
+    flat = spaced(text)
+    return [phrase for phrase in phrases if phrase not in flat]
+
+
+# ---- permissive-inversion scan -----------------------------------------------------------------
+
+NEGATION = re.compile(r"\b(never|not|no|neither|nor|cannot)\b|n't\b", re.IGNORECASE)
+ENGINEER = re.compile(r"\b(engineers?|implementing agent)\b", re.IGNORECASE)
+AC_CHANGE = re.compile(
+    r"\b(add|adds|added|adding|move|moves|moved|moving|reword|rewords|reworded|rewording|change|changes|changed|changing"
+    r"|edit|edits|edited|editing)\b[^.;,]{0,40}?\b(ACs?|acceptance criteri(?:on|a)|criteri(?:on|a))\b"
+    r"|accepted deviation",
+    re.IGNORECASE,
+)
+SKIP_TERM = re.compile(r"\b(skips?|skipped|pending lists?|exemptions?)\b", re.IGNORECASE)
+OTHER_STORY = re.compile(
+    r"\b(another|other|later|sibling)\s+(tracker\s+)?(story|stories|issue)\b|story's key|stories' files", re.IGNORECASE
+)
+
+
+def sentences(text: str) -> list[str]:
+    flat = spaced(re.sub(r"^\s*(?:[-*>]|\d+\.)\s+", "", text, flags=re.MULTILINE).replace("\n", " "))
+    return [s for s in re.split(r"(?<=[.!?])\s+(?=[A-Z\"`(\[])", flat) if s]
+
+
+def permissive_inversions(text: str) -> list[str]:
+    """Sentences that permit an engineer to change an AC, or that permit a skip keyed on another story.
+
+    The AC check is per comma or semicolon clause, so one negated clause cannot cover a permissive sibling;
+    the skip check is per semicolon clause, so a negated list of skip forms reads as one clause.
+    """
+    hits = []
+    for sentence in sentences(text):
+        if ENGINEER.search(sentence):
+            for clause in re.split(r"[,;]", sentence):
+                if AC_CHANGE.search(clause) and not NEGATION.search(clause):
+                    hits.append(sentence)
+                    break
+        for clause in sentence.split(";"):
+            if SKIP_TERM.search(clause) and OTHER_STORY.search(clause) and not NEGATION.search(clause):
+                hits.append(sentence)
+                break
+    return hits
+
+
+# ---- positive assertions -----------------------------------------------------------------------
+
+
+def test_guarded_set_covers_every_source_copy_and_skill() -> None:
+    required = required_phrases()
+    assert len(linear_files()) == 19, "shared/linear.md plus its 18 vendored copies"
+    assert len(practice_files()) >= 2
+    assert all(path.is_file() for path in required)
+
+
+def test_every_guarded_file_carries_its_phrases() -> None:
+    gaps = {str(path.relative_to(ROOT)): gap for path, phrases in required_phrases().items() if (gap := missing(path.read_text(), phrases))}
+    assert not gaps, gaps
+
+
+def test_rules_sit_in_the_named_sections() -> None:
+    linear = (SHARED / "linear.md").read_text()
+    scope = spaced(section(linear, "Acceptance criteria and scope"))
+    assert not missing(scope, (*AC1_RULE, *AC1_CARVE_OUT, *EXITS))
+    assert not missing(spaced(section(linear, "Triage and Definition of Ready")), AC7_RULE)
+    practice = spaced(section((SHARED / "engineering-practice.md").read_text(), "Make minimal, durable changes"))
+    assert not missing(practice, (AC2_RULE, *AC2_SEQUENCING, *EXITS))
+
+
+def test_triage_rule_reaches_the_product_owner_and_refinement() -> None:
+    for name in ("persona-product-owner", "story-refinement"):
+        assert not missing((SKILLS / name / "references" / "linear.md").read_text(), AC7_RULE), name
+
+
+def test_story_to_done_vendors_linear_but_not_practice() -> None:
+    refs = SKILLS / "story-to-done" / "references"
+    assert (refs / "linear.md").is_file() and not (refs / "engineering-practice.md").exists()
+    for name in ("persona-staff-engineer", "persona-staff-devops"):
+        assert (SKILLS / name / "references" / "engineering-practice.md").is_file(), name
+
+
+def brief_list(name: str) -> list[str]:
+    lines = skill_file(name).read_text().splitlines()
+    start = lines.index("It must include:") + 2
+    end = start
+    while end < len(lines) and lines[end].strip():
+        end += 1
+    return lines[start:end]
+
+
+def test_each_brief_carries_one_scope_item_with_pointer_and_links() -> None:
+    for name in BRIEF_SKILLS:
+        items = [line for line in brief_list(name) if line.startswith(BRIEF_PREFIX)]
+        assert len(items) == 1, name
+        assert not missing(items[0], pointer_phrases(name)), name
+    story_item = next(line for line in brief_list("story-to-done") if line.startswith(BRIEF_PREFIX))
+    assert AC2_RULE in story_item
+
+
+def engineering_workflow_step(number: int, title: str) -> str:
+    text = skill_file("engineering-workflow").read_text()
+    return section(text, f"{number}. {title}")
+
+
+def test_engineering_workflow_meets_the_rule_at_triage_and_self_review() -> None:
+    triage = [line for line in engineering_workflow_step(1, "Triage the story").splitlines() if "scope rules" in line]
+    assert len(triage) == 1 and triage[0].startswith("5. Apply the scope rules")
+    assert EXIT_POINTER in triage[0] and LINEAR_LINK in triage[0] and PRACTICE_LINK in triage[0]
+    assert '"Prepare the PR"' in triage[0] and '"Self-review against the acceptance criteria"' in triage[0]
+    prepare = engineering_workflow_step(5, "Prepare the PR").splitlines()
+    review = [line for line in prepare if line.startswith("4. Self-review against the acceptance criteria")]
+    assert len(review) == 1
+    assert '"Triage the story"' in review[0] and "two exits" in review[0]
+
+
+# ---- negative assertion and false-positive probe -----------------------------------------------
+
+
+def test_no_guarded_file_carries_a_permissive_inversion() -> None:
+    offenders = {str(path.relative_to(ROOT)): hits for path in required_phrases() if (hits := permissive_inversions(path.read_text()))}
+    assert not offenders, offenders
+
+
+def test_false_positive_probe_passes() -> None:
+    linear = section((SHARED / "linear.md").read_text(), "Acceptance criteria and scope")
+    carve_out = [line for line in linear.splitlines() if any(spaced(line).endswith(c[-40:]) for c in AC1_CARVE_OUT)]
+    assert len(carve_out) == len(AC1_CARVE_OUT), "carve-out lines moved: update the probe"
+    probe = "\n".join(
+        (
+            'The rule is that an implementing engineer "never adds an AC", and the engineer "never moves an AC" either.',
+            "The engineer never rewords an AC on any story.",
+            "# Permanent exemption: generated references/ copies are skipped by the scan; this depends on no other story.",
+            'EXEMPT = ("references",)  # why: vendored output, never hand-edited',
+            *carve_out,
+        )
+    )
+    assert permissive_inversions(probe) == []
+
+
+# ---- mutation tests ----------------------------------------------------------------------------
+
+
+def guard_fails(path: Path, text: str) -> bool:
+    return bool(missing(text, required_phrases()[path])) or bool(permissive_inversions(text))
+
+
+def test_guard_kills_every_mutant() -> None:
+    shared_linear = SHARED / "linear.md"
+    shared_practice = SHARED / "engineering-practice.md"
+    linear = shared_linear.read_text()
+    practice = shared_practice.read_text()
+    mutants: list[tuple[str, Path, str]] = [
+        ("delete AC1 rule", shared_linear, linear.replace(AC1_RULE[0], "")),
+        ("delete AC1 engineer sentence", shared_linear, linear.replace(AC1_RULE[1], "")),
+        (
+            "permit an engineer-added AC",
+            shared_linear,
+            linear.replace(AC1_RULE[0], "Only the product owner, the refinement process, or an implementing engineer adds acceptance criteria on any story."),
+        ),
+        (
+            "permit an engineer to add an AC in the engineer sentence",
+            shared_linear,
+            linear.replace("never adds an AC to any story", "may add an AC to any story"),
+        ),
+        ("delete AC2 rule", shared_practice, practice.replace(AC2_RULE, "")),
+        (
+            "permit a skip keyed on another story",
+            shared_practice,
+            practice.replace(AC2_RULE, AC2_RULE.replace("Code never carries", "Code may carry")),
+        ),
+        (
+            "delete AC2 restatement from the story-to-done brief",
+            skill_file("story-to-done"),
+            skill_file("story-to-done").read_text().replace(AC2_RULE, ""),
+        ),
+    ]
+    for path in (*linear_files(), *practice_files()):
+        text = path.read_text()
+        for exit_sentence in EXITS:
+            mutants.append((f"delete exit sentence from {path.relative_to(ROOT)}", path, text.replace(exit_sentence, "")))
+    for path in (*linear_files()[1:], *practice_files()[1:]):
+        text = path.read_text()
+        rule = AC1_RULE[0] if path.name == "linear.md" else AC2_RULE
+        mutants.append((f"delete rule from {path.relative_to(ROOT)}", path, text.replace(rule, "")))
+    for name in POINTER_SKILLS:
+        path = skill_file(name)
+        mutants.append((f"delete exit pointer from {name}", path, path.read_text().replace(pointer_phrases(name)[0], "")))
+    survivors = [label for label, path, text in mutants if text == path.read_text() or not guard_fails(path, text)]
+    assert not survivors, survivors
