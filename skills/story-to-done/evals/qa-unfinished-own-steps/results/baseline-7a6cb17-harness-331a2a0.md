@@ -1,3 +1,9 @@
+# Superseded baseline run: 7a6cb17, harness at `331a2a0`
+
+Kept as history, not as current evidence. Its read-back item (whether the change needs a release-notes
+entry) has since been replaced, so these runs no longer test the current case;
+`baseline-7a6cb17-harness-b3b33ca.md` is the current baseline record.
+
 # Baseline run: 7a6cb17, harness at `331a2a0`
 
 The skill as committed on the integration branch before this case, read from a detached checkout of `7a6cb17`, run and graded with the case harness as committed at `331a2a0`: one rule per scenario, each graded on exactly one role call.

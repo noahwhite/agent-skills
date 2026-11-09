@@ -2477,7 +2477,7 @@ def test_the_case_runner_detects_a_second_change_to_an_already_dirty_file(tmp_pa
     assert result.returncode == 2, result.stdout + result.stderr
     assert "the agent changed" in result.stderr, result.stderr
 
-@pytest.mark.parametrize("record", ["baseline-7a6cb17-harness-331a2a0", "candidate-331a2a0"])
+@pytest.mark.parametrize("record", ["baseline-7a6cb17-harness-b3b33ca", "candidate-b3b33ca"])
 def test_the_recorded_calls_re_grade_to_the_recorded_verdicts(tmp_path: Path, record: str) -> None:
     """The committed calls must reproduce the committed grades under the committed grader."""
     lines = [json.loads(line) for line in (CASE / "results" / f"{record}-calls.jsonl").read_text().splitlines()]

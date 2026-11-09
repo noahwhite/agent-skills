@@ -1,3 +1,10 @@
+# Superseded candidate run: `331a2a0`
+
+Kept as history, not as current evidence. Its read-back item (whether the change needs a release-notes
+entry) could be read as a pending owner decision, and its skill text let step 4's continuation claim an
+open item with no stated blocker; the fixture item and step 4 have since changed, so these runs no
+longer test the current case. `candidate-b3b33ca.md` is the current candidate record.
+
 # Candidate run: `331a2a0`
 
 The skill as committed at `331a2a0`, the branch commit whose case holds one rule per scenario: `own-steps` leaves one open item that states what it waits on, for step 4's continuation, and `read-back` leaves one open item the handback names with no blocker or owner, for step 0's checklist read-back resume.
