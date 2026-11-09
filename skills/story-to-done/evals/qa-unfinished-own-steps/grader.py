@@ -7,17 +7,18 @@ prose, so a run passes on the calls it made and on what the calls carried, not o
 agent described them. A run that acts on a handback without first reading that handback's
 checklist file fails: `qa-runtime read` records the read, and every scenario requires a read of
 that exact file, present in the run directory, before the run's first role call. The handback
-is QA round 1's for own-steps and owner-action, and the senior engineer's fix-cycle handback for
-new-round. The new round's launch brief is not graded: that scenario grades session identity and
-the checklist read, so it is no evidence of what a brief carries.
+is QA round 1's for own-steps, read-back and owner-action, and the senior engineer's fix-cycle
+handback for new-round. The new round's launch brief is not graded: that scenario grades session
+identity and the checklist read, so it is no evidence of what a brief carries.
 
-own-steps makes two role calls, both resumes of round 1's session in round 1: first step 0's
-checklist read-back resume, with SKILL.md's prescribed message word for word, for the open item
-whose handback states no blocker (the DoD check not yet run); then step 4's continuation, naming
-only that the round is unfinished and its scratch subdirectory, for the item with a stated blocker
-(the evidence PR whose gate is still running). Each control makes one role call.
+Every scenario makes exactly one role call. own-steps leaves one QA-owned item with a stated
+blocker (the evidence PR whose gate is still running), which step 4 continues with a message
+naming only that the round is unfinished and its scratch subdirectory. read-back leaves one item
+with no stated blocker (a DoD check QA had not yet run), which step 0's checklist read-back
+resume reaches with SKILL.md's prescribed message word for word; the read-back's handback comes
+after that resume, so nothing more is graded in that run.
 
-  grader.py --run-dir DIR --expectation own-steps|owner-action|new-round
+  grader.py --run-dir DIR --expectation own-steps|read-back|owner-action|new-round
 
 Each assertion prints one line; the last line is `PASS` or `FAIL`, and the exit status is 0
 for PASS and 1 for FAIL. A record the grader cannot read, of any shape, is a FAIL naming it,
@@ -137,35 +138,6 @@ def read_back_resume(message: object) -> bool:
     return text.removesuffix(".") == READ_BACK_RESUME
 
 
-def grade_own_steps(calls: list[dict], session: str, subdirectory: str, number: object) -> list[tuple[bool, str]]:
-    """Step 0 resumes round 1 for the item with no stated blocker, then step 4 continues it.
-
-    The undone DoD check names no blocker, so step 0's read-back resume reaches QA first, with
-    its prescribed message; the evidence PR whose gate is still running is a stated blocker, so
-    step 4 then continues the same round with a message naming only that it is unfinished and its
-    scratch subdirectory. SKILL.md puts the read-back resume before step 4 handling.
-    """
-    checks: list[tuple[bool, str]] = []
-    read_back, continuation = (calls + [{}, {}])[:2]
-    for name, call in (("read-back resume", read_back), ("step 4 continuation", continuation)):
-        checks.append((call.get("action") == "resume", f"the {name} was {call.get('action')}, and it had to be resume"))
-        checks.append((call.get("session") == session,
-                       f"the {name} named round {number}'s session, and it named {call.get('session')}"))
-        checks.append((call.get("round") == number,
-                       f"the {name} stayed in round {number}, and it recorded round {call.get('round')}"))
-    checks.append((read_back_resume(read_back.get("message")),
-                   f"the first call carried step 0's read-back resume message word for word, and it carried "
-                   f"{read_back.get('message')!r}"))
-    message = continuation.get("message", "")
-    checks.append((isinstance(message, str) and subdirectory in message,
-                   f"the step 4 continuation named the round's scratch subdirectory {subdirectory}"))
-    checks.append((isinstance(message, str) and balanced(message, subdirectory),
-                   f"the step 4 continuation carried only that subdirectory and no excluded term within "
-                   f"{MESSAGE_LIMIT} characters, and it carried "
-                   f"{SUBSTANTIVE.findall(message) if isinstance(message, str) else message}"))
-    return checks
-
-
 def grade(run: pathlib.Path, expectation: str) -> list[tuple[bool, str]]:
     checks: list[tuple[bool, str]] = []
     try:
@@ -186,24 +158,35 @@ def grade(run: pathlib.Path, expectation: str) -> list[tuple[bool, str]]:
     except (OSError, ValueError, KeyError, TypeError, AttributeError) as error:
         return [(False, f"the run's record is unreadable: {error.__class__.__name__}: {error}")]
 
-    # own-steps makes two role calls (step 0's read-back resume, then step 4's continuation); each
-    # control makes one.
-    expected_calls = 2 if expectation == "own-steps" else 1
-    checks.append((len(calls) == expected_calls,
-                   f"the run made exactly {expected_calls} role call{'s' if expected_calls > 1 else ''}, "
-                   f"and it made {len(calls)}"))
+    checks.append((len(calls) == 1, f"the run made exactly one role call, and it made {len(calls)}"))
     if not calls:
         return checks
-    checks.append((read, f"the run read {owner} checklist file {checklist} before its first role call, "
-                         f"and it {'did' if read else 'did not'}"))
-    if expectation == "own-steps":
-        checks.extend(grade_own_steps(calls, session, subdirectory, number))
-        return checks
-
     only = calls[0]
-    wanted = {"owner-action": "stop", "new-round": "launch"}[expectation]
+    wanted = {"own-steps": "resume", "read-back": "resume", "owner-action": "stop", "new-round": "launch"}[expectation]
     checks.append((only.get("action") == wanted, f"the call was {only.get('action')}, and it had to be {wanted}"))
-    if expectation == "owner-action":
+    checks.append((read, f"the run read {owner} checklist file {checklist} before its role call, "
+                         f"and it {'did' if read else 'did not'}"))
+
+    if expectation in ("own-steps", "read-back"):
+        checks.append((only.get("session") == session,
+                       f"the resume named round {number}'s session, and it named {only.get('session')}"))
+        checks.append((only.get("round") == number,
+                       f"the resume stayed in round {number}, and it recorded round {only.get('round')}"))
+    message = only.get("message", "")
+    if expectation == "own-steps":
+        # Step 4's continuation: only that the round is unfinished and its scratch subdirectory.
+        checks.append((isinstance(message, str) and subdirectory in message,
+                       f"the step 4 continuation named the round's scratch subdirectory {subdirectory}"))
+        checks.append((isinstance(message, str) and balanced(message, subdirectory),
+                       f"the step 4 continuation carried only that subdirectory and no excluded term within "
+                       f"{MESSAGE_LIMIT} characters, and it carried "
+                       f"{SUBSTANTIVE.findall(message) if isinstance(message, str) else message}"))
+    elif expectation == "read-back":
+        # Step 0's read-back resume: SKILL.md's prescribed text, and nothing else.
+        checks.append((read_back_resume(message),
+                       f"the resume carried step 0's read-back resume message word for word, and it carried "
+                       f"{message!r}"))
+    elif expectation == "owner-action":
         reason = only.get("reason", "")
         named = isinstance(reason, str) and bool(OWNER_SIDE.search(reason)) and bool(REMAINDER_SIDE.search(reason))
         checks.append((named, f"the stop named the owner action and what remains beside it, and it said {reason!r}"))
@@ -219,7 +202,7 @@ def grade(run: pathlib.Path, expectation: str) -> list[tuple[bool, str]]:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Grade one run of this case on its tool-call record.")
     parser.add_argument("--run-dir", required=True)
-    parser.add_argument("--expectation", required=True, choices=["own-steps", "owner-action", "new-round"])
+    parser.add_argument("--expectation", required=True, choices=["own-steps", "read-back", "owner-action", "new-round"])
     args = parser.parse_args()
     checks = grade(pathlib.Path(args.run_dir), args.expectation)
     for ok, text in checks:

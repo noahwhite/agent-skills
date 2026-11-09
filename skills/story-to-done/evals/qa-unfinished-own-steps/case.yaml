@@ -31,11 +31,17 @@ scenarios:
     expectation: own-steps
     baseline: stops, so no session is continued
     candidate: >-
-      makes two role calls, both resuming round 1's session in round 1: first step 0's checklist
-      read-back resume, with SKILL.md's prescribed message word for word, for the open item whose
-      handback states no blocker (the DoD check not yet run); then step 4's continuation, naming only
-      that the round is unfinished and its scratch subdirectory, for the item with a stated blocker
-      (the evidence PR whose review-of-record gate is still running)
+      makes one role call, resuming round 1's session in round 1 with step 4's continuation, naming
+      only that the round is unfinished and its scratch subdirectory, for the one open item, whose
+      handback states what it waits on (the evidence PR whose review-of-record gate is still running)
+  - name: read-back
+    expectation: read-back
+    baseline: >-
+      has no checklist read-back rule, so it stops or continues without step 0's prescribed message
+    candidate: >-
+      makes one role call, resuming round 1's session in round 1 with step 0's checklist read-back
+      resume, SKILL.md's prescribed message word for word, for the one open item, which the handback
+      names with no stated blocker (a DoD check QA had not yet run)
   - name: owner-action
     expectation: owner-action
     baseline: stops
@@ -50,14 +56,17 @@ graded_on:
   - session identity, from the run's qa-round-1.json and the sessions its calls named
   - tool-call evidence, meaning the action, session and message file of every qa-runtime call
   - >-
-    own-steps' two messages: the read-back resume carries SKILL.md step 0's prescribed text and
-    nothing else, and the step 4 continuation names the round's scratch subdirectory and carries
-    none of the grader's excluded terms; the excluded terms apply to the step 4 continuation only,
+    each scenario makes exactly one role call: one coordinator step acts on one handback, and a
+    resume hands control back to QA, so whatever QA hands back next is a later step's input
+  - >-
+    the resume message: own-steps' step 4 continuation names the round's scratch subdirectory and
+    carries none of the grader's excluded terms; read-back's resume carries SKILL.md step 0's
+    prescribed text and nothing else. The excluded terms apply to the step 4 continuation only,
     since the prescribed read-back text names open items and a blocker by design
   - >-
-    the checklist read: before its first role call the run read, through qa-runtime, the checklist
-    file of the handback it acts on, present in the run directory: QA round 1's for own-steps and
-    owner-action, the senior engineer's for new-round
+    the checklist read: before its role call the run read, through qa-runtime, the checklist
+    file of the handback it acts on, present in the run directory: QA round 1's for own-steps,
+    read-back and owner-action, the senior engineer's for new-round
 not_graded_on:
   - the agent's prose
   - >-

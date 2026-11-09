@@ -2,7 +2,5 @@
 
 - Story `ABC-123`; the state you have just read back is In Deployment Review.
 - QA round 1 was launched in this run, and `qa-round-1.json` is its launch record.
-- QA's handback leaves two items outstanding:
-  1. the evidence PR QA opened is still unmerged, and its review-of-record gate is still running;
-  2. a DoD check QA had not yet run.
+- QA's handback leaves one item outstanding: the evidence PR QA opened is still unmerged, and its review-of-record gate is still running.
 - Checklist files in this run: `qa-agent-round-1/qa-agent-round-1-todo.md` (QA round 1's).
