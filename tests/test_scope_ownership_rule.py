@@ -134,6 +134,10 @@ SKIP_LINK_STRONG = re.compile(
     r"\b(?:keyed on|key|naming|named|tied to|if|while|when|because|until|depends on|supplied by|supplies|needed by|lands|landing|later|blocked by|after|once)\b",
     re.IGNORECASE,
 )
+SKIP_LINK_DEPENDENCY = re.compile(
+    r"\b(?:if|while|when|until|depends on|supplied by|supplies|needed by|lands|landing|later|blocked by|after|once)\b",
+    re.IGNORECASE,
+)
 SKIP_LINK_WEAK = re.compile(r"\b(?:for|on)\b", re.IGNORECASE)
 SKIP_LINK_WEAK_IMMEDIATE = re.compile(r"\b(?:for|on)\s*$", re.IGNORECASE)
 SKIP_IMMEDIATE_LINK = re.compile(r"\b(?:for|until|when|if|while|because|keyed on|depends on|blocked by|tied to|after|once)\s*$", re.IGNORECASE)
@@ -206,7 +210,7 @@ def permissive_inversions(text: str) -> list[str]:
                     if SKIP_LINK_STRONG.search(gap[last_boundary:]):
                         return True
                     if crosses_boundary(skip[1], other[0]):
-                        return False
+                        return bool(SKIP_LINK_DEPENDENCY.search(gap[:last_boundary]))
                     return weak_link_ok(gap)
                 if skip[0] >= other[1]:
                     before_other = sentence[max(0, other[0] - 40) : other[0]]
@@ -357,6 +361,7 @@ def test_true_positive_probe_flags_permissive_inversions() -> None:
         "Tests may xfail on SKL-123.",
         "Code may carry a skip, but only until SKL-123 lands.",
         "Code may carry a skip; it is keyed on SKL-123.",
+        "Code may carry a skip if the fixtures are absent; SKL-123 will add them.",
         "The engineer may add or move an AC.",
         "An engineer adds an AC to another story.",
         "Tests xfail for another story.",
