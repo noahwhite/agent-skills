@@ -1,6 +1,6 @@
 # Engineering practice
 
-Read this when diagnosing, implementing, testing, or fixing code.
+Read this when diagnosing, implementing, testing, or fixing code, or when changing a skill, capability file, or consumer overlay.
 
 ## Diagnose before you touch code
 
@@ -71,3 +71,13 @@ Read this when diagnosing, implementing, testing, or fixing code.
   Tools that validate checksums at startup (for example Flyway with migrate-at-start) fail the boot on a mismatch.
   Add a new migration version instead; to recover, restore the applied file byte for byte (`git show <sha>:<path>`) and move the change to the new version.
 - A corrective migration does not fix a fresh database built from the edited history; check both paths.
+
+## Retire superseded memory
+
+- When a change writes a rule that is also held in the agent's persistent memory into a skill, capability file, or consumer overlay, the agent first saves the rule in its new home, then retires the matching memory note in the same session.
+  It retires the note by deleting it together with its index entry where the store has one, or by reducing it to a pointer naming the file and section of the new home.
+- A note that holds other rules keeps them; only the moved rule is removed.
+- Persistent memory is the agent-written store named in the "Persistent memory" row of `references/runtimes.md`.
+  Owner-authored instruction files (for example `CLAUDE.md`, `AGENTS.md`) are not persistent memory under this rule: the agent names the duplicated line to the owner and does not edit the file.
+- An agent that writes the change but cannot reach the memory holding the note (for example a delegated or shell-launched agent) names the note in its handback, and the agent that holds that memory retires it.
+- The PR description, or the story when there is no PR, names each retired note by path or slug and says whether it was deleted or reduced to a pointer.
