@@ -1986,8 +1986,14 @@ def test_the_case_prompt_states_the_harness_without_steering_the_run() -> None:
     assert "{skill_dir}" in prompt and "{run_dir}" in prompt
 
 
+# The checklist of the handback each scenario acts on: QA round 1's for a continuation or a stop,
+# and the senior engineer's for the new round that follows its fix-cycle handback.
+QA_CHECKLIST = "qa-agent-round-1/qa-agent-round-1-todo.md"
+ENGINEER_CHECKLIST = "senior-engineer/senior-engineer-todo.md"
+
+
 def case_run(tmp_path: Path, *actions: dict, session: str = "qa-round-1-session",
-             subdirectory: str = "qa-agent-round-1", read: bool = True) -> Path:
+             subdirectory: str = "qa-agent-round-1", read: bool = True, checklist: str | None = None) -> Path:
     run = Path(tempfile.mkdtemp(dir=tmp_path))
     (run / "qa-round-1.json").write_text(json.dumps({
         "session": session,
@@ -1995,9 +2001,12 @@ def case_run(tmp_path: Path, *actions: dict, session: str = "qa-round-1-session"
         "scratch_subdirectory": subdirectory,
         "round": 1,
     }))
+    for shipped in (f"{subdirectory}/{subdirectory}-todo.md", ENGINEER_CHECKLIST):
+        (run / shipped).parent.mkdir(parents=True, exist_ok=True)
+        (run / shipped).write_text("- [x] done\n")
     records = []
     if read:
-        records.append({"action": "read", "path": f"{subdirectory}/{subdirectory}-todo.md"})
+        records.append({"action": "read", "path": checklist or f"{subdirectory}/{subdirectory}-todo.md"})
     records.extend(actions)
     (run / "actions.jsonl").write_text("".join(json.dumps(record, sort_keys=True) + "\n" for record in records))
     return run
@@ -2019,6 +2028,18 @@ def continuation_run(tmp_path: Path, message: str, session: str = "qa-round-1-se
                               "round": round_number, "message": message}, read=read)
 
 
+def new_round_run(tmp_path: Path, session: str = "qa-round-2-session", message: str = "the environment under test",
+                  checklist: str = ENGINEER_CHECKLIST, read: bool = True) -> Path:
+    run = case_run(tmp_path, {"action": "launch", "session": session, "label": "qa-agent-round-2", "round": 2,
+                              "message": message}, read=read, checklist=checklist)
+    (run / "sessions.json").write_text(json.dumps({
+        "sessions": [{"session": "qa-round-1-session", "label": "qa-agent-round-1", "round": 1},
+                     {"session": "qa-round-2-session", "label": "qa-agent-round-2", "round": 2}],
+        "next_round": 3,
+    }))
+    return run
+
+
 def test_the_case_grades_the_same_round_continuation_on_session_identity(tmp_path: Path) -> None:
     result = graded(continuation_run(tmp_path, CLEAN_CONTINUATION), "own-steps")
     assert result.returncode == 0 and result.stdout.strip().endswith("PASS"), result.stdout
@@ -2035,15 +2056,42 @@ def test_the_case_requires_the_checklist_read_before_crediting_the_call(tmp_path
                                                             "maintainer's approval is the owner's to grant"},
                      read=False)
     assert graded(owner, "owner-action").returncode == 1, "an owner stop that never read the checklist must not pass"
-    launch = {"action": "launch", "session": "qa-round-2-session", "label": "qa-agent-round-2", "round": 2,
-              "message": "the environment under test"}
-    new_round = case_run(tmp_path, launch, read=False)
-    (new_round / "sessions.json").write_text(json.dumps({
-        "sessions": [{"session": "qa-round-1-session", "label": "qa-agent-round-1", "round": 1},
-                     {"session": "qa-round-2-session", "label": "qa-agent-round-2", "round": 2}],
-        "next_round": 3,
-    }))
+    new_round = new_round_run(tmp_path, read=False)
     assert graded(new_round, "new-round").returncode == 1, "a new round that never read the checklist must not pass"
+
+
+# A new round follows the senior engineer's fix-cycle handback, so the checklist step 0 reads before
+# it is the engineer's; QA round 1's checklist belongs to an earlier handback.
+def test_the_case_new_round_requires_the_engineers_checklist_not_qa_round_1s(tmp_path: Path) -> None:
+    assert graded(new_round_run(tmp_path), "new-round").returncode == 0
+    wrong = new_round_run(tmp_path, checklist=QA_CHECKLIST)
+    result = graded(wrong, "new-round")
+    assert result.returncode == 1, "a read of QA round 1's checklist is not the engineer's handback read"
+    assert ENGINEER_CHECKLIST in result.stdout, "the failing check names the checklist it wanted"
+    for expectation, action in (("own-steps", {"action": "resume", "session": "qa-round-1-session",
+                                               "label": "qa-agent-round-1", "round": 1,
+                                               "message": CLEAN_CONTINUATION}),
+                                ("owner-action", {"action": "stop", "reason": "the evidence PR gate is still running "
+                                                  "and a maintainer's approval is the owner's to grant"})):
+        engineer_only = case_run(tmp_path, action, checklist=ENGINEER_CHECKLIST)
+        assert graded(engineer_only, expectation).returncode == 1, f"{expectation} acts on QA's handback"
+
+
+def test_the_case_states_what_it_grades_and_that_the_new_round_brief_is_not_graded() -> None:
+    case = yaml.safe_load(case_file("case.yaml").read_text())
+    assert any("checklist" in entry for entry in case["graded_on"]), "the checklist read is a graded assertion"
+    assert any("new round's launch brief" in entry for entry in case["not_graded_on"]), \
+        "the new round's brief text is outside the case, so it claims no brief coverage"
+    assert "new round's launch brief is not graded" in case_file("grader.py").read_text()
+
+
+def test_the_case_credits_no_read_of_a_checklist_that_is_not_there(tmp_path: Path) -> None:
+    run = continuation_run(tmp_path, CLEAN_CONTINUATION)
+    (run / QA_CHECKLIST).unlink()
+    assert graded(run, "own-steps").returncode == 1, "a recorded read of a missing file is no read"
+    new_round = new_round_run(tmp_path)
+    (new_round / ENGINEER_CHECKLIST).unlink()
+    assert graded(new_round, "new-round").returncode == 1, "a recorded read of a missing file is no read"
 
 
 def test_the_case_credits_only_a_read_of_the_rounds_own_checklist_before_the_call(tmp_path: Path) -> None:
@@ -2096,19 +2144,10 @@ def test_the_case_controls_grade_the_owner_stop_and_the_new_round(tmp_path: Path
     assert graded(unnamed_owner, "owner-action").returncode == 1, "the stop must name the owner action it leaves"
     resumed = continuation_run(tmp_path, CLEAN_CONTINUATION)
     assert graded(resumed, "owner-action").returncode == 1, "an owner action must stop, never continue"
-    new_round = case_run(tmp_path, {"action": "launch", "session": "qa-round-2-session",
-                                    "label": "qa-agent-round-2", "round": 2, "message": "the environment under test"})
-    (new_round / "sessions.json").write_text(json.dumps({
-        "sessions": [{"session": "qa-round-1-session", "label": "qa-agent-round-1", "round": 1},
-                     {"session": "qa-round-2-session", "label": "qa-agent-round-2", "round": 2}],
-        "next_round": 3,
-    }))
-    assert graded(new_round, "new-round").returncode == 0
-    fabricated = case_run(tmp_path, {"action": "launch", "session": "fabricated",
-                                     "label": "qa-agent-round-2", "round": 2, "message": "the environment under test"})
+    assert graded(new_round_run(tmp_path), "new-round").returncode == 0
+    fabricated = new_round_run(tmp_path, session="fabricated")
     assert graded(fabricated, "new-round").returncode == 1, "the launched session must be one this run started"
-    reused = case_run(tmp_path, {"action": "launch", "session": "qa-round-1-session",
-                                 "label": "qa-agent-round-2", "round": 2, "message": "the environment under test"})
+    reused = new_round_run(tmp_path, session="qa-round-1-session")
     assert graded(reused, "new-round").returncode == 1, "a new round must not reuse an earlier session"
 
 
@@ -2241,26 +2280,45 @@ def test_the_case_runner_voids_a_failed_agent_command_without_grading(tmp_path: 
     assert not (run_dir / "grader-output.txt").exists(), "a void run records no grade"
 
 
-# SKL-219: step 0 reads QA's checklist at each handback and treats a missing one as open items, so
-# each scenario ships round 1's checklist at the path the QA brief gives it; its open items are
-# exactly the ones the handback names, so step 4's classification still decides the run.
-CASE_OPEN_ITEMS = {"own-steps": 2, "owner-action": 2, "new-round": 0}
+# SKL-219: step 0 reads the checklist of each handback and treats a missing one as open items, so
+# each scenario ships the checklists its subagents left, at the paths their briefs give them. QA
+# round 1's open items are exactly the ones its handback names, so step 4's classification still
+# decides a QA handback; the new round follows the engineer's fix-cycle handback, whose checklist
+# is complete.
+CASE_CHECKLISTS = {
+    "own-steps": {QA_CHECKLIST: 2},
+    "owner-action": {QA_CHECKLIST: 2},
+    "new-round": {QA_CHECKLIST: 0, ENGINEER_CHECKLIST: 0},
+}
 
 
 @pytest.mark.parametrize("scenario", CASE_SCENARIOS)
-def test_the_case_runner_places_qa_round_1_checklist_where_the_brief_puts_it(tmp_path: Path, scenario: str) -> None:
-    shipped = case_file(f"scenarios/{scenario}/qa-agent-round-1-todo.md").read_text()
-    subdirectory = json.loads(case_file(f"scenarios/{scenario}/qa-round-1.json").read_text())["scratch_subdirectory"]
-    assert subdirectory == "qa-agent-round-1"
-    assert sum(line.startswith("- [ ] ") for line in shipped.splitlines()) == CASE_OPEN_ITEMS[scenario], scenario
+def test_the_case_runner_places_each_checklist_where_the_brief_puts_it(tmp_path: Path, scenario: str) -> None:
+    shipped_dir = CASE / "scenarios" / scenario / "checklists"
+    shipped = {str(path.relative_to(shipped_dir)): path.read_text()
+               for path in shipped_dir.rglob("*") if path.is_file()}
+    assert {name: sum(line.startswith("- [ ] ") for line in text.splitlines())
+            for name, text in shipped.items()} == CASE_CHECKLISTS[scenario], scenario
     run_dir = tmp_path / "run"
     result = subprocess.run(
         ["bash", str(case_file("run.sh")), str(ROOT), scenario, str(run_dir)],
         capture_output=True, text=True, env={**os.environ, "EVAL_AGENT_CMD": "false"},
     )
     assert result.returncode == 2, result.stdout + result.stderr
-    assert (run_dir / subdirectory / "qa-agent-round-1-todo.md").read_text() == shipped
-    assert "{run_dir}/qa-agent-round-1/qa-agent-round-1-todo.md" in case_file("prompt.md").read_text()
+    for name, text in shipped.items():
+        assert (run_dir / name).read_text() == text, name
+    scenario_text = case_file(f"scenarios/{scenario}/scenario.md").read_text()
+    for name in shipped:
+        assert f"`{name}`" in scenario_text, f"{scenario}: scenario.md names the checklist {name}"
+
+
+def test_the_case_runner_voids_a_scenario_without_its_checklists(tmp_path: Path) -> None:
+    case = tmp_path / "case"
+    shutil.copytree(CASE, case)
+    shutil.rmtree(case / "scenarios" / "own-steps" / "checklists")
+    result = subprocess.run(["bash", str(case / "run.sh"), str(ROOT), "own-steps", str(tmp_path / "run")],
+                            capture_output=True, text=True, env={**os.environ, "EVAL_AGENT_CMD": "false"})
+    assert result.returncode == 2 and "no checklists" in result.stderr, result.stdout + result.stderr
 
 
 def test_the_case_runner_refuses_an_unknown_scenario_and_a_reused_directory(tmp_path: Path) -> None:
@@ -2357,6 +2415,9 @@ def test_the_recorded_calls_re_grade_to_the_recorded_verdicts(tmp_path: Path, re
             "session": "qa-round-1-session", "label": "qa-agent-round-1",
             "scratch_subdirectory": "qa-agent-round-1", "round": 1}))
         (run / "actions.jsonl").write_text("".join(json.dumps(call, sort_keys=True) + "\n" for call in run_calls))
+        for checklist in (QA_CHECKLIST, ENGINEER_CHECKLIST):
+            (run / checklist).parent.mkdir(parents=True)
+            (run / checklist).write_text("- [x] done\n")
         sessions = [{"session": "qa-round-1-session", "label": "qa-agent-round-1", "round": 1}]
         sessions += [{"session": call["session"], "label": call["label"], "round": call.get("round")}
                      for call in run_calls if call["action"] == "launch"]

@@ -40,6 +40,11 @@ REAL_CHECK = (
 )
 SCOPE_TESTS = "The tests the real-check rule needs are called for by this brief."
 GATES_ALLOWED = "The pre-PR gate and the review of record that `engineering-workflow` defines stay allowed."
+# QA loads qa-verification, whose evidence PR has a review of record of its own.
+QA_GATES_ALLOWED = (
+    "The pre-PR gate and the review of record that `engineering-workflow` defines, and the evidence PR's "
+    "review of record that `qa-verification` defines, stay allowed."
+)
 
 # The stop points each brief already defined, restated beside the keep-going sentence.
 STOP_POINTS = {
@@ -73,10 +78,10 @@ READ_BACK_QA = (
     "remainder\"."
 )
 READ_BACK_QA_OUTSTANDING = (
-    "The items QA's handback names as outstanding, whether or not the handback states what they wait on or who "
-    "owns them, go to step 4's classification and never to a read-back resume, so a mixed remainder is reported "
-    "and stopped as step 4 says; a read-back resume of QA applies only to an open checklist item the handback "
-    "does not name."
+    "The items QA's handback names as outstanding with what they wait on or who owns them go to step 4's "
+    "classification and never to a read-back resume, so a mixed remainder is reported and stopped as step 4 says; "
+    "a read-back resume of QA applies to every other open checklist item, including one the handback names with "
+    "no stated blocker."
 )
 READ_BACK_METRICS = "With `metrics` on, each read-back resume is its own launch row."
 READ_BACK_HANDBACK = {
@@ -154,7 +159,8 @@ def test_keep_going_sentence_appears_once_with_the_brief_stop_point_beside_it(na
 def test_no_self_started_review_sentence_appears_once_and_keeps_the_workflow_gates(name: str) -> None:
     brief = briefs()[name]
     assert brief.count(NO_SELF_REVIEW) == 1, f"{name}: the review sentence must appear exactly once"
-    assert f"- {NO_SELF_REVIEW} {GATES_ALLOWED}" in brief.splitlines(), name
+    allowed = QA_GATES_ALLOWED if name.startswith("qa-agent") else GATES_ALLOWED
+    assert f"- {NO_SELF_REVIEW} {allowed}" in brief.splitlines(), name
 
 
 @pytest.mark.parametrize("name", ENGINEER_BRIEFS)
@@ -182,7 +188,7 @@ def test_the_qa_brief_is_out_of_the_real_check_and_scope_rules() -> None:
 def test_each_sentence_lives_only_in_the_briefs(path: Path) -> None:
     text = path.read_text()
     named = [brief for name, brief in briefs().items() if brief in text]
-    for sentence in (KEEP_GOING, NO_SELF_REVIEW, SCOPE, SCOPE_TESTS, GATES_ALLOWED, *REAL_CHECK,
+    for sentence in (KEEP_GOING, NO_SELF_REVIEW, SCOPE, SCOPE_TESTS, GATES_ALLOWED, QA_GATES_ALLOWED, *REAL_CHECK,
                      *STOP_POINTS.values()):
         in_briefs = sum(brief.count(sentence) for brief in named)
         assert text.count(sentence) == in_briefs, f"{path.parent.name}: {sentence!r} appears outside a brief"
@@ -193,7 +199,8 @@ def test_none_of_it_reaches_the_shadow_adjudicator_spawn_text(path: Path) -> Non
     text = path.read_text()
     gate = next(heading for heading in re.findall(r"^## (4\..*)$", text, re.MULTILINE))
     shadow = section(text, gate)
-    for phrase in (KEEP_GOING, NO_SELF_REVIEW, SCOPE, SCOPE_TESTS, GATES_ALLOWED, *REAL_CHECK, *READ_BACK,
+    for phrase in (KEEP_GOING, NO_SELF_REVIEW, SCOPE, SCOPE_TESTS, GATES_ALLOWED, QA_GATES_ALLOWED, *REAL_CHECK,
+                   *READ_BACK,
                    RESUME_MESSAGE, *STOP_POINTS.values()):
         assert phrase not in shadow, f"{path.parent.name}: {phrase!r} is in the shadow adjudicator text"
 

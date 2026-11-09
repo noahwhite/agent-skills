@@ -6,9 +6,9 @@ Read `{skill_dir}/SKILL.md` and the references it names, and act as its coordina
 Everything you need about the story is in this run's directory, `{run_dir}`.
 Treat the state and the handback in `scenario.md` as already read back, and read no tracker, PR or host.
 
-- `scenario.md` holds the state you have just read back and QA's handback.
+- `scenario.md` holds the state you have just read back and the handback that brought it.
 - `qa-round-1.json` is the launch record of QA round 1.
-- `{run_dir}/qa-agent-round-1/qa-agent-round-1-todo.md` is QA round 1's checklist file, as the QA agent left it; read it with `{run_dir}/qa-runtime read --path {run_dir}/qa-agent-round-1/qa-agent-round-1-todo.md`.
+- `{run_dir}` stands in for the scratch directory: `scenario.md` lists each subagent's checklist file, as that subagent left it, by its path under `{run_dir}`; read one with `{run_dir}/qa-runtime read --path {run_dir}/<that path>`.
 - `{run_dir}/qa-runtime` is this environment's only way to start, continue or stop the QA role, and
   `{run_dir}/qa-runtime.md` gives its usage.
 

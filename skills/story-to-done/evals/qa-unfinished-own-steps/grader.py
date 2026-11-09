@@ -4,9 +4,12 @@
 The grade reads the tool-call record only: `actions.jsonl` and `sessions.json`, which the
 run's `qa-runtime` wrote, and the scenario's `qa-round-1.json`. It never reads the agent's
 prose, so a run passes on the calls it made and on what the calls carried, not on how the
-agent described them. A run that acts on a QA handback without first reading round 1's
-checklist file fails: `qa-runtime read` records that read, and every scenario requires a read
-of that exact file before the run's first role call.
+agent described them. A run that acts on a handback without first reading that handback's
+checklist file fails: `qa-runtime read` records the read, and every scenario requires a read of
+that exact file, present in the run directory, before the run's first role call. The handback
+is QA round 1's for own-steps and owner-action, and the senior engineer's fix-cycle handback for
+new-round. The new round's launch brief is not graded: that scenario grades session identity and
+the checklist read, so it is no evidence of what a brief carries.
 
   grader.py --run-dir DIR --expectation own-steps|owner-action|new-round
 
@@ -64,6 +67,9 @@ def records_of(run: pathlib.Path) -> list[dict]:
 
 
 ROLE_CALLS = ("launch", "resume", "stop")
+# The checklist file the senior engineer's brief gives it, relative to the run directory, which
+# stands in for the coordinator's scratch directory.
+ENGINEER_CHECKLIST = "senior-engineer/senior-engineer-todo.md"
 
 
 def calls_of(records: list[dict]) -> list[dict]:
@@ -76,7 +82,10 @@ def read_before_first_call(run: pathlib.Path, records: list[dict], checklist: pa
 
     A relative path is taken from the run directory, as the runtime records it; a suffix
     match is not enough, since a file of the same name elsewhere is not the round's checklist.
+    A record of a read is no read when the file is not there to have been read.
     """
+    if not checklist.is_file():
+        return False
     for record in records:
         if record.get("action") in ROLE_CALLS:
             return False
@@ -126,9 +135,12 @@ def grade(run: pathlib.Path, expectation: str) -> list[tuple[bool, str]]:
     wanted = {"own-steps": "resume", "owner-action": "stop", "new-round": "launch"}[expectation]
     checks.append((only.get("action") == wanted, f"the call was {only.get('action')}, and it had to be {wanted}"))
 
-    checklist = f"{subdirectory}/{subdirectory}-todo.md"
+    if expectation == "new-round":
+        checklist, owner = ENGINEER_CHECKLIST, "the senior engineer's fix-cycle handback's"
+    else:
+        checklist, owner = f"{subdirectory}/{subdirectory}-todo.md", f"QA round {number}'s"
     read = read_before_first_call(run, records, (run / checklist).resolve())
-    checks.append((read, f"the run read round {number}'s checklist file {checklist} before its role call, "
+    checks.append((read, f"the run read {owner} checklist file {checklist} before its role call, "
                          f"and it {'did' if read else 'did not'}"))
 
     if expectation == "own-steps":

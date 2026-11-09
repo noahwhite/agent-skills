@@ -44,8 +44,15 @@ scenarios:
 graded_on:
   - session identity, from the run's qa-round-1.json and the sessions its calls named
   - tool-call evidence, meaning the action, session and message file of every qa-runtime call
+  - >-
+    the checklist read: before its first role call the run read, through qa-runtime, the checklist
+    file of the handback it acts on, present in the run directory: QA round 1's for own-steps and
+    owner-action, the senior engineer's for new-round
 not_graded_on:
   - the agent's prose
+  - >-
+    the text of the new round's launch brief: new-round grades session identity and the checklist
+    read, so it is no evidence of what a QA brief carries
   - >-
     the positive wording of the continuation message: the case grades the scratch subdirectory it names
     and the terms it may not carry, not how it says the round is unfinished
