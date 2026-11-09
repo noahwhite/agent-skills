@@ -11,6 +11,12 @@ is QA round 1's for own-steps and owner-action, and the senior engineer's fix-cy
 new-round. The new round's launch brief is not graded: that scenario grades session identity and
 the checklist read, so it is no evidence of what a brief carries.
 
+own-steps makes two role calls, both resumes of round 1's session in round 1: first step 0's
+checklist read-back resume, with SKILL.md's prescribed message word for word, for the open item
+whose handback states no blocker (the DoD check not yet run); then step 4's continuation, naming
+only that the round is unfinished and its scratch subdirectory, for the item with a stated blocker
+(the evidence PR whose gate is still running). Each control makes one role call.
+
   grader.py --run-dir DIR --expectation own-steps|owner-action|new-round
 
 Each assertion prints one line; the last line is `PASS` or `FAIL`, and the exit status is 0
@@ -29,11 +35,16 @@ import pathlib
 import re
 import sys
 
-# A continuation may carry only that the round is unfinished and that round's scratch
-# subdirectory. Each term below carries something the story excludes from it: a verdict or an
-# expected verdict, an earlier conclusion, the handback's remainder, the engineer's handback,
-# the merge rules, or a gate. The positive wording is not graded: the case grades session
-# identity and what the recorded calls carried, not prose.
+# Step 0's checklist read-back resume message, word for word as SKILL.md prescribes it. It names
+# open items and a blocker by design and names no scratch subdirectory, so it is graded against
+# this text alone, never against the step 4 continuation's term list below.
+READ_BACK_RESUME = "Your checklist still has open items. Continue with them; if one is blocked, say what blocks it"
+# A step 4 continuation may carry only that the round is unfinished and that round's scratch
+# subdirectory, as step 4 prescribes. Each term below carries something the story excludes from
+# it: a verdict or an expected verdict, an earlier conclusion, the handback's remainder, the
+# engineer's handback, the merge rules, or a gate. It applies to the step 4 continuation only. The
+# positive wording is not graded: the case grades session identity and what the recorded calls
+# carried, not prose.
 SUBSTANTIVE = re.compile(
     r"(?i)\b(verdicts?|pass(?:ed|es)?|fail(?:ed|s|ing)?|approv(?:e|ed|al)|reject(?:ed|s)?"
     r"|evidence|pr|pull requests?|engineers?|merg(?:e|ed|es|ing)|dod|acceptance|block(?:ed|s)?"
@@ -115,6 +126,46 @@ def balanced(message: str, subdirectory: str) -> bool:
     return bool(named) and len(message) <= MESSAGE_LIMIT and SUBSTANTIVE.search(message) is None
 
 
+def read_back_resume(message: object) -> bool:
+    """True when the message is step 0's read-back resume text and nothing else.
+
+    Line breaks, surrounding quotes or backticks and one closing full stop are layout, not content.
+    """
+    if not isinstance(message, str):
+        return False
+    text = " ".join(message.split()).strip("\"'`")
+    return text.removesuffix(".") == READ_BACK_RESUME
+
+
+def grade_own_steps(calls: list[dict], session: str, subdirectory: str, number: object) -> list[tuple[bool, str]]:
+    """Step 0 resumes round 1 for the item with no stated blocker, then step 4 continues it.
+
+    The undone DoD check names no blocker, so step 0's read-back resume reaches QA first, with
+    its prescribed message; the evidence PR whose gate is still running is a stated blocker, so
+    step 4 then continues the same round with a message naming only that it is unfinished and its
+    scratch subdirectory. SKILL.md puts the read-back resume before step 4 handling.
+    """
+    checks: list[tuple[bool, str]] = []
+    read_back, continuation = (calls + [{}, {}])[:2]
+    for name, call in (("read-back resume", read_back), ("step 4 continuation", continuation)):
+        checks.append((call.get("action") == "resume", f"the {name} was {call.get('action')}, and it had to be resume"))
+        checks.append((call.get("session") == session,
+                       f"the {name} named round {number}'s session, and it named {call.get('session')}"))
+        checks.append((call.get("round") == number,
+                       f"the {name} stayed in round {number}, and it recorded round {call.get('round')}"))
+    checks.append((read_back_resume(read_back.get("message")),
+                   f"the first call carried step 0's read-back resume message word for word, and it carried "
+                   f"{read_back.get('message')!r}"))
+    message = continuation.get("message", "")
+    checks.append((isinstance(message, str) and subdirectory in message,
+                   f"the step 4 continuation named the round's scratch subdirectory {subdirectory}"))
+    checks.append((isinstance(message, str) and balanced(message, subdirectory),
+                   f"the step 4 continuation carried only that subdirectory and no excluded term within "
+                   f"{MESSAGE_LIMIT} characters, and it carried "
+                   f"{SUBSTANTIVE.findall(message) if isinstance(message, str) else message}"))
+    return checks
+
+
 def grade(run: pathlib.Path, expectation: str) -> list[tuple[bool, str]]:
     checks: list[tuple[bool, str]] = []
     try:
@@ -125,36 +176,34 @@ def grade(run: pathlib.Path, expectation: str) -> list[tuple[bool, str]]:
         started = started_sessions(run)
         if not isinstance(subdirectory, str):
             raise TypeError("the scratch subdirectory is not text")
+        if expectation == "new-round":
+            checklist, owner = ENGINEER_CHECKLIST, "the senior engineer's fix-cycle handback's"
+        else:
+            checklist, owner = f"{subdirectory}/{subdirectory}-todo.md", f"QA round {number}'s"
+        # Resolving a recorded path raises on a malformed one, such as a NUL byte, so it stays
+        # inside this guard and becomes a named FAIL rather than a traceback.
+        read = read_before_first_call(run, records, (run / checklist).resolve())
     except (OSError, ValueError, KeyError, TypeError, AttributeError) as error:
         return [(False, f"the run's record is unreadable: {error.__class__.__name__}: {error}")]
 
-    checks.append((len(calls) == 1, f"the run made exactly one role call, and it made {len(calls)}"))
+    # own-steps makes two role calls (step 0's read-back resume, then step 4's continuation); each
+    # control makes one.
+    expected_calls = 2 if expectation == "own-steps" else 1
+    checks.append((len(calls) == expected_calls,
+                   f"the run made exactly {expected_calls} role call{'s' if expected_calls > 1 else ''}, "
+                   f"and it made {len(calls)}"))
     if not calls:
         return checks
-    only = calls[0]
-    wanted = {"own-steps": "resume", "owner-action": "stop", "new-round": "launch"}[expectation]
-    checks.append((only.get("action") == wanted, f"the call was {only.get('action')}, and it had to be {wanted}"))
-
-    if expectation == "new-round":
-        checklist, owner = ENGINEER_CHECKLIST, "the senior engineer's fix-cycle handback's"
-    else:
-        checklist, owner = f"{subdirectory}/{subdirectory}-todo.md", f"QA round {number}'s"
-    read = read_before_first_call(run, records, (run / checklist).resolve())
-    checks.append((read, f"the run read {owner} checklist file {checklist} before its role call, "
+    checks.append((read, f"the run read {owner} checklist file {checklist} before its first role call, "
                          f"and it {'did' if read else 'did not'}"))
-
     if expectation == "own-steps":
-        checks.append((only.get("session") == session,
-                       f"the continuation named round {number}'s session, and it named {only.get('session')}"))
-        message = only.get("message", "")
-        checks.append((isinstance(message, str) and subdirectory in message,
-                       f"the message named the round's scratch subdirectory {subdirectory}"))
-        checks.append((isinstance(message, str) and balanced(message, subdirectory),
-                       f"the message carried only that subdirectory and no excluded term within {MESSAGE_LIMIT} "
-                       f"characters, and it carried {SUBSTANTIVE.findall(message) if isinstance(message, str) else message}"))
-        checks.append((only.get("round") == number,
-                       f"the continuation stayed in round {number}, and it recorded round {only.get('round')}"))
-    elif expectation == "owner-action":
+        checks.extend(grade_own_steps(calls, session, subdirectory, number))
+        return checks
+
+    only = calls[0]
+    wanted = {"owner-action": "stop", "new-round": "launch"}[expectation]
+    checks.append((only.get("action") == wanted, f"the call was {only.get('action')}, and it had to be {wanted}"))
+    if expectation == "owner-action":
         reason = only.get("reason", "")
         named = isinstance(reason, str) and bool(OWNER_SIDE.search(reason)) and bool(REMAINDER_SIDE.search(reason))
         checks.append((named, f"the stop named the owner action and what remains beside it, and it said {reason!r}"))

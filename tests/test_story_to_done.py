@@ -1,5 +1,6 @@
 """Contract checks for the story-to-done skill."""
 
+import ast
 import json
 import os
 import re
@@ -2020,12 +2021,24 @@ def graded(run: Path, expectation: str) -> subprocess.CompletedProcess[str]:
 
 
 CLEAN_CONTINUATION = "QA round 1 is unfinished. Its scratch subdirectory is qa-agent-round-1."
+# Step 0's read-back resume message, word for word as SKILL.md prescribes it. In own-steps the
+# undone DoD check names no blocker, so step 0 resumes QA with it before step 4 continues the
+# round for the evidence PR whose gate is still running: two resumes of round 1's session.
+READ_BACK_RESUME = ("Your checklist still has open items. Continue with them; "
+                    "if one is blocked, say what blocks it")
+
+
+def resume_call(message: str, session: str = "qa-round-1-session", round_number: int = 1) -> dict:
+    return {"action": "resume", "session": session, "label": "qa-agent-round-1",
+            "round": round_number, "message": message}
 
 
 def continuation_run(tmp_path: Path, message: str, session: str = "qa-round-1-session",
-                     round_number: int = 1, read: bool = True) -> Path:
-    return case_run(tmp_path, {"action": "resume", "session": session, "label": "qa-agent-round-1",
-                              "round": round_number, "message": message}, read=read)
+                     round_number: int = 1, read: bool = True, read_back: str | None = READ_BACK_RESUME) -> Path:
+    calls = [resume_call(message, session, round_number)]
+    if read_back is not None:
+        calls.insert(0, resume_call(read_back, session, round_number))
+    return case_run(tmp_path, *calls, read=read)
 
 
 def new_round_run(tmp_path: Path, session: str = "qa-round-2-session", message: str = "the environment under test",
@@ -2068,12 +2081,10 @@ def test_the_case_new_round_requires_the_engineers_checklist_not_qa_round_1s(tmp
     result = graded(wrong, "new-round")
     assert result.returncode == 1, "a read of QA round 1's checklist is not the engineer's handback read"
     assert ENGINEER_CHECKLIST in result.stdout, "the failing check names the checklist it wanted"
-    for expectation, action in (("own-steps", {"action": "resume", "session": "qa-round-1-session",
-                                               "label": "qa-agent-round-1", "round": 1,
-                                               "message": CLEAN_CONTINUATION}),
-                                ("owner-action", {"action": "stop", "reason": "the evidence PR gate is still running "
-                                                  "and a maintainer's approval is the owner's to grant"})):
-        engineer_only = case_run(tmp_path, action, checklist=ENGINEER_CHECKLIST)
+    for expectation, actions in (("own-steps", (resume_call(READ_BACK_RESUME), resume_call(CLEAN_CONTINUATION))),
+                                 ("owner-action", ({"action": "stop", "reason": "the evidence PR gate is still running "
+                                                   "and a maintainer's approval is the owner's to grant"},))):
+        engineer_only = case_run(tmp_path, *actions, checklist=ENGINEER_CHECKLIST)
         assert graded(engineer_only, expectation).returncode == 1, f"{expectation} acts on QA's handback"
 
 
@@ -2095,19 +2106,20 @@ def test_the_case_credits_no_read_of_a_checklist_that_is_not_there(tmp_path: Pat
 
 
 def test_the_case_credits_only_a_read_of_the_rounds_own_checklist_before_the_call(tmp_path: Path) -> None:
-    resume = {"action": "resume", "session": "qa-round-1-session", "label": "qa-agent-round-1",
-              "round": 1, "message": CLEAN_CONTINUATION}
+    read_back, resume = resume_call(READ_BACK_RESUME), resume_call(CLEAN_CONTINUATION)
     read = {"action": "read", "path": "qa-agent-round-1/qa-agent-round-1-todo.md"}
-    late = case_run(tmp_path, resume, read, read=False)
-    assert graded(late, "own-steps").returncode == 1, "a read after the role call did not inform it"
+    late = case_run(tmp_path, read_back, resume, read, read=False)
+    assert graded(late, "own-steps").returncode == 1, "a read after the role calls did not inform them"
+    between = case_run(tmp_path, read_back, read, resume, read=False)
+    assert graded(between, "own-steps").returncode == 1, "a read after the first role call did not inform it"
     for path in ("elsewhere/qa-agent-round-1/qa-agent-round-1-todo.md", "qa-agent-round-1-todo.md",
                  "/tmp/qa-agent-round-1/qa-agent-round-1-todo.md"):
-        other = case_run(tmp_path, {"action": "read", "path": path}, resume, read=False)
+        other = case_run(tmp_path, {"action": "read", "path": path}, read_back, resume, read=False)
         assert graded(other, "own-steps").returncode == 1, f"a read of {path} is not round 1's checklist file"
-    run = case_run(tmp_path, resume, read=False)
+    run = case_run(tmp_path, read_back, resume, read=False)
     (run / "actions.jsonl").write_text(
         json.dumps({"action": "read", "path": str(run / "qa-agent-round-1" / "qa-agent-round-1-todo.md")}) + "\n"
-        + json.dumps(resume) + "\n")
+        + json.dumps(read_back) + "\n" + json.dumps(resume) + "\n")
     assert graded(run, "own-steps").returncode == 0, "an absolute path to the run's own checklist counts"
 
 
@@ -2115,7 +2127,66 @@ def test_the_case_fails_a_run_that_stops_where_the_story_must_not(tmp_path: Path
     run = case_run(tmp_path, {"action": "stop", "reason": "QA is not finished"})
     result = graded(run, "own-steps")
     assert result.returncode == 1 and result.stdout.strip().endswith("FAIL"), result.stdout
-    assert "the call was stop, and it had to be resume" in result.stdout
+    assert "was stop, and it had to be resume" in result.stdout
+
+
+# Story owner ruling on SKL-219: own-steps leaves one item with a stated blocker (the evidence PR's
+# gate is running), which step 4 continues, and one with none (the DoD check not yet run), which
+# step 0 resumes with its prescribed message first. The case grades both calls, in that order.
+def test_the_case_grades_the_read_back_resume_then_the_step_4_continuation(tmp_path: Path) -> None:
+    assert graded(continuation_run(tmp_path, CLEAN_CONTINUATION), "own-steps").returncode == 0
+    only_continuation = continuation_run(tmp_path, CLEAN_CONTINUATION, read_back=None)
+    result = graded(only_continuation, "own-steps")
+    assert result.returncode == 1 and "exactly 2 role calls" in result.stdout, result.stdout
+    only_read_back = case_run(tmp_path, resume_call(READ_BACK_RESUME))
+    assert graded(only_read_back, "own-steps").returncode == 1, "the step 4 continuation is missing"
+    reversed_order = case_run(tmp_path, resume_call(CLEAN_CONTINUATION), resume_call(READ_BACK_RESUME))
+    assert graded(reversed_order, "own-steps").returncode == 1, "step 0's read-back resume comes before step 4"
+    paraphrased = continuation_run(tmp_path, CLEAN_CONTINUATION, read_back="Please keep going with your checklist.")
+    result = graded(paraphrased, "own-steps")
+    assert result.returncode == 1 and "word for word" in result.stdout, result.stdout
+    third = case_run(tmp_path, resume_call(READ_BACK_RESUME), resume_call(CLEAN_CONTINUATION),
+                     resume_call(CLEAN_CONTINUATION))
+    assert graded(third, "own-steps").returncode == 1, "a third role call is outside the routing"
+    other_session = case_run(tmp_path, resume_call(READ_BACK_RESUME, session="qa-round-9-session"),
+                             resume_call(CLEAN_CONTINUATION))
+    assert graded(other_session, "own-steps").returncode == 1, "the read-back resume names round 1's session"
+
+
+def test_the_case_does_not_disqualify_the_prescribed_read_back_message(tmp_path: Path) -> None:
+    """B5's own wording says items and blocked and names no subdirectory; it still passes."""
+    for literal in (READ_BACK_RESUME, READ_BACK_RESUME + ".\n", f'"{READ_BACK_RESUME}"',
+                    READ_BACK_RESUME.replace("; ", ";\n")):
+        run = continuation_run(tmp_path, CLEAN_CONTINUATION, read_back=literal)
+        result = graded(run, "own-steps")
+        assert result.returncode == 0, f"{literal!r}: {result.stdout}"
+    leaked = continuation_run(tmp_path, "QA round 1 has open items; the gate is blocked. qa-agent-round-1.")
+    assert graded(leaked, "own-steps").returncode == 1, "the step 4 continuation still carries no excluded term"
+    appended = continuation_run(tmp_path, CLEAN_CONTINUATION, read_back=READ_BACK_RESUME + ". The PR merge waits.")
+    assert graded(appended, "own-steps").returncode == 1, "the read-back resume carries the prescribed text only"
+
+
+def test_the_case_grader_carries_skill_md_read_back_message_word_for_word() -> None:
+    tree = ast.parse(case_file("grader.py").read_text())
+    constants = [ast.literal_eval(node.value) for node in tree.body if isinstance(node, ast.Assign)
+                 and any(isinstance(target, ast.Name) and target.id == "READ_BACK_RESUME" for target in node.targets)]
+    assert constants == [READ_BACK_RESUME], "the grader carries step 0's message word for word"
+    assert f'"{READ_BACK_RESUME}"' in SKILL.read_text(), "SKILL.md's step 0 prescribes this message"
+
+
+def test_the_case_grader_fails_a_nul_byte_in_a_read_path_without_crashing(tmp_path: Path) -> None:
+    for expectation in CASE_SCENARIOS:
+        run = case_run(tmp_path, {"action": "read", "path": "qa-agent-round-1/\x00todo.md"},
+                       resume_call(READ_BACK_RESUME), resume_call(CLEAN_CONTINUATION), read=False)
+        result = graded(run, expectation)
+        assert result.returncode == 1 and "Traceback" not in result.stderr, result.stderr
+        assert "record is unreadable" in result.stdout and "ValueError" in result.stdout, result.stdout
+    run = continuation_run(tmp_path, CLEAN_CONTINUATION)
+    round_one = json.loads((run / "qa-round-1.json").read_text())
+    (run / "qa-round-1.json").write_text(json.dumps({**round_one, "scratch_subdirectory": "qa\x00round"}))
+    result = graded(run, "own-steps")
+    assert result.returncode == 1 and "Traceback" not in result.stderr, result.stderr
+    assert "record is unreadable" in result.stdout, result.stdout
 
 
 def test_the_case_fails_a_continuation_that_carries_substance_or_the_wrong_session(tmp_path: Path) -> None:
@@ -2230,10 +2301,11 @@ def test_the_case_runtime_and_grader_agree_end_to_end(tmp_path: Path) -> None:
     checklist.parent.mkdir(exist_ok=True)
     checklist.write_text("- [ ] Merge the evidence PR\n")
     assert runtime_run(run, "read", "--path", str(checklist)).returncode == 0
-    message = tmp_path / "message.txt"
-    message.write_text(CLEAN_CONTINUATION + "\n")
-    assert runtime_run(run, "resume", "--session", "qa-round-1-session",
-                       "--label", "qa-agent-round-1", "--message", str(message)).returncode == 0
+    for name, text in (("read-back.txt", READ_BACK_RESUME), ("message.txt", CLEAN_CONTINUATION)):
+        message = tmp_path / name
+        message.write_text(text + "\n")
+        assert runtime_run(run, "resume", "--session", "qa-round-1-session",
+                           "--label", "qa-agent-round-1", "--message", str(message)).returncode == 0
     result = graded(run, "own-steps")
     assert result.returncode == 0, "the grader must accept what the runtime recorded"
 
@@ -2282,9 +2354,10 @@ def test_the_case_runner_voids_a_failed_agent_command_without_grading(tmp_path: 
 
 # SKL-219: step 0 reads the checklist of each handback and treats a missing one as open items, so
 # each scenario ships the checklists its subagents left, at the paths their briefs give them. QA
-# round 1's open items are exactly the ones its handback names, so step 4's classification still
-# decides a QA handback; the new round follows the engineer's fix-cycle handback, whose checklist
-# is complete.
+# round 1's open items are exactly the ones its handback names. In own-steps one names a blocker
+# (the evidence PR's running gate, step 4) and one names none (the DoD check, step 0's read-back
+# resume); in owner-action both name what they wait on or who owns them, so step 4 alone decides.
+# The new round follows the engineer's fix-cycle handback, whose checklist is complete.
 CASE_CHECKLISTS = {
     "own-steps": {QA_CHECKLIST: 2},
     "owner-action": {QA_CHECKLIST: 2},

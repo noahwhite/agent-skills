@@ -68,8 +68,11 @@ paragraph, naming the record that replaces it, so the trail from run to claim st
 ## What the case shows
 
 - `own-steps` is the discriminating scenario: the baseline stops, and the candidate
-  continues the session it is already in, in the same round, with a message that carries
-  only that the round is unfinished and the round's scratch subdirectory.
+  resumes the session it is already in twice, in the same round. First step 0's checklist
+  read-back resume, with SKILL.md's prescribed message word for word, for the open item whose
+  handback states no blocker; then step 4's continuation, with a message that carries only that
+  the round is unfinished and the round's scratch subdirectory, for the item with a stated
+  blocker.
 - `owner-action` and `new-round` are controls: both versions must stop for an owner action
   that sits beside QA's own work, and both must start a new session for a new round rather
   than reuse an earlier one.
