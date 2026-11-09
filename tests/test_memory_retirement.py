@@ -80,6 +80,14 @@ def test_the_section_retires_the_note_by_delete_or_pointer_and_keeps_other_rules
         assert target in trigger, target
 
 
+def test_the_section_confirms_a_note_belongs_to_the_checkout_before_retiring() -> None:
+    body = retire_section()
+    confirm = bullet(body, "confirms it belongs to the current checkout")
+    assert "project path or project id" in confirm, "ownership is confirmed against the note's project path or id"
+    assert "not confirmed" in confirm, "an unconfirmed note is not retired"
+    assert "does not delete" in confirm, "an unconfirmed note is not deleted or rewritten"
+
+
 def test_the_new_home_is_never_a_generated_copy() -> None:
     assert "never a generated copy" in retire_section()
 
