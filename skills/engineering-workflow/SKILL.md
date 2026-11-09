@@ -144,7 +144,7 @@ Reviewers never modify code; only the implementing agent or the loop's fixer com
 1. Run the complete applicable test suite, plus the repository's formatters, linters, type checks, static analysis and build.
 2. Inspect `git diff origin/<integration branch>...HEAD` after a fetch.
 3. Confirm there are no unrelated changes and no secrets.
-4. Self-review against the acceptance criteria, and against the scope rules of step 1, "Triage the story": no acceptance criterion changed on any story, no skip keyed on another story, and every discovered requirement or unmet criterion taken through one of the two exits those sections state.
+4. Self-review against the acceptance criteria, and against step 1, "Triage the story", item 5 "Apply the scope rules" ([references/linear.md](references/linear.md) "Acceptance criteria and scope", [references/engineering-practice.md](references/engineering-practice.md) "Make minimal, durable changes"): no acceptance criterion changed on any story, no skip keyed on another story, and every discovered requirement or unmet criterion taken through one of the two exits those sections state.
 5. Open the PR against `profile.git.integration_branch` with `gh pr create --base`, following the repository's PR template.
    Describe the user-visible change, the implementation, the testing performed, and anything accepted or deferred by the gate.
 6. Move the story to `profile.tracker.states.in_review` per `references/linear.md`.

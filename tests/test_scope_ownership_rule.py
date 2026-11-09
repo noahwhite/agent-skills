@@ -110,22 +110,29 @@ def missing(text: str, phrases: tuple[str, ...]) -> list[str]:
 # ---- permissive-inversion scan -----------------------------------------------------------------
 
 NEGATION = re.compile(r"\b(never|not|no|neither|nor|cannot)\b|n't\b", re.IGNORECASE)
-ENGINEER = re.compile(r"\b(engineers?|implementing agent)\b", re.IGNORECASE)
+ENGINEER = re.compile(r"\b(engineers?|implementing agent|implementer|developer|agent|team|anyone)\b", re.IGNORECASE)
 AC_CHANGE = re.compile(
-    r"\b(add|adds|added|adding|move|moves|moved|moving|reword|rewords|reworded|rewording|change|changes|changed|changing"
-    r"|edit|edits|edited|editing)\b[^.;,]{0,40}?\b(ACs?|acceptance criteri(?:on|a)|criteri(?:on|a))\b"
-    r"|accepted deviation",
+    r"\b(add|adds|added|adding|amend|amends|amended|amending|modify|modifies|modified|modifying|alter|alters|altered|altering"
+    r"|move|moves|moved|moving|reword|rewords|reworded|rewording"
+    r"|update|updates|updated|updating|rewrite|rewrites|rewritten|rewriting|replace|replaces|replaced|replacing"
+    r"|change|changes|changed|changing|edit|edits|edited|editing|delete|deletes|deleted|deleting|remove|removes|removed|removing"
+    r"|untick|unticks|unticked|un-tick|waive|waives|waived|waiving|accept|accepts|accepted|accepting)\b"
+    r"[^.;,]{0,60}?\b(ACs?|acceptance criteri(?:on|a)|criteri(?:on|a))\b"
+    r"|\b(ACs?|acceptance criteri(?:on|a)|criteri(?:on|a))\b[^.;,]{0,60}?\b(as met|met|done|complete|completed)\b"
+    r"|accepted (?:deviation|risk)|waiv(?:e|ed|er)\b",
     re.IGNORECASE,
 )
-SKIP_TERM = re.compile(r"\b(skips?|skipped|pending lists?|exemptions?)\b", re.IGNORECASE)
+SKIP_TERM = re.compile(r"\b(skips?|skipping|skipped|pending lists?|exemptions?|exempt|xfail|waive|waived|ignore|ignores|ignored)\b", re.IGNORECASE)
 OTHER_STORY = re.compile(
-    r"\b(another|other|later|sibling)\s+(tracker\s+)?(story|stories|issue)\b|story's key|stories' files", re.IGNORECASE
+    r"\b[A-Z]{2,}-\d+\b|\b(?:another|other|later|sibling|future|different|follow-up|subsequent|next)\s+(?:tracker\s+)?(?:story|stories|issue)\b"
+    r"|story's key|stories' files|directory\s+\S+\s+is\s+absent",
+    re.IGNORECASE,
 )
 
 
 def sentences(text: str) -> list[str]:
     flat = spaced(re.sub(r"^\s*(?:[-*>]|\d+\.)\s+", "", text, flags=re.MULTILINE).replace("\n", " "))
-    return [s for s in re.split(r"(?<=[.!?])\s+(?=[A-Z\"`(\[])", flat) if s]
+    return [s for s in re.split(r"(?<=[.!?])\s+", flat) if s]
 
 
 def permissive_inversions(text: str) -> list[str]:
@@ -136,13 +143,15 @@ def permissive_inversions(text: str) -> list[str]:
     """
     hits = []
     for sentence in sentences(text):
-        if ENGINEER.search(sentence):
-            for clause in re.split(r"[,;]", sentence):
-                if AC_CHANGE.search(clause) and not NEGATION.search(clause):
-                    hits.append(sentence)
-                    break
+        for clause in re.split(r"[,;]", sentence):
+            ac = AC_CHANGE.search(clause)
+            if ENGINEER.search(clause) and ac and not NEGATION.search(clause[: ac.start()]):
+                hits.append(sentence)
+                break
         for clause in sentence.split(";"):
-            if SKIP_TERM.search(clause) and OTHER_STORY.search(clause) and not NEGATION.search(clause):
+            skip = SKIP_TERM.search(clause)
+            other = OTHER_STORY.search(clause)
+            if skip and other and not NEGATION.search(clause[: skip.start()]) and not NEGATION.search(clause[: other.start()]):
                 hits.append(sentence)
                 break
     return hits
@@ -199,7 +208,7 @@ def test_each_brief_carries_one_scope_item_with_pointer_and_links() -> None:
         assert len(items) == 1, name
         assert not missing(items[0], pointer_phrases(name)), name
     story_item = next(line for line in brief_list("story-to-done") if line.startswith(BRIEF_PREFIX))
-    assert AC2_RULE in story_item
+    assert not missing(story_item, (AC2_RULE, AC2_SEQUENCING[0], "permanent exemptions that depend on no other story", "test, lint, and build exemptions", '"Do not hide failures"'))
 
 
 def engineering_workflow_step(number: int, title: str) -> str:
@@ -215,7 +224,8 @@ def test_engineering_workflow_meets_the_rule_at_triage_and_self_review() -> None
     prepare = engineering_workflow_step(5, "Prepare the PR").splitlines()
     review = [line for line in prepare if line.startswith("4. Self-review against the acceptance criteria")]
     assert len(review) == 1
-    assert '"Triage the story"' in review[0] and "two exits" in review[0]
+    assert '"Triage the story"' in review[0] and "Apply the scope rules" in review[0] and "two exits" in review[0]
+    assert LINEAR_LINK in review[0] and PRACTICE_LINK in review[0]
 
 
 # ---- negative assertion and false-positive probe -----------------------------------------------
@@ -240,6 +250,21 @@ def test_false_positive_probe_passes() -> None:
         )
     )
     assert permissive_inversions(probe) == []
+
+
+def test_true_positive_probe_flags_permissive_inversions() -> None:
+    fixtures = (
+        "The implementer may add an acceptance criterion.",
+        "The engineer may amend an acceptance criterion it cannot meet.",
+        "The engineer must not reword an AC. The engineer may move the AC though.",
+        "The engineer may add an AC when the story cannot proceed.",
+        "Code may carry a skip if directory X is absent.",
+        "Code may carry a skip keyed on SKL-123.",
+        "Code may exempt a test for a follow-up story.",
+        "Tests may xfail while another story lands.",
+    )
+    missed = [fixture for fixture in fixtures if not permissive_inversions(fixture)]
+    assert not missed, missed
 
 
 # ---- mutation tests ----------------------------------------------------------------------------
