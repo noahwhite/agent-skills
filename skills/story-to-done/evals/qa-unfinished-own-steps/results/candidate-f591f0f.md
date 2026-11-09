@@ -1,3 +1,10 @@
+# Superseded candidate run: `f591f0f`
+
+Kept as history, not as current evidence. Its own-steps fixture mixed an item with a stated
+blocker and one with none in one handback, but the case now holds one rule per scenario and grades
+exactly one role call in each, so these calls no longer re-grade to the verdicts below;
+`candidate-331a2a0.md` is the current candidate record.
+
 # Candidate run: `f591f0f`
 
 The skill as committed at `f591f0f`, the branch commit that carries the SKL-219 checklist read-back

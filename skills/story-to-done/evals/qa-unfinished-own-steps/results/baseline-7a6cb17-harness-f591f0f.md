@@ -1,3 +1,10 @@
+# Superseded baseline run: 7a6cb17, harness at `f591f0f`
+
+Kept as history, not as current evidence. Its own-steps fixture mixed an item with a stated
+blocker and one with none in one handback, but the case now holds one rule per scenario and grades
+exactly one role call in each, so these calls no longer re-grade to the verdicts below;
+`baseline-7a6cb17-harness-331a2a0.md` is the current baseline record.
+
 # Baseline run: 7a6cb17, harness at `f591f0f`
 
 The skill as committed on the integration branch before this case, read from a detached
