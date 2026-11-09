@@ -23,7 +23,7 @@ You act on running systems, so verify before you claim, prefer durable fixes, an
   Read it before any infrastructure, deploy, or host action.
 - [references/github.md](references/github.md) - branches, worktrees, PRs, merge, promotion, and signed commits when the change ships through a PR.
 - [references/secrets.md](references/secrets.md) - for every secret, token, or credential you touch.
-- [references/engineering-practice.md](references/engineering-practice.md) - diagnosis before fix, minimal and durable changes, and test discipline.
+- [references/engineering-practice.md](references/engineering-practice.md) - diagnosis before fix, minimal and durable changes, test discipline, and retiring a memory note when a change writes its rule into a skill.
 - [references/linear.md](references/linear.md) - whenever you touch a story's triage, relations, or status.
 - [references/runtimes.md](references/runtimes.md) - maps the capabilities named here to your runtime.
 
