@@ -39,7 +39,7 @@ Do not skip a gate because the change looks simple.
 The steps below are the workflow spine; the capability files hold the rules and are authoritative where they overlap:
 
 - [references/linear.md](references/linear.md): story lifecycle, triage and Definition of Ready, status transitions (steps 1, 5, 12).
-- [references/engineering-practice.md](references/engineering-practice.md): diagnosis, TDD, durable fixes, test quality (steps 2, 3, 6, 8).
+- [references/engineering-practice.md](references/engineering-practice.md): diagnosis, TDD, durable fixes, test quality (steps 2, 3, 6, 8), and retiring a memory note when a change writes its rule into a skill.
 - [references/github.md](references/github.md): branches, worktrees, commits, signing, PRs, merge, promotion, attribution (steps 2, 5, 10).
 - [references/code-review.md](references/code-review.md): the review of record, optional reviewers, finding handling, watching the PR (steps 6 to 10).
 - [references/merge-approval.md](references/merge-approval.md): the delegated merge-approval handshake: request, wake, wait, approve or bounce, and re-request when the head changes (step 10).

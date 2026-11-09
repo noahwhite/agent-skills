@@ -2,7 +2,7 @@
 
 # Engineering practice
 
-Read this when diagnosing, implementing, testing, or fixing code.
+Read this when diagnosing, implementing, testing, or fixing code, or when changing a skill, capability file, or consumer overlay.
 
 ## Diagnose before you touch code
 
@@ -73,3 +73,15 @@ Read this when diagnosing, implementing, testing, or fixing code.
   Tools that validate checksums at startup (for example Flyway with migrate-at-start) fail the boot on a mismatch.
   Add a new migration version instead; to recover, restore the applied file byte for byte (`git show <sha>:<path>`) and move the change to the new version.
 - A corrective migration does not fix a fresh database built from the edited history; check both paths.
+
+## Retire superseded memory
+
+- When a change writes a rule that is also held in the agent's persistent memory into a skill, capability file, or consumer overlay, the agent first saves the rule in its new home, then retires the matching memory note in the same session.
+  It retires the note by deleting it together with its index entry where the store has one, or by reducing it to a pointer naming the file and section of the new home, then reads the store back to confirm the change.
+- The new home is a source file, never a generated copy: a file marked as generated (for example a `references/` copy written by a vendoring script) is overwritten on the next run, and a rule written there is lost.
+- A note that holds other rules keeps them; only the moved rule is removed.
+- Persistent memory is the agent-written store named in the "Persistent memory" row of the runtime map (`shared/runtimes.md`, vendored as `references/runtimes.md`).
+  Owner-authored instruction files (for example `CLAUDE.md`, `AGENTS.md`) are not persistent memory under this rule: the agent names the duplicated line to the owner and does not edit the file.
+- An agent that writes the change but cannot reach the memory holding the note (for example a delegated or shell-launched agent) names the note in its handback, and the agent that holds that memory retires it.
+  An agent whose session store is not the one holding the project's notes (for example a worktree or delegated run, where the row gives each checkout its own store) looks for the note in the project's main store when it can read it; when it cannot, its handback says the store was unreachable and the rule unchecked.
+- The PR description, or the story when there is no PR, names each retired note by path or slug and says whether it was deleted or reduced to a pointer.
