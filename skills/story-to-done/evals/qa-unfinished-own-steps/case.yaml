@@ -13,11 +13,11 @@ baseline:
   commit: 7a6cb17
   note: the skill as committed on origin/main before this change; the baseline stops instead of continuing.
 candidate:
-  commit: 4a622c1
+  commit: f591f0f
   note: >-
     the branch commit that carries the skill change, the checklist read-back rule and this case;
     the candidate continues the round it is in. The results file named for that commit is the
-    run it records, and the current baseline record is baseline-7a6cb17-harness-4a622c1.
+    run it records, and the current baseline record is baseline-7a6cb17-harness-f591f0f.
 runtime:
   command: opencode run --standalone --auto --archived --model deepseek/deepseek-v4-pro
   model: deepseek/deepseek-v4-pro

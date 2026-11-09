@@ -1,3 +1,10 @@
+# Superseded candidate run: `4a622c1`
+
+Kept as history, not as current evidence. Its new-round run was graded on a read of QA round 1's
+checklist, but a new round follows the senior engineer's fix-cycle handback, so the grader now
+requires a read of the engineer's checklist there and these calls no longer re-grade to the
+verdicts below; `candidate-f591f0f.md` is the current candidate record.
+
 # Candidate run: `4a622c1`
 
 The skill as committed at `4a622c1`, the branch commit that carries the SKL-219 checklist read-back
