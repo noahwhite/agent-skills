@@ -741,8 +741,9 @@ METRICS_TIMED_LAUNCHES = (
 )
 METRICS_LAUNCH_POINTS = (
     "The senior engineer's timed launches are the first launch in step 2 and each resume or re-spawn in "
-    "step 4; each QA round is a launch row in step 3, and a continuation of that round under step 4 is a "
-    "further launch row within the same round."
+    "step 4; each QA round is a launch row in step 3, a continuation of that round under step 4 is a "
+    "further launch row within the same round, and each checklist read-back resume under step 0 is a launch "
+    "row of its own, within the QA agent's round when it resumes a QA agent."
 )
 METRICS_EXTRAS = (
     "- **Extras:** take each `story-to-done` extra at the step that observes it: **Start** from the step 1 "
@@ -919,6 +920,8 @@ METRICS_LINES = [
     METRICS_USAGE,
     METRICS_NOTHING_BEFORE_START,
     METRICS_STEP0,
+    # SKL-219: a checklist read-back resume is its own launch row.
+    "With `metrics` on, each read-back resume is its own launch row.",
     # SKL-159: the step 4 continuation branch states the round-count and launch-row rule.
     "  The continuation does not increment the QA round count, reuses that round's scratch subdirectory and "
     "checklist, and with `metrics` on is recorded as its own launch row within that same round.",
@@ -1159,7 +1162,10 @@ def test_step_0_seeds_the_collect_and_post_metrics_items_only_when_the_switch_is
 def test_step_0_adds_no_unconditional_collect_metrics_instruction() -> None:
     body = " ".join(section(SKILL.read_text(), "0. Track everything on a todo list").split())
     assert METRICS_STEP0 in body
-    rest = " ".join(body.replace(METRICS_STEP0, "").split()).lower()
+    # SKL-219: the read-back launch-row sentence is on-only too, so it is not an unconditional instruction.
+    read_back_row = "With `metrics` on, each read-back resume is its own launch row."
+    assert read_back_row in body
+    rest = " ".join(body.replace(METRICS_STEP0, "").replace(read_back_row, "").split()).lower()
     for phrase in ("metric", "seed the same", "same item", " off "):
         assert phrase not in rest, f"step 0 adds an unconditional collect-metrics instruction: {phrase!r}"
 
