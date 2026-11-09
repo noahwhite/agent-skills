@@ -85,10 +85,13 @@ review:
       name: DeepSeek V4 Pro
       runtime: opencode
       model: deepseek/deepseek-v4-pro
+    # Interim (owner decision 2026-11-09): match the engineer, Opus 5.5 at medium effort. The
+    # schema has no effort field, so the effort lives in the name and in the launching brief.
+    # SKL-225 replaces this pin with a blank entry that inherits the engineer's model.
     fixer:
-      name: DeepSeek V4 Pro
-      runtime: opencode
-      model: deepseek/deepseek-v4-pro
+      name: Opus 5.5 medium
+      runtime: claude-code
+      model: claude-opus-5-5
 # This repository deploys nothing, so there is no environment to promote to or verify in.
 environments: []
 qa:
