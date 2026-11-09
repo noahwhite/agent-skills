@@ -128,6 +128,8 @@ OTHER_STORY = re.compile(
     r"|story's key|stories' files|directory\s+\S+\s+is\s+absent",
     re.IGNORECASE,
 )
+PERMISSIVE = re.compile(r"\b(?:may|might|can|could|is allowed|are allowed|permitted)\b", re.IGNORECASE)
+SEGMENT_SPLIT = re.compile(r"[,;]|\band\b|\bor\b", flags=re.IGNORECASE)
 
 
 def sentences(text: str) -> list[str]:
@@ -138,31 +140,44 @@ def sentences(text: str) -> list[str]:
 def permissive_inversions(text: str) -> list[str]:
     """Sentences that permit an engineer to change an AC, or that permit a skip keyed on another story.
 
-    The AC check is per comma or semicolon clause, so one negated clause cannot cover a permissive sibling;
-    the skip check is per semicolon clause, so a negated list of skip forms reads as one clause.
+    A permissive marker must govern an unnegated AC change or skip in the same segment, while the other-story
+    reference may sit in a sibling segment; shared negations such as "never adds or moves" stay clean.
     """
     hits = []
     for sentence in sentences(text):
+        segments = [segment for segment in SEGMENT_SPLIT.split(sentence) if segment.strip()]
         hit = False
-        for clause in re.split(r"[,;]", sentence):
-            prev_end = 0
-            for ac in AC_CHANGE.finditer(clause):
-                if ENGINEER.search(clause) and not NEGATION.search(clause[prev_end : ac.start()]):
-                    hit = True
-                    break
-                prev_end = ac.end()
-            if hit:
-                break
-        if not hit:
-            for clause in re.split(r";|\band\b", sentence, flags=re.IGNORECASE):
-                others = list(OTHER_STORY.finditer(clause))
-                for skip in SKIP_TERM.finditer(clause):
-                    other = next((o for o in others if o.start() >= skip.end()), None)
-                    if other and not NEGATION.search(clause[: skip.start()]) and not NEGATION.search(clause[: other.start()]):
-                        hit = True
+        if ENGINEER.search(sentence):
+            for segment in segments:
+                for permissive in PERMISSIVE.finditer(segment):
+                    for ac in AC_CHANGE.finditer(segment, permissive.end()):
+                        if not NEGATION.search(segment[permissive.end() : ac.start()]):
+                            hit = True
+                            break
+                    if hit:
                         break
                 if hit:
                     break
+        if not hit:
+            other_hit = False
+            for segment in segments:
+                for other in OTHER_STORY.finditer(segment):
+                    if not NEGATION.search(segment[: other.start()]):
+                        other_hit = True
+                        break
+                if other_hit:
+                    break
+            if other_hit:
+                for segment in segments:
+                    for permissive in PERMISSIVE.finditer(segment):
+                        for skip in SKIP_TERM.finditer(segment, permissive.end()):
+                            if not NEGATION.search(segment[permissive.end() : skip.start()]):
+                                hit = True
+                                break
+                        if hit:
+                            break
+                    if hit:
+                        break
         if hit:
             hits.append(sentence)
     return hits
@@ -255,6 +270,8 @@ def test_false_positive_probe_passes() -> None:
         (
             'The rule is that an implementing engineer "never adds an AC", and the engineer "never moves an AC" either.',
             "The engineer never rewords an AC on any story.",
+            "An engineer never adds an AC or moves an AC.",
+            "Code never carries skips, pending lists, or exemptions keyed on another story landing later.",
             "# Permanent exemption: generated references/ copies are skipped by the scan; this depends on no other story.",
             'EXEMPT = ("references",)  # why: vendored output, never hand-edited',
             *carve_out,
@@ -275,6 +292,8 @@ def test_true_positive_probe_flags_permissive_inversions() -> None:
         "Tests may xfail while another story lands.",
         "The engineer never adds an AC to this story and may move an AC to another story.",
         "Code never carries a skip keyed on SKL-123 and may carry a skip keyed on SKL-456.",
+        "For SKL-123, code may carry a skip.",
+        "Code may skip checks for this story and another story.",
     )
     missed = [fixture for fixture in fixtures if not permissive_inversions(fixture)]
     assert not missed, missed
