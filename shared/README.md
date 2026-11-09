@@ -2,7 +2,7 @@
 
 This directory is the single source for the capability files that skills compose.
 A skill links a capability through its vendored `references/<name>.md` copy.
-`scripts/vendor_shared.py` writes those copies from the files below, using the capability list in `skills.json`.
+`scripts/vendor_shared.py` writes those copies from the files below, using the capability list in `skills.json` plus every capability a vendored file cites as `references/<name>.md`.
 A capability listed here may wait for a later slice to compose it.
 `resolve-model-role.py` is the directory's one non-Markdown file: the model-role resolver (`profile.md`, Resolve a model role), vendored into a skill's `scripts/` when `skills.json` lists it under `executables`.
 
@@ -11,7 +11,7 @@ A capability listed here may wait for a later slice to compose it.
 | File | Capability |
 |---|---|
 | `code-review.md` | The review of record, optional reviewers, finding handling, and watching the PR. |
-| `engineering-practice.md` | Diagnosis, TDD, durable fixes, and test quality. |
+| `engineering-practice.md` | Diagnosis, TDD, durable fixes, test quality, and retiring a memory note once its rule moves into a skill. |
 | `github.md` | Git, branch, worktree, PR, merge, promotion, commit signing, and attribution. |
 | `infra-deploy.md` | Infrastructure as code, CI/CD, deploys, host operations, and incidents. |
 | `linear.md` | Story and epic lifecycle, triage, estimation, and scope. |
