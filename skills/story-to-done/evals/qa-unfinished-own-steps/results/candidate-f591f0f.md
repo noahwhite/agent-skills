@@ -3,7 +3,7 @@
 Kept as history, not as current evidence. Its own-steps fixture mixed an item with a stated
 blocker and one with none in one handback, but the case now holds one rule per scenario and grades
 exactly one role call in each, so these calls no longer re-grade to the verdicts below;
-`candidate-b3b33ca.md` is the current candidate record.
+`candidate-1f24df1.md` is the current candidate record.
 
 # Candidate run: `f591f0f`
 

@@ -1,3 +1,10 @@
+# Superseded baseline run: 7a6cb17, harness at `b3b33ca`
+
+Kept as history, not as current evidence. Its new-round run carries one grade under a grader that
+tied the control to the checklist read; the grader now grades the control and `new-round-read`
+apart, so these grades no longer match the current case.
+`baseline-7a6cb17-harness-1f24df1.md` is the current baseline record.
+
 # Baseline run: 7a6cb17, harness at `b3b33ca`
 
 The skill as committed on the integration branch before this case, read from a detached checkout of `7a6cb17`, run and graded with the case harness as committed at `b3b33ca`: one rule per scenario, each graded on exactly one role call.

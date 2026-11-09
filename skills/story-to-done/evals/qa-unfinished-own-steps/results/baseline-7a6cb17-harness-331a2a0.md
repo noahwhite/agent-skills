@@ -2,7 +2,7 @@
 
 Kept as history, not as current evidence. Its read-back item (whether the change needs a release-notes
 entry) has since been replaced, so these runs no longer test the current case;
-`baseline-7a6cb17-harness-b3b33ca.md` is the current baseline record.
+`baseline-7a6cb17-harness-1f24df1.md` is the current baseline record.
 
 # Baseline run: 7a6cb17, harness at `331a2a0`
 

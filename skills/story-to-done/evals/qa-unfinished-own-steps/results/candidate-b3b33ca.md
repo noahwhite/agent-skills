@@ -1,3 +1,10 @@
+# Superseded candidate run: `b3b33ca`
+
+Kept as history, not as current evidence. Its new-round run carries one grade under a grader that
+tied the control to the checklist read; the grader now grades the control and `new-round-read`
+apart, so these grades no longer match the current case. `candidate-1f24df1.md` is the current
+candidate record.
+
 # Candidate run: `b3b33ca`
 
 The skill as committed at `b3b33ca`, the branch commit whose step 4 states that its classification covers only the items QA's handback names with what they wait on or who owns them, so an open item with no stated blocker or owner goes to step 0's checklist read-back resume first.
