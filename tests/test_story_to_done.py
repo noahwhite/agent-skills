@@ -2022,7 +2022,7 @@ def graded(run: Path, expectation: str) -> subprocess.CompletedProcess[str]:
 
 CLEAN_CONTINUATION = "QA round 1 is unfinished. Its scratch subdirectory is qa-agent-round-1."
 # Step 0's read-back resume message, word for word as SKILL.md prescribes it. In read-back the
-# handback names its one open item, whether the change needs a release-notes entry, with no stated
+# handback names its one open item, removing the round's temporary test data, with no stated
 # blocker or owner, so step 0
 # resumes round 1's session with this message; own-steps' one item states what it waits on, so
 # step 4 continues the round instead.
@@ -2361,7 +2361,7 @@ def test_the_case_runner_voids_a_failed_agent_command_without_grading(tmp_path: 
 # each scenario ships the checklists its subagents left, at the paths their briefs give them. QA
 # round 1's open items are exactly the ones its handback names. own-steps' one item names what it
 # waits on (the evidence PR's running gate, step 4); read-back's one item names no blocker or owner
-# (a release-notes question, step 0's read-back resume); in owner-action both name what they wait on or who owns them,
+# (removing the round's temporary test data, step 0's read-back resume); in owner-action both name what they wait on or who owns them,
 # so step 4 alone decides. The new round follows the engineer's fix-cycle handback, whose
 # checklist is complete.
 CASE_CHECKLISTS = {

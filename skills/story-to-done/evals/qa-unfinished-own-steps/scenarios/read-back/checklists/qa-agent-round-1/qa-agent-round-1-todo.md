@@ -6,4 +6,4 @@
 - [x] Run each DoD check
 - [x] Open the evidence PR
 - [x] Merge the evidence PR on the head its review of record covered
-- [ ] Check whether the change needs a release-notes entry
+- [ ] Remove the temporary test data this round created
