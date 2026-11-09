@@ -741,10 +741,11 @@ METRICS_TIMED_LAUNCHES = (
     "marked `cumulative`."
 )
 METRICS_LAUNCH_POINTS = (
-    "The senior engineer's timed launches are the first launch in step 2 and each resume or re-spawn in "
-    "step 4; each QA round is a launch row in step 3, a continuation of that round under step 4 is a "
-    "further launch row within the same round, and each checklist read-back resume under step 0 is a launch "
-    "row of its own, within the QA agent's round when it resumes a QA agent."
+    "The senior engineer's timed launches are the first launch in step 2, each checklist read-back resume "
+    "of the senior engineer under step 0, and each resume or re-spawn in step 4; each QA round is a launch "
+    "row in step 3, a continuation of that round under step 4 is a further launch row within the same "
+    "round, and each checklist read-back resume of a QA agent under step 0 is a launch row of its own "
+    "within that QA agent's round."
 )
 METRICS_EXTRAS = (
     "- **Extras:** take each `story-to-done` extra at the step that observes it: **Start** from the step 1 "
@@ -2034,6 +2035,32 @@ def test_the_case_requires_the_checklist_read_before_crediting_the_call(tmp_path
                                                             "maintainer's approval is the owner's to grant"},
                      read=False)
     assert graded(owner, "owner-action").returncode == 1, "an owner stop that never read the checklist must not pass"
+    launch = {"action": "launch", "session": "qa-round-2-session", "label": "qa-agent-round-2", "round": 2,
+              "message": "the environment under test"}
+    new_round = case_run(tmp_path, launch, read=False)
+    (new_round / "sessions.json").write_text(json.dumps({
+        "sessions": [{"session": "qa-round-1-session", "label": "qa-agent-round-1", "round": 1},
+                     {"session": "qa-round-2-session", "label": "qa-agent-round-2", "round": 2}],
+        "next_round": 3,
+    }))
+    assert graded(new_round, "new-round").returncode == 1, "a new round that never read the checklist must not pass"
+
+
+def test_the_case_credits_only_a_read_of_the_rounds_own_checklist_before_the_call(tmp_path: Path) -> None:
+    resume = {"action": "resume", "session": "qa-round-1-session", "label": "qa-agent-round-1",
+              "round": 1, "message": CLEAN_CONTINUATION}
+    read = {"action": "read", "path": "qa-agent-round-1/qa-agent-round-1-todo.md"}
+    late = case_run(tmp_path, resume, read, read=False)
+    assert graded(late, "own-steps").returncode == 1, "a read after the role call did not inform it"
+    for path in ("elsewhere/qa-agent-round-1/qa-agent-round-1-todo.md", "qa-agent-round-1-todo.md",
+                 "/tmp/qa-agent-round-1/qa-agent-round-1-todo.md"):
+        other = case_run(tmp_path, {"action": "read", "path": path}, resume, read=False)
+        assert graded(other, "own-steps").returncode == 1, f"a read of {path} is not round 1's checklist file"
+    run = case_run(tmp_path, resume, read=False)
+    (run / "actions.jsonl").write_text(
+        json.dumps({"action": "read", "path": str(run / "qa-agent-round-1" / "qa-agent-round-1-todo.md")}) + "\n"
+        + json.dumps(resume) + "\n")
+    assert graded(run, "own-steps").returncode == 0, "an absolute path to the run's own checklist counts"
 
 
 def test_the_case_fails_a_run_that_stops_where_the_story_must_not(tmp_path: Path) -> None:
@@ -2135,7 +2162,14 @@ def test_the_case_runtime_records_a_checklist_read(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
     assert "- [ ] Merge the evidence PR" in result.stdout, "the read prints the file it read"
     recorded = [json.loads(line) for line in (run / "actions.jsonl").read_text().splitlines()]
-    assert len(recorded) == 1 and recorded[0]["action"] == "read" and recorded[0]["path"] == str(checklist), recorded
+    assert len(recorded) == 1 and recorded[0]["action"] == "read", recorded
+    assert recorded[0]["path"] == "qa-agent-round-1/qa-agent-round-1-todo.md", \
+        "a read inside the run directory is recorded relative to it, so a committed record re-grades anywhere"
+    outside = tmp_path / "qa-agent-round-1-todo.md"
+    outside.write_text("- [ ] elsewhere\n")
+    assert runtime_run(run, "read", "--path", str(outside)).returncode == 0
+    recorded = [json.loads(line) for line in (run / "actions.jsonl").read_text().splitlines()]
+    assert recorded[1]["path"] == str(outside.resolve()), "a read outside the run directory keeps its absolute path"
     missing = runtime_run(run, "read", "--path", str(run / "absent.md"))
     assert missing.returncode != 0 and "no file" in missing.stderr
 

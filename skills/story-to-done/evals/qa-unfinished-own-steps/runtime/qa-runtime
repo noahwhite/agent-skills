@@ -102,7 +102,11 @@ def read_file(args: argparse.Namespace) -> str:
         content = path.read_text()
     except (OSError, UnicodeDecodeError) as error:
         sys.exit(f"qa-runtime: cannot read the file {args.path}: {error}")
-    record({"action": "read", "path": args.path})
+    # A file inside the run is recorded relative to it, so a committed record re-grades in any
+    # directory; anything else keeps its resolved absolute path and never matches a run file.
+    resolved = path.resolve()
+    recorded = str(resolved.relative_to(RUN)) if resolved.is_relative_to(RUN) else str(resolved)
+    record({"action": "read", "path": recorded})
     return content
 
 
