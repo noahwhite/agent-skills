@@ -138,6 +138,10 @@ SKIP_LINK_DEPENDENCY = re.compile(
     r"\b(?:if|while|when|until|depends on|supplied by|supplies|needed by|lands|landing|later|blocked by|after|once)\b",
     re.IGNORECASE,
 )
+SKIP_MISSING_STATE = re.compile(
+    r"\b(?:absent|absence|missing|lack|lacks|needed|required|depends|supplied|pending|blocked|lands|landing|later|once|after|until)\b",
+    re.IGNORECASE,
+)
 SKIP_LINK_WEAK = re.compile(r"\b(?:for|on)\b", re.IGNORECASE)
 SKIP_LINK_WEAK_IMMEDIATE = re.compile(r"\b(?:for|on)\s*$", re.IGNORECASE)
 SKIP_IMMEDIATE_LINK = re.compile(r"\b(?:for|until|when|if|while|because|keyed on|depends on|blocked by|tied to|after|once)\s*$", re.IGNORECASE)
@@ -210,7 +214,8 @@ def permissive_inversions(text: str) -> list[str]:
                     if SKIP_LINK_STRONG.search(gap[last_boundary:]):
                         return True
                     if crosses_boundary(skip[1], other[0]):
-                        return bool(SKIP_LINK_DEPENDENCY.search(gap[:last_boundary]))
+                        before_boundary = gap[:last_boundary]
+                        return bool(SKIP_LINK_DEPENDENCY.search(before_boundary) and SKIP_MISSING_STATE.search(before_boundary))
                     return weak_link_ok(gap)
                 if skip[0] >= other[1]:
                     before_other = sentence[max(0, other[0] - 40) : other[0]]
@@ -330,6 +335,7 @@ def test_false_positive_probe_passes() -> None:
             "Code may carry a permanent exemption for generated files; SKL-123 supplies the fixtures.",
             "Code may carry a permanent exemption for generated files and SKL-123 supplies the fixtures.",
             "Code may carry a permanent exemption because the files are generated; SKL-123 supplies the fixtures.",
+            "Code may carry a permanent exemption if the files are generated; SKL-123 supplies the fixtures.",
             "# Permanent exemption: generated references/ copies are skipped by the scan; this depends on no other story.",
             'EXEMPT = ("references",)  # why: vendored output, never hand-edited',
             *carve_out,
