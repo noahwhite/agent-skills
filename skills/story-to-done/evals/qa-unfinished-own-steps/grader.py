@@ -5,11 +5,14 @@ The grade reads the tool-call record only: `actions.jsonl` and `sessions.json`, 
 run's `qa-runtime` wrote, and the scenario's `qa-round-1.json`. It never reads the agent's
 prose, so a run passes on the calls it made and on what the calls carried, not on how the
 agent described them. A run that acts on a handback without first reading that handback's
-checklist file fails: `qa-runtime read` records the read, and every scenario requires a read of
-that exact file, present in the run directory, before the run's first role call. The handback
-is QA round 1's for own-steps, read-back and owner-action, and the senior engineer's fix-cycle
-handback for new-round. The new round's launch brief is not graded: that scenario grades session
-identity and the checklist read, so it is no evidence of what a brief carries.
+checklist file fails: `qa-runtime read` records the read, and every expectation but the
+new-round control requires a read of that exact file, present in the run directory, before the
+run's first role call. The handback is QA round 1's for own-steps, read-back and owner-action,
+and the senior engineer's fix-cycle handback for the new round. The new-round run is graded
+twice: `new-round`, the control, on session identity alone, so a version without the read-back
+rule passes it when it launches the right session; and `new-round-read`, on every control check
+plus the engineer checklist read. The new round's launch brief is not graded: that scenario
+grades session identity and the checklist read, so it is no evidence of what a brief carries.
 
 Every scenario makes exactly one role call. own-steps leaves one QA-owned item with a stated
 blocker (the evidence PR whose gate is still running), which step 4 continues with a message
@@ -18,7 +21,7 @@ with no stated blocker or owner (removing the temporary test data the round crea
 resume reaches with SKILL.md's prescribed message word for word; the read-back's handback comes
 after that resume, so nothing more is graded in that run.
 
-  grader.py --run-dir DIR --expectation own-steps|read-back|owner-action|new-round
+  grader.py --run-dir DIR --expectation own-steps|read-back|owner-action|new-round|new-round-read
 
 Each assertion prints one line; the last line is `PASS` or `FAIL`, and the exit status is 0
 for PASS and 1 for FAIL. A record the grader cannot read, of any shape, is a FAIL naming it,
@@ -82,6 +85,8 @@ ROLE_CALLS = ("launch", "resume", "stop")
 # The checklist file the senior engineer's brief gives it, relative to the run directory, which
 # stands in for the coordinator's scratch directory.
 ENGINEER_CHECKLIST = "senior-engineer/senior-engineer-todo.md"
+# The two expectations the new-round run is graded on: the control, and the control plus the read.
+NEW_ROUND = ("new-round", "new-round-read")
 
 
 def calls_of(records: list[dict]) -> list[dict]:
@@ -148,7 +153,7 @@ def grade(run: pathlib.Path, expectation: str) -> list[tuple[bool, str]]:
         started = started_sessions(run)
         if not isinstance(subdirectory, str):
             raise TypeError("the scratch subdirectory is not text")
-        if expectation == "new-round":
+        if expectation in NEW_ROUND:
             checklist, owner = ENGINEER_CHECKLIST, "the senior engineer's fix-cycle handback's"
         else:
             checklist, owner = f"{subdirectory}/{subdirectory}-todo.md", f"QA round {number}'s"
@@ -162,10 +167,12 @@ def grade(run: pathlib.Path, expectation: str) -> list[tuple[bool, str]]:
     if not calls:
         return checks
     only = calls[0]
-    wanted = {"own-steps": "resume", "read-back": "resume", "owner-action": "stop", "new-round": "launch"}[expectation]
+    wanted = {"own-steps": "resume", "read-back": "resume", "owner-action": "stop",
+              "new-round": "launch", "new-round-read": "launch"}[expectation]
     checks.append((only.get("action") == wanted, f"the call was {only.get('action')}, and it had to be {wanted}"))
-    checks.append((read, f"the run read {owner} checklist file {checklist} before its role call, "
-                         f"and it {'did' if read else 'did not'}"))
+    if expectation != "new-round":
+        checks.append((read, f"the run read {owner} checklist file {checklist} before its role call, "
+                             f"and it {'did' if read else 'did not'}"))
 
     if expectation in ("own-steps", "read-back"):
         checks.append((only.get("session") == session,
@@ -190,7 +197,7 @@ def grade(run: pathlib.Path, expectation: str) -> list[tuple[bool, str]]:
         reason = only.get("reason", "")
         named = isinstance(reason, str) and bool(OWNER_SIDE.search(reason)) and bool(REMAINDER_SIDE.search(reason))
         checks.append((named, f"the stop named the owner action and what remains beside it, and it said {reason!r}"))
-    elif expectation == "new-round":
+    elif expectation in NEW_ROUND:
         launched = only.get("session")
         checks.append((isinstance(launched, str) and launched != session,
                        f"the new round named a session other than round 1's, and it named {launched}"))
@@ -202,7 +209,7 @@ def grade(run: pathlib.Path, expectation: str) -> list[tuple[bool, str]]:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Grade one run of this case on its tool-call record.")
     parser.add_argument("--run-dir", required=True)
-    parser.add_argument("--expectation", required=True, choices=["own-steps", "read-back", "owner-action", "new-round"])
+    parser.add_argument("--expectation", required=True, choices=["own-steps", "read-back", "owner-action", *NEW_ROUND])
     args = parser.parse_args()
     checks = grade(pathlib.Path(args.run_dir), args.expectation)
     for ok, text in checks:

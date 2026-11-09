@@ -60,7 +60,8 @@ run directory as `grader-output.txt`, with the agent's own output beside it as
 
 Record one file per version under `results/`, named `<version>-<ref>.md`, with the
 configuration used and one line per scenario with its verdict, plus `<version>-<ref>-calls.jsonl`
-holding the calls and grades the verdicts were read from. A rerun with a different model or a
+holding the calls and grades the verdicts were read from, each grade under the expectation it
+was graded on. A rerun with a different model or a
 later commit records its own file and names what it used; it never overwrites or deletes an
 earlier result. When a result stops being current, keep it and mark it superseded in its first
 paragraph, naming the record that replaces it, so the trail from run to claim stays readable.
@@ -80,3 +81,7 @@ paragraph, naming the record that replaces it, so the trail from run to claim st
 - `owner-action` and `new-round` are controls: both versions must stop for an owner action
   that sits beside QA's own work, and both must start a new session for a new round rather
   than reuse an earlier one.
+  The new-round control grades session identity alone.
+  `run.sh` grades the same new-round run again as `new-round-read`, which adds the read of the
+  senior engineer's checklist before the launch, into `grader-read-output.txt`; that read is the
+  candidate's rule, so the baseline is not expected to pass it.

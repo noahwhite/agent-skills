@@ -9,7 +9,8 @@
 # on whitespace, so it carries no quoted argument; the prompt is attached to it as a file
 # and never put in argv. EVAL_TIMEOUT bounds the agent command in seconds.
 #
-# Exit codes: 0 the run was graded and passed, 1 the run was graded and failed, 2 the run
+# Exit codes: 0 the run was graded and passed (for new-round, both its grades), 1 the run was
+# graded and failed, 2 the run
 # itself is void (bad arguments, a run directory already in use, an agent command that
 # failed or timed out, or a checkout the agent changed), and in that case nothing is graded.
 set -euo pipefail
@@ -94,4 +95,12 @@ if [ "$(state "$checkout_real")" != "$state_before" ]; then
   exit 2
 fi
 
-python3 "$case_dir/grader.py" --run-dir "$run" --expectation "$scenario" | tee "$run/grader-output.txt"
+# The new-round run is graded twice: the control on session identity alone, then the same run
+# with the engineer checklist read added, kept as grader-read-output.txt. Either FAIL fails the run.
+graded=0
+python3 "$case_dir/grader.py" --run-dir "$run" --expectation "$scenario" | tee "$run/grader-output.txt" || graded=$?
+if [ "$scenario" = new-round ]; then
+  python3 "$case_dir/grader.py" --run-dir "$run" --expectation new-round-read |
+    tee "$run/grader-read-output.txt" || graded=$?
+fi
+exit "$graded"

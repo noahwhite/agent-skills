@@ -734,7 +734,8 @@ METRICS_USAGE = (
 )
 METRICS_TIMED_LAUNCHES = (
     "- **Timed launches:** time each senior engineer launch and each QA launch row, meaning each QA round's "
-    "spawn in step 3 and each continuation of that round in step 4, taking the start immediately before that "
+    "spawn in step 3, each continuation of that round in step 4, and each checklist read-back resume of a QA "
+    "agent under step 0, taking the start immediately before that "
     "launch and the end when it returns, and record it as one row in launch order under a "
     "label unique within the invocation, with its runtime, model, effort, duration, tokens, and tool "
     "calls as `references/metrics.md` defines; `not "
@@ -2069,15 +2070,29 @@ def test_the_case_requires_the_checklist_read_before_crediting_the_call(tmp_path
                      read=False)
     assert graded(owner, "owner-action").returncode == 1, "an owner stop that never read the checklist must not pass"
     new_round = new_round_run(tmp_path, read=False)
-    assert graded(new_round, "new-round").returncode == 1, "a new round that never read the checklist must not pass"
+    assert graded(new_round, "new-round-read").returncode == 1, "a new round that never read the checklist must not pass"
+
+
+# The new-round control grades session identity alone, so a version without the read-back rule
+# passes it when it launches the right session; the read is graded on the same run under
+# new-round-read, which keeps every control check and adds the read.
+def test_the_case_new_round_control_grades_session_identity_apart_from_the_read(tmp_path: Path) -> None:
+    unread = new_round_run(tmp_path, read=False)
+    control = graded(unread, "new-round")
+    assert control.returncode == 0 and "checklist" not in control.stdout, control.stdout
+    read = graded(unread, "new-round-read")
+    assert read.returncode == 1 and ENGINEER_CHECKLIST in read.stdout, read.stdout
+    assert graded(new_round_run(tmp_path), "new-round-read").returncode == 0
+    for session in ("fabricated", "qa-round-1-session"):
+        assert graded(new_round_run(tmp_path, session=session), "new-round-read").returncode == 1, session
 
 
 # A new round follows the senior engineer's fix-cycle handback, so the checklist step 0 reads before
 # it is the engineer's; QA round 1's checklist belongs to an earlier handback.
 def test_the_case_new_round_requires_the_engineers_checklist_not_qa_round_1s(tmp_path: Path) -> None:
-    assert graded(new_round_run(tmp_path), "new-round").returncode == 0
+    assert graded(new_round_run(tmp_path), "new-round-read").returncode == 0
     wrong = new_round_run(tmp_path, checklist=QA_CHECKLIST)
-    result = graded(wrong, "new-round")
+    result = graded(wrong, "new-round-read")
     assert result.returncode == 1, "a read of QA round 1's checklist is not the engineer's handback read"
     assert ENGINEER_CHECKLIST in result.stdout, "the failing check names the checklist it wanted"
     for expectation, actions in (("own-steps", (resume_call(CLEAN_CONTINUATION),)),
@@ -2102,7 +2117,7 @@ def test_the_case_credits_no_read_of_a_checklist_that_is_not_there(tmp_path: Pat
     assert graded(run, "own-steps").returncode == 1, "a recorded read of a missing file is no read"
     new_round = new_round_run(tmp_path)
     (new_round / ENGINEER_CHECKLIST).unlink()
-    assert graded(new_round, "new-round").returncode == 1, "a recorded read of a missing file is no read"
+    assert graded(new_round, "new-round-read").returncode == 1, "a recorded read of a missing file is no read"
 
 
 def test_the_case_credits_only_a_read_of_the_rounds_own_checklist_before_the_call(tmp_path: Path) -> None:
@@ -2315,6 +2330,20 @@ def test_the_case_runtime_and_grader_agree_end_to_end(tmp_path: Path) -> None:
     assert result.returncode == 0, "the grader must accept what the runtime recorded"
 
 
+def test_the_case_runner_grades_the_new_round_control_and_its_read_apart(tmp_path: Path) -> None:
+    agent = tmp_path / "agent.sh"
+    agent.write_text('#!/bin/sh\nrun="$(dirname "$2")"\n'
+                     'printf "the environment under test\\n" > "$run/message.txt"\n'
+                     '"$run/qa-runtime" launch --label qa-agent-round-2 --message "$run/message.txt"\n')
+    agent.chmod(0o755)
+    run_dir = tmp_path / "run"
+    result = subprocess.run(["bash", str(case_file("run.sh")), str(ROOT), "new-round", str(run_dir)],
+                            capture_output=True, text=True, env={**os.environ, "EVAL_AGENT_CMD": str(agent)})
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert (run_dir / "grader-output.txt").read_text().strip().endswith("PASS"), "the control passes on the session"
+    assert (run_dir / "grader-read-output.txt").read_text().strip().endswith("FAIL"), "the unread launch fails the read"
+
+
 def test_the_case_runner_refuses_a_void_run_and_a_reused_directory(tmp_path: Path) -> None:
     script = case_file("run.sh").read_text()
     assert "HARNESS: the agent command exited" in script, "a failed agent command must not be graded"
@@ -2482,13 +2511,16 @@ def test_the_recorded_calls_re_grade_to_the_recorded_verdicts(tmp_path: Path, re
     """The committed calls must reproduce the committed grades under the committed grader."""
     lines = [json.loads(line) for line in (CASE / "results" / f"{record}-calls.jsonl").read_text().splitlines()]
     calls: dict[str, list[dict]] = {}
-    grades: dict[str, str] = {}
+    grades: dict[str, dict[str, str]] = {}
     for entry in lines:
         if "call" in entry:
             calls.setdefault(entry["run"], []).append(entry["call"])
         else:
-            grades[entry["run"]] = entry["grade"]
+            grades.setdefault(entry["run"], {})[entry["expectation"]] = entry["grade"]
     assert calls and set(calls) == set(grades), "every recorded run has calls and a grade"
+    assert all(set(grades[name]) == ({"new-round", "new-round-read"} if name == "new-round"
+                                     else {next(s for s in CASE_SCENARIOS if name.startswith(s))})
+               for name in grades), "each run carries the grade of every expectation run.sh grades it on"
     for name, run_calls in calls.items():
         run = Path(tempfile.mkdtemp(dir=tmp_path))
         (run / "qa-round-1.json").write_text(json.dumps({
@@ -2502,9 +2534,9 @@ def test_the_recorded_calls_re_grade_to_the_recorded_verdicts(tmp_path: Path, re
         sessions += [{"session": call["session"], "label": call["label"], "round": call.get("round")}
                      for call in run_calls if call["action"] == "launch"]
         (run / "sessions.json").write_text(json.dumps({"sessions": sessions, "next_round": 3}))
-        expectation = next(scenario for scenario in CASE_SCENARIOS if name.startswith(scenario))
-        result = graded(run, expectation)
-        assert result.stdout.strip().endswith(grades[name]), f"{record} {name}: {result.stdout}"
+        for expectation, grade in grades[name].items():
+            result = graded(run, expectation)
+            assert result.stdout.strip().endswith(grade), f"{record} {name} {expectation}: {result.stdout}"
 
 def test_the_case_owner_stop_must_name_what_remains_and_not_a_bare_noun(tmp_path: Path) -> None:
     bare = case_run(tmp_path, {"action": "stop", "reason": "owner item"})

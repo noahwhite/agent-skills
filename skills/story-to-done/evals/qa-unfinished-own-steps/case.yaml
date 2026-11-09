@@ -52,7 +52,11 @@ scenarios:
     expectation: new-round
     baseline: starts a new session
     candidate: starts a new session and never reuses round 1's
-    control: a new round always gets a new agent
+    control: a new round always gets a new agent, graded on session identity alone
+    read: >-
+      the same run is graded again as new-round-read, on every control check plus a read of the
+      senior engineer's checklist before the launch; the baseline has no read-back rule, so only the
+      candidate is held to it
 graded_on:
   - session identity, from the run's qa-round-1.json and the sessions its calls named
   - tool-call evidence, meaning the action, session and message file of every qa-runtime call
@@ -67,7 +71,8 @@ graded_on:
   - >-
     the checklist read: before its role call the run read, through qa-runtime, the checklist
     file of the handback it acts on, present in the run directory: QA round 1's for own-steps,
-    read-back and owner-action, the senior engineer's for new-round
+    read-back and owner-action, the senior engineer's for new-round-read; the new-round control
+    grades session identity without it
 not_graded_on:
   - the agent's prose
   - >-
