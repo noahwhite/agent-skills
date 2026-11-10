@@ -198,11 +198,9 @@ def test_each_artifact_kind_has_its_guarded_removal() -> None:
     body = section(text(), "3. Delete only with merge evidence")
     for phrase in (
         "Remove in this order, so a branch is never refused because a worktree still holds it",
-        "Removed with `git worktree remove` only when `git status --porcelain --ignored` is empty inside it",
         "only when its HEAD is the tip of a branch with merge evidence",
         "A worktree with a detached HEAD, or on a branch without merge evidence, is refused",
         "not the worktree hosting the current session",
-        "Ignored files count",
         "Removed with `git branch -D`",
         "only when the remote tip has merge evidence and no open PR heads it",
         "Read the remote tip a second time immediately before the delete and refuse if it moved",
@@ -212,6 +210,71 @@ def test_each_artifact_kind_has_its_guarded_removal() -> None:
         "A remote branch that never became a PR is refused rather than deleted",
         "Removed only from a directory the inventory proved idle, and only after step 5 has attached the evidence the run swept",
         "An uncommitted evidence copy is removable only once it has a home the story keeps",
+    ):
+        assert phrase in body, phrase
+
+
+REGENERABLE = (".venv", "venv", "node_modules", "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache")
+
+
+def test_a_worktree_holding_only_regenerable_ignored_entries_is_emptied_then_removed() -> None:
+    body = section(text(), "3. Delete only with merge evidence")
+    names = ", ".join(f"`{name}`" for name in REGENERABLE)
+    list_sentence = f"whose final path component is one of {names}"
+    assert list_sentence in body, list_sentence
+    # The list is exactly these seven names, each with its backticks, so `.venv` never stands in for `venv`.
+    list_line = next(line for line in body.splitlines() if list_sentence in line)
+    listed = re.findall(r"`([^`]+)`", list_line.split("final path component is one of", 1)[1].split(";", 1)[0])
+    assert tuple(listed) == REGENERABLE, listed
+    for phrase in (
+        "reports it as a directory (with a trailing `/`)",
+        "so `tests/__pycache__/` qualifies",
+        "Only when the worktree passes every other check in this step and its status lists no other entry",
+        "records each regenerable entry by exact path in the inventory",
+        "deletes each one with `rm -r -- <path>` on that exact path inside the worktree: no `-f`, no `--force`, no glob",
+        "reads `git status --porcelain --ignored` inside the worktree again",
+        "removes the worktree with `git worktree remove` only when that second read is empty",
+        "A failed deletion, or a second read that is not empty, refuses the worktree, and the report names the path and the failure",
+    ):
+        assert phrase in body, phrase
+    assert (
+        body.index("`rm -r -- <path>`")
+        < body.index("reads `git status --porcelain --ignored` inside the worktree again")
+        < body.index("only when that second read is empty")
+    )
+    # SKL-243: the unqualified empty-status rule is replaced, not left beside the new one.
+    for stale in (
+        "Removed with `git worktree remove` only when `git status --porcelain --ignored` is empty inside it",
+        "Ignored files count",
+    ):
+        assert stale not in body, stale
+
+
+def test_any_other_status_entry_refuses_the_worktree_and_nothing_is_deleted() -> None:
+    body = section(text(), "3. Delete only with merge evidence")
+    for phrase in (
+        "When the status lists any other entry, the worktree is refused and nothing is deleted from it, the regenerable entries included",
+        "an ignored entry not on the regenerable list (for example `.env`, a local note, or other build output)",
+        "a symlink or file named like a list entry",
+        "a tracked modification (staged, unstaged, deleted, renamed or conflicted)",
+        "an untracked entry (a file or a directory)",
+        "The inventory and the refusal line name every such entry by exact path and kind",
+    ):
+        assert phrase in body, phrase
+
+
+def test_the_inventory_and_report_name_each_regenerable_entry_by_exact_path() -> None:
+    inventory = section(text(), "2. Inventory every artifact before removing any")
+    assert (
+        "Under each worktree's line, the inventory lists by exact path each regenerable ignored entry "
+        "the run will delete (step 3), with disposition `remove`"
+    ) in inventory
+    body = section(text(), "3. Delete only with merge evidence")
+    for phrase in (
+        "The final report lists, under the worktree it came from and by exact path, each entry deleted, "
+        "including when the worktree removal was then refused, with the failed check, and each failed deletion as a refusal",
+        "A worktree refused because its status lists any other entry lists no entry as deleted",
+        "for a worktree whose regenerable entries were deleted, the second status read is part of that read-back",
     ):
         assert phrase in body, phrase
 
