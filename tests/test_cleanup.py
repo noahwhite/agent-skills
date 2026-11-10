@@ -247,6 +247,8 @@ def test_a_worktree_holding_only_regenerable_ignored_entries_is_emptied_then_rem
         "A failed `rm -r` can leave part of that entry behind, so the run then lists what remains at its path, and the report names it.",
         "An ignored file created between the second read and the removal is still deleted with the directory; "
         "git offers no checked removal short of `--force`, so this narrow window is accepted rather than closed.",
+        "A worktree locked after its checks passed has its regenerable entries deleted before `git worktree remove` refuses it; "
+        "the report names it as a refused removal, and since only regenerable entries are lost, this window is accepted too.",
     ):
         assert phrase in body, phrase
     assert (
@@ -274,11 +276,14 @@ def test_a_worktree_holding_only_regenerable_ignored_entries_is_emptied_then_rem
 def test_a_regenerable_entry_needs_no_nested_repository_and_its_content_check() -> None:
     body = section(text(), "3. Delete only with merge evidence")
     nested = (
-        "the run first lists the contents of each such directory at any depth, without following symlinks, "
-        "and refuses the worktree when a listing holds a nested repository: "
-        "an entry named `.git` at any depth, whether a directory or a file.\n"
-        "    A bare repository, a directory holding `HEAD`, `objects` and `refs` side by side, counts as a nested repository too.\n"
-        "    A listing that exits non-zero refuses the worktree, whatever it printed."
+        "the run first lists the contents of each such directory at any depth, including entries whose names begin "
+        "with a dot and without following symlinks (`find ./<path> -print` does; `ls -R` hides dot entries and does "
+        "not qualify), and refuses the worktree when a listing holds a nested repository: "
+        "an entry named `.git` at any depth, whether a directory or a file."
+    )
+    nested_more = (
+        "A bare repository, a directory holding `HEAD`, `objects` and `refs` side by side, counts as a nested repository too.",
+        "A listing that exits non-zero refuses the worktree, whatever it printed.",
     )
     checks = (
         "It also requires a per-name content check before an entry counts as regenerable:",
@@ -295,10 +300,12 @@ def test_a_regenerable_entry_needs_no_nested_repository_and_its_content_check() 
         "neither the name nor the marker file can tell a file a tool wrote from one a person left there."
     )
     no_prompt = "`rm` runs with standard input from `/dev/null`, so it never stops to prompt."
-    for phrase in (nested, *checks, stray, no_prompt):
+    for phrase in (nested, *nested_more, *checks, stray, no_prompt):
         assert phrase in body, phrase
     assert (
         body.index(nested)
+        < body.index(nested_more[0])
+        < body.index(nested_more[1])
         < body.index(checks[0])
         < body.index(checks[-1])
         < body.index("records each regenerable entry by exact path in the inventory")
@@ -323,12 +330,15 @@ def test_a_worktree_git_cannot_remove_is_refused_before_any_deletion() -> None:
         "only when git can remove it",
         "A worktree git cannot remove is refused before anything is deleted from it: the main working tree "
         "(the first entry `git worktree list --porcelain` reports), a worktree that listing marks `locked`, "
-        "and a worktree in which `git submodule status` lists any submodule, unless git can remove it with nothing lost.",
-        "That holds only when every line `git submodule status` prints begins with `-` (not initialized), "
-        "the worktree's own modules directory (the path `git rev-parse --git-path modules` prints inside the worktree) "
-        "does not exist, and each listed submodule path inside the worktree is absent or an empty directory.",
+        "and a worktree that holds a submodule, unless git can remove it with nothing lost.",
+        "The worktree's submodule paths are the entries `git ls-files --stage -z` lists inside it with mode `160000`; "
+        "that read must exit 0, and `-z` delivers each path exactly as it is on disk, spaces included.",
+        "A worktree with submodule paths is removable with nothing lost only when its own modules directory "
+        "(the path `git rev-parse --git-path modules` prints inside the worktree) does not exist and each submodule path "
+        "is absent or an empty directory, meaning `find ./<path> -mindepth 1 -print` prints nothing and exits 0, "
+        "so an entry whose name begins with a dot counts.",
         "The status read never reports files inside a submodule path, and git refuses to remove a worktree "
-        "that has a modules directory, so a submodule that fails any of these refuses the worktree.",
+        "that has a modules directory, so a worktree that fails any of these is refused.",
         "A worktree whose path no longer exists holds nothing to delete: the run skips its status read, "
         "removes it with `git worktree remove`, and confirms the removal with the `git worktree list` read-back.",
     ):
