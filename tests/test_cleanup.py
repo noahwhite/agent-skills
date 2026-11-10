@@ -287,7 +287,9 @@ def test_a_worktree_git_cannot_remove_is_refused_before_any_deletion() -> None:
         "only when git can remove it",
         "A worktree git cannot remove is refused before anything is deleted from it: the main working tree "
         "(the first entry `git worktree list --porcelain` reports), a worktree that listing marks `locked`, "
-        "and a worktree in which `git submodule status` lists any submodule.",
+        "and a worktree in which `git submodule status` lists an initialized submodule "
+        "(a line that does not begin with `-`); an uninitialized submodule, listed with a leading `-`, "
+        "does not block the removal.",
         "A worktree whose path no longer exists holds nothing to delete: the run skips its status read, "
         "removes it with `git worktree remove`, and confirms the removal with the `git worktree list` read-back.",
     ):
