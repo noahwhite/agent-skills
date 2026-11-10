@@ -42,11 +42,14 @@ def git(repo: Path, *args: str) -> str:
 
 
 def write_files(repo: Path, files: dict[str, str | None]) -> None:
-    """Writes (or, for None, removes) each path, then stages everything."""
+    """Writes (or, for None, removes, with any directory it leaves empty) each path, then stages
+    everything."""
     for rel, content in files.items():
         path = repo / rel
         if content is None:
             path.unlink()
+            if path.parent != repo and not any(path.parent.iterdir()):
+                path.parent.rmdir()
             continue
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content)
@@ -378,6 +381,21 @@ def test_a_rename_with_an_excluded_side_is_excluded_whole(tmp_path, renamed):
         diff = section(dossier, "DIFF (")
         assert f"{MARK}-SECRET" not in diff and "payload.py" not in diff and "gen.out" not in diff
         assert "diff --git a/.adversarial-exclude" in diff
+
+
+@pytest.mark.parametrize("direction", ["file-to-directory", "directory-to-file"])
+def test_a_kept_file_never_carries_excluded_paths_under_the_same_name(tmp_path, direction):
+    as_file = {"fixture": body("plain file")}
+    as_dir = {"fixture/secret.json": f"{MARK}-SECRET\n", "fixture/kept.txt": body("kept")}
+    before, after = (as_file, as_dir) if direction == "file-to-directory" else (as_dir, as_file)
+    head = {**{p: None for p in before}, **after, ".adversarial-exclude": "*.json\n"}
+    repo = make_repo(tmp_path, before, head)
+    seen = gate_dossiers(tmp_path, repo)
+    for phase in ("sweep", "hunt"):
+        assert excluded(seen[phase]) == {"fixture/secret.json": "glob:*.json"}
+        diff = section(seen[phase], "DIFF (")
+        assert f"{MARK}-SECRET" not in diff
+        assert sorted(diff_files(seen[phase])) == [".adversarial-exclude", "fixture", "fixture/kept.txt"]
 
 
 def test_attributes_resolve_in_a_sha256_repository(tmp_path):

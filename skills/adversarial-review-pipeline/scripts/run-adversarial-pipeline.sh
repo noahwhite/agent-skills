@@ -836,17 +836,33 @@ emit_context() {  # $1 = the phase's checkout, $2 = 1 to embed the unified diff,
 
 # The embedded diff of the changes classify_exclusions kept, in diff order. The kept paths go to git
 # as literal pathspecs in batches of at most 8192 characters, so a bulk change never exceeds the exec
-# argument limit; a rename's two paths always share a batch, so the rename stays paired.
+# argument limit; a rename's two paths always share a batch, so the rename stays paired. A pathspec
+# also matches the paths under it, so when a kept file and a directory of excluded files share a name
+# (a file replaced by a directory, or the reverse), those excluded paths ride along as excludes.
 emit_kept_diff() {
   local -a spec=() entry=()
-  local i size budget=8192 used=0
+  local -A kept=() under=()
+  local i j p dir size budget=8192 used=0
   for i in "${!KEPT_OLD[@]}"; do
-    entry=(":(top,literal)${KEPT_OLD[$i]}")
-    size=${#KEPT_OLD[$i]}
-    if [ -n "${KEPT_NEW[$i]}" ]; then
-      entry+=(":(top,literal)${KEPT_NEW[$i]}")
-      size=$((size + ${#KEPT_NEW[$i]}))
-    fi
+    kept[${KEPT_OLD[$i]}]=1
+    if [ -n "${KEPT_NEW[$i]}" ]; then kept[${KEPT_NEW[$i]}]=1; fi
+  done
+  for j in "${!EXCL_PATHS[@]}"; do
+    dir="${EXCL_PATHS[$j]}"
+    while [[ "$dir" == */* ]]; do
+      dir="${dir%/*}"
+      if [ -n "${kept[$dir]:-}" ]; then under[$dir]+="$j "; fi
+    done
+  done
+  for i in "${!KEPT_OLD[@]}"; do
+    entry=(); size=0
+    for p in "${KEPT_OLD[$i]}" "${KEPT_NEW[$i]}"; do
+      if [ -z "$p" ]; then continue; fi
+      entry+=(":(top,literal)$p"); size=$((size + ${#p}))
+      for j in ${under[$p]:-}; do
+        entry+=(":(top,exclude,literal)${EXCL_PATHS[$j]}"); size=$((size + ${#EXCL_PATHS[$j]}))
+      done
+    done
     if [ "${#spec[@]}" -gt 0 ] && [ $((used + size)) -gt "$budget" ]; then
       git diff --no-ext-diff --find-renames --unified=3 "$BASE_SHA"..."$HEAD_SHA" -- "${spec[@]}"
       spec=(); used=0
