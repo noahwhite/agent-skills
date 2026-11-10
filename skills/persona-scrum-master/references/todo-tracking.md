@@ -18,13 +18,17 @@ The list is the visible record of the run: how many steps there are and where yo
 3. **Update the list before you move on.**
    Mark the finished item completed and put the next item in progress as soon as that step's outcome is observed, before starting the next step.
    Batching those two updates, or leaving a stale in-progress item while the next step runs, is forbidden.
-   Exactly one item is in progress whenever a next item exists; when none does, none is.
-4. **Grow the list as work appears.**
+4. **Move every item through in progress.**
+   Mark an item in progress before its first tool call and completed as soon as its work is done; never mark completed an item that was never in progress.
+5. **One item in progress, except parallel delegations.**
+   One item is in progress at a time for sequential work; when one step launches several delegations in parallel, each delegation has its own item, and those items are in progress together from launch until each result is read.
+6. **Grow the list as work appears.**
+   Before starting any work that has no item (a further round or re-run, a follow-up request, a fix found along the way), add an item for it and mark it in progress.
    A new finding, remediation round, blocker, or follow-up gets an item when it is discovered, before that step starts.
    Do not delete items that turned out unnecessary; mark them completed with a short note, or drop them only if they were never started.
-5. **An item is completed only when its outcome was observed** (test output seen, run concluded, state read back), not when the command was issued.
-6. **Finish the list before reporting.**
-   Write the final report only after every item is completed or explicitly noted as not done.
+7. **An item is completed only when its outcome was observed** (test output seen, run concluded, state read back), not when the command was issued.
+8. **Finish the list before reporting.**
+   Before the final report, every item is completed, or is left open and named as not done with the reason.
 
 ## Subagents
 
@@ -52,7 +56,8 @@ Tracking remains mandatory; only the storage mechanism changes.
 
 ## Seed lists
 
-Starting points only; split further as the task demands.
+The seed lists are the minimum granularity: one item per unit they name, never merged into phase items, and split further as the task demands.
+Where a count is not known up front, each further round or re-run gets its item when it starts.
 Every seed list below carries one rule: update the list after each step's outcome, before the next step starts.
 
 - **engineering-workflow:** triage the issue, read the code, one item per slice (failing test, implementation, green run), pre-PR gate preflight, each gate round, open PR, each review round, each remediation, CI green, merge, deploy, verify in the environment, each status move.

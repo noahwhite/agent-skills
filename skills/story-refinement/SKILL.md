@@ -43,8 +43,12 @@ Every other metrics instruction in this skill applies only when `metrics` is on.
 
 ## Read first
 
-- [references/profile.md](references/profile.md) - find the profile and this skill's overlay before anything else.
-- [references/todo-tracking.md](references/todo-tracking.md) - required: create the fine-grained todo list before the first read, context, or tracker write, with one item per voter input, accept round, point value, consensus check, basis-challenge round, discussion and re-vote when the check calls for them, split, and triage write.
+Create the todo list right after the actions Arguments orders before it, and before you read any reference, the profile, or an overlay.
+Create it from this file alone as a bootstrap list: one item per file listed below, the profile, and this skill's overlay, then one item per step (Step 1 to Step 4, the triage writes, the records, and the closing message).
+After reading `references/todo-tracking.md`, expand the list to the story-refinement seed items before the first investigation, context, tracker write, command, or delegation, and add the items that need the story or the profile as soon as they are known.
+
+- [references/profile.md](references/profile.md) - find the profile and this skill's overlay right after the todo list is created, before any other file.
+- [references/todo-tracking.md](references/todo-tracking.md) - required: the list rules and the story-refinement seed list, with one item per voter input, accept round, point value, consensus check, basis-challenge round, discussion and re-vote when the check calls for them, split, and triage write.
 - [references/linear.md](references/linear.md) - the rule set for the story lifecycle, Definition of Ready, estimation, splitting, relations, and tooling gotchas.
   Cite it for split mechanics; do not restate them here.
 - [references/engineering-practice.md](references/engineering-practice.md) - diagnose before changing, write meaningful tests, and keep changes minimal.
@@ -100,7 +104,7 @@ Never retry a denied write through a different tool or server.
 
 - **Inputs:** the story description, acceptance criteria, comments, and formal relations; the profile; the capability references; the Definition of Ready and Definition of Done template from the matching filing skill.
 - **Process:**
-  1. Create the todo list and read the story completely, including `linear issue relation list <ID>` for every blocker.
+  1. With the todo list already created (Read first), read the story completely, including `linear issue relation list <ID>` for every blocker.
   2. Validate the refinement roster before the tracker-write preflight and before any voter launch.
      Resolve the profile through the first-existing-file rule in [references/profile.md](references/profile.md) (the `shared/profile.md` rule), never a repository-only read.
      Stop with a message naming the violated requirement when `profile.refinement.reviewers` does not hold exactly three entries, when fewer than three reviewers are enabled, when a required role (`facilitator`, `product_owner`, `reviewers`) is unset, when a reviewer `family` is missing or empty, when two reviewer families are equal, or when two reviewer model ids are equal.

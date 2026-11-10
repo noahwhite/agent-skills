@@ -42,7 +42,9 @@ Five arguments are optional, given as `key=value` or in plain words ("QA on Opus
 
 ## Read first
 
-- [references/profile.md](references/profile.md) - find the profile and this skill's overlay as soon as the story ID is known.
+Step 0 creates the todo list before any file below is read.
+
+- [references/profile.md](references/profile.md) - find the profile and this skill's overlay right after step 0 creates the todo list.
 - [references/runtimes.md](references/runtimes.md) - maps todo list, subagents, model and effort, scratch directory and asking the user to your runtime.
 
 Read each of these at the step that needs it:
@@ -66,7 +68,9 @@ With `metrics` on, launch no command before the start form, not even to read a f
 
 ## 0. Track everything on a todo list
 
-Once the story ID is known and the profile is read, create a fine-grained todo list per `references/todo-tracking.md`.
+Create the todo list as your first action, before you read any reference, the profile, or an overlay.
+Create it from this file alone as a bootstrap list: one item per file Read first names, the profile, and this skill's overlay, then one item per step 1 to 5.
+After reading `references/todo-tracking.md`, expand the list to the seed items below, at the granularity that file requires, before your first investigation, edit, command, or delegation, and add the items that need the story or the profile as soon as they are known.
 Seed it with at least: resolve the arguments, read the story state, spawn the senior engineer, each check on its checklist until it hands back, the checklist read-back at each handback with each subagent's read-back resume count, read back the deployment-review state, each QA round, each read-back of QA's state, each failed item handed back, each fix round, and the final state read-back.
 With `metrics` on, seed two more items: collect the metrics figures; then post the metrics summary on the story and read it back before giving the summary in the closing report.
 Add an item for each new round as it starts; mark each done once its outcome is observed.
