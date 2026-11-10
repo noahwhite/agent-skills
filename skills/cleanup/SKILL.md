@@ -116,25 +116,28 @@ Before each removal other than a persistent-memory note, after `git fetch origin
 
 Remove in this order, so a branch is never refused because a worktree still holds it:
 
-- **Worktree.** Removed with `git worktree remove` only when its HEAD is the tip of a branch with merge evidence, only when it is not the worktree hosting the current session, only when git can remove it, and only when `git status --porcelain --ignored` inside it is empty or lists only regenerable ignored entries, which the run deletes first as below.
+- **Worktree.** Removed with `git worktree remove` only when its HEAD is the tip of a branch with merge evidence, only when it is not the worktree hosting the current session, only when git can remove it, and only when `git status --porcelain --ignored -z` inside it is empty or lists only regenerable ignored entries, which the run deletes first as below.
   A worktree with a detached HEAD, or on a branch without merge evidence, is refused, because nothing proves the commit it holds has landed.
   A worktree hosting the current session is refused, because removing it deletes the ground the run stands on.
-  A worktree git cannot remove is refused before anything is deleted from it: the main working tree (the first entry `git worktree list --porcelain` reports), a worktree that listing marks `locked`, and a worktree whose path does not exist.
+  A worktree git cannot remove is refused before anything is deleted from it: the main working tree (the first entry `git worktree list --porcelain` reports), a worktree that listing marks `locked`, and a worktree in which `git submodule status` lists any submodule.
+  A worktree whose path no longer exists holds nothing to delete: the run skips its status read, removes it with `git worktree remove`, and confirms the removal with the `git worktree list` read-back.
   - **Status read.** Every status read in this step runs `git status --porcelain --ignored -z` inside the worktree and must exit 0; a read that exits non-zero refuses the worktree, whatever it printed.
     The `-z` form lists the same entries as `git status --porcelain --ignored`, separated by NUL and never quoted, so a path with a space, a quote or a non-ASCII character reaches the checks below exactly as it is on disk.
-  - **Regenerable ignored entries.** An ignored entry is regenerable when `git status --porcelain --ignored` reports it with the ignored code `!!` as a directory (with a trailing `/`) whose final path component, with that trailing `/` removed, is one of `.venv`, `venv`, `node_modules`, `__pycache__`, `.pytest_cache`, `.mypy_cache`, `.ruff_cache`; so `tests/__pycache__/` qualifies.
+  - **Regenerable ignored entries.** An ignored entry is regenerable when `git status --porcelain --ignored -z` reports it with the ignored code `!!` as a directory (with a trailing `/`) whose final path component, with that trailing `/` removed, is one of `.venv`, `venv`, `node_modules`, `__pycache__`, `.pytest_cache`, `.mypy_cache`, `.ruff_cache`; so `tests/__pycache__/` qualifies.
     An untracked entry (code `??`) is never regenerable, even with a matching name and a trailing `/`.
     A package manager or test runner recreates these directories, so deleting them loses nothing.
     Only when the worktree passes every other check in this step and its status lists no other entry, the run records each regenerable entry by exact path in the inventory, then deletes each one with `rm -r -- <path>` on that exact path inside the worktree: no `-f`, no `--force`, no glob.
     The path is passed to `rm` as one argument, exactly as the `-z` read gave it, never through shell expansion.
     The run stops at the first failed deletion and deletes nothing more.
-    It then reads `git status --porcelain --ignored` inside the worktree again, and removes the worktree with `git worktree remove` only when that second read is empty, running the removal immediately after the read with no other step between them.
+    It then reads `git status --porcelain --ignored -z` inside the worktree again, and removes the worktree with `git worktree remove` only when that second read is empty, running the removal immediately after the read with no other step between them.
     A failed deletion, or a second read that is not empty, refuses the worktree, and the report names the path and the failure.
+    A failed `rm -r` can leave part of that entry behind, so the run then lists what remains at its path, and the report names it.
     An ignored file created between the second read and the removal is still deleted with the directory; git offers no checked removal short of `--force`, so this narrow window is accepted rather than closed.
   - **Any other entry refuses.** When the status lists any other entry, the worktree is refused and nothing is deleted from it, the regenerable entries included.
     The other entries are: an ignored entry not on the regenerable list (for example `.env`, a local note, or other build output), a symlink or file named like a list entry, a tracked modification (staged, unstaged, deleted, renamed or conflicted), and an untracked entry (a file or a directory).
     `git worktree remove` deletes ignored files with the directory, so an entry the run cannot prove regenerable would be lost although the run never chose to delete it.
     The inventory and the refusal line name every such entry by exact path and kind.
+    Under `-z` a rename or copy record carries two paths, the new one and then the original, and both are named.
   - **Report.** The final report lists, under the worktree it came from and by exact path, each entry deleted, including when the worktree removal was then refused, with the failed check, and each failed deletion as a refusal.
     A worktree refused because its status lists any other entry lists no entry as deleted.
     The step 6 template shows where these lines go.
