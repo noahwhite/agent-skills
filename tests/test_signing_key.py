@@ -855,6 +855,15 @@ OVERRIDE_PROHIBITION = (
 )
 # The SKL-206 restatement of the same override inside the briefs and rules of the skills.
 OVERRIDE_RESTATEMENT = "never pass `-c user.signingkey`, `-c gpg.*` or `-c commit.gpgsign`"
+# The only skill files that carry the restatement, with how many lines each carries.
+RESTATEMENT_LINES = {
+    "skills/engineering-workflow/SKILL.md": 1,
+    "skills/engineering-workflow/scripts/adversarial-review-loop.workflow.js": 1,
+    "skills/persona-staff-devops/SKILL.md": 1,
+    "skills/persona-staff-engineer/SKILL.md": 1,
+    "skills/story-to-done/SKILL.md": 2,
+}
+CHECK_SCRIPT_COMMENT = "# user.signingkey (a key:: or bare ssh- literal, a public-key file or a private-key file,"
 
 RULE_SENTENCES = (
     "- When `profile.git.signing_key` is set, it is the OpenSSH SHA256 fingerprint of the key registered for signing.",
@@ -879,15 +888,20 @@ def test_the_rule_is_stated_once_and_nowhere_else():
 
 
 def signingkey_mentions() -> list[tuple[str, str]]:
-    """Every line under shared/ and skills/ that names user.signingkey, as the AC's git grep."""
+    """Every line of shipped content under shared/ and skills/ that names user.signingkey.
+
+    Recorded eval run transcripts (skills/*/evals/*/results/) are data, not guidance, and are skipped.
+    """
     found = []
     for base in (ROOT / "shared", ROOT / "skills"):
-        for path in sorted(p for p in base.rglob("*") if p.is_file() and "__pycache__" not in p.parts):
+        for path in sorted(p for p in base.rglob("*") if p.is_file() and not p.is_symlink() and "__pycache__" not in p.parts):
+            rel = path.relative_to(ROOT).as_posix()
+            if re.fullmatch(r"skills/[^/]+/evals/[^/]+/results/.+", rel):
+                continue
             data = path.read_bytes()
             if b"\0" in data:
                 continue
-            rel = path.relative_to(ROOT).as_posix()
-            for line in data.decode("utf-8").splitlines():
+            for line in data.decode("utf-8", errors="replace").splitlines():
                 if re.search(r"user\.signingkey", line):
                     found.append((rel, line))
     return found
@@ -903,9 +917,9 @@ def signingkey_mention_kind(rel: str, line: str) -> str | None:
         return "a: the never-sets rule"
     if github and line == OVERRIDE_PROHIBITION:
         return "b: the override prohibition"
-    if script and line.startswith("# user.signingkey"):
+    if script and line == CHECK_SCRIPT_COMMENT:
         return "c: the resolution-forms comment"
-    if rel.startswith("skills/") and OVERRIDE_RESTATEMENT in line:
+    if rel in RESTATEMENT_LINES and line.count("user.signingkey") == 1 and OVERRIDE_RESTATEMENT in line:
         return "d: the restated override"
     return None
 
@@ -917,13 +931,14 @@ def test_signingkey_mentions_are_allowlisted():
     assert not [rel for rel, line in mentions if "resolves" in line]
     per_file = {}
     for rel, line in mentions:
-        kind = signingkey_mention_kind(rel, line)
-        per_file[rel] = [*per_file.get(rel, []), kind]
+        per_file[rel] = [*per_file.get(rel, []), signingkey_mention_kind(rel, line)]
+    expected = {}
     for skill in [None, *receivers()]:
         base = "shared" if skill is None else f"skills/{skill}"
         docs = f"{base}/github.md" if skill is None else f"{base}/references/github.md"
         script = f"{base}/check-signing-key.sh" if skill is None else f"{base}/scripts/check-signing-key.sh"
-        assert per_file[docs].count("a: the never-sets rule") == 1, docs
-        assert per_file[docs].count("b: the override prohibition") == 1, docs
-        assert len(per_file[docs]) == 2, docs
-        assert len(per_file[script]) == 1, script
+        expected[docs] = ["a: the never-sets rule", "b: the override prohibition"]
+        expected[script] = ["c: the resolution-forms comment"]
+    for rel, count in RESTATEMENT_LINES.items():
+        expected[rel] = ["d: the restated override"] * count
+    assert {rel: sorted(kinds) for rel, kinds in per_file.items()} == expected
