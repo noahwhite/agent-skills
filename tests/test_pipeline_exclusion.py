@@ -437,10 +437,12 @@ def test_an_init_template_cannot_inject_attributes(tmp_path):
 
 def test_a_bulk_change_stays_within_the_exec_argument_limit(tmp_path):
     long_dir = "fixtures/" + "d" * 90
-    head = {f"{long_dir}/golden-{n:04}.json": f"{MARK}-GOLDEN\n" for n in range(1500)}
+    # The directory replaces a file of the same name, so one kept change sits over every excluded file.
+    head: dict[str, str | None] = {long_dir: None}
+    head.update({f"{long_dir}/golden-{n:04}.json": f"{MARK}-GOLDEN\n" for n in range(1500)})
     head.update({f"{long_dir}/kept-{n:04}.py": f"KEPT {n}\n" for n in range(1500)})
     head[".adversarial-exclude"] = "*.json\n"
-    repo = make_repo(tmp_path, {}, head)
+    repo = make_repo(tmp_path, {long_dir: "plain file\n"}, head)
     # A 128 KiB stack gives the smallest argument limit Linux allows (128 KiB of argv and env).
     stack = "ulimit -s 128 && exec bash"
     scratch = tmp_path / "session-scratch"
@@ -464,7 +466,23 @@ def test_a_bulk_change_stays_within_the_exec_argument_limit(tmp_path):
     assert len(seen) == 1500 and set(seen.values()) == {"glob:*.json"}
     diff = section(dossier, "DIFF (")
     assert f"{MARK}-GOLDEN" not in diff
-    assert len(re.findall(r"^diff --git ", diff, re.M)) == 1501
+    assert len(re.findall(r"^diff --git ", diff, re.M)) == 1502
+
+
+def test_kept_paths_with_glob_characters_match_only_themselves(tmp_path):
+    # Each kept name, read as a glob, would match an excluded decoy.
+    names = ["a*b.py", "q?.py", "br[1].py", "back\\slash.py", "trail\\"]
+    decoys = ["aXYb.py", "qZ.py", "br1.py", "backslash.py"]
+    repo = make_repo(tmp_path, {}, {
+        ".adversarial-exclude": "".join(f"{d}\n" for d in decoys),
+        **{n: f"KEPT {n}\n" for n in names}, **{d: f"{MARK}-DECOY\n" for d in decoys},
+    })
+    dossier = gate_dossiers(tmp_path, repo)["sweep"]
+    assert excluded(dossier) == {d: f"glob:{d}" for d in decoys}
+    diff = section(dossier, "DIFF (")
+    assert f"{MARK}-DECOY" not in diff
+    for name in names:
+        assert f"+KEPT {name}" in diff, name
 
 
 def test_a_diff_with_no_exclusions_is_unchanged(tmp_path):

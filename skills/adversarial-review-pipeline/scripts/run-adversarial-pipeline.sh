@@ -834,34 +834,19 @@ emit_context() {  # $1 = the phase's checkout, $2 = 1 to embed the unified diff,
   fi
 }
 
-# The embedded diff of the changes classify_exclusions kept, in diff order. The kept paths go to git
-# as literal pathspecs in batches of at most 8192 characters, so a bulk change never exceeds the exec
-# argument limit; a rename's two paths always share a batch, so the rename stays paired. A pathspec
-# also matches the paths under it, so when a kept file and a directory of excluded files share a name
-# (a file replaced by a directory, or the reverse), those excluded paths ride along as excludes.
+# The embedded diff of the changes classify_exclusions kept, in diff order. Each kept path goes to git
+# as an exact pathspec (exact_pathspec), in batches of at most 8192 characters, so a bulk change never
+# exceeds the exec argument limit; a rename's two paths always share a batch, so the rename stays
+# paired.
 emit_kept_diff() {
   local -a spec=() entry=()
-  local -A kept=() under=()
-  local i j p dir size budget=8192 used=0
-  for i in "${!KEPT_OLD[@]}"; do
-    kept[${KEPT_OLD[$i]}]=1
-    if [ -n "${KEPT_NEW[$i]}" ]; then kept[${KEPT_NEW[$i]}]=1; fi
-  done
-  for j in "${!EXCL_PATHS[@]}"; do
-    dir="${EXCL_PATHS[$j]}"
-    while [[ "$dir" == */* ]]; do
-      dir="${dir%/*}"
-      if [ -n "${kept[$dir]:-}" ]; then under[$dir]+="$j "; fi
-    done
-  done
+  local i p one size budget=8192 used=0
   for i in "${!KEPT_OLD[@]}"; do
     entry=(); size=0
     for p in "${KEPT_OLD[$i]}" "${KEPT_NEW[$i]}"; do
       if [ -z "$p" ]; then continue; fi
-      entry+=(":(top,literal)$p"); size=$((size + ${#p}))
-      for j in ${under[$p]:-}; do
-        entry+=(":(top,exclude,literal)${EXCL_PATHS[$j]}"); size=$((size + ${#EXCL_PATHS[$j]}))
-      done
+      exact_pathspec "$p" one
+      entry+=("$one"); size=$((size + ${#one}))
     done
     if [ "${#spec[@]}" -gt 0 ] && [ $((used + size)) -gt "$budget" ]; then
       git diff --no-ext-diff --find-renames --unified=3 "$BASE_SHA"..."$HEAD_SHA" -- "${spec[@]}"
@@ -872,6 +857,16 @@ emit_kept_diff() {
   if [ "${#spec[@]}" -gt 0 ]; then
     git diff --no-ext-diff --find-renames --unified=3 "$BASE_SHA"..."$HEAD_SHA" -- "${spec[@]}"
   fi
+}
+
+# A pathspec matching exactly the path $1, never the paths under it: a plain or literal pathspec also
+# matches a directory's contents, so a kept file replaced by a directory (or the reverse) would carry
+# excluded files under its name. Glob magic with every glob character escaped, and the last character
+# escaped too, so git cannot treat the pattern as a directory prefix. Sets the variable named by $2.
+exact_pathspec() {  # $1 = path, $2 = variable to set
+  local s="${1%?}" last="${1: -1}"
+  s="${s//\\/\\\\}"; s="${s//\*/\\*}"; s="${s//\?/\\?}"; s="${s//\[/\\[}"
+  printf -v "$2" ':(top,glob)%s\\%s' "$s" "$last"
 }
 
 # C-style quoting of a path for an EXCLUDED row, always inside double quotes, so no row can begin
