@@ -62,6 +62,11 @@ The `linear` CLI (schpet/linear-cli) is the primary tool; the Linear MCP server 
   Its scope-ownership clause fails separately when another issue already owns the work.
 - ⛔ The relation graph and the DoR must never disagree.
   If a blocker is not done, either leave the DoR box unticked and keep the issue in backlog or blocked, or, only when that blocker does not gate this issue's criteria, downgrade the edge from `blocks` to `related` with a dated justification comment in the same action.
+- ⛔ An AC that requires another story's output (an artifact, credential, stack, or behaviour that story delivers) requires a formal blocked-by relation to that story.
+  The template DoR box "No blocking stories, no unresolved external dependencies, and no other story already owns this scope" stays unticked until that relation exists and the blocker is in `profile.tracker.states.done`.
+  This refines, and does not replace, the relation-graph rules above, including the dated downgrade of a blocker that does not gate the criteria from `blocks` to `related`.
+  Before adding the relation, triage checks it creates no cycle; where it would (the other story consumes this one), the product owner or the refinement process sets the delivery order, the cross-story check moves to whichever story that order lands last, and that story gets the blocked-by relations instead.
+  An implementing engineer never moves an acceptance criterion between stories to resolve a cycle.
 - ⛔ Never move an issue with that box unticked to `profile.tracker.states.ready`.
   If only part is pickable, split the unblocked part into its own issue.
 - Say "refined" and "refinement", not "groomed" or "grooming".
@@ -88,6 +93,16 @@ The `linear` CLI (schpet/linear-cli) is the primary tool; the Linear MCP server 
   Record the deferred steps in the epic.
 - ⛔ A deployment-review finding covered by an existing issue's criteria reopens that issue: move it back to in progress, amend the criteria with a dated note, and run it through PR, review, merge, deploy, and deployment review again.
   File a new issue only when no existing criterion covers the behavior.
+- ⛔ Only the product owner or the refinement process adds, moves, or rewords acceptance criteria on any story.
+  An implementing engineer never adds an AC to any story, never moves its own unmet AC onto another story, never rewords an AC, never records its own "accepted deviation", and never accepts an AC as met by any means other than the completion tick in "Completion (AC and DoD checkboxes)".
+  Ticking an AC box after observing the behaviour in the deployed environment, per "Completion (AC and DoD checkboxes)", is the verification record and not an AC change.
+  The two edits this section already directs remain permitted and are not engineer-added scope: amending one criterion with a dated note when a deployment-review finding reopens that same story, and deleting the later-environment lines the user has decided not to promote.
+  Neither licence extends to another story, and neither lets an engineer reword a criterion it cannot meet or use a dated note to make an unmet criterion pass.
+- An engineer who meets a scope limit has only two permitted responses, the two exits below.
+  Exit one, a refinement proposal: a downstream requirement the engineer discovers is posted as a comment on the target story headed "Refinement proposal (not an AC)" and listed in its handback (the completion summary, in `engineering-workflow`).
+  Exit two, blocked: when an AC cannot be met or the work needs another story's artifact, the engineer stops and reports itself blocked, naming the story that supplies the precondition or, where no story does, the criterion and why it cannot be met so the product owner can re-refine it, and the story moves to `profile.tracker.states.blocked`.
+  The engineer makes that move where it has tracker write access, and otherwise states in its handback that the move is required.
+  A proposal never substitutes for blocking when a current AC cannot be met.
 - `profile.tracker.labels.rtb` is only for maintenance of existing systems (CI fixes, dependency upgrades, config corrections, observability on running services).
   New capability is `profile.tracker.labels.feature`, even when it is docs, alerting, or hardening.
 - When asked to preserve a broken state so a fix can be verified, file the tracking issue in the same turn with a "do not clean up until verified" note.

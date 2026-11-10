@@ -82,6 +82,7 @@ It must include:
 - The story identifier, a summary of the triage findings, and the AC.
 - Your design decisions, slice plan, blast radius, rollback plan, and risks.
 - An instruction to load and follow `persona-platform-sre` for the infrastructure work and `engineering-workflow` for shipping it, with the branch base and PR target you decided in step 2 replacing `engineering-workflow`'s defaults where they differ.
+- The scope rule: the engineer never changes an acceptance criterion on any story ([references/linear.md](references/linear.md) "Acceptance criteria and scope") and never ships a skip keyed on another story ([references/engineering-practice.md](references/engineering-practice.md) "Make minimal, durable changes"); the only two exits are a "Refinement proposal (not an AC)" or reporting the story blocked, as those sections state.
 - That for this engagement the platform engineer owns the Linear transitions `engineering-workflow` describes, overriding `persona-platform-sre`'s deferral of story status.
 - One override: stop once the PR has a completed review of record at its head, and report the PR link, head SHA, raw reviewer findings, adjudicator verdicts, and plan or apply output.
   Do not merge yet.
