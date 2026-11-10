@@ -80,7 +80,7 @@ CITATIONS = (
 def strip_hidden(text: str) -> str:
     """Blank HTML comments and fenced code so hidden text cannot satisfy a pin."""
     text = re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)
-    return re.sub(r"```.*?```", "", text, flags=re.DOTALL)
+    return re.sub(r"(```|~~~).*?\1", "", text, flags=re.DOTALL)
 
 
 def section(text: str, heading: str) -> str:
@@ -153,6 +153,6 @@ def test_filing_skill_cites_the_rule_in_rules_prose(path: Path, sentence: str) -
 
 def test_skills_without_a_criteria_block_do_not_cite_the_rule() -> None:
     for name in EXCLUDED_SKILLS:
-        text = (ROOT / "skills" / name / "SKILL.md").read_text()
-        assert "one-pass producible" not in text, name
-        assert "one-pass evidence rule" not in text, name
+        text = (ROOT / "skills" / name / "SKILL.md").read_text().lower().replace("-", " ")
+        assert "one pass producib" not in text, name
+        assert "one pass evidence" not in text, name
