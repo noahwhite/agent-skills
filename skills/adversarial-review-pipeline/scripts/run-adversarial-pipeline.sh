@@ -48,8 +48,10 @@
 #
 # Exclusion: the sweep and hunt dossiers leave generated, vendored and fixture files out of the
 # embedded diff; they stay in the diffstat and in the checkout, and an 'EXCLUDED' section lists each
-# one as '"<path>" | <reason>', the full repo-relative path always double-quoted, with a quote or a
-# backslash backslash-escaped and a control byte written as a three-digit octal escape. A changed path (repo-relative, without 'a/' or
+# one as '"<path>" | <reason>', the full repo-relative path always double-quoted and escaped exactly as the
+# truncation marker and the size sidecar escape a quoted path (one shared escape: a quote or a backslash
+# backslash-escaped, a control byte as its named escape or a three-digit octal escape, a byte of 127 or more as
+# a three-digit octal escape). A changed path (repo-relative, without 'a/' or
 # 'b/') is excluded when either arm holds, both read from the head under review, never the working
 # tree:
 #   (a) `git check-attr --source=<head SHA>` reports linguist-generated or linguist-vendored as
@@ -836,9 +838,10 @@ emit_spec() {
   fi
 }
 
-# The path escape shared by the truncation marker and the size sidecar's `excluded` lines, so both
-# show a path byte-identically. `read` returns 1 at the end of the here-document: that is how it
-# ends, not a failure.
+# The path escape shared by the truncation marker, the size sidecar's `excluded` lines and the
+# dossier's EXCLUDED rows, so all three show a path byte-identically. The marker and the sidecar quote a
+# path only when it needs it; an EXCLUDED row always quotes (`force`). `read` returns 1 at the end of the
+# here-document: that is how it ends, not a failure.
 IFS= read -r -d '' PATH_ESCAPE_PY <<'PYEOF' || true
 import os
 import sys
@@ -847,9 +850,10 @@ ESCAPES = {7: b"\\a", 8: b"\\b", 9: b"\\t", 10: b"\\n", 11: b"\\v", 12: b"\\f", 
            34: b'\\"', 92: b"\\\\"}
 
 
-def escape(path):
-    """The path as the marker shows it: raw, unless it holds a quote, backslash or control byte."""
-    if not any(b in (34, 92, 127) or b < 32 for b in path):
+def escape(path, force=False):
+    """The path as the marker shows it: raw, unless it holds a quote, backslash or control byte
+    (or `force` asks for the quoted form)."""
+    if not force and not any(b in (34, 92, 127) or b < 32 for b in path):
         return path
     out = bytearray(b'"')
     for b in path:
@@ -876,6 +880,16 @@ out.write(b"path=" + escape(os.path.abspath(os.fsencode(sys.argv[1]))) + b"\n")
 out.write(b"bytes=" + size.encode() + b"\n")
 for path, reason in zip(fields[0::2], fields[1::2]):
     out.write(b"excluded " + escape(path) + b" reason=" + reason + b"\n")
+out.flush()
+PYEOF
+
+# The EXCLUDED rows of a dossier: stdin holds NUL-terminated path and reason pairs; each becomes one
+# `"<escaped path>" | <reason>` line, the path always quoted.
+IFS= read -r -d '' EXCLUDED_ROWS_PY <<'PYEOF' || true
+fields = sys.stdin.buffer.read().split(b"\0")[:-1]
+out = sys.stdout.buffer
+for path, reason in zip(fields[0::2], fields[1::2]):
+    out.write(escape(path, True) + b" | " + reason + b"\n")
 out.flush()
 PYEOF
 
@@ -1073,7 +1087,8 @@ emit_context() {  # $1 = the phase's checkout, $2 = 1 to embed the unified diff,
       echo
       echo "===== EXCLUDED (path | reason: generated, vendored or listed files; in the diffstat above, not in the diff below - read them in your checkout) ====="
       local i
-      for i in "${!EXCL_PATHS[@]}"; do printf '%s | %s\n' "${EXCL_SHOWN[$i]}" "${EXCL_REASONS[$i]}"; done
+      for i in "${!EXCL_PATHS[@]}"; do printf '%s\0%s\0' "${EXCL_PATHS[$i]}" "${EXCL_REASONS[$i]}"; done \
+        | python3 -I -c "$PATH_ESCAPE_PY$EXCLUDED_ROWS_PY"
     fi
     echo
     echo "===== DIFF (${BASE}...HEAD) ====="
@@ -1125,32 +1140,16 @@ exact_pathspec() {  # $1 = path, $2 = variable to set
   printf -v "$2" ':(top,glob)%s\\%s' "$s" "$last"
 }
 
-# C-style quoting of a path for an EXCLUDED row, always inside double quotes, so no row can begin
-# like a dossier marker or span two lines. Sets the variable named by $2.
-quote_path() {  # $1 = path, $2 = variable to set
-  local s="$1" out="" c i
-  s="${s//\\/\\\\}"; s="${s//\"/\\\"}"
-  if [[ "$s" == *[[:cntrl:]]* ]]; then
-    for ((i = 0; i < ${#s}; i++)); do
-      c="${s:i:1}"
-      if [[ "$c" == [[:cntrl:]] ]]; then printf -v c '\\%03o' "'$c"; fi
-      out+="$c"
-    done
-    s="$out"
-  fi
-  printf -v "$2" '"%s"' "$s"
-}
-
 # The two exclusion arms of the header's "Exclusion" paragraph, both read from HEAD_SHA. Changes are
 # enumerated with rename detection, as the embedded diff shows them; a rename with either side
-# excluded is excluded whole. Sets EXCL_PATHS, EXCL_SHOWN (each path quoted by quote_path) and
+# excluded is excluded whole. Sets EXCL_PATHS and
 # EXCL_REASONS, parallel and in diff order, and KEPT_OLD/KEPT_NEW, the kept changes in diff order
 # (KEPT_NEW is empty unless the change is a rename). Attributes are checked in an empty bare git dir,
 # made without templates and in this repository's object format, that reads this repository's
 # object store, so neither the working tree, the repository's info/attributes, core.attributesFile,
 # an init template nor the system attributes file can set them.
 classify_exclusions() {
-  EXCL_PATHS=(); EXCL_SHOWN=(); EXCL_REASONS=(); KEPT_OLD=(); KEPT_NEW=()
+  EXCL_PATHS=(); EXCL_REASONS=(); KEPT_OLD=(); KEPT_NEW=()
   local tmp; tmp="$(mktemp -d -p "$SCRATCH" exclusions.XXXXXX)"
   git diff --find-renames --name-status -z "$BASE_SHA"..."$HEAD_SHA" > "$tmp/changes"
   local -a old=() new=() paths=() globs=()
@@ -1202,7 +1201,7 @@ classify_exclusions() {
     why[$path]="$reason"
   done
   # A rename's other side takes the excluded side's reason, so its hunks cannot carry the content back.
-  local i shown
+  local i
   for i in "${!old[@]}"; do
     reason="${why[${old[$i]}]}"
     if [ -n "${new[$i]}" ] && [ -z "$reason" ]; then reason="${why[${new[$i]}]}"; fi
@@ -1212,8 +1211,7 @@ classify_exclusions() {
     fi
     for path in "${old[$i]}" "${new[$i]}"; do
       if [ -z "$path" ]; then continue; fi
-      quote_path "$path" shown
-      EXCL_PATHS+=("$path"); EXCL_SHOWN+=("$shown")
+      EXCL_PATHS+=("$path")
       if [ -n "${why[$path]}" ]; then EXCL_REASONS+=("${why[$path]}"); else EXCL_REASONS+=("$reason"); fi
     done
   done
