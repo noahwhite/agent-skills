@@ -46,6 +46,24 @@
 # not see ignored files or edits to files that were already untracked; the agent's sandbox is the
 # real boundary (see references/runtimes.md).
 #
+# Exclusion: the sweep and hunt dossiers leave generated, vendored and fixture files out of the
+# embedded diff; they stay in the diffstat and in the checkout, and an 'EXCLUDED' section lists each
+# one as '<path> | <reason>'. A changed path (repo-relative, as the diffstat prints it) is excluded
+# when either arm holds, both read from the head under review, never the working tree:
+#   (a) `git check-attr --source=<head SHA>` reports linguist-generated or linguist-vendored as
+#       `set` or `true` (reason `linguist-generated` or `linguist-vendored`); `unset`, `unspecified`
+#       and `false` never exclude. Only the head's .gitattributes files count: info/attributes,
+#       core.attributesFile and the system attributes file are not read.
+#   (b) the path matches a line of the exclusion list `.adversarial-exclude` at the root of the
+#       repository under review, read from the head (reason `glob:<pattern>`). One glob per line,
+#       surrounding whitespace stripped, a line whose first non-space character is '#' is a comment,
+#       and a leading './' is stripped; each glob matches the whole path with bash
+#       `[[ "$path" == <pattern> ]]` semantics, so '*' and '?' match '/' and '*.json' matches
+#       'a/b.json'. Inline comments and '!' negation are unsupported. A missing or empty list
+#       excludes nothing.
+# An attribute reason wins over a matching glob. Test modules get no automatic exclusion. The
+# arbitrate dossier embeds no diff, so it lists no exclusions.
+#
 # Env equivalents: ADVERSARIAL_REPO, ADVERSARIAL_TEST_CMD, ADVERSARIAL_TEST_DIR, ADVERSARIAL_BASE,
 # ADVERSARIAL_SPEC_FILE, ADVERSARIAL_SCRATCH, ADVERSARIAL_AGENT_CMD, ADVERSARIAL_MODEL,
 # ADVERSARIAL_PROBE_CMD, ADVERSARIAL_PROBE_TIMEOUT (30), ADVERSARIAL_TIMEOUT (900).
@@ -795,10 +813,69 @@ emit_context() {  # $1 = the phase's checkout, $2 = 1 to embed the unified diff,
   echo "===== BLUEPRINT (diffstat and files, ${BASE}...HEAD) ====="
   git diff --stat "$BASE_SHA"..."$HEAD_SHA"
   if [ "$2" -eq 1 ]; then
+    classify_exclusions
+    if [ "${#EXCL_PATHS[@]}" -gt 0 ]; then
+      echo
+      echo "===== EXCLUDED (path | reason: generated, vendored or listed files; in the diffstat above, not in the diff below - read them in your checkout) ====="
+      local i
+      for i in "${!EXCL_PATHS[@]}"; do printf '%s | %s\n' "${EXCL_PATHS[$i]}" "${EXCL_REASONS[$i]}"; done
+    fi
     echo
     echo "===== DIFF (${BASE}...HEAD) ====="
-    git diff --no-ext-diff --unified=3 "$BASE_SHA"..."$HEAD_SHA"
+    if [ "${#EXCL_PATHS[@]}" -eq 0 ]; then
+      git diff --no-ext-diff --unified=3 "$BASE_SHA"..."$HEAD_SHA"
+    else
+      local -a pathspec=(":(top)")
+      local p
+      for p in "${EXCL_PATHS[@]}"; do pathspec+=(":(top,exclude,literal)$p"); done
+      git diff --no-ext-diff --unified=3 "$BASE_SHA"..."$HEAD_SHA" -- "${pathspec[@]}"
+    fi
   fi
+}
+
+# The two exclusion arms of the header's "Exclusion" paragraph, both read from HEAD_SHA. Sets
+# EXCL_PATHS and EXCL_REASONS (parallel arrays, in diff order). Attributes are checked in an empty
+# bare git dir that borrows this repository's objects, so neither the working tree, the repository's
+# info/attributes, core.attributesFile nor the system attributes file can set them.
+classify_exclusions() {
+  EXCL_PATHS=(); EXCL_REASONS=()
+  local tmp; tmp="$(mktemp -d -p "$SCRATCH" exclusions.XXXXXX)"
+  git diff --no-renames --name-only -z "$BASE_SHA"..."$HEAD_SHA" > "$tmp/paths"
+  local -a paths=() globs=()
+  local path name value line
+  while IFS= read -r -d '' path; do paths+=("$path"); done < "$tmp/paths"
+  if [ "${#paths[@]}" -eq 0 ]; then rm -rf -- "$tmp"; return 0; fi
+  if [ "$(git cat-file -t "${HEAD_SHA}:.adversarial-exclude" 2>/dev/null)" = "blob" ]; then
+    git cat-file blob "${HEAD_SHA}:.adversarial-exclude" > "$tmp/list"
+    while IFS= read -r line || [ -n "$line" ]; do
+      line="${line#"${line%%[![:space:]]*}"}"
+      line="${line%"${line##*[![:space:]]}"}"
+      if [ -z "$line" ] || [ "${line:0:1}" = "#" ]; then continue; fi
+      globs+=("${line#./}")
+    done < "$tmp/list"
+  fi
+  git init -q --bare --initial-branch=attributes "$tmp/attr.git"
+  printf '%s\n' "$COMMON_DIR/objects" > "$tmp/attr.git/objects/info/alternates"
+  printf '%s\0' "${paths[@]}" \
+    | GIT_ATTR_NOSYSTEM=1 git --git-dir="$tmp/attr.git" -c core.attributesFile=/dev/null \
+        check-attr -z --stdin --source="$HEAD_SHA" linguist-generated linguist-vendored > "$tmp/attrs"
+  local -A attr=()
+  while IFS= read -r -d '' path && IFS= read -r -d '' name && IFS= read -r -d '' value; do
+    if [ -z "${attr[$path]:-}" ] && { [ "$value" = "set" ] || [ "$value" = "true" ]; }; then
+      attr[$path]="$name"
+    fi
+  done < "$tmp/attrs"
+  rm -rf -- "$tmp"
+  local reason glob
+  for path in "${paths[@]}"; do
+    reason="${attr[$path]:-}"
+    if [ -z "$reason" ]; then
+      for glob in "${globs[@]}"; do
+        if [[ "${path#./}" == $glob ]]; then reason="glob:$glob"; break; fi
+      done
+    fi
+    if [ -n "$reason" ]; then EXCL_PATHS+=("$path"); EXCL_REASONS+=("$reason"); fi
+  done
 }
 
 emit_prior() {  # $1 = phase, $2 = text when that phase is intentionally absent (--no-sweep)
