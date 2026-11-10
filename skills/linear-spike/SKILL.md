@@ -44,6 +44,7 @@ For an implementation story use `linear-user-story`; for an alert or page diagno
 - **Output is knowledge:** success is validated learning - findings, a recommendation, and a Go/No-Go decision.
 - **State:** create in the backlog state; never in progress.
 - **Assignee:** always `profile.tracker.assignee`.
+- **Success Criteria:** each success criterion that needs behavioural evidence must be one-pass producible, as [references/linear.md](references/linear.md) "Acceptance criteria and scope" states.
 
 ## Template (the description)
 

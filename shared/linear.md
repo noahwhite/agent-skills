@@ -86,6 +86,11 @@ The `linear` CLI (schpet/linear-cli) is the primary tool; the Linear MCP server 
   Bake reachability (routing, TLS, the deploy actually delivering the artifact) and any access gate into the criteria.
 - Build each issue for every environment in `profile.environments` up front; promotion only tests, it never adds code.
   Gate a real production safety concern instead of scoping down to one environment.
+- An acceptance criterion that needs behavioural evidence must name the one artifact that proves it and the single command, run or record that produces that artifact, and that artifact must be producible in one pass by one role.
+  One pass means one session of the one role the criterion names, with no fix round, no second session and no resumed session to finish it.
+  A live multi-context ceremony is allowed only when the ceremony is the story's subject; then the story names the fixture, the exact voter contexts a single run creates, and the one record that run posts.
+  A fixture the story would have to build is its own story.
+  A criterion that expects a re-run, a second fixture, a fix round or a resumed session after the first run is not one-pass and fails this rule.
 - Making a synchronous external call on a request path non-blocking belongs to the issue that introduces the call, not to a later hardening issue.
 - When the user decides no production promotion is scheduled and the only unticked items are later-environment legs, delete those lines, add an italic dated note naming who decided, tick the rest, and set done.
   Record the deferred steps in the epic.
