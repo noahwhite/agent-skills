@@ -202,8 +202,11 @@ def test_containment_is_merge_evidence_for_a_local_branch_under_every_merge_meth
     body = section(text(), "3. Delete only with merge evidence")
     for phrase in (
         "establish merge evidence from the story's pull requests or, for a local branch, from containment:",
-        # Containment is the evidence for a branch no PR reviewed, so it must settle the "unreviewed work" rule.
-        "For a branch, the merge evidence below is what shows it holds no such work.",
+        # Containment is the evidence for a branch no PR reviewed, so it must settle the "unreviewed work" rule
+        # without claiming it shows review.
+        "For a branch, the merge evidence below is what this rule asks for: containment shows every commit on it "
+        "has landed, a merged PR whose head commit is the tip also shows it was reviewed, and a local branch needs "
+        "either while a remote branch needs the merged PR.",
     ):
         assert phrase in body, phrase
     containment = bullet(body, "- Containment, for a local branch only:", "Remove in this order")
@@ -229,7 +232,11 @@ def test_containment_is_merge_evidence_for_a_local_branch_under_every_merge_meth
 def test_containment_is_never_merge_evidence_for_a_remote_branch() -> None:
     body = section(text(), "3. Delete only with merge evidence")
     remote = bullet(body, "**Remote branch.**", "**Disposable QA output and session files.**")
-    phrase = "Containment is never merge evidence for a remote branch, under any merge method"
+    phrase = (
+        "Containment is never merge evidence for a remote branch, under any merge method: only a merged PR whose "
+        "head commit is the remote tip is, because containment shows that every commit landed but never that it "
+        "was reviewed."
+    )
     assert phrase in remote, phrase
 
 
@@ -255,6 +262,11 @@ def test_a_local_branch_tip_is_read_again_before_its_delete() -> None:
         "delete immediately after these reads with no other step between."
     )
     assert phrase in local, phrase
+    window = (
+        "A commit that lands on the branch between these reads and the delete is still lost with it, because "
+        "`git branch -D` takes no expected tip; this narrow window is accepted rather than closed."
+    )
+    assert window in local, window
 
 
 def test_each_artifact_kind_has_its_guarded_removal() -> None:
