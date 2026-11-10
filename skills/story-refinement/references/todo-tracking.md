@@ -24,6 +24,7 @@ The list is the visible record of the run: how many steps there are and where yo
    One item is in progress at a time for sequential work; when one step launches several delegations in parallel, each delegation has its own item, and those items are in progress together from launch until each result is read.
 6. **Grow the list as work appears.**
    Before starting any work that has no item (a further round or re-run, a follow-up request, a fix found along the way), add an item for it and mark it in progress.
+   For sequential work, first complete the current in-progress item if its work is done, or else return it to pending until the new item is completed.
    A new finding, remediation round, blocker, or follow-up gets an item when it is discovered, before that step starts.
    Do not delete items that turned out unnecessary; mark them completed with a short note, or drop them only if they were never started.
 7. **An item is completed only when its outcome was observed** (test output seen, run concluded, state read back), not when the command was issued.

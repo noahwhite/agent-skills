@@ -43,9 +43,10 @@ Every other metrics instruction in this skill applies only when `metrics` is on.
 
 ## Read first
 
-Create the todo list right after the actions Arguments orders before it, and before you read any reference, the profile, or an overlay.
+Create the todo list as your first action, before you read any reference, the profile, or an overlay.
+The only actions before it are the two that Arguments orders before the todo list: resolving the arguments and, when Arguments calls for it, the `invocation_start` timestamp command.
 Create it from this file alone as a bootstrap list: one item per file listed below, the profile, and this skill's overlay, then one item per step (Step 1 to Step 4, the triage writes, the records, and the closing message).
-After reading `references/todo-tracking.md`, expand the list to the story-refinement seed items before the first investigation, context, tracker write, command, or delegation, and add the items that need the story or the profile as soon as they are known.
+After reading `references/todo-tracking.md`, expand the list to the story-refinement seed items before the first investigation, context, tracker write, delegation, or any other command, and add the items that need the story or the profile as soon as they are known.
 
 - [references/profile.md](references/profile.md) - find the profile and this skill's overlay right after the todo list is created, before any other file.
 - [references/todo-tracking.md](references/todo-tracking.md) - required: the list rules and the story-refinement seed list, with one item per voter input, accept round, point value, consensus check, basis-challenge round, discussion and re-vote when the check calls for them, split, and triage write.

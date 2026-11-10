@@ -773,10 +773,12 @@ METRICS_STEP0 = (
 )
 METRICS_NOTHING_BEFORE_START = (
     "With `metrics` on, launch no command before the start form, not even to read a file or list a directory; "
-    "read this skill, its references and the profile with the runtime's file-read tool, which launches nothing."
+    "after step 0 creates the todo list, read this skill's references and the profile with the runtime's "
+    "file-read tool, which launches nothing."
 )
 METRICS_START = (
-    "With `metrics` on, the first command launched, before step 0, is this start form, which records "
+    "With `metrics` on, the first command launched, right after step 0 creates the todo list, is this start form, "
+    "which records "
     "`invocation_start` and makes its `metrics.txt` the `<metrics file>` of every later launch, with the "
     "scratch-directory creation from `references/runtimes.md`, or `scratch='<directory you were handed>'` when "
     "you were handed one, in place of `<scratch creation>`:"
@@ -907,7 +909,8 @@ METRICS_POINTER = (
     "The run rules for a `metrics=on` run - where the figures live, timed launches, extras, the start form, the "
     "command wrapper, the end form, the summary post, and the closing report - are in "
     "[references/metrics-protocol.md](references/metrics-protocol.md); read it with the runtime's file-read tool, "
-    "which launches nothing, together with `references/metrics.md`, before the first command is launched."
+    "which launches nothing, together with `references/metrics.md`, after step 0 creates the todo list and "
+    "before the first command is launched."
 )
 METRICS_LINES = [
     METRICS_ROW,
@@ -918,7 +921,7 @@ METRICS_LINES = [
     "- " + OFF_PATH,
     "- " + METRICS_LINE_SENTENCE + " (the step 5 report, or the report made at any stop, including one before step 0).",
     "## Metrics",
-    METRICS_OPENING + " once the story ID is known: it is the single home for what a `story-to-done` run "
+    METRICS_OPENING + " right after step 0 creates the todo list: it is the single home for what a `story-to-done` run "
     "collects and reports, and this file does not restate it.",
     METRICS_POINTER,
     METRICS_USAGE,

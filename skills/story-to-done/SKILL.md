@@ -32,7 +32,7 @@ Five arguments are optional, given as `key=value` or in plain words ("QA on Opus
 - An argument left out takes its default.
 - Effort is one of `low`, `medium`, `high`, `xhigh`, or `max`.
 - If a value is ambiguous (an unknown model, an effort outside that list), ask the user; never guess.
-- Map each model and effort to your runtime with `references/runtimes.md`.
+- After step 0 creates the todo list, map each model and effort to your runtime with `references/runtimes.md`.
   If the runtime cannot run that exact model or effort level, stop and say so; never substitute another model or level.
 - Each role keeps the same model and effort in every round.
 - `metrics` is given as `metrics=on` or `metrics=off`, or in plain words: "with metrics" and "metrics on" mean on, "without metrics" and "metrics off" mean off; ask the user about any other phrasing about metrics; never guess.
@@ -58,13 +58,13 @@ Where this file and a capability file disagree, the capability file wins.
 
 ## Metrics
 
-Only when `metrics` is on, read [references/metrics.md](references/metrics.md) once the story ID is known: it is the single home for what a `story-to-done` run collects and reports, and this file does not restate it.
+Only when `metrics` is on, read [references/metrics.md](references/metrics.md) right after step 0 creates the todo list: it is the single home for what a `story-to-done` run collects and reports, and this file does not restate it.
 
-The run rules for a `metrics=on` run - where the figures live, timed launches, extras, the start form, the command wrapper, the end form, the summary post, and the closing report - are in [references/metrics-protocol.md](references/metrics-protocol.md); read it with the runtime's file-read tool, which launches nothing, together with `references/metrics.md`, before the first command is launched.
+The run rules for a `metrics=on` run - where the figures live, timed launches, extras, the start form, the command wrapper, the end form, the summary post, and the closing report - are in [references/metrics-protocol.md](references/metrics-protocol.md); read it with the runtime's file-read tool, which launches nothing, together with `references/metrics.md`, after step 0 creates the todo list and before the first command is launched.
 
 - **Usage:** Each launch's Tokens and Tool calls are read as the "Read a subagent's usage" row and the "Usage from shell-launched agents" rule in [references/runtimes.md](references/runtimes.md) state; this section states no usage formula of its own.
 
-With `metrics` on, launch no command before the start form, not even to read a file or list a directory; read this skill, its references and the profile with the runtime's file-read tool, which launches nothing.
+With `metrics` on, launch no command before the start form, not even to read a file or list a directory; after step 0 creates the todo list, read this skill's references and the profile with the runtime's file-read tool, which launches nothing.
 
 ## 0. Track everything on a todo list
 
