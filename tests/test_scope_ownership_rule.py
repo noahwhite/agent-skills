@@ -139,7 +139,7 @@ SKIP_LINK_DEPENDENCY = re.compile(
     re.IGNORECASE,
 )
 SKIP_MISSING_STATE = re.compile(
-    r"\b(?:absent|absence|missing|lack|lacks|needed|required|depends|supplied|pending|blocked|lands|landing|later|once|after|until)\b",
+    r"\b(?:absent|unavailable|missing|lacking|lack|incomplete|unfinished|pending|blocked|needed|required|depends|supplied|unsupported|unprovided|scarce|unmade|unbuilt|unwritten|not|no|never|without)\b|n't\b|\b(?:does|do|is|are) not\b",
     re.IGNORECASE,
 )
 SKIP_LINK_WEAK = re.compile(r"\b(?:for|on)\b", re.IGNORECASE)
@@ -181,6 +181,7 @@ def permissive_inversions(text: str) -> list[str]:
             skip_spans = [(m.start(), m.end()) for m in SKIP_TERM.finditer(sentence)]
             other_spans = [(m.start(), m.end()) for m in OTHER_STORY.finditer(sentence)]
             permissive_ends = [m.end() for m in PERMISSIVE.finditer(sentence)]
+            boundary_ends = [m.end() for m in SKIP_BOUNDARY.finditer(sentence)]
 
             def scope_start(pos: int) -> int:
                 start = 0
@@ -192,7 +193,13 @@ def permissive_inversions(text: str) -> list[str]:
                 return start
 
             def unnegated(span: tuple[int, int]) -> bool:
-                return not NEGATION.search(sentence[scope_start(span[0]) : span[0]])
+                start = scope_start(span[0])
+                for end in boundary_ends:
+                    if end <= span[0]:
+                        start = max(start, end)
+                    else:
+                        break
+                return not NEGATION.search(sentence[start : span[0]])
 
             def linked(skip: tuple[int, int], other: tuple[int, int]) -> bool:
                 other_text = sentence[other[0] : other[1]]
@@ -368,6 +375,9 @@ def test_true_positive_probe_flags_permissive_inversions() -> None:
         "Code may carry a skip, but only until SKL-123 lands.",
         "Code may carry a skip; it is keyed on SKL-123.",
         "Code may carry a skip if the fixtures are absent; SKL-123 will add them.",
+        "Code may carry a skip if the fixtures are unavailable; SKL-123 will provide them.",
+        "Code may carry a skip while the credentials are not present; SKL-123 supplies them.",
+        "Code may carry a skip if the directory does not exist; SKL-123 creates it.",
         "The engineer may add or move an AC.",
         "An engineer adds an AC to another story.",
         "Tests xfail for another story.",
