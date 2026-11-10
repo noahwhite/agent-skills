@@ -171,11 +171,30 @@ SKIP_CONTENT_STOP = frozenset(
 )
 
 
+SKIP_ARTIFACT_GENERIC = frozenset(
+    {
+        "api", "apis", "artifact", "artifacts", "check", "checks", "config", "configs", "configuration", "configurations",
+        "contract", "contracts", "credential", "credentials", "data", "dependency", "dependencies", "dir", "dirs", "directory",
+        "directories", "environment", "environments", "file", "files", "fixture", "fixtures", "implementation", "key", "keys",
+        "output", "outputs", "secret", "secrets", "service", "services", "test", "tests", "token", "tokens",
+    }
+)
+SKIP_ARTIFACT_BLOCKERS = frozenset({"independent", "separate", "unrelated"})
+
+
 def content_overlap(left: str, right: str) -> bool:
     def words(text: str) -> set[str]:
         return {word for word in re.findall(r"[a-z]{3,}", text.lower()) if word not in SKIP_CONTENT_STOP}
 
-    return bool(words(left) & words(right))
+    left_words = words(left)
+    right_words = words(right)
+    if not left_words or not right_words or (left_words | right_words) & SKIP_ARTIFACT_BLOCKERS:
+        return False
+    if (left_words - SKIP_ARTIFACT_GENERIC) & (right_words - SKIP_ARTIFACT_GENERIC):
+        return True
+    left_modifiers = left_words - SKIP_ARTIFACT_GENERIC
+    right_modifiers = right_words - SKIP_ARTIFACT_GENERIC
+    return any(word in left_words and word in right_words and left_modifiers == right_modifiers for word in SKIP_ARTIFACT_GENERIC)
 
 
 def sentences(text: str) -> list[str]:
@@ -252,7 +271,7 @@ def permissive_inversions(text: str) -> list[str]:
                         before_boundary = gap[:last_boundary]
                         temporal_match = SKIP_TEMPORAL_DEPENDENCY.search(before_boundary)
                         if temporal_match and SKIP_INDEPENDENT_AGENT.search(before_boundary):
-                            temporal = content_overlap(before_boundary, sentence[other[1] :])
+                            temporal = content_overlap(temporal_match.group(0), sentence[other[1] :])
                         else:
                             temporal = bool(temporal_match)
                         return bool(
@@ -383,6 +402,7 @@ def test_false_positive_probe_passes() -> None:
             "Code may carry a permanent exemption if the generated files are created by a tool; SKL-123 supplies fixtures.",
             "Code may carry a permanent exemption if no fixtures are expected by design; SKL-123 supplies an unrelated API.",
             "Code may carry a permanent exemption while the files are created by a tool; SKL-123 supplies fixtures.",
+            "Code may carry a permanent exemption while files are created by a tool; SKL-123 supplies unrelated files.",
             "# Permanent exemption: generated references/ copies are skipped by the scan; this depends on no other story.",
             'EXEMPT = ("references",)  # why: vendored output, never hand-edited',
             *carve_out,
@@ -423,6 +443,7 @@ def test_true_positive_probe_flags_permissive_inversions() -> None:
         "Code may carry a skip until the API is delivered; SKL-123 delivers it.",
         "Code may carry a skip until the API client is delivered by a tool; SKL-123 delivers the client.",
         "Code may carry a skip until the client is landed by the pipeline; SKL-123 lands the client.",
+        "Code may carry a skip while files are created by a tool; SKL-123 supplies the files.",
         "The engineer may add or move an AC.",
         "An engineer adds an AC to another story.",
         "Tests xfail for another story.",
