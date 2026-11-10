@@ -88,8 +88,8 @@
 # Size sidecars: every completed dossier write, on `run` or `dossier`, leaves `<phase>.dossier` in the
 # run directory: a `path=<absolute dossier path>` line, a `bytes=<n>` line (`LC_ALL=C wc -c` of that
 # dossier), and one `excluded <path> reason=<reason>` line per path the exclusion step left out of the
-# dossier's diff, the path escaped as the truncation marker escapes it (the arbitrate dossier lists
-# none). A phase's start removes its own sidecar, a re-run removes the sidecars of the phases it
+# dossier's diff (the arbitrate dossier lists none); both paths are escaped as the truncation marker
+# escapes its path, so every record is one physical line. A phase's start removes its own sidecar, a re-run removes the sidecars of the phases it
 # discards, and a `dossier` whose write fails or is undone removes the one it wrote; an invocation
 # refused before its phase starts removes nothing. Sidecars are measurements only: they are not in
 # any binding or stamp and never change acceptance. One that cannot be written prints a WARNING and
@@ -857,12 +857,21 @@ def escape(path):
     return bytes(out + b'"')
 PYEOF
 
-# The size sidecar's `excluded` lines: reads NUL-terminated path and reason pairs on stdin and writes
-# one `excluded <escaped path> reason=<reason>` line per pair.
+# The size sidecar's whole record: argv is the dossier path and its `wc -c` output; stdin holds
+# NUL-terminated path and reason pairs. Writes the `path=` line (the dossier's absolute path,
+# escaped), the `bytes=` line and one `excluded <escaped path> reason=<reason>` line per pair. Any
+# failure, a bad byte count or an unwritable stdout included, exits non-zero.
 IFS= read -r -d '' SIDECAR_PY <<'PYEOF' || true
+size = sys.argv[2].strip()
+if not size.isdigit():
+    sys.exit("not a byte count: %r" % sys.argv[2])
 fields = sys.stdin.buffer.read().split(b"\0")[:-1]
+out = sys.stdout.buffer
+out.write(b"path=" + escape(os.path.abspath(os.fsencode(sys.argv[1]))) + b"\n")
+out.write(b"bytes=" + size.encode() + b"\n")
 for path, reason in zip(fields[0::2], fields[1::2]):
-    sys.stdout.buffer.write(b"excluded " + escape(path) + b" reason=" + reason + b"\n")
+    out.write(b"excluded " + escape(path) + b" reason=" + reason + b"\n")
+out.flush()
 PYEOF
 
 # The per-file splitter: reads one `git diff` on stdin, cuts it at `diff --git` lines and applies the
@@ -1019,21 +1028,20 @@ cap_diff_sections() {  # $1 = the phase's checkout; stdin = one `git diff`, stdo
 
 # The size sidecar of a completed dossier write (see "Size sidecars" in the header). The excluded
 # paths and reasons are the ones classify_exclusions set for this dossier; the arbitrate dossier
-# runs no classification, so it lists none. A sidecar that cannot be written is removed and warned
-# about; it never fails the phase.
+# runs no classification, so it lists none. The record is written whole to a temporary file and
+# renamed into place, so no partial sidecar is ever published. A sidecar that cannot be written is
+# removed and warned about on one line; it never fails the phase.
 EXCL_PATHS=(); EXCL_REASONS=()
-write_size_sidecar() {  # $1 = phase, $2 = the dossier just written (an absolute path)
-  local side="$RUN_DIR/$1.dossier" bytes i
+write_size_sidecar() {  # $1 = phase, $2 = the dossier just written
+  local side="$RUN_DIR/$1.dossier" tmp="$RUN_DIR/$1.dossier.tmp" bytes i
   if ! {
     bytes="$(LC_ALL=C wc -c < "$2")" &&
-    {
-      printf 'path=%s\nbytes=%s\n' "$2" "${bytes//[[:space:]]/}"
-      for i in "${!EXCL_PATHS[@]}"; do printf '%s\0%s\0' "${EXCL_PATHS[$i]}" "${EXCL_REASONS[$i]}"; done \
-        | python3 -I -c "$PATH_ESCAPE_PY$SIDECAR_PY"
-    } > "$side"
+    for i in "${!EXCL_PATHS[@]}"; do printf '%s\0%s\0' "${EXCL_PATHS[$i]}" "${EXCL_REASONS[$i]}"; done \
+      | python3 -I -c "$PATH_ESCAPE_PY$SIDECAR_PY" "$2" "$bytes" > "$tmp" &&
+    mv -f -- "$tmp" "$side"
   } 2>/dev/null; then
-    rm -f -- "$side" 2>/dev/null || true
-    echo "WARNING: could not write the $1 dossier size sidecar $side; the phase is unaffected." >&2
+    rm -f -- "$tmp" "$side" 2>/dev/null || true
+    printf 'WARNING: could not write the %s dossier size sidecar %q; the phase is unaffected.\n' "$1" "$side" >&2
   fi
 }
 

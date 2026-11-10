@@ -354,6 +354,48 @@ def test_a_sidecar_write_failure_warns_and_changes_no_outcome(gate, flow):
     check_sidecar(gate, "hunt", hunt)
 
 
+@pytest.mark.parametrize("flow", FLOWS)
+def test_an_unwritable_sidecar_record_warns_even_with_no_excluded_lines(gate, flow):
+    """The arbitrate record has no excluded lines; a failed write of it must still warn."""
+    for phase in ("sweep", "hunt"):
+        complete(gate, flow, phase)
+    (run_dir(gate) / "arbitrate.dossier.tmp").mkdir()
+    if flow == "run":
+        result = run_phase(gate, "arbitrate")
+    else:
+        result = run_script("dossier", "arbitrate", *common(gate), env=gate["env"])
+        cleanup(gate, Path(line_value(result.stderr, "CHECKOUT: ")))
+    assert result.returncode == 0, result.stdout + result.stderr
+    warnings = [line for line in result.stderr.splitlines() if line.startswith("WARNING:")]
+    assert len(warnings) == 1 and "arbitrate" in warnings[0], result.stderr
+    assert not sidecar(gate, "arbitrate").exists()
+
+
+def test_a_relative_tmpdir_still_records_an_absolute_dossier_path(gate):
+    """Without --scratch the dossier lands under TMPDIR, which may be relative to the repository."""
+    (gate["repo"] / "reltmp").mkdir()
+    env = {**gate["env"], "TMPDIR": "reltmp"}
+    result = run_script("dossier", "sweep", "--repo", str(gate["repo"]), "--base", BASE_REF,
+                        "--spec", str(gate["spec"]), env=env)
+    assert result.returncode == 0, result.stdout + result.stderr
+    dossier = gate["repo"] / result.stdout.strip().splitlines()[-1]
+    path = line_value(sidecar(gate, "sweep").read_text(), "path=")
+    assert path == str(dossier.resolve()) and Path(path).is_absolute(), path
+    cleanup(gate, Path(line_value(result.stderr, "CHECKOUT: ")))
+
+
+def test_a_dossier_path_with_a_newline_stays_one_escaped_line(gate):
+    scratch = gate["tmp"] / "odd\nscratch"
+    scratch.mkdir()
+    result = run_script("dossier", "sweep", "--repo", str(gate["repo"]), "--base", BASE_REF,
+                        "--spec", str(gate["spec"]), "--scratch", str(scratch), env=gate["env"])
+    assert result.returncode == 0, result.stdout + result.stderr
+    lines = sidecar(gate, "sweep").read_bytes().splitlines()
+    assert len(lines) == 2, lines
+    assert lines[0].startswith(b'path="') and b"odd\\nscratch" in lines[0], lines[0]
+    assert lines[1].startswith(b"bytes="), lines[1]
+
+
 # --- sidecars never enter the binding or the acceptance ---------------------------------------------
 
 @pytest.mark.parametrize("flow", FLOWS)
