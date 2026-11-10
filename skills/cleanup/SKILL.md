@@ -140,19 +140,24 @@ With such an instruction, for a worktree or local branch that fails merge eviden
    It also refuses before deleting anything when the instruction does not authorize every loss removal would incur that normal merge evidence does not cover: untracked entries need an instruction that waives them, and a worktree or branch without merge evidence needs one that waives the merge-evidence guard.
    It also refuses before deleting anything a worktree git cannot remove, as the worktree rules below define it: the main working tree, a worktree `git worktree list --porcelain` marks `locked`, and a worktree whose submodule paths are not removable with nothing lost.
    An untracked directory is listed at any depth with `find ./<path> -print0`, whose output is split on NUL so each path arrives exactly as it is on disk, and a listing that exits non-zero refuses the worktree.
+   The path is passed to `find` as one argument, exactly as the `-z` read gave it, never through shell expansion.
    A nested repository inside it, an entry named `.git` or a bare repository as the regenerable-entry checks define them, refuses the worktree, because its commits are a loss the inventory cannot show.
 2. It records the branch tip SHA (`git rev-parse refs/heads/<branch>`, so a tag of the same name never answers) in the inventory and prints what removal would lose: every untracked entry by exact path, with every path its listing printed, and every commit `git log --oneline origin/<profile.git.integration_branch>..<tip>` lists.
    A `git log` that exits non-zero refuses the worktree and its branch, because a failed listing can hide a loss.
+   A tip read that exits non-zero, here or in step 5, refuses the worktree and its branch, because an empty tip would make `git log` list the wrong commits.
    Under a squash or a rebase merge that list can include commits whose content already landed, so it states the most the run could lose, never less.
 3. It deletes each regenerable entry and each untracked entry by exact path with `rm -r --` (no `-f`, no `--force`, no glob), because `git worktree remove` refuses untracked entries without `--force`.
    The paths deleted are the entries the `-z` status read reports, such as `out/` for an untracked directory; the `find` listing only records what they hold, and a path inside a directory already deleted is never deleted on its own.
    Each deletion follows the regenerable-entry rules below: one argument exactly as the `-z` read gave it, standard input from `/dev/null`, and a stop at the first failed deletion, which refuses the worktree and its branch.
+   A file created inside an untracked directory after its listing is still deleted with it and is missing from the inventory; nothing short of locking the directory closes this, so this narrow window is accepted, as the regenerable-entry windows below are.
 4. It reads the status again, with `git status --porcelain --ignored -z` inside the worktree, and removes the worktree with `git worktree remove` only when that read is empty; a read that is not empty refuses the worktree and its branch.
+   Right before that removal it reads HEAD inside the worktree with `git symbolic-ref -q HEAD` and `git rev-parse HEAD`, and refuses the worktree and its branch when HEAD is detached, names another branch, or is not the tip the inventory recorded.
 5. It re-reads the branch tip with `git rev-parse refs/heads/<branch>`, refuses the branch if it moved since the inventory, and otherwise removes the branch with `git branch -D` immediately after that re-read.
    A commit that lands on the branch between the re-read and the delete is lost without being inventoried; `git branch -D` takes no expected tip, so this narrow window is accepted, as the regenerable-entry windows below are.
 
 A local branch that no worktree holds skips steps 3 and 4.
 The report quotes the instruction verbatim, whether the run removed or refused, and lists every path deleted and every commit discarded.
+A deleted untracked directory is reported by its status entry followed by every path its listing printed, so the report shows everything `rm -r` removed under it.
 
 Remove in this order, so a branch is never refused because a worktree still holds it:
 
@@ -292,6 +297,7 @@ skipped:
 refused:
 - <artifact>: <failed check>, <why>
   - deleted: <regenerable entry path>
+  - deleted: <untracked entry path>
   - refused: <regenerable entry path>: <failed deletion>
 ```
 

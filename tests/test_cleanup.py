@@ -344,17 +344,19 @@ def test_a_worktree_holding_only_regenerable_ignored_entries_is_emptied_then_rem
     allowed = (
         "- **Worktree.** Removed with `git worktree remove` only when its HEAD",
         "It then reads `git status --porcelain --ignored -z` inside the worktree again",
-        # SKL-245: the recorded-instruction sequence's own second read, pinned whole so no other
-        # line can borrow its prefix.
+    )
+    # SKL-245: the recorded-instruction sequence's own second read, matched whole so neither another
+    # line nor an appended tail can borrow it.
+    step4 = (
         "4. It reads the status again, with `git status --porcelain --ignored -z` inside the worktree, and removes the "
         "worktree with `git worktree remove` only when that read is empty; a read that is not empty refuses the worktree "
-        "and its branch.",
+        "and its branch."
     )
     for line in body.splitlines():
         if re.search(r"\bempty\b", line) and re.search(
             r"worktree remov|removal|removes the worktree", line, re.IGNORECASE
         ):
-            assert line.strip().startswith(allowed), line
+            assert line.strip().startswith(allowed) or line.strip() == step4, line
 
 
 def test_a_regenerable_entry_needs_no_nested_repository_and_its_content_check() -> None:
@@ -468,6 +470,7 @@ def test_the_inventory_and_report_name_each_regenerable_entry_by_exact_path() ->
     refused = (
         "refused:\n- <artifact>: <failed check>, <why>\n"
         "  - deleted: <regenerable entry path>\n"
+        "  - deleted: <untracked entry path>\n"
         "  - refused: <regenerable entry path>: <failed deletion>\n"
     )
     assert removed in report, removed
@@ -497,7 +500,8 @@ def test_a_recorded_instruction_is_scoped_to_a_named_artifact_or_a_named_loss() 
         "With such an instruction, for a worktree or local branch that fails merge evidence or has untracked entries, "
         "the run takes these steps in order:",
     ):
-        assert phrase in block, phrase
+        # Whole lines, so an appended contradiction fails too.
+        assert phrase in [line.strip() for line in block.splitlines()], phrase
     invocation = section(text(), "Invocation")
     assert "The skill takes one or more story keys:" in invocation
     assert "- The story keys alone choose the stories." in invocation
@@ -517,7 +521,8 @@ def test_a_recorded_instruction_inventories_the_tip_and_every_loss_before_deleti
     )
     unauthorized = (
         "It also refuses before deleting anything when the instruction does not authorize every loss removal would incur "
-        "that normal merge evidence does not cover"
+        "that normal merge evidence does not cover: untracked entries need an instruction that waives them, and a "
+        "worktree or branch without merge evidence needs one that waives the merge-evidence guard."
     )
     cannot_remove = (
         "It also refuses before deleting anything a worktree git cannot remove, as the worktree rules below define it: "
@@ -544,7 +549,25 @@ def test_a_recorded_instruction_inventories_the_tip_and_every_loss_before_deleti
         "Under a squash or a rebase merge that list can include commits whose content already landed, "
         "so it states the most the run could lose, never less."
     )
-    for phrase in (refuse_first, unauthorized, cannot_remove, listing, nested, inventory, log_fails, upper_bound):
+    one_argument = (
+        "The path is passed to `find` as one argument, exactly as the `-z` read gave it, never through shell expansion."
+    )
+    tip_fails = (
+        "A tip read that exits non-zero, here or in step 5, refuses the worktree and its branch, "
+        "because an empty tip would make `git log` list the wrong commits."
+    )
+    for phrase in (
+        refuse_first,
+        unauthorized,
+        cannot_remove,
+        listing,
+        one_argument,
+        nested,
+        inventory,
+        log_fails,
+        tip_fails,
+        upper_bound,
+    ):
         assert phrase in block, phrase
     assert (
         block.index(refuse_first)
@@ -593,18 +616,41 @@ def test_a_recorded_instruction_deletes_by_exact_path_then_removes_then_rereads_
         "The report quotes the instruction verbatim, whether the run removed or refused, "
         "and lists every path deleted and every commit discarded."
     )
+    listing_window = (
+        "A file created inside an untracked directory after its listing is still deleted with it and is missing from "
+        "the inventory; nothing short of locking the directory closes this, so this narrow window is accepted, "
+        "as the regenerable-entry windows below are."
+    )
+    head_check = (
+        "Right before that removal it reads HEAD inside the worktree with `git symbolic-ref -q HEAD` and "
+        "`git rev-parse HEAD`, and refuses the worktree and its branch when HEAD is detached, names another branch, "
+        "or is not the tip the inventory recorded."
+    )
+    nested_report = (
+        "A deleted untracked directory is reported by its status entry followed by every path its listing printed, "
+        "so the report shows everything `rm -r` removed under it."
+    )
     for phrase in (
         delete,
         targets,
         delete_rules,
+        listing_window,
         reread,
+        head_check,
         tip,
         window,
+        nested_report,
         "A local branch that no worktree holds skips steps 3 and 4.",
         report,
     ):
         assert phrase in block, phrase
-    assert block.index("2. It records the branch tip SHA") < block.index(delete) < block.index(reread) < block.index(tip)
+    assert (
+        block.index("2. It records the branch tip SHA")
+        < block.index(delete)
+        < block.index(reread)
+        < block.index(head_check)
+        < block.index(tip)
+    )
     body = section(text(), "3. Delete only with merge evidence")
     for phrase in (
         "A recorded instruction (below) is the one way to discard an untracked entry or an unlanded commit, "
