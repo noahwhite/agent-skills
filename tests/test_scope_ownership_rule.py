@@ -196,12 +196,18 @@ def temporal_artifact(text: str) -> str:
     return SKIP_ARTIFACT_MARKER.sub(" ", SKIP_ARTIFACT_VERB.sub(" ", text))
 
 
-def story_artifact(text: str) -> str:
-    artifacts = [
-        SKIP_ARTIFACT_ADJUNCT.split(text[match.end() :], maxsplit=1)[0]
-        for match in SKIP_ARTIFACT_VERB.finditer(text)
-    ]
-    return " ".join(artifacts) if artifacts else text
+def story_artifact_phrases(text: str) -> list[str]:
+    matches = list(SKIP_ARTIFACT_VERB.finditer(text))
+    if not matches:
+        return [text]
+    phrases = []
+    for index, match in enumerate(matches):
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+        phrase = SKIP_ARTIFACT_ADJUNCT.split(text[match.end() : end], maxsplit=1)[0]
+        phrase = re.sub(r"(?:\s+(?:and|or|plus))+\s*$", "", phrase).strip()
+        if phrase:
+            phrases.append(phrase)
+    return phrases or [text]
 
 
 def content_overlap(left: str, right: str) -> bool:
@@ -295,9 +301,10 @@ def permissive_inversions(text: str) -> list[str]:
                         before_boundary = gap[:last_boundary]
                         temporal_match = SKIP_TEMPORAL_DEPENDENCY.search(before_boundary)
                         if temporal_match and SKIP_INDEPENDENT_AGENT.search(before_boundary):
-                            temporal = content_overlap(
-                                temporal_artifact(temporal_match.group(0)),
-                                story_artifact(sentence[other[1] :]),
+                            temporal_text = temporal_artifact(temporal_match.group(0))
+                            temporal = any(
+                                content_overlap(temporal_text, phrase)
+                                for phrase in story_artifact_phrases(sentence[other[1] :])
                             )
                         else:
                             temporal = bool(temporal_match)
@@ -476,6 +483,7 @@ def test_true_positive_probe_flags_permissive_inversions() -> None:
         "Code may carry a skip while generated files are created by a tool; SKL-123 supplies the files.",
         "Code may carry a skip while files are created by a tool; SKL-123 supplies the files in a separate package.",
         "Code may carry a skip until the client is landed by the pipeline; SKL-123 creates API docs for users and lands the client.",
+        "Code may carry a skip while generated files are created by a tool; SKL-123 supplies the files and creates documentation.",
         "The engineer may add or move an AC.",
         "An engineer adds an AC to another story.",
         "Tests xfail for another story.",
