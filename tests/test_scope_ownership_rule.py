@@ -157,6 +157,25 @@ SKIP_IMMEDIATE_LINK = re.compile(r"\b(?:for|until|when|if|while|because|keyed on
 SKIP_STRICT_LINK = re.compile(r"\b(?:until|when|once|after|lands|landing)\b", re.IGNORECASE)
 SKIP_BOUNDARY = re.compile(r";|\bbut\b", re.IGNORECASE)
 STORY_KEY = re.compile(r"^[A-Z]{2,}-\d+$")
+SKIP_CONTENT_STOP = frozenset(
+    {
+        "the", "and", "for", "with", "that", "this", "from", "into", "are", "was", "were", "will", "would", "can", "could", "may", "might",
+        "permanent", "exemption", "exempt", "skip", "skips", "skipping", "pending", "lists", "code", "story", "stories", "issue", "another",
+        "other", "later", "sibling", "future", "different", "follow", "subsequent", "next", "keyed", "key", "naming", "named", "tied",
+        "depends", "blocked", "until", "after", "once", "when", "while", "lands", "landing", "landed", "deliver", "delivers", "delivered",
+        "delivery", "provide", "provides", "provided", "supply", "supplies", "supplied", "add", "adds", "added", "create", "creates", "created",
+        "build", "builds", "built", "write", "writes", "written", "tool", "tools", "script", "scripts", "generator", "generators", "system",
+        "systems", "pipeline", "pipelines", "process", "processes", "vendor", "vendors", "expected", "expects", "assumed", "assumes",
+        "intentional", "deliberate", "design",
+    }
+)
+
+
+def content_overlap(left: str, right: str) -> bool:
+    def words(text: str) -> set[str]:
+        return {word for word in re.findall(r"[a-z]{3,}", text.lower()) if word not in SKIP_CONTENT_STOP}
+
+    return bool(words(left) & words(right))
 
 
 def sentences(text: str) -> list[str]:
@@ -231,7 +250,11 @@ def permissive_inversions(text: str) -> list[str]:
                         return True
                     if crosses_boundary(skip[1], other[0]):
                         before_boundary = gap[:last_boundary]
-                        temporal = SKIP_TEMPORAL_DEPENDENCY.search(before_boundary) and not SKIP_INDEPENDENT_AGENT.search(before_boundary)
+                        temporal_match = SKIP_TEMPORAL_DEPENDENCY.search(before_boundary)
+                        if temporal_match and SKIP_INDEPENDENT_AGENT.search(before_boundary):
+                            temporal = content_overlap(before_boundary, sentence[other[1] :])
+                        else:
+                            temporal = bool(temporal_match)
                         return bool(
                             temporal
                             or (SKIP_LINK_DEPENDENCY.search(before_boundary) and SKIP_MISSING_STATE.search(before_boundary))
@@ -398,6 +421,8 @@ def test_true_positive_probe_flags_permissive_inversions() -> None:
         "Code may carry a skip until the API lands; SKL-123 will deliver the API.",
         "Code may carry a skip if there are no fixtures; SKL-123 will provide them.",
         "Code may carry a skip until the API is delivered; SKL-123 delivers it.",
+        "Code may carry a skip until the API client is delivered by a tool; SKL-123 delivers the client.",
+        "Code may carry a skip until the client is landed by the pipeline; SKL-123 lands the client.",
         "The engineer may add or move an AC.",
         "An engineer adds an AC to another story.",
         "Tests xfail for another story.",
