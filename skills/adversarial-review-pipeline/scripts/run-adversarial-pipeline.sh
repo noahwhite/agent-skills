@@ -48,7 +48,8 @@
 #
 # Exclusion: the sweep and hunt dossiers leave generated, vendored and fixture files out of the
 # embedded diff; they stay in the diffstat and in the checkout, and an 'EXCLUDED' section lists each
-# one as '<path> | <reason>'. A changed path (repo-relative, as the diffstat prints it) is excluded
+# one as '<path> | <reason>', the path quoted the way git quotes it in the diffstat (a name holding
+# a newline, a quote or a backslash is C-quoted). A changed path (repo-relative, as the diffstat prints it) is excluded
 # when either arm holds, both read from the head under review, never the working tree:
 #   (a) `git check-attr --source=<head SHA>` reports linguist-generated or linguist-vendored as
 #       `set` or `true` (reason `linguist-generated` or `linguist-vendored`); `unset`, `unspecified`
@@ -818,7 +819,7 @@ emit_context() {  # $1 = the phase's checkout, $2 = 1 to embed the unified diff,
       echo
       echo "===== EXCLUDED (path | reason: generated, vendored or listed files; in the diffstat above, not in the diff below - read them in your checkout) ====="
       local i
-      for i in "${!EXCL_PATHS[@]}"; do printf '%s | %s\n' "${EXCL_PATHS[$i]}" "${EXCL_REASONS[$i]}"; done
+      for i in "${!EXCL_PATHS[@]}"; do printf '%s | %s\n' "${EXCL_SHOWN[$i]}" "${EXCL_REASONS[$i]}"; done
     fi
     echo
     echo "===== DIFF (${BASE}...HEAD) ====="
@@ -834,17 +835,23 @@ emit_context() {  # $1 = the phase's checkout, $2 = 1 to embed the unified diff,
 }
 
 # The two exclusion arms of the header's "Exclusion" paragraph, both read from HEAD_SHA. Sets
-# EXCL_PATHS and EXCL_REASONS (parallel arrays, in diff order). Attributes are checked in an empty
-# bare git dir that borrows this repository's objects, so neither the working tree, the repository's
-# info/attributes, core.attributesFile nor the system attributes file can set them.
+# EXCL_PATHS (raw paths, for the pathspec), EXCL_SHOWN (the same paths quoted as git prints them, so
+# a name holding a newline cannot forge a dossier line) and EXCL_REASONS, parallel and in diff order.
+# Attributes are checked in an empty bare git dir that reads this repository's object store, so
+# neither the working tree, the repository's info/attributes, core.attributesFile nor the system
+# attributes file can set them.
 classify_exclusions() {
-  EXCL_PATHS=(); EXCL_REASONS=()
+  EXCL_PATHS=(); EXCL_SHOWN=(); EXCL_REASONS=()
   local tmp; tmp="$(mktemp -d -p "$SCRATCH" exclusions.XXXXXX)"
   git diff --no-renames --name-only -z "$BASE_SHA"..."$HEAD_SHA" > "$tmp/paths"
-  local -a paths=() globs=()
+  git diff --no-renames --name-only "$BASE_SHA"..."$HEAD_SHA" > "$tmp/shown"
+  local -a paths=() shown=() globs=()
   local path name value line
   while IFS= read -r -d '' path; do paths+=("$path"); done < "$tmp/paths"
+  while IFS= read -r line; do shown+=("$line"); done < "$tmp/shown"
   if [ "${#paths[@]}" -eq 0 ]; then rm -rf -- "$tmp"; return 0; fi
+  [ "${#shown[@]}" -eq "${#paths[@]}" ] || die 2 "could not list the changed paths for the exclusion check (${#paths[@]} raw, ${#shown[@]} quoted)."
+  local objects; objects="$(git rev-parse --path-format=absolute --git-path objects)"
   if [ "$(git cat-file -t "${HEAD_SHA}:.adversarial-exclude" 2>/dev/null)" = "blob" ]; then
     git cat-file blob "${HEAD_SHA}:.adversarial-exclude" > "$tmp/list"
     while IFS= read -r line || [ -n "$line" ]; do
@@ -854,10 +861,14 @@ classify_exclusions() {
       globs+=("${line#./}")
     done < "$tmp/list"
   fi
-  git init -q --bare --initial-branch=attributes "$tmp/attr.git"
-  printf '%s\n' "$COMMON_DIR/objects" > "$tmp/attr.git/objects/info/alternates"
+  # The repository's object store (GIT_OBJECT_DIRECTORY honoured) is handed over as the attrs dir's
+  # own; every other variable that could point git back at this repository is dropped.
+  env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE -u GIT_OBJECT_DIRECTORY \
+    git init -q --bare --initial-branch=attributes "$tmp/attr.git"
   printf '%s\0' "${paths[@]}" \
-    | GIT_ATTR_NOSYSTEM=1 git --git-dir="$tmp/attr.git" -c core.attributesFile=/dev/null \
+    | env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
+        GIT_OBJECT_DIRECTORY="$objects" GIT_ATTR_NOSYSTEM=1 \
+        git --git-dir="$tmp/attr.git" -c core.attributesFile=/dev/null \
         check-attr -z --stdin --source="$HEAD_SHA" linguist-generated linguist-vendored > "$tmp/attrs"
   local -A attr=()
   while IFS= read -r -d '' path && IFS= read -r -d '' name && IFS= read -r -d '' value; do
@@ -866,15 +877,18 @@ classify_exclusions() {
     fi
   done < "$tmp/attrs"
   rm -rf -- "$tmp"
-  local reason glob
-  for path in "${paths[@]}"; do
+  local reason glob i
+  for i in "${!paths[@]}"; do
+    path="${paths[$i]}"
     reason="${attr[$path]:-}"
     if [ -z "$reason" ]; then
       for glob in "${globs[@]}"; do
         if [[ "${path#./}" == $glob ]]; then reason="glob:$glob"; break; fi
       done
     fi
-    if [ -n "$reason" ]; then EXCL_PATHS+=("$path"); EXCL_REASONS+=("$reason"); fi
+    if [ -n "$reason" ]; then
+      EXCL_PATHS+=("$path"); EXCL_SHOWN+=("${shown[$i]}"); EXCL_REASONS+=("$reason")
+    fi
   done
 }
 
