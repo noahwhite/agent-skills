@@ -126,11 +126,21 @@ Remove in this order, so a branch is never refused because a worktree still hold
   - **Regenerable ignored entries.** An ignored entry is regenerable when `git status --porcelain --ignored -z` reports it with the ignored code `!!` as a directory (with a trailing `/`) whose final path component, with that trailing `/` removed, is one of `.venv`, `venv`, `node_modules`, `__pycache__`, `.pytest_cache`, `.mypy_cache`, `.ruff_cache`; so `tests/__pycache__/` qualifies.
     An untracked entry (code `??`) is never regenerable, even with a matching name and a trailing `/`.
     A package manager or test runner recreates these directories, so deleting them loses nothing.
-    Only when the worktree passes every other check in this step and its status lists no other entry, the run records each regenerable entry by exact path in the inventory, then deletes each one with `rm -r -- <path>` on that exact path inside the worktree: no `-f`, no `--force`, no glob.
+    Only when the worktree passes every other check in this step and its status lists no other entry, the run first lists the contents of each such directory at any depth, without following symlinks, and refuses the worktree when a listing holds a nested repository: an entry named `.git` at any depth, whether a directory or a file.
+    It also requires a per-name content check before an entry counts as regenerable:
+    - `__pycache__` holds only `*.pyc` files: every entry inside it is a regular file whose name ends in `.pyc`.
+    - `.venv` and `venv` have `pyvenv.cfg` at their top: a regular file of that name directly inside the directory.
+    - `.pytest_cache`, `.mypy_cache` and `.ruff_cache` have `CACHEDIR.TAG` at their top: a regular file of that name directly inside the directory.
+    - `node_modules` has no content check and is subject to the nested-repository refusal only.
+
+    A directory that fails its check is not regenerable and the worktree is refused.
+    The run checks every regenerable entry before it deletes any, so a nested repository or a failed content check deletes nothing.
+    A stray file inside a directory that passes its check is still deleted with it: neither the name nor the marker file can tell a file a tool wrote from one a person left there.
+    Then the run records each regenerable entry by exact path in the inventory, and deletes each one with `rm -r -- <path>` on that exact path inside the worktree: no `-f`, no `--force`, no glob.
     The path is passed to `rm` as one argument, exactly as the `-z` read gave it, never through shell expansion.
     The run stops at the first failed deletion and deletes nothing more.
     It then reads `git status --porcelain --ignored -z` inside the worktree again, and removes the worktree with `git worktree remove` only when that second read is empty, running the removal immediately after the read with no other step between them.
-    A failed deletion, or a second read that is not empty, refuses the worktree, and the report names the path and the failure.
+    A failed deletion, a second read that is not empty, a nested repository, or a failed content check refuses the worktree, and the report names the path and the failure.
     A failed `rm -r` can leave part of that entry behind, so the run then lists what remains at its path, and the report names it.
     An ignored file created between the second read and the removal is still deleted with the directory; git offers no checked removal short of `--force`, so this narrow window is accepted rather than closed.
   - **Any other entry refuses.** When the status lists any other entry, the worktree is refused and nothing is deleted from it, the regenerable entries included.
