@@ -7,7 +7,7 @@ sweep, hunt and arbitrate in that order: `<phase>: <bytes> bytes` and the sideca
 for a phase with a sidecar, `<phase>: not run` for one without, `sweep: absent (--no-sweep)` when the
 invocation sets `--no-sweep`, and `total: <bytes> bytes` once every phase not disabled has a sidecar.
 `paths` prints its absolute path as a final `dossier_sizes <path>` line. The log is never a demanded
-artefact, never enters the binding or a stamp, and a failure to write it only warns.
+artifact, never enters the binding or a stamp, and a failure to write it only warns.
 
 Every test seeds a base commit and a head commit and reviews the head against its base, on both
 flows: `run`, and `dossier` followed by `record`.
