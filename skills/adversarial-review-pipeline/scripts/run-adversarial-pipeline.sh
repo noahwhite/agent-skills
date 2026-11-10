@@ -48,13 +48,14 @@
 #
 # Exclusion: the sweep and hunt dossiers leave generated, vendored and fixture files out of the
 # embedded diff; they stay in the diffstat and in the checkout, and an 'EXCLUDED' section lists each
-# one as '<path> | <reason>', the path quoted the way git quotes it in the diffstat (a name holding
-# a newline, a quote or a backslash is C-quoted). A changed path (repo-relative, as the diffstat prints it) is excluded
-# when either arm holds, both read from the head under review, never the working tree:
+# one as '"<path>" | <reason>', the full repo-relative path always double-quoted, with a quote or a
+# backslash backslash-escaped and a control byte written as a three-digit octal escape. A changed path (repo-relative, without 'a/' or
+# 'b/') is excluded when either arm holds, both read from the head under review, never the working
+# tree:
 #   (a) `git check-attr --source=<head SHA>` reports linguist-generated or linguist-vendored as
 #       `set` or `true` (reason `linguist-generated` or `linguist-vendored`); `unset`, `unspecified`
 #       and `false` never exclude. Only the head's .gitattributes files count: info/attributes,
-#       core.attributesFile and the system attributes file are not read.
+#       core.attributesFile, init templates and the system attributes file are not read.
 #   (b) the path matches a line of the exclusion list `.adversarial-exclude` at the root of the
 #       repository under review, read from the head (reason `glob:<pattern>`). One glob per line,
 #       surrounding whitespace stripped, a line whose first non-space character is '#' is a comment,
@@ -62,7 +63,9 @@
 #       `[[ "$path" == <pattern> ]]` semantics, so '*' and '?' match '/' and '*.json' matches
 #       'a/b.json'. Inline comments and '!' negation are unsupported. A missing or empty list
 #       excludes nothing.
-# An attribute reason wins over a matching glob. Test modules get no automatic exclusion. The
+# An attribute reason wins over a matching glob. Changes are matched with rename detection on, and
+# when either side of a rename is excluded both sides are, the other side listed with the excluded
+# side's reason. Test modules get no automatic exclusion. The
 # arbitrate dossier embeds no diff, so it lists no exclusions.
 #
 # Env equivalents: ADVERSARIAL_REPO, ADVERSARIAL_TEST_CMD, ADVERSARIAL_TEST_DIR, ADVERSARIAL_BASE,
@@ -826,32 +829,75 @@ emit_context() {  # $1 = the phase's checkout, $2 = 1 to embed the unified diff,
     if [ "${#EXCL_PATHS[@]}" -eq 0 ]; then
       git diff --no-ext-diff --unified=3 "$BASE_SHA"..."$HEAD_SHA"
     else
-      local -a pathspec=(":(top)")
-      local p
-      for p in "${EXCL_PATHS[@]}"; do pathspec+=(":(top,exclude,literal)$p"); done
-      git diff --no-ext-diff --unified=3 "$BASE_SHA"..."$HEAD_SHA" -- "${pathspec[@]}"
+      emit_kept_diff
     fi
   fi
 }
 
-# The two exclusion arms of the header's "Exclusion" paragraph, both read from HEAD_SHA. Sets
-# EXCL_PATHS (raw paths, for the pathspec), EXCL_SHOWN (the same paths quoted as git prints them, so
-# a name holding a newline cannot forge a dossier line) and EXCL_REASONS, parallel and in diff order.
-# Attributes are checked in an empty bare git dir that reads this repository's object store, so
-# neither the working tree, the repository's info/attributes, core.attributesFile nor the system
-# attributes file can set them.
+# The embedded diff of the changes classify_exclusions kept, in diff order. The kept paths go to git
+# as literal pathspecs in batches of at most 8192 characters, so a bulk change never exceeds the exec
+# argument limit; a rename's two paths always share a batch, so the rename stays paired.
+emit_kept_diff() {
+  local -a spec=() entry=()
+  local i size budget=8192 used=0
+  for i in "${!KEPT_OLD[@]}"; do
+    entry=(":(top,literal)${KEPT_OLD[$i]}")
+    size=${#KEPT_OLD[$i]}
+    if [ -n "${KEPT_NEW[$i]}" ]; then
+      entry+=(":(top,literal)${KEPT_NEW[$i]}")
+      size=$((size + ${#KEPT_NEW[$i]}))
+    fi
+    if [ "${#spec[@]}" -gt 0 ] && [ $((used + size)) -gt "$budget" ]; then
+      git diff --no-ext-diff --find-renames --unified=3 "$BASE_SHA"..."$HEAD_SHA" -- "${spec[@]}"
+      spec=(); used=0
+    fi
+    spec+=("${entry[@]}"); used=$((used + size))
+  done
+  if [ "${#spec[@]}" -gt 0 ]; then
+    git diff --no-ext-diff --find-renames --unified=3 "$BASE_SHA"..."$HEAD_SHA" -- "${spec[@]}"
+  fi
+}
+
+# C-style quoting of a path for an EXCLUDED row, always inside double quotes, so no row can begin
+# like a dossier marker or span two lines. Sets the variable named by $2.
+quote_path() {  # $1 = path, $2 = variable to set
+  local s="$1" out="" c i
+  s="${s//\\/\\\\}"; s="${s//\"/\\\"}"
+  if [[ "$s" == *[[:cntrl:]]* ]]; then
+    for ((i = 0; i < ${#s}; i++)); do
+      c="${s:i:1}"
+      if [[ "$c" == [[:cntrl:]] ]]; then printf -v c '\\%03o' "'$c"; fi
+      out+="$c"
+    done
+    s="$out"
+  fi
+  printf -v "$2" '"%s"' "$s"
+}
+
+# The two exclusion arms of the header's "Exclusion" paragraph, both read from HEAD_SHA. Changes are
+# enumerated with rename detection, as the embedded diff shows them; a rename with either side
+# excluded is excluded whole. Sets EXCL_PATHS, EXCL_SHOWN (each path quoted by quote_path) and
+# EXCL_REASONS, parallel and in diff order, and KEPT_OLD/KEPT_NEW, the kept changes in diff order
+# (KEPT_NEW is empty unless the change is a rename). Attributes are checked in an empty bare git dir,
+# made without templates and in this repository's object format, that reads this repository's
+# object store, so neither the working tree, the repository's info/attributes, core.attributesFile,
+# an init template nor the system attributes file can set them.
 classify_exclusions() {
-  EXCL_PATHS=(); EXCL_SHOWN=(); EXCL_REASONS=()
+  EXCL_PATHS=(); EXCL_SHOWN=(); EXCL_REASONS=(); KEPT_OLD=(); KEPT_NEW=()
   local tmp; tmp="$(mktemp -d -p "$SCRATCH" exclusions.XXXXXX)"
-  git diff --no-renames --name-only -z "$BASE_SHA"..."$HEAD_SHA" > "$tmp/paths"
-  git diff --no-renames --name-only "$BASE_SHA"..."$HEAD_SHA" > "$tmp/shown"
-  local -a paths=() shown=() globs=()
-  local path name value line
-  while IFS= read -r -d '' path; do paths+=("$path"); done < "$tmp/paths"
-  while IFS= read -r line; do shown+=("$line"); done < "$tmp/shown"
-  if [ "${#paths[@]}" -eq 0 ]; then rm -rf -- "$tmp"; return 0; fi
-  [ "${#shown[@]}" -eq "${#paths[@]}" ] || die 2 "could not list the changed paths for the exclusion check (${#paths[@]} raw, ${#shown[@]} quoted)."
-  local objects; objects="$(git rev-parse --path-format=absolute --git-path objects)"
+  git diff --find-renames --name-status -z "$BASE_SHA"..."$HEAD_SHA" > "$tmp/changes"
+  local -a old=() new=() paths=() globs=()
+  local status path other name value line
+  while IFS= read -r -d '' status && IFS= read -r -d '' path; do
+    other=""
+    case "$status" in R*|C*) IFS= read -r -d '' other ;; esac
+    old+=("$path"); new+=("$other"); paths+=("$path")
+    if [ -n "$other" ]; then paths+=("$other"); fi
+  done < "$tmp/changes"
+  if [ "${#old[@]}" -eq 0 ]; then rm -rf -- "$tmp"; return 0; fi
+  local objects format
+  objects="$(git rev-parse --path-format=absolute --git-path objects)"
+  format="$(git rev-parse --show-object-format)"
   if [ "$(git cat-file -t "${HEAD_SHA}:.adversarial-exclude" 2>/dev/null)" = "blob" ]; then
     git cat-file blob "${HEAD_SHA}:.adversarial-exclude" > "$tmp/list"
     while IFS= read -r line || [ -n "$line" ]; do
@@ -864,7 +910,7 @@ classify_exclusions() {
   # The repository's object store (GIT_OBJECT_DIRECTORY honoured) is handed over as the attrs dir's
   # own; every other variable that could point git back at this repository is dropped.
   env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE -u GIT_OBJECT_DIRECTORY \
-    git init -q --bare --initial-branch=attributes "$tmp/attr.git"
+    git init -q --bare --template= --object-format="$format" --initial-branch=attributes "$tmp/attr.git"
   printf '%s\0' "${paths[@]}" \
     | env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
         GIT_OBJECT_DIRECTORY="$objects" GIT_ATTR_NOSYSTEM=1 \
@@ -877,18 +923,32 @@ classify_exclusions() {
     fi
   done < "$tmp/attrs"
   rm -rf -- "$tmp"
-  local reason glob i
-  for i in "${!paths[@]}"; do
-    path="${paths[$i]}"
+  local -A why=()
+  local reason glob
+  for path in "${paths[@]}"; do
     reason="${attr[$path]:-}"
     if [ -z "$reason" ]; then
       for glob in "${globs[@]}"; do
         if [[ "${path#./}" == $glob ]]; then reason="glob:$glob"; break; fi
       done
     fi
-    if [ -n "$reason" ]; then
-      EXCL_PATHS+=("$path"); EXCL_SHOWN+=("${shown[$i]}"); EXCL_REASONS+=("$reason")
+    why[$path]="$reason"
+  done
+  # A rename's other side takes the excluded side's reason, so its hunks cannot carry the content back.
+  local i shown
+  for i in "${!old[@]}"; do
+    reason="${why[${old[$i]}]}"
+    if [ -n "${new[$i]}" ] && [ -z "$reason" ]; then reason="${why[${new[$i]}]}"; fi
+    if [ -z "$reason" ]; then
+      KEPT_OLD+=("${old[$i]}"); KEPT_NEW+=("${new[$i]}")
+      continue
     fi
+    for path in "${old[$i]}" "${new[$i]}"; do
+      if [ -z "$path" ]; then continue; fi
+      quote_path "$path" shown
+      EXCL_PATHS+=("$path"); EXCL_SHOWN+=("$shown")
+      if [ -n "${why[$path]}" ]; then EXCL_REASONS+=("${why[$path]}"); else EXCL_REASONS+=("$reason"); fi
+    done
   done
 }
 
