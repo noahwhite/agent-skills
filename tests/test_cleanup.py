@@ -127,7 +127,9 @@ def test_the_key_is_matched_at_a_token_boundary_never_as_a_substring() -> None:
         "the key starts the name or follows a `-` or `/` in it, and the key ends the name or is followed by a `-` or `/` in it",
         "the directory `<key>` in `/tmp/<key>/checkout` all carry it",
         "`<key>0`, `x<key>`, and `<key>x` do not",
-        "A name that fails the boundary test is a different story's artifact",
+        # SKL-220: scoped so it does not exclude persistent-memory notes, which have their own match.
+        "Outside persistent-memory notes, which step 2 matches by their own rule below, "
+        "a name that fails the boundary test is a different story's artifact",
     ):
         assert phrase in body, phrase
 
@@ -336,6 +338,119 @@ def test_the_run_acts_in_one_repository() -> None:
         "named as skipped rather than touched",
     ):
         assert phrase in body, phrase
+
+
+def persistent_memory_row() -> str:
+    rows = [line for line in (ROOT / "shared" / "runtimes.md").read_text().splitlines()
+            if line.startswith("| Persistent memory")]
+    assert len(rows) == 1, f"expected one persistent-memory row in shared/runtimes.md, got {len(rows)}"
+    return rows[0]
+
+
+def test_step_1_records_each_resolved_keys_tracker_state() -> None:
+    body = section(text(), "1. Resolve every key against the tracker")
+    assert (
+        "Record each resolved key's tracker state, the state its `linear issue view` lookup reports"
+        in body
+    )
+
+
+def test_the_read_first_runtimes_bullet_names_the_persistent_memory_row() -> None:
+    bullet = next(line for line in section(text(), "Read first").splitlines()
+                  if line.startswith("- [references/runtimes.md]"))
+    assert 'the "Persistent memory" row' in bullet
+
+
+def test_persistent_memory_notes_are_an_inventory_source_read_from_the_runtime_map_row() -> None:
+    body = section(text(), "2. Inventory every artifact before removing any")
+    for phrase in (
+        "**Persistent-memory notes.**",
+        'the stores the "Persistent memory" row of [references/runtimes.md](references/runtimes.md) names',
+        "for the main checkout and for each worktree this inventory lists",
+        "this text names no runtime and no store path",
+        "A store the run cannot read is reported as unsearchable, never as empty.",
+    ):
+        assert phrase in body, phrase
+
+
+def test_a_note_is_matched_on_file_name_or_frontmatter_name_case_insensitively() -> None:
+    body = section(text(), "2. Inventory every artifact before removing any")
+    for phrase in (
+        "A note is `remove` when its file name, with its extension ignored, or the `name` in its frontmatter carries the story key",
+        "compared without regard to letter case",
+        "with no letter or digit directly before or after the key",
+        "A note that carries the key only in its body is `skip`, and the report names it.",
+    ):
+        assert phrase in body, phrase
+
+
+def test_a_runtime_without_observed_memory_touches_no_note_and_prints_the_pinned_line() -> None:
+    body = section(text(), "2. Inventory every artifact before removing any")
+    for phrase in (
+        "When the row for the runtime reads `none`, print `skipped: this runtime has no persistent memory`",
+        "when it reads `not observed`, or the map has no row for the runtime, "
+        "print `unchecked: persistent memory not observed on this runtime`",
+        "in both cases no note is listed or touched",
+    ):
+        assert phrase in body, phrase
+
+
+def test_a_memory_note_is_removed_only_when_its_story_is_done_or_canceled() -> None:
+    body = section(text(), "3. Delete only with merge evidence")
+    for phrase in (
+        "**Persistent-memory note.**",
+        "the story's tracker state is the only guard for it",
+        "the merge-evidence guards of every other artifact are unchanged",
+        "deleted with a single `rm` of its quoted path",
+        "only when the state step 1 recorded for its story equals "
+        "`profile.tracker.states.done` or `profile.tracker.states.canceled`",
+        "When either of those two profile keys is unset, no note is removed, and the report names the unset key.",
+    ):
+        assert phrase in body, phrase
+
+
+def test_a_memory_note_removal_is_read_back_and_index_lines_are_not_edited() -> None:
+    body = section(text(), "3. Delete only with merge evidence")
+    for phrase in (
+        "Each note removal is read back",
+        "a note still present is `refused`, not removed",
+        "Index lines are not edited",
+        "the report says so once when any note was removed",
+    ):
+        assert phrase in body, phrase
+
+
+def test_the_report_names_each_memory_note_and_carries_the_pinned_lines() -> None:
+    body = section(text(), "6. Report and confirm")
+    for phrase in (
+        "Each persistent-memory note is reported by its file name under removed, skipped, or refused, with the reason",
+        "`skipped: this runtime has no persistent memory`",
+        "`unchecked: persistent memory not observed on this runtime`",
+        "index lines were not edited",
+    ):
+        assert phrase in body, phrase
+
+
+def test_the_boundaries_bullet_is_scoped_to_admit_memory_notes() -> None:
+    body = section(text(), "Boundaries")
+    assert (
+        "It removes only artifacts it can attribute to a named key: at a token boundary, "
+        "or, for a persistent-memory note, by the note match step 2 states."
+    ) in body
+
+
+def test_the_skill_text_names_no_runtime_or_store_path_the_memory_row_names() -> None:
+    header = next(line for line in (ROOT / "shared" / "runtimes.md").read_text().splitlines()
+                  if line.startswith("| Capability |"))
+    runtimes = [cell.strip() for cell in header.split("|")[2:] if cell.strip()]
+    runtimes = [re.sub(r"\s*\(.*\)$", "", name) for name in runtimes]
+    runtime_cells = "|".join(persistent_memory_row().split("|")[2:])
+    paths = [token for token in re.findall(r"`([^`]+)`", runtime_cells)
+             if re.search(r"[A-Za-z]", token) and ("/" in token or token.endswith(".md"))]
+    assert runtimes and paths, (runtimes, paths)
+    body = text()
+    for name in runtimes + paths:
+        assert name not in body, name
 
 
 def test_the_skill_text_names_no_host_the_capability_map_names() -> None:

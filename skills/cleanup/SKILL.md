@@ -23,7 +23,7 @@ It deletes; it never implements, reviews, or verifies a story.
   The exact commands this skill runs are in steps 1 and 5.
 - [references/github.md](references/github.md) - background for branches, worktrees, and merges.
   The merge evidence this skill requires is stated in step 3, and it is stricter than the general rule there.
-- [references/runtimes.md](references/runtimes.md) - step 4: the hosted-evidence capability row, and the capability mapping when a runtime is not listed.
+- [references/runtimes.md](references/runtimes.md) - steps 2 and 3: the "Persistent memory" row; step 4: the hosted-evidence capability row, and the capability mapping when a runtime is not listed.
 
 ## Invocation
 
@@ -53,6 +53,7 @@ Do this before anything is touched, so a mistyped key removes nothing.
   The other keys still run: one bad key never stops the run, and no artifact is attributed to it.
 - Never invent, guess, or shorten a key, and never take one from the current branch, a worktree path, or the session's own history.
 - Record each key's resolution in the final report.
+- Record each resolved key's tracker state, the state its `linear issue view` lookup reports, for the persistent-memory guard in step 3.
 
 ## 2. Inventory every artifact before removing any
 
@@ -64,7 +65,7 @@ Find artifacts by story key: a session's scratch directory is per-session and ra
 **Match the key at a token boundary.**
 A name carries the key only when the key stands as its own token: the key starts the name or follows a `-` or `/` in it, and the key ends the name or is followed by a `-` or `/` in it.
 `feature/<key>`, `<key>-follow-up`, `fix-x-<key>`, and the directory `<key>` in `/tmp/<key>/checkout` all carry it; `<key>0`, `x<key>`, and `<key>x` do not.
-A name that fails the boundary test is a different story's artifact: it is never inventoried as removable and never acted on, whatever a glob or a search returns.
+Outside persistent-memory notes, which step 2 matches by their own rule below, a name that fails the boundary test is a different story's artifact: it is never inventoried as removable and never acted on, whatever a glob or a search returns.
 
 Sources, all of them:
 
@@ -79,6 +80,12 @@ Sources, all of them:
   Committed evidence, meaning the content the branch tip holds at `profile.qa.evidence_dir`, is out of scope here; a working-tree edit there is uncommitted and is inventoried.
 - **Session files.** Session checklist and scratch files naming the key under `profile.workspace.scratch_dir`.
   When that key is unset, the sessions of this profile used standalone temporary directories, so the report names this source as unsearchable instead of reporting it as empty.
+- **Persistent-memory notes.** The notes in the stores the "Persistent memory" row of [references/runtimes.md](references/runtimes.md) names for the runtime this session runs on, for the main checkout and for each worktree this inventory lists.
+  The row says where each store is; this text names no runtime and no store path.
+  A store the run cannot read is reported as unsearchable, never as empty.
+  A note is `remove` when its file name, with its extension ignored, or the `name` in its frontmatter carries the story key, compared without regard to letter case, with no letter or digit directly before or after the key.
+  A note that carries the key only in its body is `skip`, and the report names it.
+  When the row for the runtime reads `none`, print `skipped: this runtime has no persistent memory`; when it reads `not observed`, or the map has no row for the runtime, print `unchecked: persistent memory not observed on this runtime`; in both cases no note is listed or touched.
 
 Never inventoried as removable:
 
@@ -119,6 +126,12 @@ Remove in this order, so a branch is never refused because a worktree still hold
   A remote branch that never became a PR is refused rather than deleted.
 - **Disposable QA output and session files.** Removed only from a directory the inventory proved idle, and only after step 5 has attached the evidence the run swept, so the run never deletes the only copy of something the story is about to receive.
   An uncommitted evidence copy is removable only once it has a home the story keeps: attached in step 5, or committed. Until then it is skipped, because a copy with no home is the durable record.
+- **Persistent-memory note.** A note holds no branch or commit, so merge evidence does not apply: the story's tracker state is the only guard for it, and the merge-evidence guards of every other artifact are unchanged.
+  A `remove` note is deleted with a single `rm` of its quoted path, only when the state step 1 recorded for its story equals `profile.tracker.states.done` or `profile.tracker.states.canceled`.
+  A note whose story is in any other state is skipped, with the reason that the story is not done or canceled.
+  When either of those two profile keys is unset, no note is removed, and the report names the unset key.
+  Each note removal is read back by listing its store: a note still present is `refused`, not removed.
+  Index lines are not edited: a line that links a removed note stays as it is, and the report says so once when any note was removed.
 
 Guards that hold for every removal:
 
@@ -182,6 +195,8 @@ refused:
 - Every story named at invocation gets its own section, including an unresolved key, which carries only its resolution line.
 - The report carries four parts per story: what was removed, what was archived to the tracker, with the attachment names, what was skipped and why, including the hosted-evidence skip, and what it refused to touch, with the failed check.
 - The inventory report already printed before the first removal: nothing is removed before the inventory report is printed.
+- Each persistent-memory note is reported by its file name under removed, skipped, or refused, with the reason.
+  The report carries the `skipped: this runtime has no persistent memory` or `unchecked: persistent memory not observed on this runtime` line when step 2 printed one, and, once, that index lines were not edited when any note was removed.
 - When anything was archived or refused, post the same summary as a comment on that story, carrying the dated refusal lines step 3 recorded.
   One comment per story per run: the refusal detail lives inside this summary, never in a second comment.
 
@@ -189,7 +204,7 @@ refused:
 
 - It acts in one repository: the one the run starts in, or the one this skill's overlay names.
   An artifact in another repository is that repository's own run to clean, and is named as skipped rather than touched.
-- It removes only artifacts it can attribute to a named key at a token boundary.
+- It removes only artifacts it can attribute to a named key: at a token boundary, or, for a persistent-memory note, by the note match step 2 states.
   Everything else is left out and named as skipped.
 - It never removes work that has not landed, and it never forces a removal.
 - It never edits, reviews, or verifies a story, and it never moves a story's status.
