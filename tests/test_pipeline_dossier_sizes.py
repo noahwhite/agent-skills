@@ -252,6 +252,26 @@ def test_after_a_sweep_rerun_discards_the_hunt_and_arbitrate(gate, flow):
         "arbitrate: not run\n")
 
 
+@pytest.mark.parametrize("bad", ["path=x\n", "bytes=12x\n", "bytes=1234567890123456789\n", "dir", "fifo"])
+@pytest.mark.parametrize("flow", FLOWS)
+def test_an_unusable_sweep_sidecar_reads_not_run_and_the_rest_still_rebuilds(gate, flow, bad):
+    """A sidecar that is not a regular file, or has no byte count of at most 18 digits, is no size."""
+    complete(gate, flow, "sweep")
+    side = run_dir(gate) / "sweep.dossier"
+    side.unlink()
+    if bad == "dir":
+        side.mkdir()
+    elif bad == "fifo":
+        os.mkfifo(side)
+    else:
+        side.write_text(bad)
+    hunt = complete(gate, flow, "hunt")
+    assert size_log(gate).read_text() == (
+        "sweep: not run\n"
+        f"hunt: {hunt} bytes\n"
+        "arbitrate: not run\n")
+
+
 @pytest.mark.parametrize("flow", FLOWS)
 def test_excluded_lines_follow_their_phase_in_sidecar_order(excluding_gate, flow):
     g = excluding_gate

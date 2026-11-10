@@ -104,7 +104,7 @@
 # rebuilt after every completed sidecar write and after every sidecar removal point (a phase's start
 # and the phases it discards, whether or not a sidecar was there, and the `dossier` exit trap). It
 # lists sweep, hunt and arbitrate in that order: '<phase>: <bytes> bytes' followed by the sidecar's
-# `excluded` lines, or '<phase>: not run' without a sidecar. Under --no-sweep the sweep line is
+# `excluded` lines, or '<phase>: not run' without a usable sidecar. Under --no-sweep the sweep line is
 # 'sweep: absent (--no-sweep)' and any sweep sidecar is ignored. A final 'total: <bytes> bytes' line
 # appears once every phase --no-sweep does not disable has a sidecar, and sums those phases. The log
 # is a view only: no phase demands it, it is in no binding or stamp, and one that cannot be written
@@ -1082,7 +1082,9 @@ write_size_sidecar() {  # $1 = phase, $2 = the dossier just written
 }
 
 # The size log's text (see "Size log" in the header), built from the sidecars present now into
-# DOSSIER_SIZES_TEXT. Returns non-zero when a sidecar exists but cannot be read or has no byte count.
+# DOSSIER_SIZES_TEXT. A sidecar that is not a regular file, cannot be read, or carries no byte count
+# of at most 18 digits (so three still sum without overflow) gives no size: that phase reads
+# 'not run' and the rest of the log is still rebuilt.
 DOSSIER_SIZES_TEXT=""
 dossier_sizes_text() {
   local p side content line bytes total=0 complete=1 text=""
@@ -1093,21 +1095,21 @@ dossier_sizes_text() {
       continue
     fi
     side="$RUN_DIR/$p.dossier"
-    if ! content="$(cat -- "$side" 2>/dev/null)"; then
-      [ ! -e "$side" ] || return 1
+    bytes=""
+    excluded=()
+    if [ -f "$side" ] && content="$(cat -- "$side" 2>/dev/null)"; then
+      while IFS= read -r line; do
+        case "$line" in
+          bytes=*) bytes="${line#bytes=}" ;;
+          "excluded "*) excluded+=("$line") ;;
+        esac
+      done <<< "$content"
+    fi
+    if ! [[ "$bytes" =~ ^[0-9]{1,18}$ ]]; then
       text+="$p: not run"$'\n'
       complete=0
       continue
     fi
-    bytes=""
-    excluded=()
-    while IFS= read -r line; do
-      case "$line" in
-        bytes=*) bytes="${line#bytes=}" ;;
-        "excluded "*) excluded+=("$line") ;;
-      esac
-    done <<< "$content"
-    [[ "$bytes" =~ ^[0-9]+$ ]] || return 1
     text+="$p: $bytes bytes"$'\n'
     for line in "${excluded[@]}"; do text+="$line"$'\n'; done
     total=$(( total + 10#$bytes ))
