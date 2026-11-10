@@ -130,7 +130,7 @@ Remove in this order, so a branch is never refused because a worktree still hold
   A `remove` note is deleted with a single `rm` of its quoted path, only when the state step 1 recorded for its story equals `profile.tracker.states.done` or `profile.tracker.states.canceled`.
   A note whose story is in any other state is skipped, with the reason that the story is not done or canceled.
   When either of those two profile keys is unset, no note is removed, and the report names each unset key.
-  Each note removal is read back by listing its store: a note still present is `refused`, not removed.
+  Each note removal is read back by listing its store: a note still present is `refused`, not removed, and a store listing that fails reports the note `refused` with the failure's reason, never `removed`.
   Index lines are not edited: a line that links a removed note stays as it is, and the report says so once when any note was removed.
 
 Guards that hold for every removal:

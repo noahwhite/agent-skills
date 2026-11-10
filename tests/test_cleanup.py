@@ -421,6 +421,7 @@ def test_a_memory_note_removal_is_read_back_and_index_lines_are_not_edited() -> 
     for phrase in (
         "Each note removal is read back",
         "a note still present is `refused`, not removed",
+        "a store listing that fails reports the note `refused` with the failure's reason, never `removed`",
         "Index lines are not edited",
         "the report says so once when any note was removed",
     ):
