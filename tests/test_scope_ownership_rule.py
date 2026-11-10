@@ -197,10 +197,11 @@ def temporal_artifact(text: str) -> str:
 
 
 def story_artifact(text: str) -> str:
-    match = SKIP_ARTIFACT_VERB.search(text)
-    if not match:
-        return text
-    return SKIP_ARTIFACT_ADJUNCT.split(text[match.end() :], maxsplit=1)[0]
+    artifacts = [
+        SKIP_ARTIFACT_ADJUNCT.split(text[match.end() :], maxsplit=1)[0]
+        for match in SKIP_ARTIFACT_VERB.finditer(text)
+    ]
+    return " ".join(artifacts) if artifacts else text
 
 
 def content_overlap(left: str, right: str) -> bool:
@@ -213,7 +214,11 @@ def content_overlap(left: str, right: str) -> bool:
         return False
     if (left_words - SKIP_ARTIFACT_GENERIC) & (right_words - SKIP_ARTIFACT_GENERIC):
         return True
-    return bool((left_words & right_words) & SKIP_ARTIFACT_GENERIC)
+    if not (left_words & right_words) & SKIP_ARTIFACT_GENERIC:
+        return False
+    left_modifiers = left_words - SKIP_ARTIFACT_GENERIC
+    right_modifiers = right_words - SKIP_ARTIFACT_GENERIC
+    return not left_modifiers or not right_modifiers or bool(left_modifiers & right_modifiers)
 
 
 def sentences(text: str) -> list[str]:
@@ -426,6 +431,7 @@ def test_false_positive_probe_passes() -> None:
             "Code may carry a permanent exemption while the files are created by a tool; SKL-123 supplies fixtures.",
             "Code may carry a permanent exemption while files are created by a tool; SKL-123 supplies unrelated files.",
             "Code may carry a skip while files are created by a tool; SKL-123 supplies separate files.",
+            "Code may carry a skip while alpha files are created by a tool; SKL-123 supplies beta files.",
             "# Permanent exemption: generated references/ copies are skipped by the scan; this depends on no other story.",
             'EXEMPT = ("references",)  # why: vendored output, never hand-edited',
             *carve_out,
@@ -469,6 +475,7 @@ def test_true_positive_probe_flags_permissive_inversions() -> None:
         "Code may carry a skip while files are created by a tool; SKL-123 supplies the files.",
         "Code may carry a skip while generated files are created by a tool; SKL-123 supplies the files.",
         "Code may carry a skip while files are created by a tool; SKL-123 supplies the files in a separate package.",
+        "Code may carry a skip until the client is landed by the pipeline; SKL-123 creates API docs for users and lands the client.",
         "The engineer may add or move an AC.",
         "An engineer adds an AC to another story.",
         "Tests xfail for another story.",
