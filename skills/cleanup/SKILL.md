@@ -105,7 +105,7 @@ Two more rules:
 ## 3. Delete only with merge evidence
 
 Nothing is deleted while it still holds unmerged or unreviewed work: a branch holds it, and a worktree holds its own uncommitted or ignored files.
-Before each removal, after `git fetch origin`, establish merge evidence from the story's pull requests:
+Before each removal other than a persistent-memory note, after `git fetch origin`, establish merge evidence from the story's pull requests:
 
 - A merged PR whose head commit is the tip: `gh pr view <n> --json state,headRefOid` reports `MERGED`, and its `headRefOid` equals the tip from `git rev-parse <branch>` for a local branch, or from `git ls-remote --heads origin <branch>` for a remote one.
 - Containment, only when `profile.git.merge_method` is neither `squash` nor `rebase`: `git merge-base --is-ancestor <branch-tip> origin/<profile.git.integration_branch>`, read after the same fetch.
@@ -129,7 +129,7 @@ Remove in this order, so a branch is never refused because a worktree still hold
 - **Persistent-memory note.** A note holds no branch or commit, so merge evidence does not apply: the story's tracker state is the only guard for it, and the merge-evidence guards of every other artifact are unchanged.
   A `remove` note is deleted with a single `rm` of its quoted path, only when the state step 1 recorded for its story equals `profile.tracker.states.done` or `profile.tracker.states.canceled`.
   A note whose story is in any other state is skipped, with the reason that the story is not done or canceled.
-  When either of those two profile keys is unset, no note is removed, and the report names the unset key.
+  When either of those two profile keys is unset, no note is removed, and the report names each unset key.
   Each note removal is read back by listing its store: a note still present is `refused`, not removed.
   Index lines are not edited: a line that links a removed note stays as it is, and the report says so once when any note was removed.
 
@@ -196,6 +196,7 @@ refused:
 - The report carries four parts per story: what was removed, what was archived to the tracker, with the attachment names, what was skipped and why, including the hosted-evidence skip, and what it refused to touch, with the failed check.
 - The inventory report already printed before the first removal: nothing is removed before the inventory report is printed.
 - Each persistent-memory note is reported by its file name under removed, skipped, or refused, with the reason.
+  Each persistent-memory store step 2 could not read is named in the report as unsearchable.
   The report carries the `skipped: this runtime has no persistent memory` or `unchecked: persistent memory not observed on this runtime` line when step 2 printed one, and, once, that index lines were not edited when any note was removed.
 - When anything was archived or refused, post the same summary as a comment on that story, carrying the dated refusal lines step 3 recorded.
   One comment per story per run: the refusal detail lives inside this summary, never in a second comment.
