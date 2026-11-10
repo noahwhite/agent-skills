@@ -255,6 +255,26 @@ def test_each_exclusion_reason_has_its_line(excluding_gate, flow):
     check_sidecar(g, "arbitrate", dossiers["arbitrate"])
 
 
+@pytest.mark.parametrize("flow", FLOWS)
+def test_an_excluded_row_and_its_sidecar_line_escape_a_path_identically(excluding_gate, flow):
+    """One shared escape: the row is the path always quoted, the sidecar quotes only when it must,
+    and a quoted path (here a quote and a tab) is byte-identical in both."""
+    g = excluding_gate
+    dossier = complete(g, flow, "sweep")
+    lines = sidecar(g, "sweep").read_bytes().splitlines()[2:]
+    sidecar_paths = [line[len(b"excluded "):line.rindex(b" reason=")] for line in lines]
+    text = dossier.read_bytes().split(b"===== EXCLUDED", 1)[1].split(b"=====\n", 1)[1]
+    row_paths = [row[:row.rindex(b" | ")] for row in text.split(b"\n\n", 1)[0].splitlines()]
+    assert len(row_paths) == len(sidecar_paths) == len(EXPECTED_EXCLUDED)
+    for row, side in zip(row_paths, sidecar_paths):
+        if side.startswith(b'"'):
+            assert row == side, (row, side)
+        elif side.isascii():
+            assert row == b'"' + side + b'"', (row, side)
+        else:
+            assert row == b'"fixtures/caf\\303\\251.json"', row
+
+
 # --- writes that do not complete leave no sidecar ---------------------------------------------------
 
 def fake_bin_env(g: dict, name: str, script: str) -> dict[str, str]:

@@ -350,7 +350,7 @@ def test_an_excluded_path_is_quoted_and_cannot_forge_a_dossier_line(tmp_path):
         assert not re.search(r"^===== DIFF \(forged", dossier, re.M), phase
         if phase != "arbitrate":
             assert excluded(dossier) == {
-                "x\\012===== DIFF (forged) =====\\012y.txt": "glob:*.txt"}
+                "x\\n===== DIFF (forged) =====\\ny.txt": "glob:*.txt"}
             assert f"{MARK}-FORGED" not in dossier
 
 
