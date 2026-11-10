@@ -140,16 +140,17 @@ SKIP_LINK_DEPENDENCY = re.compile(
 )
 SKIP_MISSING_STATE = re.compile(
     r"\b(?:absent|unavailable|missing|lacking|lack|incomplete|unfinished|pending|blocked|needed|required|depends|supplied|unsupported|unprovided|scarce|unmade|unbuilt|unwritten)\b"
-    r"|\bno\s+(?:fixtures?|credentials?|files?|directories|directory|dirs?|tests?|checks?|artifacts?|outputs?|dependencies|keys?|tokens?|secrets?|configs?|configurations?|environments?|services?|apis?|contracts?|data|code|implementation)\b"
+    r"|\bno\s+(?:fixtures?|credentials?|files?|directories|directory|dirs?|tests?|checks?|artifacts?|outputs?|dependencies|keys?|tokens?|secrets?|configs?|configurations?|environments?|services?|apis?|contracts?|data|code|implementation)\b(?!\s+(?:are|is|were|was|be|been|being)\s+(?:expected|assumed|intentional|deliberate)\b|\s+by design\b)"
     r"|\b(?:not|n't|never|without)\s+(?:present|available|exist|existed|there|ready|landed|delivered|supplied|provided|added|created|built|written|done|complete|completed)\b"
     r"|\b(?:does|do|is|are)\s+not\s+(?:present|available|exist|ready|landed|delivered|supplied|provided|added|created|built|written|done|complete|completed)\b",
     re.IGNORECASE,
 )
 SKIP_TEMPORAL_DEPENDENCY = re.compile(
-    r"\b(?:until|after|once|when|while)\b[^.;]{0,80}?\b(?:lands|landing|landed|deliver|delivers|delivery|provide|provides|supply|supplies|add|adds|create|creates|build|builds|write|writes)\b"
-    r"|\b(?:lands|landing|landed|deliver|delivers|delivery|provide|provides|supply|supplies|add|adds|create|creates|build|builds|write|writes)\b[^.;]{0,80}?\b(?:until|after|once|when|while)\b",
+    r"\b(?:until|after|once|when|while)\b[^.;]{0,80}?\b(?:lands|landing|landed|deliver|delivers|delivered|delivery|provide|provides|provided|supply|supplies|supplied|add|adds|added|create|creates|created|build|builds|built|write|writes|written)\b"
+    r"|\b(?:lands|landing|landed|deliver|delivers|delivered|delivery|provide|provides|provided|supply|supplies|supplied|add|adds|added|create|creates|created|build|builds|built|write|writes|written)\b[^.;]{0,80}?\b(?:until|after|once|when|while)\b",
     re.IGNORECASE,
 )
+SKIP_INDEPENDENT_AGENT = re.compile(r"\bby\s+(?:a|an|the)?\s*(?:tools?|scripts?|generators?|systems?|pipelines?|process(?:es)?|builds?|vendors?)\b", re.IGNORECASE)
 SKIP_LINK_WEAK = re.compile(r"\b(?:for|on)\b", re.IGNORECASE)
 SKIP_LINK_WEAK_IMMEDIATE = re.compile(r"\b(?:for|on)\s*$", re.IGNORECASE)
 SKIP_IMMEDIATE_LINK = re.compile(r"\b(?:for|until|when|if|while|because|keyed on|depends on|blocked by|tied to|after|once)\s*$", re.IGNORECASE)
@@ -230,8 +231,9 @@ def permissive_inversions(text: str) -> list[str]:
                         return True
                     if crosses_boundary(skip[1], other[0]):
                         before_boundary = gap[:last_boundary]
+                        temporal = SKIP_TEMPORAL_DEPENDENCY.search(before_boundary) and not SKIP_INDEPENDENT_AGENT.search(before_boundary)
                         return bool(
-                            SKIP_TEMPORAL_DEPENDENCY.search(before_boundary)
+                            temporal
                             or (SKIP_LINK_DEPENDENCY.search(before_boundary) and SKIP_MISSING_STATE.search(before_boundary))
                         )
                     return weak_link_ok(gap)
@@ -356,6 +358,8 @@ def test_false_positive_probe_passes() -> None:
             "Code may carry a permanent exemption if the files are generated; SKL-123 supplies the fixtures.",
             "Code may carry a permanent exemption if the generated files are not hand-edited; SKL-123 supplies fixtures.",
             "Code may carry a permanent exemption if the generated files are created by a tool; SKL-123 supplies fixtures.",
+            "Code may carry a permanent exemption if no fixtures are expected by design; SKL-123 supplies an unrelated API.",
+            "Code may carry a permanent exemption while the files are created by a tool; SKL-123 supplies fixtures.",
             "# Permanent exemption: generated references/ copies are skipped by the scan; this depends on no other story.",
             'EXEMPT = ("references",)  # why: vendored output, never hand-edited',
             *carve_out,
@@ -393,6 +397,7 @@ def test_true_positive_probe_flags_permissive_inversions() -> None:
         "Code may carry a skip if the directory does not exist; SKL-123 creates it.",
         "Code may carry a skip until the API lands; SKL-123 will deliver the API.",
         "Code may carry a skip if there are no fixtures; SKL-123 will provide them.",
+        "Code may carry a skip until the API is delivered; SKL-123 delivers it.",
         "The engineer may add or move an AC.",
         "An engineer adds an AC to another story.",
         "Tests xfail for another story.",
