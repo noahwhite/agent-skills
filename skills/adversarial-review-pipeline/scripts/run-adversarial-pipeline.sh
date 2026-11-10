@@ -91,9 +91,9 @@
 # dossier's diff (the arbitrate dossier lists none); both paths are escaped as the truncation marker
 # escapes its path, so every record is one physical line. A phase's start removes its own sidecar, a re-run removes the sidecars of the phases it
 # discards, and a `dossier` whose write fails or is undone removes the one it wrote; an invocation
-# refused before its phase starts removes nothing. `run` measures again once its agent returns, since
-# the agent can rewrite its dossier. Each record is written to a temporary file and renamed into
-# place. Sidecars are measurements only: they are not in any binding or stamp and never change
+# refused before its phase starts removes nothing. `run` measures its dossier once, as its phase
+# attempt exits, since the agent can rewrite its dossier, so no record outlives a rewrite. Each
+# record is written to a temporary file and renamed into place. Sidecars are measurements only: they are not in any binding or stamp and never change
 # acceptance. One that cannot be written prints a WARNING, removes only its own temporary file and
 # changes no exit status.
 #
@@ -687,6 +687,7 @@ PHASE_START=0
 CHECKOUT_PATH=""
 COMPLETION_EMITTED=0
 DOSSIER_PENDING=0
+DOSSIER_WRITTEN=0
 on_run_exit() {  # a run attempt's single exit path: report completion, then clean up, keeping the status
   local rc=$?
   set +e
@@ -701,6 +702,8 @@ on_run_exit() {  # a run attempt's single exit path: report completion, then cle
     rm -f -- "$(artifact_for "$phase").stamp" "${dossier:-}" \
       "$RUN_DIR/$phase.launch" "$RUN_DIR/$phase.binding" "$RUN_DIR/$phase.primary"
   fi
+  # Measured only now, once the agent can no longer rewrite the dossier, so the record is never stale.
+  if [ "$DOSSIER_WRITTEN" -eq 1 ]; then write_size_sidecar "$phase" "$dossier"; fi
   if [ "$COMPLETION_EMITTED" -eq 0 ] && [ -n "${phase:-}" ]; then
     COMPLETION_EMITTED=1
     completion_line "$phase" "$(( SECONDS - PHASE_START ))" "$rc"
@@ -1033,22 +1036,17 @@ cap_diff_sections() {  # $1 = the phase's checkout; stdin = one `git diff`, stdo
 # runs no classification, so it lists none. The record is written whole to a temporary file of this
 # invocation's own and renamed into place, so no partial sidecar is ever published and a failure
 # removes only that temporary file, never a sidecar another write published. A sidecar that cannot
-# be written is warned about on one line; it never fails the phase. Sets SIDECAR_WRITTEN to 1 when
-# the sidecar was published, else 0.
+# be written is warned about on one line; it never fails the phase.
 EXCL_PATHS=(); EXCL_REASONS=()
-SIDECAR_WRITTEN=0
 write_size_sidecar() {  # $1 = phase, $2 = the dossier just written
   local side="$RUN_DIR/$1.dossier" tmp="" bytes i
-  SIDECAR_WRITTEN=0
-  if {
+  if ! {
     tmp="$(mktemp "$RUN_DIR/$1.dossier.tmp.XXXXXX")" &&
     bytes="$(LC_ALL=C wc -c < "$2")" &&
     for i in "${!EXCL_PATHS[@]}"; do printf '%s\0%s\0' "${EXCL_PATHS[$i]}" "${EXCL_REASONS[$i]}"; done \
       | python3 -I -c "$PATH_ESCAPE_PY$SIDECAR_PY" "$2" "$bytes" > "$tmp" &&
     mv -f -- "$tmp" "$side"
   } 2>/dev/null; then
-    SIDECAR_WRITTEN=1
-  else
     [ -z "$tmp" ] || rm -f -- "$tmp" 2>/dev/null || true
     printf 'WARNING: could not write the %s dossier size sidecar %q; the phase is unaffected.\n' "$1" "$side" >&2
   fi
@@ -1579,7 +1577,7 @@ case "$cmd" in
     DOSSIER_PENDING=1
     write_dossier "$phase" "$dossier" "$checkout"
     DOSSIER_PENDING=0
-    write_size_sidecar "$phase" "$dossier"
+    DOSSIER_WRITTEN=1
     q_prompt="$(printf '%q' "$dossier")"
     q_out="$(printf '%q' "$out")"
     q_checkout="$(printf '%q' "$checkout")"
@@ -1597,8 +1595,6 @@ case "$cmd" in
     export ADVERSARIAL_SESSION_SCRATCH="${SESSION_SCRATCH:-$SCRATCH}"
     run_guarded "cd $q_checkout && ${line}" "$remaining" "$dossier" "$result_out" "$errlog" "$phase"
     unset ADVERSARIAL_SESSION_SCRATCH
-    # The agent can rewrite its own dossier; the sidecar measures what is on disk once it is done.
-    if [ "$SIDECAR_WRITTEN" -eq 1 ]; then write_size_sidecar "$phase" "$dossier"; fi
     if [[ "$AGENT_CMD" != *"{output_file}"* ]]; then
       cp -- "$out" "$agentlog" 2>/dev/null || true   # the agent's stdout is both the artifact and its log
     fi

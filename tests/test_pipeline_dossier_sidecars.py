@@ -405,6 +405,31 @@ def test_a_run_measures_the_dossier_its_agent_left(gate):
     check_sidecar(gate, "sweep", dossier)
 
 
+def test_a_run_never_keeps_a_measurement_its_agent_outdated(gate):
+    """A measurement that fails once the agent has rewritten the dossier leaves no stale record."""
+    real_wc = subprocess.run(["bash", "-c", "command -v wc"], capture_output=True,
+                             text=True, check=True).stdout.strip()
+    env = fake_bin_env(gate, "wc", (
+        'input="$(cat; echo x)"\n'
+        'case "$input" in *"appended by the agent"*) echo "wc: refused" >&2; exit 1;; esac\n'
+        f'printf "%s" "${{input%x}}" | "{real_wc}" "$@"\n'))
+    agent = AGENT + "; printf 'appended by the agent\\n' >> {prompt_file}"
+    result = run_script("run", "sweep", *common(gate), "--agent-cmd", agent,
+                        env={**env, "PHASE_NAME": "sweep"})
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert sum(line.startswith("WARNING:") for line in result.stderr.splitlines()) == 1, result.stderr
+    assert not sidecar(gate, "sweep").exists()
+    assert leftover_temporaries(gate) == []
+
+
+def test_a_run_whose_agent_fails_still_records_its_completed_dossier(gate):
+    result = run_script("run", "sweep", *common(gate), "--agent-cmd", AGENT + "; exit 1",
+                        env={**gate["env"], "PHASE_NAME": "sweep"})
+    assert result.returncode == 15, result.stdout + result.stderr
+    assert result.stderr.splitlines()[-1].endswith(" exit=15"), result.stderr
+    check_sidecar(gate, "sweep", Path((gate["scratch"] / "seen-sweep" / "path").read_text()))
+
+
 def test_a_relative_tmpdir_still_records_an_absolute_dossier_path(gate):
     """Without --scratch the dossier lands under TMPDIR, which may be relative to the repository."""
     (gate["repo"] / "reltmp").mkdir()
