@@ -29,9 +29,15 @@ MARKER_RE = re.compile(
 )
 
 
-# The fixtures and the oracle read no global or system git config, so a host's diff settings
-# (color, prefixes, submodule format) cannot shape the expected bytes.
-NEUTRAL_GIT = {**os.environ, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
+def neutral_env(extra: dict[str, str] | None = None) -> dict[str, str]:
+    """The host environment without ADVERSARIAL_* and GIT_* variables and without global or system
+    git config, so a host's diff settings (renames, color, prefixes, submodule format) shape neither
+    the fixtures, the oracle nor the script under test."""
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("ADVERSARIAL_", "GIT_"))}
+    return {**env, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1", **(extra or {})}
+
+
+NEUTRAL_GIT = neutral_env()
 
 
 def git(repo: Path, *args: str) -> str:
@@ -43,11 +49,6 @@ def git(repo: Path, *args: str) -> str:
 def git_bytes(repo: Path, *args: str, env: dict[str, str] | None = None) -> bytes:
     return subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True,
                           env=env or NEUTRAL_GIT).stdout
-
-
-def clean_env(extra: dict[str, str] | None = None) -> dict[str, str]:
-    env = {k: v for k, v in os.environ.items() if not k.startswith("ADVERSARIAL_")}
-    return {**env, **(extra or {})}
 
 
 def run_script(*args: str, env: dict[str, str]) -> subprocess.CompletedProcess:
@@ -104,7 +105,7 @@ def make_gate(tmp_path: Path, base: dict[str, bytes], head: dict[str, bytes | No
     scratch = tmp_path / "session-scratch"
     scratch.mkdir()
     (tmp_path / "runtime-tmp").mkdir()
-    env = clean_env({"TMPDIR": str(tmp_path / "runtime-tmp"), **(env_extra or {})})
+    env = neutral_env({"TMPDIR": str(tmp_path / "runtime-tmp"), **(env_extra or {})})
     spec = tmp_path / "spec.md"
     spec.write_text("Story SKL-87: cap the embedded diff.\n")
     g = {"repo": repo, "scratch": scratch, "env": env, "spec": spec, "tmp": tmp_path}
@@ -671,3 +672,16 @@ def test_a_failing_diff_call_fails_the_dossier_write_and_leaves_nothing_behind(t
     run_dir = Path(git(g["repo"], "rev-parse", "--path-format=absolute", "--git-path", "adversarial-pipeline"))
     left = [p.name for p in run_dir.rglob("*") if p.name in (f"{phase}.launch", f"{phase}.binding")]
     assert left == [], f"the failed {phase} phase left {left}"
+
+
+def test_the_preflight_fails_when_python3_cannot_run(tmp_path):
+    g = make_gate(tmp_path, {"a.txt": b"a\n"}, {"a.txt": b"b\n"})
+    fakebin = tmp_path / "nopython"
+    fakebin.mkdir()
+    (fakebin / "python3").write_text("#!/bin/sh\nexit 127\n")
+    (fakebin / "python3").chmod(0o755)
+    env = {**g["env"], "PATH": f"{fakebin}:{g['env']['PATH']}"}
+    result = run_script("preflight", "--repo", str(g["repo"]), "--base", BASE_REF,
+                        "--test-cmd", "true", "--scratch", str(g["scratch"]), env=env)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "FAIL - python3 is not runnable here" in result.stdout, result.stdout

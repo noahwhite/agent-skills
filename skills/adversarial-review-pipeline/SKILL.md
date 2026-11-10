@@ -172,6 +172,7 @@ SPEC="$scratch/spec.md"                                      # the story text an
 ```
 
 It asserts the working tree is clean (`git status --porcelain --untracked-files=all` empty), creates a detached worktree at `HEAD`, and runs the suite there.
+It also fails when `python3` cannot run, because the sweep and hunt dossiers need it to cap the embedded diff.
 A detached worktree, not an archive export, so tests that shell out to git still work.
 Exit codes: 0 PASS, 1 FAIL (dirty tree or suite failed), 3 INCOMPLETE (clean tree but no test command: not a pass).
 Any other failure while writing the report exits non-zero rather than passing.

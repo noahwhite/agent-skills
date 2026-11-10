@@ -60,7 +60,7 @@
 # and a failing `git diff` still fails the dossier write. The call pins --no-color, the a/ and b/
 # prefixes and --submodule=short, so a user's color.ui, diff.noprefix, diff.mnemonicPrefix or
 # diff.submodule setting cannot hide a section boundary from the splitter, which streams the diff one
-# section at a time.
+# section at a time. The splitter needs python3, which the preflight checks.
 #
 # Env equivalents: ADVERSARIAL_REPO, ADVERSARIAL_TEST_CMD, ADVERSARIAL_TEST_DIR, ADVERSARIAL_BASE,
 # ADVERSARIAL_SPEC_FILE, ADVERSARIAL_SCRATCH, ADVERSARIAL_AGENT_CMD, ADVERSARIAL_MODEL,
@@ -1211,6 +1211,14 @@ case "$cmd" in
             echo "Full suite output: $SUITE_LOG"
           fi
         fi
+      fi
+      echo
+      echo "## 3. python3, which the sweep and hunt dossiers need to cap the embedded diff"
+      if python3 -I -c '' < /dev/null > /dev/null 2>&1; then
+        echo "PASS - python3 runs."
+      else
+        echo "FAIL - python3 is not runnable here, so no sweep or hunt dossier could be written."
+        status=1
       fi
       echo
       echo "## Verdict"
