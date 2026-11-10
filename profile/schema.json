@@ -257,7 +257,7 @@
         },
         "signed_commits": {
           "type": "boolean",
-          "description": "Whether commits must be signed. With git.signing_key set, the skills also run the preflight that checks git would sign with that key; with it unset, they only confirm user.signingkey resolves to the registered key."
+          "description": "Whether commits must be signed. With git.signing_key set, the skills also run the preflight that checks git would sign with that key. An agent never sets `user.signingkey` itself, by `git config` or otherwise; a read-only check (for example `git config --get user.signingkey`) is not a set."
         },
         "signing_key": {
           "type": "string",

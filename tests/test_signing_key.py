@@ -845,12 +845,34 @@ def commits_and_signing() -> list[str]:
     return [line.strip() for line in lines[start:end]]
 
 
+NEVER_SETS_SIGNINGKEY = (
+    "- An agent never sets `user.signingkey` itself, by `git config` or otherwise; "
+    "a read-only check (for example `git config --get user.signingkey`) is not a set."
+)
+OVERRIDE_PROHIBITION = (
+    "- Never pass `-c user.signingkey`, `-c gpg.*` or `-c commit.gpgsign` "
+    "to a commit-creating git command; rely on the configured signing."
+)
+# The SKL-206 restatement of the same override inside the briefs and rules of the skills.
+OVERRIDE_RESTATEMENT = "never pass `-c user.signingkey`, `-c gpg.*` or `-c commit.gpgsign`"
+# The only skill files that carry the restatement, with how many lines each carries.
+RESTATEMENT_LINES = {
+    "skills/engineering-workflow/SKILL.md": 1,
+    "skills/engineering-workflow/scripts/adversarial-review-loop.workflow.js": 1,
+    "skills/persona-staff-devops/SKILL.md": 1,
+    "skills/persona-staff-engineer/SKILL.md": 1,
+    "skills/story-to-done/SKILL.md": 2,
+}
+# Recorded eval runs embed the same briefs, so a transcript line that restates the override is kind d too.
+EVAL_TRANSCRIPT = re.compile(r"skills/[^/]+/evals/[^/]+/results/[^/]+")
+CHECK_SCRIPT_COMMENT = "# user.signingkey (a key:: or bare ssh- literal, a public-key file or a private-key file,"
+
 RULE_SENTENCES = (
     "- When `profile.git.signing_key` is set, it is the OpenSSH SHA256 fingerprint of the key registered for signing.",
     "Before the first commit of a task, and again after any change to git config, run `bash <skill dir>/scripts/check-signing-key.sh <profile.git.signing_key>` from inside the target repository.",
     "A non-zero exit is a configuration fault, handled as the Always list below says.",
     "Never commit with a per-commit key override, and never fall back to another key.",
-    "- When `profile.git.signing_key` is unset, confirm `user.signingkey` resolves to that key before committing.",
+    NEVER_SETS_SIGNINGKEY,
     "- Check the result after push: `gh api repos/<owner>/<repo>/commits/<sha> --jq '.commit.verification'`.",
 )
 
@@ -865,3 +887,59 @@ def test_the_rule_is_stated_once_and_nowhere_else():
     for path in [*(ROOT / "shared").glob("*.md"), *(ROOT / "skills").glob("*/SKILL.md")]:
         if path != GITHUB:
             assert "check-signing-key" not in path.read_text(), path
+
+
+def signingkey_mentions() -> list[tuple[str, str]]:
+    """Every line under shared/ and skills/ that names user.signingkey, as the AC's git grep."""
+    found = []
+    for base in (ROOT / "shared", ROOT / "skills"):
+        for path in sorted(p for p in base.rglob("*") if p.is_file() and not p.is_symlink() and "__pycache__" not in p.parts):
+            rel = path.relative_to(ROOT).as_posix()
+            data = path.read_bytes()
+            if b"\0" in data:
+                continue
+            for line in data.decode("utf-8", errors="replace").splitlines():
+                if re.search(r"user\.signingkey", line):
+                    found.append((rel, line))
+    return found
+
+
+def signingkey_mention_kind(rel: str, line: str) -> str | None:
+    """The one allowlisted kind a mention belongs to, or None for an unlisted mention."""
+    github = rel == "shared/github.md" or re.fullmatch(r"skills/[^/]+/references/github\.md", rel)
+    script = rel == "shared/check-signing-key.sh" or re.fullmatch(
+        r"skills/[^/]+/scripts/check-signing-key\.sh", rel
+    )
+    if github and line == NEVER_SETS_SIGNINGKEY:
+        return "a: the never-sets rule"
+    if github and line == OVERRIDE_PROHIBITION:
+        return "b: the override prohibition"
+    if script and line == CHECK_SCRIPT_COMMENT:
+        return "c: the resolution-forms comment"
+    restating = line.count("user.signingkey") == 1 and OVERRIDE_RESTATEMENT in line
+    if restating and (rel in RESTATEMENT_LINES or EVAL_TRANSCRIPT.fullmatch(rel)):
+        return "d: the restated override"
+    return None
+
+
+def test_signingkey_mentions_are_allowlisted():
+    mentions = signingkey_mentions()
+    unlisted = [(rel, line) for rel, line in mentions if signingkey_mention_kind(rel, line) is None]
+    assert unlisted == []
+    assert not [rel for rel, line in mentions if "resolves" in line.lower()]
+    per_file = {}
+    for rel, line in mentions:
+        per_file[rel] = [*per_file.get(rel, []), signingkey_mention_kind(rel, line)]
+    expected = {}
+    for skill in [None, *receivers()]:
+        base = "shared" if skill is None else f"skills/{skill}"
+        docs = f"{base}/github.md" if skill is None else f"{base}/references/github.md"
+        script = f"{base}/check-signing-key.sh" if skill is None else f"{base}/scripts/check-signing-key.sh"
+        expected[docs] = ["a: the never-sets rule", "b: the override prohibition"]
+        expected[script] = ["c: the resolution-forms comment"]
+    for rel, count in RESTATEMENT_LINES.items():
+        expected[rel] = ["d: the restated override"] * count
+    transcripts = {rel: kinds for rel, kinds in per_file.items() if EVAL_TRANSCRIPT.fullmatch(rel)}
+    assert all(set(kinds) == {"d: the restated override"} for kinds in transcripts.values())
+    shipped = {rel: sorted(kinds) for rel, kinds in per_file.items() if rel not in transcripts}
+    assert shipped == expected

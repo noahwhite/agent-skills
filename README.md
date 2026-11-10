@@ -114,7 +114,8 @@ The throwaway commit is made with `git commit-tree` into a temporary object dire
 It prints nothing and exits 0 on a match; otherwise it exits non-zero with one line on stderr, and the skill stops instead of committing.
 The script is vendored into every skill that receives `references/github.md`, as a copy with a generated header above the shebang, so it is run through `bash` and never as an executable.
 A `gpg.ssh.program` wrapper is honoured as git honours it, so the signature it produces is the one checked.
-When `git.signing_key` is unset, nothing is checked by fingerprint and the skills only confirm that `user.signingkey` resolves to the registered key.
+When `git.signing_key` is unset, nothing is checked by fingerprint.
+An agent never sets `user.signingkey` itself, by `git config` or otherwise; a read-only check (for example `git config --get user.signingkey`) is not a set.
 
 ### Switching a seat off
 
