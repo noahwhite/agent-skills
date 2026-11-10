@@ -29,14 +29,20 @@ MARKER_RE = re.compile(
 )
 
 
+# The fixtures and the oracle read no global or system git config, so a host's diff settings
+# (color, prefixes, submodule format) cannot shape the expected bytes.
+NEUTRAL_GIT = {**os.environ, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
+
+
 def git(repo: Path, *args: str) -> str:
     return subprocess.run(
-        ["git", *args], cwd=repo, check=True, capture_output=True, text=True,
+        ["git", *args], cwd=repo, check=True, capture_output=True, text=True, env=NEUTRAL_GIT,
     ).stdout.strip()
 
 
-def git_bytes(repo: Path, *args: str) -> bytes:
-    return subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True).stdout
+def git_bytes(repo: Path, *args: str, env: dict[str, str] | None = None) -> bytes:
+    return subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True,
+                          env=env or NEUTRAL_GIT).stdout
 
 
 def clean_env(extra: dict[str, str] | None = None) -> dict[str, str]:
@@ -93,12 +99,12 @@ def seed(tmp_path: Path, base: dict[str, bytes], head: dict[str, bytes | None],
 
 
 def make_gate(tmp_path: Path, base: dict[str, bytes], head: dict[str, bytes | None],
-              head_ops=None) -> dict:
+              head_ops=None, env_extra: dict[str, str] | None = None) -> dict:
     repo = seed(tmp_path, base, head, head_ops)
     scratch = tmp_path / "session-scratch"
     scratch.mkdir()
     (tmp_path / "runtime-tmp").mkdir()
-    env = clean_env({"TMPDIR": str(tmp_path / "runtime-tmp")})
+    env = clean_env({"TMPDIR": str(tmp_path / "runtime-tmp"), **(env_extra or {})})
     spec = tmp_path / "spec.md"
     spec.write_text("Story SKL-87: cap the embedded diff.\n")
     g = {"repo": repo, "scratch": scratch, "env": env, "spec": spec, "tmp": tmp_path}
@@ -247,8 +253,9 @@ def assert_capped(g: dict, phase: str, flow: str, truncated_paths: list[str]) ->
     assert next(paths, None) is None, "fewer truncated sections than expected"
     marker_lines = [line for line in lines_of(dossier) if line.startswith(b"<!-- TRUNCATED:")]
     assert len(marker_lines) == len(truncated_paths), "not exactly one marker per section"
-    assert blueprint_of(dossier) == git_bytes(g["repo"], "diff", "--stat", f"{BASE_REF}...HEAD"), \
-        "the diffstat changed"
+    # the diffstat is git's own `git diff --stat` under the same config the script ran with
+    assert blueprint_of(dossier) == git_bytes(g["repo"], "diff", "--stat", f"{BASE_REF}...HEAD",
+                                              env=g["env"]), "the diffstat changed"
     return dossier
 
 
@@ -339,6 +346,126 @@ def test_a_single_line_over_the_cap_is_never_cut_in_the_middle(tmp_path, phase, 
     first_hunk_line = hunks[0].split(b"\n", 1)[0] + b"\n"
     assert text == header + first_hunk_line + b" before\n", "only the complete lines that fit are kept"
     assert b"z" not in text and b"y" not in text
+
+
+@pytest.mark.parametrize("flow", FLOWS)
+@pytest.mark.parametrize("phase", PHASES)
+def test_a_later_hunk_that_does_not_fit_is_dropped_whole_never_clipped(tmp_path, phase, flow):
+    # a small first hunk leaves room for several lines of the large second one, which still goes
+    g = make_gate(tmp_path, {"two.txt": numbered("row", 600)},
+                  {"two.txt": numbered("row", 600, lambda i: i == 3 or 100 <= i <= 400)})
+    dossier = assert_capped(g, phase, flow, ["two.txt"])
+    full, = git_sections(g)
+    header, hunks = header_and_hunks(full)
+    (text, _), = [p for p in parse_diff_region(dossier) if p[1]]
+    assert len(hunks) == 2 and CAP - len(header + hunks[0]) > 1000
+    assert text == header + hunks[0], "the second hunk was clipped instead of dropped"
+
+
+def padded(tmp_path: Path, make, measure) -> tuple[dict, dict]:
+    """(base, head) from `make(pad)`, with the pad chosen so that `measure(section)` of the unpadded
+    fixture's single section reaches exactly CAP bytes; the pad lands inside the measured span."""
+    probe = tmp_path / "probe"
+    probe.mkdir()
+    base, head = make(0)
+    full = git_bytes(seed(probe, base, head), "diff", "--no-ext-diff", "--unified=1", f"{BASE_REF}...HEAD")
+    measured = measure(full)
+    assert measured < CAP
+    return make(CAP - measured)
+
+
+def edge_file(pad: int, changed: dict[int, bytes]) -> tuple[dict, dict]:
+    lines = numbered("row", 60).splitlines(keepends=True)
+    for i, text in changed.items():
+        lines[i] = text.replace(b"PAD", b"p" * pad)
+    return {"edge.txt": numbered("row", 60)}, {"edge.txt": b"".join(lines)}
+
+
+@pytest.mark.parametrize("flow", FLOWS)
+def test_a_section_of_exactly_the_cap_is_untouched(tmp_path, flow):
+    base, head = padded(tmp_path, lambda pad: edge_file(pad, {1: b"row 0002 PAD\n"}), len)
+    g = make_gate(tmp_path, base, head)
+    full, = git_sections(g)
+    assert len(full) == CAP
+    assert_capped(g, "sweep", flow, [])
+
+
+@pytest.mark.parametrize("flow", FLOWS)
+def test_whole_hunks_filling_exactly_the_cap_are_kept(tmp_path, flow):
+    # three hunks: the pad sits in the second, so header + hunks 1-2 is exactly the cap
+    changed = {1: b"row 0002 CHANGED\n", 20: b"row 0021 PAD\n", 49: b"row 0050 CHANGED\n"}
+
+    def first_two(section: bytes) -> int:
+        header, hunks = header_and_hunks(section)
+        return len(header + hunks[0] + hunks[1])
+
+    base, head = padded(tmp_path, lambda pad: edge_file(pad, changed), first_two)
+    g = make_gate(tmp_path, base, head)
+    dossier = assert_capped(g, "sweep", flow, ["edge.txt"])
+    full, = git_sections(g)
+    header, hunks = header_and_hunks(full)
+    (text, marker), = [p for p in parse_diff_region(dossier) if p[1]]
+    assert len(hunks) == 3 and text == header + hunks[0] + hunks[1] and int(marker["shown"]) == CAP
+
+
+@pytest.mark.parametrize("flow", FLOWS)
+def test_a_first_hunk_clip_keeps_a_line_ending_exactly_at_the_cap(tmp_path, flow):
+    # one long hunk; the pad grows its second removed line so a line boundary falls exactly on the cap
+    def make(pad: int) -> tuple[dict, dict]:
+        old = numbered("old", 300).splitlines(keepends=True)
+        old[1] = b"old 0002 " + b"p" * pad + b"\n"
+        return {"clip.txt": b"".join(old)}, {"clip.txt": numbered("new", 300)}
+
+    def last_boundary(section: bytes) -> int:
+        return len(longest_line_prefix(section, CAP))
+
+    base, head = padded(tmp_path, make, last_boundary)
+    g = make_gate(tmp_path, base, head)
+    dossier = assert_capped(g, "sweep", flow, ["clip.txt"])
+    (text, marker), = [p for p in parse_diff_region(dossier) if p[1]]
+    assert len(text) == CAP and int(marker["shown"]) == CAP
+
+
+@pytest.mark.parametrize("flow", FLOWS)
+@pytest.mark.parametrize("phase", PHASES)
+def test_a_clipped_hunk_keeps_its_cr_bytes_and_no_newline_annotation(tmp_path, phase, flow):
+    old = b"".join(f"old {i:04d}\r\n".encode() for i in range(1, 301))[:-2]  # no newline at the end
+    new = b"".join(f"new {i:04d}\n".encode() for i in range(1, 301))
+    g = make_gate(tmp_path, {"crlf.txt": old}, {"crlf.txt": new})
+    dossier = assert_capped(g, phase, flow, ["crlf.txt"])
+    (text, _), = [p for p in parse_diff_region(dossier) if p[1]]
+    assert b"-old 0299\r\n-old 0300\n\\ No newline at end of file\n+new 0001\n" in text
+
+
+@pytest.mark.parametrize("flow", FLOWS)
+def test_the_cap_holds_under_a_hostile_diff_config(tmp_path, flow):
+    """color, no or mnemonic prefixes and submodule logs in the user's config change git's output;
+    the dossier's sections are still git's plain --unified=1 sections, capped."""
+    gitconfig = tmp_path / "hostile.gitconfig"
+    gitconfig.write_text(
+        "[color]\n\tui = always\n\tdiff = always\n"
+        "[diff]\n\tnoprefix = true\n\tmnemonicPrefix = true\n\tsubmodule = log\n"
+    )
+
+    def add_submodule(repo: Path) -> None:
+        sub = repo / "sub"
+        sub.mkdir()
+        git(sub, "init", "-q")
+        git(sub, "config", "commit.gpgsign", "false")
+        git(sub, "-c", "user.name=s", "-c", "user.email=s@example.com", "commit", "-q",
+            "--allow-empty", "-m", "s")
+
+    g = make_gate(tmp_path, {"big.txt": numbered("line", 800)},
+                  {"big.txt": numbered("line", 800, lambda i: i % 8 == 0)},
+                  head_ops=add_submodule,
+                  env_extra={"GIT_CONFIG_GLOBAL": str(gitconfig), "GIT_CONFIG_NOSYSTEM": "1"})
+    sections = git_sections(g)
+    assert any(s.startswith(b"diff --git a/sub b/sub\n") for s in sections), "fixture lost its submodule"
+    hostile = git_bytes(g["repo"], "diff", "--no-ext-diff", "--unified=1", f"{BASE_REF}...HEAD",
+                        env=g["env"])
+    assert b"\x1b[" in hostile and b"Submodule sub" in hostile, "the hostile config did not apply"
+    for phase in PHASES:
+        assert_capped(g, phase, flow, ["big.txt"])
 
 
 # --- headers alone over the cap, and sections without text hunks -----------------------------------
@@ -485,13 +612,20 @@ def test_only_the_over_cap_files_are_truncated_among_many(tmp_path, flow):
 
 # --- the arbitrate dossier still carries no diff ----------------------------------------------------
 
-def test_the_arbitrate_dossier_carries_neither_diff_nor_marker(tmp_path):
+@pytest.mark.parametrize("flow", FLOWS)
+def test_the_arbitrate_dossier_carries_neither_diff_nor_marker(tmp_path, flow):
     g = make_gate(tmp_path, {"big.txt": numbered("line", 800)},
                   {"big.txt": numbered("line", 800, lambda i: i % 8 == 0)})
-    for phase in ("hunt", "arbitrate"):
-        result = run_script("run", phase, *common(g, "hunt"), "--agent-cmd", COPY_AGENT, env=g["env"])
+    result = run_script("run", "hunt", *common(g, "hunt"), "--agent-cmd", COPY_AGENT, env=g["env"])
+    assert result.returncode == 0, result.stdout + result.stderr
+    if flow == "run":
+        result = run_script("run", "arbitrate", *common(g, "hunt"), "--agent-cmd", COPY_AGENT, env=g["env"])
         assert result.returncode == 0, result.stdout + result.stderr
-    seen = (g["scratch"] / "seen-dossier.md").read_bytes()
+        seen = (g["scratch"] / "seen-dossier.md").read_bytes()
+    else:
+        result = run_script("dossier", "arbitrate", *common(g, "hunt"), env=g["env"])
+        assert result.returncode == 0, result.stdout + result.stderr
+        seen = Path(result.stdout.strip().splitlines()[-1]).read_bytes()
     assert b"===== DIFF" not in seen and b"<!-- TRUNCATED:" not in seen and b"diff --git" not in seen
     assert b"big.txt | " in seen, "the arbitrate dossier lost the diffstat"
 

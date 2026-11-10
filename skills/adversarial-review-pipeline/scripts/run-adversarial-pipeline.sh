@@ -57,7 +57,10 @@
 # where <path> is the destination path (the source path of a deletion), git-quoted only when it holds
 # a double quote, backslash or control byte, <total> is the file's uncapped section and <shown> what
 # was emitted, in bytes, and <CHECKOUT> is the dossier's own CHECKOUT: value. The diffstat is untouched,
-# and a failing `git diff` still fails the dossier write.
+# and a failing `git diff` still fails the dossier write. The call pins --no-color, the a/ and b/
+# prefixes and --submodule=short, so a user's color.ui, diff.noprefix, diff.mnemonicPrefix or
+# diff.submodule setting cannot hide a section boundary from the splitter, which streams the diff one
+# section at a time.
 #
 # Env equivalents: ADVERSARIAL_REPO, ADVERSARIAL_TEST_CMD, ADVERSARIAL_TEST_DIR, ADVERSARIAL_BASE,
 # ADVERSARIAL_SPEC_FILE, ADVERSARIAL_SCRATCH, ADVERSARIAL_AGENT_CMD, ADVERSARIAL_MODEL,
@@ -808,26 +811,18 @@ ESCAPES = {7: b"\\a", 8: b"\\b", 9: b"\\t", 10: b"\\n", 11: b"\\v", 12: b"\\f", 
            34: b'\\"', 92: b"\\\\"}
 
 
-def lines_of(data):
-    lines, pos = [], 0
-    while pos < len(data):
-        end = data.find(b"\n", pos) + 1 or len(data)
-        lines.append(data[pos:end])
-        pos = end
-    return lines
-
-
 def size(lines):
     return sum(len(line) for line in lines)
 
 
 def line_prefix(lines, room):
     """The longest run of whole lines, from the start, that fits in `room` bytes."""
-    kept = []
+    kept, used = [], 0
     for line in lines:
-        if size(kept) + len(line) > room:
+        if used + len(line) > room:
             break
         kept.append(line)
+        used += len(line)
     return kept
 
 
@@ -842,11 +837,12 @@ def unquote(token):
         if byte != 92:
             out.append(byte)
             i += 1
-        elif body[i + 1:i + 2].isdigit():
-            out.append(int(body[i + 1:i + 4], 8))
+        elif body[i + 1:i + 4].isdigit():
+            out.append(int(body[i + 1:i + 4], 8) & 0xFF)
             i += 4
-        else:
-            out.append(simple[body[i + 1]])
+        else:   # a named escape; anything git does not emit is kept as the byte after the backslash
+            nxt = body[i + 1:i + 2]
+            out += bytes([simple.get(nxt[0], nxt[0])]) if nxt else b"\\"
             i += 2
     return bytes(out)
 
@@ -870,7 +866,7 @@ def split_git_line(rest):
     """The a/ and b/ sides of `diff --git <rest>`, raw and without their prefixes."""
     if rest[:1] == b'"':
         end = 1
-        while rest[end:end + 1] != b'"':
+        while end < len(rest) and rest[end:end + 1] != b'"':
             end += 2 if rest[end:end + 1] == b"\\" else 1
         a_tok, b_tok = rest[:end + 1], rest[end + 2:]
     elif rest[-1:] == b'"' and b' "b/' in rest:
@@ -886,11 +882,13 @@ def split_git_line(rest):
     return unquote(a_tok)[2:], unquote(b_tok)[2:]
 
 
-def destination(section):
-    a_path, b_path = split_git_line(section[0][len(b"diff --git "):].rstrip(b"\n"))
-    for line in section:
-        if line.startswith(b"@@"):
-            break
+PATH_LINES = (b"rename to ", b"copy to ", b"deleted file mode")
+
+
+def destination(header):
+    """The marker's path from a section's `diff --git` line and its PATH_LINES header lines."""
+    a_path, b_path = split_git_line(header[0][len(b"diff --git "):].rstrip(b"\n"))
+    for line in header[1:]:
         for prefix in (b"rename to ", b"copy to "):
             if line.startswith(prefix):
                 return unquote(line[len(prefix):].rstrip(b"\n"))
@@ -899,10 +897,9 @@ def destination(section):
     return b_path
 
 
-def cap_section(section):
-    """(emitted lines, whether truncated) for one file's section."""
-    if size(section) <= cap:
-        return section, False
+def cap_lines(section):
+    """The emitted lines of an over-cap section, given its whole lines up to the first that crosses
+    the cap: every decision (whole hunks that fit, a clipped first hunk, a cut header) lies in them."""
     first = next((i for i, line in enumerate(section) if line.startswith(b"@@")), len(section))
     header, hunks = section[:first], []
     for line in section[first:]:
@@ -910,7 +907,7 @@ def cap_section(section):
             hunks.append([])
         hunks[-1].append(line)
     if size(header) > cap:
-        return line_prefix(header, cap), True
+        return line_prefix(header, cap)
     kept = list(header)
     for n, hunk in enumerate(hunks):
         if size(kept) + size(hunk) <= cap:
@@ -919,25 +916,53 @@ def cap_section(section):
             if n == 0:
                 kept += line_prefix(hunk, cap - size(kept))
             break
-    return kept, True
+    return kept
 
 
-sections = []
-for line in lines_of(sys.stdin.buffer.read()):
-    if line.startswith(b"diff --git ") or not sections:
-        sections.append([])
-    sections[-1].append(line)
-out = sys.stdout.buffer
-for section in sections:
-    if not section[0].startswith(b"diff --git "):
-        out.write(b"".join(section))
-        continue
-    kept, truncated = cap_section(section)
-    out.write(b"".join(kept))
-    if truncated:
-        out.write(b"<!-- TRUNCATED: " + escape(destination(section))
-                  + b" (%d/%d bytes)" % (size(kept), size(section))
+class Section:
+    """One file's section, streamed: it holds at most its first cap + 1 bytes (in whole lines) and
+    the few header lines the marker's path needs, then only counts."""
+
+    def __init__(self, first_line):
+        self.pending, self.total, self.shown = [], 0, None
+        self.header, self.in_header = [first_line], True
+        self.add(first_line)
+
+    def add(self, line):
+        self.total += len(line)
+        if line.startswith(b"@@"):
+            self.in_header = False
+        elif self.in_header and line.startswith(PATH_LINES):
+            self.header.append(line)
+        if self.shown is None:
+            self.pending.append(line)
+            if self.total > cap:
+                kept = cap_lines(self.pending)
+                out.write(b"".join(kept))
+                self.shown, self.pending = size(kept), None
+
+    def finish(self):
+        if self.shown is None:
+            out.write(b"".join(self.pending))
+            return
+        out.write(b"<!-- TRUNCATED: " + escape(destination(self.header))
+                  + b" (%d/%d bytes)" % (self.shown, self.total)
                   + b" - the full diff of this file is in your checkout at " + checkout + b" -->\n")
+
+
+out = sys.stdout.buffer
+section = None
+for line in sys.stdin.buffer:   # binary-mode lines end at b"\n" only, so CR bytes stay in place
+    if line.startswith(b"diff --git "):
+        if section is not None:
+            section.finish()
+        section = Section(line)
+    elif section is None:
+        out.write(line)
+    else:
+        section.add(line)
+if section is not None:
+    section.finish()
 out.flush()
 PYEOF
 
@@ -964,7 +989,9 @@ emit_context() {  # $1 = the phase's checkout, $2 = 1 to embed the unified diff,
     echo
     echo "===== DIFF (${BASE}...HEAD) ====="
     # pipefail makes a failing `git diff` (or splitter) fail this pipeline, hence the dossier write.
-    git diff --no-ext-diff --unified=1 "$BASE_SHA"..."$HEAD_SHA" | cap_diff_sections "$1"
+    # The pinned options keep every section starting at a plain `diff --git a/... b/...` line.
+    git diff --no-ext-diff --unified=1 --no-color --src-prefix=a/ --dst-prefix=b/ \
+      --submodule=short "$BASE_SHA"..."$HEAD_SHA" | cap_diff_sections "$1"
   fi
 }
 
