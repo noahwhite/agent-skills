@@ -46,6 +46,19 @@
 # not see ignored files or edits to files that were already untracked; the agent's sandbox is the
 # real boundary (see references/runtimes.md).
 #
+# Embedded diff: the sweep and hunt dossiers embed `git diff --no-ext-diff --unified=1` of the run's
+# range, and DIFF_CAP_BYTES (4096, in bytes of unified-diff text, per file and not a bound on the whole
+# diff) caps each file's section: its `diff --git` header, hunk headers and hunks together. A section at
+# or below the cap is emitted byte-identical to git's output. A larger one keeps whole hunks from the
+# start and drops the rest; only when the header lines plus the first hunk already exceed the cap is
+# that hunk clipped, and a header that alone exceeds the cap is cut, both at a line boundary (zero
+# bytes when no complete line fits). The dropped remainder becomes one marker line,
+#   <!-- TRUNCATED: <path> (<shown>/<total> bytes) - the full diff of this file is in your checkout at <CHECKOUT> -->
+# where <path> is the destination path (the source path of a deletion), git-quoted only when it holds
+# a double quote, backslash or control byte, <total> is the file's uncapped section and <shown> what
+# was emitted, in bytes, and <CHECKOUT> is the dossier's own CHECKOUT: value. The diffstat is untouched,
+# and a failing `git diff` still fails the dossier write.
+#
 # Env equivalents: ADVERSARIAL_REPO, ADVERSARIAL_TEST_CMD, ADVERSARIAL_TEST_DIR, ADVERSARIAL_BASE,
 # ADVERSARIAL_SPEC_FILE, ADVERSARIAL_SCRATCH, ADVERSARIAL_AGENT_CMD, ADVERSARIAL_MODEL,
 # ADVERSARIAL_PROBE_CMD, ADVERSARIAL_PROBE_TIMEOUT (30), ADVERSARIAL_TIMEOUT (900).
@@ -141,6 +154,8 @@
 # A checkout that cannot be created exits with git's own status, which is what that path did before
 # the checkout became deadline-bounded.
 set -euo pipefail
+
+DIFF_CAP_BYTES=4096   # bytes of unified-diff text per file in an embedded diff (see "Embedded diff" above)
 
 usage() { awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0" >&2; exit 2; }
 die() { local code="$1"; shift; echo "ERROR: $*" >&2; exit "$code"; }
@@ -779,6 +794,157 @@ emit_spec() {
   fi
 }
 
+# The per-file splitter: reads one `git diff` on stdin, cuts it at `diff --git` lines and applies the
+# cap to each file's section (see "Embedded diff" in the header). It works on bytes, so a section at or
+# below the cap leaves it unchanged. argv: the cap in bytes and the phase checkout's path.
+# `read` returns 1 at the end of the here-document: that is how it ends, not a failure.
+IFS= read -r -d '' DIFF_CAP_PY <<'PYEOF' || true
+import os
+import sys
+
+cap = int(sys.argv[1])
+checkout = os.fsencode(sys.argv[2])
+ESCAPES = {7: b"\\a", 8: b"\\b", 9: b"\\t", 10: b"\\n", 11: b"\\v", 12: b"\\f", 13: b"\\r",
+           34: b'\\"', 92: b"\\\\"}
+
+
+def lines_of(data):
+    lines, pos = [], 0
+    while pos < len(data):
+        end = data.find(b"\n", pos) + 1 or len(data)
+        lines.append(data[pos:end])
+        pos = end
+    return lines
+
+
+def size(lines):
+    return sum(len(line) for line in lines)
+
+
+def line_prefix(lines, room):
+    """The longest run of whole lines, from the start, that fits in `room` bytes."""
+    kept = []
+    for line in lines:
+        if size(kept) + len(line) > room:
+            break
+        kept.append(line)
+    return kept
+
+
+def unquote(token):
+    """A git C-style quoted token (or an unquoted one) as raw bytes."""
+    if not (len(token) >= 2 and token[:1] == b'"' and token[-1:] == b'"'):
+        return token
+    body, out, i = token[1:-1], bytearray(), 0
+    simple = {v[1]: k for k, v in ESCAPES.items()}
+    while i < len(body):
+        byte = body[i]
+        if byte != 92:
+            out.append(byte)
+            i += 1
+        elif body[i + 1:i + 2].isdigit():
+            out.append(int(body[i + 1:i + 4], 8))
+            i += 4
+        else:
+            out.append(simple[body[i + 1]])
+            i += 2
+    return bytes(out)
+
+
+def escape(path):
+    """The path as the marker shows it: raw, unless it holds a quote, backslash or control byte."""
+    if not any(b in (34, 92, 127) or b < 32 for b in path):
+        return path
+    out = bytearray(b'"')
+    for b in path:
+        if b in ESCAPES:
+            out += ESCAPES[b]
+        elif b < 32 or b >= 127:
+            out += b"\\%03o" % b
+        else:
+            out.append(b)
+    return bytes(out + b'"')
+
+
+def split_git_line(rest):
+    """The a/ and b/ sides of `diff --git <rest>`, raw and without their prefixes."""
+    if rest[:1] == b'"':
+        end = 1
+        while rest[end:end + 1] != b'"':
+            end += 2 if rest[end:end + 1] == b"\\" else 1
+        a_tok, b_tok = rest[:end + 1], rest[end + 2:]
+    elif rest[-1:] == b'"' and b' "b/' in rest:
+        a_tok, _, b_tok = rest.rpartition(b' "b/')
+        b_tok = b'"b/' + b_tok
+    else:
+        half = (len(rest) - 5) // 2   # `a/P b/P` with one P twice: unquoted paths are symmetric
+        if len(rest) == 2 * half + 5 and rest[2 + half:5 + half] == b" b/":
+            a_tok, b_tok = rest[:2 + half], rest[3 + half:]
+        else:
+            a_tok, _, b_tok = rest.partition(b" b/")
+            b_tok = b"b/" + b_tok
+    return unquote(a_tok)[2:], unquote(b_tok)[2:]
+
+
+def destination(section):
+    a_path, b_path = split_git_line(section[0][len(b"diff --git "):].rstrip(b"\n"))
+    for line in section:
+        if line.startswith(b"@@"):
+            break
+        for prefix in (b"rename to ", b"copy to "):
+            if line.startswith(prefix):
+                return unquote(line[len(prefix):].rstrip(b"\n"))
+        if line.startswith(b"deleted file mode"):
+            return a_path
+    return b_path
+
+
+def cap_section(section):
+    """(emitted lines, whether truncated) for one file's section."""
+    if size(section) <= cap:
+        return section, False
+    first = next((i for i, line in enumerate(section) if line.startswith(b"@@")), len(section))
+    header, hunks = section[:first], []
+    for line in section[first:]:
+        if line.startswith(b"@@"):
+            hunks.append([])
+        hunks[-1].append(line)
+    if size(header) > cap:
+        return line_prefix(header, cap), True
+    kept = list(header)
+    for n, hunk in enumerate(hunks):
+        if size(kept) + size(hunk) <= cap:
+            kept += hunk
+        else:
+            if n == 0:
+                kept += line_prefix(hunk, cap - size(kept))
+            break
+    return kept, True
+
+
+sections = []
+for line in lines_of(sys.stdin.buffer.read()):
+    if line.startswith(b"diff --git ") or not sections:
+        sections.append([])
+    sections[-1].append(line)
+out = sys.stdout.buffer
+for section in sections:
+    if not section[0].startswith(b"diff --git "):
+        out.write(b"".join(section))
+        continue
+    kept, truncated = cap_section(section)
+    out.write(b"".join(kept))
+    if truncated:
+        out.write(b"<!-- TRUNCATED: " + escape(destination(section))
+                  + b" (%d/%d bytes)" % (size(kept), size(section))
+                  + b" - the full diff of this file is in your checkout at " + checkout + b" -->\n")
+out.flush()
+PYEOF
+
+cap_diff_sections() {  # $1 = the phase's checkout; stdin = one `git diff`, stdout = the capped diff
+  python3 -I -c "$DIFF_CAP_PY" "$DIFF_CAP_BYTES" "$1"
+}
+
 # Every dossier names the phase's throwaway checkout and the base, so anything not embedded inline
 # (for the arbiter, the whole diff) is readable there with `git diff <base SHA>...HEAD`. The diffstat
 # and diff are taken at the pinned HEAD SHA, the commit the checkout holds, never the moving HEAD ref.
@@ -797,7 +963,8 @@ emit_context() {  # $1 = the phase's checkout, $2 = 1 to embed the unified diff,
   if [ "$2" -eq 1 ]; then
     echo
     echo "===== DIFF (${BASE}...HEAD) ====="
-    git diff --no-ext-diff --unified=3 "$BASE_SHA"..."$HEAD_SHA"
+    # pipefail makes a failing `git diff` (or splitter) fail this pipeline, hence the dossier write.
+    git diff --no-ext-diff --unified=1 "$BASE_SHA"..."$HEAD_SHA" | cap_diff_sections "$1"
   fi
 }
 
