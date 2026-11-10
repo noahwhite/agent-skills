@@ -249,6 +249,8 @@ def test_a_worktree_holding_only_regenerable_ignored_entries_is_emptied_then_rem
         "git offers no checked removal short of `--force`, so this narrow window is accepted rather than closed.",
         "A worktree locked after its checks passed has its regenerable entries deleted before `git worktree remove` refuses it; "
         "the report names it as a refused removal, and since only regenerable entries are lost, this window is accepted too.",
+        "A nested repository created inside a regenerable entry after its listing is still deleted with it; "
+        "nothing short of locking the directory closes this, so this window is accepted as well.",
     ):
         assert phrase in body, phrase
     assert (
@@ -335,8 +337,8 @@ def test_a_worktree_git_cannot_remove_is_refused_before_any_deletion() -> None:
         "that read must exit 0, and `-z` delivers each path exactly as it is on disk, spaces included.",
         "A worktree with submodule paths is removable with nothing lost only when its own modules directory "
         "(the path `git rev-parse --git-path modules` prints inside the worktree) does not exist and each submodule path "
-        "is absent or an empty directory, meaning `find ./<path> -mindepth 1 -print` prints nothing and exits 0, "
-        "so an entry whose name begins with a dot counts.",
+        "is absent (nothing at all exists at `./<path>`, not even a symlink) or an empty directory "
+        "(`find ./<path> -mindepth 1 -print` prints nothing and exits 0, so an entry whose name begins with a dot counts).",
         "The status read never reports files inside a submodule path, and git refuses to remove a worktree "
         "that has a modules directory, so a worktree that fails any of these is refused.",
         "A worktree whose path no longer exists holds nothing to delete: the run skips its status read, "
