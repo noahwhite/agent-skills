@@ -186,12 +186,55 @@ def test_deletion_requires_merge_evidence_from_the_storys_pull_requests() -> Non
         "Before each removal other than a persistent-memory note, after `git fetch origin`, establish merge evidence",
         "A merged PR whose head commit is the tip: `gh pr view <n> --json state,headRefOid`",
         "from `git ls-remote --heads origin <branch>` for a remote one",
-        "Containment, only when `profile.git.merge_method` is neither `squash` nor `rebase`",
         "`git merge-base --is-ancestor",
         "origin/<profile.git.integration_branch>",
-        "Under a squash or a rebase merge the integration branch holds a different commit",
     ):
         assert phrase in body, phrase
+
+
+def bullet(body: str, start: str, end: str) -> str:
+    """The text of one step 3 bullet, from its bold lead to the next bullet's bold lead."""
+    return body[body.index(start): body.index(end)]
+
+
+def test_containment_is_merge_evidence_for_a_local_branch_under_every_merge_method() -> None:
+    # SKL-244: containment is a positive proof whatever the merge method; only exit 1 is uninformative.
+    body = section(text(), "3. Delete only with merge evidence")
+    for phrase in (
+        "establish merge evidence from the story's pull requests or, for a local branch, from containment:",
+        "after `git fetch origin` exits 0, `git merge-base --is-ancestor <tip> origin/<profile.git.integration_branch>` "
+        "exiting 0 is merge evidence for a local branch under every `profile.git.merge_method`, including when no PR heads it",
+        "`<tip>` is the output of `git rev-parse <branch>`.",
+        "A tip reachable from the integration branch has every commit on it in the integration branch, "
+        "whatever the merge method.",
+        'Exit 1 is not evidence and is not reported as "unmerged": the branch then needs a merged PR whose head commit '
+        'is the tip, and without one it is refused with the reason "no merge evidence".',
+        "Any other exit status refuses that branch, whatever a PR shows, and the report names the exit status.",
+        "When `git fetch origin` exits non-zero, containment is not read and the branch is handled as for exit 1: "
+        'it needs a merged PR whose head commit is the tip, and without one it is refused with the reason "no merge '
+        'evidence", and the report names the fetch exit status.',
+    ):
+        assert phrase in body, phrase
+    for stale in ("proves nothing and is never used", "neither `squash` nor `rebase`"):
+        assert stale not in body, stale
+
+
+def test_containment_is_never_merge_evidence_for_a_remote_branch() -> None:
+    body = section(text(), "3. Delete only with merge evidence")
+    remote = bullet(body, "**Remote branch.**", "**Disposable QA output and session files.**")
+    phrase = "Containment is never merge evidence for a remote branch, under any merge method"
+    assert phrase in remote, phrase
+
+
+def test_a_checked_out_local_branch_waits_for_its_worktree() -> None:
+    body = section(text(), "3. Delete only with merge evidence")
+    local = bullet(body, "**Local branch.**", "**Remote branch.**")
+    phrase = (
+        "A local branch checked out in any worktree is removed only after that worktree is removed, and is refused, "
+        "naming the worktree's failed check, when that worktree is refused or kept, including the main working tree "
+        "and the worktree hosting the current session."
+    )
+    assert phrase in local, phrase
 
 
 def test_each_artifact_kind_has_its_guarded_removal() -> None:
