@@ -269,11 +269,16 @@ def test_a_worktree_holding_only_regenerable_ignored_entries_is_emptied_then_rem
     allowed = (
         "- **Worktree.** Removed with `git worktree remove` only when its HEAD",
         "It then reads `git status --porcelain --ignored -z` inside the worktree again",
-        # SKL-245: the recorded-instruction sequence's own second read.
-        "4. It reads the status again, with `git status --porcelain --ignored -z` inside the worktree",
+        # SKL-245: the recorded-instruction sequence's own second read, pinned whole so no other
+        # line can borrow its prefix.
+        "4. It reads the status again, with `git status --porcelain --ignored -z` inside the worktree, and removes the "
+        "worktree with `git worktree remove` only when that read is empty; a read that is not empty refuses the worktree "
+        "and its branch.",
     )
     for line in body.splitlines():
-        if re.search(r"\bempty\b", line) and re.search(r"worktree remov|removal", line, re.IGNORECASE):
+        if re.search(r"\bempty\b", line) and re.search(
+            r"worktree remov|removal|removes the worktree", line, re.IGNORECASE
+        ):
             assert line.strip().startswith(allowed), line
 
 
@@ -410,8 +415,10 @@ def test_a_recorded_instruction_is_scoped_to_a_named_artifact_or_a_named_loss() 
         "or names each loss it accepts (for example \"discard untracked files and unlanded commits\").",
         "With one story key the instruction is that key's; with several, it covers only the key it names.",
         "Naming the worktree or branch authorizes every loss in it; naming a loss authorizes only that loss.",
-        "A worktree is named by its path and a branch by its name, and naming one does not name the other.",
-        "\"Don't skip anything\" without that scope does not count",
+        "A worktree is named by its path and a branch by its name, and naming either names both the worktree "
+        "and the branch it holds, because the branch cannot be removed while that worktree holds it.",
+        "\"Don't skip anything\" without that scope does not count, and neither does any other text that names "
+        "neither an artifact nor a loss.",
         "With such an instruction, for a worktree or local branch that fails merge evidence or has untracked entries, "
         "the run takes these steps in order:",
     ):
@@ -423,7 +430,7 @@ def test_a_recorded_instruction_is_scoped_to_a_named_artifact_or_a_named_loss() 
         "Any other invocation text is read only as a recorded instruction to discard unlanded work "
         "(step 3, \"Recorded instruction\"), and never as permission for anything else."
     ) in invocation
-    assert "A story key is the whole input." not in invocation
+    assert "A story key is the whole input" not in text()
 
 
 def test_a_recorded_instruction_inventories_the_tip_and_every_loss_before_deleting() -> None:
@@ -437,18 +444,40 @@ def test_a_recorded_instruction_inventories_the_tip_and_every_loss_before_deleti
         "It also refuses before deleting anything when the instruction does not authorize every loss removal would incur "
         "that normal merge evidence does not cover"
     )
+    cannot_remove = (
+        "It also refuses before deleting anything a worktree git cannot remove, as the worktree rules below define it: "
+        "the main working tree, a worktree `git worktree list --porcelain` marks `locked`, and a worktree whose "
+        "submodule paths are not removable with nothing lost."
+    )
+    listing = (
+        "An untracked directory is listed at any depth with `find ./<path> -print0`, whose output is split on NUL "
+        "so each path arrives exactly as it is on disk, and a listing that exits non-zero refuses the worktree."
+    )
     nested = (
-        "An untracked directory is listed at any depth with `find ./<path> -print`, and a nested repository inside it, "
-        "an entry named `.git` or a bare repository as the regenerable-entry checks define them, refuses the worktree"
+        "A nested repository inside it, an entry named `.git` or a bare repository as the regenerable-entry checks "
+        "define them, refuses the worktree, because its commits are a loss the inventory cannot show."
     )
     inventory = (
-        "2. It records the branch tip SHA (`git rev-parse <branch>`) in the inventory and prints what removal would lose: "
-        "every untracked entry by exact path, with every path its listing printed, and every commit "
-        "`git log --oneline origin/<profile.git.integration_branch>..<tip>` lists."
+        "2. It records the branch tip SHA (`git rev-parse refs/heads/<branch>`, so a tag of the same name never answers) "
+        "in the inventory and prints what removal would lose: every untracked entry by exact path, with every path its "
+        "listing printed, and every commit `git log --oneline origin/<profile.git.integration_branch>..<tip>` lists."
     )
-    for phrase in (refuse_first, unauthorized, nested, inventory):
+    log_fails = (
+        "A `git log` that exits non-zero refuses the worktree and its branch, because a failed listing can hide a loss."
+    )
+    upper_bound = (
+        "Under a squash or a rebase merge that list can include commits whose content already landed, "
+        "so it states the most the run could lose, never less."
+    )
+    for phrase in (refuse_first, unauthorized, cannot_remove, listing, nested, inventory, log_fails, upper_bound):
         assert phrase in block, phrase
-    assert block.index(refuse_first) < block.index(unauthorized) < block.index(inventory)
+    assert (
+        block.index(refuse_first)
+        < block.index(unauthorized)
+        < block.index(cannot_remove)
+        < block.index(inventory)
+        < block.index("3. It deletes")
+    )
     step2 = section(text(), "2. Inventory every artifact before removing any")
     for phrase in (
         "Under a recorded instruction (step 3) that waives untracked entries, an untracked entry of a worktree "
@@ -473,12 +502,32 @@ def test_a_recorded_instruction_deletes_by_exact_path_then_removes_then_rereads_
         "4. It reads the status again, with `git status --porcelain --ignored -z` inside the worktree, and removes the "
         "worktree with `git worktree remove` only when that read is empty; a read that is not empty refuses the worktree and its branch."
     )
-    tip = (
-        "5. It re-reads the branch tip with `git rev-parse <branch>`, refuses the branch if it moved since the inventory, "
-        "and otherwise removes the branch with `git branch -D`."
+    targets = (
+        "The paths deleted are the entries the `-z` status read reports, such as `out/` for an untracked directory; "
+        "the `find` listing only records what they hold, and a path inside a directory already deleted is never deleted on its own."
     )
-    report = "The report quotes the instruction verbatim and lists every path deleted and every commit discarded."
-    for phrase in (delete, delete_rules, reread, tip, "A local branch that no worktree holds skips steps 3 and 4.", report):
+    tip = (
+        "5. It re-reads the branch tip with `git rev-parse refs/heads/<branch>`, refuses the branch if it moved since the "
+        "inventory, and otherwise removes the branch with `git branch -D` immediately after that re-read."
+    )
+    window = (
+        "A commit that lands on the branch between the re-read and the delete is lost without being inventoried; "
+        "`git branch -D` takes no expected tip, so this narrow window is accepted, as the regenerable-entry windows below are."
+    )
+    report = (
+        "The report quotes the instruction verbatim, whether the run removed or refused, "
+        "and lists every path deleted and every commit discarded."
+    )
+    for phrase in (
+        delete,
+        targets,
+        delete_rules,
+        reread,
+        tip,
+        window,
+        "A local branch that no worktree holds skips steps 3 and 4.",
+        report,
+    ):
         assert phrase in block, phrase
     assert block.index("2. It records the branch tip SHA") < block.index(delete) < block.index(reread) < block.index(tip)
     body = section(text(), "3. Delete only with merge evidence")
@@ -493,14 +542,14 @@ def test_a_recorded_instruction_deletes_by_exact_path_then_removes_then_rereads_
     report_section = section(text(), "6. Report and confirm")
     template = (
         "<story-key>: resolved | unresolved\n"
-        "instruction: \"<recorded instruction, verbatim>\"\n"
+        "instruction: \"<recorded instruction, verbatim>\" (only when one applied)\n"
     )
-    lines = "  - deleted: <untracked entry path>\n  - discarded: <commit SHA> <subject>\n"
+    lines = "  - deleted: <untracked entry path>\n  - discarded: <abbreviated commit SHA> <subject>\n"
     for phrase in (
         template,
         lines,
         "the story's section quotes it verbatim on its `instruction:` line and lists every path deleted "
-        "and every commit discarded under the artifact it came from",
+        "and every commit discarded under the artifact it came from; with none, the `instruction:` line is left out.",
     ):
         assert phrase in report_section, phrase
     assert (
@@ -525,7 +574,8 @@ def test_a_recorded_instruction_waives_only_the_two_guards_it_names() -> None:
 
 def test_the_guard_statement_lists_every_guard_a_recorded_instruction_keeps() -> None:
     body = section(text(), "3. Delete only with merge evidence")
-    guards = body[body.index("Guards that hold for every worktree and branch removal, with or without a recorded instruction:"):]
+    start = body.index("Guards that hold for every worktree and branch removal, with or without a recorded instruction:")
+    end = body.index("Guards that hold for every removal:", start)
     for phrase in (
         "- Every guard in this step holds, and a recorded instruction lifts only the two it states; "
         "this list and the next are a minimum.",
@@ -536,6 +586,10 @@ def test_the_guard_statement_lists_every_guard_a_recorded_instruction_keeps() ->
         "(a recorded instruction waives this only when it waives the merge-evidence guard) and never from a detached HEAD.",
         "- A remote branch is deleted only with merge evidence from the story's pull requests, no open PR heading it, "
         "and an unchanged remote tip on a second read.",
+    ):
+        assert phrase in body[start:end], phrase
+    guards = body[end:]
+    for phrase in (
         "- `--force` is never used, on any command",
         "Each removal is confirmed by reading it back",
         "The second status read before a worktree removal confirms every deleted entry, regenerable or untracked, is gone.",

@@ -123,7 +123,7 @@ Without a recorded instruction, an untracked entry or an unlanded commit still r
 An explicit instruction is invocation text that, for the named story key, names the worktree or branch, or names each loss it accepts (for example "discard untracked files and unlanded commits").
 With one story key the instruction is that key's; with several, it covers only the key it names.
 Naming the worktree or branch authorizes every loss in it; naming a loss authorizes only that loss.
-A worktree is named by its path and a branch by its name, and naming one does not name the other.
+A worktree is named by its path and a branch by its name, and naming either names both the worktree and the branch it holds, because the branch cannot be removed while that worktree holds it.
 "Don't skip anything" without that scope does not count, and neither does any other text that names neither an artifact nor a loss.
 The instruction waives the merge-evidence guard only when it names the worktree or branch or names unlanded commits, and waives untracked entries only when it names the worktree or branch or names untracked entries.
 It waives nothing else: tracked modifications, ignored entries that the regenerable list does not qualify (including a symlink or file named like a list entry), a detached HEAD, the worktree hosting the current session, remote branch deletion, the open-PR guard, token-boundary attribution and the read-back all still refuse or apply.
@@ -132,15 +132,21 @@ With such an instruction, for a worktree or local branch that fails merge eviden
 
 1. It refuses the worktree before deleting anything if it has a tracked modification, ignored entries that the regenerable list does not qualify (including a symlink or file named like a list entry), a detached HEAD, or is the worktree hosting the current session, and refuses its branch if the worktree is refused.
    It also refuses before deleting anything when the instruction does not authorize every loss removal would incur that normal merge evidence does not cover: untracked entries need an instruction that waives them, and a worktree or branch without merge evidence needs one that waives the merge-evidence guard.
-   An untracked directory is listed at any depth with `find ./<path> -print`, and a nested repository inside it, an entry named `.git` or a bare repository as the regenerable-entry checks define them, refuses the worktree, because its commits are a loss the inventory cannot show.
-2. It records the branch tip SHA (`git rev-parse <branch>`) in the inventory and prints what removal would lose: every untracked entry by exact path, with every path its listing printed, and every commit `git log --oneline origin/<profile.git.integration_branch>..<tip>` lists.
+   It also refuses before deleting anything a worktree git cannot remove, as the worktree rules below define it: the main working tree, a worktree `git worktree list --porcelain` marks `locked`, and a worktree whose submodule paths are not removable with nothing lost.
+   An untracked directory is listed at any depth with `find ./<path> -print0`, whose output is split on NUL so each path arrives exactly as it is on disk, and a listing that exits non-zero refuses the worktree.
+   A nested repository inside it, an entry named `.git` or a bare repository as the regenerable-entry checks define them, refuses the worktree, because its commits are a loss the inventory cannot show.
+2. It records the branch tip SHA (`git rev-parse refs/heads/<branch>`, so a tag of the same name never answers) in the inventory and prints what removal would lose: every untracked entry by exact path, with every path its listing printed, and every commit `git log --oneline origin/<profile.git.integration_branch>..<tip>` lists.
+   A `git log` that exits non-zero refuses the worktree and its branch, because a failed listing can hide a loss.
+   Under a squash or a rebase merge that list can include commits whose content already landed, so it states the most the run could lose, never less.
 3. It deletes each regenerable entry and each untracked entry by exact path with `rm -r --` (no `-f`, no `--force`, no glob), because `git worktree remove` refuses untracked entries without `--force`.
+   The paths deleted are the entries the `-z` status read reports, such as `out/` for an untracked directory; the `find` listing only records what they hold, and a path inside a directory already deleted is never deleted on its own.
    Each deletion follows the regenerable-entry rules below: one argument exactly as the `-z` read gave it, standard input from `/dev/null`, and a stop at the first failed deletion, which refuses the worktree and its branch.
 4. It reads the status again, with `git status --porcelain --ignored -z` inside the worktree, and removes the worktree with `git worktree remove` only when that read is empty; a read that is not empty refuses the worktree and its branch.
-5. It re-reads the branch tip with `git rev-parse <branch>`, refuses the branch if it moved since the inventory, and otherwise removes the branch with `git branch -D`.
+5. It re-reads the branch tip with `git rev-parse refs/heads/<branch>`, refuses the branch if it moved since the inventory, and otherwise removes the branch with `git branch -D` immediately after that re-read.
+   A commit that lands on the branch between the re-read and the delete is lost without being inventoried; `git branch -D` takes no expected tip, so this narrow window is accepted, as the regenerable-entry windows below are.
 
 A local branch that no worktree holds skips steps 3 and 4.
-The report quotes the instruction verbatim and lists every path deleted and every commit discarded.
+The report quotes the instruction verbatim, whether the run removed or refused, and lists every path deleted and every commit discarded.
 
 Remove in this order, so a branch is never refused because a worktree still holds it:
 
@@ -259,13 +265,13 @@ The run ends with one report, structured per story, as the run's final message:
 cleanup report
 
 <story-key>: resolved | unresolved
-instruction: "<recorded instruction, verbatim>"
+instruction: "<recorded instruction, verbatim>" (only when one applied)
 
 removed:
 - <artifact>: <path or URL>
   - deleted: <regenerable entry path>
   - deleted: <untracked entry path>
-  - discarded: <commit SHA> <subject>
+  - discarded: <abbreviated commit SHA> <subject>
 
 archived to the tracker:
 - <attachment name>: <what it shows>
