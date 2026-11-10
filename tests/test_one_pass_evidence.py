@@ -3,8 +3,8 @@
 The filing rule lives in shared/linear.md ("Acceptance criteria and scope") and the
 filing skills cite it in rules prose. Each pinned sentence is matched per source
 line after stripping the leading "- ", so deleting any one fails exactly one test.
-Pins also assert the line's bullet prefix, so a rule hidden in an HTML comment or
-restructured out of its bullet fails too.
+Pins also assert the line's bullet prefix, so a rule hidden in an HTML comment,
+a code fence or a restructured bullet fails too.
 """
 
 import re
@@ -57,8 +57,9 @@ CITATIONS = (
     ),
     pytest.param(
         USER_STORY_SKILL,
-        '**Definition of Ready:** the "observable behaviour" box is checked against the one-pass evidence rule '
-        'in [references/linear.md](references/linear.md) "Acceptance criteria and scope".',
+        '**Definition of Ready:** the "observable behaviour" box is checked against the rule that behavioural '
+        'evidence must be one-pass producible, as [references/linear.md](references/linear.md) '
+        '"Acceptance criteria and scope" states.',
         id="citation-linear-user-story-dor-observable-behaviour",
     ),
     pytest.param(
@@ -76,8 +77,10 @@ CITATIONS = (
 )
 
 
-def strip_comments(text: str) -> str:
-    return re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)
+def strip_hidden(text: str) -> str:
+    """Blank HTML comments and fenced code so hidden text cannot satisfy a pin."""
+    text = re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)
+    return re.sub(r"```.*?```", "", text, flags=re.DOTALL)
 
 
 def section(text: str, heading: str) -> str:
@@ -92,7 +95,7 @@ def scope_entries() -> list[tuple[str, str]]:
     text = section(SHARED_LINEAR.read_text(), "Acceptance criteria and scope")
     return [
         (line, line.strip().removeprefix("- "))
-        for line in strip_comments(text).splitlines()
+        for line in strip_hidden(text).splitlines()
         if line.strip()
     ]
 
@@ -100,7 +103,7 @@ def scope_entries() -> list[tuple[str, str]]:
 def skill_lines(path: Path) -> set[str]:
     return {
         line.strip().removeprefix("- ")
-        for line in strip_comments(path.read_text()).splitlines()
+        for line in strip_hidden(path.read_text()).splitlines()
         if line.strip()
     }
 
