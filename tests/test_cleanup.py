@@ -198,11 +198,9 @@ def test_each_artifact_kind_has_its_guarded_removal() -> None:
     body = section(text(), "3. Delete only with merge evidence")
     for phrase in (
         "Remove in this order, so a branch is never refused because a worktree still holds it",
-        "Removed with `git worktree remove` only when `git status --porcelain --ignored` is empty inside it",
         "only when its HEAD is the tip of a branch with merge evidence",
         "A worktree with a detached HEAD, or on a branch without merge evidence, is refused",
         "not the worktree hosting the current session",
-        "Ignored files count",
         "Removed with `git branch -D`",
         "only when the remote tip has merge evidence and no open PR heads it",
         "Read the remote tip a second time immediately before the delete and refuse if it moved",
@@ -214,6 +212,185 @@ def test_each_artifact_kind_has_its_guarded_removal() -> None:
         "An uncommitted evidence copy is removable only once it has a home the story keeps",
     ):
         assert phrase in body, phrase
+
+
+# The seven names SKL-243 A1 fixes, written out literally in its order and not derived from any
+# other value in this file.
+SEVEN_NAMES = "`.venv`, `venv`, `node_modules`, `__pycache__`, `.pytest_cache`, `.mypy_cache`, `.ruff_cache`"
+LIST_LEAD = "whose final path component, with that trailing `/` removed, is one of "
+
+
+def test_a_worktree_holding_only_regenerable_ignored_entries_is_emptied_then_removed() -> None:
+    body = section(text(), "3. Delete only with merge evidence")
+    # The whole clause after "is one of" is the list and nothing else, each name in its own backticks,
+    # so `.venv` never stands in for `venv` and no extra name hides inside or after the clause.
+    list_sentence = f"{LIST_LEAD}{SEVEN_NAMES}; so `tests/__pycache__/` qualifies."
+    assert list_sentence in body, list_sentence
+    list_line = next(line for line in body.splitlines() if LIST_LEAD in line)
+    assert list_line.rstrip().endswith(list_sentence), list_line
+    assert body.count(LIST_LEAD) == 1
+    for phrase in (
+        "uncommitted or ignored files, apart from the regenerable ignored entries below.",
+        "and only when `git status --porcelain --ignored -z` inside it is empty or lists only regenerable ignored entries, which the run deletes first as below.",
+        "An ignored entry is regenerable when `git status --porcelain --ignored -z` reports it with the ignored code `!!` as a directory (with a trailing `/`)",
+        "An untracked entry (code `??`) is never regenerable, even with a matching name and a trailing `/`.",
+        "Only when the worktree passes every other check in this step and its status lists no other entry",
+        "records each regenerable entry by exact path in the inventory",
+        "deletes each one with `rm -r -- <path>` on that exact path inside the worktree: no `-f`, no `--force`, no glob",
+        "The path is passed to `rm` as one argument, exactly as the `-z` read gave it, never through shell expansion.",
+        "The run stops at the first failed deletion and deletes nothing more.",
+        "reads `git status --porcelain --ignored -z` inside the worktree again",
+        "removes the worktree with `git worktree remove` only when that second read is empty, "
+        "running the removal immediately after the read with no other step between them.",
+        "A failed deletion, a second read that is not empty, a nested repository, or a failed content check refuses the worktree, "
+        "and the report names the path and the failure",
+        "A failed `rm -r` can leave part of that entry behind, so the run then lists what remains at its path, and the report names it.",
+        "An ignored file created between the second read and the removal is still deleted with the directory; "
+        "git offers no checked removal short of `--force`, so this narrow window is accepted rather than closed.",
+        "A worktree locked after its checks passed has its regenerable entries deleted before `git worktree remove` refuses it; "
+        "the report names it as a refused removal, and since only regenerable entries are lost, this window is accepted too.",
+        "A nested repository created inside a regenerable entry after its listing is still deleted with it; "
+        "nothing short of locking the directory closes this, so this window is accepted as well.",
+    ):
+        assert phrase in body, phrase
+    assert (
+        body.index("records each regenerable entry by exact path in the inventory")
+        < body.index("`rm -r -- <path>`")
+        < body.index("reads `git status --porcelain --ignored -z` inside the worktree again")
+        < body.index("only when that second read is empty")
+    )
+    # SKL-243: the unqualified empty-status rule is replaced, not left beside the new one. Only the
+    # bullet head and the second-read sentence may tie a worktree removal to an empty status.
+    for stale in (
+        "Removed with `git worktree remove` only when `git status --porcelain --ignored` is empty inside it",
+        "Ignored files count",
+    ):
+        assert stale not in body, stale
+    allowed = (
+        "- **Worktree.** Removed with `git worktree remove` only when its HEAD",
+        "It then reads `git status --porcelain --ignored -z` inside the worktree again",
+    )
+    for line in body.splitlines():
+        if re.search(r"\bempty\b", line) and re.search(r"worktree remov|removal", line, re.IGNORECASE):
+            assert line.strip().startswith(allowed), line
+
+
+def test_a_regenerable_entry_needs_no_nested_repository_and_its_content_check() -> None:
+    body = section(text(), "3. Delete only with merge evidence")
+    nested = (
+        "the run first lists the contents of each such directory at any depth, including entries whose names begin "
+        "with a dot and without following symlinks (`find ./<path> -print` does; `ls -R` hides dot entries and does "
+        "not qualify), and refuses the worktree when a listing holds a nested repository: "
+        "an entry named `.git` at any depth, whether a directory or a file."
+    )
+    nested_more = (
+        "A bare repository, a directory holding `HEAD`, `objects` and `refs` side by side, counts as a nested repository too.",
+        "A listing that exits non-zero refuses the worktree, whatever it printed.",
+    )
+    checks = (
+        "It also requires a per-name content check before an entry counts as regenerable:",
+        "- `__pycache__` holds only `*.pyc` files: every entry inside it is a regular file whose name ends in `.pyc`.",
+        "- `.venv` and `venv` have `pyvenv.cfg` at their top: a regular file of that name directly inside the directory.",
+        "- `.pytest_cache`, `.mypy_cache` and `.ruff_cache` have `CACHEDIR.TAG` at their top: "
+        "a regular file of that name directly inside the directory.",
+        "- `node_modules` has no content check and is subject to the nested-repository refusal only.",
+        "A directory that fails its check is not regenerable and the worktree is refused.",
+        "The run checks every regenerable entry before it deletes any, so a nested repository or a failed content check deletes nothing.",
+    )
+    stray = (
+        "A stray file inside a directory that passes its check is still deleted with it: "
+        "neither the name nor the marker file can tell a file a tool wrote from one a person left there."
+    )
+    no_prompt = "`rm` runs with standard input from `/dev/null`, so it never stops to prompt."
+    for phrase in (nested, *nested_more, *checks, stray, no_prompt):
+        assert phrase in body, phrase
+    assert (
+        body.index(nested)
+        < body.index(nested_more[0])
+        < body.index(nested_more[1])
+        < body.index(checks[0])
+        < body.index(checks[-1])
+        < body.index("records each regenerable entry by exact path in the inventory")
+        < body.index("`rm -r -- <path>`")
+    )
+
+
+def test_every_status_read_is_unquoted_and_must_succeed() -> None:
+    body = section(text(), "3. Delete only with merge evidence")
+    for phrase in (
+        "Every status read in this step runs `git status --porcelain --ignored -z` inside the worktree and must exit 0; "
+        "a read that exits non-zero refuses the worktree, whatever it printed.",
+        "The `-z` form lists the same entries as `git status --porcelain --ignored`, separated by NUL and never quoted, "
+        "so a path with a space, a quote or a non-ASCII character reaches the checks below exactly as it is on disk.",
+    ):
+        assert phrase in body, phrase
+
+
+def test_a_worktree_git_cannot_remove_is_refused_before_any_deletion() -> None:
+    body = section(text(), "3. Delete only with merge evidence")
+    for phrase in (
+        "only when git can remove it",
+        "A worktree git cannot remove is refused before anything is deleted from it: the main working tree "
+        "(the first entry `git worktree list --porcelain` reports), a worktree that listing marks `locked`, "
+        "and a worktree that holds a submodule, unless git can remove it with nothing lost.",
+        "The worktree's submodule paths are the entries `git ls-files --stage -z` lists inside it with mode `160000`; "
+        "that read must exit 0, and `-z` delivers each path exactly as it is on disk, spaces included.",
+        "A worktree with submodule paths is removable with nothing lost only when its own modules directory "
+        "(the path `git rev-parse --git-path modules` prints inside the worktree) does not exist and each submodule path "
+        "is absent (nothing at all exists at `./<path>`, not even a symlink) or an empty directory "
+        "(`find ./<path> -mindepth 1 -print` prints nothing and exits 0, so an entry whose name begins with a dot counts).",
+        "The status read never reports files inside a submodule path, and git refuses to remove a worktree "
+        "that has a modules directory, so a worktree that fails any of these is refused.",
+        "A worktree whose path no longer exists holds nothing to delete: the run skips its status read, "
+        "removes it with `git worktree remove`, and confirms the removal with the `git worktree list` read-back.",
+    ):
+        assert phrase in body, phrase
+    assert "a worktree whose path does not exist" not in body
+
+
+def test_any_other_status_entry_refuses_the_worktree_and_nothing_is_deleted() -> None:
+    body = section(text(), "3. Delete only with merge evidence")
+    for phrase in (
+        "When the status lists any other entry, the worktree is refused and nothing is deleted from it, the regenerable entries included",
+        "an ignored entry not on the regenerable list (for example `.env`, a local note, or other build output)",
+        "a symlink or file named like a list entry",
+        "a tracked modification (staged, unstaged, deleted, renamed or conflicted)",
+        "an untracked entry (a file or a directory)",
+        "The inventory and the refusal line name every such entry by exact path and kind",
+        "Under `-z` a rename or copy record carries two paths, the new one and then the original, and both are named.",
+    ):
+        assert phrase in body, phrase
+
+
+def test_the_inventory_and_report_name_each_regenerable_entry_by_exact_path() -> None:
+    inventory = section(text(), "2. Inventory every artifact before removing any")
+    for phrase in (
+        "Under each worktree's line, the inventory lists by exact path every entry its status read (step 3) reports.",
+        "Each regenerable ignored entry the run will delete (step 3) has disposition `remove`; the run will delete it only "
+        "when the worktree passes every step 3 check, so the inventory evaluates those checks before it prints, "
+        "and step 3 evaluates them again before deleting.",
+        "A regenerable entry in a worktree that fails any of them is `keep`, and each other entry is `refuse`, with its kind.",
+    ):
+        assert phrase in inventory, phrase
+    body = section(text(), "3. Delete only with merge evidence")
+    for phrase in (
+        "The final report lists, under the worktree it came from and by exact path, each entry deleted, "
+        "including when the worktree removal was then refused, with the failed check, and each failed deletion as a refusal",
+        "A worktree refused because its status lists any other entry lists no entry as deleted",
+        "The step 6 template shows where these lines go.",
+        "for a worktree whose regenerable entries were deleted, the second status read is part of that read-back",
+    ):
+        assert phrase in body, phrase
+    report = section(text(), "6. Report and confirm")
+    removed = "removed:\n- <artifact>: <path or URL>\n  - deleted: <regenerable entry path>\n"
+    refused = (
+        "refused:\n- <artifact>: <failed check>, <why>\n"
+        "  - deleted: <regenerable entry path>\n"
+        "  - refused: <regenerable entry path>: <failed deletion>\n"
+    )
+    assert removed in report, removed
+    assert refused in report, refused
+    assert report.index(removed) < report.index(refused)
 
 
 def test_worktrees_are_removed_before_the_branch_they_hold() -> None:
