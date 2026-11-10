@@ -863,6 +863,8 @@ RESTATEMENT_LINES = {
     "skills/persona-staff-engineer/SKILL.md": 1,
     "skills/story-to-done/SKILL.md": 2,
 }
+# Recorded eval runs embed the same briefs, so a transcript line that restates the override is kind d too.
+EVAL_TRANSCRIPT = re.compile(r"skills/[^/]+/evals/[^/]+/results/[^/]+")
 CHECK_SCRIPT_COMMENT = "# user.signingkey (a key:: or bare ssh- literal, a public-key file or a private-key file,"
 
 RULE_SENTENCES = (
@@ -888,16 +890,11 @@ def test_the_rule_is_stated_once_and_nowhere_else():
 
 
 def signingkey_mentions() -> list[tuple[str, str]]:
-    """Every line of shipped content under shared/ and skills/ that names user.signingkey.
-
-    Recorded eval run transcripts (skills/*/evals/*/results/) are data, not guidance, and are skipped.
-    """
+    """Every line under shared/ and skills/ that names user.signingkey, as the AC's git grep."""
     found = []
     for base in (ROOT / "shared", ROOT / "skills"):
         for path in sorted(p for p in base.rglob("*") if p.is_file() and not p.is_symlink() and "__pycache__" not in p.parts):
             rel = path.relative_to(ROOT).as_posix()
-            if re.fullmatch(r"skills/[^/]+/evals/[^/]+/results/.+", rel):
-                continue
             data = path.read_bytes()
             if b"\0" in data:
                 continue
@@ -919,7 +916,8 @@ def signingkey_mention_kind(rel: str, line: str) -> str | None:
         return "b: the override prohibition"
     if script and line == CHECK_SCRIPT_COMMENT:
         return "c: the resolution-forms comment"
-    if rel in RESTATEMENT_LINES and line.count("user.signingkey") == 1 and OVERRIDE_RESTATEMENT in line:
+    restating = line.count("user.signingkey") == 1 and OVERRIDE_RESTATEMENT in line
+    if restating and (rel in RESTATEMENT_LINES or EVAL_TRANSCRIPT.fullmatch(rel)):
         return "d: the restated override"
     return None
 
@@ -928,7 +926,7 @@ def test_signingkey_mentions_are_allowlisted():
     mentions = signingkey_mentions()
     unlisted = [(rel, line) for rel, line in mentions if signingkey_mention_kind(rel, line) is None]
     assert unlisted == []
-    assert not [rel for rel, line in mentions if "resolves" in line]
+    assert not [rel for rel, line in mentions if "resolves" in line.lower()]
     per_file = {}
     for rel, line in mentions:
         per_file[rel] = [*per_file.get(rel, []), signingkey_mention_kind(rel, line)]
@@ -941,4 +939,7 @@ def test_signingkey_mentions_are_allowlisted():
         expected[script] = ["c: the resolution-forms comment"]
     for rel, count in RESTATEMENT_LINES.items():
         expected[rel] = ["d: the restated override"] * count
-    assert {rel: sorted(kinds) for rel, kinds in per_file.items()} == expected
+    transcripts = {rel: kinds for rel, kinds in per_file.items() if EVAL_TRANSCRIPT.fullmatch(rel)}
+    assert all(set(kinds) == {"d: the restated override"} for kinds in transcripts.values())
+    shipped = {rel: sorted(kinds) for rel, kinds in per_file.items() if rel not in transcripts}
+    assert shipped == expected
