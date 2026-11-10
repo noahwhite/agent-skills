@@ -227,6 +227,8 @@ def test_a_worktree_holding_only_regenerable_ignored_entries_is_emptied_then_rem
     listed = re.findall(r"`([^`]+)`", list_line.split("final path component is one of", 1)[1].split(";", 1)[0])
     assert tuple(listed) == REGENERABLE, listed
     for phrase in (
+        "uncommitted or ignored files, apart from the regenerable ignored entries below.",
+        "and only when `git status --porcelain --ignored` inside it is empty or lists only regenerable ignored entries, which the run deletes first as below.",
         "reports it as a directory (with a trailing `/`)",
         "so `tests/__pycache__/` qualifies",
         "Only when the worktree passes every other check in this step and its status lists no other entry",
