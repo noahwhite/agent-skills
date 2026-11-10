@@ -45,6 +45,7 @@ Reproduce the failure first if you can; a bug report without a concrete observat
   Do not point a bug.
 - **State:** create in the backlog state; never in progress.
 - **Assignee:** always `profile.tracker.assignee`.
+- **Acceptance Criteria:** each acceptance criterion that needs behavioural evidence must be one-pass producible, as [references/linear.md](references/linear.md) "Acceptance criteria and scope" states.
 
 ## Template (the description)
 
