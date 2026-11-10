@@ -359,16 +359,50 @@ def test_an_unwritable_sidecar_record_warns_even_with_no_excluded_lines(gate, fl
     """The arbitrate record has no excluded lines; a failed write of it must still warn."""
     for phase in ("sweep", "hunt"):
         complete(gate, flow, phase)
-    (run_dir(gate) / "arbitrate.dossier.tmp").mkdir()
+    # The arbitrate dossier embeds no diff, so python3 runs only for its sidecar record.
+    env = fake_bin_env(gate, "python3", "exit 1\n")
     if flow == "run":
-        result = run_phase(gate, "arbitrate")
+        result = run_phase(gate, "arbitrate", env=env)
     else:
-        result = run_script("dossier", "arbitrate", *common(gate), env=gate["env"])
+        result = run_script("dossier", "arbitrate", *common(gate), env=env)
         cleanup(gate, Path(line_value(result.stderr, "CHECKOUT: ")))
     assert result.returncode == 0, result.stdout + result.stderr
     warnings = [line for line in result.stderr.splitlines() if line.startswith("WARNING:")]
     assert len(warnings) == 1 and "arbitrate" in warnings[0], result.stderr
     assert not sidecar(gate, "arbitrate").exists()
+    assert leftover_temporaries(gate) == []
+
+
+def leftover_temporaries(g: dict) -> list[str]:
+    return sorted(p.name for p in run_dir(g).iterdir() if ".dossier.tmp" in p.name)
+
+
+@pytest.mark.parametrize("flow", FLOWS)
+def test_a_failed_sidecar_write_never_removes_a_sidecar_another_write_published(gate, flow):
+    """A concurrent write of the same phase publishes its sidecar while this one is measuring."""
+    side = sidecar(gate, "sweep")
+    published = b"path=/elsewhere/sweep-dossier.md\nbytes=7\n"
+    env = fake_bin_env(gate, "wc", f'printf "%b" {published.decode()!r} > {str(side)!r}\nexit 1\n')
+    if flow == "run":
+        result = run_phase(gate, "sweep", env=env)
+    else:
+        result = run_script("dossier", "sweep", *common(gate), env=env)
+        cleanup(gate, Path(line_value(result.stderr, "CHECKOUT: ")))
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert sum(line.startswith("WARNING:") for line in result.stderr.splitlines()) == 1, result.stderr
+    assert side.read_bytes() == published
+    assert leftover_temporaries(gate) == []
+
+
+def test_a_run_measures_the_dossier_its_agent_left(gate):
+    """An agent that rewrites its own dossier leaves a sidecar measuring what is on disk."""
+    agent = AGENT + "; printf 'appended by the agent\\n' >> {prompt_file}"
+    result = run_script("run", "sweep", *common(gate), "--agent-cmd", agent,
+                        env={**gate["env"], "PHASE_NAME": "sweep"})
+    assert result.returncode == 0, result.stdout + result.stderr
+    dossier = Path((gate["scratch"] / "seen-sweep" / "path").read_text())
+    assert dossier.read_bytes().endswith(b"appended by the agent\n")
+    check_sidecar(gate, "sweep", dossier)
 
 
 def test_a_relative_tmpdir_still_records_an_absolute_dossier_path(gate):
