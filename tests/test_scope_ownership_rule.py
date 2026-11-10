@@ -139,7 +139,14 @@ SKIP_LINK_DEPENDENCY = re.compile(
     re.IGNORECASE,
 )
 SKIP_MISSING_STATE = re.compile(
-    r"\b(?:absent|unavailable|missing|lacking|lack|incomplete|unfinished|pending|blocked|needed|required|depends|supplied|unsupported|unprovided|scarce|unmade|unbuilt|unwritten|not|no|never|without)\b|n't\b|\b(?:does|do|is|are) not\b",
+    r"\b(?:absent|unavailable|missing|lacking|lack|incomplete|unfinished|pending|blocked|needed|required|depends|supplied|unsupported|unprovided|scarce|unmade|unbuilt|unwritten)\b"
+    r"|\b(?:not|n't|never|without)\s+(?:present|available|exist|existed|there|ready|landed|delivered|supplied|provided|added|created|built|written|done|complete|completed)\b"
+    r"|\b(?:does|do|is|are)\s+not\s+(?:present|available|exist|ready|landed|delivered|supplied|provided|added|created|built|written|done|complete|completed)\b",
+    re.IGNORECASE,
+)
+SKIP_TEMPORAL_DEPENDENCY = re.compile(
+    r"\b(?:until|after|once|when|while|if)\b[^.;]{0,80}?\b(?:lands|landing|landed|deliver|delivers|delivered|delivery|provide|provides|provided|supply|supplies|supplied|add|adds|added|create|creates|created|build|builds|built|write|writes|written)\b"
+    r"|\b(?:lands|landing|landed|deliver|delivers|delivered|delivery)\b[^.;]{0,80}?\b(?:until|after|once|when|while|if)\b",
     re.IGNORECASE,
 )
 SKIP_LINK_WEAK = re.compile(r"\b(?:for|on)\b", re.IGNORECASE)
@@ -222,7 +229,10 @@ def permissive_inversions(text: str) -> list[str]:
                         return True
                     if crosses_boundary(skip[1], other[0]):
                         before_boundary = gap[:last_boundary]
-                        return bool(SKIP_LINK_DEPENDENCY.search(before_boundary) and SKIP_MISSING_STATE.search(before_boundary))
+                        return bool(
+                            SKIP_TEMPORAL_DEPENDENCY.search(before_boundary)
+                            or (SKIP_LINK_DEPENDENCY.search(before_boundary) and SKIP_MISSING_STATE.search(before_boundary))
+                        )
                     return weak_link_ok(gap)
                 if skip[0] >= other[1]:
                     before_other = sentence[max(0, other[0] - 40) : other[0]]
@@ -343,6 +353,7 @@ def test_false_positive_probe_passes() -> None:
             "Code may carry a permanent exemption for generated files and SKL-123 supplies the fixtures.",
             "Code may carry a permanent exemption because the files are generated; SKL-123 supplies the fixtures.",
             "Code may carry a permanent exemption if the files are generated; SKL-123 supplies the fixtures.",
+            "Code may carry a permanent exemption if the generated files are not hand-edited; SKL-123 supplies fixtures.",
             "# Permanent exemption: generated references/ copies are skipped by the scan; this depends on no other story.",
             'EXEMPT = ("references",)  # why: vendored output, never hand-edited',
             *carve_out,
@@ -378,6 +389,7 @@ def test_true_positive_probe_flags_permissive_inversions() -> None:
         "Code may carry a skip if the fixtures are unavailable; SKL-123 will provide them.",
         "Code may carry a skip while the credentials are not present; SKL-123 supplies them.",
         "Code may carry a skip if the directory does not exist; SKL-123 creates it.",
+        "Code may carry a skip until the API lands; SKL-123 will deliver the API.",
         "The engineer may add or move an AC.",
         "An engineer adds an AC to another story.",
         "Tests xfail for another story.",
