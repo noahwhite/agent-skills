@@ -50,7 +50,7 @@ When `profile.git.signed_commits` is true:
   A non-zero exit is a configuration fault, handled as the Always list below says.
   Never commit with a per-commit key override, and never fall back to another key.
 - Never pass `-c user.signingkey`, `-c gpg.*` or `-c commit.gpgsign` to a commit-creating git command; rely on the configured signing.
-- When `profile.git.signing_key` is unset, confirm `user.signingkey` resolves to that key before committing.
+- An agent never sets `user.signingkey` itself, by `git config` or otherwise; a read-only check (for example `git config --get user.signingkey`) is not a set.
 - Check the result after push: `gh api repos/<owner>/<repo>/commits/<sha> --jq '.commit.verification'`.
   A pushed commit whose `.commit.verification.verified` is false is a configuration fault, handled as the Always list below says.
 - Workflows that create commits must sign them (for example `sign-commits: true` on a create-pull-request action).

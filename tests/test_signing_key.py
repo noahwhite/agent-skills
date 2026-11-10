@@ -845,12 +845,23 @@ def commits_and_signing() -> list[str]:
     return [line.strip() for line in lines[start:end]]
 
 
+NEVER_SETS_SIGNINGKEY = (
+    "- An agent never sets `user.signingkey` itself, by `git config` or otherwise; "
+    "a read-only check (for example `git config --get user.signingkey`) is not a set."
+)
+OVERRIDE_PROHIBITION = (
+    "- Never pass `-c user.signingkey`, `-c gpg.*` or `-c commit.gpgsign` "
+    "to a commit-creating git command; rely on the configured signing."
+)
+# The SKL-206 restatement of the same override inside the briefs and rules of the skills.
+OVERRIDE_RESTATEMENT = "never pass `-c user.signingkey`, `-c gpg.*` or `-c commit.gpgsign`"
+
 RULE_SENTENCES = (
     "- When `profile.git.signing_key` is set, it is the OpenSSH SHA256 fingerprint of the key registered for signing.",
     "Before the first commit of a task, and again after any change to git config, run `bash <skill dir>/scripts/check-signing-key.sh <profile.git.signing_key>` from inside the target repository.",
     "A non-zero exit is a configuration fault, handled as the Always list below says.",
     "Never commit with a per-commit key override, and never fall back to another key.",
-    "- When `profile.git.signing_key` is unset, confirm `user.signingkey` resolves to that key before committing.",
+    NEVER_SETS_SIGNINGKEY,
     "- Check the result after push: `gh api repos/<owner>/<repo>/commits/<sha> --jq '.commit.verification'`.",
 )
 
@@ -865,3 +876,54 @@ def test_the_rule_is_stated_once_and_nowhere_else():
     for path in [*(ROOT / "shared").glob("*.md"), *(ROOT / "skills").glob("*/SKILL.md")]:
         if path != GITHUB:
             assert "check-signing-key" not in path.read_text(), path
+
+
+def signingkey_mentions() -> list[tuple[str, str]]:
+    """Every line under shared/ and skills/ that names user.signingkey, as the AC's git grep."""
+    found = []
+    for base in (ROOT / "shared", ROOT / "skills"):
+        for path in sorted(p for p in base.rglob("*") if p.is_file() and "__pycache__" not in p.parts):
+            data = path.read_bytes()
+            if b"\0" in data:
+                continue
+            rel = path.relative_to(ROOT).as_posix()
+            for line in data.decode("utf-8").splitlines():
+                if re.search(r"user\.signingkey", line):
+                    found.append((rel, line))
+    return found
+
+
+def signingkey_mention_kind(rel: str, line: str) -> str | None:
+    """The one allowlisted kind a mention belongs to, or None for an unlisted mention."""
+    github = rel == "shared/github.md" or re.fullmatch(r"skills/[^/]+/references/github\.md", rel)
+    script = rel == "shared/check-signing-key.sh" or re.fullmatch(
+        r"skills/[^/]+/scripts/check-signing-key\.sh", rel
+    )
+    if github and line == NEVER_SETS_SIGNINGKEY:
+        return "a: the never-sets rule"
+    if github and line == OVERRIDE_PROHIBITION:
+        return "b: the override prohibition"
+    if script and line.startswith("# user.signingkey"):
+        return "c: the resolution-forms comment"
+    if rel.startswith("skills/") and OVERRIDE_RESTATEMENT in line:
+        return "d: the restated override"
+    return None
+
+
+def test_signingkey_mentions_are_allowlisted():
+    mentions = signingkey_mentions()
+    unlisted = [(rel, line) for rel, line in mentions if signingkey_mention_kind(rel, line) is None]
+    assert unlisted == []
+    assert not [rel for rel, line in mentions if "resolves" in line]
+    per_file = {}
+    for rel, line in mentions:
+        kind = signingkey_mention_kind(rel, line)
+        per_file[rel] = [*per_file.get(rel, []), kind]
+    for skill in [None, *receivers()]:
+        base = "shared" if skill is None else f"skills/{skill}"
+        docs = f"{base}/github.md" if skill is None else f"{base}/references/github.md"
+        script = f"{base}/check-signing-key.sh" if skill is None else f"{base}/scripts/check-signing-key.sh"
+        assert per_file[docs].count("a: the never-sets rule") == 1, docs
+        assert per_file[docs].count("b: the override prohibition") == 1, docs
+        assert len(per_file[docs]) == 2, docs
+        assert len(per_file[script]) == 1, script
