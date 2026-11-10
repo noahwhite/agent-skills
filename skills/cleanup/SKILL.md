@@ -108,6 +108,7 @@ Two more rules:
 ## 3. Delete only with merge evidence
 
 Nothing is deleted while it still holds unmerged or unreviewed work: a branch holds it, and a worktree holds its own uncommitted or ignored files, apart from the regenerable ignored entries below.
+For a branch, the merge evidence below is what shows it holds no such work.
 Before each removal other than a persistent-memory note, after `git fetch origin`, establish merge evidence from the story's pull requests or, for a local branch, from containment:
 
 - A merged PR whose head commit is the tip: `gh pr view <n> --json state,headRefOid` reports `MERGED`, and its `headRefOid` equals the tip from `git rev-parse <branch>` for a local branch, or from `git ls-remote --heads origin <branch>` for a remote one.
@@ -166,6 +167,7 @@ Remove in this order, so a branch is never refused because a worktree still hold
     The step 6 template shows where these lines go.
 - **Local branch.** Removed with `git branch -D` once it has merge evidence.
   `-D` rather than `-d`, because a squash or a rebase merge leaves the tip unmerged in git's own eyes.
+  Read the tip with `git rev-parse <branch>` a second time immediately before `git branch -D` and refuse if it moved; when containment is the evidence, run `git merge-base --is-ancestor <tip> origin/<profile.git.integration_branch>` again with that tip and refuse unless it exits 0, running the delete immediately after these reads with no other step between.
   A local branch checked out in any worktree is removed only after that worktree is removed, and is refused, naming the worktree's failed check, when that worktree is refused or kept, including the main working tree and the worktree hosting the current session.
 - **Remote branch.** Deleted with `git push origin --delete <branch>` only when the remote tip has merge evidence and no open PR heads it.
   Containment is never merge evidence for a remote branch, under any merge method: only a merged PR whose head commit is the remote tip is, because containment shows that every commit landed but never that it was reviewed.

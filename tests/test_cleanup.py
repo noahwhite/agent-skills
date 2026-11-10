@@ -202,6 +202,12 @@ def test_containment_is_merge_evidence_for_a_local_branch_under_every_merge_meth
     body = section(text(), "3. Delete only with merge evidence")
     for phrase in (
         "establish merge evidence from the story's pull requests or, for a local branch, from containment:",
+        # Containment is the evidence for a branch no PR reviewed, so it must settle the "unreviewed work" rule.
+        "For a branch, the merge evidence below is what shows it holds no such work.",
+    ):
+        assert phrase in body, phrase
+    containment = bullet(body, "- Containment, for a local branch only:", "Remove in this order")
+    for phrase in (
         "after `git fetch origin` exits 0, `git merge-base --is-ancestor <tip> origin/<profile.git.integration_branch>` "
         "exiting 0 is merge evidence for a local branch under every `profile.git.merge_method`, including when no PR heads it",
         "`<tip>` is the output of `git rev-parse <branch>`.",
@@ -213,8 +219,9 @@ def test_containment_is_merge_evidence_for_a_local_branch_under_every_merge_meth
         "When `git fetch origin` exits non-zero, containment is not read and the branch is handled as for exit 1: "
         'it needs a merged PR whose head commit is the tip, and without one it is refused with the reason "no merge '
         'evidence", and the report names the fetch exit status.',
+        "a detached HEAD is refused even at a contained commit.",
     ):
-        assert phrase in body, phrase
+        assert phrase in containment, phrase
     for stale in ("proves nothing and is never used", "neither `squash` nor `rebase`"):
         assert stale not in body, stale
 
@@ -233,6 +240,19 @@ def test_a_checked_out_local_branch_waits_for_its_worktree() -> None:
         "A local branch checked out in any worktree is removed only after that worktree is removed, and is refused, "
         "naming the worktree's failed check, when that worktree is refused or kept, including the main working tree "
         "and the worktree hosting the current session."
+    )
+    assert phrase in local, phrase
+
+
+def test_a_local_branch_tip_is_read_again_before_its_delete() -> None:
+    # A commit landing after the evidence read would otherwise be lost to `git branch -D`.
+    body = section(text(), "3. Delete only with merge evidence")
+    local = bullet(body, "**Local branch.**", "**Remote branch.**")
+    phrase = (
+        "Read the tip with `git rev-parse <branch>` a second time immediately before `git branch -D` and refuse if "
+        "it moved; when containment is the evidence, run `git merge-base --is-ancestor <tip> "
+        "origin/<profile.git.integration_branch>` again with that tip and refuse unless it exits 0, running the "
+        "delete immediately after these reads with no other step between."
     )
     assert phrase in local, phrase
 
