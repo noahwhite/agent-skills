@@ -85,6 +85,16 @@
 # diff.submodule setting cannot hide a section boundary from the splitter, which streams the diff one
 # section at a time. The splitter needs python3, which the preflight checks.
 #
+# Size sidecars: every completed dossier write, on `run` or `dossier`, leaves `<phase>.dossier` in the
+# run directory: a `path=<absolute dossier path>` line, a `bytes=<n>` line (`LC_ALL=C wc -c` of that
+# dossier), and one `excluded <path> reason=<reason>` line per path the exclusion step left out of the
+# dossier's diff, the path escaped as the truncation marker escapes it (the arbitrate dossier lists
+# none). A phase's start removes its own sidecar, a re-run removes the sidecars of the phases it
+# discards, and a `dossier` whose write fails or is undone removes the one it wrote; an invocation
+# refused before its phase starts removes nothing. Sidecars are measurements only: they are not in
+# any binding or stamp and never change acceptance. One that cannot be written prints a WARNING and
+# changes no exit status.
+#
 # Env equivalents: ADVERSARIAL_REPO, ADVERSARIAL_TEST_CMD, ADVERSARIAL_TEST_DIR, ADVERSARIAL_BASE,
 # ADVERSARIAL_SPEC_FILE, ADVERSARIAL_SCRATCH, ADVERSARIAL_AGENT_CMD, ADVERSARIAL_MODEL,
 # ADVERSARIAL_PROBE_CMD, ADVERSARIAL_PROBE_TIMEOUT (30), ADVERSARIAL_TIMEOUT (900).
@@ -483,13 +493,14 @@ invalidate_downstream() {  # $1 = phase: a re-run discards every later phase, in
   local p a
   for p in $(downstream_of "$1"); do
     a="$(artifact_for "$p")"
-    rm -f -- "$a" "$a.stamp" "$RUN_DIR/$p.launch" "$RUN_DIR/$p.binding" "$RUN_DIR/$p.primary"
+    rm -f -- "$a" "$a.stamp" "$RUN_DIR/$p.launch" "$RUN_DIR/$p.binding" "$RUN_DIR/$p.primary" \
+      "$RUN_DIR/$p.dossier"
   done
 }
 
 begin_phase() {  # $1 = phase: drop stale output and later phases, bind the inputs, mark the launch time
   local art; art="$(artifact_for "$1")"
-  rm -f -- "$art" "$art.stamp"
+  rm -f -- "$art" "$art.stamp" "$RUN_DIR/$1.dossier"
   invalidate_downstream "$1"
   : > "$RUN_DIR/$1.launch"
 }
@@ -820,18 +831,46 @@ emit_spec() {
   fi
 }
 
-# The per-file splitter: reads one `git diff` on stdin, cuts it at `diff --git` lines and applies the
-# cap to each file's section (see "Embedded diff" in the header). It works on bytes, so a section at or
-# below the cap leaves it unchanged. argv: the cap in bytes and the phase checkout's path.
-# `read` returns 1 at the end of the here-document: that is how it ends, not a failure.
-IFS= read -r -d '' DIFF_CAP_PY <<'PYEOF' || true
+# The path escape shared by the truncation marker and the size sidecar's `excluded` lines, so both
+# show a path byte-identically. `read` returns 1 at the end of the here-document: that is how it
+# ends, not a failure.
+IFS= read -r -d '' PATH_ESCAPE_PY <<'PYEOF' || true
 import os
 import sys
 
-cap = int(sys.argv[1])
-checkout = os.fsencode(sys.argv[2])
 ESCAPES = {7: b"\\a", 8: b"\\b", 9: b"\\t", 10: b"\\n", 11: b"\\v", 12: b"\\f", 13: b"\\r",
            34: b'\\"', 92: b"\\\\"}
+
+
+def escape(path):
+    """The path as the marker shows it: raw, unless it holds a quote, backslash or control byte."""
+    if not any(b in (34, 92, 127) or b < 32 for b in path):
+        return path
+    out = bytearray(b'"')
+    for b in path:
+        if b in ESCAPES:
+            out += ESCAPES[b]
+        elif b < 32 or b >= 127:
+            out += b"\\%03o" % b
+        else:
+            out.append(b)
+    return bytes(out + b'"')
+PYEOF
+
+# The size sidecar's `excluded` lines: reads NUL-terminated path and reason pairs on stdin and writes
+# one `excluded <escaped path> reason=<reason>` line per pair.
+IFS= read -r -d '' SIDECAR_PY <<'PYEOF' || true
+fields = sys.stdin.buffer.read().split(b"\0")[:-1]
+for path, reason in zip(fields[0::2], fields[1::2]):
+    sys.stdout.buffer.write(b"excluded " + escape(path) + b" reason=" + reason + b"\n")
+PYEOF
+
+# The per-file splitter: reads one `git diff` on stdin, cuts it at `diff --git` lines and applies the
+# cap to each file's section (see "Embedded diff" in the header). It works on bytes, so a section at or
+# below the cap leaves it unchanged. argv: the cap in bytes and the phase checkout's path.
+IFS= read -r -d '' DIFF_CAP_PY <<'PYEOF' || true
+cap = int(sys.argv[1])
+checkout = os.fsencode(sys.argv[2])
 
 
 def size(lines):
@@ -868,21 +907,6 @@ def unquote(token):
             out += bytes([simple.get(nxt[0], nxt[0])]) if nxt else b"\\"
             i += 2
     return bytes(out)
-
-
-def escape(path):
-    """The path as the marker shows it: raw, unless it holds a quote, backslash or control byte."""
-    if not any(b in (34, 92, 127) or b < 32 for b in path):
-        return path
-    out = bytearray(b'"')
-    for b in path:
-        if b in ESCAPES:
-            out += ESCAPES[b]
-        elif b < 32 or b >= 127:
-            out += b"\\%03o" % b
-        else:
-            out.append(b)
-    return bytes(out + b'"')
 
 
 def split_git_line(rest):
@@ -990,7 +1014,27 @@ out.flush()
 PYEOF
 
 cap_diff_sections() {  # $1 = the phase's checkout; stdin = one `git diff`, stdout = the capped diff
-  python3 -I -c "$DIFF_CAP_PY" "$DIFF_CAP_BYTES" "$1"
+  python3 -I -c "$PATH_ESCAPE_PY$DIFF_CAP_PY" "$DIFF_CAP_BYTES" "$1"
+}
+
+# The size sidecar of a completed dossier write (see "Size sidecars" in the header). The excluded
+# paths and reasons are the ones classify_exclusions set for this dossier; the arbitrate dossier
+# runs no classification, so it lists none. A sidecar that cannot be written is removed and warned
+# about; it never fails the phase.
+EXCL_PATHS=(); EXCL_REASONS=()
+write_size_sidecar() {  # $1 = phase, $2 = the dossier just written (an absolute path)
+  local side="$RUN_DIR/$1.dossier" bytes i
+  if ! {
+    bytes="$(LC_ALL=C wc -c < "$2")" &&
+    {
+      printf 'path=%s\nbytes=%s\n' "$2" "${bytes//[[:space:]]/}"
+      for i in "${!EXCL_PATHS[@]}"; do printf '%s\0%s\0' "${EXCL_PATHS[$i]}" "${EXCL_REASONS[$i]}"; done \
+        | python3 -I -c "$PATH_ESCAPE_PY$SIDECAR_PY"
+    } > "$side"
+  } 2>/dev/null; then
+    rm -f -- "$side" 2>/dev/null || true
+    echo "WARNING: could not write the $1 dossier size sidecar $side; the phase is unaffected." >&2
+  fi
 }
 
 # Every dossier names the phase's throwaway checkout and the base, so anything not embedded inline
@@ -1415,7 +1459,8 @@ case "$cmd" in
     # A phase that fails before its dossier path reaches the caller never started: it leaves no
     # launch, binding, partial dossier or checkout behind (set -e included).
     unstart_phase() {
-      rm -f -- "$dossier" "$RUN_DIR/$phase.launch" "$RUN_DIR/$phase.binding" "$RUN_DIR/$phase.primary"
+      rm -f -- "$dossier" "$RUN_DIR/$phase.launch" "$RUN_DIR/$phase.binding" "$RUN_DIR/$phase.primary" \
+        "$RUN_DIR/$phase.dossier"
     }
     checkout_rc=0
     checkout="$(make_checkout)" || checkout_rc=$?
@@ -1432,6 +1477,7 @@ case "$cmd" in
       unstart_phase
       exit "$rc"' EXIT
     write_dossier "$phase" "$dossier" "$checkout"
+    write_size_sidecar "$phase" "$dossier"
     bind_phase "$phase"
     echo "CHECKOUT: $checkout" >&2
     echo "Work only in that checkout (never the primary checkout); the $phase dossier names it too. Remove it with 'cleanup $checkout' once the phase is recorded." >&2
@@ -1516,6 +1562,7 @@ case "$cmd" in
     DOSSIER_PENDING=1
     write_dossier "$phase" "$dossier" "$checkout"
     DOSSIER_PENDING=0
+    write_size_sidecar "$phase" "$dossier"
     q_prompt="$(printf '%q' "$dossier")"
     q_out="$(printf '%q' "$out")"
     q_checkout="$(printf '%q' "$checkout")"
