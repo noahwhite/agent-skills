@@ -78,6 +78,44 @@ Delegated agents that launch reviewers need `experimental.subagent_depth: 2` and
 Use `opencode run --agent <id> --model <provider>/<model>#<variant>` for automation.
 The root interactive TUI does not accept those agent/model flags; configure fresh-session defaults or command frontmatter instead, and verify the effective model on resumed sessions.
 
+### Todo enforcer hook (Claude Code)
+
+`story-to-done` and `story-refinement` ship a Claude Code hook, `scripts/todo-enforce.py`, that keeps the main thread working from its task list.
+Register one copy for all four events in `~/.claude/settings.json`, merging the `hooks` key into any you already have:
+
+```json
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {"hooks": [{"type": "command", "command": "python3 ~/.claude/skills/story-to-done/scripts/todo-enforce.py"}]}
+    ],
+    "PreToolUse": [
+      {"matcher": "*", "hooks": [{"type": "command", "command": "python3 ~/.claude/skills/story-to-done/scripts/todo-enforce.py"}]}
+    ],
+    "TaskCreated": [
+      {"hooks": [{"type": "command", "command": "python3 ~/.claude/skills/story-to-done/scripts/todo-enforce.py"}]}
+    ],
+    "TaskCompleted": [
+      {"hooks": [{"type": "command", "command": "python3 ~/.claude/skills/story-to-done/scripts/todo-enforce.py"}]}
+    ]
+  }
+}
+```
+
+The path assumes the install link above; point it at wherever `skills/story-to-done` lives.
+The hook acts only in a session whose main thread loaded `story-to-done` or `story-refinement`, either by its slash command or by the model loading the skill, and only when that session has the task tools (`TaskCreate` and its siblings).
+In such a session it enforces two things on the main thread:
+
+- A tool call runs only while a task the main thread created is `in_progress`; otherwise it is denied with a reason telling the model to mark one in progress.
+  The task tools themselves, the tool Claude Code uses to load them, and `Skill` are always allowed.
+- A main-thread task completes only if it was `in_progress` first, and a subagent cannot complete a main-thread task; otherwise the completion is refused with a reason.
+
+It never denies a subagent's tool calls, a session that loaded neither skill, or a session without the task tools, such as a default `claude -p` run.
+After a denial or refusal the session continues, and the model can fix the task list and retry.
+It fails open: a malformed payload, unreadable state or any error of its own is logged to stderr and the call is allowed.
+Its state lives under `${XDG_STATE_HOME:-~/.local/state}/agent-skills/todo-enforce/`, one directory per session, and it reads task files from `${CLAUDE_CONFIG_DIR:-~/.claude}/tasks/`.
+To remove it, delete those four entries from `settings.json`; you may also delete its state directory.
+
 ## Profile
 
 A profile is a YAML file with the values that differ between projects: tracker team and state names, branches, review models, environments.
