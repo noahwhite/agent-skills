@@ -110,7 +110,8 @@ FIGURE_RULES = [
     ),
     pytest.param(
         "The elapsed wall-clock runs from the recorded `invocation_start`, the UTC timestamp taken "
-        "with a command the moment the `metrics` switch resolved on, to `invocation_end`, a UTC "
+        "with a command right after the todo list is created, once the `metrics` switch resolved on, "
+        "to `invocation_end`, a UTC "
         "timestamp taken with a command immediately before the closing message or closing report, "
         "or, where the skill composes the summary before that message, immediately before the "
         "summary is composed.",

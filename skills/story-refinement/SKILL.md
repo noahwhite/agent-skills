@@ -35,7 +35,9 @@ If none was given, ask the owner for one before doing anything else; never guess
 Any other phrasing about metrics is asked about, never guessed.
 
 - Resolve both arguments, asking about any ambiguity, before the todo list is created.
-- When `metrics` resolves on, the facilitator's next action, before the todo list, is to take a UTC timestamp with a command and record it as `invocation_start` in the metrics file.
+- When `metrics` resolves on, the facilitator's first command, right after the todo list is created, is to take a UTC timestamp with a command and record it as `invocation_start` in the metrics file.
+  The bootstrap todo list then starts with the record invocation start item, so that command runs under an item in progress.
+  That command first creates the session's scratch directory (`references/runtimes.md`, Scratch files) when it does not exist yet, so the metrics file has a directory.
 - Write the resolved value as one line `metrics: on` or `metrics: off` at the top of the todo list and in the closing message.
 
 With `metrics` off or omitted, the facilitator does not open `references/metrics.md`, collects no figure, creates no metrics scratch file, posts no metrics comment, and adds no metrics content to any brief, record, report, todo list, closing message, or tracker write, other than the `metrics: off` line.
@@ -43,8 +45,14 @@ Every other metrics instruction in this skill applies only when `metrics` is on.
 
 ## Read first
 
-- [references/profile.md](references/profile.md) - find the profile and this skill's overlay before anything else.
-- [references/todo-tracking.md](references/todo-tracking.md) - required: create the fine-grained todo list before the first read, context, or tracker write, with one item per voter input, accept round, point value, consensus check, basis-challenge round, discussion and re-vote when the check calls for them, split, and triage write.
+Create the todo list as your first action, before you read any reference, the profile, or an overlay.
+The only action before it is the one Arguments orders before the todo list: resolving the arguments, asking about any ambiguity.
+With no todo tool, compose the primary-session checklist first; only placing its file may then create its scratch directory when it does not exist yet and, when the runtime's scratch base is `profile.workspace.scratch_dir`, read that one key, and no other profile content is read before the checklist file exists.
+Create it from this file alone as a bootstrap list: one item per file listed below, including the profile and overlay those files locate, then one item per step (Step 1 to Step 4, the triage writes, the records, and the closing message).
+After reading `references/todo-tracking.md`, expand the list to the story-refinement seed items before the first investigation, context, tracker write, delegation, or any command other than the one Arguments orders right after the todo list, and add the items that need the story or the profile as soon as they are known.
+
+- [references/profile.md](references/profile.md) - find the profile and this skill's overlay right after the todo list is created, before any other file.
+- [references/todo-tracking.md](references/todo-tracking.md) - required: the list rules and the story-refinement seed list, with one item per voter input, accept round, point value, consensus check, basis-challenge round, discussion and re-vote when the check calls for them, split, and triage write.
 - [references/linear.md](references/linear.md) - the rule set for the story lifecycle, Definition of Ready, estimation, splitting, relations, and tooling gotchas.
   Cite it for split mechanics; do not restate them here.
 - [references/engineering-practice.md](references/engineering-practice.md) - diagnose before changing, write meaningful tests, and keep changes minimal.
@@ -125,7 +133,7 @@ The guards and their commands come from the repository under refinement; this sk
 
 - **Inputs:** the story description, acceptance criteria, comments, and formal relations; the profile; the capability references; the Definition of Ready and Definition of Done template from the matching filing skill.
 - **Process:**
-  1. Create the todo list and read the story completely, including `linear issue relation list <ID>` for every blocker.
+  1. With the todo list already created (Read first), read the story completely, including `linear issue relation list <ID>` for every blocker.
   2. Validate the refinement roster before the tracker-write preflight and before any voter launch.
      Resolve the profile through the first-existing-file rule in [references/profile.md](references/profile.md) (the `shared/profile.md` rule), never a repository-only read.
      Stop with a message naming the violated requirement when `profile.refinement.reviewers` does not hold exactly three entries, when fewer than three reviewers are enabled, when a required role (`facilitator`, `product_owner`, `reviewers`) is unset, when a reviewer `family` is missing or empty, when two reviewer families are equal, or when two reviewer model ids are equal.
