@@ -329,6 +329,21 @@ def test_a_remote_branch_tip_is_read_again_by_command_before_its_delete() -> Non
     assert exact in merged_pr, exact
 
 
+def test_every_remote_read_must_exit_0_and_match_the_exact_ref() -> None:
+    # SKL-251 AC 3 (amended): a failed `git ls-remote` exits 128 with empty stdout, and a successful one also
+    # lists `refs/heads/<x>/<branch>`, so every remote read in step 3, the read-back included, needs both rules.
+    body = section(text(), "3. Delete only with merge evidence")
+    merged_pr = bullet(body, "- A merged PR whose head commit is the tip:", "- Containment, for a local branch only:")
+    rule = (
+        "Every `git ls-remote --heads origin <branch>` read in this step must exit 0 and answers only through its "
+        "line whose ref is exactly `refs/heads/<branch>`: a read that exits non-zero is never evidence, whatever it "
+        "printed, and the report names its exit status."
+    )
+    assert rule in merged_pr, rule
+    # The tail-matching, status-blind read-back wording is gone.
+    assert "`git ls-remote --heads origin <branch>` must no longer list the branch" not in text()
+
+
 def test_every_integration_branch_read_names_the_remote_tracking_ref() -> None:
     # SKL-252: a short `origin/<integration_branch>` resolves a same-named tag first, so every
     # containment check and loss listing names `refs/remotes/origin/<...>`.
@@ -816,7 +831,9 @@ def test_a_local_branch_read_back_is_an_exact_ref_check() -> None:
         "`git show-ref --verify --quiet refs/heads/<branch>` must exit 1, "
         "the status for an exact ref that does not exist (exit 0 means it still exists and any other status is a "
         "failed read, both refusals); after a worktree removal, `git worktree list` must no longer list the worktree; "
-        "after a remote-branch removal, `git ls-remote --heads origin <branch>` must no longer list the branch;"
+        "after a remote-branch removal, `git ls-remote --heads origin <branch>` must exit 0 and list no line whose "
+        "ref is exactly `refs/heads/<branch>` (a line for another branch whose name ends in `/<branch>` is not that "
+        "branch, and any other exit status is a failed read, a refusal);"
     )
     assert phrase in guards, phrase
     assert "git branch --list" not in text()
