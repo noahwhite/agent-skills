@@ -2437,8 +2437,9 @@ PRODUCIBLE_OUTPUT_PHRASES = (
     "commits it there so guards that read committed content see it",
     "a guard passes only when it exits zero and reports no finding",
     "runs every guard on the guard list against it from that checkout, leaving the primary checkout unchanged",
-    "the throwaway checkout is made from the repository under refinement at the revision the story's work starts "
-    "from, sits in the session's scratch directory, and is removed after the check",
+    "the throwaway checkout is a disposable clone of the repository under refinement with its own object store, "
+    "never a worktree that shares one, at the revision the story's work starts from; it sits in the session's "
+    "scratch directory, and the whole clone is removed after the check",
     "for each guard, the command, the exit status and the result, "
     "and for a sample its provenance and coverage limits",
 )
