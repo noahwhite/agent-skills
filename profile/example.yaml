@@ -69,9 +69,9 @@ review:
     runtime: codex
     model: gpt-5
   adjudicator:
-    name: Claude adjudicator
-    runtime: claude-code
-    model: opus
+    name: DeepSeek V4.1 Flash
+    runtime: opencode
+    model: deepseek/deepseek-flash
   shadow_adjudicators:
     - name: Claude shadow adjudicator
       runtime: claude-code
@@ -153,6 +153,28 @@ refinement:
       model: example/family-c
       family: family-c
   point_cap: 5
+# The seats story-to-done falls back to when an invocation leaves a seat argument out. An explicit
+# argument overrides a field; effort defaults to high; a seat with no model stops the skill to ask.
+# A command seat runs from any orchestrator with a shell: the skill fills {model} and {effort}.
+story_to_done:
+  engineer:
+    name: DeepSeek V4.1 Flash
+    runtime: command
+    model: deepseek/deepseek-flash
+    effort: high
+    command: >-
+      opencode run --model "{model}#{effort}" "Follow the instructions in the attached file exactly."
+      --title "{session_title}"
+      --file "{prompt_file}" > "{output_file}"
+  qa:
+    name: DeepSeek V4 Pro
+    runtime: command
+    model: deepseek/deepseek-v4-pro
+    effort: high
+    command: >-
+      opencode run --model "{model}#{effort}" "Follow the instructions in the attached file exactly."
+      --title "{session_title}"
+      --file "{prompt_file}" > "{output_file}"
 workspace:
   # A base directory only: each session creates one directory inside it with mktemp -d
   # (shared/runtimes.md, Scratch files). Optional; the session falls back to a standalone

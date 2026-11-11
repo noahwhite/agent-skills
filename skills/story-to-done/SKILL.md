@@ -2,8 +2,8 @@
 name: story-to-done
 description: >-
   Drive one Linear story from implementation to Done: a senior-engineer subagent implements it through engineering-workflow and takes it to deployment review, then a QA subagent verifies it through qa-verification, and every item QA rules not met goes back to the senior engineer until nothing keeps the story from Done.
-  Takes the story identifier plus optional model and reasoning effort for each role (defaults: senior engineer Sonnet 5.5 at high, QA Opus 5.5 at high).
-  Use when asked to implement a story and see it through QA to Done (for example "story to done ABC-123" or "implement ABC-123, QA it, and fix until done, QA on Opus 5.5 at max").
+  Takes the story identifier plus optional model and reasoning effort for each role (defaults: each role's seat in the profile, effort high when the seat sets none; with neither, it asks).
+  Use when asked to implement a story and see it through QA to Done (for example "story to done ABC-123" or "implement ABC-123, QA it, and fix until done, QA on <model> at max").
   Not for implementing without QA (use engineering-workflow), verifying a story without fixing it (use qa-verification), or staff-level triage, planning, and shadow adjudication (use persona-staff-engineer).
 license: Apache-2.0
 compatibility: Requires a runtime that can spawn subagents and set each one's model and reasoning effort, plus the linear CLI (schpet/linear-cli) with jq, or the Linear MCP server.
@@ -19,14 +19,14 @@ You run the loop; you do not write the code or run the QA yourself.
 Its team prefix is the team for every read and write this skill performs on or for that issue, and it need not equal `profile.tracker.team_key`.
 If none was given, ask the user for one before doing anything else; never guess a story number.
 
-Five arguments are optional, given as `key=value` or in plain words ("QA on Opus 5.5 at max" sets `qa-model` and `qa-effort`):
+Five arguments are optional, given as `key=value` or in plain words ("QA on <model> at max" sets `qa-model` and `qa-effort`):
 
 | Argument | Sets | Default |
 |---|---|---|
-| `engineer-model` | the senior engineer's model | Sonnet 5.5 (`claude-sonnet-5-5`) |
-| `engineer-effort` | the senior engineer's reasoning effort | `high` |
-| `qa-model` | the QA agent's model | Opus 5.5 (`claude-opus-5-5`) |
-| `qa-effort` | the QA agent's reasoning effort | `high` |
+| `engineer-model` | the senior engineer's model | `profile.story_to_done.engineer` |
+| `engineer-effort` | the senior engineer's reasoning effort | seat effort (default high) |
+| `qa-model` | the QA agent's model | `profile.story_to_done.qa` |
+| `qa-effort` | the QA agent's reasoning effort | seat effort (default high) |
 | `metrics` | whether the run collects and reports run metrics | `off` |
 
 - An argument left out takes its default.
@@ -34,11 +34,29 @@ Five arguments are optional, given as `key=value` or in plain words ("QA on Opus
 - If a value is ambiguous (an unknown model, an effort outside that list), ask the user; never guess.
 - After step 0 creates the todo list, map each model and effort to your runtime with `references/runtimes.md`.
   If the runtime cannot run that exact model or effort level, stop and say so; never substitute another model or level.
-- Each role keeps the same model and effort in every round.
 - `metrics` is given as `metrics=on` or `metrics=off`, or in plain words: "with metrics" and "metrics on" mean on, "without metrics" and "metrics off" mean off; ask the user about any other phrasing about metrics; never guess.
 - Resolve `metrics` before step 0 creates the todo list; it sets no model or effort.
 - With `metrics` off or omitted, read no metrics reference, collect no figure, create no metrics file, post no metrics comment, and add no metrics content to any brief, report, todo list, or tracker write, other than the `metrics: off` line.
 - Write the four resolved model and effort values and the `metrics: on|off` line at the top of your todo list and in the closing report of every end state (the step 5 report, or the report made at any stop, including one before step 0).
+
+### Seat resolution
+
+The engineer seat is `profile.story_to_done.engineer` and the QA seat is `profile.story_to_done.qa`, read from the profile the chain in [references/profile.md](references/profile.md) selects (Find the profile), right after step 0 creates the todo list and before step 1.
+A value not yet resolved is written as `unresolved` wherever the four values are written.
+
+- Each value resolves on its own: the explicit argument, else the seat's field (`model` for a model, `effort` for an effort), else, for an effort only, `high`; a model has no default.
+- An explicit argument overrides the seat field by field: it replaces only the value it names, and the seat's other fields still apply.
+- When a seat argument is absent and the profile yields no usable value for it (no profile, no `profile.story_to_done` object, no `engineer` or `qa` entry, or an entry with no `model`), stop before spawning either role and ask the user for that seat's model and effort, asking only for the values the arguments left unset and the profile does not supply.
+  A caller-supplied argument is used even when the seat entry is absent.
+  Never fall back to a model id written in this skill, and never probe or fall back across a list of model ids.
+- The seat's `runtime` decides the launch.
+  `claude-code` or `opencode` is a subagent of that runtime, and a seat with no `runtime`, or no entry at all when the arguments supply its model, is a subagent of your own runtime.
+  `command` is a separate process launched by the shell-launched agents rule in [references/runtimes.md](references/runtimes.md): fill `{model}`, `{effort}`, `{prompt_file}`, `{output_file}` and `{session_title}` in its `command` with the resolved model, the resolved effort, the brief's file, the file it hands back in, and a title unique to the launch.
+  A seat whose runtime you cannot launch, such as an `opencode` seat under another runtime, stops the skill before either role is spawned: say which seat and why.
+- One resolved seat serves its role in every round, unchanged: the senior engineer goes back to it for each fix round, and each new QA round spawns a new agent on it.
+  A `command` seat is never resumed: step 4 hands the senior engineer's failed items to a new launch on the same seat with the step 2 brief, and a QA resume that step 0 or step 4 calls for is one the runtime cannot make.
+
+These seats reuse the refinement seat pattern of `profile.refinement`, with four differences: no `family` field and no rule that the two seats sit on distinct families; an explicit argument overrides the profile field by field; one resolved seat is reused unchanged in every round, with QA respawned on the same seat; and a `command` seat launches by the shell-launched agents rule rather than as a resumed subagent.
 
 ## Read first
 
@@ -173,7 +191,7 @@ For a waived PR, compare the merged PR's `headRefOid` with the SHA recorded when
   If all three hold, go to step 5; if any does not, report the mismatch and stop.
 - **`profile.tracker.states.in_progress`:** QA ruled at least one AC or DoD item not met and reopened the story.
   Those failed items are the issues to fix.
-  Hand them back to the senior engineer: resume the same subagent if the runtime can, else spawn a new clean, neutral one on the same model and effort with the step 2 brief.
+  Hand them back to the senior engineer: resume the same subagent if the runtime can, else spawn a new clean, neutral one on the same seat with the step 2 brief.
   Either way, add to the hand-back brief each failed item as QA recorded it on the story (the item, its verdict, and the evidence it cites), and instruct the engineer to fix them through `engineering-workflow` on this story and take it back to `profile.tracker.states.in_deployment_review`.
   Confirm that state as step 2 does, then run step 3 again with a new QA agent.
 - **`profile.tracker.states.in_deployment_review`:** QA is not finished: one or more items in its handback are outstanding.

@@ -13,6 +13,7 @@ import time
 from decimal import Decimal
 from pathlib import Path
 
+import jsonschema
 import pytest
 import yaml
 
@@ -70,10 +71,10 @@ def test_skill_links_to_required_references() -> None:
 def test_arguments_table_pins_each_default() -> None:
     body = section(SKILL.read_text(), "Arguments")
     for row in (
-        "| `engineer-model` | the senior engineer's model | Sonnet 5.5 (`claude-sonnet-5-5`) |",
-        "| `engineer-effort` | the senior engineer's reasoning effort | `high` |",
-        "| `qa-model` | the QA agent's model | Opus 5.5 (`claude-opus-5-5`) |",
-        "| `qa-effort` | the QA agent's reasoning effort | `high` |",
+        "| `engineer-model` | the senior engineer's model | `profile.story_to_done.engineer` |",
+        "| `engineer-effort` | the senior engineer's reasoning effort | seat effort (default high) |",
+        "| `qa-model` | the QA agent's model | `profile.story_to_done.qa` |",
+        "| `qa-effort` | the QA agent's reasoning effort | seat effort (default high) |",
     ):
         assert row in body, f"defaults table missing: {row}"
     for phrase in (
@@ -84,6 +85,128 @@ def test_arguments_table_pins_each_default() -> None:
         "never substitute another model or level",
     ):
         assert phrase in body, f"arguments missing: {phrase}"
+
+
+# SKL-83: the engineer and QA seats resolve from the profile, never from a model id the skill
+# names. Any model id or model family name in the skill text is a hard-coded default creeping back
+# in; `claude-code` is a runtime name, not a model.
+MODEL_NAME = re.compile(
+    r"\b(claude-(?!code\b)[\w.-]+|sonnet|opus|haiku|gpt-[\w.-]+|deepseek[\w./-]*|gemini[\w.-]*|grok[\w.-]*"
+    r"|glm-[\w.-]+|kimi[\w.-]*|qwen[\w.-]*)",
+    re.IGNORECASE,
+)
+SEAT_RULES = (
+    "The engineer seat is `profile.story_to_done.engineer` and the QA seat is `profile.story_to_done.qa`, "
+    "read from the profile the chain in [references/profile.md](references/profile.md) selects (Find the "
+    "profile), right after step 0 creates the todo list and before step 1.",
+    "Each value resolves on its own: the explicit argument, else the seat's field (`model` for a model, "
+    "`effort` for an effort), else, for an effort only, `high`; a model has no default.",
+    "An explicit argument overrides the seat field by field: it replaces only the value it names, and the "
+    "seat's other fields still apply.",
+    "When a seat argument is absent and the profile yields no usable value for it (no profile, no "
+    "`profile.story_to_done` object, no `engineer` or `qa` entry, or an entry with no `model`), stop before "
+    "spawning either role and ask the user for that seat's model and effort, asking only for the values the "
+    "arguments left unset and the profile does not supply.",
+    "A caller-supplied argument is used even when the seat entry is absent.",
+    "Never fall back to a model id written in this skill, and never probe or fall back across a list of "
+    "model ids.",
+    "One resolved seat serves its role in every round, unchanged: the senior engineer goes back to it for "
+    "each fix round, and each new QA round spawns a new agent on it.",
+)
+SEAT_DIFFERENCES = (
+    "no `family` field and no rule that the two seats sit on distinct families",
+    "an explicit argument overrides the profile field by field",
+    "one resolved seat is reused unchanged in every round, with QA respawned on the same seat",
+    "a `command` seat launches by the shell-launched agents rule rather than as a resumed subagent",
+)
+
+
+def test_skill_names_no_model_id() -> None:
+    text = SKILL.read_text()
+    assert not MODEL_NAME.findall(text), f"hard-coded model names: {MODEL_NAME.findall(text)}"
+    assert "QA on <model> at max" in text, "the plain-words example names a placeholder, not a model"
+
+
+def test_model_name_guard_catches_the_removed_defaults() -> None:
+    for removed in ("Sonnet 5.5 (`claude-sonnet-5-5`)", "QA on Opus 5.5 at max", "`claude-opus-5-5`",
+                    "deepseek/deepseek-flash", "openai/gpt-6.1-sol"):
+        assert MODEL_NAME.search(removed), removed
+    for allowed in ("runtime `claude-code`", "`opencode` seat", "QA on <model> at max"):
+        assert not MODEL_NAME.search(allowed), allowed
+
+
+def test_seats_resolve_from_the_profile() -> None:
+    body = " ".join(section(SKILL.read_text(), "Arguments").split())
+    for rule in SEAT_RULES:
+        assert rule in body, f"seat resolution missing: {rule}"
+    for difference in SEAT_DIFFERENCES:
+        assert difference in body, f"difference from the refinement seats missing: {difference}"
+    for phrase in (
+        "`{model}`, `{effort}`, `{prompt_file}`, `{output_file}` and `{session_title}`",
+        "A seat whose runtime you cannot launch",
+        "stops the skill",
+    ):
+        assert phrase in body, f"seat launch missing: {phrase}"
+    assert "Each role keeps the same model and effort in every round." not in body
+
+
+SCHEMA = json.loads((ROOT / "profile" / "schema.json").read_text())
+SEAT = {"name": "Engineer", "runtime": "opencode", "model": "example/strong", "effort": "high"}
+COMMAND_SEAT = {
+    "name": "Engineer",
+    "runtime": "command",
+    "model": "example/strong",
+    "command": 'agent --model "{model}#{effort}" --file "{prompt_file}" > "{output_file}"',
+}
+
+
+def profile_with(story_to_done) -> dict:
+    return {"version": 1, "project": {"name": "Example"}, "story_to_done": story_to_done}
+
+
+def schema_errors(instance: dict) -> list[str]:
+    return [e.message for e in jsonschema.Draft202012Validator(SCHEMA).iter_errors(instance)]
+
+
+def test_schema_accepts_a_story_to_done_seat_pair() -> None:
+    assert not schema_errors(profile_with({"engineer": SEAT, "qa": COMMAND_SEAT}))
+    assert not schema_errors(profile_with({"engineer": {"model": "example/strong"}, "qa": SEAT}))
+    effort = SCHEMA["$defs"]["story_to_done_seat"]["properties"]["effort"]
+    assert effort["enum"] == ["low", "medium", "high", "xhigh", "max"]
+    assert effort["default"] == "high"
+
+
+@pytest.mark.parametrize(
+    "story_to_done",
+    [
+        {"engineer": SEAT},
+        {"qa": SEAT},
+        {"engineer": SEAT, "qa": SEAT, "extra": SEAT},
+        {"engineer": {k: v for k, v in SEAT.items() if k != "model"}, "qa": SEAT},
+        {"engineer": SEAT | {"family": "example"}, "qa": SEAT},
+        {"engineer": SEAT | {"effort": "extreme"}, "qa": SEAT},
+        {"engineer": SEAT | {"runtime": "shell"}, "qa": SEAT},
+        {"engineer": {k: v for k, v in COMMAND_SEAT.items() if k != "command"}, "qa": SEAT},
+        {"engineer": COMMAND_SEAT | {"command": 'agent --model "example/strong#high"'}, "qa": SEAT},
+        {"engineer": COMMAND_SEAT | {"command": 'agent --model "{model}#high"'}, "qa": SEAT},
+    ],
+    ids=["no-qa", "no-engineer", "extra-seat", "no-model", "family", "bad-effort", "bad-runtime",
+         "command-without-command", "command-without-placeholders", "command-without-effort"],
+)
+def test_schema_refuses_a_malformed_story_to_done(story_to_done) -> None:
+    assert schema_errors(profile_with(story_to_done))
+
+
+@pytest.mark.parametrize("path", [ROOT / "profile" / "example.yaml", ROOT / ".agent-skills" / "profile.yaml"],
+                         ids=["example", "repository"])
+def test_profiles_seat_story_to_done_on_verified_labs(path: Path) -> None:
+    profile = yaml.safe_load(path.read_text())
+    seats = profile["story_to_done"]
+    assert not schema_errors(profile_with(seats))
+    assert (seats["engineer"]["model"], seats["engineer"]["effort"]) == ("deepseek/deepseek-flash", "high")
+    assert (seats["qa"]["model"], seats["qa"]["effort"]) == ("deepseek/deepseek-v4-pro", "high")
+    assert profile["review"]["adjudicator"]["model"] == "deepseek/deepseek-flash"
+    assert "Interim: the owner will change this again" not in path.read_text()
 
 
 def test_senior_engineer_uses_its_model_and_engineering_workflow() -> None:
