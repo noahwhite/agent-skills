@@ -222,7 +222,15 @@ def test_containment_is_merge_evidence_for_a_local_branch_under_every_merge_meth
         "a detached HEAD is refused even at a contained commit.",
     ):
         assert phrase in containment, phrase
-    for stale in ("proves nothing and is never used", "neither `squash` nor `rebase`"):
+    for stale in (
+        "proves nothing and is never used",
+        "neither `squash` nor `rebase`",
+        # The opener no longer restates the Containment and Remote branch bullets.
+        "containment shows every commit on it has landed",
+        # No sentence may contradict the Containment bullet for a local branch.
+        "never merge evidence for a local branch",
+        "never evidence for a local branch",
+    ):
         assert stale not in body, stale
 
 
@@ -265,11 +273,13 @@ def test_a_local_branch_tip_is_read_again_before_its_delete() -> None:
     local = bullet(body, "**Local branch.**", "**Remote branch.**")
     phrase = (
         "Read the tip with `git rev-parse <branch>` a second time immediately before `git branch -D` and refuse if "
-        "it moved, running the delete immediately after that read with no other step between."
+        "it moved; when containment is the evidence, run `git merge-base --is-ancestor <tip> "
+        "origin/<profile.git.integration_branch>` again with that tip and refuse unless it exits 0, running the "
+        "delete immediately after these reads with no other step between."
     )
     assert phrase in local, phrase
     window = (
-        "A commit that lands on the branch between that read and the delete is still lost with it, because "
+        "A commit that lands on the branch between these reads and the delete is still lost with it, because "
         "`git branch -D` takes no expected tip; this narrow window is accepted rather than closed."
     )
     assert window in local, window

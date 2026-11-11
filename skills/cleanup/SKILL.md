@@ -208,8 +208,8 @@ Remove in this order, so a branch is never refused because a worktree still hold
     The step 6 template shows where these lines go.
 - **Local branch.** Removed with `git branch -D` once it has merge evidence, or once a recorded instruction (above) waives the merge-evidence guard for it and its tip re-read matches the inventory.
   `-D` rather than `-d`, because a squash or a rebase merge leaves the tip unmerged in git's own eyes.
-  Read the tip with `git rev-parse <branch>` a second time immediately before `git branch -D` and refuse if it moved, running the delete immediately after that read with no other step between.
-  A commit that lands on the branch between that read and the delete is still lost with it, because `git branch -D` takes no expected tip; this narrow window is accepted rather than closed.
+  Read the tip with `git rev-parse <branch>` a second time immediately before `git branch -D` and refuse if it moved; when containment is the evidence, run `git merge-base --is-ancestor <tip> origin/<profile.git.integration_branch>` again with that tip and refuse unless it exits 0, running the delete immediately after these reads with no other step between.
+  A commit that lands on the branch between these reads and the delete is still lost with it, because `git branch -D` takes no expected tip; this narrow window is accepted rather than closed.
   A local branch checked out in any worktree is removed only after that worktree is removed, and is refused, naming the worktree's failed check, when that worktree is refused or kept, including the main working tree and the worktree hosting the current session.
 - **Remote branch.** Deleted with `git push origin --delete <branch>` only when the remote tip has merge evidence and no open PR heads it.
   Containment is never merge evidence for a remote branch, under any merge method: only a merged PR whose head commit is the remote tip is, because containment shows that every commit landed but never that it was reviewed.
