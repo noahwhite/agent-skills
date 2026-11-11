@@ -1,0 +1,3342 @@
+You are the ARBITER for an adversarial code review. You get the diff, a raw candidate list from a
+cheap sweep (Phase 1), and empirical execution results (Phase 2).
+1. Filter hallucinations, false positives and unexploitable edge cases. Weigh the EMPIRICAL
+   Phase-2 results over Phase-1 theory.
+2. Surface cross-module logic inconsistencies, security bypasses and architectural regressions
+   the lower tiers missed.
+3. Never invent findings to fill a section. Do not modify files. Never write secrets to files or command arguments.
+The session's scratch directory is <TMP-ROOT>/session-scratch; keep any artefact you create there.
+4. Output the final report in EXACTLY this Markdown layout and nothing else, after one first line:
+   'REVIEW-RAN: yes' when you read the diff and both phase results below; otherwise
+   'REVIEW-RAN: no - <reason>'. A report without that line is treated as a review that did not run.
+
+### Critical vulnerabilities and breaking bugs
+(Only items validated by Phase-2 execution or confirmed by your reasoning.)
+* **File/Line:** path/to/file.ext:line
+* **The bug:** concise description.
+* **Empirical evidence:** failing test log or exact logic trace.
+* **Remediation:** suggested patch.
+
+### Optimizations and code smells
+(Lower-priority cleanups, performance, architectural adjustments.)
+
+### Verified safe modules
+(The parts of the diff that were attacked and stood up, and the categories found clean.)
+
+===== STORY / ACCEPTANCE CRITERIA (the scope reference: work outside it is out of scope, not a defect) =====
+SYNTHETIC FIXTURE - SKL-242 - not real data
+Story: validated ledger totals (synthetic story for the dossier-size fixture)
+
+As a bookkeeper reading a ledger batch, I want every ledger part to refuse malformed and negative
+entries and to report the entries over a limit, so a typo cannot silently change a total.
+
+Acceptance criteria
+
+1. Parsing. Each ledger part reads a line as `name,amount`, with surrounding whitespace removed
+   from both fields. A line with no separator, more than one separator, an empty name, or an amount
+   that is not a non-negative whole number raises the part's entry error, and the message names the
+   part and the offending text.
+2. Skipped lines. Blank lines and lines whose first non-space character is `#` are skipped, not
+   parsed, by every function that reads a batch.
+3. Line numbers. An entry error raised while reading a batch names the one-based number of the
+   offending line in the batch as given, counting skipped lines.
+4. Totals. The total is the sum of the amounts of the parsed entries; an empty batch totals zero.
+5. Largest. The largest entry is the one with the greatest amount, ties broken by the greater name;
+   an empty batch has no largest entry.
+6. Over the limit. Entries whose amount is strictly greater than the limit are returned as
+   `(name, amount)` pairs in batch order. The limit defaults to 250 and can be passed per call.
+7. Summary. The summary names the part, the entry count, the total, the limit and the names of the
+   entries over it, or `none` when no entry is over it.
+8. Average. The average is the whole-number mean of the amounts; an empty batch raises the part's
+   entry error instead of returning zero.
+9. Names. The names are returned once each, in the order they first appear.
+10. Report. The report lists every entry sorted by name, then amount, with the names padded to the
+    longest name, the amounts right-aligned in eight columns, an `over` flag on the entries over
+    the limit, and the summary as its last line, ending in a newline.
+11. Separator. Every function takes an optional separator, defaulting to a comma, and passes it on
+    to the parser.
+
+Out of scope
+
+- Currency, decimal amounts and thousands separators.
+- Reading batches from files or streams; every function takes a list of lines.
+- Persisting totals or reports.
+
+Notes for reviewers
+
+- The change is the same in all twenty-five ledger parts, so a defect in one part is a defect in
+  every part; report it once with the list of parts it affects.
+- The base version accepted negative amounts and summed comment lines; both are the defects this
+  story fixes, not behaviour to preserve.
+- There is no test suite for the ledger parts in this repository; a finding about missing tests is
+  in scope.
+
+===== BLUEPRINT (diffstat and files, base...HEAD) =====
+ ledger/part_01.py | 102 ++++++++++++++++++++++++++++++++++--------------------
+ ledger/part_02.py | 102 ++++++++++++++++++++++++++++++++++--------------------
+ ledger/part_03.py | 102 ++++++++++++++++++++++++++++++++++--------------------
+ ledger/part_04.py | 102 ++++++++++++++++++++++++++++++++++--------------------
+ ledger/part_05.py | 102 ++++++++++++++++++++++++++++++++++--------------------
+ ledger/part_06.py | 102 ++++++++++++++++++++++++++++++++++--------------------
+ ledger/part_07.py | 102 ++++++++++++++++++++++++++++++++++--------------------
+ ledger/part_08.py | 102 ++++++++++++++++++++++++++++++++++--------------------
+ ledger/part_09.py | 102 ++++++++++++++++++++++++++++++++++--------------------
+ ledger/part_10.py | 102 ++++++++++++++++++++++++++++++++++--------------------
+ ledger/part_11.py | 102 ++++++++++++++++++++++++++++++++++--------------------
+ ledger/part_12.py | 102 ++++++++++++++++++++++++++++++++++--------------------
+ ledger/part_13.py | 102 ++++++++++++++++++++++++++++++++++--------------------
+ ledger/part_14.py | 102 ++++++++++++++++++++++++++++++++++--------------------
+ ledger/part_15.py | 102 ++++++++++++++++++++++++++++++++++--------------------
+ ledger/part_16.py | 102 ++++++++++++++++++++++++++++++++++--------------------
+ ledger/part_17.py | 102 ++++++++++++++++++++++++++++++++++--------------------
+ ledger/part_18.py | 102 ++++++++++++++++++++++++++++++++++--------------------
+ ledger/part_19.py | 102 ++++++++++++++++++++++++++++++++++--------------------
+ ledger/part_20.py | 102 ++++++++++++++++++++++++++++++++++--------------------
+ ledger/part_21.py | 102 ++++++++++++++++++++++++++++++++++--------------------
+ ledger/part_22.py | 102 ++++++++++++++++++++++++++++++++++--------------------
+ ledger/part_23.py | 102 ++++++++++++++++++++++++++++++++++--------------------
+ ledger/part_24.py | 102 ++++++++++++++++++++++++++++++++++--------------------
+ ledger/part_25.py | 102 ++++++++++++++++++++++++++++++++++--------------------
+ 25 files changed, 1600 insertions(+), 950 deletions(-)
+
+===== DIFF (base...HEAD) =====
+diff --git a/ledger/part_01.py b/ledger/part_01.py
+index e1318ab..03aed71 100644
+--- a/ledger/part_01.py
++++ b/ledger/part_01.py
+@@ -1,56 +1,82 @@
+ SYNTHETIC FIXTURE - SKL-242 - not real data
+-"""Ledger part 01: totals for a synthetic batch of entries."""
++"""Ledger part 01: validated totals for a synthetic batch of entries, with negative amounts refused."""
+ 
+-LIMIT_01 = 100
++# HUNK-ONLY-MARKER-01-A: this line exists only in the head and so only inside a changed hunk.
++DEFAULT_LIMIT_01 = 250
++SEPARATOR_01 = ","
+ 
+ 
+-def parse_entry_01(line):
+-    name, amount = line.split(",")
+-    return name.strip(), int(amount)
++class EntryError_01(ValueError):
++    """Raised when a ledger line cannot be read as a name and a non-negative whole amount."""
+ 
+ 
+-def total_01(lines):
+-    total = 0
+-    for line in lines:
+-        name, amount = parse_entry_01(line)
+-        total += amount
+-    return total
++def parse_entry_01(line, separator=SEPARATOR_01):
++    parts = [part.strip() for part in line.split(separator)]
++    if len(parts) != 2 or not parts[0]:
++        raise EntryError_01("part 01: expected 'name,amount', got %r" % (line,))
++    name, raw_amount = parts
++    if not raw_amount.isdigit():
++        raise EntryError_01("part 01: amount must be a non-negative whole number: %r" % (raw_amount,))
++    return name, int(raw_amount)
+ 
+ 
+-def largest_01(lines):
+-    best = None
+-    for line in lines:
+-        name, amount = parse_entry_01(line)
+-        if best is None or amount > best[1]:
+-            best = (name, amount)
+-    return best
++def parsed_entries_01(lines, separator=SEPARATOR_01):
++    entries = []
++    for number, line in enumerate(lines, 1):
++        if not line.strip() or line.lstrip().startswith("#"):
++            continue
++        try:
++            entries.append(parse_entry_01(line, separator))
++        except EntryError_01 as error:
++            raise EntryError_01("line %d: %s" % (number, error)) from error
++    return entries
+ 
+ 
+-def over_limit_01(lines):
+-    return [line for line in lines if parse_entry_01(line)[1] > LIMIT_01]
++def total_01(lines, separator=SEPARATOR_01):
++    # HUNK-ONLY-MARKER-01-B: the total now skips blank and comment lines before summing.
++    return sum(amount for _, amount in parsed_entries_01(lines, separator))
+ 
+ 
+-def summary_01(lines):
+-    return "part 01: %d entries, total %d" % (len(lines), total_01(lines))
++def largest_01(lines, separator=SEPARATOR_01):
++    entries = parsed_entries_01(lines, separator)
++    if not entries:
++        return None
++    return max(entries, key=lambda entry: (entry[1], entry[0]))
+ 
+ 
+-def average_01(lines):
+-    if not lines:
+-        return 0
+-    return total_01(lines) / len(lines)
++def over_limit_01(lines, limit=DEFAULT_LIMIT_01, separator=SEPARATOR_01):
++    return [(name, amount) for name, amount in parsed_entries_01(lines, separator) if amount > limit]
+ 
+ 
+-def names_01(lines):
+-    names = []
+-    for line in lines:
+-        names.append(parse_entry_01(line)[0])
+-    return names
++def summary_01(lines, limit=DEFAULT_LIMIT_01, separator=SEPARATOR_01):
++    entries = parsed_entries_01(lines, separator)
++    flagged = [name for name, amount in entries if amount > limit]
++    # HUNK-ONLY-MARKER-01-C: the summary now names the flagged entries.
++    return "part 01: %d entries, total %d, over %d: %s" % (
++        len(entries), sum(amount for _, amount in entries), limit, ", ".join(flagged) or "none")
+ 
+ 
+-def report_01(lines):
+-    rows = []
+-    for line in lines:
+-        name, amount = parse_entry_01(line)
+-        rows.append("%s %d" % (name, amount))
+-    rows.append(summary_01(lines))
+-    return "\n".join(rows)
++def average_01(lines, separator=SEPARATOR_01):
++    entries = parsed_entries_01(lines, separator)
++    if not entries:
++        raise EntryError_01("part 01: no entries to average")
++    return sum(amount for _, amount in entries) // len(entries)
++
++
++def names_01(lines, separator=SEPARATOR_01):
++    seen = set()
++    ordered = []
++    for name, _ in parsed_entries_01(lines, separator):
++        if name not in seen:
++            seen.add(name)
++            ordered.append(name)
++    return ordered
++
++
++def report_01(lines, limit=DEFAULT_LIMIT_01, separator=SEPARATOR_01):
++    entries = parsed_entries_01(lines, separator)
++    width = max((len(name) for name, _ in entries), default=0)
++    rows = ["%-*s %8d%s" % (width, name, amount, "  over" if amount > limit else "")
++            for name, amount in sorted(entries)]
++    rows.append(summary_01(lines, limit, separator))
++    return "\n".join(rows) + "\n"
+diff --git a/ledger/part_02.py b/ledger/part_02.py
+index 4a7c372..d52c7a2 100644
+--- a/ledger/part_02.py
++++ b/ledger/part_02.py
+@@ -1,56 +1,82 @@
+ SYNTHETIC FIXTURE - SKL-242 - not real data
+-"""Ledger part 02: totals for a synthetic batch of entries."""
++"""Ledger part 02: validated totals for a synthetic batch of entries, with negative amounts refused."""
+ 
+-LIMIT_02 = 100
++# HUNK-ONLY-MARKER-02-A: this line exists only in the head and so only inside a changed hunk.
++DEFAULT_LIMIT_02 = 250
++SEPARATOR_02 = ","
+ 
+ 
+-def parse_entry_02(line):
+-    name, amount = line.split(",")
+-    return name.strip(), int(amount)
++class EntryError_02(ValueError):
++    """Raised when a ledger line cannot be read as a name and a non-negative whole amount."""
+ 
+ 
+-def total_02(lines):
+-    total = 0
+-    for line in lines:
+-        name, amount = parse_entry_02(line)
+-        total += amount
+-    return total
++def parse_entry_02(line, separator=SEPARATOR_02):
++    parts = [part.strip() for part in line.split(separator)]
++    if len(parts) != 2 or not parts[0]:
++        raise EntryError_02("part 02: expected 'name,amount', got %r" % (line,))
++    name, raw_amount = parts
++    if not raw_amount.isdigit():
++        raise EntryError_02("part 02: amount must be a non-negative whole number: %r" % (raw_amount,))
++    return name, int(raw_amount)
+ 
+ 
+-def largest_02(lines):
+-    best = None
+-    for line in lines:
+-        name, amount = parse_entry_02(line)
+-        if best is None or amount > best[1]:
+-            best = (name, amount)
+-    return best
++def parsed_entries_02(lines, separator=SEPARATOR_02):
++    entries = []
++    for number, line in enumerate(lines, 1):
++        if not line.strip() or line.lstrip().startswith("#"):
++            continue
++        try:
++            entries.append(parse_entry_02(line, separator))
++        except EntryError_02 as error:
++            raise EntryError_02("line %d: %s" % (number, error)) from error
++    return entries
+ 
+ 
+-def over_limit_02(lines):
+-    return [line for line in lines if parse_entry_02(line)[1] > LIMIT_02]
++def total_02(lines, separator=SEPARATOR_02):
++    # HUNK-ONLY-MARKER-02-B: the total now skips blank and comment lines before summing.
++    return sum(amount for _, amount in parsed_entries_02(lines, separator))
+ 
+ 
+-def summary_02(lines):
+-    return "part 02: %d entries, total %d" % (len(lines), total_02(lines))
++def largest_02(lines, separator=SEPARATOR_02):
++    entries = parsed_entries_02(lines, separator)
++    if not entries:
++        return None
++    return max(entries, key=lambda entry: (entry[1], entry[0]))
+ 
+ 
+-def average_02(lines):
+-    if not lines:
+-        return 0
+-    return total_02(lines) / len(lines)
++def over_limit_02(lines, limit=DEFAULT_LIMIT_02, separator=SEPARATOR_02):
++    return [(name, amount) for name, amount in parsed_entries_02(lines, separator) if amount > limit]
+ 
+ 
+-def names_02(lines):
+-    names = []
+-    for line in lines:
+-        names.append(parse_entry_02(line)[0])
+-    return names
++def summary_02(lines, limit=DEFAULT_LIMIT_02, separator=SEPARATOR_02):
++    entries = parsed_entries_02(lines, separator)
++    flagged = [name for name, amount in entries if amount > limit]
++    # HUNK-ONLY-MARKER-02-C: the summary now names the flagged entries.
++    return "part 02: %d entries, total %d, over %d: %s" % (
++        len(entries), sum(amount for _, amount in entries), limit, ", ".join(flagged) or "none")
+ 
+ 
+-def report_02(lines):
+-    rows = []
+-    for line in lines:
+-        name, amount = parse_entry_02(line)
+-        rows.append("%s %d" % (name, amount))
+-    rows.append(summary_02(lines))
+-    return "\n".join(rows)
++def average_02(lines, separator=SEPARATOR_02):
++    entries = parsed_entries_02(lines, separator)
++    if not entries:
++        raise EntryError_02("part 02: no entries to average")
++    return sum(amount for _, amount in entries) // len(entries)
++
++
++def names_02(lines, separator=SEPARATOR_02):
++    seen = set()
++    ordered = []
++    for name, _ in parsed_entries_02(lines, separator):
++        if name not in seen:
++            seen.add(name)
++            ordered.append(name)
++    return ordered
++
++
++def report_02(lines, limit=DEFAULT_LIMIT_02, separator=SEPARATOR_02):
++    entries = parsed_entries_02(lines, separator)
++    width = max((len(name) for name, _ in entries), default=0)
++    rows = ["%-*s %8d%s" % (width, name, amount, "  over" if amount > limit else "")
++            for name, amount in sorted(entries)]
++    rows.append(summary_02(lines, limit, separator))
++    return "\n".join(rows) + "\n"
+diff --git a/ledger/part_03.py b/ledger/part_03.py
+index 0ac396b..eaf1490 100644
+--- a/ledger/part_03.py
++++ b/ledger/part_03.py
+@@ -1,56 +1,82 @@
+ SYNTHETIC FIXTURE - SKL-242 - not real data
+-"""Ledger part 03: totals for a synthetic batch of entries."""
++"""Ledger part 03: validated totals for a synthetic batch of entries, with negative amounts refused."""
+ 
+-LIMIT_03 = 100
++# HUNK-ONLY-MARKER-03-A: this line exists only in the head and so only inside a changed hunk.
++DEFAULT_LIMIT_03 = 250
++SEPARATOR_03 = ","
+ 
+ 
+-def parse_entry_03(line):
+-    name, amount = line.split(",")
+-    return name.strip(), int(amount)
++class EntryError_03(ValueError):
++    """Raised when a ledger line cannot be read as a name and a non-negative whole amount."""
+ 
+ 
+-def total_03(lines):
+-    total = 0
+-    for line in lines:
+-        name, amount = parse_entry_03(line)
+-        total += amount
+-    return total
++def parse_entry_03(line, separator=SEPARATOR_03):
++    parts = [part.strip() for part in line.split(separator)]
++    if len(parts) != 2 or not parts[0]:
++        raise EntryError_03("part 03: expected 'name,amount', got %r" % (line,))
++    name, raw_amount = parts
++    if not raw_amount.isdigit():
++        raise EntryError_03("part 03: amount must be a non-negative whole number: %r" % (raw_amount,))
++    return name, int(raw_amount)
+ 
+ 
+-def largest_03(lines):
+-    best = None
+-    for line in lines:
+-        name, amount = parse_entry_03(line)
+-        if best is None or amount > best[1]:
+-            best = (name, amount)
+-    return best
++def parsed_entries_03(lines, separator=SEPARATOR_03):
++    entries = []
++    for number, line in enumerate(lines, 1):
++        if not line.strip() or line.lstrip().startswith("#"):
++            continue
++        try:
++            entries.append(parse_entry_03(line, separator))
++        except EntryError_03 as error:
++            raise EntryError_03("line %d: %s" % (number, error)) from error
++    return entries
+ 
+ 
+-def over_limit_03(lines):
+-    return [line for line in lines if parse_entry_03(line)[1] > LIMIT_03]
++def total_03(lines, separator=SEPARATOR_03):
++    # HUNK-ONLY-MARKER-03-B: the total now skips blank and comment lines before summing.
++    return sum(amount for _, amount in parsed_entries_03(lines, separator))
+ 
+ 
+-def summary_03(lines):
+-    return "part 03: %d entries, total %d" % (len(lines), total_03(lines))
++def largest_03(lines, separator=SEPARATOR_03):
++    entries = parsed_entries_03(lines, separator)
++    if not entries:
++        return None
++    return max(entries, key=lambda entry: (entry[1], entry[0]))
+ 
+ 
+-def average_03(lines):
+-    if not lines:
+-        return 0
+-    return total_03(lines) / len(lines)
++def over_limit_03(lines, limit=DEFAULT_LIMIT_03, separator=SEPARATOR_03):
++    return [(name, amount) for name, amount in parsed_entries_03(lines, separator) if amount > limit]
+ 
+ 
+-def names_03(lines):
+-    names = []
+-    for line in lines:
+-        names.append(parse_entry_03(line)[0])
+-    return names
++def summary_03(lines, limit=DEFAULT_LIMIT_03, separator=SEPARATOR_03):
++    entries = parsed_entries_03(lines, separator)
++    flagged = [name for name, amount in entries if amount > limit]
++    # HUNK-ONLY-MARKER-03-C: the summary now names the flagged entries.
++    return "part 03: %d entries, total %d, over %d: %s" % (
++        len(entries), sum(amount for _, amount in entries), limit, ", ".join(flagged) or "none")
+ 
+ 
+-def report_03(lines):
+-    rows = []
+-    for line in lines:
+-        name, amount = parse_entry_03(line)
+-        rows.append("%s %d" % (name, amount))
+-    rows.append(summary_03(lines))
+-    return "\n".join(rows)
++def average_03(lines, separator=SEPARATOR_03):
++    entries = parsed_entries_03(lines, separator)
++    if not entries:
++        raise EntryError_03("part 03: no entries to average")
++    return sum(amount for _, amount in entries) // len(entries)
++
++
++def names_03(lines, separator=SEPARATOR_03):
++    seen = set()
++    ordered = []
++    for name, _ in parsed_entries_03(lines, separator):
++        if name not in seen:
++            seen.add(name)
++            ordered.append(name)
++    return ordered
++
++
++def report_03(lines, limit=DEFAULT_LIMIT_03, separator=SEPARATOR_03):
++    entries = parsed_entries_03(lines, separator)
++    width = max((len(name) for name, _ in entries), default=0)
++    rows = ["%-*s %8d%s" % (width, name, amount, "  over" if amount > limit else "")
++            for name, amount in sorted(entries)]
++    rows.append(summary_03(lines, limit, separator))
++    return "\n".join(rows) + "\n"
+diff --git a/ledger/part_04.py b/ledger/part_04.py
+index ca41ef7..d1defa0 100644
+--- a/ledger/part_04.py
++++ b/ledger/part_04.py
+@@ -1,56 +1,82 @@
+ SYNTHETIC FIXTURE - SKL-242 - not real data
+-"""Ledger part 04: totals for a synthetic batch of entries."""
++"""Ledger part 04: validated totals for a synthetic batch of entries, with negative amounts refused."""
+ 
+-LIMIT_04 = 100
++# HUNK-ONLY-MARKER-04-A: this line exists only in the head and so only inside a changed hunk.
++DEFAULT_LIMIT_04 = 250
++SEPARATOR_04 = ","
+ 
+ 
+-def parse_entry_04(line):
+-    name, amount = line.split(",")
+-    return name.strip(), int(amount)
++class EntryError_04(ValueError):
++    """Raised when a ledger line cannot be read as a name and a non-negative whole amount."""
+ 
+ 
+-def total_04(lines):
+-    total = 0
+-    for line in lines:
+-        name, amount = parse_entry_04(line)
+-        total += amount
+-    return total
++def parse_entry_04(line, separator=SEPARATOR_04):
++    parts = [part.strip() for part in line.split(separator)]
++    if len(parts) != 2 or not parts[0]:
++        raise EntryError_04("part 04: expected 'name,amount', got %r" % (line,))
++    name, raw_amount = parts
++    if not raw_amount.isdigit():
++        raise EntryError_04("part 04: amount must be a non-negative whole number: %r" % (raw_amount,))
++    return name, int(raw_amount)
+ 
+ 
+-def largest_04(lines):
+-    best = None
+-    for line in lines:
+-        name, amount = parse_entry_04(line)
+-        if best is None or amount > best[1]:
+-            best = (name, amount)
+-    return best
++def parsed_entries_04(lines, separator=SEPARATOR_04):
++    entries = []
++    for number, line in enumerate(lines, 1):
++        if not line.strip() or line.lstrip().startswith("#"):
++            continue
++        try:
++            entries.append(parse_entry_04(line, separator))
++        except EntryError_04 as error:
++            raise EntryError_04("line %d: %s" % (number, error)) from error
++    return entries
+ 
+ 
+-def over_limit_04(lines):
+-    return [line for line in lines if parse_entry_04(line)[1] > LIMIT_04]
++def total_04(lines, separator=SEPARATOR_04):
++    # HUNK-ONLY-MARKER-04-B: the total now skips blank and comment lines before summing.
++    return sum(amount for _, amount in parsed_entries_04(lines, separator))
+ 
+ 
+-def summary_04(lines):
+-    return "part 04: %d entries, total %d" % (len(lines), total_04(lines))
++def largest_04(lines, separator=SEPARATOR_04):
++    entries = parsed_entries_04(lines, separator)
++    if not entries:
++        return None
++    return max(entries, key=lambda entry: (entry[1], entry[0]))
+ 
+ 
+-def average_04(lines):
+-    if not lines:
+-        return 0
+-    return total_04(lines) / len(lines)
++def over_limit_04(lines, limit=DEFAULT_LIMIT_04, separator=SEPARATOR_04):
++    return [(name, amount) for name, amount in parsed_entries_04(lines, separator) if amount > limit]
+ 
+ 
+-def names_04(lines):
+-    names = []
+-    for line in lines:
+-        names.append(parse_entry_04(line)[0])
+-    return names
++def summary_04(lines, limit=DEFAULT_LIMIT_04, separator=SEPARATOR_04):
++    entries = parsed_entries_04(lines, separator)
++    flagged = [name for name, amount in entries if amount > limit]
++    # HUNK-ONLY-MARKER-04-C: the summary now names the flagged entries.
++    return "part 04: %d entries, total %d, over %d: %s" % (
++        len(entries), sum(amount for _, amount in entries), limit, ", ".join(flagged) or "none")
+ 
+ 
+-def report_04(lines):
+-    rows = []
+-    for line in lines:
+-        name, amount = parse_entry_04(line)
+-        rows.append("%s %d" % (name, amount))
+-    rows.append(summary_04(lines))
+-    return "\n".join(rows)
++def average_04(lines, separator=SEPARATOR_04):
++    entries = parsed_entries_04(lines, separator)
++    if not entries:
++        raise EntryError_04("part 04: no entries to average")
++    return sum(amount for _, amount in entries) // len(entries)
++
++
++def names_04(lines, separator=SEPARATOR_04):
++    seen = set()
++    ordered = []
++    for name, _ in parsed_entries_04(lines, separator):
++        if name not in seen:
++            seen.add(name)
++            ordered.append(name)
++    return ordered
++
++
++def report_04(lines, limit=DEFAULT_LIMIT_04, separator=SEPARATOR_04):
++    entries = parsed_entries_04(lines, separator)
++    width = max((len(name) for name, _ in entries), default=0)
++    rows = ["%-*s %8d%s" % (width, name, amount, "  over" if amount > limit else "")
++            for name, amount in sorted(entries)]
++    rows.append(summary_04(lines, limit, separator))
++    return "\n".join(rows) + "\n"
+diff --git a/ledger/part_05.py b/ledger/part_05.py
+index dd06156..fb51e0f 100644
+--- a/ledger/part_05.py
++++ b/ledger/part_05.py
+@@ -1,56 +1,82 @@
+ SYNTHETIC FIXTURE - SKL-242 - not real data
+-"""Ledger part 05: totals for a synthetic batch of entries."""
++"""Ledger part 05: validated totals for a synthetic batch of entries, with negative amounts refused."""
+ 
+-LIMIT_05 = 100
++# HUNK-ONLY-MARKER-05-A: this line exists only in the head and so only inside a changed hunk.
++DEFAULT_LIMIT_05 = 250
++SEPARATOR_05 = ","
+ 
+ 
+-def parse_entry_05(line):
+-    name, amount = line.split(",")
+-    return name.strip(), int(amount)
++class EntryError_05(ValueError):
++    """Raised when a ledger line cannot be read as a name and a non-negative whole amount."""
+ 
+ 
+-def total_05(lines):
+-    total = 0
+-    for line in lines:
+-        name, amount = parse_entry_05(line)
+-        total += amount
+-    return total
++def parse_entry_05(line, separator=SEPARATOR_05):
++    parts = [part.strip() for part in line.split(separator)]
++    if len(parts) != 2 or not parts[0]:
++        raise EntryError_05("part 05: expected 'name,amount', got %r" % (line,))
++    name, raw_amount = parts
++    if not raw_amount.isdigit():
++        raise EntryError_05("part 05: amount must be a non-negative whole number: %r" % (raw_amount,))
++    return name, int(raw_amount)
+ 
+ 
+-def largest_05(lines):
+-    best = None
+-    for line in lines:
+-        name, amount = parse_entry_05(line)
+-        if best is None or amount > best[1]:
+-            best = (name, amount)
+-    return best
++def parsed_entries_05(lines, separator=SEPARATOR_05):
++    entries = []
++    for number, line in enumerate(lines, 1):
++        if not line.strip() or line.lstrip().startswith("#"):
++            continue
++        try:
++            entries.append(parse_entry_05(line, separator))
++        except EntryError_05 as error:
++            raise EntryError_05("line %d: %s" % (number, error)) from error
++    return entries
+ 
+ 
+-def over_limit_05(lines):
+-    return [line for line in lines if parse_entry_05(line)[1] > LIMIT_05]
++def total_05(lines, separator=SEPARATOR_05):
++    # HUNK-ONLY-MARKER-05-B: the total now skips blank and comment lines before summing.
++    return sum(amount for _, amount in parsed_entries_05(lines, separator))
+ 
+ 
+-def summary_05(lines):
+-    return "part 05: %d entries, total %d" % (len(lines), total_05(lines))
++def largest_05(lines, separator=SEPARATOR_05):
++    entries = parsed_entries_05(lines, separator)
++    if not entries:
++        return None
++    return max(entries, key=lambda entry: (entry[1], entry[0]))
+ 
+ 
+-def average_05(lines):
+-    if not lines:
+-        return 0
+-    return total_05(lines) / len(lines)
++def over_limit_05(lines, limit=DEFAULT_LIMIT_05, separator=SEPARATOR_05):
++    return [(name, amount) for name, amount in parsed_entries_05(lines, separator) if amount > limit]
+ 
+ 
+-def names_05(lines):
+-    names = []
+-    for line in lines:
+-        names.append(parse_entry_05(line)[0])
+-    return names
++def summary_05(lines, limit=DEFAULT_LIMIT_05, separator=SEPARATOR_05):
++    entries = parsed_entries_05(lines, separator)
++    flagged = [name for name, amount in entries if amount > limit]
++    # HUNK-ONLY-MARKER-05-C: the summary now names the flagged entries.
++    return "part 05: %d entries, total %d, over %d: %s" % (
++        len(entries), sum(amount for _, amount in entries), limit, ", ".join(flagged) or "none")
+ 
+ 
+-def report_05(lines):
+-    rows = []
+-    for line in lines:
+-        name, amount = parse_entry_05(line)
+-        rows.append("%s %d" % (name, amount))
+-    rows.append(summary_05(lines))
+-    return "\n".join(rows)
++def average_05(lines, separator=SEPARATOR_05):
++    entries = parsed_entries_05(lines, separator)
++    if not entries:
++        raise EntryError_05("part 05: no entries to average")
++    return sum(amount for _, amount in entries) // len(entries)
++
++
++def names_05(lines, separator=SEPARATOR_05):
++    seen = set()
++    ordered = []
++    for name, _ in parsed_entries_05(lines, separator):
++        if name not in seen:
++            seen.add(name)
++            ordered.append(name)
++    return ordered
++
++
++def report_05(lines, limit=DEFAULT_LIMIT_05, separator=SEPARATOR_05):
++    entries = parsed_entries_05(lines, separator)
++    width = max((len(name) for name, _ in entries), default=0)
++    rows = ["%-*s %8d%s" % (width, name, amount, "  over" if amount > limit else "")
++            for name, amount in sorted(entries)]
++    rows.append(summary_05(lines, limit, separator))
++    return "\n".join(rows) + "\n"
+diff --git a/ledger/part_06.py b/ledger/part_06.py
+index cfe3c76..8e9f6e0 100644
+--- a/ledger/part_06.py
++++ b/ledger/part_06.py
+@@ -1,56 +1,82 @@
+ SYNTHETIC FIXTURE - SKL-242 - not real data
+-"""Ledger part 06: totals for a synthetic batch of entries."""
++"""Ledger part 06: validated totals for a synthetic batch of entries, with negative amounts refused."""
+ 
+-LIMIT_06 = 100
++# HUNK-ONLY-MARKER-06-A: this line exists only in the head and so only inside a changed hunk.
++DEFAULT_LIMIT_06 = 250
++SEPARATOR_06 = ","
+ 
+ 
+-def parse_entry_06(line):
+-    name, amount = line.split(",")
+-    return name.strip(), int(amount)
++class EntryError_06(ValueError):
++    """Raised when a ledger line cannot be read as a name and a non-negative whole amount."""
+ 
+ 
+-def total_06(lines):
+-    total = 0
+-    for line in lines:
+-        name, amount = parse_entry_06(line)
+-        total += amount
+-    return total
++def parse_entry_06(line, separator=SEPARATOR_06):
++    parts = [part.strip() for part in line.split(separator)]
++    if len(parts) != 2 or not parts[0]:
++        raise EntryError_06("part 06: expected 'name,amount', got %r" % (line,))
++    name, raw_amount = parts
++    if not raw_amount.isdigit():
++        raise EntryError_06("part 06: amount must be a non-negative whole number: %r" % (raw_amount,))
++    return name, int(raw_amount)
+ 
+ 
+-def largest_06(lines):
+-    best = None
+-    for line in lines:
+-        name, amount = parse_entry_06(line)
+-        if best is None or amount > best[1]:
+-            best = (name, amount)
+-    return best
++def parsed_entries_06(lines, separator=SEPARATOR_06):
++    entries = []
++    for number, line in enumerate(lines, 1):
++        if not line.strip() or line.lstrip().startswith("#"):
++            continue
++        try:
++            entries.append(parse_entry_06(line, separator))
++        except EntryError_06 as error:
++            raise EntryError_06("line %d: %s" % (number, error)) from error
++    return entries
+ 
+ 
+-def over_limit_06(lines):
+-    return [line for line in lines if parse_entry_06(line)[1] > LIMIT_06]
++def total_06(lines, separator=SEPARATOR_06):
++    # HUNK-ONLY-MARKER-06-B: the total now skips blank and comment lines before summing.
++    return sum(amount for _, amount in parsed_entries_06(lines, separator))
+ 
+ 
+-def summary_06(lines):
+-    return "part 06: %d entries, total %d" % (len(lines), total_06(lines))
++def largest_06(lines, separator=SEPARATOR_06):
++    entries = parsed_entries_06(lines, separator)
++    if not entries:
++        return None
++    return max(entries, key=lambda entry: (entry[1], entry[0]))
+ 
+ 
+-def average_06(lines):
+-    if not lines:
+-        return 0
+-    return total_06(lines) / len(lines)
++def over_limit_06(lines, limit=DEFAULT_LIMIT_06, separator=SEPARATOR_06):
++    return [(name, amount) for name, amount in parsed_entries_06(lines, separator) if amount > limit]
+ 
+ 
+-def names_06(lines):
+-    names = []
+-    for line in lines:
+-        names.append(parse_entry_06(line)[0])
+-    return names
++def summary_06(lines, limit=DEFAULT_LIMIT_06, separator=SEPARATOR_06):
++    entries = parsed_entries_06(lines, separator)
++    flagged = [name for name, amount in entries if amount > limit]
++    # HUNK-ONLY-MARKER-06-C: the summary now names the flagged entries.
++    return "part 06: %d entries, total %d, over %d: %s" % (
++        len(entries), sum(amount for _, amount in entries), limit, ", ".join(flagged) or "none")
+ 
+ 
+-def report_06(lines):
+-    rows = []
+-    for line in lines:
+-        name, amount = parse_entry_06(line)
+-        rows.append("%s %d" % (name, amount))
+-    rows.append(summary_06(lines))
+-    return "\n".join(rows)
++def average_06(lines, separator=SEPARATOR_06):
++    entries = parsed_entries_06(lines, separator)
++    if not entries:
++        raise EntryError_06("part 06: no entries to average")
++    return sum(amount for _, amount in entries) // len(entries)
++
++
++def names_06(lines, separator=SEPARATOR_06):
++    seen = set()
++    ordered = []
++    for name, _ in parsed_entries_06(lines, separator):
++        if name not in seen:
++            seen.add(name)
++            ordered.append(name)
++    return ordered
++
++
++def report_06(lines, limit=DEFAULT_LIMIT_06, separator=SEPARATOR_06):
++    entries = parsed_entries_06(lines, separator)
++    width = max((len(name) for name, _ in entries), default=0)
++    rows = ["%-*s %8d%s" % (width, name, amount, "  over" if amount > limit else "")
++            for name, amount in sorted(entries)]
++    rows.append(summary_06(lines, limit, separator))
++    return "\n".join(rows) + "\n"
+diff --git a/ledger/part_07.py b/ledger/part_07.py
+index f6ad5be..c29ef2e 100644
+--- a/ledger/part_07.py
++++ b/ledger/part_07.py
+@@ -1,56 +1,82 @@
+ SYNTHETIC FIXTURE - SKL-242 - not real data
+-"""Ledger part 07: totals for a synthetic batch of entries."""
++"""Ledger part 07: validated totals for a synthetic batch of entries, with negative amounts refused."""
+ 
+-LIMIT_07 = 100
++# HUNK-ONLY-MARKER-07-A: this line exists only in the head and so only inside a changed hunk.
++DEFAULT_LIMIT_07 = 250
++SEPARATOR_07 = ","
+ 
+ 
+-def parse_entry_07(line):
+-    name, amount = line.split(",")
+-    return name.strip(), int(amount)
++class EntryError_07(ValueError):
++    """Raised when a ledger line cannot be read as a name and a non-negative whole amount."""
+ 
+ 
+-def total_07(lines):
+-    total = 0
+-    for line in lines:
+-        name, amount = parse_entry_07(line)
+-        total += amount
+-    return total
++def parse_entry_07(line, separator=SEPARATOR_07):
++    parts = [part.strip() for part in line.split(separator)]
++    if len(parts) != 2 or not parts[0]:
++        raise EntryError_07("part 07: expected 'name,amount', got %r" % (line,))
++    name, raw_amount = parts
++    if not raw_amount.isdigit():
++        raise EntryError_07("part 07: amount must be a non-negative whole number: %r" % (raw_amount,))
++    return name, int(raw_amount)
+ 
+ 
+-def largest_07(lines):
+-    best = None
+-    for line in lines:
+-        name, amount = parse_entry_07(line)
+-        if best is None or amount > best[1]:
+-            best = (name, amount)
+-    return best
++def parsed_entries_07(lines, separator=SEPARATOR_07):
++    entries = []
++    for number, line in enumerate(lines, 1):
++        if not line.strip() or line.lstrip().startswith("#"):
++            continue
++        try:
++            entries.append(parse_entry_07(line, separator))
++        except EntryError_07 as error:
++            raise EntryError_07("line %d: %s" % (number, error)) from error
++    return entries
+ 
+ 
+-def over_limit_07(lines):
+-    return [line for line in lines if parse_entry_07(line)[1] > LIMIT_07]
++def total_07(lines, separator=SEPARATOR_07):
++    # HUNK-ONLY-MARKER-07-B: the total now skips blank and comment lines before summing.
++    return sum(amount for _, amount in parsed_entries_07(lines, separator))
+ 
+ 
+-def summary_07(lines):
+-    return "part 07: %d entries, total %d" % (len(lines), total_07(lines))
++def largest_07(lines, separator=SEPARATOR_07):
++    entries = parsed_entries_07(lines, separator)
++    if not entries:
++        return None
++    return max(entries, key=lambda entry: (entry[1], entry[0]))
+ 
+ 
+-def average_07(lines):
+-    if not lines:
+-        return 0
+-    return total_07(lines) / len(lines)
++def over_limit_07(lines, limit=DEFAULT_LIMIT_07, separator=SEPARATOR_07):
++    return [(name, amount) for name, amount in parsed_entries_07(lines, separator) if amount > limit]
+ 
+ 
+-def names_07(lines):
+-    names = []
+-    for line in lines:
+-        names.append(parse_entry_07(line)[0])
+-    return names
++def summary_07(lines, limit=DEFAULT_LIMIT_07, separator=SEPARATOR_07):
++    entries = parsed_entries_07(lines, separator)
++    flagged = [name for name, amount in entries if amount > limit]
++    # HUNK-ONLY-MARKER-07-C: the summary now names the flagged entries.
++    return "part 07: %d entries, total %d, over %d: %s" % (
++        len(entries), sum(amount for _, amount in entries), limit, ", ".join(flagged) or "none")
+ 
+ 
+-def report_07(lines):
+-    rows = []
+-    for line in lines:
+-        name, amount = parse_entry_07(line)
+-        rows.append("%s %d" % (name, amount))
+-    rows.append(summary_07(lines))
+-    return "\n".join(rows)
++def average_07(lines, separator=SEPARATOR_07):
++    entries = parsed_entries_07(lines, separator)
++    if not entries:
++        raise EntryError_07("part 07: no entries to average")
++    return sum(amount for _, amount in entries) // len(entries)
++
++
++def names_07(lines, separator=SEPARATOR_07):
++    seen = set()
++    ordered = []
++    for name, _ in parsed_entries_07(lines, separator):
++        if name not in seen:
++            seen.add(name)
++            ordered.append(name)
++    return ordered
++
++
++def report_07(lines, limit=DEFAULT_LIMIT_07, separator=SEPARATOR_07):
++    entries = parsed_entries_07(lines, separator)
++    width = max((len(name) for name, _ in entries), default=0)
++    rows = ["%-*s %8d%s" % (width, name, amount, "  over" if amount > limit else "")
++            for name, amount in sorted(entries)]
++    rows.append(summary_07(lines, limit, separator))
++    return "\n".join(rows) + "\n"
+diff --git a/ledger/part_08.py b/ledger/part_08.py
+index 0fd61eb..1454c27 100644
+--- a/ledger/part_08.py
++++ b/ledger/part_08.py
+@@ -1,56 +1,82 @@
+ SYNTHETIC FIXTURE - SKL-242 - not real data
+-"""Ledger part 08: totals for a synthetic batch of entries."""
++"""Ledger part 08: validated totals for a synthetic batch of entries, with negative amounts refused."""
+ 
+-LIMIT_08 = 100
++# HUNK-ONLY-MARKER-08-A: this line exists only in the head and so only inside a changed hunk.
++DEFAULT_LIMIT_08 = 250
++SEPARATOR_08 = ","
+ 
+ 
+-def parse_entry_08(line):
+-    name, amount = line.split(",")
+-    return name.strip(), int(amount)
++class EntryError_08(ValueError):
++    """Raised when a ledger line cannot be read as a name and a non-negative whole amount."""
+ 
+ 
+-def total_08(lines):
+-    total = 0
+-    for line in lines:
+-        name, amount = parse_entry_08(line)
+-        total += amount
+-    return total
++def parse_entry_08(line, separator=SEPARATOR_08):
++    parts = [part.strip() for part in line.split(separator)]
++    if len(parts) != 2 or not parts[0]:
++        raise EntryError_08("part 08: expected 'name,amount', got %r" % (line,))
++    name, raw_amount = parts
++    if not raw_amount.isdigit():
++        raise EntryError_08("part 08: amount must be a non-negative whole number: %r" % (raw_amount,))
++    return name, int(raw_amount)
+ 
+ 
+-def largest_08(lines):
+-    best = None
+-    for line in lines:
+-        name, amount = parse_entry_08(line)
+-        if best is None or amount > best[1]:
+-            best = (name, amount)
+-    return best
++def parsed_entries_08(lines, separator=SEPARATOR_08):
++    entries = []
++    for number, line in enumerate(lines, 1):
++        if not line.strip() or line.lstrip().startswith("#"):
++            continue
++        try:
++            entries.append(parse_entry_08(line, separator))
++        except EntryError_08 as error:
++            raise EntryError_08("line %d: %s" % (number, error)) from error
++    return entries
+ 
+ 
+-def over_limit_08(lines):
+-    return [line for line in lines if parse_entry_08(line)[1] > LIMIT_08]
++def total_08(lines, separator=SEPARATOR_08):
++    # HUNK-ONLY-MARKER-08-B: the total now skips blank and comment lines before summing.
++    return sum(amount for _, amount in parsed_entries_08(lines, separator))
+ 
+ 
+-def summary_08(lines):
+-    return "part 08: %d entries, total %d" % (len(lines), total_08(lines))
++def largest_08(lines, separator=SEPARATOR_08):
++    entries = parsed_entries_08(lines, separator)
++    if not entries:
++        return None
++    return max(entries, key=lambda entry: (entry[1], entry[0]))
+ 
+ 
+-def average_08(lines):
+-    if not lines:
+-        return 0
+-    return total_08(lines) / len(lines)
++def over_limit_08(lines, limit=DEFAULT_LIMIT_08, separator=SEPARATOR_08):
++    return [(name, amount) for name, amount in parsed_entries_08(lines, separator) if amount > limit]
+ 
+ 
+-def names_08(lines):
+-    names = []
+-    for line in lines:
+-        names.append(parse_entry_08(line)[0])
+-    return names
++def summary_08(lines, limit=DEFAULT_LIMIT_08, separator=SEPARATOR_08):
++    entries = parsed_entries_08(lines, separator)
++    flagged = [name for name, amount in entries if amount > limit]
++    # HUNK-ONLY-MARKER-08-C: the summary now names the flagged entries.
++    return "part 08: %d entries, total %d, over %d: %s" % (
++        len(entries), sum(amount for _, amount in entries), limit, ", ".join(flagged) or "none")
+ 
+ 
+-def report_08(lines):
+-    rows = []
+-    for line in lines:
+-        name, amount = parse_entry_08(line)
+-        rows.append("%s %d" % (name, amount))
+-    rows.append(summary_08(lines))
+-    return "\n".join(rows)
++def average_08(lines, separator=SEPARATOR_08):
++    entries = parsed_entries_08(lines, separator)
++    if not entries:
++        raise EntryError_08("part 08: no entries to average")
++    return sum(amount for _, amount in entries) // len(entries)
++
++
++def names_08(lines, separator=SEPARATOR_08):
++    seen = set()
++    ordered = []
++    for name, _ in parsed_entries_08(lines, separator):
++        if name not in seen:
++            seen.add(name)
++            ordered.append(name)
++    return ordered
++
++
++def report_08(lines, limit=DEFAULT_LIMIT_08, separator=SEPARATOR_08):
++    entries = parsed_entries_08(lines, separator)
++    width = max((len(name) for name, _ in entries), default=0)
++    rows = ["%-*s %8d%s" % (width, name, amount, "  over" if amount > limit else "")
++            for name, amount in sorted(entries)]
++    rows.append(summary_08(lines, limit, separator))
++    return "\n".join(rows) + "\n"
+diff --git a/ledger/part_09.py b/ledger/part_09.py
+index ac6f814..98ce4b1 100644
+--- a/ledger/part_09.py
++++ b/ledger/part_09.py
+@@ -1,56 +1,82 @@
+ SYNTHETIC FIXTURE - SKL-242 - not real data
+-"""Ledger part 09: totals for a synthetic batch of entries."""
++"""Ledger part 09: validated totals for a synthetic batch of entries, with negative amounts refused."""
+ 
+-LIMIT_09 = 100
++# HUNK-ONLY-MARKER-09-A: this line exists only in the head and so only inside a changed hunk.
++DEFAULT_LIMIT_09 = 250
++SEPARATOR_09 = ","
+ 
+ 
+-def parse_entry_09(line):
+-    name, amount = line.split(",")
+-    return name.strip(), int(amount)
++class EntryError_09(ValueError):
++    """Raised when a ledger line cannot be read as a name and a non-negative whole amount."""
+ 
+ 
+-def total_09(lines):
+-    total = 0
+-    for line in lines:
+-        name, amount = parse_entry_09(line)
+-        total += amount
+-    return total
++def parse_entry_09(line, separator=SEPARATOR_09):
++    parts = [part.strip() for part in line.split(separator)]
++    if len(parts) != 2 or not parts[0]:
++        raise EntryError_09("part 09: expected 'name,amount', got %r" % (line,))
++    name, raw_amount = parts
++    if not raw_amount.isdigit():
++        raise EntryError_09("part 09: amount must be a non-negative whole number: %r" % (raw_amount,))
++    return name, int(raw_amount)
+ 
+ 
+-def largest_09(lines):
+-    best = None
+-    for line in lines:
+-        name, amount = parse_entry_09(line)
+-        if best is None or amount > best[1]:
+-            best = (name, amount)
+-    return best
++def parsed_entries_09(lines, separator=SEPARATOR_09):
++    entries = []
++    for number, line in enumerate(lines, 1):
++        if not line.strip() or line.lstrip().startswith("#"):
++            continue
++        try:
++            entries.append(parse_entry_09(line, separator))
++        except EntryError_09 as error:
++            raise EntryError_09("line %d: %s" % (number, error)) from error
++    return entries
+ 
+ 
+-def over_limit_09(lines):
+-    return [line for line in lines if parse_entry_09(line)[1] > LIMIT_09]
++def total_09(lines, separator=SEPARATOR_09):
++    # HUNK-ONLY-MARKER-09-B: the total now skips blank and comment lines before summing.
++    return sum(amount for _, amount in parsed_entries_09(lines, separator))
+ 
+ 
+-def summary_09(lines):
+-    return "part 09: %d entries, total %d" % (len(lines), total_09(lines))
++def largest_09(lines, separator=SEPARATOR_09):
++    entries = parsed_entries_09(lines, separator)
++    if not entries:
++        return None
++    return max(entries, key=lambda entry: (entry[1], entry[0]))
+ 
+ 
+-def average_09(lines):
+-    if not lines:
+-        return 0
+-    return total_09(lines) / len(lines)
++def over_limit_09(lines, limit=DEFAULT_LIMIT_09, separator=SEPARATOR_09):
++    return [(name, amount) for name, amount in parsed_entries_09(lines, separator) if amount > limit]
+ 
+ 
+-def names_09(lines):
+-    names = []
+-    for line in lines:
+-        names.append(parse_entry_09(line)[0])
+-    return names
++def summary_09(lines, limit=DEFAULT_LIMIT_09, separator=SEPARATOR_09):
++    entries = parsed_entries_09(lines, separator)
++    flagged = [name for name, amount in entries if amount > limit]
++    # HUNK-ONLY-MARKER-09-C: the summary now names the flagged entries.
++    return "part 09: %d entries, total %d, over %d: %s" % (
++        len(entries), sum(amount for _, amount in entries), limit, ", ".join(flagged) or "none")
+ 
+ 
+-def report_09(lines):
+-    rows = []
+-    for line in lines:
+-        name, amount = parse_entry_09(line)
+-        rows.append("%s %d" % (name, amount))
+-    rows.append(summary_09(lines))
+-    return "\n".join(rows)
++def average_09(lines, separator=SEPARATOR_09):
++    entries = parsed_entries_09(lines, separator)
++    if not entries:
++        raise EntryError_09("part 09: no entries to average")
++    return sum(amount for _, amount in entries) // len(entries)
++
++
++def names_09(lines, separator=SEPARATOR_09):
++    seen = set()
++    ordered = []
++    for name, _ in parsed_entries_09(lines, separator):
++        if name not in seen:
++            seen.add(name)
++            ordered.append(name)
++    return ordered
++
++
++def report_09(lines, limit=DEFAULT_LIMIT_09, separator=SEPARATOR_09):
++    entries = parsed_entries_09(lines, separator)
++    width = max((len(name) for name, _ in entries), default=0)
++    rows = ["%-*s %8d%s" % (width, name, amount, "  over" if amount > limit else "")
++            for name, amount in sorted(entries)]
++    rows.append(summary_09(lines, limit, separator))
++    return "\n".join(rows) + "\n"
+diff --git a/ledger/part_10.py b/ledger/part_10.py
+index 823ebf5..b6117a2 100644
+--- a/ledger/part_10.py
++++ b/ledger/part_10.py
+@@ -1,56 +1,82 @@
+ SYNTHETIC FIXTURE - SKL-242 - not real data
+-"""Ledger part 10: totals for a synthetic batch of entries."""
++"""Ledger part 10: validated totals for a synthetic batch of entries, with negative amounts refused."""
+ 
+-LIMIT_10 = 100
++# HUNK-ONLY-MARKER-10-A: this line exists only in the head and so only inside a changed hunk.
++DEFAULT_LIMIT_10 = 250
++SEPARATOR_10 = ","
+ 
+ 
+-def parse_entry_10(line):
+-    name, amount = line.split(",")
+-    return name.strip(), int(amount)
++class EntryError_10(ValueError):
++    """Raised when a ledger line cannot be read as a name and a non-negative whole amount."""
+ 
+ 
+-def total_10(lines):
+-    total = 0
+-    for line in lines:
+-        name, amount = parse_entry_10(line)
+-        total += amount
+-    return total
++def parse_entry_10(line, separator=SEPARATOR_10):
++    parts = [part.strip() for part in line.split(separator)]
++    if len(parts) != 2 or not parts[0]:
++        raise EntryError_10("part 10: expected 'name,amount', got %r" % (line,))
++    name, raw_amount = parts
++    if not raw_amount.isdigit():
++        raise EntryError_10("part 10: amount must be a non-negative whole number: %r" % (raw_amount,))
++    return name, int(raw_amount)
+ 
+ 
+-def largest_10(lines):
+-    best = None
+-    for line in lines:
+-        name, amount = parse_entry_10(line)
+-        if best is None or amount > best[1]:
+-            best = (name, amount)
+-    return best
++def parsed_entries_10(lines, separator=SEPARATOR_10):
++    entries = []
++    for number, line in enumerate(lines, 1):
++        if not line.strip() or line.lstrip().startswith("#"):
++            continue
++        try:
++            entries.append(parse_entry_10(line, separator))
++        except EntryError_10 as error:
++            raise EntryError_10("line %d: %s" % (number, error)) from error
++    return entries
+ 
+ 
+-def over_limit_10(lines):
+-    return [line for line in lines if parse_entry_10(line)[1] > LIMIT_10]
++def total_10(lines, separator=SEPARATOR_10):
++    # HUNK-ONLY-MARKER-10-B: the total now skips blank and comment lines before summing.
++    return sum(amount for _, amount in parsed_entries_10(lines, separator))
+ 
+ 
+-def summary_10(lines):
+-    return "part 10: %d entries, total %d" % (len(lines), total_10(lines))
++def largest_10(lines, separator=SEPARATOR_10):
++    entries = parsed_entries_10(lines, separator)
++    if not entries:
++        return None
++    return max(entries, key=lambda entry: (entry[1], entry[0]))
+ 
+ 
+-def average_10(lines):
+-    if not lines:
+-        return 0
+-    return total_10(lines) / len(lines)
++def over_limit_10(lines, limit=DEFAULT_LIMIT_10, separator=SEPARATOR_10):
++    return [(name, amount) for name, amount in parsed_entries_10(lines, separator) if amount > limit]
+ 
+ 
+-def names_10(lines):
+-    names = []
+-    for line in lines:
+-        names.append(parse_entry_10(line)[0])
+-    return names
++def summary_10(lines, limit=DEFAULT_LIMIT_10, separator=SEPARATOR_10):
++    entries = parsed_entries_10(lines, separator)
++    flagged = [name for name, amount in entries if amount > limit]
++    # HUNK-ONLY-MARKER-10-C: the summary now names the flagged entries.
++    return "part 10: %d entries, total %d, over %d: %s" % (
++        len(entries), sum(amount for _, amount in entries), limit, ", ".join(flagged) or "none")
+ 
+ 
+-def report_10(lines):
+-    rows = []
+-    for line in lines:
+-        name, amount = parse_entry_10(line)
+-        rows.append("%s %d" % (name, amount))
+-    rows.append(summary_10(lines))
+-    return "\n".join(rows)
++def average_10(lines, separator=SEPARATOR_10):
++    entries = parsed_entries_10(lines, separator)
++    if not entries:
++        raise EntryError_10("part 10: no entries to average")
++    return sum(amount for _, amount in entries) // len(entries)
++
++
++def names_10(lines, separator=SEPARATOR_10):
++    seen = set()
++    ordered = []
++    for name, _ in parsed_entries_10(lines, separator):
++        if name not in seen:
++            seen.add(name)
++            ordered.append(name)
++    return ordered
++
++
++def report_10(lines, limit=DEFAULT_LIMIT_10, separator=SEPARATOR_10):
++    entries = parsed_entries_10(lines, separator)
++    width = max((len(name) for name, _ in entries), default=0)
++    rows = ["%-*s %8d%s" % (width, name, amount, "  over" if amount > limit else "")
++            for name, amount in sorted(entries)]
++    rows.append(summary_10(lines, limit, separator))
++    return "\n".join(rows) + "\n"
+diff --git a/ledger/part_11.py b/ledger/part_11.py
+index 1358d9d..f6927df 100644
+--- a/ledger/part_11.py
++++ b/ledger/part_11.py
+@@ -1,56 +1,82 @@
+ SYNTHETIC FIXTURE - SKL-242 - not real data
+-"""Ledger part 11: totals for a synthetic batch of entries."""
++"""Ledger part 11: validated totals for a synthetic batch of entries, with negative amounts refused."""
+ 
+-LIMIT_11 = 100
++# HUNK-ONLY-MARKER-11-A: this line exists only in the head and so only inside a changed hunk.
++DEFAULT_LIMIT_11 = 250
++SEPARATOR_11 = ","
+ 
+ 
+-def parse_entry_11(line):
+-    name, amount = line.split(",")
+-    return name.strip(), int(amount)
++class EntryError_11(ValueError):
++    """Raised when a ledger line cannot be read as a name and a non-negative whole amount."""
+ 
+ 
+-def total_11(lines):
+-    total = 0
+-    for line in lines:
+-        name, amount = parse_entry_11(line)
+-        total += amount
+-    return total
++def parse_entry_11(line, separator=SEPARATOR_11):
++    parts = [part.strip() for part in line.split(separator)]
++    if len(parts) != 2 or not parts[0]:
++        raise EntryError_11("part 11: expected 'name,amount', got %r" % (line,))
++    name, raw_amount = parts
++    if not raw_amount.isdigit():
++        raise EntryError_11("part 11: amount must be a non-negative whole number: %r" % (raw_amount,))
++    return name, int(raw_amount)
+ 
+ 
+-def largest_11(lines):
+-    best = None
+-    for line in lines:
+-        name, amount = parse_entry_11(line)
+-        if best is None or amount > best[1]:
+-            best = (name, amount)
+-    return best
++def parsed_entries_11(lines, separator=SEPARATOR_11):
++    entries = []
++    for number, line in enumerate(lines, 1):
++        if not line.strip() or line.lstrip().startswith("#"):
++            continue
++        try:
++            entries.append(parse_entry_11(line, separator))
++        except EntryError_11 as error:
++            raise EntryError_11("line %d: %s" % (number, error)) from error
++    return entries
+ 
+ 
+-def over_limit_11(lines):
+-    return [line for line in lines if parse_entry_11(line)[1] > LIMIT_11]
++def total_11(lines, separator=SEPARATOR_11):
++    # HUNK-ONLY-MARKER-11-B: the total now skips blank and comment lines before summing.
++    return sum(amount for _, amount in parsed_entries_11(lines, separator))
+ 
+ 
+-def summary_11(lines):
+-    return "part 11: %d entries, total %d" % (len(lines), total_11(lines))
++def largest_11(lines, separator=SEPARATOR_11):
++    entries = parsed_entries_11(lines, separator)
++    if not entries:
++        return None
++    return max(entries, key=lambda entry: (entry[1], entry[0]))
+ 
+ 
+-def average_11(lines):
+-    if not lines:
+-        return 0
+-    return total_11(lines) / len(lines)
++def over_limit_11(lines, limit=DEFAULT_LIMIT_11, separator=SEPARATOR_11):
++    return [(name, amount) for name, amount in parsed_entries_11(lines, separator) if amount > limit]
+ 
+ 
+-def names_11(lines):
+-    names = []
+-    for line in lines:
+-        names.append(parse_entry_11(line)[0])
+-    return names
++def summary_11(lines, limit=DEFAULT_LIMIT_11, separator=SEPARATOR_11):
++    entries = parsed_entries_11(lines, separator)
++    flagged = [name for name, amount in entries if amount > limit]
++    # HUNK-ONLY-MARKER-11-C: the summary now names the flagged entries.
++    return "part 11: %d entries, total %d, over %d: %s" % (
++        len(entries), sum(amount for _, amount in entries), limit, ", ".join(flagged) or "none")
+ 
+ 
+-def report_11(lines):
+-    rows = []
+-    for line in lines:
+-        name, amount = parse_entry_11(line)
+-        rows.append("%s %d" % (name, amount))
+-    rows.append(summary_11(lines))
+-    return "\n".join(rows)
++def average_11(lines, separator=SEPARATOR_11):
++    entries = parsed_entries_11(lines, separator)
++    if not entries:
++        raise EntryError_11("part 11: no entries to average")
++    return sum(amount for _, amount in entries) // len(entries)
++
++
++def names_11(lines, separator=SEPARATOR_11):
++    seen = set()
++    ordered = []
++    for name, _ in parsed_entries_11(lines, separator):
++        if name not in seen:
++            seen.add(name)
++            ordered.append(name)
++    return ordered
++
++
++def report_11(lines, limit=DEFAULT_LIMIT_11, separator=SEPARATOR_11):
++    entries = parsed_entries_11(lines, separator)
++    width = max((len(name) for name, _ in entries), default=0)
++    rows = ["%-*s %8d%s" % (width, name, amount, "  over" if amount > limit else "")
++            for name, amount in sorted(entries)]
++    rows.append(summary_11(lines, limit, separator))
++    return "\n".join(rows) + "\n"
+diff --git a/ledger/part_12.py b/ledger/part_12.py
+index d62c86b..5d070d5 100644
+--- a/ledger/part_12.py
++++ b/ledger/part_12.py
+@@ -1,56 +1,82 @@
+ SYNTHETIC FIXTURE - SKL-242 - not real data
+-"""Ledger part 12: totals for a synthetic batch of entries."""
++"""Ledger part 12: validated totals for a synthetic batch of entries, with negative amounts refused."""
+ 
+-LIMIT_12 = 100
++# HUNK-ONLY-MARKER-12-A: this line exists only in the head and so only inside a changed hunk.
++DEFAULT_LIMIT_12 = 250
++SEPARATOR_12 = ","
+ 
+ 
+-def parse_entry_12(line):
+-    name, amount = line.split(",")
+-    return name.strip(), int(amount)
++class EntryError_12(ValueError):
++    """Raised when a ledger line cannot be read as a name and a non-negative whole amount."""
+ 
+ 
+-def total_12(lines):
+-    total = 0
+-    for line in lines:
+-        name, amount = parse_entry_12(line)
+-        total += amount
+-    return total
++def parse_entry_12(line, separator=SEPARATOR_12):
++    parts = [part.strip() for part in line.split(separator)]
++    if len(parts) != 2 or not parts[0]:
++        raise EntryError_12("part 12: expected 'name,amount', got %r" % (line,))
++    name, raw_amount = parts
++    if not raw_amount.isdigit():
++        raise EntryError_12("part 12: amount must be a non-negative whole number: %r" % (raw_amount,))
++    return name, int(raw_amount)
+ 
+ 
+-def largest_12(lines):
+-    best = None
+-    for line in lines:
+-        name, amount = parse_entry_12(line)
+-        if best is None or amount > best[1]:
+-            best = (name, amount)
+-    return best
++def parsed_entries_12(lines, separator=SEPARATOR_12):
++    entries = []
++    for number, line in enumerate(lines, 1):
++        if not line.strip() or line.lstrip().startswith("#"):
++            continue
++        try:
++            entries.append(parse_entry_12(line, separator))
++        except EntryError_12 as error:
++            raise EntryError_12("line %d: %s" % (number, error)) from error
++    return entries
+ 
+ 
+-def over_limit_12(lines):
+-    return [line for line in lines if parse_entry_12(line)[1] > LIMIT_12]
++def total_12(lines, separator=SEPARATOR_12):
++    # HUNK-ONLY-MARKER-12-B: the total now skips blank and comment lines before summing.
++    return sum(amount for _, amount in parsed_entries_12(lines, separator))
+ 
+ 
+-def summary_12(lines):
+-    return "part 12: %d entries, total %d" % (len(lines), total_12(lines))
++def largest_12(lines, separator=SEPARATOR_12):
++    entries = parsed_entries_12(lines, separator)
++    if not entries:
++        return None
++    return max(entries, key=lambda entry: (entry[1], entry[0]))
+ 
+ 
+-def average_12(lines):
+-    if not lines:
+-        return 0
+-    return total_12(lines) / len(lines)
++def over_limit_12(lines, limit=DEFAULT_LIMIT_12, separator=SEPARATOR_12):
++    return [(name, amount) for name, amount in parsed_entries_12(lines, separator) if amount > limit]
+ 
+ 
+-def names_12(lines):
+-    names = []
+-    for line in lines:
+-        names.append(parse_entry_12(line)[0])
+-    return names
++def summary_12(lines, limit=DEFAULT_LIMIT_12, separator=SEPARATOR_12):
++    entries = parsed_entries_12(lines, separator)
++    flagged = [name for name, amount in entries if amount > limit]
++    # HUNK-ONLY-MARKER-12-C: the summary now names the flagged entries.
++    return "part 12: %d entries, total %d, over %d: %s" % (
++        len(entries), sum(amount for _, amount in entries), limit, ", ".join(flagged) or "none")
+ 
+ 
+-def report_12(lines):
+-    rows = []
+-    for line in lines:
+-        name, amount = parse_entry_12(line)
+-        rows.append("%s %d" % (name, amount))
+-    rows.append(summary_12(lines))
+-    return "\n".join(rows)
++def average_12(lines, separator=SEPARATOR_12):
++    entries = parsed_entries_12(lines, separator)
++    if not entries:
++        raise EntryError_12("part 12: no entries to average")
++    return sum(amount for _, amount in entries) // len(entries)
++
++
++def names_12(lines, separator=SEPARATOR_12):
++    seen = set()
++    ordered = []
++    for name, _ in parsed_entries_12(lines, separator):
++        if name not in seen:
++            seen.add(name)
++            ordered.append(name)
++    return ordered
++
++
++def report_12(lines, limit=DEFAULT_LIMIT_12, separator=SEPARATOR_12):
++    entries = parsed_entries_12(lines, separator)
++    width = max((len(name) for name, _ in entries), default=0)
++    rows = ["%-*s %8d%s" % (width, name, amount, "  over" if amount > limit else "")
++            for name, amount in sorted(entries)]
++    rows.append(summary_12(lines, limit, separator))
++    return "\n".join(rows) + "\n"
+diff --git a/ledger/part_13.py b/ledger/part_13.py
+index ad9499e..05418a6 100644
+--- a/ledger/part_13.py
++++ b/ledger/part_13.py
+@@ -1,56 +1,82 @@
+ SYNTHETIC FIXTURE - SKL-242 - not real data
+-"""Ledger part 13: totals for a synthetic batch of entries."""
++"""Ledger part 13: validated totals for a synthetic batch of entries, with negative amounts refused."""
+ 
+-LIMIT_13 = 100
++# HUNK-ONLY-MARKER-13-A: this line exists only in the head and so only inside a changed hunk.
++DEFAULT_LIMIT_13 = 250
++SEPARATOR_13 = ","
+ 
+ 
+-def parse_entry_13(line):
+-    name, amount = line.split(",")
+-    return name.strip(), int(amount)
++class EntryError_13(ValueError):
++    """Raised when a ledger line cannot be read as a name and a non-negative whole amount."""
+ 
+ 
+-def total_13(lines):
+-    total = 0
+-    for line in lines:
+-        name, amount = parse_entry_13(line)
+-        total += amount
+-    return total
++def parse_entry_13(line, separator=SEPARATOR_13):
++    parts = [part.strip() for part in line.split(separator)]
++    if len(parts) != 2 or not parts[0]:
++        raise EntryError_13("part 13: expected 'name,amount', got %r" % (line,))
++    name, raw_amount = parts
++    if not raw_amount.isdigit():
++        raise EntryError_13("part 13: amount must be a non-negative whole number: %r" % (raw_amount,))
++    return name, int(raw_amount)
+ 
+ 
+-def largest_13(lines):
+-    best = None
+-    for line in lines:
+-        name, amount = parse_entry_13(line)
+-        if best is None or amount > best[1]:
+-            best = (name, amount)
+-    return best
++def parsed_entries_13(lines, separator=SEPARATOR_13):
++    entries = []
++    for number, line in enumerate(lines, 1):
++        if not line.strip() or line.lstrip().startswith("#"):
++            continue
++        try:
++            entries.append(parse_entry_13(line, separator))
++        except EntryError_13 as error:
++            raise EntryError_13("line %d: %s" % (number, error)) from error
++    return entries
+ 
+ 
+-def over_limit_13(lines):
+-    return [line for line in lines if parse_entry_13(line)[1] > LIMIT_13]
++def total_13(lines, separator=SEPARATOR_13):
++    # HUNK-ONLY-MARKER-13-B: the total now skips blank and comment lines before summing.
++    return sum(amount for _, amount in parsed_entries_13(lines, separator))
+ 
+ 
+-def summary_13(lines):
+-    return "part 13: %d entries, total %d" % (len(lines), total_13(lines))
++def largest_13(lines, separator=SEPARATOR_13):
++    entries = parsed_entries_13(lines, separator)
++    if not entries:
++        return None
++    return max(entries, key=lambda entry: (entry[1], entry[0]))
+ 
+ 
+-def average_13(lines):
+-    if not lines:
+-        return 0
+-    return total_13(lines) / len(lines)
++def over_limit_13(lines, limit=DEFAULT_LIMIT_13, separator=SEPARATOR_13):
++    return [(name, amount) for name, amount in parsed_entries_13(lines, separator) if amount > limit]
+ 
+ 
+-def names_13(lines):
+-    names = []
+-    for line in lines:
+-        names.append(parse_entry_13(line)[0])
+-    return names
++def summary_13(lines, limit=DEFAULT_LIMIT_13, separator=SEPARATOR_13):
++    entries = parsed_entries_13(lines, separator)
++    flagged = [name for name, amount in entries if amount > limit]
++    # HUNK-ONLY-MARKER-13-C: the summary now names the flagged entries.
++    return "part 13: %d entries, total %d, over %d: %s" % (
++        len(entries), sum(amount for _, amount in entries), limit, ", ".join(flagged) or "none")
+ 
+ 
+-def report_13(lines):
+-    rows = []
+-    for line in lines:
+-        name, amount = parse_entry_13(line)
+-        rows.append("%s %d" % (name, amount))
+-    rows.append(summary_13(lines))
+-    return "\n".join(rows)
++def average_13(lines, separator=SEPARATOR_13):
++    entries = parsed_entries_13(lines, separator)
++    if not entries:
++        raise EntryError_13("part 13: no entries to average")
++    return sum(amount for _, amount in entries) // len(entries)
++
++
++def names_13(lines, separator=SEPARATOR_13):
++    seen = set()
++    ordered = []
++    for name, _ in parsed_entries_13(lines, separator):
++        if name not in seen:
++            seen.add(name)
++            ordered.append(name)
++    return ordered
++
++
++def report_13(lines, limit=DEFAULT_LIMIT_13, separator=SEPARATOR_13):
++    entries = parsed_entries_13(lines, separator)
++    width = max((len(name) for name, _ in entries), default=0)
++    rows = ["%-*s %8d%s" % (width, name, amount, "  over" if amount > limit else "")
++            for name, amount in sorted(entries)]
++    rows.append(summary_13(lines, limit, separator))
++    return "\n".join(rows) + "\n"
+diff --git a/ledger/part_14.py b/ledger/part_14.py
+index ab5624b..9cc52fc 100644
+--- a/ledger/part_14.py
++++ b/ledger/part_14.py
+@@ -1,56 +1,82 @@
+ SYNTHETIC FIXTURE - SKL-242 - not real data
+-"""Ledger part 14: totals for a synthetic batch of entries."""
++"""Ledger part 14: validated totals for a synthetic batch of entries, with negative amounts refused."""
+ 
+-LIMIT_14 = 100
++# HUNK-ONLY-MARKER-14-A: this line exists only in the head and so only inside a changed hunk.
++DEFAULT_LIMIT_14 = 250
++SEPARATOR_14 = ","
+ 
+ 
+-def parse_entry_14(line):
+-    name, amount = line.split(",")
+-    return name.strip(), int(amount)
++class EntryError_14(ValueError):
++    """Raised when a ledger line cannot be read as a name and a non-negative whole amount."""
+ 
+ 
+-def total_14(lines):
+-    total = 0
+-    for line in lines:
+-        name, amount = parse_entry_14(line)
+-        total += amount
+-    return total
++def parse_entry_14(line, separator=SEPARATOR_14):
++    parts = [part.strip() for part in line.split(separator)]
++    if len(parts) != 2 or not parts[0]:
++        raise EntryError_14("part 14: expected 'name,amount', got %r" % (line,))
++    name, raw_amount = parts
++    if not raw_amount.isdigit():
++        raise EntryError_14("part 14: amount must be a non-negative whole number: %r" % (raw_amount,))
++    return name, int(raw_amount)
+ 
+ 
+-def largest_14(lines):
+-    best = None
+-    for line in lines:
+-        name, amount = parse_entry_14(line)
+-        if best is None or amount > best[1]:
+-            best = (name, amount)
+-    return best
++def parsed_entries_14(lines, separator=SEPARATOR_14):
++    entries = []
++    for number, line in enumerate(lines, 1):
++        if not line.strip() or line.lstrip().startswith("#"):
++            continue
++        try:
++            entries.append(parse_entry_14(line, separator))
++        except EntryError_14 as error:
++            raise EntryError_14("line %d: %s" % (number, error)) from error
++    return entries
+ 
+ 
+-def over_limit_14(lines):
+-    return [line for line in lines if parse_entry_14(line)[1] > LIMIT_14]
++def total_14(lines, separator=SEPARATOR_14):
++    # HUNK-ONLY-MARKER-14-B: the total now skips blank and comment lines before summing.
++    return sum(amount for _, amount in parsed_entries_14(lines, separator))
+ 
+ 
+-def summary_14(lines):
+-    return "part 14: %d entries, total %d" % (len(lines), total_14(lines))
++def largest_14(lines, separator=SEPARATOR_14):
++    entries = parsed_entries_14(lines, separator)
++    if not entries:
++        return None
++    return max(entries, key=lambda entry: (entry[1], entry[0]))
+ 
+ 
+-def average_14(lines):
+-    if not lines:
+-        return 0
+-    return total_14(lines) / len(lines)
++def over_limit_14(lines, limit=DEFAULT_LIMIT_14, separator=SEPARATOR_14):
++    return [(name, amount) for name, amount in parsed_entries_14(lines, separator) if amount > limit]
+ 
+ 
+-def names_14(lines):
+-    names = []
+-    for line in lines:
+-        names.append(parse_entry_14(line)[0])
+-    return names
++def summary_14(lines, limit=DEFAULT_LIMIT_14, separator=SEPARATOR_14):
++    entries = parsed_entries_14(lines, separator)
++    flagged = [name for name, amount in entries if amount > limit]
++    # HUNK-ONLY-MARKER-14-C: the summary now names the flagged entries.
++    return "part 14: %d entries, total %d, over %d: %s" % (
++        len(entries), sum(amount for _, amount in entries), limit, ", ".join(flagged) or "none")
+ 
+ 
+-def report_14(lines):
+-    rows = []
+-    for line in lines:
+-        name, amount = parse_entry_14(line)
+-        rows.append("%s %d" % (name, amount))
+-    rows.append(summary_14(lines))
+-    return "\n".join(rows)
++def average_14(lines, separator=SEPARATOR_14):
++    entries = parsed_entries_14(lines, separator)
++    if not entries:
++        raise EntryError_14("part 14: no entries to average")
++    return sum(amount for _, amount in entries) // len(entries)
++
++
++def names_14(lines, separator=SEPARATOR_14):
++    seen = set()
++    ordered = []
++    for name, _ in parsed_entries_14(lines, separator):
++        if name not in seen:
++            seen.add(name)
++            ordered.append(name)
++    return ordered
++
++
++def report_14(lines, limit=DEFAULT_LIMIT_14, separator=SEPARATOR_14):
++    entries = parsed_entries_14(lines, separator)
++    width = max((len(name) for name, _ in entries), default=0)
++    rows = ["%-*s %8d%s" % (width, name, amount, "  over" if amount > limit else "")
++            for name, amount in sorted(entries)]
++    rows.append(summary_14(lines, limit, separator))
++    return "\n".join(rows) + "\n"
+diff --git a/ledger/part_15.py b/ledger/part_15.py
+index 9ea5f10..23f5f29 100644
+--- a/ledger/part_15.py
++++ b/ledger/part_15.py
+@@ -1,56 +1,82 @@
+ SYNTHETIC FIXTURE - SKL-242 - not real data
+-"""Ledger part 15: totals for a synthetic batch of entries."""
++"""Ledger part 15: validated totals for a synthetic batch of entries, with negative amounts refused."""
+ 
+-LIMIT_15 = 100
++# HUNK-ONLY-MARKER-15-A: this line exists only in the head and so only inside a changed hunk.
++DEFAULT_LIMIT_15 = 250
++SEPARATOR_15 = ","
+ 
+ 
+-def parse_entry_15(line):
+-    name, amount = line.split(",")
+-    return name.strip(), int(amount)
++class EntryError_15(ValueError):
++    """Raised when a ledger line cannot be read as a name and a non-negative whole amount."""
+ 
+ 
+-def total_15(lines):
+-    total = 0
+-    for line in lines:
+-        name, amount = parse_entry_15(line)
+-        total += amount
+-    return total
++def parse_entry_15(line, separator=SEPARATOR_15):
++    parts = [part.strip() for part in line.split(separator)]
++    if len(parts) != 2 or not parts[0]:
++        raise EntryError_15("part 15: expected 'name,amount', got %r" % (line,))
++    name, raw_amount = parts
++    if not raw_amount.isdigit():
++        raise EntryError_15("part 15: amount must be a non-negative whole number: %r" % (raw_amount,))
++    return name, int(raw_amount)
+ 
+ 
+-def largest_15(lines):
+-    best = None
+-    for line in lines:
+-        name, amount = parse_entry_15(line)
+-        if best is None or amount > best[1]:
+-            best = (name, amount)
+-    return best
++def parsed_entries_15(lines, separator=SEPARATOR_15):
++    entries = []
++    for number, line in enumerate(lines, 1):
++        if not line.strip() or line.lstrip().startswith("#"):
++            continue
++        try:
++            entries.append(parse_entry_15(line, separator))
++        except EntryError_15 as error:
++            raise EntryError_15("line %d: %s" % (number, error)) from error
++    return entries
+ 
+ 
+-def over_limit_15(lines):
+-    return [line for line in lines if parse_entry_15(line)[1] > LIMIT_15]
++def total_15(lines, separator=SEPARATOR_15):
++    # HUNK-ONLY-MARKER-15-B: the total now skips blank and comment lines before summing.
++    return sum(amount for _, amount in parsed_entries_15(lines, separator))
+ 
+ 
+-def summary_15(lines):
+-    return "part 15: %d entries, total %d" % (len(lines), total_15(lines))
++def largest_15(lines, separator=SEPARATOR_15):
++    entries = parsed_entries_15(lines, separator)
++    if not entries:
++        return None
++    return max(entries, key=lambda entry: (entry[1], entry[0]))
+ 
+ 
+-def average_15(lines):
+-    if not lines:
+-        return 0
+-    return total_15(lines) / len(lines)
++def over_limit_15(lines, limit=DEFAULT_LIMIT_15, separator=SEPARATOR_15):
++    return [(name, amount) for name, amount in parsed_entries_15(lines, separator) if amount > limit]
+ 
+ 
+-def names_15(lines):
+-    names = []
+-    for line in lines:
+-        names.append(parse_entry_15(line)[0])
+-    return names
++def summary_15(lines, limit=DEFAULT_LIMIT_15, separator=SEPARATOR_15):
++    entries = parsed_entries_15(lines, separator)
++    flagged = [name for name, amount in entries if amount > limit]
++    # HUNK-ONLY-MARKER-15-C: the summary now names the flagged entries.
++    return "part 15: %d entries, total %d, over %d: %s" % (
++        len(entries), sum(amount for _, amount in entries), limit, ", ".join(flagged) or "none")
+ 
+ 
+-def report_15(lines):
+-    rows = []
+-    for line in lines:
+-        name, amount = parse_entry_15(line)
+-        rows.append("%s %d" % (name, amount))
+-    rows.append(summary_15(lines))
+-    return "\n".join(rows)
++def average_15(lines, separator=SEPARATOR_15):
++    entries = parsed_entries_15(lines, separator)
++    if not entries:
++        raise EntryError_15("part 15: no entries to average")
++    return sum(amount for _, amount in entries) // len(entries)
++
++
++def names_15(lines, separator=SEPARATOR_15):
++    seen = set()
++    ordered = []
++    for name, _ in parsed_entries_15(lines, separator):
++        if name not in seen:
++            seen.add(name)
++            ordered.append(name)
++    return ordered
++
++
++def report_15(lines, limit=DEFAULT_LIMIT_15, separator=SEPARATOR_15):
++    entries = parsed_entries_15(lines, separator)
++    width = max((len(name) for name, _ in entries), default=0)
++    rows = ["%-*s %8d%s" % (width, name, amount, "  over" if amount > limit else "")
++            for name, amount in sorted(entries)]
++    rows.append(summary_15(lines, limit, separator))
++    return "\n".join(rows) + "\n"
+diff --git a/ledger/part_16.py b/ledger/part_16.py
+index ab4acd0..f77e01a 100644
+--- a/ledger/part_16.py
++++ b/ledger/part_16.py
+@@ -1,56 +1,82 @@
+ SYNTHETIC FIXTURE - SKL-242 - not real data
+-"""Ledger part 16: totals for a synthetic batch of entries."""
++"""Ledger part 16: validated totals for a synthetic batch of entries, with negative amounts refused."""
+ 
+-LIMIT_16 = 100
++# HUNK-ONLY-MARKER-16-A: this line exists only in the head and so only inside a changed hunk.
++DEFAULT_LIMIT_16 = 250
++SEPARATOR_16 = ","
+ 
+ 
+-def parse_entry_16(line):
+-    name, amount = line.split(",")
+-    return name.strip(), int(amount)
++class EntryError_16(ValueError):
++    """Raised when a ledger line cannot be read as a name and a non-negative whole amount."""
+ 
+ 
+-def total_16(lines):
+-    total = 0
+-    for line in lines:
+-        name, amount = parse_entry_16(line)
+-        total += amount
+-    return total
++def parse_entry_16(line, separator=SEPARATOR_16):
++    parts = [part.strip() for part in line.split(separator)]
++    if len(parts) != 2 or not parts[0]:
++        raise EntryError_16("part 16: expected 'name,amount', got %r" % (line,))
++    name, raw_amount = parts
++    if not raw_amount.isdigit():
++        raise EntryError_16("part 16: amount must be a non-negative whole number: %r" % (raw_amount,))
++    return name, int(raw_amount)
+ 
+ 
+-def largest_16(lines):
+-    best = None
+-    for line in lines:
+-        name, amount = parse_entry_16(line)
+-        if best is None or amount > best[1]:
+-            best = (name, amount)
+-    return best
++def parsed_entries_16(lines, separator=SEPARATOR_16):
++    entries = []
++    for number, line in enumerate(lines, 1):
++        if not line.strip() or line.lstrip().startswith("#"):
++            continue
++        try:
++            entries.append(parse_entry_16(line, separator))
++        except EntryError_16 as error:
++            raise EntryError_16("line %d: %s" % (number, error)) from error
++    return entries
+ 
+ 
+-def over_limit_16(lines):
+-    return [line for line in lines if parse_entry_16(line)[1] > LIMIT_16]
++def total_16(lines, separator=SEPARATOR_16):
++    # HUNK-ONLY-MARKER-16-B: the total now skips blank and comment lines before summing.
++    return sum(amount for _, amount in parsed_entries_16(lines, separator))
+ 
+ 
+-def summary_16(lines):
+-    return "part 16: %d entries, total %d" % (len(lines), total_16(lines))
++def largest_16(lines, separator=SEPARATOR_16):
++    entries = parsed_entries_16(lines, separator)
++    if not entries:
++        return None
++    return max(entries, key=lambda entry: (entry[1], entry[0]))
+ 
+ 
+-def average_16(lines):
+-    if not lines:
+-        return 0
+-    return total_16(lines) / len(lines)
++def over_limit_16(lines, limit=DEFAULT_LIMIT_16, separator=SEPARATOR_16):
++    return [(name, amount) for name, amount in parsed_entries_16(lines, separator) if amount > limit]
+ 
+ 
+-def names_16(lines):
+-    names = []
+-    for line in lines:
+-        names.append(parse_entry_16(line)[0])
+-    return names
++def summary_16(lines, limit=DEFAULT_LIMIT_16, separator=SEPARATOR_16):
++    entries = parsed_entries_16(lines, separator)
++    flagged = [name for name, amount in entries if amount > limit]
++    # HUNK-ONLY-MARKER-16-C: the summary now names the flagged entries.
++    return "part 16: %d entries, total %d, over %d: %s" % (
++        len(entries), sum(amount for _, amount in entries), limit, ", ".join(flagged) or "none")
+ 
+ 
+-def report_16(lines):
+-    rows = []
+-    for line in lines:
+-        name, amount = parse_entry_16(line)
+-        rows.append("%s %d" % (name, amount))
+-    rows.append(summary_16(lines))
+-    return "\n".join(rows)
++def average_16(lines, separator=SEPARATOR_16):
++    entries = parsed_entries_16(lines, separator)
++    if not entries:
++        raise EntryError_16("part 16: no entries to average")
++    return sum(amount for _, amount in entries) // len(entries)
++
++
++def names_16(lines, separator=SEPARATOR_16):
++    seen = set()
++    ordered = []
++    for name, _ in parsed_entries_16(lines, separator):
++        if name not in seen:
++            seen.add(name)
++            ordered.append(name)
++    return ordered
++
++
++def report_16(lines, limit=DEFAULT_LIMIT_16, separator=SEPARATOR_16):
++    entries = parsed_entries_16(lines, separator)
++    width = max((len(name) for name, _ in entries), default=0)
++    rows = ["%-*s %8d%s" % (width, name, amount, "  over" if amount > limit else "")
++            for name, amount in sorted(entries)]
++    rows.append(summary_16(lines, limit, separator))
++    return "\n".join(rows) + "\n"
+diff --git a/ledger/part_17.py b/ledger/part_17.py
+index af3bffc..899a695 100644
+--- a/ledger/part_17.py
++++ b/ledger/part_17.py
+@@ -1,56 +1,82 @@
+ SYNTHETIC FIXTURE - SKL-242 - not real data
+-"""Ledger part 17: totals for a synthetic batch of entries."""
++"""Ledger part 17: validated totals for a synthetic batch of entries, with negative amounts refused."""
+ 
+-LIMIT_17 = 100
++# HUNK-ONLY-MARKER-17-A: this line exists only in the head and so only inside a changed hunk.
++DEFAULT_LIMIT_17 = 250
++SEPARATOR_17 = ","
+ 
+ 
+-def parse_entry_17(line):
+-    name, amount = line.split(",")
+-    return name.strip(), int(amount)
++class EntryError_17(ValueError):
++    """Raised when a ledger line cannot be read as a name and a non-negative whole amount."""
+ 
+ 
+-def total_17(lines):
+-    total = 0
+-    for line in lines:
+-        name, amount = parse_entry_17(line)
+-        total += amount
+-    return total
++def parse_entry_17(line, separator=SEPARATOR_17):
++    parts = [part.strip() for part in line.split(separator)]
++    if len(parts) != 2 or not parts[0]:
++        raise EntryError_17("part 17: expected 'name,amount', got %r" % (line,))
++    name, raw_amount = parts
++    if not raw_amount.isdigit():
++        raise EntryError_17("part 17: amount must be a non-negative whole number: %r" % (raw_amount,))
++    return name, int(raw_amount)
+ 
+ 
+-def largest_17(lines):
+-    best = None
+-    for line in lines:
+-        name, amount = parse_entry_17(line)
+-        if best is None or amount > best[1]:
+-            best = (name, amount)
+-    return best
++def parsed_entries_17(lines, separator=SEPARATOR_17):
++    entries = []
++    for number, line in enumerate(lines, 1):
++        if not line.strip() or line.lstrip().startswith("#"):
++            continue
++        try:
++            entries.append(parse_entry_17(line, separator))
++        except EntryError_17 as error:
++            raise EntryError_17("line %d: %s" % (number, error)) from error
++    return entries
+ 
+ 
+-def over_limit_17(lines):
+-    return [line for line in lines if parse_entry_17(line)[1] > LIMIT_17]
++def total_17(lines, separator=SEPARATOR_17):
++    # HUNK-ONLY-MARKER-17-B: the total now skips blank and comment lines before summing.
++    return sum(amount for _, amount in parsed_entries_17(lines, separator))
+ 
+ 
+-def summary_17(lines):
+-    return "part 17: %d entries, total %d" % (len(lines), total_17(lines))
++def largest_17(lines, separator=SEPARATOR_17):
++    entries = parsed_entries_17(lines, separator)
++    if not entries:
++        return None
++    return max(entries, key=lambda entry: (entry[1], entry[0]))
+ 
+ 
+-def average_17(lines):
+-    if not lines:
+-        return 0
+-    return total_17(lines) / len(lines)
++def over_limit_17(lines, limit=DEFAULT_LIMIT_17, separator=SEPARATOR_17):
++    return [(name, amount) for name, amount in parsed_entries_17(lines, separator) if amount > limit]
+ 
+ 
+-def names_17(lines):
+-    names = []
+-    for line in lines:
+-        names.append(parse_entry_17(line)[0])
+-    return names
++def summary_17(lines, limit=DEFAULT_LIMIT_17, separator=SEPARATOR_17):
++    entries = parsed_entries_17(lines, separator)
++    flagged = [name for name, amount in entries if amount > limit]
++    # HUNK-ONLY-MARKER-17-C: the summary now names the flagged entries.
++    return "part 17: %d entries, total %d, over %d: %s" % (
++        len(entries), sum(amount for _, amount in entries), limit, ", ".join(flagged) or "none")
+ 
+ 
+-def report_17(lines):
+-    rows = []
+-    for line in lines:
+-        name, amount = parse_entry_17(line)
+-        rows.append("%s %d" % (name, amount))
+-    rows.append(summary_17(lines))
+-    return "\n".join(rows)
++def average_17(lines, separator=SEPARATOR_17):
++    entries = parsed_entries_17(lines, separator)
++    if not entries:
++        raise EntryError_17("part 17: no entries to average")
++    return sum(amount for _, amount in entries) // len(entries)
++
++
++def names_17(lines, separator=SEPARATOR_17):
++    seen = set()
++    ordered = []
++    for name, _ in parsed_entries_17(lines, separator):
++        if name not in seen:
++            seen.add(name)
++            ordered.append(name)
++    return ordered
++
++
++def report_17(lines, limit=DEFAULT_LIMIT_17, separator=SEPARATOR_17):
++    entries = parsed_entries_17(lines, separator)
++    width = max((len(name) for name, _ in entries), default=0)
++    rows = ["%-*s %8d%s" % (width, name, amount, "  over" if amount > limit else "")
++            for name, amount in sorted(entries)]
++    rows.append(summary_17(lines, limit, separator))
++    return "\n".join(rows) + "\n"
+diff --git a/ledger/part_18.py b/ledger/part_18.py
+index f805a58..8da51bc 100644
+--- a/ledger/part_18.py
++++ b/ledger/part_18.py
+@@ -1,56 +1,82 @@
+ SYNTHETIC FIXTURE - SKL-242 - not real data
+-"""Ledger part 18: totals for a synthetic batch of entries."""
++"""Ledger part 18: validated totals for a synthetic batch of entries, with negative amounts refused."""
+ 
+-LIMIT_18 = 100
++# HUNK-ONLY-MARKER-18-A: this line exists only in the head and so only inside a changed hunk.
++DEFAULT_LIMIT_18 = 250
++SEPARATOR_18 = ","
+ 
+ 
+-def parse_entry_18(line):
+-    name, amount = line.split(",")
+-    return name.strip(), int(amount)
++class EntryError_18(ValueError):
++    """Raised when a ledger line cannot be read as a name and a non-negative whole amount."""
+ 
+ 
+-def total_18(lines):
+-    total = 0
+-    for line in lines:
+-        name, amount = parse_entry_18(line)
+-        total += amount
+-    return total
++def parse_entry_18(line, separator=SEPARATOR_18):
++    parts = [part.strip() for part in line.split(separator)]
++    if len(parts) != 2 or not parts[0]:
++        raise EntryError_18("part 18: expected 'name,amount', got %r" % (line,))
++    name, raw_amount = parts
++    if not raw_amount.isdigit():
++        raise EntryError_18("part 18: amount must be a non-negative whole number: %r" % (raw_amount,))
++    return name, int(raw_amount)
+ 
+ 
+-def largest_18(lines):
+-    best = None
+-    for line in lines:
+-        name, amount = parse_entry_18(line)
+-        if best is None or amount > best[1]:
+-            best = (name, amount)
+-    return best
++def parsed_entries_18(lines, separator=SEPARATOR_18):
++    entries = []
++    for number, line in enumerate(lines, 1):
++        if not line.strip() or line.lstrip().startswith("#"):
++            continue
++        try:
++            entries.append(parse_entry_18(line, separator))
++        except EntryError_18 as error:
++            raise EntryError_18("line %d: %s" % (number, error)) from error
++    return entries
+ 
+ 
+-def over_limit_18(lines):
+-    return [line for line in lines if parse_entry_18(line)[1] > LIMIT_18]
++def total_18(lines, separator=SEPARATOR_18):
++    # HUNK-ONLY-MARKER-18-B: the total now skips blank and comment lines before summing.
++    return sum(amount for _, amount in parsed_entries_18(lines, separator))
+ 
+ 
+-def summary_18(lines):
+-    return "part 18: %d entries, total %d" % (len(lines), total_18(lines))
++def largest_18(lines, separator=SEPARATOR_18):
++    entries = parsed_entries_18(lines, separator)
++    if not entries:
++        return None
++    return max(entries, key=lambda entry: (entry[1], entry[0]))
+ 
+ 
+-def average_18(lines):
+-    if not lines:
+-        return 0
+-    return total_18(lines) / len(lines)
++def over_limit_18(lines, limit=DEFAULT_LIMIT_18, separator=SEPARATOR_18):
++    return [(name, amount) for name, amount in parsed_entries_18(lines, separator) if amount > limit]
+ 
+ 
+-def names_18(lines):
+-    names = []
+-    for line in lines:
+-        names.append(parse_entry_18(line)[0])
+-    return names
++def summary_18(lines, limit=DEFAULT_LIMIT_18, separator=SEPARATOR_18):
++    entries = parsed_entries_18(lines, separator)
++    flagged = [name for name, amount in entries if amount > limit]
++    # HUNK-ONLY-MARKER-18-C: the summary now names the flagged entries.
++    return "part 18: %d entries, total %d, over %d: %s" % (
++        len(entries), sum(amount for _, amount in entries), limit, ", ".join(flagged) or "none")
+ 
+ 
+-def report_18(lines):
+-    rows = []
+-    for line in lines:
+-        name, amount = parse_entry_18(line)
+-        rows.append("%s %d" % (name, amount))
+-    rows.append(summary_18(lines))
+-    return "\n".join(rows)
++def average_18(lines, separator=SEPARATOR_18):
++    entries = parsed_entries_18(lines, separator)
++    if not entries:
++        raise EntryError_18("part 18: no entries to average")
++    return sum(amount for _, amount in entries) // len(entries)
++
++
++def names_18(lines, separator=SEPARATOR_18):
++    seen = set()
++    ordered = []
++    for name, _ in parsed_entries_18(lines, separator):
++        if name not in seen:
++            seen.add(name)
++            ordered.append(name)
++    return ordered
++
++
++def report_18(lines, limit=DEFAULT_LIMIT_18, separator=SEPARATOR_18):
++    entries = parsed_entries_18(lines, separator)
++    width = max((len(name) for name, _ in entries), default=0)
++    rows = ["%-*s %8d%s" % (width, name, amount, "  over" if amount > limit else "")
++            for name, amount in sorted(entries)]
++    rows.append(summary_18(lines, limit, separator))
++    return "\n".join(rows) + "\n"
+diff --git a/ledger/part_19.py b/ledger/part_19.py
+index 57ee42e..a847d55 100644
+--- a/ledger/part_19.py
++++ b/ledger/part_19.py
+@@ -1,56 +1,82 @@
+ SYNTHETIC FIXTURE - SKL-242 - not real data
+-"""Ledger part 19: totals for a synthetic batch of entries."""
++"""Ledger part 19: validated totals for a synthetic batch of entries, with negative amounts refused."""
+ 
+-LIMIT_19 = 100
++# HUNK-ONLY-MARKER-19-A: this line exists only in the head and so only inside a changed hunk.
++DEFAULT_LIMIT_19 = 250
++SEPARATOR_19 = ","
+ 
+ 
+-def parse_entry_19(line):
+-    name, amount = line.split(",")
+-    return name.strip(), int(amount)
++class EntryError_19(ValueError):
++    """Raised when a ledger line cannot be read as a name and a non-negative whole amount."""
+ 
+ 
+-def total_19(lines):
+-    total = 0
+-    for line in lines:
+-        name, amount = parse_entry_19(line)
+-        total += amount
+-    return total
++def parse_entry_19(line, separator=SEPARATOR_19):
++    parts = [part.strip() for part in line.split(separator)]
++    if len(parts) != 2 or not parts[0]:
++        raise EntryError_19("part 19: expected 'name,amount', got %r" % (line,))
++    name, raw_amount = parts
++    if not raw_amount.isdigit():
++        raise EntryError_19("part 19: amount must be a non-negative whole number: %r" % (raw_amount,))
++    return name, int(raw_amount)
+ 
+ 
+-def largest_19(lines):
+-    best = None
+-    for line in lines:
+-        name, amount = parse_entry_19(line)
+-        if best is None or amount > best[1]:
+-            best = (name, amount)
+-    return best
++def parsed_entries_19(lines, separator=SEPARATOR_19):
++    entries = []
++    for number, line in enumerate(lines, 1):
++        if not line.strip() or line.lstrip().startswith("#"):
++            continue
++        try:
++            entries.append(parse_entry_19(line, separator))
++        except EntryError_19 as error:
++            raise EntryError_19("line %d: %s" % (number, error)) from error
++    return entries
+ 
+ 
+-def over_limit_19(lines):
+-    return [line for line in lines if parse_entry_19(line)[1] > LIMIT_19]
++def total_19(lines, separator=SEPARATOR_19):
++    # HUNK-ONLY-MARKER-19-B: the total now skips blank and comment lines before summing.
++    return sum(amount for _, amount in parsed_entries_19(lines, separator))
+ 
+ 
+-def summary_19(lines):
+-    return "part 19: %d entries, total %d" % (len(lines), total_19(lines))
++def largest_19(lines, separator=SEPARATOR_19):
++    entries = parsed_entries_19(lines, separator)
++    if not entries:
++        return None
++    return max(entries, key=lambda entry: (entry[1], entry[0]))
+ 
+ 
+-def average_19(lines):
+-    if not lines:
+-        return 0
+-    return total_19(lines) / len(lines)
++def over_limit_19(lines, limit=DEFAULT_LIMIT_19, separator=SEPARATOR_19):
++    return [(name, amount) for name, amount in parsed_entries_19(lines, separator) if amount > limit]
+ 
+ 
+-def names_19(lines):
+-    names = []
+-    for line in lines:
+-        names.append(parse_entry_19(line)[0])
+-    return names
++def summary_19(lines, limit=DEFAULT_LIMIT_19, separator=SEPARATOR_19):
++    entries = parsed_entries_19(lines, separator)
++    flagged = [name for name, amount in entries if amount > limit]
++    # HUNK-ONLY-MARKER-19-C: the summary now names the flagged entries.
++    return "part 19: %d entries, total %d, over %d: %s" % (
++        len(entries), sum(amount for _, amount in entries), limit, ", ".join(flagged) or "none")
+ 
+ 
+-def report_19(lines):
+-    rows = []
+-    for line in lines:
+-        name, amount = parse_entry_19(line)
+-        rows.append("%s %d" % (name, amount))
+-    rows.append(summary_19(lines))
+-    return "\n".join(rows)
++def average_19(lines, separator=SEPARATOR_19):
++    entries = parsed_entries_19(lines, separator)
++    if not entries:
++        raise EntryError_19("part 19: no entries to average")
++    return sum(amount for _, amount in entries) // len(entries)
++
++
++def names_19(lines, separator=SEPARATOR_19):
++    seen = set()
++    ordered = []
++    for name, _ in parsed_entries_19(lines, separator):
++        if name not in seen:
++            seen.add(name)
++            ordered.append(name)
++    return ordered
++
++
++def report_19(lines, limit=DEFAULT_LIMIT_19, separator=SEPARATOR_19):
++    entries = parsed_entries_19(lines, separator)
++    width = max((len(name) for name, _ in entries), default=0)
++    rows = ["%-*s %8d%s" % (width, name, amount, "  over" if amount > limit else "")
++            for name, amount in sorted(entries)]
++    rows.append(summary_19(lines, limit, separator))
++    return "\n".join(rows) + "\n"
+diff --git a/ledger/part_20.py b/ledger/part_20.py
+index ac2d952..2e28ec8 100644
+--- a/ledger/part_20.py
++++ b/ledger/part_20.py
+@@ -1,56 +1,82 @@
+ SYNTHETIC FIXTURE - SKL-242 - not real data
+-"""Ledger part 20: totals for a synthetic batch of entries."""
++"""Ledger part 20: validated totals for a synthetic batch of entries, with negative amounts refused."""
+ 
+-LIMIT_20 = 100
++# HUNK-ONLY-MARKER-20-A: this line exists only in the head and so only inside a changed hunk.
++DEFAULT_LIMIT_20 = 250
++SEPARATOR_20 = ","
+ 
+ 
+-def parse_entry_20(line):
+-    name, amount = line.split(",")
+-    return name.strip(), int(amount)
++class EntryError_20(ValueError):
++    """Raised when a ledger line cannot be read as a name and a non-negative whole amount."""
+ 
+ 
+-def total_20(lines):
+-    total = 0
+-    for line in lines:
+-        name, amount = parse_entry_20(line)
+-        total += amount
+-    return total
++def parse_entry_20(line, separator=SEPARATOR_20):
++    parts = [part.strip() for part in line.split(separator)]
++    if len(parts) != 2 or not parts[0]:
++        raise EntryError_20("part 20: expected 'name,amount', got %r" % (line,))
++    name, raw_amount = parts
++    if not raw_amount.isdigit():
++        raise EntryError_20("part 20: amount must be a non-negative whole number: %r" % (raw_amount,))
++    return name, int(raw_amount)
+ 
+ 
+-def largest_20(lines):
+-    best = None
+-    for line in lines:
+-        name, amount = parse_entry_20(line)
+-        if best is None or amount > best[1]:
+-            best = (name, amount)
+-    return best
++def parsed_entries_20(lines, separator=SEPARATOR_20):
++    entries = []
++    for number, line in enumerate(lines, 1):
++        if not line.strip() or line.lstrip().startswith("#"):
++            continue
++        try:
++            entries.append(parse_entry_20(line, separator))
++        except EntryError_20 as error:
++            raise EntryError_20("line %d: %s" % (number, error)) from error
++    return entries
+ 
+ 
+-def over_limit_20(lines):
+-    return [line for line in lines if parse_entry_20(line)[1] > LIMIT_20]
++def total_20(lines, separator=SEPARATOR_20):
++    # HUNK-ONLY-MARKER-20-B: the total now skips blank and comment lines before summing.
++    return sum(amount for _, amount in parsed_entries_20(lines, separator))
+ 
+ 
+-def summary_20(lines):
+-    return "part 20: %d entries, total %d" % (len(lines), total_20(lines))
++def largest_20(lines, separator=SEPARATOR_20):
++    entries = parsed_entries_20(lines, separator)
++    if not entries:
++        return None
++    return max(entries, key=lambda entry: (entry[1], entry[0]))
+ 
+ 
+-def average_20(lines):
+-    if not lines:
+-        return 0
+-    return total_20(lines) / len(lines)
++def over_limit_20(lines, limit=DEFAULT_LIMIT_20, separator=SEPARATOR_20):
++    return [(name, amount) for name, amount in parsed_entries_20(lines, separator) if amount > limit]
+ 
+ 
+-def names_20(lines):
+-    names = []
+-    for line in lines:
+-        names.append(parse_entry_20(line)[0])
+-    return names
++def summary_20(lines, limit=DEFAULT_LIMIT_20, separator=SEPARATOR_20):
++    entries = parsed_entries_20(lines, separator)
++    flagged = [name for name, amount in entries if amount > limit]
++    # HUNK-ONLY-MARKER-20-C: the summary now names the flagged entries.
++    return "part 20: %d entries, total %d, over %d: %s" % (
++        len(entries), sum(amount for _, amount in entries), limit, ", ".join(flagged) or "none")
+ 
+ 
+-def report_20(lines):
+-    rows = []
+-    for line in lines:
+-        name, amount = parse_entry_20(line)
+-        rows.append("%s %d" % (name, amount))
+-    rows.append(summary_20(lines))
+-    return "\n".join(rows)
++def average_20(lines, separator=SEPARATOR_20):
++    entries = parsed_entries_20(lines, separator)
++    if not entries:
++        raise EntryError_20("part 20: no entries to average")
++    return sum(amount for _, amount in entries) // len(entries)
++
++
++def names_20(lines, separator=SEPARATOR_20):
++    seen = set()
++    ordered = []
++    for name, _ in parsed_entries_20(lines, separator):
++        if name not in seen:
++            seen.add(name)
++            ordered.append(name)
++    return ordered
++
++
++def report_20(lines, limit=DEFAULT_LIMIT_20, separator=SEPARATOR_20):
++    entries = parsed_entries_20(lines, separator)
++    width = max((len(name) for name, _ in entries), default=0)
++    rows = ["%-*s %8d%s" % (width, name, amount, "  over" if amount > limit else "")
++            for name, amount in sorted(entries)]
++    rows.append(summary_20(lines, limit, separator))
++    return "\n".join(rows) + "\n"
+diff --git a/ledger/part_21.py b/ledger/part_21.py
+index e060493..e33fadf 100644
+--- a/ledger/part_21.py
++++ b/ledger/part_21.py
+@@ -1,56 +1,82 @@
+ SYNTHETIC FIXTURE - SKL-242 - not real data
+-"""Ledger part 21: totals for a synthetic batch of entries."""
++"""Ledger part 21: validated totals for a synthetic batch of entries, with negative amounts refused."""
+ 
+-LIMIT_21 = 100
++# HUNK-ONLY-MARKER-21-A: this line exists only in the head and so only inside a changed hunk.
++DEFAULT_LIMIT_21 = 250
++SEPARATOR_21 = ","
+ 
+ 
+-def parse_entry_21(line):
+-    name, amount = line.split(",")
+-    return name.strip(), int(amount)
++class EntryError_21(ValueError):
++    """Raised when a ledger line cannot be read as a name and a non-negative whole amount."""
+ 
+ 
+-def total_21(lines):
+-    total = 0
+-    for line in lines:
+-        name, amount = parse_entry_21(line)
+-        total += amount
+-    return total
++def parse_entry_21(line, separator=SEPARATOR_21):
++    parts = [part.strip() for part in line.split(separator)]
++    if len(parts) != 2 or not parts[0]:
++        raise EntryError_21("part 21: expected 'name,amount', got %r" % (line,))
++    name, raw_amount = parts
++    if not raw_amount.isdigit():
++        raise EntryError_21("part 21: amount must be a non-negative whole number: %r" % (raw_amount,))
++    return name, int(raw_amount)
+ 
+ 
+-def largest_21(lines):
+-    best = None
+-    for line in lines:
+-        name, amount = parse_entry_21(line)
+-        if best is None or amount > best[1]:
+-            best = (name, amount)
+-    return best
++def parsed_entries_21(lines, separator=SEPARATOR_21):
++    entries = []
++    for number, line in enumerate(lines, 1):
++        if not line.strip() or line.lstrip().startswith("#"):
++            continue
++        try:
++            entries.append(parse_entry_21(line, separator))
++        except EntryError_21 as error:
++            raise EntryError_21("line %d: %s" % (number, error)) from error
++    return entries
+ 
+ 
+-def over_limit_21(lines):
+-    return [line for line in lines if parse_entry_21(line)[1] > LIMIT_21]
++def total_21(lines, separator=SEPARATOR_21):
++    # HUNK-ONLY-MARKER-21-B: the total now skips blank and comment lines before summing.
++    return sum(amount for _, amount in parsed_entries_21(lines, separator))
+ 
+ 
+-def summary_21(lines):
+-    return "part 21: %d entries, total %d" % (len(lines), total_21(lines))
++def largest_21(lines, separator=SEPARATOR_21):
++    entries = parsed_entries_21(lines, separator)
++    if not entries:
++        return None
++    return max(entries, key=lambda entry: (entry[1], entry[0]))
+ 
+ 
+-def average_21(lines):
+-    if not lines:
+-        return 0
+-    return total_21(lines) / len(lines)
++def over_limit_21(lines, limit=DEFAULT_LIMIT_21, separator=SEPARATOR_21):
++    return [(name, amount) for name, amount in parsed_entries_21(lines, separator) if amount > limit]
+ 
+ 
+-def names_21(lines):
+-    names = []
+-    for line in lines:
+-        names.append(parse_entry_21(line)[0])
+-    return names
++def summary_21(lines, limit=DEFAULT_LIMIT_21, separator=SEPARATOR_21):
++    entries = parsed_entries_21(lines, separator)
++    flagged = [name for name, amount in entries if amount > limit]
++    # HUNK-ONLY-MARKER-21-C: the summary now names the flagged entries.
++    return "part 21: %d entries, total %d, over %d: %s" % (
++        len(entries), sum(amount for _, amount in entries), limit, ", ".join(flagged) or "none")
+ 
+ 
+-def report_21(lines):
+-    rows = []
+-    for line in lines:
+-        name, amount = parse_entry_21(line)
+-        rows.append("%s %d" % (name, amount))
+-    rows.append(summary_21(lines))
+-    return "\n".join(rows)
++def average_21(lines, separator=SEPARATOR_21):
++    entries = parsed_entries_21(lines, separator)
++    if not entries:
++        raise EntryError_21("part 21: no entries to average")
++    return sum(amount for _, amount in entries) // len(entries)
++
++
++def names_21(lines, separator=SEPARATOR_21):
++    seen = set()
++    ordered = []
++    for name, _ in parsed_entries_21(lines, separator):
++        if name not in seen:
++            seen.add(name)
++            ordered.append(name)
++    return ordered
++
++
++def report_21(lines, limit=DEFAULT_LIMIT_21, separator=SEPARATOR_21):
++    entries = parsed_entries_21(lines, separator)
++    width = max((len(name) for name, _ in entries), default=0)
++    rows = ["%-*s %8d%s" % (width, name, amount, "  over" if amount > limit else "")
++            for name, amount in sorted(entries)]
++    rows.append(summary_21(lines, limit, separator))
++    return "\n".join(rows) + "\n"
+diff --git a/ledger/part_22.py b/ledger/part_22.py
+index 10f7467..290272f 100644
+--- a/ledger/part_22.py
++++ b/ledger/part_22.py
+@@ -1,56 +1,82 @@
+ SYNTHETIC FIXTURE - SKL-242 - not real data
+-"""Ledger part 22: totals for a synthetic batch of entries."""
++"""Ledger part 22: validated totals for a synthetic batch of entries, with negative amounts refused."""
+ 
+-LIMIT_22 = 100
++# HUNK-ONLY-MARKER-22-A: this line exists only in the head and so only inside a changed hunk.
++DEFAULT_LIMIT_22 = 250
++SEPARATOR_22 = ","
+ 
+ 
+-def parse_entry_22(line):
+-    name, amount = line.split(",")
+-    return name.strip(), int(amount)
++class EntryError_22(ValueError):
++    """Raised when a ledger line cannot be read as a name and a non-negative whole amount."""
+ 
+ 
+-def total_22(lines):
+-    total = 0
+-    for line in lines:
+-        name, amount = parse_entry_22(line)
+-        total += amount
+-    return total
++def parse_entry_22(line, separator=SEPARATOR_22):
++    parts = [part.strip() for part in line.split(separator)]
++    if len(parts) != 2 or not parts[0]:
++        raise EntryError_22("part 22: expected 'name,amount', got %r" % (line,))
++    name, raw_amount = parts
++    if not raw_amount.isdigit():
++        raise EntryError_22("part 22: amount must be a non-negative whole number: %r" % (raw_amount,))
++    return name, int(raw_amount)
+ 
+ 
+-def largest_22(lines):
+-    best = None
+-    for line in lines:
+-        name, amount = parse_entry_22(line)
+-        if best is None or amount > best[1]:
+-            best = (name, amount)
+-    return best
++def parsed_entries_22(lines, separator=SEPARATOR_22):
++    entries = []
++    for number, line in enumerate(lines, 1):
++        if not line.strip() or line.lstrip().startswith("#"):
++            continue
++        try:
++            entries.append(parse_entry_22(line, separator))
++        except EntryError_22 as error:
++            raise EntryError_22("line %d: %s" % (number, error)) from error
++    return entries
+ 
+ 
+-def over_limit_22(lines):
+-    return [line for line in lines if parse_entry_22(line)[1] > LIMIT_22]
++def total_22(lines, separator=SEPARATOR_22):
++    # HUNK-ONLY-MARKER-22-B: the total now skips blank and comment lines before summing.
++    return sum(amount for _, amount in parsed_entries_22(lines, separator))
+ 
+ 
+-def summary_22(lines):
+-    return "part 22: %d entries, total %d" % (len(lines), total_22(lines))
++def largest_22(lines, separator=SEPARATOR_22):
++    entries = parsed_entries_22(lines, separator)
++    if not entries:
++        return None
++    return max(entries, key=lambda entry: (entry[1], entry[0]))
+ 
+ 
+-def average_22(lines):
+-    if not lines:
+-        return 0
+-    return total_22(lines) / len(lines)
++def over_limit_22(lines, limit=DEFAULT_LIMIT_22, separator=SEPARATOR_22):
++    return [(name, amount) for name, amount in parsed_entries_22(lines, separator) if amount > limit]
+ 
+ 
+-def names_22(lines):
+-    names = []
+-    for line in lines:
+-        names.append(parse_entry_22(line)[0])
+-    return names
++def summary_22(lines, limit=DEFAULT_LIMIT_22, separator=SEPARATOR_22):
++    entries = parsed_entries_22(lines, separator)
++    flagged = [name for name, amount in entries if amount > limit]
++    # HUNK-ONLY-MARKER-22-C: the summary now names the flagged entries.
++    return "part 22: %d entries, total %d, over %d: %s" % (
++        len(entries), sum(amount for _, amount in entries), limit, ", ".join(flagged) or "none")
+ 
+ 
+-def report_22(lines):
+-    rows = []
+-    for line in lines:
+-        name, amount = parse_entry_22(line)
+-        rows.append("%s %d" % (name, amount))
+-    rows.append(summary_22(lines))
+-    return "\n".join(rows)
++def average_22(lines, separator=SEPARATOR_22):
++    entries = parsed_entries_22(lines, separator)
++    if not entries:
++        raise EntryError_22("part 22: no entries to average")
++    return sum(amount for _, amount in entries) // len(entries)
++
++
++def names_22(lines, separator=SEPARATOR_22):
++    seen = set()
++    ordered = []
++    for name, _ in parsed_entries_22(lines, separator):
++        if name not in seen:
++            seen.add(name)
++            ordered.append(name)
++    return ordered
++
++
++def report_22(lines, limit=DEFAULT_LIMIT_22, separator=SEPARATOR_22):
++    entries = parsed_entries_22(lines, separator)
++    width = max((len(name) for name, _ in entries), default=0)
++    rows = ["%-*s %8d%s" % (width, name, amount, "  over" if amount > limit else "")
++            for name, amount in sorted(entries)]
++    rows.append(summary_22(lines, limit, separator))
++    return "\n".join(rows) + "\n"
+diff --git a/ledger/part_23.py b/ledger/part_23.py
+index 35a46e0..81bb659 100644
+--- a/ledger/part_23.py
++++ b/ledger/part_23.py
+@@ -1,56 +1,82 @@
+ SYNTHETIC FIXTURE - SKL-242 - not real data
+-"""Ledger part 23: totals for a synthetic batch of entries."""
++"""Ledger part 23: validated totals for a synthetic batch of entries, with negative amounts refused."""
+ 
+-LIMIT_23 = 100
++# HUNK-ONLY-MARKER-23-A: this line exists only in the head and so only inside a changed hunk.
++DEFAULT_LIMIT_23 = 250
++SEPARATOR_23 = ","
+ 
+ 
+-def parse_entry_23(line):
+-    name, amount = line.split(",")
+-    return name.strip(), int(amount)
++class EntryError_23(ValueError):
++    """Raised when a ledger line cannot be read as a name and a non-negative whole amount."""
+ 
+ 
+-def total_23(lines):
+-    total = 0
+-    for line in lines:
+-        name, amount = parse_entry_23(line)
+-        total += amount
+-    return total
++def parse_entry_23(line, separator=SEPARATOR_23):
++    parts = [part.strip() for part in line.split(separator)]
++    if len(parts) != 2 or not parts[0]:
++        raise EntryError_23("part 23: expected 'name,amount', got %r" % (line,))
++    name, raw_amount = parts
++    if not raw_amount.isdigit():
++        raise EntryError_23("part 23: amount must be a non-negative whole number: %r" % (raw_amount,))
++    return name, int(raw_amount)
+ 
+ 
+-def largest_23(lines):
+-    best = None
+-    for line in lines:
+-        name, amount = parse_entry_23(line)
+-        if best is None or amount > best[1]:
+-            best = (name, amount)
+-    return best
++def parsed_entries_23(lines, separator=SEPARATOR_23):
++    entries = []
++    for number, line in enumerate(lines, 1):
++        if not line.strip() or line.lstrip().startswith("#"):
++            continue
++        try:
++            entries.append(parse_entry_23(line, separator))
++        except EntryError_23 as error:
++            raise EntryError_23("line %d: %s" % (number, error)) from error
++    return entries
+ 
+ 
+-def over_limit_23(lines):
+-    return [line for line in lines if parse_entry_23(line)[1] > LIMIT_23]
++def total_23(lines, separator=SEPARATOR_23):
++    # HUNK-ONLY-MARKER-23-B: the total now skips blank and comment lines before summing.
++    return sum(amount for _, amount in parsed_entries_23(lines, separator))
+ 
+ 
+-def summary_23(lines):
+-    return "part 23: %d entries, total %d" % (len(lines), total_23(lines))
++def largest_23(lines, separator=SEPARATOR_23):
++    entries = parsed_entries_23(lines, separator)
++    if not entries:
++        return None
++    return max(entries, key=lambda entry: (entry[1], entry[0]))
+ 
+ 
+-def average_23(lines):
+-    if not lines:
+-        return 0
+-    return total_23(lines) / len(lines)
++def over_limit_23(lines, limit=DEFAULT_LIMIT_23, separator=SEPARATOR_23):
++    return [(name, amount) for name, amount in parsed_entries_23(lines, separator) if amount > limit]
+ 
+ 
+-def names_23(lines):
+-    names = []
+-    for line in lines:
+-        names.append(parse_entry_23(line)[0])
+-    return names
++def summary_23(lines, limit=DEFAULT_LIMIT_23, separator=SEPARATOR_23):
++    entries = parsed_entries_23(lines, separator)
++    flagged = [name for name, amount in entries if amount > limit]
++    # HUNK-ONLY-MARKER-23-C: the summary now names the flagged entries.
++    return "part 23: %d entries, total %d, over %d: %s" % (
++        len(entries), sum(amount for _, amount in entries), limit, ", ".join(flagged) or "none")
+ 
+ 
+-def report_23(lines):
+-    rows = []
+-    for line in lines:
+-        name, amount = parse_entry_23(line)
+-        rows.append("%s %d" % (name, amount))
+-    rows.append(summary_23(lines))
+-    return "\n".join(rows)
++def average_23(lines, separator=SEPARATOR_23):
++    entries = parsed_entries_23(lines, separator)
++    if not entries:
++        raise EntryError_23("part 23: no entries to average")
++    return sum(amount for _, amount in entries) // len(entries)
++
++
++def names_23(lines, separator=SEPARATOR_23):
++    seen = set()
++    ordered = []
++    for name, _ in parsed_entries_23(lines, separator):
++        if name not in seen:
++            seen.add(name)
++            ordered.append(name)
++    return ordered
++
++
++def report_23(lines, limit=DEFAULT_LIMIT_23, separator=SEPARATOR_23):
++    entries = parsed_entries_23(lines, separator)
++    width = max((len(name) for name, _ in entries), default=0)
++    rows = ["%-*s %8d%s" % (width, name, amount, "  over" if amount > limit else "")
++            for name, amount in sorted(entries)]
++    rows.append(summary_23(lines, limit, separator))
++    return "\n".join(rows) + "\n"
+diff --git a/ledger/part_24.py b/ledger/part_24.py
+index 14c1e63..f108e4e 100644
+--- a/ledger/part_24.py
++++ b/ledger/part_24.py
+@@ -1,56 +1,82 @@
+ SYNTHETIC FIXTURE - SKL-242 - not real data
+-"""Ledger part 24: totals for a synthetic batch of entries."""
++"""Ledger part 24: validated totals for a synthetic batch of entries, with negative amounts refused."""
+ 
+-LIMIT_24 = 100
++# HUNK-ONLY-MARKER-24-A: this line exists only in the head and so only inside a changed hunk.
++DEFAULT_LIMIT_24 = 250
++SEPARATOR_24 = ","
+ 
+ 
+-def parse_entry_24(line):
+-    name, amount = line.split(",")
+-    return name.strip(), int(amount)
++class EntryError_24(ValueError):
++    """Raised when a ledger line cannot be read as a name and a non-negative whole amount."""
+ 
+ 
+-def total_24(lines):
+-    total = 0
+-    for line in lines:
+-        name, amount = parse_entry_24(line)
+-        total += amount
+-    return total
++def parse_entry_24(line, separator=SEPARATOR_24):
++    parts = [part.strip() for part in line.split(separator)]
++    if len(parts) != 2 or not parts[0]:
++        raise EntryError_24("part 24: expected 'name,amount', got %r" % (line,))
++    name, raw_amount = parts
++    if not raw_amount.isdigit():
++        raise EntryError_24("part 24: amount must be a non-negative whole number: %r" % (raw_amount,))
++    return name, int(raw_amount)
+ 
+ 
+-def largest_24(lines):
+-    best = None
+-    for line in lines:
+-        name, amount = parse_entry_24(line)
+-        if best is None or amount > best[1]:
+-            best = (name, amount)
+-    return best
++def parsed_entries_24(lines, separator=SEPARATOR_24):
++    entries = []
++    for number, line in enumerate(lines, 1):
++        if not line.strip() or line.lstrip().startswith("#"):
++            continue
++        try:
++            entries.append(parse_entry_24(line, separator))
++        except EntryError_24 as error:
++            raise EntryError_24("line %d: %s" % (number, error)) from error
++    return entries
+ 
+ 
+-def over_limit_24(lines):
+-    return [line for line in lines if parse_entry_24(line)[1] > LIMIT_24]
++def total_24(lines, separator=SEPARATOR_24):
++    # HUNK-ONLY-MARKER-24-B: the total now skips blank and comment lines before summing.
++    return sum(amount for _, amount in parsed_entries_24(lines, separator))
+ 
+ 
+-def summary_24(lines):
+-    return "part 24: %d entries, total %d" % (len(lines), total_24(lines))
++def largest_24(lines, separator=SEPARATOR_24):
++    entries = parsed_entries_24(lines, separator)
++    if not entries:
++        return None
++    return max(entries, key=lambda entry: (entry[1], entry[0]))
+ 
+ 
+-def average_24(lines):
+-    if not lines:
+-        return 0
+-    return total_24(lines) / len(lines)
++def over_limit_24(lines, limit=DEFAULT_LIMIT_24, separator=SEPARATOR_24):
++    return [(name, amount) for name, amount in parsed_entries_24(lines, separator) if amount > limit]
+ 
+ 
+-def names_24(lines):
+-    names = []
+-    for line in lines:
+-        names.append(parse_entry_24(line)[0])
+-    return names
++def summary_24(lines, limit=DEFAULT_LIMIT_24, separator=SEPARATOR_24):
++    entries = parsed_entries_24(lines, separator)
++    flagged = [name for name, amount in entries if amount > limit]
++    # HUNK-ONLY-MARKER-24-C: the summary now names the flagged entries.
++    return "part 24: %d entries, total %d, over %d: %s" % (
++        len(entries), sum(amount for _, amount in entries), limit, ", ".join(flagged) or "none")
+ 
+ 
+-def report_24(lines):
+-    rows = []
+-    for line in lines:
+-        name, amount = parse_entry_24(line)
+-        rows.append("%s %d" % (name, amount))
+-    rows.append(summary_24(lines))
+-    return "\n".join(rows)
++def average_24(lines, separator=SEPARATOR_24):
++    entries = parsed_entries_24(lines, separator)
++    if not entries:
++        raise EntryError_24("part 24: no entries to average")
++    return sum(amount for _, amount in entries) // len(entries)
++
++
++def names_24(lines, separator=SEPARATOR_24):
++    seen = set()
++    ordered = []
++    for name, _ in parsed_entries_24(lines, separator):
++        if name not in seen:
++            seen.add(name)
++            ordered.append(name)
++    return ordered
++
++
++def report_24(lines, limit=DEFAULT_LIMIT_24, separator=SEPARATOR_24):
++    entries = parsed_entries_24(lines, separator)
++    width = max((len(name) for name, _ in entries), default=0)
++    rows = ["%-*s %8d%s" % (width, name, amount, "  over" if amount > limit else "")
++            for name, amount in sorted(entries)]
++    rows.append(summary_24(lines, limit, separator))
++    return "\n".join(rows) + "\n"
+diff --git a/ledger/part_25.py b/ledger/part_25.py
+index b33dcfd..ceba2ef 100644
+--- a/ledger/part_25.py
++++ b/ledger/part_25.py
+@@ -1,56 +1,82 @@
+ SYNTHETIC FIXTURE - SKL-242 - not real data
+-"""Ledger part 25: totals for a synthetic batch of entries."""
++"""Ledger part 25: validated totals for a synthetic batch of entries, with negative amounts refused."""
+ 
+-LIMIT_25 = 100
++# HUNK-ONLY-MARKER-25-A: this line exists only in the head and so only inside a changed hunk.
++DEFAULT_LIMIT_25 = 250
++SEPARATOR_25 = ","
+ 
+ 
+-def parse_entry_25(line):
+-    name, amount = line.split(",")
+-    return name.strip(), int(amount)
++class EntryError_25(ValueError):
++    """Raised when a ledger line cannot be read as a name and a non-negative whole amount."""
+ 
+ 
+-def total_25(lines):
+-    total = 0
+-    for line in lines:
+-        name, amount = parse_entry_25(line)
+-        total += amount
+-    return total
++def parse_entry_25(line, separator=SEPARATOR_25):
++    parts = [part.strip() for part in line.split(separator)]
++    if len(parts) != 2 or not parts[0]:
++        raise EntryError_25("part 25: expected 'name,amount', got %r" % (line,))
++    name, raw_amount = parts
++    if not raw_amount.isdigit():
++        raise EntryError_25("part 25: amount must be a non-negative whole number: %r" % (raw_amount,))
++    return name, int(raw_amount)
+ 
+ 
+-def largest_25(lines):
+-    best = None
+-    for line in lines:
+-        name, amount = parse_entry_25(line)
+-        if best is None or amount > best[1]:
+-            best = (name, amount)
+-    return best
++def parsed_entries_25(lines, separator=SEPARATOR_25):
++    entries = []
++    for number, line in enumerate(lines, 1):
++        if not line.strip() or line.lstrip().startswith("#"):
++            continue
++        try:
++            entries.append(parse_entry_25(line, separator))
++        except EntryError_25 as error:
++            raise EntryError_25("line %d: %s" % (number, error)) from error
++    return entries
+ 
+ 
+-def over_limit_25(lines):
+-    return [line for line in lines if parse_entry_25(line)[1] > LIMIT_25]
++def total_25(lines, separator=SEPARATOR_25):
++    # HUNK-ONLY-MARKER-25-B: the total now skips blank and comment lines before summing.
++    return sum(amount for _, amount in parsed_entries_25(lines, separator))
+ 
+ 
+-def summary_25(lines):
+-    return "part 25: %d entries, total %d" % (len(lines), total_25(lines))
++def largest_25(lines, separator=SEPARATOR_25):
++    entries = parsed_entries_25(lines, separator)
++    if not entries:
++        return None
++    return max(entries, key=lambda entry: (entry[1], entry[0]))
+ 
+ 
+-def average_25(lines):
+-    if not lines:
+-        return 0
+-    return total_25(lines) / len(lines)
++def over_limit_25(lines, limit=DEFAULT_LIMIT_25, separator=SEPARATOR_25):
++    return [(name, amount) for name, amount in parsed_entries_25(lines, separator) if amount > limit]
+ 
+ 
+-def names_25(lines):
+-    names = []
+-    for line in lines:
+-        names.append(parse_entry_25(line)[0])
+-    return names
++def summary_25(lines, limit=DEFAULT_LIMIT_25, separator=SEPARATOR_25):
++    entries = parsed_entries_25(lines, separator)
++    flagged = [name for name, amount in entries if amount > limit]
++    # HUNK-ONLY-MARKER-25-C: the summary now names the flagged entries.
++    return "part 25: %d entries, total %d, over %d: %s" % (
++        len(entries), sum(amount for _, amount in entries), limit, ", ".join(flagged) or "none")
+ 
+ 
+-def report_25(lines):
+-    rows = []
+-    for line in lines:
+-        name, amount = parse_entry_25(line)
+-        rows.append("%s %d" % (name, amount))
+-    rows.append(summary_25(lines))
+-    return "\n".join(rows)
++def average_25(lines, separator=SEPARATOR_25):
++    entries = parsed_entries_25(lines, separator)
++    if not entries:
++        raise EntryError_25("part 25: no entries to average")
++    return sum(amount for _, amount in entries) // len(entries)
++
++
++def names_25(lines, separator=SEPARATOR_25):
++    seen = set()
++    ordered = []
++    for name, _ in parsed_entries_25(lines, separator):
++        if name not in seen:
++            seen.add(name)
++            ordered.append(name)
++    return ordered
++
++
++def report_25(lines, limit=DEFAULT_LIMIT_25, separator=SEPARATOR_25):
++    entries = parsed_entries_25(lines, separator)
++    width = max((len(name) for name, _ in entries), default=0)
++    rows = ["%-*s %8d%s" % (width, name, amount, "  over" if amount > limit else "")
++            for name, amount in sorted(entries)]
++    rows.append(summary_25(lines, limit, separator))
++    return "\n".join(rows) + "\n"
+
+===== PHASE 1 (sweep candidates) =====
+REVIEW-RAN: yes
+SYNTHETIC FIXTURE - SKL-242 - not real data
+
+# Phase 1 - sweep candidates (synthetic)
+
+- ledger/part_01.py:12 | Medium | parse_entry accepts a name made only of spaces once strip runs after the emptiness check | the line ' ,5' yields an empty name only if the check runs before the strip; confirm the order
+- ledger/part_02.py:19 | Low | isdigit accepts superscript digits, so int() can raise a bare ValueError | the amount '\u00b2' passes isdigit and int() raises ValueError, not the part's entry error
+- ledger/part_03.py:26 | Medium | parsed_entries skips a line that starts with spaces then '#', which may hide an entry | a name that legitimately begins with '#' after indentation is silently dropped from the total
+- ledger/part_04.py:33 | Low | average uses floor division and drops the fraction | amounts 1 and 2 average to 1, which the criteria call the whole-number mean
+- ledger/part_05.py:40 | Medium | largest breaks ties by the greater name, which may not be what a reader expects | two entries of equal amount return the one later in the alphabet
+- ledger/part_06.py:47 | Low | report sorts by name then amount and so reorders the batch | a reader comparing the report with the batch sees a different order
+- ledger/part_07.py:54 | Low | names keeps the first spelling of a name and ignores case | 'Alpha' and 'alpha' are two names in the output
+- ledger/part_08.py:61 | Medium | the summary joins flagged names with ', ' so a name containing ', ' is ambiguous | a flagged name 'a, b' reads as two names in the summary
+- ledger/part_09.py:68 | Low | the separator argument is not validated | an empty separator makes split raise ValueError instead of the part's entry error
+- ledger/part_10.py:15 | Medium | the line number in an entry error counts skipped lines | a batch with a comment on line 1 and a bad entry on line 2 reports line 2, which criterion 3 asks for
+- ledger/part_11.py:22 | Low | over_limit returns pairs while the base returned lines | a caller that printed the returned lines now prints tuples
+- ledger/part_12.py:29 | Medium | the default limit changed from 100 to 250 | a caller relying on the old default flags fewer entries without any change on its side
+- ledger/part_13.py:36 | Low | report pads names with %-*s, which counts characters, not display width | names with wide characters misalign the amount column
+- ledger/part_14.py:43 | Low | total re-parses the batch instead of reusing parsed entries in summary | summary parses the batch twice through total in the base; the head parses once
+- ledger/part_15.py:50 | Medium | parse_entry accepts a name made only of spaces once strip runs after the emptiness check | the line ' ,5' yields an empty name only if the check runs before the strip; confirm the order
+- ledger/part_16.py:57 | Low | isdigit accepts superscript digits, so int() can raise a bare ValueError | the amount '\u00b2' passes isdigit and int() raises ValueError, not the part's entry error
+- ledger/part_17.py:64 | Medium | parsed_entries skips a line that starts with spaces then '#', which may hide an entry | a name that legitimately begins with '#' after indentation is silently dropped from the total
+- ledger/part_18.py:71 | Low | average uses floor division and drops the fraction | amounts 1 and 2 average to 1, which the criteria call the whole-number mean
+- ledger/part_19.py:18 | Medium | largest breaks ties by the greater name, which may not be what a reader expects | two entries of equal amount return the one later in the alphabet
+- ledger/part_20.py:25 | Low | report sorts by name then amount and so reorders the batch | a reader comparing the report with the batch sees a different order
+- ledger/part_21.py:32 | Low | names keeps the first spelling of a name and ignores case | 'Alpha' and 'alpha' are two names in the output
+- ledger/part_22.py:39 | Medium | the summary joins flagged names with ', ' so a name containing ', ' is ambiguous | a flagged name 'a, b' reads as two names in the summary
+- ledger/part_23.py:46 | Low | the separator argument is not validated | an empty separator makes split raise ValueError instead of the part's entry error
+- ledger/part_24.py:53 | Medium | the line number in an entry error counts skipped lines | a batch with a comment on line 1 and a bad entry on line 2 reports line 2, which criterion 3 asks for
+- ledger/part_25.py:60 | Low | over_limit returns pairs while the base returned lines | a caller that printed the returned lines now prints tuples
+- ledger/part_01.py:67 | Medium | the default limit changed from 100 to 250 | a caller relying on the old default flags fewer entries without any change on its side
+- ledger/part_02.py:14 | Low | report pads names with %-*s, which counts characters, not display width | names with wide characters misalign the amount column
+- ledger/part_03.py:21 | Low | total re-parses the batch instead of reusing parsed entries in summary | summary parses the batch twice through total in the base; the head parses once
+- ledger/part_04.py:28 | Medium | parse_entry accepts a name made only of spaces once strip runs after the emptiness check | the line ' ,5' yields an empty name only if the check runs before the strip; confirm the order
+- ledger/part_05.py:35 | Low | isdigit accepts superscript digits, so int() can raise a bare ValueError | the amount '\u00b2' passes isdigit and int() raises ValueError, not the part's entry error
+- ledger/part_06.py:42 | Medium | parsed_entries skips a line that starts with spaces then '#', which may hide an entry | a name that legitimately begins with '#' after indentation is silently dropped from the total
+- ledger/part_07.py:49 | Low | average uses floor division and drops the fraction | amounts 1 and 2 average to 1, which the criteria call the whole-number mean
+- ledger/part_08.py:56 | Medium | largest breaks ties by the greater name, which may not be what a reader expects | two entries of equal amount return the one later in the alphabet
+- ledger/part_09.py:63 | Low | report sorts by name then amount and so reorders the batch | a reader comparing the report with the batch sees a different order
+- ledger/part_10.py:70 | Low | names keeps the first spelling of a name and ignores case | 'Alpha' and 'alpha' are two names in the output
+- ledger/part_11.py:17 | Medium | the summary joins flagged names with ', ' so a name containing ', ' is ambiguous | a flagged name 'a, b' reads as two names in the summary
+- ledger/part_12.py:24 | Low | the separator argument is not validated | an empty separator makes split raise ValueError instead of the part's entry error
+- ledger/part_13.py:31 | Medium | the line number in an entry error counts skipped lines | a batch with a comment on line 1 and a bad entry on line 2 reports line 2, which criterion 3 asks for
+- ledger/part_14.py:38 | Low | over_limit returns pairs while the base returned lines | a caller that printed the returned lines now prints tuples
+- ledger/part_15.py:45 | Medium | the default limit changed from 100 to 250 | a caller relying on the old default flags fewer entries without any change on its side
+- ledger/part_16.py:52 | Low | report pads names with %-*s, which counts characters, not display width | names with wide characters misalign the amount column
+- ledger/part_17.py:59 | Low | total re-parses the batch instead of reusing parsed entries in summary | summary parses the batch twice through total in the base; the head parses once
+- ledger/part_18.py:66 | Medium | parse_entry accepts a name made only of spaces once strip runs after the emptiness check | the line ' ,5' yields an empty name only if the check runs before the strip; confirm the order
+- ledger/part_19.py:13 | Low | isdigit accepts superscript digits, so int() can raise a bare ValueError | the amount '\u00b2' passes isdigit and int() raises ValueError, not the part's entry error
+- ledger/part_20.py:20 | Medium | parsed_entries skips a line that starts with spaces then '#', which may hide an entry | a name that legitimately begins with '#' after indentation is silently dropped from the total
+- ledger/part_21.py:27 | Low | average uses floor division and drops the fraction | amounts 1 and 2 average to 1, which the criteria call the whole-number mean
+- ledger/part_22.py:34 | Medium | largest breaks ties by the greater name, which may not be what a reader expects | two entries of equal amount return the one later in the alphabet
+- ledger/part_23.py:41 | Low | report sorts by name then amount and so reorders the batch | a reader comparing the report with the batch sees a different order
+- ledger/part_24.py:48 | Low | names keeps the first spelling of a name and ignores case | 'Alpha' and 'alpha' are two names in the output
+- ledger/part_25.py:55 | Medium | the summary joins flagged names with ', ' so a name containing ', ' is ambiguous | a flagged name 'a, b' reads as two names in the summary
+- ledger/part_01.py:62 | Low | the separator argument is not validated | an empty separator makes split raise ValueError instead of the part's entry error
+- ledger/part_02.py:69 | Medium | the line number in an entry error counts skipped lines | a batch with a comment on line 1 and a bad entry on line 2 reports line 2, which criterion 3 asks for
+- ledger/part_03.py:16 | Low | over_limit returns pairs while the base returned lines | a caller that printed the returned lines now prints tuples
+- ledger/part_04.py:23 | Medium | the default limit changed from 100 to 250 | a caller relying on the old default flags fewer entries without any change on its side
+- ledger/part_05.py:30 | Low | report pads names with %-*s, which counts characters, not display width | names with wide characters misalign the amount column
+- ledger/part_06.py:37 | Low | total re-parses the batch instead of reusing parsed entries in summary | summary parses the batch twice through total in the base; the head parses once
+- ledger/part_07.py:44 | Medium | parse_entry accepts a name made only of spaces once strip runs after the emptiness check | the line ' ,5' yields an empty name only if the check runs before the strip; confirm the order
+- ledger/part_08.py:51 | Low | isdigit accepts superscript digits, so int() can raise a bare ValueError | the amount '\u00b2' passes isdigit and int() raises ValueError, not the part's entry error
+- ledger/part_09.py:58 | Medium | parsed_entries skips a line that starts with spaces then '#', which may hide an entry | a name that legitimately begins with '#' after indentation is silently dropped from the total
+- ledger/part_10.py:65 | Low | average uses floor division and drops the fraction | amounts 1 and 2 average to 1, which the criteria call the whole-number mean
+- ledger/part_11.py:12 | Medium | largest breaks ties by the greater name, which may not be what a reader expects | two entries of equal amount return the one later in the alphabet
+
+===== PHASE 2 (empirical results) =====
+REVIEW-RAN: yes
+SYNTHETIC FIXTURE - SKL-242 - not real data
+
+# Phase 2 - empirical results (synthetic)
+
+- ledger/part_01.py:14 | REFUTED | command: python3 -c 'from part import parse_entry; parse_entry(" ,5")' | observed: raised the part's entry error: the strip runs before the emptiness check
+- ledger/part_04.py:19 | VERIFIED | command: python3 -c 'from part import parse_entry; parse_entry("a,\u00b2")' | observed: raised ValueError from int(), not the part's entry error
+- ledger/part_07.py:24 | REFUTED | command: python3 -c 'from part import total; print(total(["  #a,1", "b,2"]))' | observed: printed 2: an indented comment is skipped, as criterion 2 states
+- ledger/part_10.py:29 | REFUTED | command: python3 -c 'from part import average; print(average(["a,1", "b,2"]))' | observed: printed 1: the whole-number mean is what criterion 8 asks for
+- ledger/part_13.py:34 | REFUTED | command: python3 -c 'from part import largest; print(largest(["a,5", "b,5"]))' | observed: printed ('b', 5): criterion 5 breaks ties by the greater name
+- ledger/part_16.py:39 | VERIFIED | command: python3 -c 'from part import summary; print(summary(["a, b,300"]))' | observed: raised the part's entry error: a name with a separator cannot be entered at all
+- ledger/part_19.py:44 | REFUTED | command: python3 -c 'from part import total; total(["a,1"], separator="")' | observed: raised ValueError: empty separator; out of scope for this story, no caller passes one
+- ledger/part_22.py:49 | REFUTED | command: python3 -c 'from part import parse_entry; parse_entry(" ,5")' | observed: raised the part's entry error: the strip runs before the emptiness check
+- ledger/part_25.py:54 | VERIFIED | command: python3 -c 'from part import parse_entry; parse_entry("a,\u00b2")' | observed: raised ValueError from int(), not the part's entry error
+- ledger/part_03.py:59 | REFUTED | command: python3 -c 'from part import total; print(total(["  #a,1", "b,2"]))' | observed: printed 2: an indented comment is skipped, as criterion 2 states
+- ledger/part_06.py:64 | REFUTED | command: python3 -c 'from part import average; print(average(["a,1", "b,2"]))' | observed: printed 1: the whole-number mean is what criterion 8 asks for
+- ledger/part_09.py:14 | REFUTED | command: python3 -c 'from part import largest; print(largest(["a,5", "b,5"]))' | observed: printed ('b', 5): criterion 5 breaks ties by the greater name
+- ledger/part_12.py:19 | VERIFIED | command: python3 -c 'from part import summary; print(summary(["a, b,300"]))' | observed: raised the part's entry error: a name with a separator cannot be entered at all
+- ledger/part_15.py:24 | REFUTED | command: python3 -c 'from part import total; total(["a,1"], separator="")' | observed: raised ValueError: empty separator; out of scope for this story, no caller passes one
+- ledger/part_18.py:29 | REFUTED | command: python3 -c 'from part import parse_entry; parse_entry(" ,5")' | observed: raised the part's entry error: the strip runs before the emptiness check
+- ledger/part_21.py:34 | VERIFIED | command: python3 -c 'from part import parse_entry; parse_entry("a,\u00b2")' | observed: raised ValueError from int(), not the part's entry error
+- ledger/part_24.py:39 | REFUTED | command: python3 -c 'from part import total; print(total(["  #a,1", "b,2"]))' | observed: printed 2: an indented comment is skipped, as criterion 2 states
+- ledger/part_02.py:44 | REFUTED | command: python3 -c 'from part import average; print(average(["a,1", "b,2"]))' | observed: printed 1: the whole-number mean is what criterion 8 asks for
+- ledger/part_05.py:49 | REFUTED | command: python3 -c 'from part import largest; print(largest(["a,5", "b,5"]))' | observed: printed ('b', 5): criterion 5 breaks ties by the greater name
+- ledger/part_08.py:54 | VERIFIED | command: python3 -c 'from part import summary; print(summary(["a, b,300"]))' | observed: raised the part's entry error: a name with a separator cannot be entered at all
+- ledger/part_11.py:59 | REFUTED | command: python3 -c 'from part import total; total(["a,1"], separator="")' | observed: raised ValueError: empty separator; out of scope for this story, no caller passes one
+- ledger/part_14.py:64 | REFUTED | command: python3 -c 'from part import parse_entry; parse_entry(" ,5")' | observed: raised the part's entry error: the strip runs before the emptiness check
+- ledger/part_17.py:14 | VERIFIED | command: python3 -c 'from part import parse_entry; parse_entry("a,\u00b2")' | observed: raised ValueError from int(), not the part's entry error
+- ledger/part_20.py:19 | REFUTED | command: python3 -c 'from part import total; print(total(["  #a,1", "b,2"]))' | observed: printed 2: an indented comment is skipped, as criterion 2 states
+- ledger/part_23.py:24 | REFUTED | command: python3 -c 'from part import average; print(average(["a,1", "b,2"]))' | observed: printed 1: the whole-number mean is what criterion 8 asks for
+- ledger/part_01.py:29 | REFUTED | command: python3 -c 'from part import largest; print(largest(["a,5", "b,5"]))' | observed: printed ('b', 5): criterion 5 breaks ties by the greater name
+- ledger/part_04.py:34 | VERIFIED | command: python3 -c 'from part import summary; print(summary(["a, b,300"]))' | observed: raised the part's entry error: a name with a separator cannot be entered at all
+- ledger/part_07.py:39 | REFUTED | command: python3 -c 'from part import total; total(["a,1"], separator="")' | observed: raised ValueError: empty separator; out of scope for this story, no caller passes one
+- ledger/part_10.py:44 | REFUTED | command: python3 -c 'from part import parse_entry; parse_entry(" ,5")' | observed: raised the part's entry error: the strip runs before the emptiness check
+- ledger/part_13.py:49 | VERIFIED | command: python3 -c 'from part import parse_entry; parse_entry("a,\u00b2")' | observed: raised ValueError from int(), not the part's entry error
+- ledger/part_16.py:54 | REFUTED | command: python3 -c 'from part import total; print(total(["  #a,1", "b,2"]))' | observed: printed 2: an indented comment is skipped, as criterion 2 states
+- ledger/part_19.py:59 | REFUTED | command: python3 -c 'from part import average; print(average(["a,1", "b,2"]))' | observed: printed 1: the whole-number mean is what criterion 8 asks for
+- ledger/part_22.py:64 | REFUTED | command: python3 -c 'from part import largest; print(largest(["a,5", "b,5"]))' | observed: printed ('b', 5): criterion 5 breaks ties by the greater name
+- ledger/part_25.py:14 | VERIFIED | command: python3 -c 'from part import summary; print(summary(["a, b,300"]))' | observed: raised the part's entry error: a name with a separator cannot be entered at all
+- ledger/part_03.py:19 | REFUTED | command: python3 -c 'from part import total; total(["a,1"], separator="")' | observed: raised ValueError: empty separator; out of scope for this story, no caller passes one
+- ledger/part_06.py:24 | REFUTED | command: python3 -c 'from part import parse_entry; parse_entry(" ,5")' | observed: raised the part's entry error: the strip runs before the emptiness check
+- ledger/part_09.py:29 | VERIFIED | command: python3 -c 'from part import parse_entry; parse_entry("a,\u00b2")' | observed: raised ValueError from int(), not the part's entry error
+- ledger/part_12.py:34 | REFUTED | command: python3 -c 'from part import total; print(total(["  #a,1", "b,2"]))' | observed: printed 2: an indented comment is skipped, as criterion 2 states
+- ledger/part_15.py:39 | REFUTED | command: python3 -c 'from part import average; print(average(["a,1", "b,2"]))' | observed: printed 1: the whole-number mean is what criterion 8 asks for
+- ledger/part_18.py:44 | REFUTED | command: python3 -c 'from part import largest; print(largest(["a,5", "b,5"]))' | observed: printed ('b', 5): criterion 5 breaks ties by the greater name
