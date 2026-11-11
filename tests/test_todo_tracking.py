@@ -61,7 +61,9 @@ RETIRED_RULES = (
 # carries it, so deleting any rule or either half fails the guard while rewording around the
 # phrases does not. The rule number pins where a Rules phrase lives; seed-list phrases have none.
 RULE_KEY_PHRASES = {
-    "seed-list granularity": ("## Seed lists", None, ("minimum granularity", "one item per unit they name")),
+    "seed-list granularity": (
+        "## Seed lists", None, ("minimum granularity", "one item per unit they name", "never merged into phase items"),
+    ),
     "unknown-count rounds": ("## Seed lists", None, ("each further round or re-run gets its item",)),
     "transition": (
         "## Rules", 4,

@@ -70,9 +70,10 @@ With `metrics` on, launch no command before the start form, not even to read a f
 
 Create the todo list as your first action, before you read any reference, the profile, or an overlay.
 The only actions before it are the ones Arguments orders before step 0: resolving the arguments, asking the user about a missing story ID or any ambiguous value.
+With no todo tool, also the one key read that places the checklist fallback, as `references/todo-tracking.md` states.
 Create it from this file alone as a bootstrap list: one item per file Read first names, the profile, and this skill's overlay, then one item per step 1 to 5.
 After reading `references/todo-tracking.md`, expand the list to the seed items below, at the granularity that file requires, before your first investigation, edit, command, or delegation, and add the items that need the story or the profile as soon as they are known.
-Seed it with at least: resolve the arguments, read the story state, spawn the senior engineer, each check on its checklist until it hands back, the checklist read-back at each handback with each subagent's read-back resume count, read back the deployment-review state, each QA round, each read-back of QA's state, each failed item handed back, each fix round, and the final state read-back.
+Seed it with at least: read the story state, spawn the senior engineer, each check on its checklist until it hands back, the checklist read-back at each handback with each subagent's read-back resume count, read back the deployment-review state, each QA round, each read-back of QA's state, each failed item handed back, each fix round, and the final state read-back.
 With `metrics` on, seed two more items: collect the metrics figures; then post the metrics summary on the story and read it back before giving the summary in the closing report.
 Add an item for each new round as it starts; mark each done once its outcome is observed.
 Every subagent brief requires a checklist file in that subagent's own subdirectory of the scratch directory; read it from there and mirror it into your list whenever you check on the subagent.
