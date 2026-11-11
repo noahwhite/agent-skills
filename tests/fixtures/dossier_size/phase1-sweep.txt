@@ -1,0 +1,66 @@
+REVIEW-RAN: yes
+SYNTHETIC FIXTURE - SKL-242 - not real data
+
+# Phase 1 - sweep candidates (synthetic)
+
+- ledger/part_01.py:12 | Medium | parse_entry accepts a name made only of spaces once strip runs after the emptiness check | the line ' ,5' yields an empty name only if the check runs before the strip; confirm the order
+- ledger/part_02.py:19 | Low | isdigit accepts superscript digits, so int() can raise a bare ValueError | the amount '\u00b2' passes isdigit and int() raises ValueError, not the part's entry error
+- ledger/part_03.py:26 | Medium | parsed_entries skips a line that starts with spaces then '#', which may hide an entry | a name that legitimately begins with '#' after indentation is silently dropped from the total
+- ledger/part_04.py:33 | Low | average uses floor division and drops the fraction | amounts 1 and 2 average to 1, which the criteria call the whole-number mean
+- ledger/part_05.py:40 | Medium | largest breaks ties by the greater name, which may not be what a reader expects | two entries of equal amount return the one later in the alphabet
+- ledger/part_06.py:47 | Low | report sorts by name then amount and so reorders the batch | a reader comparing the report with the batch sees a different order
+- ledger/part_07.py:54 | Low | names keeps the first spelling of a name and ignores case | 'Alpha' and 'alpha' are two names in the output
+- ledger/part_08.py:61 | Medium | the summary joins flagged names with ', ' so a name containing ', ' is ambiguous | a flagged name 'a, b' reads as two names in the summary
+- ledger/part_09.py:68 | Low | the separator argument is not validated | an empty separator makes split raise ValueError instead of the part's entry error
+- ledger/part_10.py:15 | Medium | the line number in an entry error counts skipped lines | a batch with a comment on line 1 and a bad entry on line 2 reports line 2, which criterion 3 asks for
+- ledger/part_11.py:22 | Low | over_limit returns pairs while the base returned lines | a caller that printed the returned lines now prints tuples
+- ledger/part_12.py:29 | Medium | the default limit changed from 100 to 250 | a caller relying on the old default flags fewer entries without any change on its side
+- ledger/part_13.py:36 | Low | report pads names with %-*s, which counts characters, not display width | names with wide characters misalign the amount column
+- ledger/part_14.py:43 | Low | total re-parses the batch instead of reusing parsed entries in summary | summary parses the batch twice through total in the base; the head parses once
+- ledger/part_15.py:50 | Medium | parse_entry accepts a name made only of spaces once strip runs after the emptiness check | the line ' ,5' yields an empty name only if the check runs before the strip; confirm the order
+- ledger/part_16.py:57 | Low | isdigit accepts superscript digits, so int() can raise a bare ValueError | the amount '\u00b2' passes isdigit and int() raises ValueError, not the part's entry error
+- ledger/part_17.py:64 | Medium | parsed_entries skips a line that starts with spaces then '#', which may hide an entry | a name that legitimately begins with '#' after indentation is silently dropped from the total
+- ledger/part_18.py:71 | Low | average uses floor division and drops the fraction | amounts 1 and 2 average to 1, which the criteria call the whole-number mean
+- ledger/part_19.py:18 | Medium | largest breaks ties by the greater name, which may not be what a reader expects | two entries of equal amount return the one later in the alphabet
+- ledger/part_20.py:25 | Low | report sorts by name then amount and so reorders the batch | a reader comparing the report with the batch sees a different order
+- ledger/part_21.py:32 | Low | names keeps the first spelling of a name and ignores case | 'Alpha' and 'alpha' are two names in the output
+- ledger/part_22.py:39 | Medium | the summary joins flagged names with ', ' so a name containing ', ' is ambiguous | a flagged name 'a, b' reads as two names in the summary
+- ledger/part_23.py:46 | Low | the separator argument is not validated | an empty separator makes split raise ValueError instead of the part's entry error
+- ledger/part_24.py:53 | Medium | the line number in an entry error counts skipped lines | a batch with a comment on line 1 and a bad entry on line 2 reports line 2, which criterion 3 asks for
+- ledger/part_25.py:60 | Low | over_limit returns pairs while the base returned lines | a caller that printed the returned lines now prints tuples
+- ledger/part_01.py:67 | Medium | the default limit changed from 100 to 250 | a caller relying on the old default flags fewer entries without any change on its side
+- ledger/part_02.py:14 | Low | report pads names with %-*s, which counts characters, not display width | names with wide characters misalign the amount column
+- ledger/part_03.py:21 | Low | total re-parses the batch instead of reusing parsed entries in summary | summary parses the batch twice through total in the base; the head parses once
+- ledger/part_04.py:28 | Medium | parse_entry accepts a name made only of spaces once strip runs after the emptiness check | the line ' ,5' yields an empty name only if the check runs before the strip; confirm the order
+- ledger/part_05.py:35 | Low | isdigit accepts superscript digits, so int() can raise a bare ValueError | the amount '\u00b2' passes isdigit and int() raises ValueError, not the part's entry error
+- ledger/part_06.py:42 | Medium | parsed_entries skips a line that starts with spaces then '#', which may hide an entry | a name that legitimately begins with '#' after indentation is silently dropped from the total
+- ledger/part_07.py:49 | Low | average uses floor division and drops the fraction | amounts 1 and 2 average to 1, which the criteria call the whole-number mean
+- ledger/part_08.py:56 | Medium | largest breaks ties by the greater name, which may not be what a reader expects | two entries of equal amount return the one later in the alphabet
+- ledger/part_09.py:63 | Low | report sorts by name then amount and so reorders the batch | a reader comparing the report with the batch sees a different order
+- ledger/part_10.py:70 | Low | names keeps the first spelling of a name and ignores case | 'Alpha' and 'alpha' are two names in the output
+- ledger/part_11.py:17 | Medium | the summary joins flagged names with ', ' so a name containing ', ' is ambiguous | a flagged name 'a, b' reads as two names in the summary
+- ledger/part_12.py:24 | Low | the separator argument is not validated | an empty separator makes split raise ValueError instead of the part's entry error
+- ledger/part_13.py:31 | Medium | the line number in an entry error counts skipped lines | a batch with a comment on line 1 and a bad entry on line 2 reports line 2, which criterion 3 asks for
+- ledger/part_14.py:38 | Low | over_limit returns pairs while the base returned lines | a caller that printed the returned lines now prints tuples
+- ledger/part_15.py:45 | Medium | the default limit changed from 100 to 250 | a caller relying on the old default flags fewer entries without any change on its side
+- ledger/part_16.py:52 | Low | report pads names with %-*s, which counts characters, not display width | names with wide characters misalign the amount column
+- ledger/part_17.py:59 | Low | total re-parses the batch instead of reusing parsed entries in summary | summary parses the batch twice through total in the base; the head parses once
+- ledger/part_18.py:66 | Medium | parse_entry accepts a name made only of spaces once strip runs after the emptiness check | the line ' ,5' yields an empty name only if the check runs before the strip; confirm the order
+- ledger/part_19.py:13 | Low | isdigit accepts superscript digits, so int() can raise a bare ValueError | the amount '\u00b2' passes isdigit and int() raises ValueError, not the part's entry error
+- ledger/part_20.py:20 | Medium | parsed_entries skips a line that starts with spaces then '#', which may hide an entry | a name that legitimately begins with '#' after indentation is silently dropped from the total
+- ledger/part_21.py:27 | Low | average uses floor division and drops the fraction | amounts 1 and 2 average to 1, which the criteria call the whole-number mean
+- ledger/part_22.py:34 | Medium | largest breaks ties by the greater name, which may not be what a reader expects | two entries of equal amount return the one later in the alphabet
+- ledger/part_23.py:41 | Low | report sorts by name then amount and so reorders the batch | a reader comparing the report with the batch sees a different order
+- ledger/part_24.py:48 | Low | names keeps the first spelling of a name and ignores case | 'Alpha' and 'alpha' are two names in the output
+- ledger/part_25.py:55 | Medium | the summary joins flagged names with ', ' so a name containing ', ' is ambiguous | a flagged name 'a, b' reads as two names in the summary
+- ledger/part_01.py:62 | Low | the separator argument is not validated | an empty separator makes split raise ValueError instead of the part's entry error
+- ledger/part_02.py:69 | Medium | the line number in an entry error counts skipped lines | a batch with a comment on line 1 and a bad entry on line 2 reports line 2, which criterion 3 asks for
+- ledger/part_03.py:16 | Low | over_limit returns pairs while the base returned lines | a caller that printed the returned lines now prints tuples
+- ledger/part_04.py:23 | Medium | the default limit changed from 100 to 250 | a caller relying on the old default flags fewer entries without any change on its side
+- ledger/part_05.py:30 | Low | report pads names with %-*s, which counts characters, not display width | names with wide characters misalign the amount column
+- ledger/part_06.py:37 | Low | total re-parses the batch instead of reusing parsed entries in summary | summary parses the batch twice through total in the base; the head parses once
+- ledger/part_07.py:44 | Medium | parse_entry accepts a name made only of spaces once strip runs after the emptiness check | the line ' ,5' yields an empty name only if the check runs before the strip; confirm the order
+- ledger/part_08.py:51 | Low | isdigit accepts superscript digits, so int() can raise a bare ValueError | the amount '\u00b2' passes isdigit and int() raises ValueError, not the part's entry error
+- ledger/part_09.py:58 | Medium | parsed_entries skips a line that starts with spaces then '#', which may hide an entry | a name that legitimately begins with '#' after indentation is silently dropped from the total
+- ledger/part_10.py:65 | Low | average uses floor division and drops the fraction | amounts 1 and 2 average to 1, which the criteria call the whole-number mean
+- ledger/part_11.py:12 | Medium | largest breaks ties by the greater name, which may not be what a reader expects | two entries of equal amount return the one later in the alphabet

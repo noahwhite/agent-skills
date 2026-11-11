@@ -1,0 +1,46 @@
+SYNTHETIC FIXTURE - SKL-242 - not real data
+Story: validated ledger totals (synthetic story for the dossier-size fixture)
+
+As a bookkeeper reading a ledger batch, I want every ledger part to refuse malformed and negative
+entries and to report the entries over a limit, so a typo cannot silently change a total.
+
+Acceptance criteria
+
+1. Parsing. Each ledger part reads a line as `name,amount`, with surrounding whitespace removed
+   from both fields. A line with no separator, more than one separator, an empty name, or an amount
+   that is not a non-negative whole number raises the part's entry error, and the message names the
+   part and the offending text.
+2. Skipped lines. Blank lines and lines whose first non-space character is `#` are skipped, not
+   parsed, by every function that reads a batch.
+3. Line numbers. An entry error raised while reading a batch names the one-based number of the
+   offending line in the batch as given, counting skipped lines.
+4. Totals. The total is the sum of the amounts of the parsed entries; an empty batch totals zero.
+5. Largest. The largest entry is the one with the greatest amount, ties broken by the greater name;
+   an empty batch has no largest entry.
+6. Over the limit. Entries whose amount is strictly greater than the limit are returned as
+   `(name, amount)` pairs in batch order. The limit defaults to 250 and can be passed per call.
+7. Summary. The summary names the part, the entry count, the total, the limit and the names of the
+   entries over it, or `none` when no entry is over it.
+8. Average. The average is the whole-number mean of the amounts; an empty batch raises the part's
+   entry error instead of returning zero.
+9. Names. The names are returned once each, in the order they first appear.
+10. Report. The report lists every entry sorted by name, then amount, with the names padded to the
+    longest name, the amounts right-aligned in eight columns, an `over` flag on the entries over
+    the limit, and the summary as its last line, ending in a newline.
+11. Separator. Every function takes an optional separator, defaulting to a comma, and passes it on
+    to the parser.
+
+Out of scope
+
+- Currency, decimal amounts and thousands separators.
+- Reading batches from files or streams; every function takes a list of lines.
+- Persisting totals or reports.
+
+Notes for reviewers
+
+- The change is the same in all twenty-five ledger parts, so a defect in one part is a defect in
+  every part; report it once with the list of parts it affects.
+- The base version accepted negative amounts and summed comment lines; both are the defects this
+  story fixes, not behaviour to preserve.
+- There is no test suite for the ledger parts in this repository; a finding about missing tests is
+  in scope.

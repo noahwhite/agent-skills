@@ -581,8 +581,10 @@ def test_reference_mentions_in_bundles_resolve_to_local_files():
 
 # The British spelling, assembled so this file does not contain it.
 BRITISH_ARTIFACT = "arte" + "fact"
-# Closed-story QA evidence is a frozen record and is not rewritten.
-SPELLING_EXEMPT = ("docs/qa-evidence/",)
+# Closed-story QA evidence is a frozen record and is not rewritten. The dossier-size baseline is
+# the byte-exact output of the pipeline script at 21f0265, whose prompt used the British spelling;
+# rewriting it would change the bytes the SKL-242 ceiling is measured against.
+SPELLING_EXEMPT = ("docs/qa-evidence/", "tests/fixtures/dossier_size/baseline-arbitrate.txt")
 
 
 def test_house_spelling_is_artifact_everywhere_tracked():
