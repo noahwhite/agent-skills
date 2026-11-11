@@ -30,3 +30,29 @@ The raw output is attached to SKL-246 as `SKL-246-qa-assertions.txt` and `SKL-24
 | DoD: no new regressions | Verified | `uv run pytest` at the build reported 1708 passed, CI succeeded on the PR head (run 42966660256) and on `main` (run 42967338739), and no other skill's text contradicts the new rules. |
 
 Closing decision: stays In Deployment Review until the owner runs the AC2 sessions on the shipped post-fix skills.
+
+## Round 2
+
+Date: 2026-11-11 UTC, independent QA round 2.
+Build under test: `main` at `da295a43a92deeaf0fc6f939c3bc182826ad6cb7`, which contains the fix `1898fb45efd009a85a09c5e626f1b2502df21319`.
+`skills/story-to-done`, `skills/story-refinement` and `shared/` have no diff between the fix and this build.
+The installed skills were shipped at 14:39 UTC and are identical to this build for `story-to-done` and `story-refinement`.
+Environment: none; the lanes are the session transcripts, the repository and the tracker.
+Fixtures: the owner-run post-fix sessions `ceee87d1` (`story-refinement` on OFF-960, started 14:46:59 UTC) and `3554eadc` (`story-to-done` on SKL-83, started 14:47:56 UTC), with their subagents.
+The scan uses the AC1 method and columns plus per-call tracking of each list item's state, from a snapshot taken at 14:53:28 UTC.
+Neither session had reached its final report at the snapshot, but transcripts are append-only, so the failures below are final.
+The raw output is attached to SKL-246 as `SKL-246-qa-round-2-assertions.txt`; there is no visual surface, so no screenshot applies.
+
+| Item | Verdict | Evidence |
+|---|---|---|
+| AC1 | Verified (round 1) | Unchanged. |
+| AC2: `story-refinement` session | Not met | The list is created at call 2, before the first reference read at call 8. Item #2 is marked completed at call 13 without ever being in progress. Calls 75-80 run with no item in progress. The SM/EM contribution work at calls 87-90 starts before its item #12 goes in progress at call 91, and #12, which is not a delegation, is then in progress alongside voter items #9-#11. |
+| AC2: `story-to-done` session | Not met | The list is created at call 2, before the first reference read at call 12. Items #1, #3, #4, #5 and #13 are marked completed without ever being in progress (calls 19, 20, 27, 41 and 48). Calls 11-18 run with no item in progress. Phase item #6 stays in progress alongside #14 and #17, which are not parallel delegations. |
+| AC3: briefs | Verified (round 1) | Unchanged on this build. |
+| AC3: subagent checklist behaviour | Not met | The `story-to-done` senior engineer first writes its checklist at its call 10, after nine actions, and leaves it stale through call 32. The `story-refinement` PO subagent writes its checklist first but ticks every item in one final write. The `story-refinement` voters never write their own checklist; the facilitator seeds and overwrites it, as the Officina overlay prescribes. |
+| AC4-AC7 | Verified (round 1) | Re-check on this build: `scripts/vendor_shared.py --check` exited 0 and `tests/test_todo_tracking.py` reported 39 passed. |
+| DoD: fix verified against the original failing case | Not met | Items completed without being in progress, and work run with no item in progress, recur in both sessions. |
+| Other DoD boxes | Verified (round 1) | Unchanged. |
+
+Against the AC1 baseline, the first todo call moved to call 2 in both sessions (baseline calls 3-22), and the longest untracked run fell to 14 and 8 calls (baseline up to 100 and 88).
+Closing decision: SKL-246 reopens to In Progress with dated deployment-review notes on AC2 and AC3, and the fix goes back to `engineering-workflow`.
