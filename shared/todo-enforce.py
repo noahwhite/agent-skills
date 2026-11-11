@@ -11,9 +11,9 @@ hook_event_name and, per session_id:
   or a UserPromptSubmit prompt that starts with its slash command;
 - records each created task's owner, armed or not: "main" without agent_id, else that agent_id;
 - in an armed session that has the task tools, denies a main-thread tool call outside
-  TaskCreate, TaskUpdate, TaskList, TaskGet, ToolSearch and Skill unless a main-owned task is
-  in_progress, and allows it with a stderr warning when the only main-owned task files that
-  exist are unreadable;
+  TaskCreate, TaskUpdate, TaskList, TaskGet, ToolSearch, Skill and AskUserQuestion unless a
+  main-owned task is in_progress, and allows it with a stderr warning when the only main-owned
+  task files that exist are unreadable;
 - in an armed session that has the task tools, refuses (exit 2) a main-owned task's completion
   from a subagent, or from the main thread unless its task file still says in_progress
   (TaskCompleted fires before the status is written) or when that file is unreadable.
@@ -32,7 +32,7 @@ import re
 import sys
 
 SKILLS = ("story-to-done", "story-refinement")
-EXEMPT = frozenset({"TaskCreate", "TaskUpdate", "TaskList", "TaskGet", "ToolSearch", "Skill"})
+EXEMPT = frozenset({"TaskCreate", "TaskUpdate", "TaskList", "TaskGet", "ToolSearch", "Skill", "AskUserQuestion"})
 MAIN = "main"
 SAFE_ID = re.compile(r"[A-Za-z0-9_-]+")
 SLASH = re.compile(r"/(%s)(\s|$)" % "|".join(map(re.escape, SKILLS)))

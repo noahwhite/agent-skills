@@ -108,7 +108,7 @@ The hook acts only in a session whose main thread loaded `story-to-done` or `sto
 In such a session it enforces two things on the main thread:
 
 - A tool call runs only while a task the main thread created is `in_progress`; otherwise it is denied with a reason telling the model to mark one in progress.
-  `TaskCreate`, `TaskUpdate`, `TaskList`, `TaskGet`, the tool Claude Code uses to load them, and `Skill` are always allowed; every other tool, `TaskStop` included, is checked.
+  `TaskCreate`, `TaskUpdate`, `TaskList`, `TaskGet`, the tool Claude Code uses to load them, `Skill` and `AskUserQuestion` are always allowed; every other tool, `TaskStop` included, is checked.
 - A main-thread task completes only if it was `in_progress` first, and a subagent cannot complete a main-thread task; otherwise the completion is refused with a reason.
 
 It never denies a subagent's tool calls, a session that loaded neither skill, or a session without the task tools.

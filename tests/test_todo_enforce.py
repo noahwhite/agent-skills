@@ -23,7 +23,7 @@ FIXTURES = ROOT / "tests" / "fixtures" / "todo_enforce"
 FIXTURE = json.loads((FIXTURES / "payloads.json").read_text())
 PAYLOADS = FIXTURE["payloads"]
 SKILLS = ("story-to-done", "story-refinement")
-EXEMPT = ("TaskCreate", "TaskUpdate", "TaskList", "TaskGet", "ToolSearch", "Skill")
+EXEMPT = ("TaskCreate", "TaskUpdate", "TaskList", "TaskGet", "ToolSearch", "Skill", "AskUserQuestion")
 SESSION = "test-session"
 
 
