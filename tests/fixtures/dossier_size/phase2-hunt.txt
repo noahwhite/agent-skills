@@ -1,0 +1,45 @@
+REVIEW-RAN: yes
+SYNTHETIC FIXTURE - SKL-242 - not real data
+
+# Phase 2 - empirical results (synthetic)
+
+- ledger/part_01.py:14 | REFUTED | command: python3 -c 'from part import parse_entry; parse_entry(" ,5")' | observed: raised the part's entry error: the strip runs before the emptiness check
+- ledger/part_04.py:19 | VERIFIED | command: python3 -c 'from part import parse_entry; parse_entry("a,\u00b2")' | observed: raised ValueError from int(), not the part's entry error
+- ledger/part_07.py:24 | REFUTED | command: python3 -c 'from part import total; print(total(["  #a,1", "b,2"]))' | observed: printed 2: an indented comment is skipped, as criterion 2 states
+- ledger/part_10.py:29 | REFUTED | command: python3 -c 'from part import average; print(average(["a,1", "b,2"]))' | observed: printed 1: the whole-number mean is what criterion 8 asks for
+- ledger/part_13.py:34 | REFUTED | command: python3 -c 'from part import largest; print(largest(["a,5", "b,5"]))' | observed: printed ('b', 5): criterion 5 breaks ties by the greater name
+- ledger/part_16.py:39 | VERIFIED | command: python3 -c 'from part import summary; print(summary(["a, b,300"]))' | observed: raised the part's entry error: a name with a separator cannot be entered at all
+- ledger/part_19.py:44 | REFUTED | command: python3 -c 'from part import total; total(["a,1"], separator="")' | observed: raised ValueError: empty separator; out of scope for this story, no caller passes one
+- ledger/part_22.py:49 | REFUTED | command: python3 -c 'from part import parse_entry; parse_entry(" ,5")' | observed: raised the part's entry error: the strip runs before the emptiness check
+- ledger/part_25.py:54 | VERIFIED | command: python3 -c 'from part import parse_entry; parse_entry("a,\u00b2")' | observed: raised ValueError from int(), not the part's entry error
+- ledger/part_03.py:59 | REFUTED | command: python3 -c 'from part import total; print(total(["  #a,1", "b,2"]))' | observed: printed 2: an indented comment is skipped, as criterion 2 states
+- ledger/part_06.py:64 | REFUTED | command: python3 -c 'from part import average; print(average(["a,1", "b,2"]))' | observed: printed 1: the whole-number mean is what criterion 8 asks for
+- ledger/part_09.py:14 | REFUTED | command: python3 -c 'from part import largest; print(largest(["a,5", "b,5"]))' | observed: printed ('b', 5): criterion 5 breaks ties by the greater name
+- ledger/part_12.py:19 | VERIFIED | command: python3 -c 'from part import summary; print(summary(["a, b,300"]))' | observed: raised the part's entry error: a name with a separator cannot be entered at all
+- ledger/part_15.py:24 | REFUTED | command: python3 -c 'from part import total; total(["a,1"], separator="")' | observed: raised ValueError: empty separator; out of scope for this story, no caller passes one
+- ledger/part_18.py:29 | REFUTED | command: python3 -c 'from part import parse_entry; parse_entry(" ,5")' | observed: raised the part's entry error: the strip runs before the emptiness check
+- ledger/part_21.py:34 | VERIFIED | command: python3 -c 'from part import parse_entry; parse_entry("a,\u00b2")' | observed: raised ValueError from int(), not the part's entry error
+- ledger/part_24.py:39 | REFUTED | command: python3 -c 'from part import total; print(total(["  #a,1", "b,2"]))' | observed: printed 2: an indented comment is skipped, as criterion 2 states
+- ledger/part_02.py:44 | REFUTED | command: python3 -c 'from part import average; print(average(["a,1", "b,2"]))' | observed: printed 1: the whole-number mean is what criterion 8 asks for
+- ledger/part_05.py:49 | REFUTED | command: python3 -c 'from part import largest; print(largest(["a,5", "b,5"]))' | observed: printed ('b', 5): criterion 5 breaks ties by the greater name
+- ledger/part_08.py:54 | VERIFIED | command: python3 -c 'from part import summary; print(summary(["a, b,300"]))' | observed: raised the part's entry error: a name with a separator cannot be entered at all
+- ledger/part_11.py:59 | REFUTED | command: python3 -c 'from part import total; total(["a,1"], separator="")' | observed: raised ValueError: empty separator; out of scope for this story, no caller passes one
+- ledger/part_14.py:64 | REFUTED | command: python3 -c 'from part import parse_entry; parse_entry(" ,5")' | observed: raised the part's entry error: the strip runs before the emptiness check
+- ledger/part_17.py:14 | VERIFIED | command: python3 -c 'from part import parse_entry; parse_entry("a,\u00b2")' | observed: raised ValueError from int(), not the part's entry error
+- ledger/part_20.py:19 | REFUTED | command: python3 -c 'from part import total; print(total(["  #a,1", "b,2"]))' | observed: printed 2: an indented comment is skipped, as criterion 2 states
+- ledger/part_23.py:24 | REFUTED | command: python3 -c 'from part import average; print(average(["a,1", "b,2"]))' | observed: printed 1: the whole-number mean is what criterion 8 asks for
+- ledger/part_01.py:29 | REFUTED | command: python3 -c 'from part import largest; print(largest(["a,5", "b,5"]))' | observed: printed ('b', 5): criterion 5 breaks ties by the greater name
+- ledger/part_04.py:34 | VERIFIED | command: python3 -c 'from part import summary; print(summary(["a, b,300"]))' | observed: raised the part's entry error: a name with a separator cannot be entered at all
+- ledger/part_07.py:39 | REFUTED | command: python3 -c 'from part import total; total(["a,1"], separator="")' | observed: raised ValueError: empty separator; out of scope for this story, no caller passes one
+- ledger/part_10.py:44 | REFUTED | command: python3 -c 'from part import parse_entry; parse_entry(" ,5")' | observed: raised the part's entry error: the strip runs before the emptiness check
+- ledger/part_13.py:49 | VERIFIED | command: python3 -c 'from part import parse_entry; parse_entry("a,\u00b2")' | observed: raised ValueError from int(), not the part's entry error
+- ledger/part_16.py:54 | REFUTED | command: python3 -c 'from part import total; print(total(["  #a,1", "b,2"]))' | observed: printed 2: an indented comment is skipped, as criterion 2 states
+- ledger/part_19.py:59 | REFUTED | command: python3 -c 'from part import average; print(average(["a,1", "b,2"]))' | observed: printed 1: the whole-number mean is what criterion 8 asks for
+- ledger/part_22.py:64 | REFUTED | command: python3 -c 'from part import largest; print(largest(["a,5", "b,5"]))' | observed: printed ('b', 5): criterion 5 breaks ties by the greater name
+- ledger/part_25.py:14 | VERIFIED | command: python3 -c 'from part import summary; print(summary(["a, b,300"]))' | observed: raised the part's entry error: a name with a separator cannot be entered at all
+- ledger/part_03.py:19 | REFUTED | command: python3 -c 'from part import total; total(["a,1"], separator="")' | observed: raised ValueError: empty separator; out of scope for this story, no caller passes one
+- ledger/part_06.py:24 | REFUTED | command: python3 -c 'from part import parse_entry; parse_entry(" ,5")' | observed: raised the part's entry error: the strip runs before the emptiness check
+- ledger/part_09.py:29 | VERIFIED | command: python3 -c 'from part import parse_entry; parse_entry("a,\u00b2")' | observed: raised ValueError from int(), not the part's entry error
+- ledger/part_12.py:34 | REFUTED | command: python3 -c 'from part import total; print(total(["  #a,1", "b,2"]))' | observed: printed 2: an indented comment is skipped, as criterion 2 states
+- ledger/part_15.py:39 | REFUTED | command: python3 -c 'from part import average; print(average(["a,1", "b,2"]))' | observed: printed 1: the whole-number mean is what criterion 8 asks for
+- ledger/part_18.py:44 | REFUTED | command: python3 -c 'from part import largest; print(largest(["a,5", "b,5"]))' | observed: printed ('b', 5): criterion 5 breaks ties by the greater name
