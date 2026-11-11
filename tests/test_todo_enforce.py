@@ -140,7 +140,7 @@ def test_a_session_that_loaded_neither_skill_is_never_denied(rig, prompt):
     rig.task("1", "pending")
     assert_allowed(rig.tool("Read"))
     assert_allowed(rig.send("main_task_completed"))
-    assert not rig.state.exists()
+    assert not (rig.state / "agent-skills" / "todo-enforce" / SESSION / "armed").exists()
 
 
 @pytest.mark.parametrize("skill", ["persona-staff-engineer", "story-to-done-extra"])
@@ -191,7 +191,9 @@ def deny_with_a_pending_main_task(rig):
 def test_an_armed_session_with_no_task_denies_a_tool_call(rig):
     rig.arm()
     assert not (rig.config / "tasks").exists()
-    assert_denied(rig.tool())
+    res = rig.tool()
+    assert_denied(res)
+    assert "TaskCreated hook" in res.stderr
 
 
 def test_an_armed_session_with_a_pending_main_task_denies_and_allows_once_it_is_in_progress(rig):
@@ -207,7 +209,9 @@ def test_an_armed_session_with_a_pending_main_task_denies_and_allows_once_it_is_
 def test_a_main_task_with_no_task_file_does_not_count(rig):
     rig.arm()
     assert_allowed(rig.send("main_task_created", task_id="7"))
-    assert_denied(rig.tool())
+    res = rig.tool()
+    assert_denied(res)
+    assert "has a task file under" in res.stderr
 
 
 @pytest.mark.parametrize("tool", EXEMPT)
@@ -239,11 +243,12 @@ def test_a_subagent_owned_in_progress_task_does_not_satisfy_the_main_thread(rig)
     assert_allowed(rig.tool())
 
 
-def test_a_task_created_before_the_session_was_armed_is_not_main_owned(rig):
-    assert_allowed(rig.send("main_task_created", task_id="1"))
-    rig.task("1", "in_progress")
+def test_a_task_created_before_the_session_was_armed_is_main_owned(rig):
+    rig.main_task("1", "in_progress")
     rig.arm()
-    assert_denied(rig.tool())
+    assert_allowed(rig.tool())
+    rig.task("1", "pending")
+    assert_refused(rig.send("main_task_completed", task_id="1"), "task 1", "pending")
 
 
 # --- (e) subagent tool calls -------------------------------------------------------------------
@@ -314,6 +319,14 @@ def test_an_armed_session_without_the_task_tools_is_never_denied(rig):
     assert_allowed(rig.tool("Read"))
 
 
+def test_an_armed_session_without_the_task_tools_never_refuses_a_completion(rig):
+    rig.use_transcript("without-task-tools")
+    rig.arm()
+    rig.main_task("1", "pending")
+    assert_allowed(rig.send("main_task_completed", task_id="1"))
+    assert_allowed(rig.send("subagent_task_completed", task_id="1"))
+
+
 def test_task_tools_removed_later_in_the_transcript_count_as_absent(rig):
     with rig.transcript.open("a") as fh:
         fh.write(json.dumps({"type": "attachment", "attachment": {
@@ -335,7 +348,10 @@ def test_a_quoted_delta_that_is_not_an_attachment_does_not_count(rig):
 def test_an_unreadable_transcript_counts_as_no_task_tools(rig, transcript):
     rig.arm()
     path = str(rig.transcript.parent / "absent.jsonl") if transcript == "missing" else transcript
-    assert_allowed(rig.tool(transcript_path=path))
+    res = rig.tool(transcript_path=path)
+    assert_allowed(res)
+    if transcript == "missing":
+        assert "transcript unreadable" in res.stderr
 
 
 # --- (i) fail open ----------------------------------------------------------------------------
@@ -345,8 +361,11 @@ def test_an_unreadable_transcript_counts_as_no_task_tools(rig, transcript):
     "stdin",
     ["", "not json", "[]", "null", json.dumps({"hook_event_name": "PreToolUse", "tool_name": "Bash"}),
      json.dumps({"hook_event_name": "PreToolUse", "session_id": "../escape", "tool_name": "Bash"}),
-     json.dumps({"hook_event_name": "PreToolUse", "session_id": 7, "tool_name": "Bash"})],
-    ids=["empty", "not-json", "list", "null", "no-session", "path-session", "number-session"],
+     json.dumps({"hook_event_name": "PreToolUse", "session_id": 7, "tool_name": "Bash"}),
+     json.dumps({"hook_event_name": "PreToolUse", "session_id": SESSION}),
+     json.dumps({"hook_event_name": "PreToolUse", "session_id": SESSION, "tool_name": "Bash", "agent_id": ""})],
+    ids=["empty", "not-json", "list", "null", "no-session", "path-session", "number-session", "no-tool",
+         "empty-agent"],
 )
 def test_a_malformed_payload_exits_zero_and_logs(rig, stdin):
     rig.arm()
@@ -369,22 +388,46 @@ def test_unwritable_state_exits_zero(tmp_path):
     assert_allowed(rig.tool())
 
 
-def test_unreadable_task_state_exits_zero(rig):
+@pytest.mark.parametrize("content", ["{broken", "[]"], ids=["not-json", "not-an-object"])
+def test_an_unreadable_main_task_file_allows_tool_calls_and_refuses_its_completion(rig, content):
+    rig.arm()
+    rig.main_task("1", "pending")
+    (rig.config / "tasks" / SESSION / "1.json").write_text(content)
+    res = rig.tool()
+    assert_allowed(res)
+    assert "task 1 file unreadable" in res.stderr
+    res = rig.send("main_task_completed", task_id="1")
+    assert_refused(res, "task 1", "could not be read")
+
+
+def refuse_main_completion_of_an_unreadable_task(rig):
     rig.arm()
     rig.main_task("1", "pending")
     (rig.config / "tasks" / SESSION / "1.json").write_text("{broken")
-    res = rig.send("main_task_completed", task_id="1")
-    assert_allowed(res)
-    assert "todo-enforce" in res.stderr
-    assert_denied(rig.tool())
+    return rig.send("main_task_completed", task_id="1").returncode == 2
 
 
 @pytest.mark.parametrize("task_id", ["../1", "", None])
 def test_an_unsafe_task_id_exits_zero(rig, task_id):
     rig.arm()
-    assert_allowed(rig.send("main_task_created", task_id=task_id))
-    assert_allowed(rig.send("main_task_completed", task_id=task_id))
-    assert not (rig.state / "agent-skills" / "todo-enforce" / "1").exists()
+    payload = {} if task_id is None else {"task_id": task_id}
+    created = rig.payload("main_task_created", **payload)
+    completed = rig.payload("main_task_completed", **payload)
+    if task_id is None:
+        del created["task_id"], completed["task_id"]
+    for res in (rig.raw(json.dumps(created)), rig.raw(json.dumps(completed))):
+        assert_allowed(res)
+        assert "todo-enforce" in res.stderr
+    owners = rig.state / "agent-skills" / "todo-enforce" / SESSION / "owners"
+    assert not owners.exists() or not any(owners.iterdir())
+
+
+def test_an_empty_agent_id_records_no_owner(rig):
+    rig.arm()
+    res = rig.send("subagent_task_created", task_id="2", agent_id="")
+    assert_allowed(res)
+    assert "agent_id" in res.stderr
+    assert not (rig.state / "agent-skills" / "todo-enforce" / SESSION / "owners" / "2").exists()
 
 
 # --- mutation proof: removing each deny or refuse branch fails its test ---------------------------
@@ -406,12 +449,17 @@ BRANCHES = {
         "        return refuse(NOT_IN_PROGRESS.format(task=task, status=status))\n",
         [refuse_main_completion_of_a_pending_task],
     ),
+    "refuse completing a task whose file is unreadable": (
+        "        return refuse(UNREADABLE.format(task=task, error=error))\n",
+        [refuse_main_completion_of_an_unreadable_task],
+    ),
 }
 NEUTRAL = {
     "    return deny(NO_TASK_IN_PROGRESS.format(tool=tool))\n": "    return 0\n",
     "or owner_of(session, task) != MAIN:": "or owner_of(session, task) is None:",
     "        return refuse(SUBAGENT_COMPLETES_MAIN.format(task=task))\n": "        pass\n",
     "        return refuse(NOT_IN_PROGRESS.format(task=task, status=status))\n": "        return 0\n",
+    "        return refuse(UNREADABLE.format(task=task, error=error))\n": "        return 0\n",
 }
 
 
@@ -502,3 +550,21 @@ def test_no_skill_frontmatter_has_a_hooks_key():
     for skill_md in sorted((ROOT / "skills").glob("*/SKILL.md")):
         front = skill_md.read_text().split("---", 2)[1]
         assert "hooks" not in yaml.safe_load(front), skill_md
+
+
+# --- the README settings block (AC10) ----------------------------------------------------------
+
+
+def test_the_readme_block_registers_the_enforcer_for_the_four_events():
+    readme = (ROOT / "README.md").read_text()
+    section = readme.split("### Todo enforcer hook (Claude Code)", 1)[1].split("\n## ", 1)[0]
+    block = json.loads(section.split("```json\n", 1)[1].split("\n```", 1)[0])
+    hooks = block["hooks"]
+    assert set(hooks) == {"UserPromptSubmit", "PreToolUse", "TaskCreated", "TaskCompleted"}
+    assert hooks["PreToolUse"][0]["matcher"] == "*"
+    for event, entries in hooks.items():
+        (entry,) = entries
+        (hook,) = entry["hooks"]
+        assert hook["type"] == "command", event
+        assert hook["command"] == "python3 ~/.claude/skills/story-to-done/scripts/todo-enforce.py", event
+    assert (ROOT / "skills" / "story-to-done" / "scripts" / "todo-enforce.py").is_file()

@@ -867,7 +867,7 @@ def test_the_profile_reference_documents_the_resolver():
 
 
 def test_the_readmes_and_the_pipeline_compatibility_name_the_resolver():
-    assert "`resolve-model-role.py` is the directory's one non-Markdown file" in (ROOT / "shared" / "README.md").read_text()
+    assert "non-Markdown files are `resolve-model-role.py`, the model-role resolver" in (ROOT / "shared" / "README.md").read_text()
     contributing = section((ROOT / "README.md").read_text(), "## Contributing")
     assert "shared/resolve-model-role.py" in contributing
     assert "after stripping that first line" in contributing

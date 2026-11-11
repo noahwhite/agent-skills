@@ -9,18 +9,19 @@ hook_event_name and, per session_id:
 
 - arms the session when the main thread loads either skill: a PreToolUse Skill call naming it,
   or a UserPromptSubmit prompt that starts with its slash command;
-- records each created task's owner: "main" without agent_id, else that agent_id;
-- in an armed session that has the task tools, denies a main-thread tool call outside the
-  task tools, ToolSearch and Skill unless a main-owned task is in_progress;
-- in an armed session, refuses (exit 2) a main-owned task's completion from a subagent, or
-  from the main thread unless its task file still says in_progress (TaskCompleted fires
-  before the status is written).
+- records each created task's owner, armed or not: "main" without agent_id, else that agent_id;
+- in an armed session that has the task tools, denies a main-thread tool call outside
+  TaskCreate, TaskUpdate, TaskList, TaskGet, ToolSearch and Skill unless a main-owned task is
+  in_progress, and allows it with a stderr warning when a main-owned task file is unreadable;
+- in an armed session that has the task tools, refuses (exit 2) a main-owned task's completion
+  from a subagent, or from the main thread unless its task file still says in_progress
+  (TaskCompleted fires before the status is written) or when that file is unreadable.
 
 A session has the task tools when the transcript at transcript_path lists TaskCreate in its
 deferred_tools_delta attachments. Subagent tool calls (agent_id set) are never denied.
 State lives in ${XDG_STATE_HOME:-$HOME/.local/state}/agent-skills/todo-enforce/<session_id>/
 and task files are read from ${CLAUDE_CONFIG_DIR:-$HOME/.claude}/tasks/<session_id>/.
-It fails open: a malformed payload, unreadable state or any internal error is logged to
+It fails open: a malformed payload, unwritable state or any internal error is logged to
 stderr and exits 0. Python 3 standard library only.
 """
 
@@ -44,6 +45,10 @@ SUBAGENT_COMPLETES_MAIN = (
     "todo-enforce: task {task} belongs to the main thread, so a subagent cannot complete it. "
     "Leave it to the main thread."
 )
+UNREADABLE = (
+    "todo-enforce: task {task} was not completed because its task file could not be read ({error}). "
+    "Mark it in_progress with TaskUpdate, then complete it again."
+)
 NOT_IN_PROGRESS = (
     "todo-enforce: task {task} was not completed because it is {status}, not in_progress. "
     "Mark it in_progress with TaskUpdate when you start the work, then complete it when done."
@@ -62,10 +67,29 @@ def tasks_dir(session):
     return os.path.join(home_dir("CLAUDE_CONFIG_DIR", ".claude"), "tasks", session)
 
 
+def log(message):
+    print("todo-enforce: " + message, file=sys.stderr)
+
+
 def safe_id(value):
     if not isinstance(value, str) or not SAFE_ID.fullmatch(value):
         raise ValueError("unsafe or missing id: %r" % (value,))
     return value
+
+
+def agent_of(payload):
+    """None on the main thread, else the subagent's id; a present but malformed agent_id raises."""
+    if "agent_id" not in payload:
+        return None
+    agent = payload["agent_id"]
+    if not isinstance(agent, str) or not agent or agent == MAIN:
+        raise ValueError("malformed agent_id: %r" % (agent,))
+    return agent
+
+
+def task_of(payload):
+    task = payload.get("task_id")
+    return safe_id(str(task) if isinstance(task, int) and not isinstance(task, bool) else task)
 
 
 def is_armed(session):
@@ -98,22 +122,43 @@ def record_owner(session, task, owner):
 
 def task_status(session, task):
     with open(os.path.join(tasks_dir(session), task + ".json")) as fh:
-        return json.load(fh).get("status")
+        data = json.load(fh)
+    if not isinstance(data, dict):
+        raise ValueError("task file is not a JSON object")
+    return data.get("status")
 
 
 def main_task_in_progress(session):
+    """True, False, or None when a main-owned task file exists but cannot be read."""
     try:
         tasks = os.listdir(os.path.join(state_dir(session), "owners"))
     except FileNotFoundError:
-        return False
+        tasks = []
+    owned = readable = 0
+    unreadable = None
     for task in tasks:
         if task.startswith(".") or owner_of(session, task) != MAIN:
             continue
+        owned += 1
         try:
-            if task_status(session, task) == "in_progress":
-                return True
-        except (OSError, ValueError):
+            status = task_status(session, task)
+        except FileNotFoundError:
             continue
+        except (OSError, ValueError) as exc:
+            log("task %s file unreadable: %s: %s" % (task, type(exc).__name__, exc))
+            unreadable = task
+            continue
+        readable += 1
+        if status == "in_progress":
+            return True
+    if unreadable is not None:
+        return None
+    if not owned:
+        log("no main-created task is recorded for this session; if one was created, "
+            "check that the TaskCreated hook is registered")
+    elif not readable:
+        log("none of this session's %d main-created tasks has a task file under %s"
+            % (owned, tasks_dir(session)))
     return False
 
 
@@ -138,7 +183,9 @@ def has_task_tools(transcript):
                     continue
                 names |= set(delta.get("addedNames") or []) | set(delta.get("readdedNames") or [])
                 names -= set(delta.get("removedNames") or [])
-    except OSError:
+    except OSError as exc:
+        log("transcript unreadable, treating the session as without task tools: %s: %s"
+            % (type(exc).__name__, exc))
         return False
     return "TaskCreate" in names
 
@@ -159,15 +206,17 @@ def refuse(reason):
 
 def on_user_prompt(payload, session):
     prompt = payload.get("prompt")
-    if not payload.get("agent_id") and isinstance(prompt, str) and SLASH.match(prompt):
+    if agent_of(payload) is None and isinstance(prompt, str) and SLASH.match(prompt):
         arm(session)
     return 0
 
 
 def on_pre_tool_use(payload, session):
-    if payload.get("agent_id"):
+    if agent_of(payload) is not None:
         return 0
     tool = payload.get("tool_name")
+    if not isinstance(tool, str) or not tool:
+        raise ValueError("missing tool_name")
     if tool == "Skill":
         skill = (payload.get("tool_input") or {}).get("skill")
         if skill in SKILLS:
@@ -176,26 +225,37 @@ def on_pre_tool_use(payload, session):
         return 0
     if not has_task_tools(payload.get("transcript_path")):
         return 0
-    if main_task_in_progress(session):
+    progress = main_task_in_progress(session)
+    if progress is None:
+        log("allowing %s: a main-created task's state is unknown" % tool)
+        return 0
+    if progress:
         return 0
     return deny(NO_TASK_IN_PROGRESS.format(tool=tool))
 
 
 def on_task_created(payload, session):
-    if is_armed(session):
-        record_owner(session, safe_id(str(payload.get("task_id"))), payload.get("agent_id") or MAIN)
+    record_owner(session, task_of(payload), agent_of(payload) or MAIN)
     return 0
 
 
 def on_task_completed(payload, session):
     if not is_armed(session):
         return 0
-    task = safe_id(str(payload.get("task_id")))
+    task = task_of(payload)
+    agent = agent_of(payload)
     if owner_of(session, task) != MAIN:
         return 0
-    if payload.get("agent_id"):
+    if not has_task_tools(payload.get("transcript_path")):
+        return 0
+    if agent is not None:
         return refuse(SUBAGENT_COMPLETES_MAIN.format(task=task))
-    status = task_status(session, task)
+    try:
+        status = task_status(session, task)
+    except (OSError, ValueError) as exc:
+        error = "%s: %s" % (type(exc).__name__, exc)
+        log("task %s file unreadable: %s" % (task, error))
+        return refuse(UNREADABLE.format(task=task, error=error))
     if status != "in_progress":
         return refuse(NOT_IN_PROGRESS.format(task=task, status=status))
     return 0

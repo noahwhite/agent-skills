@@ -4,7 +4,7 @@ This directory is the single source for the capability files that skills compose
 A skill links a capability through its vendored `references/<name>.md` copy.
 `scripts/vendor_shared.py` writes those copies from the files below, using the capability list in `skills.json` plus every capability a vendored file cites as `references/<name>.md`.
 A capability listed here may wait for a later slice to compose it.
-`resolve-model-role.py` is the directory's one non-Markdown file: the model-role resolver (`profile.md`, Resolve a model role), vendored into a skill's `scripts/` when `skills.json` lists it under `executables`.
+The directory's two non-Markdown files are `resolve-model-role.py`, the model-role resolver (`profile.md`, Resolve a model role), and `todo-enforce.py`, the Claude Code todo enforcer hook (the repository README, Todo enforcer hook); each is vendored into a skill's `scripts/` when `skills.json` lists it under `executables`.
 
 ## Files
 
@@ -21,6 +21,7 @@ A capability listed here may wait for a later slice to compose it.
 | `resolve-model-role.py` | The model-role resolver that `profile.md` documents. |
 | `runtimes.md` | Mapping each named capability to the tools of each supported runtime. |
 | `secrets.md` | Secrets, tokens, credentials, and input validation. |
+| `todo-enforce.py` | The Claude Code hook that holds a `story-to-done` or `story-refinement` main thread to its task list. |
 | `todo-tracking.md` | The fine-grained todo list every persona keeps. |
 
 ## Adding a capability
