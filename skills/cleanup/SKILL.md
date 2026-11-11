@@ -112,7 +112,7 @@ Two more rules:
 
 Nothing is deleted while it still holds unmerged or unreviewed work: a branch holds it, and a worktree holds its own uncommitted or ignored files, apart from the regenerable ignored entries below.
 A recorded instruction (below) is the one way to discard an untracked entry or an unlanded commit, and only the loss it names.
-For a branch, the merge evidence below is what this rule asks for: containment shows every commit on it has landed, a merged PR whose head commit is the tip also shows it was reviewed, and a local branch needs either while a remote branch needs the merged PR.
+For a branch, the merge evidence below is what this rule asks for.
 Before each removal other than a persistent-memory note, after `git fetch origin`, establish merge evidence from the story's pull requests or, for a local branch, from containment:
 
 - A merged PR whose head commit is the tip: `gh pr view <n> --json state,headRefOid` reports `MERGED`, and its `headRefOid` equals the tip from `git rev-parse refs/heads/<branch>` for a local branch, or from `git ls-remote --heads origin <branch>` for a remote one.

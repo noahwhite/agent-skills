@@ -217,11 +217,8 @@ def test_containment_is_merge_evidence_for_a_local_branch_under_every_merge_meth
     body = section(text(), "3. Delete only with merge evidence")
     for phrase in (
         "establish merge evidence from the story's pull requests or, for a local branch, from containment:",
-        # Containment is the evidence for a branch no PR reviewed, so it must settle the "unreviewed work" rule
-        # without claiming it shows review.
-        "For a branch, the merge evidence below is what this rule asks for: containment shows every commit on it "
-        "has landed, a merged PR whose head commit is the tip also shows it was reviewed, and a local branch needs "
-        "either while a remote branch needs the merged PR.",
+        # Containment is the evidence for a branch no PR reviewed, so the "unreviewed work" rule defers to it.
+        "For a branch, the merge evidence below is what this rule asks for.",
     ):
         assert phrase in body, phrase
     containment = bullet(body, "- Containment, for a local branch only:", "Remove in this order")
@@ -240,7 +237,15 @@ def test_containment_is_merge_evidence_for_a_local_branch_under_every_merge_meth
         "a detached HEAD is refused even at a contained commit.",
     ):
         assert phrase in containment, phrase
-    for stale in ("proves nothing and is never used", "neither `squash` nor `rebase`"):
+    for stale in (
+        "proves nothing and is never used",
+        "neither `squash` nor `rebase`",
+        # The opener no longer restates the Containment and Remote branch bullets.
+        "containment shows every commit on it has landed",
+        # The two direct denials of local containment evidence; a phrase check cannot rule out every rewording.
+        "never merge evidence for a local branch",
+        "never evidence for a local branch",
+    ):
         assert stale not in body, stale
 
 
@@ -264,6 +269,17 @@ def test_a_checked_out_local_branch_waits_for_its_worktree() -> None:
         "and the worktree hosting the current session."
     )
     assert phrase in local, phrase
+
+
+def test_read_first_says_step_3_merge_evidence_governs_in_place_of_the_general_rule() -> None:
+    # SKL-244: the old "stricter than the general rule" wording is untrue once containment is evidence.
+    read_first = section(text(), "Read first")
+    phrase = (
+        "The merge evidence this skill requires is stated in step 3, and it governs this skill's deletions "
+        "in place of the general rule there."
+    )
+    assert phrase in read_first, phrase
+    assert "stricter than the general rule" not in read_first
 
 
 def test_a_local_branch_tip_is_read_again_before_its_delete() -> None:
