@@ -307,12 +307,26 @@ def test_a_remote_branch_tip_is_read_again_by_command_before_its_delete() -> Non
     remote = bullet(body, "**Remote branch.**", "**Disposable QA output and session files.**")
     phrase = (
         "Read the remote tip a second time with `git ls-remote --heads origin <branch>` immediately before the delete, "
+        "take the SHA on its line whose ref is exactly `refs/heads/<branch>`, "
         "compare it with the tip recorded at merge evidence, and refuse if it moved; otherwise run "
         "`git push origin --delete <branch>` immediately after that read, with no other step between: a push that "
         "lands between the read and the delete is the one case this run cannot prevent, because the repository "
         "forbids a force or lease push."
     )
     assert phrase in remote, phrase
+    # `git ls-remote --heads origin <branch>` also lists `refs/heads/<x>/<branch>`, and a failed read prints nothing.
+    failed = (
+        "A second remote read that exits non-zero, or lists no line whose ref is exactly `refs/heads/<branch>`, "
+        "is never evidence: the report names the branch as unreadable with the exit status, the branch is refused, "
+        "and nothing is deleted for it."
+    )
+    assert failed in remote, failed
+    merged_pr = bullet(body, "- A merged PR whose head commit is the tip:", "- Containment, for a local branch only:")
+    exact = (
+        "A remote tip is the SHA on the one line whose ref is exactly `refs/heads/<branch>`, because that command "
+        "also lists every other branch whose name ends in `/<branch>`."
+    )
+    assert exact in merged_pr, exact
 
 
 def test_every_integration_branch_read_names_the_remote_tracking_ref() -> None:
@@ -803,6 +817,9 @@ def test_a_local_branch_read_back_is_an_exact_ref_check() -> None:
     )
     assert phrase in guards, phrase
     assert "git branch --list" not in text()
+    # `--quiet` prints nothing, so a refusal's evidence is the exit status.
+    evidence = "`git show-ref --verify --quiet` prints nothing, so for that read the exit status is the evidence."
+    assert evidence in guards, evidence
 
 
 def test_worktrees_are_removed_before_the_branch_they_hold() -> None:
