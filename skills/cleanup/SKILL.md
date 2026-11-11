@@ -116,7 +116,11 @@ For a branch, the merge evidence below is what this rule asks for.
 Before each removal other than a persistent-memory note, after `git fetch origin`, establish merge evidence from the story's pull requests or, for a local branch, from containment:
 
 - A merged PR whose head commit is the tip: `gh pr view <n> --json state,headRefOid` reports `MERGED`, and its `headRefOid` equals the tip from `git rev-parse refs/heads/<branch>` for a local branch, or from `git ls-remote --heads origin <branch>` for a remote one.
-- Containment, for a local branch only: after `git fetch origin` exits 0, `git merge-base --is-ancestor <tip> origin/<profile.git.integration_branch>` exiting 0 is merge evidence for a local branch under every `profile.git.merge_method`, including when no PR heads it.
+  A remote tip is the SHA on the one line whose ref is exactly `refs/heads/<branch>`, because that command also lists every other branch whose name ends in `/<branch>`.
+  Every `git ls-remote --heads origin <branch>` read in this step must exit 0 and answer only through its line whose ref is exactly `refs/heads/<branch>`: a read that exits non-zero is never evidence, whatever it printed, and the report names its exit status.
+  A `git rev-parse refs/heads/<branch>` that exits non-zero is never merge evidence, whatever it printed: the report names the branch as unreadable with the exit status, the branch is refused, and nothing is deleted for it.
+- Containment, for a local branch only: after `git fetch origin` exits 0, `git merge-base --is-ancestor <tip> refs/remotes/origin/<profile.git.integration_branch>` exiting 0 is merge evidence for a local branch under every `profile.git.merge_method`, including when no PR heads it.
+  Every integration-branch read in this step names `refs/remotes/origin/<profile.git.integration_branch>`, the full remote-tracking ref, so a tag of the same name never answers.
   `<tip>` is the output of `git rev-parse refs/heads/<branch>`.
   A tip reachable from the integration branch has every commit on it in the integration branch, whatever the merge method.
   Exit 1 is not evidence and is not reported as "unmerged": the branch then needs a merged PR whose head commit is the tip, and without one it is refused with the reason "no merge evidence".
@@ -144,7 +148,7 @@ With such an instruction, for a worktree or local branch that fails merge eviden
    An untracked directory is listed at any depth with `find ./<path> -print0`, whose output is split on NUL so each path arrives exactly as it is on disk, and a listing that exits non-zero refuses the worktree.
    The path is passed to `find` as one argument, exactly as the `-z` read gave it, never through shell expansion.
    A nested repository inside it, an entry named `.git` or a bare repository as the regenerable-entry checks define them, refuses the worktree, because its commits are a loss the inventory cannot show.
-2. It records the branch tip SHA (`git rev-parse refs/heads/<branch>`, so a tag of the same name never answers) in the inventory and prints what removal would lose: every untracked entry by exact path, with every path its listing printed, and every commit `git log --oneline origin/<profile.git.integration_branch>..<tip>` lists.
+2. It records the branch tip SHA (`git rev-parse refs/heads/<branch>`, so a tag of the same name never answers) in the inventory and prints what removal would lose: every untracked entry by exact path, with every path its listing printed, and every commit `git log --oneline refs/remotes/origin/<profile.git.integration_branch>..<tip>` lists.
    A `git log` that exits non-zero refuses the worktree and its branch, because a failed listing can hide a loss.
    A tip read that exits non-zero, here or in step 5, refuses the worktree and its branch, because an empty tip would make `git log` list the wrong commits.
    Under a squash or a rebase merge that list can include commits whose content already landed, so it states the most the run could lose, never less.
@@ -210,12 +214,14 @@ Remove in this order, so a branch is never refused because a worktree still hold
     The step 6 template shows where these lines go.
 - **Local branch.** Removed with `git branch -D` once it has merge evidence, or once a recorded instruction (above) waives the merge-evidence guard for it and its tip re-read matches the inventory.
   `-D` rather than `-d`, because a squash or a rebase merge leaves the tip unmerged in git's own eyes.
-  Read the tip with `git rev-parse refs/heads/<branch>` a second time immediately before `git branch -D` and refuse if it moved; when containment is the evidence, run `git merge-base --is-ancestor <tip> origin/<profile.git.integration_branch>` again with that tip and refuse unless it exits 0, running the delete immediately after these reads with no other step between.
+  Read the tip with `git rev-parse refs/heads/<branch>` a second time immediately before `git branch -D` and refuse if it moved; when containment is the evidence, run `git merge-base --is-ancestor <tip> refs/remotes/origin/<profile.git.integration_branch>` again with that tip and refuse unless it exits 0, running the delete immediately after these reads with no other step between.
   A commit that lands on the branch between these reads and the delete is still lost with it, because `git branch -D` takes no expected tip; this narrow window is accepted rather than closed.
   A local branch checked out in any worktree is removed only after that worktree is removed, and is refused, naming the worktree's failed check, when that worktree is refused or kept, including the main working tree and the worktree hosting the current session.
-- **Remote branch.** Deleted with `git push origin --delete <branch>` only when the remote tip has merge evidence and no open PR heads it.
+- **Remote branch.** Deleted with `git push origin --delete refs/heads/<branch>` only when the remote tip has merge evidence and no open PR heads it.
+  The delete names the full ref, because a short name also matches a remote tag of the same name: it deletes that tag when the branch is gone, and fails when both exist.
   Containment is never merge evidence for a remote branch, under any merge method: only a merged PR whose head commit is the remote tip is, because containment shows that every commit landed but never that it was reviewed.
-  Read the remote tip a second time immediately before the delete and refuse if it moved: a push that lands between the check and the delete is the one case this run cannot prevent, because the repository forbids a force or lease push.
+  Read the remote tip a second time with `git ls-remote --heads origin <branch>` immediately before the delete, take the SHA on its line whose ref is exactly `refs/heads/<branch>`, compare it with the tip recorded at merge evidence, and refuse if it moved; otherwise run `git push origin --delete refs/heads/<branch>` immediately after that read, with no other step between: a push that lands between the read and the delete is the one case this run cannot prevent, because the repository forbids a force or lease push.
+  A second remote read that exits non-zero, or lists no line whose ref is exactly `refs/heads/<branch>`, is never evidence: the report names the branch as unreadable with the exit status, or as absent when the read exited 0, the branch is refused, and nothing is deleted for it.
   A branch whose head ref is named at the key boundary by `gh pr list --state open --json headRefName,number --limit 1000` is refused, and a listing that returns exactly its limit is not proven complete, so the run refuses instead of deleting.
   Match head refs from that listing, not a free-text search: a search matches titles and bodies, so a PR whose head branch carries the key but whose text does not would slip past.
   A remote branch that never became a PR is refused rather than deleted.
@@ -240,9 +246,9 @@ Guards that hold for every removal:
 
 - `--force` is never used, on any command, and a removal that would need it is refused instead.
 - An artifact that fails a check is skipped, not forced, and the run continues with the others.
-- Each removal is confirmed by reading it back: `git branch --list <branch>`, `git worktree list`, and `git ls-remote --heads origin <branch>` must no longer list the artifact; for a worktree whose regenerable entries were deleted, the second status read is part of that read-back.
+- Each removal is confirmed by the read-back for its own kind: after a local-branch removal, `git show-ref --verify --quiet refs/heads/<branch>` must exit 1, the status for an exact ref that does not exist (exit 0 means it still exists and any other status is a failed read, both refusals); after a worktree removal, `git worktree list` must no longer list the worktree; after a remote-branch removal, `git ls-remote --heads origin <branch>` must exit 0 and list no line whose ref is exactly `refs/heads/<branch>` (a line for another branch whose name ends in `/<branch>` is not that branch, and any other exit status is a failed read, a refusal); for a worktree whose regenerable entries were deleted, the second status read is part of that read-back.
   The second status read before a worktree removal confirms every deleted entry, regenerable or untracked, is gone.
-  A read-back that still lists it is a refusal, not a removal, and its output is reported as the evidence.
+  A read-back that still lists it is a refusal, not a removal, and its output is reported as the evidence; `git show-ref --verify --quiet` prints nothing, so for that read the exit status is the evidence.
 - Every refusal is recorded in the report as a dated line naming the artifact, the failed check, and why, and step 6 posts it on the named story.
 
 ## 4. Hosted evidence (a self-contained, capability-detected section)

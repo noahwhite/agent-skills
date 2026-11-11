@@ -202,7 +202,7 @@ def test_deletion_requires_merge_evidence_from_the_storys_pull_requests() -> Non
         "In this step's commands, `<branch>` is the branch name without its `refs/heads/` prefix, passed as one "
         "argument and never through shell expansion.",
         "`git merge-base --is-ancestor",
-        "origin/<profile.git.integration_branch>",
+        "refs/remotes/origin/<profile.git.integration_branch>",
     ):
         assert phrase in body, phrase
 
@@ -223,7 +223,7 @@ def test_containment_is_merge_evidence_for_a_local_branch_under_every_merge_meth
         assert phrase in body, phrase
     containment = bullet(body, "- Containment, for a local branch only:", "Remove in this order")
     for phrase in (
-        "after `git fetch origin` exits 0, `git merge-base --is-ancestor <tip> origin/<profile.git.integration_branch>` "
+        "after `git fetch origin` exits 0, `git merge-base --is-ancestor <tip> refs/remotes/origin/<profile.git.integration_branch>` "
         "exiting 0 is merge evidence for a local branch under every `profile.git.merge_method`, including when no PR heads it",
         "`<tip>` is the output of `git rev-parse refs/heads/<branch>`.",
         "A tip reachable from the integration branch has every commit on it in the integration branch, "
@@ -289,7 +289,7 @@ def test_a_local_branch_tip_is_read_again_before_its_delete() -> None:
     phrase = (
         "Read the tip with `git rev-parse refs/heads/<branch>` a second time immediately before `git branch -D` and refuse if "
         "it moved; when containment is the evidence, run `git merge-base --is-ancestor <tip> "
-        "origin/<profile.git.integration_branch>` again with that tip and refuse unless it exits 0, running the "
+        "refs/remotes/origin/<profile.git.integration_branch>` again with that tip and refuse unless it exits 0, running the "
         "delete immediately after these reads with no other step between."
     )
     assert phrase in local, phrase
@@ -317,6 +317,93 @@ def test_every_local_branch_tip_read_names_its_full_ref() -> None:
     assert not bare, f"bare branch tip reads: {bare}"
 
 
+def test_a_remote_branch_tip_is_read_again_by_command_before_its_delete() -> None:
+    # SKL-250: the second remote tip read names its command and ties the delete to it.
+    body = section(text(), "3. Delete only with merge evidence")
+    remote = bullet(body, "**Remote branch.**", "**Disposable QA output and session files.**")
+    phrase = (
+        "Read the remote tip a second time with `git ls-remote --heads origin <branch>` immediately before the delete, "
+        "take the SHA on its line whose ref is exactly `refs/heads/<branch>`, "
+        "compare it with the tip recorded at merge evidence, and refuse if it moved; otherwise run "
+        "`git push origin --delete refs/heads/<branch>` immediately after that read, with no other step between: a push that "
+        "lands between the read and the delete is the one case this run cannot prevent, because the repository "
+        "forbids a force or lease push."
+    )
+    assert phrase in remote, phrase
+    # `git ls-remote --heads origin <branch>` also lists `refs/heads/<x>/<branch>`, and a failed read prints nothing.
+    failed = (
+        "A second remote read that exits non-zero, or lists no line whose ref is exactly `refs/heads/<branch>`, "
+        "is never evidence: the report names the branch as unreadable with the exit status, or as absent when the "
+        "read exited 0, the branch is refused, and nothing is deleted for it."
+    )
+    assert failed in remote, failed
+    merged_pr = bullet(body, "- A merged PR whose head commit is the tip:", "- Containment, for a local branch only:")
+    exact = (
+        "A remote tip is the SHA on the one line whose ref is exactly `refs/heads/<branch>`, because that command "
+        "also lists every other branch whose name ends in `/<branch>`."
+    )
+    assert exact in merged_pr, exact
+
+
+def test_every_remote_read_must_exit_0_and_match_the_exact_ref() -> None:
+    # SKL-251 AC 3 (amended): a failed `git ls-remote` exits 128 with empty stdout, and a successful one also
+    # lists `refs/heads/<x>/<branch>`, so every remote read in step 3, the read-back included, needs both rules.
+    body = section(text(), "3. Delete only with merge evidence")
+    merged_pr = bullet(body, "- A merged PR whose head commit is the tip:", "- Containment, for a local branch only:")
+    rule = (
+        "Every `git ls-remote --heads origin <branch>` read in this step must exit 0 and answer only through its "
+        "line whose ref is exactly `refs/heads/<branch>`: a read that exits non-zero is never evidence, whatever it "
+        "printed, and the report names its exit status."
+    )
+    assert rule in merged_pr, rule
+    # No status-blind read-back survives beside the new one, whatever it names as listed ("the branch",
+    # "the artifact"): every `git ls-remote` requirement starts with its exit status.
+    blind = re.findall(r"`git ls-remote --heads origin <branch>` must (?!exit 0 )", text())
+    assert not blind, f"status-blind remote read-backs: {len(blind)}"
+
+
+def test_the_remote_delete_names_the_exact_branch_ref() -> None:
+    # A short name in `git push origin --delete` resolves across refs/heads/ and refs/tags/: it deletes a
+    # same-named tag when the branch is gone, and fails "matches more than one" when both exist.
+    deletes = re.findall(r"git push origin --delete (\S+?)`", text())
+    assert deletes, "no remote delete command found"
+    assert set(deletes) == {"refs/heads/<branch>"}, deletes
+
+
+def test_every_integration_branch_read_names_the_remote_tracking_ref() -> None:
+    # SKL-252: a short `origin/<integration_branch>` resolves a same-named tag first, so every
+    # containment check and loss listing names `refs/remotes/origin/<...>`.
+    full = "refs/remotes/origin/<profile.git.integration_branch>"
+    # Any short remote-tracking name, whatever follows it (`origin/main`, `origin/<integration_branch>`).
+    short = re.findall(r"(?<!refs/remotes/)(?<![\w.-])origin/\S*", text())
+    assert not short, f"short remote-tracking reads: {short}"
+    # Every containment check and loss listing reads the full remote-tracking ref, whatever its spelling.
+    reads = re.findall(r"merge-base --is-ancestor \S+ ([^\s`]+)", text())
+    reads += re.findall(r"git log --oneline ([^\s`]+?)\.\.", text())
+    assert len(reads) == 3, reads
+    assert all(ref.startswith("refs/remotes/origin/") for ref in reads), reads
+    containment = (
+        f"`git merge-base --is-ancestor <tip> {full}` exiting 0 is merge evidence",
+        f"run `git merge-base --is-ancestor <tip> {full}` again with that tip",
+        f"`git log --oneline {full}..<tip>` lists",
+    )
+    for phrase in containment:
+        assert phrase in text(), phrase
+    assert "the full remote-tracking ref, so a tag of the same name never answers" in text()
+
+
+def test_a_failed_local_tip_read_is_never_merge_evidence() -> None:
+    # SKL-253: `git rev-parse refs/heads/<missing>` exits non-zero and still prints its argument.
+    body = section(text(), "3. Delete only with merge evidence")
+    merged_pr = bullet(body, "- A merged PR whose head commit is the tip:", "- Containment, for a local branch only:")
+    phrase = (
+        "A `git rev-parse refs/heads/<branch>` that exits non-zero is never merge evidence, whatever it printed: "
+        "the report names the branch as unreadable with the exit status, the branch is refused, and nothing is "
+        "deleted for it."
+    )
+    assert phrase in merged_pr, phrase
+
+
 def test_each_artifact_kind_has_its_guarded_removal() -> None:
     body = section(text(), "3. Delete only with merge evidence")
     for phrase in (
@@ -326,7 +413,6 @@ def test_each_artifact_kind_has_its_guarded_removal() -> None:
         "not the worktree hosting the current session",
         "Removed with `git branch -D`",
         "only when the remote tip has merge evidence and no open PR heads it",
-        "Read the remote tip a second time immediately before the delete and refuse if it moved",
         "`gh pr list --state open --json headRefName,number --limit 1000`",
         "Match head refs from that listing, not a free-text search",
         "a listing that returns exactly its limit is not proven complete",
@@ -588,7 +674,7 @@ def test_a_recorded_instruction_inventories_the_tip_and_every_loss_before_deleti
     inventory = (
         "2. It records the branch tip SHA (`git rev-parse refs/heads/<branch>`, so a tag of the same name never answers) "
         "in the inventory and prints what removal would lose: every untracked entry by exact path, with every path its "
-        "listing printed, and every commit `git log --oneline origin/<profile.git.integration_branch>..<tip>` lists."
+        "listing printed, and every commit `git log --oneline refs/remotes/origin/<profile.git.integration_branch>..<tip>` lists."
     )
     log_fails = (
         "A `git log` that exits non-zero refuses the worktree and its branch, because a failed listing can hide a loss."
@@ -760,10 +846,32 @@ def test_the_guard_statement_lists_every_guard_a_recorded_instruction_keeps() ->
     guards = body[end:]
     for phrase in (
         "- `--force` is never used, on any command",
-        "Each removal is confirmed by reading it back",
+        "Each removal is confirmed by the read-back for its own kind",
         "The second status read before a worktree removal confirms every deleted entry, regenerable or untracked, is gone.",
     ):
         assert phrase in guards, phrase
+
+
+def test_a_local_branch_read_back_is_an_exact_ref_check() -> None:
+    # SKL-251: `git branch --list` takes a glob, so the read-back names the exact ref instead.
+    body = section(text(), "3. Delete only with merge evidence")
+    guards = body[body.index("Guards that hold for every removal:"):]
+    # Each read-back is scoped to its own kind: a worktree is removed before its branch, so a universal
+    # show-ref check would refuse every worktree removal.
+    phrase = (
+        "Each removal is confirmed by the read-back for its own kind: after a local-branch removal, "
+        "`git show-ref --verify --quiet refs/heads/<branch>` must exit 1, "
+        "the status for an exact ref that does not exist (exit 0 means it still exists and any other status is a "
+        "failed read, both refusals); after a worktree removal, `git worktree list` must no longer list the worktree; "
+        "after a remote-branch removal, `git ls-remote --heads origin <branch>` must exit 0 and list no line whose "
+        "ref is exactly `refs/heads/<branch>` (a line for another branch whose name ends in `/<branch>` is not that "
+        "branch, and any other exit status is a failed read, a refusal);"
+    )
+    assert phrase in guards, phrase
+    assert "git branch --list" not in text()
+    # `--quiet` prints nothing, so a refusal's evidence is the exit status.
+    evidence = "`git show-ref --verify --quiet` prints nothing, so for that read the exit status is the evidence."
+    assert evidence in guards, evidence
 
 
 def test_worktrees_are_removed_before_the_branch_they_hold() -> None:
