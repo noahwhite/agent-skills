@@ -27,14 +27,15 @@ It deletes; it never implements, reviews, or verifies a story.
 
 ## Invocation
 
-The skill takes one or more story keys and nothing else:
+The skill takes one or more story keys:
 
 ```
 /cleanup <story-key> [<story-key> ...]
 ```
 
-- A story key is the whole input.
+- The story keys alone choose the stories.
   The skill never infers a story from ambient context, from the current branch, or from a worktree path.
+- Any other invocation text is read only as a recorded instruction to discard unlanded work (step 3, "Recorded instruction"), and never as permission for anything else.
 - With no story key it prints `usage: /cleanup <story-key> [<story-key> ...]` and stops without touching anything.
 - This skill is not the `cleanup <path>` subcommand of the adversarial pre-PR pipeline: that one removes a throwaway checkout the script created and takes a path, never a story key.
 
@@ -73,7 +74,9 @@ Sources, all of them:
   Under each worktree's line, the inventory lists by exact path every entry its status read (step 3) reports.
   Each regenerable ignored entry the run will delete (step 3) has disposition `remove`; the run will delete it only when the worktree passes every step 3 check, so the inventory evaluates those checks before it prints, and step 3 evaluates them again before deleting.
   A regenerable entry in a worktree that fails any of them is `keep`, and each other entry is `refuse`, with its kind.
+  Under a recorded instruction (step 3) that waives untracked entries, an untracked entry of a worktree that passes the instruction's checks is `remove` instead.
 - **Local branches.** Every branch whose name carries the key under a prefix in `profile.git.branch_prefixes`.
+  For each worktree and local branch a recorded instruction (step 3) covers, the inventory also carries the branch tip SHA and what removal would lose, as step 3 states.
 - **Remote branches.** Every head `git ls-remote --heads origin '*<key>*'` reports whose name carries the key at the boundary.
 - **Pull requests.** Every PR `gh pr list --state all --search '<key>' --json number,url,state,headRefName --limit 1000` returns, each cited with its full URL.
   That limit fetches every page the CLI holds, so the record is complete for any realistic story; a result set that reaches it is not proven complete, and then the inventory is reported as incomplete and nothing is removed for that story until it is.
@@ -108,6 +111,7 @@ Two more rules:
 ## 3. Delete only with merge evidence
 
 Nothing is deleted while it still holds unmerged or unreviewed work: a branch holds it, and a worktree holds its own uncommitted or ignored files, apart from the regenerable ignored entries below.
+A recorded instruction (below) is the one way to discard an untracked entry or an unlanded commit, and only the loss it names.
 For a branch, the merge evidence below is what this rule asks for: containment shows every commit on it has landed, a merged PR whose head commit is the tip also shows it was reviewed, and a local branch needs either while a remote branch needs the merged PR.
 Before each removal other than a persistent-memory note, after `git fetch origin`, establish merge evidence from the story's pull requests or, for a local branch, from containment:
 
@@ -120,10 +124,46 @@ Before each removal other than a persistent-memory note, after `git fetch origin
   When `git fetch origin` exits non-zero, containment is not read and the branch is handled as for exit 1: it needs a merged PR whose head commit is the tip, and without one it is refused with the reason "no merge evidence", and the report names the fetch exit status.
   A worktree qualifies only through the Worktree rule below: on a branch whose tip is contained it qualifies, and a detached HEAD is refused even at a contained commit.
 
+**Recorded instruction.**
+Without a recorded instruction, an untracked entry or an unlanded commit still refuses, as the rules below state.
+An explicit instruction is invocation text that, for the named story key, names the worktree or branch, or names each loss it accepts (for example "discard untracked files and unlanded commits").
+With one story key the instruction is that key's; with several, it covers only the key it names.
+Naming the worktree or branch authorizes every loss in it; naming a loss authorizes only that loss.
+A worktree is named by its path and a branch by its name, and naming either names both the worktree and the branch it holds, because the branch cannot be removed while that worktree holds it.
+"Don't skip anything" without that scope does not count, and neither does any other text that names neither an artifact nor a loss.
+The instruction waives the merge-evidence guard only when it names the worktree or branch or names unlanded commits, and waives untracked entries only when it names the worktree or branch or names untracked entries.
+It waives nothing else: tracked modifications, ignored entries that the regenerable list does not qualify (including a symlink or file named like a list entry), a detached HEAD, the worktree hosting the current session, remote branch deletion, the open-PR guard, token-boundary attribution and the read-back all still refuse or apply.
+Every other check in this step, such as a worktree git cannot remove, the status-read rules and the regenerable-entry checks, holds as well.
+With such an instruction, for a worktree or local branch that fails merge evidence or has untracked entries, the run takes these steps in order:
+
+1. It refuses the worktree before deleting anything if it has a tracked modification, ignored entries that the regenerable list does not qualify (including a symlink or file named like a list entry), a detached HEAD, or is the worktree hosting the current session, and refuses its branch if the worktree is refused.
+   It also refuses before deleting anything when the instruction does not authorize every loss removal would incur that normal merge evidence does not cover: untracked entries need an instruction that waives them, and a worktree or branch without merge evidence needs one that waives the merge-evidence guard.
+   It also refuses before deleting anything a worktree git cannot remove, as the worktree rules below define it: the main working tree, a worktree `git worktree list --porcelain` marks `locked`, and a worktree whose submodule paths are not removable with nothing lost.
+   An untracked directory is listed at any depth with `find ./<path> -print0`, whose output is split on NUL so each path arrives exactly as it is on disk, and a listing that exits non-zero refuses the worktree.
+   The path is passed to `find` as one argument, exactly as the `-z` read gave it, never through shell expansion.
+   A nested repository inside it, an entry named `.git` or a bare repository as the regenerable-entry checks define them, refuses the worktree, because its commits are a loss the inventory cannot show.
+2. It records the branch tip SHA (`git rev-parse refs/heads/<branch>`, so a tag of the same name never answers) in the inventory and prints what removal would lose: every untracked entry by exact path, with every path its listing printed, and every commit `git log --oneline origin/<profile.git.integration_branch>..<tip>` lists.
+   A `git log` that exits non-zero refuses the worktree and its branch, because a failed listing can hide a loss.
+   A tip read that exits non-zero, here or in step 5, refuses the worktree and its branch, because an empty tip would make `git log` list the wrong commits.
+   Under a squash or a rebase merge that list can include commits whose content already landed, so it states the most the run could lose, never less.
+3. It deletes each regenerable entry and each untracked entry by exact path with `rm -r --` (no `-f`, no `--force`, no glob), because `git worktree remove` refuses untracked entries without `--force`.
+   The paths deleted are the entries the `-z` status read reports, such as `out/` for an untracked directory; the `find` listing only records what they hold, and a path inside a directory already deleted is never deleted on its own.
+   Each deletion follows the regenerable-entry rules below: one argument exactly as the `-z` read gave it, standard input from `/dev/null`, and a stop at the first failed deletion, which refuses the worktree and its branch.
+   A file created inside an untracked directory after its listing is still deleted with it and is missing from the inventory; nothing short of locking the directory closes this, so this narrow window is accepted, as the regenerable-entry windows below are.
+4. It reads the status again, with `git status --porcelain --ignored -z` inside the worktree, and removes the worktree with `git worktree remove` only when that read is empty; a read that is not empty refuses the worktree and its branch.
+   Right before that removal it reads HEAD inside the worktree with `git symbolic-ref -q HEAD` and `git rev-parse HEAD`, and refuses the worktree and its branch when HEAD is detached, names another branch, or is not the tip the inventory recorded.
+5. It re-reads the branch tip with `git rev-parse refs/heads/<branch>`, refuses the branch if it moved since the inventory, and otherwise removes the branch with `git branch -D` immediately after that re-read.
+   A commit that lands on the branch between the re-read and the delete is lost without being inventoried; `git branch -D` takes no expected tip, so this narrow window is accepted, as the regenerable-entry windows below are.
+
+A local branch that no worktree holds skips steps 3 and 4.
+The report quotes the instruction verbatim, whether the run removed or refused, and lists every path deleted and every commit discarded.
+A deleted untracked directory is reported by its status entry followed by every path its listing printed, so the report shows everything `rm -r` removed under it.
+
 Remove in this order, so a branch is never refused because a worktree still holds it:
 
 - **Worktree.** Removed with `git worktree remove` only when its HEAD is the tip of a branch with merge evidence, only when it is not the worktree hosting the current session, only when git can remove it, and only when `git status --porcelain --ignored -z` inside it is empty or lists only regenerable ignored entries, which the run deletes first as below.
   A worktree with a detached HEAD, or on a branch without merge evidence, is refused, because nothing proves the commit it holds has landed.
+  A recorded instruction (above) can lift the second of these, never the detached HEAD.
   A worktree hosting the current session is refused, because removing it deletes the ground the run stands on.
   A worktree git cannot remove is refused before anything is deleted from it: the main working tree (the first entry `git worktree list --porcelain` reports), a worktree that listing marks `locked`, and a worktree that holds a submodule, unless git can remove it with nothing lost.
   The worktree's submodule paths are the entries `git ls-files --stage -z` lists inside it with mode `160000`; that read must exit 0, and `-z` delivers each path exactly as it is on disk, spaces included.
@@ -161,11 +201,12 @@ Remove in this order, so a branch is never refused because a worktree still hold
     The other entries are: an ignored entry not on the regenerable list (for example `.env`, a local note, or other build output), a symlink or file named like a list entry, a tracked modification (staged, unstaged, deleted, renamed or conflicted), and an untracked entry (a file or a directory).
     `git worktree remove` deletes ignored files with the directory, so an entry the run cannot prove regenerable would be lost although the run never chose to delete it.
     The inventory and the refusal line name every such entry by exact path and kind.
+    An untracked entry stops refusing only under a recorded instruction that waives untracked entries (above), which deletes it in the instruction's order.
     Under `-z` a rename or copy record carries two paths, the new one and then the original, and both are named.
   - **Report.** The final report lists, under the worktree it came from and by exact path, each entry deleted, including when the worktree removal was then refused, with the failed check, and each failed deletion as a refusal.
     A worktree refused because its status lists any other entry lists no entry as deleted.
     The step 6 template shows where these lines go.
-- **Local branch.** Removed with `git branch -D` once it has merge evidence.
+- **Local branch.** Removed with `git branch -D` once it has merge evidence, or once a recorded instruction (above) waives the merge-evidence guard for it and its tip re-read matches the inventory.
   `-D` rather than `-d`, because a squash or a rebase merge leaves the tip unmerged in git's own eyes.
   Read the tip with `git rev-parse <branch>` a second time immediately before `git branch -D` and refuse if it moved; when containment is the evidence, run `git merge-base --is-ancestor <tip> origin/<profile.git.integration_branch>` again with that tip and refuse unless it exits 0, running the delete immediately after these reads with no other step between.
   A commit that lands on the branch between these reads and the delete is still lost with it, because `git branch -D` takes no expected tip; this narrow window is accepted rather than closed.
@@ -185,11 +226,20 @@ Remove in this order, so a branch is never refused because a worktree still hold
   Each note removal is read back by listing its store: a note still present is `refused`, not removed, and a store listing that fails reports the note `refused` with the failure's reason, never `removed`.
   Index lines are not edited: a line that links a removed note stays as it is, and the report says so once when any note was removed.
 
+Guards that hold for every worktree and branch removal, with or without a recorded instruction:
+
+- Every guard in this step holds, and a recorded instruction lifts only the two it states; this list and the next are a minimum.
+- Token-boundary attribution holds: the run acts only on a worktree or branch whose path or name carries the key at a token boundary (step 2).
+- The worktree hosting the current session is never removed.
+- A worktree is removed only when its HEAD is the tip of a branch with merge evidence (a recorded instruction waives this only when it waives the merge-evidence guard) and never from a detached HEAD.
+- A remote branch is deleted only with merge evidence from the story's pull requests, no open PR heading it, and an unchanged remote tip on a second read.
+
 Guards that hold for every removal:
 
 - `--force` is never used, on any command, and a removal that would need it is refused instead.
 - An artifact that fails a check is skipped, not forced, and the run continues with the others.
 - Each removal is confirmed by reading it back: `git branch --list <branch>`, `git worktree list`, and `git ls-remote --heads origin <branch>` must no longer list the artifact; for a worktree whose regenerable entries were deleted, the second status read is part of that read-back.
+  The second status read before a worktree removal confirms every deleted entry, regenerable or untracked, is gone.
   A read-back that still lists it is a refusal, not a removal, and its output is reported as the evidence.
 - Every refusal is recorded in the report as a dated line naming the artifact, the failed check, and why, and step 6 posts it on the named story.
 
@@ -230,10 +280,13 @@ The run ends with one report, structured per story, as the run's final message:
 cleanup report
 
 <story-key>: resolved | unresolved
+instruction: "<recorded instruction, verbatim>" (only when one applied)
 
 removed:
 - <artifact>: <path or URL>
   - deleted: <regenerable entry path>
+  - deleted: <untracked entry path>
+  - discarded: <abbreviated commit SHA> <subject>
 
 archived to the tracker:
 - <attachment name>: <what it shows>
@@ -244,11 +297,13 @@ skipped:
 refused:
 - <artifact>: <failed check>, <why>
   - deleted: <regenerable entry path>
+  - deleted: <untracked entry path>
   - refused: <regenerable entry path>: <failed deletion>
 ```
 
 - Every story named at invocation gets its own section, including an unresolved key, which carries only its resolution line.
 - The report carries four parts per story: what was removed, what was archived to the tracker, with the attachment names, what was skipped and why, including the hosted-evidence skip, and what it refused to touch, with the failed check.
+- When a recorded instruction applied (step 3), the story's section quotes it verbatim on its `instruction:` line and lists every path deleted and every commit discarded under the artifact it came from; with none, the `instruction:` line is left out.
 - The inventory report already printed before the first removal: nothing is removed before the inventory report is printed.
 - Each persistent-memory note is reported by its file name under removed, skipped, or refused, with the reason.
   Each persistent-memory store step 2 could not read is named in the report as unsearchable.
@@ -262,7 +317,7 @@ refused:
   An artifact in another repository is that repository's own run to clean, and is named as skipped rather than touched.
 - It removes only artifacts it can attribute to a named key: at a token boundary, or, for a persistent-memory note, by the note match step 2 states.
   Everything else is left out and named as skipped.
-- It never removes work that has not landed, and it never forces a removal.
+- It never removes work that has not landed, apart from the loss a recorded instruction (step 3) names, and it never forces a removal.
 - It never edits, reviews, or verifies a story, and it never moves a story's status.
 - It reads no credential and writes none: every tracker and hosting call uses the credential its own CLI already holds.
 
