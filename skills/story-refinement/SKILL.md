@@ -115,7 +115,8 @@ The guards and their commands come from the repository under refinement; this sk
    The resolved output is re-run through the rejecting guard and passes, and through every other guard on the guard list, which pass too; the refinement note records the rejection, the resolution and the passing re-run.
 5. **Stop.** When a guard on the guard list cannot be run, or the resolved output still fails any guard on the guard list, the facilitator stops and reports `needs input` to the owner naming the guard, its command and its result.
 6. **Refresh.** When an accept-round amendment adds or changes a tracked file or committed output the check has not covered, the facilitator runs the check again against the amended acceptance criteria before the updated refinement comment is posted.
-   A split sibling under the [Split rule](#split-rule), and a story whose acceptance criteria changed after an earlier check, get the check against their own final acceptance criteria before the PO decides the "checked against the implementation" Definition of Ready box.
+   A split sibling under the [Split rule](#split-rule) gets the check against its own acceptance criteria before its estimate voters launch, and its guard list is part of the story surface those voters receive.
+   A story whose acceptance criteria changed after an earlier check gets the check against its final acceptance criteria before the PO decides the "checked against the implementation" Definition of Ready box.
 7. **No secrets.** The guard list, guard output given to a voter, and the refinement note contain no secrets: a rejection that matched secret text is cited by guard, file and line, never quoted.
 
 ## Stage 1: refinement

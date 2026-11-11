@@ -2501,8 +2501,10 @@ def test_guards_section_stops_on_an_unrunnable_guard_or_a_surviving_rejection() 
         "when an accept-round amendment adds or changes a tracked file or committed output the check has not "
         "covered, the facilitator runs the check again against the amended acceptance criteria before the updated "
         "refinement comment is posted",
-        "a split sibling under the [split rule](#split-rule), and a story whose acceptance criteria changed after an "
-        "earlier check, get the check against their own final acceptance criteria",
+        "a split sibling under the [split rule](#split-rule) gets the check against its own acceptance criteria before "
+        "its estimate voters launch, and its guard list is part of the story surface those voters receive",
+        "a story whose acceptance criteria changed after an earlier check gets the check against its final acceptance "
+        "criteria before the po decides",
     ],
 )
 def test_guards_section_refreshes_the_check_against_the_final_criteria(phrase: str) -> None:
