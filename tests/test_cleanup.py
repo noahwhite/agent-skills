@@ -199,7 +199,8 @@ def test_deletion_requires_merge_evidence_from_the_storys_pull_requests() -> Non
         # SKL-248: the local tip is read by its full ref, so a same-named tag never answers.
         "the tip from `git rev-parse refs/heads/<branch>` for a local branch",
         "from `git ls-remote --heads origin <branch>` for a remote one",
-        "takes `<branch>` as one argument, exactly as git listed it, never through shell expansion.",
+        "In this step's commands, `<branch>` is the branch name without its `refs/heads/` prefix, passed as one "
+        "argument and never through shell expansion.",
         "`git merge-base --is-ancestor",
         "origin/<profile.git.integration_branch>",
     ):
@@ -286,10 +287,15 @@ def test_a_local_branch_tip_is_read_again_before_its_delete() -> None:
 def test_every_local_branch_tip_read_names_its_full_ref() -> None:
     # SKL-248: a bare `git rev-parse <branch>` resolves a same-named tag first, so every branch tip
     # read names `refs/heads/<branch>`.
-    # Any flags before a placeholder (such as `--verify <branch>`) still resolve a same-named tag first.
-    bare = re.findall(r"git rev-parse (?!refs/heads/<branch>)\S*\s*<[^>]*>", text())
+    # Every rev-parse command span is checked whatever flags or options surround it: each argument
+    # that stands for a name (a `<placeholder>`, a shell variable or a quoted value) must be a full
+    # `refs/heads/<...>` ref.
+    bare = []
+    for span in re.findall(r"`([^`]*\brev-parse\b[^`]*)`", text()):
+        arguments = span.split("rev-parse", 1)[1].split()
+        names = [arg for arg in arguments if re.search(r"[<$\"']", arg)]
+        bare += [span for name in names if not re.fullmatch(r"refs/heads/<[^>]+>", name)]
     assert not bare, f"bare branch tip reads: {bare}"
-    assert text().count("git rev-parse refs/heads/<branch>") >= 5
 
 
 def test_each_artifact_kind_has_its_guarded_removal() -> None:

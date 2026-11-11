@@ -114,15 +114,17 @@ Nothing is deleted while it still holds unmerged or unreviewed work: a branch ho
 A recorded instruction (below) is the one way to discard an untracked entry or an unlanded commit, and only the loss it names.
 For a branch, the merge evidence below is what this rule asks for: containment shows every commit on it has landed, a merged PR whose head commit is the tip also shows it was reviewed, and a local branch needs either while a remote branch needs the merged PR.
 Before each removal other than a persistent-memory note, after `git fetch origin`, establish merge evidence from the story's pull requests or, for a local branch, from containment:
-Every git command below takes `<branch>` as one argument, exactly as git listed it, never through shell expansion.
 
 - A merged PR whose head commit is the tip: `gh pr view <n> --json state,headRefOid` reports `MERGED`, and its `headRefOid` equals the tip from `git rev-parse refs/heads/<branch>` for a local branch, or from `git ls-remote --heads origin <branch>` for a remote one.
 - Containment, for a local branch only: after `git fetch origin` exits 0, `git merge-base --is-ancestor <tip> origin/<profile.git.integration_branch>` exiting 0 is merge evidence for a local branch under every `profile.git.merge_method`, including when no PR heads it.
-  `<tip>` is the output of `git rev-parse refs/heads/<branch>`.  A tip reachable from the integration branch has every commit on it in the integration branch, whatever the merge method.
+  `<tip>` is the output of `git rev-parse refs/heads/<branch>`.
+  A tip reachable from the integration branch has every commit on it in the integration branch, whatever the merge method.
   Exit 1 is not evidence and is not reported as "unmerged": the branch then needs a merged PR whose head commit is the tip, and without one it is refused with the reason "no merge evidence".
   Any other exit status refuses that branch, whatever a PR shows, and the report names the exit status.
   When `git fetch origin` exits non-zero, containment is not read and the branch is handled as for exit 1: it needs a merged PR whose head commit is the tip, and without one it is refused with the reason "no merge evidence", and the report names the fetch exit status.
   A worktree qualifies only through the Worktree rule below: on a branch whose tip is contained it qualifies, and a detached HEAD is refused even at a contained commit.
+
+In this step's commands, `<branch>` is the branch name without its `refs/heads/` prefix, passed as one argument and never through shell expansion.
 
 **Recorded instruction.**
 Without a recorded instruction, an untracked entry or an unlanded commit still refuses, as the rules below state.
