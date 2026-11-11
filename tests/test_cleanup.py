@@ -335,7 +335,7 @@ def test_every_remote_read_must_exit_0_and_match_the_exact_ref() -> None:
     body = section(text(), "3. Delete only with merge evidence")
     merged_pr = bullet(body, "- A merged PR whose head commit is the tip:", "- Containment, for a local branch only:")
     rule = (
-        "Every `git ls-remote --heads origin <branch>` read in this step must exit 0 and answers only through its "
+        "Every `git ls-remote --heads origin <branch>` read in this step must exit 0 and answer only through its "
         "line whose ref is exactly `refs/heads/<branch>`: a read that exits non-zero is never evidence, whatever it "
         "printed, and the report names its exit status."
     )
@@ -358,8 +358,14 @@ def test_every_integration_branch_read_names_the_remote_tracking_ref() -> None:
     # SKL-252: a short `origin/<integration_branch>` resolves a same-named tag first, so every
     # containment check and loss listing names `refs/remotes/origin/<...>`.
     full = "refs/remotes/origin/<profile.git.integration_branch>"
-    short = re.findall(r"(?<!refs/remotes/)\borigin/<profile\.git\.integration_branch>", text())
-    assert not short, f"short integration-branch reads: {len(short)}"
+    # Any short remote-tracking name, whatever follows it (`origin/main`, `origin/<integration_branch>`).
+    short = re.findall(r"(?<!refs/remotes/)(?<![\w.-])origin/\S*", text())
+    assert not short, f"short remote-tracking reads: {short}"
+    # Every containment check and loss listing reads the full remote-tracking ref, whatever its spelling.
+    reads = re.findall(r"merge-base --is-ancestor \S+ ([^\s`]+)", text())
+    reads += re.findall(r"git log --oneline ([^\s`]+?)\.\.", text())
+    assert len(reads) == 3, reads
+    assert all(ref.startswith("refs/remotes/origin/") for ref in reads), reads
     containment = (
         f"`git merge-base --is-ancestor <tip> {full}` exiting 0 is merge evidence",
         f"run `git merge-base --is-ancestor <tip> {full}` again with that tip",

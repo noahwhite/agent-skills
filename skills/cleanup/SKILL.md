@@ -117,7 +117,7 @@ Before each removal other than a persistent-memory note, after `git fetch origin
 
 - A merged PR whose head commit is the tip: `gh pr view <n> --json state,headRefOid` reports `MERGED`, and its `headRefOid` equals the tip from `git rev-parse refs/heads/<branch>` for a local branch, or from `git ls-remote --heads origin <branch>` for a remote one.
   A remote tip is the SHA on the one line whose ref is exactly `refs/heads/<branch>`, because that command also lists every other branch whose name ends in `/<branch>`.
-  Every `git ls-remote --heads origin <branch>` read in this step must exit 0 and answers only through its line whose ref is exactly `refs/heads/<branch>`: a read that exits non-zero is never evidence, whatever it printed, and the report names its exit status.
+  Every `git ls-remote --heads origin <branch>` read in this step must exit 0 and answer only through its line whose ref is exactly `refs/heads/<branch>`: a read that exits non-zero is never evidence, whatever it printed, and the report names its exit status.
   A `git rev-parse refs/heads/<branch>` that exits non-zero is never merge evidence, whatever it printed: the report names the branch as unreadable with the exit status, the branch is refused, and nothing is deleted for it.
 - Containment, for a local branch only: after `git fetch origin` exits 0, `git merge-base --is-ancestor <tip> refs/remotes/origin/<profile.git.integration_branch>` exiting 0 is merge evidence for a local branch under every `profile.git.merge_method`, including when no PR heads it.
   Every integration-branch read in this step names `refs/remotes/origin/<profile.git.integration_branch>`, the full remote-tracking ref, so a tag of the same name never answers.
