@@ -242,7 +242,7 @@ def test_containment_is_merge_evidence_for_a_local_branch_under_every_merge_meth
         "neither `squash` nor `rebase`",
         # The opener no longer restates the Containment and Remote branch bullets.
         "containment shows every commit on it has landed",
-        # No sentence may contradict the Containment bullet for a local branch.
+        # The two direct denials of local containment evidence; a phrase check cannot rule out every rewording.
         "never merge evidence for a local branch",
         "never evidence for a local branch",
     ):
