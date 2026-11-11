@@ -317,8 +317,8 @@ def test_a_remote_branch_tip_is_read_again_by_command_before_its_delete() -> Non
     # `git ls-remote --heads origin <branch>` also lists `refs/heads/<x>/<branch>`, and a failed read prints nothing.
     failed = (
         "A second remote read that exits non-zero, or lists no line whose ref is exactly `refs/heads/<branch>`, "
-        "is never evidence: the report names the branch as unreadable with the exit status, the branch is refused, "
-        "and nothing is deleted for it."
+        "is never evidence: the report names the branch as unreadable with the exit status, or as absent when the "
+        "read exited 0, the branch is refused, and nothing is deleted for it."
     )
     assert failed in remote, failed
     merged_pr = bullet(body, "- A merged PR whose head commit is the tip:", "- Containment, for a local branch only:")
@@ -799,7 +799,7 @@ def test_the_guard_statement_lists_every_guard_a_recorded_instruction_keeps() ->
     guards = body[end:]
     for phrase in (
         "- `--force` is never used, on any command",
-        "Each removal is confirmed by reading it back",
+        "Each removal is confirmed by the read-back for its own kind",
         "The second status read before a worktree removal confirms every deleted entry, regenerable or untracked, is gone.",
     ):
         assert phrase in guards, phrase
@@ -809,11 +809,14 @@ def test_a_local_branch_read_back_is_an_exact_ref_check() -> None:
     # SKL-251: `git branch --list` takes a glob, so the read-back names the exact ref instead.
     body = section(text(), "3. Delete only with merge evidence")
     guards = body[body.index("Guards that hold for every removal:"):]
+    # Each read-back is scoped to its own kind: a worktree is removed before its branch, so a universal
+    # show-ref check would refuse every worktree removal.
     phrase = (
-        "Each removal is confirmed by reading it back: `git show-ref --verify --quiet refs/heads/<branch>` must exit 1, "
+        "Each removal is confirmed by the read-back for its own kind: after a local-branch removal, "
+        "`git show-ref --verify --quiet refs/heads/<branch>` must exit 1, "
         "the status for an exact ref that does not exist (exit 0 means it still exists and any other status is a "
-        "failed read, both refusals), and `git worktree list` and `git ls-remote --heads origin <branch>` must no "
-        "longer list the artifact;"
+        "failed read, both refusals); after a worktree removal, `git worktree list` must no longer list the worktree; "
+        "after a remote-branch removal, `git ls-remote --heads origin <branch>` must no longer list the branch;"
     )
     assert phrase in guards, phrase
     assert "git branch --list" not in text()
