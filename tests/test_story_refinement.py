@@ -2341,39 +2341,65 @@ def test_record_says_the_triage_record_is_a_po_triage_write() -> None:
 # --- SKL-247: refinement checks repository guards against what a story commits -------------------
 
 GUARDS = "Repository guards"
-GUARD_ITEM = "Run the repository guard check in [Repository guards](#repository-guards)"
-DOR_GUARD_BULLET = '- The PO does not tick the "checked against the implementation" Definition of Ready box'
-THIS_REPOSITORY_GUARD_NAMES = ("leak_scan", "test_house_spelling", "ci.yml", "skills-ref")
+GUARD_ITEM = "Run the repository guard check in [Repository guards](#repository-guards) before any voter launches."
+DOR_GUARD_BULLET = (
+    "- When the story's acceptance criteria add or change any tracked file, "
+    'the PO does not tick the "checked against the implementation" Definition of Ready box'
+)
+GUARD_ITEM_HEADINGS = (
+    "Guard list", "Producible output", "Output not yet producible", "Rejection", "Stop", "Refresh", "No secrets",
+)
+# Each of this repository's guard names, matched with any run of spaces, underscores or hyphens between its words.
+THIS_REPOSITORY_GUARD_PATTERNS = {
+    "leak_scan": r"leak[\s_-]*scan",
+    "test_house_spelling": r"test[\s_-]*house[\s_-]*spelling",
+    "ci.yml": r"\bci\.ya?ml\b",
+    "skills-ref": r"skills[\s_-]*ref",
+}
 
 
 def guards_section() -> str:
     return flat(section(SKILL.read_text(), GUARDS))
 
 
+def guard_items() -> list[str]:
+    """The numbered items of the Repository guards section, index 0 being the text before item 1, each flattened."""
+    return [flat(part) for part in re.split(r"^\d+\. ", section(SKILL.read_text(), GUARDS), flags=re.MULTILINE)]
+
+
 def dor_guard_bullet() -> str:
-    """The Triage bullet that holds the guard condition on the implementation-check DoR box, continuation lines included."""
+    """The one Triage bullet that holds the guard condition on the implementation-check DoR box, continuation lines included."""
     lines = section(SKILL.read_text(), "Triage").splitlines()
-    start = next((i for i, line in enumerate(lines) if line.startswith(DOR_GUARD_BULLET)), None)
-    assert start is not None, f"Triage has no bullet starting {DOR_GUARD_BULLET!r}"
+    starts = [i for i, line in enumerate(lines) if line.startswith(DOR_GUARD_BULLET)]
+    assert len(starts) == 1, f"expected one Triage bullet starting {DOR_GUARD_BULLET!r}, found {len(starts)}"
+    start = starts[0]
     end = next((i for i in range(start + 1, len(lines)) if not lines[i].startswith("  ")), len(lines))
     return flat("\n".join(lines[start:end]))
 
 
-@pytest.mark.parametrize(
-    "phrase",
-    [
-        "before any voter launches, whenever the story's acceptance criteria add or change any tracked file",
-        "lists the guards of the repository under refinement that every added or changed tracked file must pass",
-        "not only checks on the files the story edits",
-        "test modules that scan tracked files, linters, schema or spec validators, and leak or spelling scanners",
-        "discovers them from that repository's ci configuration and test suite",
-        "the refinement note records each guard, the command that runs it, and the discovery source",
-        "the guard list is part of the story surface every voter receives",
-    ],
+def test_guards_section_items_keep_their_headings_in_order() -> None:
+    """The numbered cross-references ("item 2", "item 4") keep pointing at the requirement they name."""
+    items = guard_items()
+    assert len(items) == len(GUARD_ITEM_HEADINGS) + 1, "one item per heading"
+    for number, heading in enumerate(GUARD_ITEM_HEADINGS, start=1):
+        assert items[number].startswith(f"**{heading.lower()}.**"), (number, heading)
+
+
+GUARD_LIST_PHRASES = (
+    (0, "before any voter launches, whenever the story's acceptance criteria add or change any tracked file"),
+    (1, "lists the guards of the repository under refinement that every added or changed tracked file must pass"),
+    (1, "not only checks on the files the story edits"),
+    (1, "test modules that scan tracked files, linters, schema or spec validators, and leak or spelling scanners"),
+    (1, "discovers them from that repository's ci configuration and test suite"),
+    (1, "the refinement note records each guard, the command that runs it, and the discovery source"),
+    (1, "the guard list is part of the story surface every voter receives"),
 )
-def test_guards_section_requires_the_guard_list(phrase: str) -> None:
+
+
+@pytest.mark.parametrize("item, phrase", GUARD_LIST_PHRASES)
+def test_guards_section_requires_the_guard_list(item: int, phrase: str) -> None:
     """AC1: the facilitator lists every repository guard before the voters launch."""
-    assert phrase in guards_section()
+    assert phrase in guard_items()[item]
 
 
 def test_step_one_runs_the_guard_check_after_the_probe_and_before_any_voter() -> None:
@@ -2382,8 +2408,16 @@ def test_step_one_runs_the_guard_check_after_the_probe_and_before_any_voter() ->
     guard = step_one_item_index(GUARD_ITEM)
     launch = step_one_item_index("Launch the three engineers in separate contexts")
     assert probe < guard < launch, "the guard check must sit between the probe and the voter launch"
-    assert "run the repository guard check in [repository guards](#repository-guards) before any voter launches" in (
-        squash(step(SKILL.read_text(), "Step 1: Independent refinement")))
+    assert process_item("Step 1: Independent refinement", GUARD_ITEM) == GUARD_ITEM
+
+
+def test_step_one_voter_brief_carries_the_guard_list() -> None:
+    """AC1: the voter launch brief, which lists everything a voter receives, includes the guard list."""
+    launch = flat(process_item("Step 1: Independent refinement", "Launch the three engineers in separate contexts"))
+    assert (
+        "give each voter only its own profile entry, the story, the guard list from "
+        "[repository guards](#repository-guards) when that check ran, and the session's scratch directory"
+    ) in launch
 
 
 def test_reviewer_output_contract_includes_a_guard_list_verdict() -> None:
@@ -2392,82 +2426,137 @@ def test_reviewer_output_contract_includes_a_guard_list_verdict() -> None:
     assert "a verdict on the guard list" in contract
 
 
-@pytest.mark.parametrize(
-    "phrase",
-    [
-        "a recorded baseline, a captured dossier, or a golden file produced by a tool or by an earlier commit",
-        "the exact bytes the story commits where they exist before implementation, "
-        "otherwise a representative sample produced the same way",
-        "places the output at its intended path in a throwaway checkout",
-        "stages it there so guards that enumerate tracked files see it",
-        "runs every guard on the guard list against it, leaving the primary checkout unchanged",
-        "for each guard, the command, the exit status and the result, "
-        "and for a sample its provenance and coverage limits",
-    ],
+PRODUCIBLE_OUTPUT_PHRASES = (
+    "a recorded baseline, a captured dossier, or a golden file produced by a tool or by an earlier commit",
+    "the exact bytes the story commits where they exist before implementation, "
+    "otherwise a representative sample produced the same way",
+    "places the output at its intended path in a throwaway checkout",
+    "stages it there so guards that enumerate tracked files see it",
+    "runs every guard on the guard list against it from that checkout, leaving the primary checkout unchanged",
+    "the throwaway checkout is made from the repository under refinement at the revision the story's work starts "
+    "from, sits in the session's scratch directory, and is removed after the check",
+    "for each guard, the command, the exit status and the result, "
+    "and for a sample its provenance and coverage limits",
 )
+
+
+@pytest.mark.parametrize("phrase", PRODUCIBLE_OUTPUT_PHRASES)
 def test_guards_section_runs_producible_output_through_every_guard(phrase: str) -> None:
     """AC2: producible generated or frozen output is staged in a throwaway checkout and run through every guard."""
-    assert phrase in guards_section()
+    assert phrase in guard_items()[2]
 
 
-@pytest.mark.parametrize(
-    "phrase",
-    [
-        "cannot be produced before implementation because code the story writes generates it, "
-        "the refinement note states why",
-        "the refined acceptance criteria require the committed output to pass every guard on the guard list "
-        "and name the resolution the implementer may use if a guard rejects it",
-    ],
+NOT_PRODUCIBLE_PHRASES = (
+    "cannot be produced before implementation because code the story writes generates it, "
+    "the refinement note states why",
+    "the refined acceptance criteria require the committed output to pass every guard on the guard list "
+    "and name the resolution the implementer may use if a guard rejects it, chosen from the kinds item 4 lists",
 )
+
+
+@pytest.mark.parametrize("phrase", NOT_PRODUCIBLE_PHRASES)
 def test_guards_section_covers_output_not_producible_before_implementation(phrase: str) -> None:
     """AC3: output only the story's code can generate still carries the guard requirement and a resolution."""
-    assert phrase in guards_section()
+    assert phrase in guard_items()[3]
 
 
-@pytest.mark.parametrize(
-    "phrase",
-    [
-        "when a guard rejects output checked under item 2, the refined acceptance criteria state the resolution",
-        "an exemption the story adds, scoped to its own files; a normalization; an encoding; "
-        "or an amendment to the criterion that forbade one of these",
-        "the resolved output is re-run through the rejecting guard and passes",
-        "the refinement note records the rejection, the resolution and the passing re-run",
-    ],
+REJECTION_PHRASES = (
+    "when a guard rejects output checked under item 2, the refined acceptance criteria state the resolution",
+    "an exemption the story adds, scoped to its own files; a normalization; an encoding; "
+    "or an amendment to the criterion that forbade one of these",
+    "the resolved output is re-run through the rejecting guard and passes",
+    "the refinement note records the rejection, the resolution and the passing re-run",
 )
+
+
+@pytest.mark.parametrize("phrase", REJECTION_PHRASES)
 def test_guards_section_resolves_a_rejection_with_a_passing_re_run(phrase: str) -> None:
     """AC4: a rejection ends in a stated resolution and a passing re-run, recorded in the refinement note."""
-    assert phrase in guards_section()
+    assert phrase in guard_items()[4]
+
+
+def test_guards_section_stops_on_an_unrunnable_guard_or_a_surviving_rejection() -> None:
+    """AC5: a guard that cannot run, or a rejection the resolution does not clear, stops the ceremony."""
+    assert (
+        "when a guard on the guard list cannot be run, or the resolved output still fails the rejecting guard, "
+        "the facilitator stops and reports `needs input` to the owner naming the guard, its command and its result"
+    ) in guard_items()[5]
+    stop = bullet(step(SKILL.read_text(), "Step 1: Independent refinement"), "Stop")
+    assert "a guard on the guard list cannot be run or still rejects the resolved output" in stop
 
 
 @pytest.mark.parametrize(
     "phrase",
     [
-        'the po does not tick the "checked against the implementation" definition of ready box '
-        "while the guard list is missing",
-        "producible output under item 2 of [repository guards](#repository-guards) was not run",
-        "a guard could not be run",
-        "or a guard rejection lacks a resolution with a passing re-run",
+        "when an accept-round amendment adds or changes a tracked file or committed output the check has not "
+        "covered, the facilitator runs the check again against the amended acceptance criteria before the updated "
+        "refinement comment is posted",
+        "a split sibling under the [split rule](#split-rule), and a story whose acceptance criteria changed after an "
+        "earlier check, get the check against their own final acceptance criteria",
     ],
 )
+def test_guards_section_refreshes_the_check_against_the_final_criteria(phrase: str) -> None:
+    """AC5: the check covers the story's final acceptance criteria, amendments and split siblings included."""
+    assert phrase in guard_items()[6]
+
+
+def test_guards_section_keeps_secrets_out_of_guard_evidence() -> None:
+    """Guard evidence reaches voters and the tracker, so a rejection on secret text is cited, never quoted."""
+    assert (
+        "the guard list, guard output given to a voter, and the refinement note contain no secrets: a rejection "
+        "that matched secret text is cited by guard, file and line, never quoted"
+    ) in guard_items()[7]
+
+
+def test_records_carry_the_guard_evidence() -> None:
+    """AC1, AC2, AC4: the Records contract carries every guard field the refinement note records."""
+    assert (
+        "when the [repository guards](#repository-guards) check ran, the refinement comment also records the guard "
+        "list with each guard's command and discovery source; for each guard run, its command, exit status and "
+        "result; each sample's provenance and coverage limits; and each rejection with its resolution and passing "
+        "re-run"
+    ) in flat(section(SKILL.read_text(), "Records"))
+
+
+DOR_GUARD_PHRASES = (
+    "when the story's acceptance criteria add or change any tracked file, the po does not tick",
+    'the po does not tick the "checked against the implementation" definition of ready box '
+    "while the guard list is missing",
+    "the check did not run against the story's final acceptance criteria",
+    "producible output under item 2 of [repository guards](#repository-guards) was not run",
+    "a guard could not be run",
+    "or a guard rejection lacks a resolution with a passing re-run",
+)
+
+
+@pytest.mark.parametrize("phrase", DOR_GUARD_PHRASES)
 def test_triage_holds_the_implementation_check_box_on_the_guard_check(phrase: str) -> None:
     """AC5: the implementation-check DoR box stays unticked until the guard check is complete."""
     assert phrase in dor_guard_bullet()
 
 
-def test_guards_section_names_kinds_not_one_repository() -> None:
-    """AC6: the procedure leaves every concrete guard to the repository under refinement."""
-    assert "the guards and their commands come from the repository under refinement" in guards_section()
+def test_guard_phrase_pins_keep_their_count() -> None:
+    """Dropping a pinned phrase from a parametrize list fails here instead of silently shrinking the suite."""
+    assert [len(GUARD_LIST_PHRASES), len(PRODUCIBLE_OUTPUT_PHRASES), len(NOT_PRODUCIBLE_PHRASES),
+            len(REJECTION_PHRASES), len(DOR_GUARD_PHRASES)] == [7, 7, 2, 4, 6]
 
 
-def test_added_guard_text_names_none_of_this_repository_guards() -> None:
-    """AC6: no added sentence names this repository's own guard commands, scripts, tests or paths."""
-    step_one = step(SKILL.read_text(), "Step 1: Independent refinement")
-    added = " ".join((
-        guards_section(),
-        squash(process_item("Step 1: Independent refinement", GUARD_ITEM)),
-        bullet(step_one, "Reviewer output contract"),
-        dor_guard_bullet(),
-    ))
-    assert "guard list" in added, "the added text is present"
-    for name in THIS_REPOSITORY_GUARD_NAMES:
-        assert name not in added, name
+@pytest.mark.parametrize(
+    "phrase",
+    [
+        "the guards and their commands come from the repository under refinement; this skill names guard kinds only",
+        "test modules that scan tracked files, linters, schema or spec validators, and leak or spelling scanners",
+        "stages it there so guards that enumerate tracked files see it",
+    ],
+)
+def test_guards_section_names_kinds_not_one_repository(phrase: str) -> None:
+    """AC6: the procedure names guard kinds and capabilities and leaves every concrete guard to the repository."""
+    assert phrase in guards_section()
+
+
+def test_skill_names_none_of_this_repository_guards() -> None:
+    """AC6: the skill names none of this repository's guard commands, scripts, tests or paths, in any spelling."""
+    text = SKILL.read_text().lower()
+    assert "guard list" in text, "the added text is present"
+    for name, pattern in THIS_REPOSITORY_GUARD_PATTERNS.items():
+        assert not re.search(pattern, text), name

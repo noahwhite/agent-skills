@@ -104,11 +104,16 @@ The guards and their commands come from the repository under refinement; this sk
    The refinement note records each guard, the command that runs it, and the discovery source.
    The guard list is part of the story surface every voter receives.
 2. **Producible output.** When the story commits generated or frozen output (a recorded baseline, a captured dossier, or a golden file produced by a tool or by an earlier commit), the facilitator produces that output: the exact bytes the story commits where they exist before implementation, otherwise a representative sample produced the same way.
-   It places the output at its intended path in a throwaway checkout, stages it there so guards that enumerate tracked files see it, and runs every guard on the guard list against it, leaving the primary checkout unchanged.
+   It places the output at its intended path in a throwaway checkout, stages it there so guards that enumerate tracked files see it, and runs every guard on the guard list against it from that checkout, leaving the primary checkout unchanged.
+   The throwaway checkout is made from the repository under refinement at the revision the story's work starts from, sits in the session's scratch directory, and is removed after the check.
    The refinement note records, for each guard, the command, the exit status and the result, and for a sample its provenance and coverage limits.
-3. **Output not yet producible.** When the output cannot be produced before implementation because code the story writes generates it, the refinement note states why, and the refined acceptance criteria require the committed output to pass every guard on the guard list and name the resolution the implementer may use if a guard rejects it.
+3. **Output not yet producible.** When the output cannot be produced before implementation because code the story writes generates it, the refinement note states why, and the refined acceptance criteria require the committed output to pass every guard on the guard list and name the resolution the implementer may use if a guard rejects it, chosen from the kinds item 4 lists.
 4. **Rejection.** When a guard rejects output checked under item 2, the refined acceptance criteria state the resolution: an exemption the story adds, scoped to its own files; a normalization; an encoding; or an amendment to the criterion that forbade one of these.
    The resolved output is re-run through the rejecting guard and passes, and the refinement note records the rejection, the resolution and the passing re-run.
+5. **Stop.** When a guard on the guard list cannot be run, or the resolved output still fails the rejecting guard, the facilitator stops and reports `needs input` to the owner naming the guard, its command and its result.
+6. **Refresh.** When an accept-round amendment adds or changes a tracked file or committed output the check has not covered, the facilitator runs the check again against the amended acceptance criteria before the updated refinement comment is posted.
+   A split sibling under the [Split rule](#split-rule), and a story whose acceptance criteria changed after an earlier check, get the check against their own final acceptance criteria before the PO decides the "checked against the implementation" Definition of Ready box.
+7. **No secrets.** The guard list, guard output given to a voter, and the refinement note contain no secrets: a rejection that matched secret text is cited by guard, file and line, never quoted.
 
 ## Stage 1: refinement
 
@@ -128,7 +133,7 @@ The guards and their commands come from the repository under refinement; this sk
      After the owner acts, run the probe again; if the owner directly authorizes the facilitator under the denied tracker writes fallback, the facilitator applies the PO-authored probe verbatim, records its comment id, and the voters launch.
   4. Run the repository guard check in [Repository guards](#repository-guards) before any voter launches.
   5. Launch the three engineers in separate contexts with the same story surface.
-     Give each voter only its own profile entry, the story, and the session's scratch directory it writes into; never give it another voter's file or a summary of another input.
+     Give each voter only its own profile entry, the story, the guard list from [Repository guards](#repository-guards) when that check ran, and the session's scratch directory it writes into; never give it another voter's file or a summary of another input.
      A voter runs in its own child context and cannot derive the parent's directory, so the brief carries the path.
   6. Each voter writes only its own input file in the session's scratch directory (`references/runtimes.md`, Scratch files), under a subdirectory named after the story key and a role-specific name; never a path component outside that directory.
      The session's directory sits inside `profile.workspace.scratch_dir` when that is the base the runtime or the profile gives (the runtime's base wins), and is a standalone `mktemp -d` when neither gives one.
@@ -139,7 +144,7 @@ The guards and their commands come from the repository under refinement; this sk
      No tracker comment is posted until all three voter inputs are recorded, except the tracker-write preflight, which is the only exception.
 - **Reviewer output contract:** a refinement input includes a Definition of Ready verdict, a verdict on the guard list, per-AC gaps with exact proposed wording, scope and split, risks, refined AC deltas, and an `ACCEPT` or `OBJECT` position.
 - **Outputs:** three voter input files and one separate SM/EM contribution file in the session's scratch directory.
-- **Stop:** the roster check fails (a reviewer count other than three, fewer than three reviewers enabled, a required role unset, a missing or empty reviewer family, or a duplicate reviewer family or model id), a required profile key is unset, a voter cannot run on its configured runtime and model, a voter file is missing, or the tracker-write preflight is denied and the owner has not authorized the denied tracker writes fallback.
+- **Stop:** the roster check fails (a reviewer count other than three, fewer than three reviewers enabled, a required role unset, a missing or empty reviewer family, or a duplicate reviewer family or model id), a required profile key is unset, a voter cannot run on its configured runtime and model, a voter file is missing, a guard on the guard list cannot be run or still rejects the resolved output, or the tracker-write preflight is denied and the owner has not authorized the denied tracker writes fallback.
   The scratch directory is never such a key: without one the documented standalone `mktemp -d` fallback applies.
   Never substitute a different model, a different voter, or a guessed value.
 
@@ -305,7 +310,7 @@ When `metrics` is on, the metrics summary is the one comment the SM/EM posts out
 
 - The PO ticks a Definition of Ready box only after verifying the condition and records the evidence for every ticked box.
   An unverified box stays unticked.
-- The PO does not tick the "checked against the implementation" Definition of Ready box while the guard list is missing, producible output under item 2 of [Repository guards](#repository-guards) was not run, a guard could not be run, or a guard rejection lacks a resolution with a passing re-run.
+- When the story's acceptance criteria add or change any tracked file, the PO does not tick the "checked against the implementation" Definition of Ready box while the guard list is missing, the check did not run against the story's final acceptance criteria, producible output under item 2 of [Repository guards](#repository-guards) was not run, a guard could not be run, or a guard rejection lacks a resolution with a passing re-run.
 - When the team of `STORY_ID` differs from `profile.tracker.team_key`, confirm `profile.tracker.states.ready`, `profile.tracker.states.backlog` and each label name on that team before writing it, under the differing-team rule in Team resolution in [references/linear.md](references/linear.md).
 - Set `profile.tracker.states.ready` only when no blocker remains.
 - Leave blocked siblings in `profile.tracker.states.backlog` with the blocker Definition of Ready box unchecked.
@@ -326,6 +331,7 @@ Use the Triage record template in the same file for the triage write that record
 Keep the raw voter files in the session's scratch directory and cite each file by its base name only (never a directory path) in the record.
 Quote or attach any file content a reader needs in the record.
 Record the refinement comment id, every accept round, all three point values, the SM/EM sizing context, the `Consensus check:` outcome, the discussion result, every challenge with its outcome, the consensus or the residual variance outcome with the derived values, the gap between the highest and the lowest in scale steps and the rule applied, the recorded estimate or the unpointed variance stop, and any split.
+When the [Repository guards](#repository-guards) check ran, the refinement comment also records the guard list with each guard's command and discovery source; for each guard run, its command, exit status and result; each sample's provenance and coverage limits; and each rejection with its resolution and passing re-run.
 
 ## Metrics
 
