@@ -256,10 +256,10 @@ def on_pre_tool_use(payload, session):
         return 0
     if progress:
         return 0
+    if not owners_writable(session):
+        return 0
     reason = NO_TASK_IN_PROGRESS.format(tool=tool)
     if not owned:
-        if not owners_writable(session):
-            return 0
         reason += NO_TASK_RECORDED
     return deny(reason)
 

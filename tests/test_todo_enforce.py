@@ -415,6 +415,22 @@ def test_an_unwritable_owners_directory_after_arming_does_not_deny(rig):
         owners.chmod(0o700)
 
 
+@pytest.mark.skipif(os.geteuid() == 0, reason="root ignores directory permissions")
+def test_an_unwritable_owners_directory_with_a_recorded_task_does_not_deny(rig):
+    rig.arm()
+    rig.main_task("1", "completed")
+    owners = rig.state / "agent-skills" / "todo-enforce" / SESSION / "owners"
+    owners.chmod(0o500)
+    try:
+        assert_allowed(rig.send("main_task_created", task_id="2"))
+        rig.task("2", "in_progress")
+        res = rig.tool()
+        assert_allowed(res)
+        assert "unwritable" in res.stderr
+    finally:
+        owners.chmod(0o700)
+
+
 @pytest.mark.parametrize("content", ["{broken", "[]"], ids=["not-json", "not-an-object"])
 def test_an_unreadable_main_task_file_allows_tool_calls_and_refuses_its_completion(rig, content):
     rig.arm()
