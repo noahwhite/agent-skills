@@ -2434,13 +2434,15 @@ PRODUCIBLE_OUTPUT_PHRASES = (
     "otherwise a representative sample produced the same way",
     "places the output at its intended path in a throwaway checkout",
     "stages it there so guards that enumerate tracked files see it",
-    "commits it there so guards that read committed content see it",
-    "a guard passes only when it exits zero and reports no finding",
+    "every guard runs twice, once with the output staged and not yet committed and once after the output is "
+    "committed there, so a guard that reads the staged set, the index or committed content sees it; a guard passes "
+    "only when both runs pass",
+    "a run passes only when the guard exits zero and reports no finding",
     "runs every guard on the guard list against it from that checkout, leaving the primary checkout unchanged",
     "the throwaway checkout is a disposable clone of the repository under refinement with its own object store, "
     "never a worktree that shares one, at the revision the story's work starts from; it sits in the session's "
     "scratch directory, and the whole clone is removed after the check",
-    "for each guard, the command, the exit status and the result, "
+    "for each guard, the command, the exit status and the result of each run, "
     "and for a sample its provenance and coverage limits",
 )
 
