@@ -70,7 +70,7 @@ With `metrics` on, launch no command before the start form, not even to read a f
 
 Create the todo list as your first action, before you read any reference, the profile, or an overlay.
 The only actions before it are the ones Arguments orders before step 0: resolving the arguments, asking the user about a missing story ID or any ambiguous value.
-With no todo tool, also the one key read that places the checklist fallback, as `references/todo-tracking.md` states.
+With no todo tool, creating the primary-session checklist fallback includes creating its scratch directory when it does not exist yet and, when the runtime's scratch base is `profile.workspace.scratch_dir`, that one key read to place it; no other profile content comes before the checklist.
 Create it from this file alone as a bootstrap list: one item per file Read first names, the profile, and this skill's overlay, then one item per step 1 to 5.
 After reading `references/todo-tracking.md`, expand the list to the seed items below, at the granularity that file requires, before your first investigation, edit, command, or delegation, and add the items that need the story or the profile as soon as they are known.
 Seed it with at least: read the story state, spawn the senior engineer, each check on its checklist until it hands back, the checklist read-back at each handback with each subagent's read-back resume count, read back the deployment-review state, each QA round, each read-back of QA's state, each failed item handed back, each fix round, and the final state read-back.

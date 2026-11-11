@@ -48,8 +48,6 @@ Whenever you check the subagent's status, read that file from the subagent's sub
 Whether the todo tool exists at all depends on the runtime and its configuration; some ship it off by default or behind an experimental flag, and a harness may still not expose it.
 Consult `references/runtimes.md` for the version-specific mapping; do not assume a tool exists from configuration alone.
 When the primary session has no todo tool, create a checklist file at `<scratch directory>/<session-label>-todo.md` before starting, using the same item granularity and `(in progress)` marker as a subagent.
-Creating that scratch directory, when it does not exist yet, is part of creating the checklist.
-When your runtime's scratch base is `profile.workspace.scratch_dir`, reading that one key from the profile to place the directory is part of creating the checklist too, and no other profile content is read before the checklist exists.
 `<scratch directory>` is the one per-session scratch directory (`references/runtimes.md`, Scratch files), never a fixed path under the base.
 Tell the user its path and update it at every step; this file is the visible plan and the place to mirror delegated checklists.
 Do not block or ask for a runtime reconfiguration merely because the todo tool is unavailable.

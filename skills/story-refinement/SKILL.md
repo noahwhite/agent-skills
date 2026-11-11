@@ -46,7 +46,7 @@ Every other metrics instruction in this skill applies only when `metrics` is on.
 
 Create the todo list as your first action, before you read any reference, the profile, or an overlay.
 The only action before it is the one Arguments orders before the todo list: resolving the arguments, asking about any ambiguity.
-With no todo tool, also the one key read that places the checklist fallback, as `references/todo-tracking.md` states.
+With no todo tool, creating the primary-session checklist fallback includes creating its scratch directory when it does not exist yet and, when the runtime's scratch base is `profile.workspace.scratch_dir`, that one key read to place it; no other profile content comes before the checklist.
 Create it from this file alone as a bootstrap list: one item per file listed below, the profile, and this skill's overlay, then one item per step (Step 1 to Step 4, the triage writes, the records, and the closing message).
 After reading `references/todo-tracking.md`, expand the list to the story-refinement seed items before the first investigation, context, tracker write, delegation, or any command other than the one Arguments orders right after the todo list, and add the items that need the story or the profile as soon as they are known.
 
