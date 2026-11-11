@@ -92,14 +92,15 @@ FALLBACK_KEY = "`profile.workspace.scratch_dir`"
 FALLBACK_CLOSING = "no other profile content is read before the checklist file exists"
 FALLBACK_REQUIRED = {
     "compose the primary-session checklist first": re.compile(r"compose the primary-session checklist first"),
-    # A read of one key named by a singular determiner; the sentence may mention "key" only this once.
+    # A read of one key named by a singular determiner; no other read may follow it in the sentence.
     "read that one key": re.compile(r"\bread (?:only |just )?(?:that|this|the) (?:one |single |sole )?key\b"),
     FALLBACK_CLOSING: re.compile(re.escape(FALLBACK_CLOSING)),
 }
 FALLBACK_TARGET_RE = re.compile(r"\bprofiles?\b|\breferences?\b|\boverlays?\b", re.IGNORECASE)
-KEY_WORD_RE = re.compile(r"\bkeys?\b", re.IGNORECASE)
 # "before" and then "checklist" anywhere later in the same clause, whatever words sit between them.
 BEFORE_CHECKLIST_RE = re.compile(r"\bbefore\b[^.;:]*\bchecklist\b", re.IGNORECASE)
+# A clause led by "after ... checklist" orders its read after the list, whatever checklist it later names.
+AFTER_CHECKLIST_RE = re.compile(r"\bafter\b[^.;:]*\bchecklist\b", re.IGNORECASE)
 
 # SKL-246 guard on list-creation order. The scope is the skill text from its title to the end of
 # the section that creates the list, so Arguments, Read first and Metrics are covered too.
@@ -278,19 +279,21 @@ def fallback_faults(text: str, heading: str) -> list[str]:
     sentence = found[0]
     faults = [] if FALLBACK_KEY in sentence else [f"missing {FALLBACK_KEY!r}"]
     faults += [f"missing {name!r}" for name, pattern in FALLBACK_REQUIRED.items() if not pattern.search(sentence)]
-    if len(KEY_WORD_RE.findall(sentence)) != 1:
-        faults.append("the fallback reads more than its one key")
     rest = sentence.replace(FALLBACK_KEY, "").replace(FALLBACK_CLOSING, "")
     faults += [f"the fallback names another pre-list target: {hit!r}" for hit in FALLBACK_TARGET_RE.findall(rest)]
-    # Every other clause in the skill: one that orders a non-negated read and puts it before the checklist.
+    # Without its one key read, the sentence orders no other read, whatever it names.
+    if orders_read(FALLBACK_REQUIRED["read that one key"].sub("", rest, count=1).lower()):
+        faults.append("the fallback orders a read besides its one key")
+    # Every other clause in the skill: one that orders a non-negated read before the checklist and is not
+    # itself placed after the checklist.
     own = set(clauses(sentence))
-    faults += [
-        f"another clause orders a read before the checklist: {clause!r}"
-        for clause in clauses(text[text.index("\n# "):])
-        if clause not in own
-        and BEFORE_CHECKLIST_RE.search(clause)
-        and orders_read(clause[: BEFORE_CHECKLIST_RE.search(clause).start()])
-    ]
+    for clause in clauses(text[text.index("\n# "):]):
+        before = BEFORE_CHECKLIST_RE.search(clause)
+        if clause in own or not before:
+            continue
+        lead = clause[: before.start()]
+        if orders_read(lead) and not AFTER_CHECKLIST_RE.search(lead):
+            faults.append(f"another clause orders a read before the checklist: {clause!r}")
     return faults
 
 
@@ -528,8 +531,9 @@ def test_a_separate_pre_checklist_read_fails_the_guard(skill: str, checklist: st
     [
         "Do not read the profile before the checklist exists.",
         "Do not read the profile before the checklist exists; read it after the checklist exists.",
+        "After the checklist exists, read the profile before the QA checklist is drafted.",
     ],
-    ids=["forbid", "forbid-then-after"],
+    ids=["forbid", "forbid-then-after", "after-then-other-checklist"],
 )
 def test_a_sentence_forbidding_a_pre_checklist_read_keeps_the_guard_green(skill: str, addition: str) -> None:
     text = skill_text(skill)
@@ -540,11 +544,25 @@ def test_a_sentence_forbidding_a_pre_checklist_read_keeps_the_guard_green(skill:
 
 @pytest.mark.parametrize("skill", list(LIST_CREATION_SECTIONS))
 @pytest.mark.parametrize(
-    "new", ["read every key", "read any key", "read that one key, then read every key"], ids=["every", "any", "then-every"]
+    "new",
+    [
+        "read every key",
+        "read any key",
+        "read that one key, then read every key",
+        "read that one key, then read all remaining fields",
+        "read that one key and load the remaining settings",
+    ],
+    ids=["every", "any", "then-every", "then-fields", "then-load"],
 )
 def test_a_fallback_that_reads_more_than_one_key_fails_the_guard(skill: str, new: str) -> None:
     text = mutated_skill(skill, "read that one key", new)
     assert fallback_faults(text, LIST_CREATION_SECTIONS[skill])
+
+
+@pytest.mark.parametrize("skill", list(LIST_CREATION_SECTIONS))
+def test_a_fallback_that_forbids_other_keys_keeps_the_guard_green(skill: str) -> None:
+    text = mutated_skill(skill, "read that one key", "read that one key, never any other keys")
+    assert fallback_faults(text, LIST_CREATION_SECTIONS[skill]) == []
 
 
 @pytest.mark.parametrize("skill", list(LIST_CREATION_SECTIONS))
