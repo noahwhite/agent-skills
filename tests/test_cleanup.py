@@ -309,7 +309,7 @@ def test_a_remote_branch_tip_is_read_again_by_command_before_its_delete() -> Non
         "Read the remote tip a second time with `git ls-remote --heads origin <branch>` immediately before the delete, "
         "take the SHA on its line whose ref is exactly `refs/heads/<branch>`, "
         "compare it with the tip recorded at merge evidence, and refuse if it moved; otherwise run "
-        "`git push origin --delete <branch>` immediately after that read, with no other step between: a push that "
+        "`git push origin --delete refs/heads/<branch>` immediately after that read, with no other step between: a push that "
         "lands between the read and the delete is the one case this run cannot prevent, because the repository "
         "forbids a force or lease push."
     )
@@ -340,8 +340,18 @@ def test_every_remote_read_must_exit_0_and_match_the_exact_ref() -> None:
         "printed, and the report names its exit status."
     )
     assert rule in merged_pr, rule
-    # The tail-matching, status-blind read-back wording is gone.
-    assert "`git ls-remote --heads origin <branch>` must no longer list the branch" not in text()
+    # No status-blind read-back survives beside the new one, whatever it names as listed ("the branch",
+    # "the artifact"): every `git ls-remote` requirement starts with its exit status.
+    blind = re.findall(r"`git ls-remote --heads origin <branch>` must (?!exit 0 )", text())
+    assert not blind, f"status-blind remote read-backs: {len(blind)}"
+
+
+def test_the_remote_delete_names_the_exact_branch_ref() -> None:
+    # A short name in `git push origin --delete` resolves across refs/heads/ and refs/tags/: it deletes a
+    # same-named tag when the branch is gone, and fails "matches more than one" when both exist.
+    deletes = re.findall(r"git push origin --delete (\S+?)`", text())
+    assert deletes, "no remote delete command found"
+    assert set(deletes) == {"refs/heads/<branch>"}, deletes
 
 
 def test_every_integration_branch_read_names_the_remote_tracking_ref() -> None:
