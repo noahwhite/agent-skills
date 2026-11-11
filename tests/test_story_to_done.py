@@ -2682,12 +2682,21 @@ INTERIM_WAIT = (
     "under a timeout), repeated until the deadline."
 )
 INTERIM_WAIT_CAP = (
-    "Each wait returns within 90 seconds, so the runtime never moves it to the background and a handback that "
-    "arrives during a wait is handled when that wait returns."
+    "Each wait lasts the lesser of 90 seconds and the time left to the deadline, so it returns at or before the "
+    "deadline, the runtime never moves it to the background, and a handback that arrives during a wait is handled "
+    "when that wait returns."
+)
+INTERIM_PR_WATCH = (
+    "When the awaited CI run belongs to a PR, it also watches the PR, so a new head and its new run are not missed "
+    "([references/code-review.md](code-review.md), Watching the PR)."
 )
 INTERIM_NO_WAIT = (
-    "A runtime with no bounded wait reads the primary source at once and stops with the report below; it never "
-    "waits passively."
+    "A runtime with no bounded wait reads the primary source at once and stops with the report below, which gives "
+    "the read time and says the deadline was not reached; it never waits passively."
+)
+INTERIM_CLEAR_LATE = (
+    "A handback that arrived before the deadline clears it even when the coordinator sees it only after the "
+    "deadline."
 )
 INTERIM_LIMITS = (
     "This rule changes no step logic for final or blocked handbacks, and leaves step 2's stop clause, every QA "
@@ -2729,8 +2738,17 @@ def test_an_interim_handback_never_gets_the_read_back_resume() -> None:
 
 def test_the_interim_rule_runs_wait_then_clear_then_read_then_stop() -> None:
     text = interim_text()
-    positions = [text.index(phrase) for phrase in (INTERIM_WAIT, INTERIM_WAIT_CAP, INTERIM_CLEAR, INTERIM_READ, INTERIM_STOP)]
+    phrases = (INTERIM_WAIT, INTERIM_WAIT_CAP, INTERIM_CLEAR, INTERIM_CLEAR_LATE, INTERIM_READ, INTERIM_STOP)
+    positions = [text.index(phrase) for phrase in phrases]
     assert positions == sorted(positions)
+
+
+def test_a_handback_seen_late_still_clears_a_deadline_it_beat() -> None:
+    assert INTERIM_CLEAR_LATE in interim_text()
+
+
+def test_a_ci_run_on_a_pr_is_watched_through_the_pr() -> None:
+    assert INTERIM_PR_WATCH in interim_text()
 
 
 def test_each_wait_is_capped_so_a_handback_during_it_is_handled() -> None:
