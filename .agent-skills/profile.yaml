@@ -71,15 +71,13 @@ review:
       name: Codex GPT-6 Sol
       runtime: codex
       model: gpt-6-sol
-    # Owner decision 2026-11-01: the arbiter is GLM-5.3-Flash on opencode/glm-5.3-flash-free
-    # (zhipu lab, free tier, verified working in this container). The previous Claude Code
-    # entry was stale: Anthropic auth is revoked here (claude -p returns 401, and opencode
-    # reports "OAuth access token has been revoked"), and the container's Grok 4.7 fallback
-    # fails with "Insufficient account funds".
+    # Owner decision 2026-11-11: the arbiter is Mistral Large 4 via OpenRouter, matching the
+    # home profile. The previous GLM-5.3-Flash free-tier seat stopped launching with
+    # "Free usage limit reached".
     arbiter:
-      name: GLM-5.3-Flash
+      name: Mistral Large 4
       runtime: opencode
-      model: opencode/glm-5.3-flash-free
+      model: openrouter/mistralai/mistral-large-4-0
     simplicity_reviewer:
       name: DeepSeek V4 Pro
       runtime: opencode
