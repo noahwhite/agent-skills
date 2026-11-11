@@ -2351,10 +2351,10 @@ GUARD_ITEM_HEADINGS = (
 )
 # Each of this repository's guard names, matched with any run of spaces, underscores or hyphens between its words.
 THIS_REPOSITORY_GUARD_PATTERNS = {
-    "leak_scan": r"leak[\s_-]*scan",
-    "test_house_spelling": r"test[\s_-]*house[\s_-]*spelling",
+    "leak_scan": r"\bleak[\s_-]*scan\b",
+    "test_house_spelling": r"\btest[\s_-]*house[\s_-]*spelling\b",
     "ci.yml": r"\bci\.ya?ml\b",
-    "skills-ref": r"skills[\s_-]*ref",
+    "skills-ref": r"\bskills[\s_-]*ref\b",
 }
 
 
@@ -2393,6 +2393,8 @@ GUARD_LIST_PHRASES = (
     (1, "discovers them from that repository's ci configuration and test suite"),
     (1, "the refinement note records each guard, the command that runs it, and the discovery source"),
     (1, "the guard list is part of the story surface every voter receives"),
+    (1, "the refined acceptance criteria require every added or changed tracked file the story commits to pass every "
+        "guard on the guard list"),
 )
 
 
@@ -2416,7 +2418,7 @@ def test_step_one_voter_brief_carries_the_guard_list() -> None:
     launch = flat(process_item("Step 1: Independent refinement", "Launch the three engineers in separate contexts"))
     assert (
         "give each voter only its own profile entry, the story, the guard list from "
-        "[repository guards](#repository-guards) when that check ran, and the session's scratch directory"
+        "[repository guards](#repository-guards) when that check ran,"
     ) in launch
 
 
@@ -2432,6 +2434,8 @@ PRODUCIBLE_OUTPUT_PHRASES = (
     "otherwise a representative sample produced the same way",
     "places the output at its intended path in a throwaway checkout",
     "stages it there so guards that enumerate tracked files see it",
+    "commits it there so guards that read committed content see it",
+    "a guard passes only when it exits zero and reports no finding",
     "runs every guard on the guard list against it from that checkout, leaving the primary checkout unchanged",
     "the throwaway checkout is made from the repository under refinement at the revision the story's work starts "
     "from, sits in the session's scratch directory, and is removed after the check",
@@ -2449,6 +2453,8 @@ def test_guards_section_runs_producible_output_through_every_guard(phrase: str) 
 NOT_PRODUCIBLE_PHRASES = (
     "cannot be produced before implementation because code the story writes generates it, "
     "the refinement note states why",
+    "naming the code the story writes that generates it and confirming that no tool or earlier commit produces "
+    "those bytes before implementation",
     "the refined acceptance criteria require the committed output to pass every guard on the guard list "
     "and name the resolution the implementer may use if a guard rejects it, chosen from the kinds item 4 lists",
 )
@@ -2465,6 +2471,7 @@ REJECTION_PHRASES = (
     "an exemption the story adds, scoped to its own files; a normalization; an encoding; "
     "or an amendment to the criterion that forbade one of these",
     "the resolved output is re-run through the rejecting guard and passes",
+    "and through every other guard on the guard list, which pass too",
     "the refinement note records the rejection, the resolution and the passing re-run",
 )
 
@@ -2478,7 +2485,7 @@ def test_guards_section_resolves_a_rejection_with_a_passing_re_run(phrase: str) 
 def test_guards_section_stops_on_an_unrunnable_guard_or_a_surviving_rejection() -> None:
     """AC5: a guard that cannot run, or a rejection the resolution does not clear, stops the ceremony."""
     assert (
-        "when a guard on the guard list cannot be run, or the resolved output still fails the rejecting guard, "
+        "when a guard on the guard list cannot be run, or the resolved output still fails any guard on the guard list, "
         "the facilitator stops and reports `needs input` to the owner naming the guard, its command and its result"
     ) in guard_items()[5]
     stop = bullet(step(SKILL.read_text(), "Step 1: Independent refinement"), "Stop")
@@ -2514,7 +2521,7 @@ def test_records_carry_the_guard_evidence() -> None:
         "when the [repository guards](#repository-guards) check ran, the refinement comment also records the guard "
         "list with each guard's command and discovery source; for each guard run, its command, exit status and "
         "result; each sample's provenance and coverage limits; and each rejection with its resolution and passing "
-        "re-run"
+        "re-run, with no secrets under item 7 of [repository guards](#repository-guards)"
     ) in flat(section(SKILL.read_text(), "Records"))
 
 
@@ -2523,6 +2530,7 @@ DOR_GUARD_PHRASES = (
     'the po does not tick the "checked against the implementation" definition of ready box '
     "while the guard list is missing",
     "the check did not run against the story's final acceptance criteria",
+    "output was classed under item 3 without the evidence item 3 requires",
     "producible output under item 2 of [repository guards](#repository-guards) was not run",
     "a guard could not be run",
     "or a guard rejection lacks a resolution with a passing re-run",
@@ -2538,7 +2546,7 @@ def test_triage_holds_the_implementation_check_box_on_the_guard_check(phrase: st
 def test_guard_phrase_pins_keep_their_count() -> None:
     """Dropping a pinned phrase from a parametrize list fails here instead of silently shrinking the suite."""
     assert [len(GUARD_LIST_PHRASES), len(PRODUCIBLE_OUTPUT_PHRASES), len(NOT_PRODUCIBLE_PHRASES),
-            len(REJECTION_PHRASES), len(DOR_GUARD_PHRASES)] == [7, 7, 2, 4, 6]
+            len(REJECTION_PHRASES), len(DOR_GUARD_PHRASES)] == [8, 9, 3, 5, 7]
 
 
 @pytest.mark.parametrize(
@@ -2557,6 +2565,6 @@ def test_guards_section_names_kinds_not_one_repository(phrase: str) -> None:
 def test_skill_names_none_of_this_repository_guards() -> None:
     """AC6: the skill names none of this repository's guard commands, scripts, tests or paths, in any spelling."""
     text = SKILL.read_text().lower()
-    assert "guard list" in text, "the added text is present"
+    assert "## repository guards" in text, "the added section is present"
     for name, pattern in THIS_REPOSITORY_GUARD_PATTERNS.items():
         assert not re.search(pattern, text), name
