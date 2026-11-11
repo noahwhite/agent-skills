@@ -86,7 +86,7 @@ If the runtime cannot resume the subagent, record the open items and continue wi
 A read-back resume of the QA agent happens before step 4 handling, carries no verdict, does not increment the round count, and has a cap separate from step 4's "once per observed change to the remainder".
 The items QA's handback names as outstanding with what they wait on or who owns them go to step 4's classification and never to a read-back resume, so a mixed remainder is reported and stopped as step 4 says; a read-back resume of QA applies to every other open checklist item, including one the handback names with no stated blocker.
 With `metrics` on, each read-back resume is its own launch row.
-An interim handback from the senior engineer is classified before this read-back, under [references/interim-handbacks.md](references/interim-handbacks.md).
+An interim handback from the senior engineer is classified before step 0's checklist read-back above, under [references/interim-handbacks.md](references/interim-handbacks.md).
 If your todo tool is unavailable, use the primary-session checklist fallback in `references/todo-tracking.md`; never block.
 
 ## 1. Read the story and pick the starting point
@@ -131,7 +131,7 @@ This skill assigns merge approval to no manager, so `engineering-workflow`'s own
 Let the senior engineer do the engineering; do not pre-empt its choices.
 The engineer never does pre-PR arbitration (`adversarial-review-pipeline` Phase 3, `engineering-workflow` step 4 Verify stage) or rules a finding valid, invalid or accepted risk or the gate converged (applying the gate's scope guard is not arbitration), and fixes what QA ruled not met or the adjudicator ruled valid without overturning those rulings; a separate clean, neutral arbiter on `profile.review.pre_pr.arbiter`, independent of engineer and coordinator, arbitrates every head.
 
-An interim handback goes to [references/interim-handbacks.md](references/interim-handbacks.md) before the read-backs below.
+An interim handback goes to [references/interim-handbacks.md](references/interim-handbacks.md) before the step 0 checklist read-back and every check below; any other handback continues here.
 When it hands back, do the step 0 checklist read-back first, then read the story yourself and confirm it is in `profile.tracker.states.in_deployment_review`; a handback is a claim, the tracker is the record.
 If it handed back blocked or the story is not in deployment review, stop and report why.
 Then, for every PR it merged, read the PR yourself with `gh pr view <n> --json headRefOid,mergeCommit` and `gh api --paginate repos/<owner>/<repo>/pulls/<n>/reviews`.

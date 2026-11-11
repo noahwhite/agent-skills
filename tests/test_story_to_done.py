@@ -2639,13 +2639,16 @@ def test_the_case_runner_detects_a_change_made_through_an_untracked_link(tmp_pat
 # SKL-254: interim senior-engineer handbacks get a deadline and a primary-source read.
 INTERIM = ROOT / "skills" / "story-to-done" / "references" / "interim-handbacks.md"
 INTERIM_STEP_0_POINTER = (
-    "An interim handback from the senior engineer is classified before this read-back, under "
+    "An interim handback from the senior engineer is classified before step 0's checklist read-back above, under "
     "[references/interim-handbacks.md](references/interim-handbacks.md)."
 )
 INTERIM_STEP_2_POINTER = (
     "An interim handback goes to [references/interim-handbacks.md](references/interim-handbacks.md) before the "
-    "read-backs below."
+    "step 0 checklist read-back and every check below; any other handback continues here."
 )
+STEP_2_READ_BACK_FIRST = "When it hands back, do the step 0 checklist read-back first"
+STEP_2_STOP_CLAUSE = "If it handed back blocked or the story is not in deployment review, stop and report why."
+INTERIM_NO_RESUME = "So the awaited item gets the deadline below, never step 0's read-back resume."
 INTERIM_DEFINITION = (
     "An interim handback is a handback from the senior engineer that names an awaited item of its own background "
     "work (a CI run, a deploy, a tracker move, a review in flight) and is neither a final handback nor blocked. "
@@ -2678,6 +2681,19 @@ INTERIM_WAIT = (
     "the awaited item's primary source that returns at or before the deadline (for a CI run, a watch on the run "
     "under a timeout), repeated until the deadline."
 )
+INTERIM_WAIT_CAP = (
+    "Each wait returns within 90 seconds, so the runtime never moves it to the background and a handback that "
+    "arrives during a wait is handled when that wait returns."
+)
+INTERIM_NO_WAIT = (
+    "A runtime with no bounded wait reads the primary source at once and stops with the report below; it never "
+    "waits passively."
+)
+INTERIM_LIMITS = (
+    "This rule changes no step logic for final or blocked handbacks, and leaves step 2's stop clause, every QA "
+    "step, and the no-write and no-verdict constraints unchanged; it only comes before step 0's read-back and "
+    "step 2's check."
+)
 
 
 def interim_text() -> str:
@@ -2693,7 +2709,40 @@ def test_step_0_points_to_the_interim_handbacks_reference() -> None:
 def test_step_2_points_to_the_interim_handbacks_reference_without_restating_it() -> None:
     step_2 = " ".join(section(SKILL.read_text(), "2. Senior engineer: implement to deployment review").split())
     assert INTERIM_STEP_2_POINTER in step_2
-    assert "deadline" not in step_2, "step 2 restates the interim rule instead of pointing to it"
+    for token in ("deadline", "30 minutes", "10 minutes", "50%", "primary source", "foreground wait"):
+        assert token not in step_2, f"step 2 restates the interim rule ({token!r}) instead of pointing to it"
+    for sentence in INTERIM.read_text().splitlines():
+        sentence = " ".join(sentence.split())
+        if len(sentence) > 40:
+            assert sentence not in step_2, f"step 2 restates {sentence!r}"
+
+
+def test_step_2_sends_an_interim_handback_on_before_the_read_back_and_the_stop() -> None:
+    step_2 = " ".join(section(SKILL.read_text(), "2. Senior engineer: implement to deployment review").split())
+    pointer = step_2.index(INTERIM_STEP_2_POINTER)
+    assert pointer < step_2.index(STEP_2_READ_BACK_FIRST) < step_2.index(STEP_2_STOP_CLAUSE)
+
+
+def test_an_interim_handback_never_gets_the_read_back_resume() -> None:
+    assert INTERIM_NO_RESUME in interim_text()
+
+
+def test_the_interim_rule_runs_wait_then_clear_then_read_then_stop() -> None:
+    text = interim_text()
+    positions = [text.index(phrase) for phrase in (INTERIM_WAIT, INTERIM_WAIT_CAP, INTERIM_CLEAR, INTERIM_READ, INTERIM_STOP)]
+    assert positions == sorted(positions)
+
+
+def test_each_wait_is_capped_so_a_handback_during_it_is_handled() -> None:
+    assert INTERIM_WAIT_CAP in interim_text()
+
+
+def test_a_runtime_with_no_bounded_wait_stops_rather_than_waits_passively() -> None:
+    assert INTERIM_NO_WAIT in interim_text()
+
+
+def test_the_interim_rule_limits_are_pinned() -> None:
+    assert INTERIM_LIMITS in interim_text()
 
 
 def test_the_interim_handback_definition_is_pinned() -> None:
