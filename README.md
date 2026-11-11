@@ -115,7 +115,8 @@ It never denies a subagent's tool calls, a session that loaded neither skill, or
 In Claude Code v2.1.322 the task tools exist only in background (job) sessions, sessions started with `CLAUDE_CODE_ENABLE_TODO_TOOLS=1`, and sessions on some older models.
 A default interactive session or `claude -p` run has none, so the hook stays inert there; start the session with `CLAUDE_CODE_ENABLE_TODO_TOOLS=1` to have it enforce.
 After a denial or refusal the session continues, and the model can fix the task list and retry.
-It fails open: a malformed payload, unwritable state or any error of its own is logged to stderr and the call is allowed.
+It fails open on its own faults: a malformed payload, unwritable state or an internal error is logged to stderr and the call is allowed.
+A missing `TaskCreated` entry is not such a fault: the hook then never learns which tasks the main thread created, so an armed session denies every checked call, with a reason saying the `TaskCreated` hook may not be registered; register all four entries.
 An unreadable main-thread task file is logged too: tool calls are allowed, and that task's completion is refused until it is marked `in_progress` again.
 Its state lives under `${XDG_STATE_HOME:-~/.local/state}/agent-skills/todo-enforce/`, one directory per session, and it reads task files from `${CLAUDE_CONFIG_DIR:-~/.claude}/tasks/`.
 To remove it, delete those four entries from `settings.json`; you may also delete its state directory.

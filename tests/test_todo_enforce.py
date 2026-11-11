@@ -286,10 +286,14 @@ def test_the_main_thread_completes_an_in_progress_task(rig):
     assert_allowed(rig.send("main_task_completed", task_id="1"))
 
 
-def test_completion_of_a_task_the_enforcer_did_not_record_is_not_refused(rig):
+def test_main_completion_of_a_task_the_enforcer_did_not_record_is_checked(rig):
     rig.arm()
     rig.task("9", "pending")
+    assert_refused(rig.send("main_task_completed", task_id="9"), "task 9", "pending")
+    rig.task("9", "in_progress")
     assert_allowed(rig.send("main_task_completed", task_id="9"))
+    rig.task("8", "pending")
+    assert_allowed(rig.send("subagent_task_completed", task_id="8"))
 
 
 # --- (g) a subagent cannot complete a main-owned task -----------------------------------------
@@ -449,12 +453,25 @@ def test_an_unsafe_task_id_exits_zero(rig, task_id):
     assert not owners.exists() or not any(owners.iterdir())
 
 
-def test_an_empty_agent_id_records_no_owner(rig):
+@pytest.mark.parametrize("agent_id", ["", 7, None], ids=["empty", "number", "null"])
+def test_a_task_created_without_a_usable_agent_id_is_main_owned(rig, agent_id):
     rig.arm()
-    res = rig.send("subagent_task_created", task_id="2", agent_id="")
+    res = rig.send("subagent_task_created", task_id="2", agent_id=agent_id)
     assert_allowed(res)
-    assert "agent_id" in res.stderr
-    assert not (rig.state / "agent-skills" / "todo-enforce" / SESSION / "owners" / "2").exists()
+    assert ("agent_id" in res.stderr) == (agent_id is not None)
+    assert (rig.state / "agent-skills" / "todo-enforce" / SESSION / "owners" / "2").read_text() == "main"
+    rig.task("2", "in_progress")
+    assert_allowed(rig.tool())
+
+
+def test_a_tilde_in_the_state_root_is_expanded(tmp_path):
+    rig = Rig(tmp_path)
+    env = rig.env()
+    env["XDG_STATE_HOME"] = "~/state"
+    res = subprocess.run([sys.executable, "-I", str(rig.script)], input=json.dumps(rig.payload("user_prompt_slash_story_to_done")),
+                         env=env, capture_output=True, text=True, timeout=30)
+    assert_allowed(res)
+    assert (rig.home / "state" / "agent-skills" / "todo-enforce" / SESSION / "armed").is_file()
 
 
 # --- mutation proof: removing each deny or refuse branch fails its test ---------------------------

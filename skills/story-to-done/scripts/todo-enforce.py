@@ -16,6 +16,7 @@ hook_event_name and, per session_id:
   main-owned task is in_progress, and allows it with a stderr warning when the only main-owned
   task files that exist are unreadable;
 - in an armed session that has the task tools, refuses (exit 2) a main-owned task's completion
+  (a task with no owner record counts as main-owned when the main thread completes it)
   from a subagent, or from the main thread unless its task file still says in_progress
   (TaskCompleted fires before the status is written) or when that file is unreadable.
 
@@ -62,7 +63,8 @@ NOT_IN_PROGRESS = (
 
 
 def home_dir(var, *default):
-    return os.environ.get(var) or os.path.join(os.path.expanduser("~"), *default)
+    value = os.environ.get(var)
+    return os.path.expanduser(value) if value else os.path.join(os.path.expanduser("~"), *default)
 
 
 def state_dir(session):
@@ -84,10 +86,11 @@ def safe_id(value):
 
 
 def agent_of(payload):
-    """None on the main thread, else the subagent's id; a present but malformed agent_id raises."""
-    if "agent_id" not in payload:
+    """None on the main thread (agent_id absent or null), else the subagent's id; any other
+    unusable agent_id raises."""
+    agent = payload.get("agent_id")
+    if agent is None:
         return None
-    agent = payload["agent_id"]
     if not isinstance(agent, str) or not agent or agent == MAIN:
         raise ValueError("malformed agent_id: %r" % (agent,))
     return agent
@@ -245,7 +248,13 @@ def on_pre_tool_use(payload, session):
 
 
 def on_task_created(payload, session):
-    record_owner(session, task_of(payload), agent_of(payload) or MAIN)
+    task = task_of(payload)
+    try:
+        agent = agent_of(payload)
+    except ValueError as exc:
+        log("%s; recording task %s as main-owned" % (exc, task))
+        agent = None
+    record_owner(session, task, agent or MAIN)
     return 0
 
 
@@ -254,7 +263,8 @@ def on_task_completed(payload, session):
         return 0
     task = task_of(payload)
     agent = agent_of(payload)
-    if owner_of(session, task) != MAIN:
+    owner = owner_of(session, task)
+    if owner not in (None, MAIN) or (owner is None and agent is not None):
         return 0
     if not has_task_tools(payload.get("transcript_path")):
         return 0
