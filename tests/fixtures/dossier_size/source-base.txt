@@ -1,0 +1,56 @@
+SYNTHETIC FIXTURE - SKL-242 - not real data
+"""Ledger part %NN%: totals for a synthetic batch of entries."""
+
+LIMIT_%NN% = 100
+
+
+def parse_entry_%NN%(line):
+    name, amount = line.split(",")
+    return name.strip(), int(amount)
+
+
+def total_%NN%(lines):
+    total = 0
+    for line in lines:
+        name, amount = parse_entry_%NN%(line)
+        total += amount
+    return total
+
+
+def largest_%NN%(lines):
+    best = None
+    for line in lines:
+        name, amount = parse_entry_%NN%(line)
+        if best is None or amount > best[1]:
+            best = (name, amount)
+    return best
+
+
+def over_limit_%NN%(lines):
+    return [line for line in lines if parse_entry_%NN%(line)[1] > LIMIT_%NN%]
+
+
+def summary_%NN%(lines):
+    return "part %NN%: %d entries, total %d" % (len(lines), total_%NN%(lines))
+
+
+def average_%NN%(lines):
+    if not lines:
+        return 0
+    return total_%NN%(lines) / len(lines)
+
+
+def names_%NN%(lines):
+    names = []
+    for line in lines:
+        names.append(parse_entry_%NN%(line)[0])
+    return names
+
+
+def report_%NN%(lines):
+    rows = []
+    for line in lines:
+        name, amount = parse_entry_%NN%(line)
+        rows.append("%s %d" % (name, amount))
+    rows.append(summary_%NN%(lines))
+    return "\n".join(rows)
