@@ -78,6 +78,20 @@ RULE_KEY_PHRASES = {
     "closing": ("## Rules", 8, ("every item is completed", "named as not done with the reason")),
 }
 RULE_PHRASES = [(rule, phrase) for rule, (_, _, phrases) in RULE_KEY_PHRASES.items() for phrase in phrases]
+# A key phrase right after a negation states the opposite rule, so it does not count as present.
+NEGATED_LEAD_RE = re.compile(r"\b(?:never|not|no|don't|do not)\s+$", re.IGNORECASE)
+
+# SKL-246 guard on the no-todo-tool fallback: its sentence is the only pre-list profile access, and it
+# names one key. Removing the allowed key and closing clause must leave no profile, reference or
+# overlay mention in it.
+FALLBACK_LEAD = "With no todo tool,"
+FALLBACK_KEY = "`profile.workspace.scratch_dir`"
+FALLBACK_REQUIRED = (
+    "compose the primary-session checklist first",
+    "read that one key",
+    "no other profile content is read before the checklist file exists",
+)
+FALLBACK_TARGET_RE = re.compile(r"\bprofiles?\b|\breferences?\b|\boverlays?\b", re.IGNORECASE)
 
 # SKL-246 guard on list-creation order. The scope is the skill text from its title to the end of
 # the section that creates the list, so Arguments, Read first and Metrics are covered too.
@@ -155,13 +169,20 @@ def flat(text: str) -> str:
     return " ".join(text.split())
 
 
+def stated(phrase: str, body: str) -> bool:
+    """Whether the body carries the phrase at least once without a negation right before it."""
+    return any(
+        not NEGATED_LEAD_RE.search(body[: match.start()]) for match in re.finditer(re.escape(phrase), body)
+    )
+
+
 def missing_rules(text: str) -> list[str]:
-    """The SKL-246 rules whose key phrase is absent from the section, or numbered rule, that carries it."""
+    """The SKL-246 rules whose key phrase is absent, or only negated, in the section or numbered rule that carries it."""
     numbered = rules(text)
     missing = []
     for name, (heading, number, phrases) in RULE_KEY_PHRASES.items():
         body = flat(section(text, heading) if number is None else numbered.get(number, ""))
-        if any(phrase not in body for phrase in phrases):
+        if not all(stated(phrase, body) for phrase in phrases):
             missing.append(name)
     return missing
 
@@ -240,6 +261,19 @@ def list_creation_order_faults(text: str, heading: str) -> list[str]:
     return faults
 
 
+def fallback_faults(text: str, heading: str) -> list[str]:
+    """Why the no-todo-tool fallback sentence allows more than its one profile key before the list."""
+    body = flat(section(text, heading))
+    found = [part for part in re.split(r"(?<=\.) ", body) if part.startswith(FALLBACK_LEAD)]
+    if len(found) != 1:
+        return [f"expected one {FALLBACK_LEAD!r} sentence, found {len(found)}"]
+    sentence = found[0]
+    faults = [f"missing {phrase!r}" for phrase in (FALLBACK_KEY, *FALLBACK_REQUIRED) if phrase not in sentence]
+    rest = sentence.replace(FALLBACK_KEY, "").replace(FALLBACK_REQUIRED[2], "")
+    faults += [f"the fallback names another pre-list target: {hit!r}" for hit in FALLBACK_TARGET_RE.findall(rest)]
+    return faults
+
+
 def skill_text(skill: str) -> str:
     return (ROOT / "skills" / skill / "SKILL.md").read_text()
 
@@ -291,6 +325,15 @@ def test_deleting_either_half_of_a_rule_fails_the_guard(rule: str, phrase: str) 
     text = TODO.read_text()
     assert text.count(phrase) == 1, phrase
     assert missing_rules(text.replace(phrase, "")) == [rule]
+
+
+@pytest.mark.parametrize(("rule", "phrase"), RULE_PHRASES)
+@pytest.mark.parametrize("negation", ["Never ", "do not "])
+def test_negating_any_rule_fails_the_guard(rule: str, phrase: str, negation: str) -> None:
+    """Mutation proof: a negation right before a key phrase reverses its rule and the guard names that rule."""
+    text = TODO.read_text()
+    assert text.count(phrase) == 1, phrase
+    assert missing_rules(text.replace(phrase, negation + phrase)) == [rule]
 
 
 @pytest.mark.parametrize("width", [40, 200])
@@ -420,6 +463,35 @@ def test_each_skill_names_its_only_pre_list_actions(skill: str) -> None:
     for clause in clauses(text[text.index("\n# "):]):
         if "invocation_start" in clause or "timestamp" in clause:
             assert not BEFORE_LIST_RE.search(clause), clause
+
+
+@pytest.mark.parametrize("skill", list(LIST_CREATION_SECTIONS))
+def test_the_no_todo_tool_fallback_reads_only_its_one_key(skill: str) -> None:
+    assert fallback_faults(skill_text(skill), LIST_CREATION_SECTIONS[skill]) == []
+
+
+@pytest.mark.parametrize("skill", list(LIST_CREATION_SECTIONS))
+@pytest.mark.parametrize(
+    ("old", "new"),
+    [
+        ("read that one key", "read the entire profile before the checklist"),
+        ("read that one key", "read that one key and `references/profile.md`"),
+        ("and no other profile content is read before the checklist file exists", "and the overlay is read too"),
+        ("compose the primary-session checklist first; only placing", "first read the profile; placing"),
+    ],
+    ids=["whole-profile", "extra-reference", "closing-clause", "compose-first"],
+)
+def test_a_broadened_fallback_fails_the_guard(skill: str, old: str, new: str) -> None:
+    """Mutation proof: a fallback that reads more than its one key before the list fails the guard."""
+    text = mutated_skill(skill, old, new)
+    assert fallback_faults(text, LIST_CREATION_SECTIONS[skill])
+
+
+@pytest.mark.parametrize("skill", list(LIST_CREATION_SECTIONS))
+def test_a_dropped_fallback_fails_the_guard(skill: str) -> None:
+    text = skill_text(skill)
+    line = next(line for line in text.splitlines() if line.startswith(FALLBACK_LEAD))
+    assert fallback_faults(text.replace(line + "\n", ""), LIST_CREATION_SECTIONS[skill])
 
 
 def test_every_composing_skill_has_a_seed_entry() -> None:

@@ -37,6 +37,7 @@ Any other phrasing about metrics is asked about, never guessed.
 - Resolve both arguments, asking about any ambiguity, before the todo list is created.
 - When `metrics` resolves on, the facilitator's first command, right after the todo list is created, is to take a UTC timestamp with a command and record it as `invocation_start` in the metrics file.
   The bootstrap todo list then starts with the record invocation start item, so that command runs under an item in progress.
+  That command first creates the session's scratch directory (`references/runtimes.md`, Scratch files) when it does not exist yet, so the metrics file has a directory.
 - Write the resolved value as one line `metrics: on` or `metrics: off` at the top of the todo list and in the closing message.
 
 With `metrics` off or omitted, the facilitator does not open `references/metrics.md`, collects no figure, creates no metrics scratch file, posts no metrics comment, and adds no metrics content to any brief, record, report, todo list, closing message, or tracker write, other than the `metrics: off` line.
@@ -46,8 +47,8 @@ Every other metrics instruction in this skill applies only when `metrics` is on.
 
 Create the todo list as your first action, before you read any reference, the profile, or an overlay.
 The only action before it is the one Arguments orders before the todo list: resolving the arguments, asking about any ambiguity.
-With no todo tool, creating the primary-session checklist fallback includes creating its scratch directory when it does not exist yet and, when the runtime's scratch base is `profile.workspace.scratch_dir`, that one key read to place it; no other profile content comes before the checklist.
-Create it from this file alone as a bootstrap list: one item per file listed below, the profile, and this skill's overlay, then one item per step (Step 1 to Step 4, the triage writes, the records, and the closing message).
+With no todo tool, compose the primary-session checklist first; only placing its file may then create its scratch directory when it does not exist yet and, when the runtime's scratch base is `profile.workspace.scratch_dir`, read that one key, and no other profile content is read before the checklist file exists.
+Create it from this file alone as a bootstrap list: one item per file listed below, including the profile and overlay those files locate, then one item per step (Step 1 to Step 4, the triage writes, the records, and the closing message).
 After reading `references/todo-tracking.md`, expand the list to the story-refinement seed items before the first investigation, context, tracker write, delegation, or any command other than the one Arguments orders right after the todo list, and add the items that need the story or the profile as soon as they are known.
 
 - [references/profile.md](references/profile.md) - find the profile and this skill's overlay right after the todo list is created, before any other file.
