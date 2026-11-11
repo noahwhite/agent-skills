@@ -1801,7 +1801,7 @@ def skill_section(heading: str) -> str:
         "Any other phrasing about metrics is asked about, never guessed.",
         "Resolve both arguments, asking about any ambiguity, before the todo list is created.",
         "Write the resolved value as one line `metrics: on` or `metrics: off` at the top of the todo list and in the closing message.",
-        "When `metrics` resolves on, the facilitator's next action, before the todo list, is to take a UTC timestamp with a command and record it as `invocation_start` in the metrics file.",
+        "When `metrics` resolves on, the facilitator's first command, right after the todo list is created, is to take a UTC timestamp with a command and record it as `invocation_start` in the metrics file.",
     ],
 )
 def test_arguments_section_defines_the_story_identifier_and_the_metrics_switch(sentence: str) -> None:
@@ -2007,10 +2007,12 @@ def test_todo_tracking_seed_lists_invocation_start_first_among_metrics_on_items(
     assert metrics_on.startswith("record invocation start (metrics on)")
 
 
-def test_invocation_start_is_the_first_action_after_the_switch_resolves() -> None:
+def test_invocation_start_is_the_first_command_after_the_todo_list() -> None:
     bullets = [line for line in section(SKILL.read_text(), ARGUMENTS).splitlines() if line.startswith("- ")]
     resolve = next(i for i, line in enumerate(bullets) if line.startswith("- Resolve both arguments"))
-    assert bullets[resolve + 1].startswith("- When `metrics` resolves on, the facilitator's next action, before the todo list,")
+    assert bullets[resolve + 1].startswith(
+        "- When `metrics` resolves on, the facilitator's first command, right after the todo list is created,"
+    )
 
 
 # --- SKL-92: the metrics summary is posted on the story -------------------------------------------
@@ -2041,7 +2043,8 @@ def test_metrics_reference_shares_the_timestamp_with_a_posted_summary() -> None:
     text = spaced((ROOT / "shared" / "metrics.md").read_text())
     sentence = (
         "The elapsed wall-clock runs from the recorded `invocation_start`, the UTC timestamp taken with a command "
-        "the moment the `metrics` switch resolved on, to `invocation_end`, a UTC timestamp taken with a command "
+        "right after the todo list is created, once the `metrics` switch resolved on, to `invocation_end`, "
+        "a UTC timestamp taken with a command "
         "immediately before the closing message or closing report, or, where the skill composes the summary "
         "before that message, immediately before the summary is composed."
     )

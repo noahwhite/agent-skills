@@ -35,7 +35,8 @@ If none was given, ask the owner for one before doing anything else; never guess
 Any other phrasing about metrics is asked about, never guessed.
 
 - Resolve both arguments, asking about any ambiguity, before the todo list is created.
-- When `metrics` resolves on, the facilitator's next action, before the todo list, is to take a UTC timestamp with a command and record it as `invocation_start` in the metrics file.
+- When `metrics` resolves on, the facilitator's first command, right after the todo list is created, is to take a UTC timestamp with a command and record it as `invocation_start` in the metrics file.
+  The bootstrap todo list then starts with the record invocation start item, so that command runs under an item in progress.
 - Write the resolved value as one line `metrics: on` or `metrics: off` at the top of the todo list and in the closing message.
 
 With `metrics` off or omitted, the facilitator does not open `references/metrics.md`, collects no figure, creates no metrics scratch file, posts no metrics comment, and adds no metrics content to any brief, record, report, todo list, closing message, or tracker write, other than the `metrics: off` line.
@@ -44,9 +45,9 @@ Every other metrics instruction in this skill applies only when `metrics` is on.
 ## Read first
 
 Create the todo list as your first action, before you read any reference, the profile, or an overlay.
-The only actions before it are the two that Arguments orders before the todo list: resolving the arguments and, when Arguments calls for it, the `invocation_start` timestamp command.
+The only action before it is the one Arguments orders before the todo list: resolving the arguments, asking about any ambiguity.
 Create it from this file alone as a bootstrap list: one item per file listed below, the profile, and this skill's overlay, then one item per step (Step 1 to Step 4, the triage writes, the records, and the closing message).
-After reading `references/todo-tracking.md`, expand the list to the story-refinement seed items before the first investigation, context, tracker write, delegation, or any other command, and add the items that need the story or the profile as soon as they are known.
+After reading `references/todo-tracking.md`, expand the list to the story-refinement seed items before the first investigation, context, tracker write, delegation, or any command other than the one Arguments orders right after the todo list, and add the items that need the story or the profile as soon as they are known.
 
 - [references/profile.md](references/profile.md) - find the profile and this skill's overlay right after the todo list is created, before any other file.
 - [references/todo-tracking.md](references/todo-tracking.md) - required: the list rules and the story-refinement seed list, with one item per voter input, accept round, point value, consensus check, basis-challenge round, discussion and re-vote when the check calls for them, split, and triage write.

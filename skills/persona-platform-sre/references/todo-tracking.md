@@ -26,7 +26,7 @@ The list is the visible record of the run: how many steps there are and where yo
    Before starting any work that has no item (a further round or re-run, a follow-up request, a fix found along the way), add an item for it and mark it in progress.
    For sequential work, first complete the current in-progress item if its work is done, or else return it to pending until the new item is completed.
    A new finding, remediation round, blocker, or follow-up gets an item when it is discovered, before that step starts.
-   Do not delete items that turned out unnecessary; mark them completed with a short note, or drop them only if they were never started.
+   Do not delete items that turned out unnecessary: mark one that was started completed with a short note, and drop one only if it was never started.
 7. **An item is completed only when its outcome was observed** (test output seen, run concluded, state read back), not when the command was issued.
 8. **Finish the list before reporting.**
    Before the final report, every item is completed, or is left open and named as not done with the reason.
@@ -50,6 +50,7 @@ Whenever you check the subagent's status, read that file from the subagent's sub
 Whether the todo tool exists at all depends on the runtime and its configuration; some ship it off by default or behind an experimental flag, and a harness may still not expose it.
 Consult `references/runtimes.md` for the version-specific mapping; do not assume a tool exists from configuration alone.
 When the primary session has no todo tool, create a checklist file at `<scratch directory>/<session-label>-todo.md` before starting, using the same item granularity and `(in progress)` marker as a subagent.
+Creating that scratch directory, when it does not exist yet, is part of creating the checklist.
 `<scratch directory>` is the one per-session scratch directory (`references/runtimes.md`, Scratch files), never a fixed path under the base.
 Tell the user its path and update it at every step; this file is the visible plan and the place to mirror delegated checklists.
 Do not block or ask for a runtime reconfiguration merely because the todo tool is unavailable.

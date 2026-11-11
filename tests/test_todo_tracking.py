@@ -37,8 +37,8 @@ DISCOVERY_RULE = (
     "before that step starts."
 )
 KEEP_UNNEEDED_RULE = (
-    "Do not delete items that turned out unnecessary; mark them completed with a short note, or "
-    "drop them only if they were never started."
+    "Do not delete items that turned out unnecessary: mark one that was started completed with a "
+    "short note, and drop one only if it was never started."
 )
 OBSERVED_RULE = (
     "**An item is completed only when its outcome was observed** (test output seen, run concluded, "
@@ -57,18 +57,25 @@ RETIRED_RULES = (
     "Starting points only; split further as the task demands.",
 )
 
-# SKL-246 guard: one short key phrase per rule, in the section that carries it, so deleting any
-# single rule fails the guard while rewording around the phrase does not. The rule number pins
-# where a Rules phrase lives; the seed-list phrase has no number.
+# SKL-246 guard: short key phrases per rule, one for each half a rule has, in the section that
+# carries it, so deleting any rule or either half fails the guard while rewording around the
+# phrases does not. The rule number pins where a Rules phrase lives; seed-list phrases have none.
 RULE_KEY_PHRASES = {
-    "seed-list granularity": ("## Seed lists", None, "minimum granularity"),
-    "unknown-count rounds": ("## Seed lists", None, "each further round or re-run gets its item"),
-    "transition": ("## Rules", 4, "never mark completed an item that was never in progress"),
-    "parallel-delegation exception": ("## Rules", 5, "in progress together from launch until each result is read"),
-    "add-an-item": ("## Rules", 6, "add an item for it and mark it in progress"),
-    "sequential pause": ("## Rules", 6, "return it to pending"),
-    "closing": ("## Rules", 8, "named as not done with the reason"),
+    "seed-list granularity": ("## Seed lists", None, ("minimum granularity", "one item per unit they name")),
+    "unknown-count rounds": ("## Seed lists", None, ("each further round or re-run gets its item",)),
+    "transition": (
+        "## Rules", 4,
+        ("Mark an item in progress before its first tool call", "never mark completed an item that was never in progress"),
+    ),
+    "parallel-delegation exception": (
+        "## Rules", 5,
+        ("One item is in progress at a time for sequential work", "in progress together from launch until each result is read"),
+    ),
+    "add-an-item": ("## Rules", 6, ("add an item for it and mark it in progress",)),
+    "sequential pause": ("## Rules", 6, ("return it to pending",)),
+    "closing": ("## Rules", 8, ("every item is completed", "named as not done with the reason")),
 }
+RULE_PHRASES = [(rule, phrase) for rule, (_, _, phrases) in RULE_KEY_PHRASES.items() for phrase in phrases]
 
 # SKL-246 guard on list-creation order. The scope is the skill text from its title to the end of
 # the section that creates the list, so Arguments, Read first and Metrics are covered too.
@@ -79,25 +86,38 @@ LIST_CREATION_SECTIONS = {
 CREATE_PHRASE = "create the todo list"
 FIRST_ACTION_PHRASE = "as your first action"
 BEFORE_READS_RE = re.compile(
-    r"before (?:you read|reading) any reference,? (?:the )?profile,? or (?:an )?overlay"
+    r"before (?:you read|reading|you open|opening) any reference,? (?:the )?profile,? or (?:an )?overlay"
 )
-# A read instruction: a read verb (not passive) in the same clause as a reference, the profile or
-# an overlay. Nouns alone ("the profile may be incomplete") are not reads.
-READ_VERB_RE = re.compile(r"(?<!\bis )(?<!\bare )(?<!\bbe )\b(?:read|reading|open|load|consult|map|find)\b")
+# A read instruction: an active read verb, or a passive read whose subject is a reference, the
+# profile or an overlay, in the same clause as one of those targets. Nouns alone ("the profile may
+# be incomplete") are not reads, and neither is a plural passive that describes a method ("figures
+# are read as the runtimes row states"). Negation applies to each verb on its own.
+READ_VERB_RE = re.compile(
+    r"(?<!\bis )(?<!\bare )(?<!\bbe )\b(?:read|reading|open|opening|load|consult|map|find|see|follow|use|check|per)\b"
+)
+PASSIVE_READ_RE = re.compile(
+    r"(?:\bthe profile|references/\S+|\breference|\boverlay)\S*\s+(?:is|be|was|has been)\s+(?:read|opened|loaded)\b"
+)
 READ_TARGET_RE = re.compile(r"references/|\breferences?\b|\bthe profile\b|\boverlays?\b")
-NEGATED_READ_RE = re.compile(
-    r"\b(?:not|never|no)\s+(?:even\s+)?(?:\w+\s+)?(?:read|open|load)\b|\b(?:read|open|load)\s+no\b"
-)
+NEGATION_BEFORE_RE = re.compile(r"\b(?:not|never|no)\s+(?:even\s+)?(?:\w+\s+)?$")
+NEGATION_AFTER_RE = re.compile(r"^\s+no\b")
 AFTER_LIST_RE = re.compile(
     r"after step 0 creates the todo list|after the todo list is created|after (?:you )?creat(?:e|ing) the todo list"
 )
 BEFORE_LIST_RE = re.compile(
     r"before (?:step 0 creates|creating|you create|the todo list)"
 )
-REFINEMENT_CARVE_OUT = (
-    "The only actions before it are the two that Arguments orders before the todo list: resolving the "
-    "arguments and, when Arguments calls for it, the `invocation_start` timestamp command."
-)
+# The only actions each skill allows before its list: the argument resolution its Arguments orders.
+PRE_LIST_CARVE_OUTS = {
+    "story-to-done": (
+        "The only actions before it are the ones Arguments orders before step 0: resolving the arguments, "
+        "asking the user about a missing story ID or any ambiguous value."
+    ),
+    "story-refinement": (
+        "The only action before it is the one Arguments orders before the todo list: resolving the "
+        "arguments, asking about any ambiguity."
+    ),
+}
 
 
 def section(text: str, heading: str) -> str:
@@ -137,9 +157,9 @@ def missing_rules(text: str) -> list[str]:
     """The SKL-246 rules whose key phrase is absent from the section, or numbered rule, that carries it."""
     numbered = rules(text)
     missing = []
-    for name, (heading, number, phrase) in RULE_KEY_PHRASES.items():
-        body = section(text, heading) if number is None else numbered.get(number, "")
-        if phrase not in flat(body):
+    for name, (heading, number, phrases) in RULE_KEY_PHRASES.items():
+        body = flat(section(text, heading) if number is None else numbered.get(number, ""))
+        if any(phrase not in body for phrase in phrases):
             missing.append(name)
     return missing
 
@@ -180,8 +200,18 @@ def clauses(block: str) -> list[str]:
     return [part for part in re.split(r"(?<=[.;:])\s+", flat(block).lower()) if part.strip(". ")]
 
 
+def orders_read(text: str) -> bool:
+    """Whether the text holds a non-negated active read verb or a passive read of a target."""
+    if PASSIVE_READ_RE.search(text):
+        return True
+    return any(
+        not NEGATION_BEFORE_RE.search(text[: verb.start()]) and not NEGATION_AFTER_RE.search(text[verb.end():])
+        for verb in READ_VERB_RE.finditer(text)
+    )
+
+
 def is_read(clause: str) -> bool:
-    return bool(READ_VERB_RE.search(clause) and READ_TARGET_RE.search(clause) and not NEGATED_READ_RE.search(clause))
+    return bool(READ_TARGET_RE.search(clause) and orders_read(clause))
 
 
 def list_creation_order_faults(text: str, heading: str) -> list[str]:
@@ -197,12 +227,12 @@ def list_creation_order_faults(text: str, heading: str) -> list[str]:
         faults.append("list creation is not the first action")
     if not BEFORE_READS_RE.search(create):
         faults.append("the list-creation instruction does not say it comes before every read")
-    if READ_VERB_RE.search(create[: create.index(CREATE_PHRASE)]):
+    if orders_read(create[: create.index(CREATE_PHRASE)]):
         faults.append(f"the list-creation instruction orders a read first: {create!r}")
     for clause in earlier + own[:index]:
         if is_read(clause) and not AFTER_LIST_RE.search(clause):
             faults.append(f"a read is ordered before list creation: {clause!r}")
-    for clause in earlier + own[:index] + own[index + 1:]:
+    for clause in clauses(text[text.index("\n# "):]):
         if is_read(clause) and BEFORE_LIST_RE.search(clause):
             faults.append(f"a read is ordered before list creation: {clause!r}")
     return faults
@@ -247,10 +277,18 @@ def test_every_skl_246_rule_is_present() -> None:
     assert missing_rules(TODO.read_text()) == []
 
 
-@pytest.mark.parametrize("rule", list(RULE_KEY_PHRASES))
-def test_deleting_any_one_rule_fails_the_guard(rule: str) -> None:
-    """Mutation proof: drop the sentence carrying each rule from the real file and the guard names that rule."""
-    assert missing_rules(without_sentence(TODO.read_text(), RULE_KEY_PHRASES[rule][2])) == [rule]
+@pytest.mark.parametrize(("rule", "phrase"), RULE_PHRASES)
+def test_deleting_any_one_rule_fails_the_guard(rule: str, phrase: str) -> None:
+    """Mutation proof: drop the sentence carrying each key phrase from the real file and the guard names that rule."""
+    assert missing_rules(without_sentence(TODO.read_text(), phrase)) == [rule]
+
+
+@pytest.mark.parametrize(("rule", "phrase"), RULE_PHRASES)
+def test_deleting_either_half_of_a_rule_fails_the_guard(rule: str, phrase: str) -> None:
+    """Mutation proof: drop only the clause a key phrase anchors and the guard names that rule."""
+    text = TODO.read_text()
+    assert text.count(phrase) == 1, phrase
+    assert missing_rules(text.replace(phrase, "")) == [rule]
 
 
 @pytest.mark.parametrize("width", [40, 200])
@@ -328,13 +366,42 @@ def test_the_retired_read_first_ordering_fails_the_guard() -> None:
 
 
 @pytest.mark.parametrize("skill", list(LIST_CREATION_SECTIONS))
-def test_equivalent_wording_keeps_the_guard_green(skill: str) -> None:
+@pytest.mark.parametrize(
+    "wording", ["before reading any reference, profile, or overlay", "before opening any reference, profile, or overlay"]
+)
+def test_equivalent_wording_keeps_the_guard_green(skill: str, wording: str) -> None:
+    text = mutated_skill(skill, "before you read any reference, the profile, or an overlay", wording)
+    assert list_creation_order_faults(text, LIST_CREATION_SECTIONS[skill]) == []
+
+
+@pytest.mark.parametrize("skill", list(LIST_CREATION_SECTIONS))
+@pytest.mark.parametrize(
+    "prefix",
+    ["See `references/profile.md` first.\n", "Once the profile is read, follow `references/linear.md`.\n"],
+    ids=["see-first", "passive-read"],
+)
+def test_a_read_phrased_with_another_verb_before_creation_fails_the_guard(skill: str, prefix: str) -> None:
+    """Mutation proof: a pre-list read phrased with "see", "follow" or the passive voice fails the guard."""
+    text = mutated_skill(skill, "Create the todo list as your first action", prefix + "Create the todo list as your first action")
+    assert list_creation_order_faults(text, LIST_CREATION_SECTIONS[skill])
+
+
+@pytest.mark.parametrize("skill", list(LIST_CREATION_SECTIONS))
+def test_a_negated_read_does_not_hide_a_read_in_the_same_clause(skill: str) -> None:
+    """Mutation proof: negation applies per verb, so "do not open X, but read Y before the list" fails."""
     text = mutated_skill(
         skill,
-        "before you read any reference, the profile, or an overlay",
-        "before reading any reference, profile, or overlay",
+        "## Arguments\n\n",
+        "## Arguments\n\n- Do not open an overlay, but read `references/profile.md` before creating the todo list.\n",
     )
-    assert list_creation_order_faults(text, LIST_CREATION_SECTIONS[skill]) == []
+    assert list_creation_order_faults(text, LIST_CREATION_SECTIONS[skill])
+
+
+@pytest.mark.parametrize("skill", list(LIST_CREATION_SECTIONS))
+def test_a_pre_list_read_in_a_later_section_fails_the_guard(skill: str) -> None:
+    """Mutation proof: a read ordered before the list anywhere in the skill, even its last section, fails."""
+    text = skill_text(skill).rstrip("\n") + "\nRead `references/linear.md` before creating the todo list.\n"
+    assert list_creation_order_faults(text, LIST_CREATION_SECTIONS[skill])
 
 
 @pytest.mark.parametrize("skill", list(LIST_CREATION_SECTIONS))
@@ -343,12 +410,14 @@ def test_a_profile_mention_that_is_not_a_read_keeps_the_guard_green(skill: str) 
     assert list_creation_order_faults(text, LIST_CREATION_SECTIONS[skill]) == []
 
 
-def test_story_refinement_names_its_only_pre_list_actions() -> None:
-    """The refinement carve-out is deliberate: Arguments orders exactly two actions before the list."""
-    text = skill_text("story-refinement")
-    assert REFINEMENT_CARVE_OUT in flat(section(text, "## Read first"))
-    arguments = [clause for clause in clauses(section(text, "## Arguments")) if "before the todo list" in clause]
-    assert len(arguments) == 2, arguments
+@pytest.mark.parametrize("skill", list(LIST_CREATION_SECTIONS))
+def test_each_skill_names_its_only_pre_list_actions(skill: str) -> None:
+    """Only argument resolution precedes the list: no command, including the metrics timestamp."""
+    text = skill_text(skill)
+    assert PRE_LIST_CARVE_OUTS[skill] in flat(section(text, LIST_CREATION_SECTIONS[skill]))
+    for clause in clauses(text[text.index("\n# "):]):
+        if "invocation_start" in clause or "timestamp" in clause:
+            assert not BEFORE_LIST_RE.search(clause), clause
 
 
 def test_every_composing_skill_has_a_seed_entry() -> None:

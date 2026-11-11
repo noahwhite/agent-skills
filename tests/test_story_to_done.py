@@ -772,7 +772,9 @@ METRICS_STEP0 = (
     "story and read it back before giving the summary in the closing report."
 )
 METRICS_NOTHING_BEFORE_START = (
-    "With `metrics` on, launch no command before the start form, not even to read a file or list a directory; "
+    "With `metrics` on, launch no command before the start form, not even to read a file or list a directory, "
+    "except the scratch-directory creation that the step 0 checklist fallback needs when no todo tool exists, "
+    "whose directory the start form then uses; "
     "after step 0 creates the todo list, read this skill's references and the profile with the runtime's "
     "file-read tool, which launches nothing."
 )
@@ -781,7 +783,7 @@ METRICS_START = (
     "which records "
     "`invocation_start` and makes its `metrics.txt` the `<metrics file>` of every later launch, with the "
     "scratch-directory creation from `references/runtimes.md`, or `scratch='<directory you were handed>'` when "
-    "you were handed one, in place of `<scratch creation>`:"
+    "you were handed one or the step 0 checklist fallback created it, in place of `<scratch creation>`:"
 )
 METRICS_START_BLOCK = [
     "```sh",
