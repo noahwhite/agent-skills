@@ -1,1 +1,3 @@
 .opencode-version text eol=lf
+# SKL-242 dossier-size fixture: byte sizes are pinned, so no line-ending conversion.
+tests/fixtures/dossier_size/** -text

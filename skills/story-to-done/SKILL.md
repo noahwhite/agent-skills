@@ -32,7 +32,7 @@ Five arguments are optional, given as `key=value` or in plain words ("QA on Opus
 - An argument left out takes its default.
 - Effort is one of `low`, `medium`, `high`, `xhigh`, or `max`.
 - If a value is ambiguous (an unknown model, an effort outside that list), ask the user; never guess.
-- Map each model and effort to your runtime with `references/runtimes.md`.
+- After step 0 creates the todo list, map each model and effort to your runtime with `references/runtimes.md`.
   If the runtime cannot run that exact model or effort level, stop and say so; never substitute another model or level.
 - Each role keeps the same model and effort in every round.
 - `metrics` is given as `metrics=on` or `metrics=off`, or in plain words: "with metrics" and "metrics on" mean on, "without metrics" and "metrics off" mean off; ask the user about any other phrasing about metrics; never guess.
@@ -42,7 +42,9 @@ Five arguments are optional, given as `key=value` or in plain words ("QA on Opus
 
 ## Read first
 
-- [references/profile.md](references/profile.md) - find the profile and this skill's overlay as soon as the story ID is known.
+Step 0 creates the todo list before any file below is read.
+
+- [references/profile.md](references/profile.md) - find the profile and this skill's overlay right after step 0 creates the todo list.
 - [references/runtimes.md](references/runtimes.md) - maps todo list, subagents, model and effort, scratch directory and asking the user to your runtime.
 
 Read each of these at the step that needs it:
@@ -56,18 +58,22 @@ Where this file and a capability file disagree, the capability file wins.
 
 ## Metrics
 
-Only when `metrics` is on, read [references/metrics.md](references/metrics.md) once the story ID is known: it is the single home for what a `story-to-done` run collects and reports, and this file does not restate it.
+Only when `metrics` is on, read [references/metrics.md](references/metrics.md) right after step 0 creates the todo list: it is the single home for what a `story-to-done` run collects and reports, and this file does not restate it.
 
-The run rules for a `metrics=on` run - where the figures live, timed launches, extras, the start form, the command wrapper, the end form, the summary post, and the closing report - are in [references/metrics-protocol.md](references/metrics-protocol.md); read it with the runtime's file-read tool, which launches nothing, together with `references/metrics.md`, before the first command is launched.
+The run rules for a `metrics=on` run - where the figures live, timed launches, extras, the start form, the command wrapper, the end form, the summary post, and the closing report - are in [references/metrics-protocol.md](references/metrics-protocol.md); read it with the runtime's file-read tool, which launches nothing, together with `references/metrics.md`, after step 0 creates the todo list and before the first command is launched.
 
 - **Usage:** Each launch's Tokens and Tool calls are read as the "Read a subagent's usage" row and the "Usage from shell-launched agents" rule in [references/runtimes.md](references/runtimes.md) state; this section states no usage formula of its own.
 
-With `metrics` on, launch no command before the start form, not even to read a file or list a directory; read this skill, its references and the profile with the runtime's file-read tool, which launches nothing.
+With `metrics` on, launch no command before the start form, not even to read a file or list a directory, except the scratch-directory creation that the step 0 checklist fallback needs when no todo tool exists, whose directory the start form then uses; after step 0 creates the todo list, read this skill's references and the profile with the runtime's file-read tool, which launches nothing.
 
 ## 0. Track everything on a todo list
 
-Once the story ID is known and the profile is read, create a fine-grained todo list per `references/todo-tracking.md`.
-Seed it with at least: resolve the arguments, read the story state, spawn the senior engineer, each check on its checklist until it hands back, the checklist read-back at each handback with each subagent's read-back resume count, read back the deployment-review state, each QA round, each read-back of QA's state, each failed item handed back, each fix round, and the final state read-back.
+Create the todo list as your first action, before you read any reference, the profile, or an overlay.
+The only actions before it are the ones Arguments orders before step 0: resolving the arguments, asking the user about a missing story ID or any ambiguous value.
+With no todo tool, compose the primary-session checklist first; only placing its file may then create its scratch directory when it does not exist yet and, when the runtime's scratch base is `profile.workspace.scratch_dir`, read that one key, and no other profile content is read before the checklist file exists.
+Create it from this file alone as a bootstrap list: one item per file Read first names, including the profile and overlay those files locate, then one item per step 1 to 5.
+After reading `references/todo-tracking.md`, expand the list to the seed items below, at the granularity that file requires, before your first investigation, edit, command, or delegation, and add the items that need the story or the profile as soon as they are known.
+Seed it with at least: read the story state, spawn the senior engineer, each check on its checklist until it hands back, the checklist read-back at each handback with each subagent's read-back resume count, read back the deployment-review state, each QA round, each read-back of QA's state, each failed item handed back, each fix round, and the final state read-back.
 With `metrics` on, seed two more items: collect the metrics figures; then post the metrics summary on the story and read it back before giving the summary in the closing report.
 Add an item for each new round as it starts; mark each done once its outcome is observed.
 Every subagent brief requires a checklist file in that subagent's own subdirectory of the scratch directory; read it from there and mirror it into your list whenever you check on the subagent.
