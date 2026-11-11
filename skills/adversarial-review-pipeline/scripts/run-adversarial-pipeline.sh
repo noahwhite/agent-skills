@@ -17,7 +17,8 @@
 #   run-adversarial-pipeline.sh record <sweep|hunt|arbitrate> --base REF [--model ID] [--spec FILE] [--no-sweep]  # accept a subagent's report
 #   run-adversarial-pipeline.sh checkout --base REF [--scratch DIR]   # an extra throwaway detached worktree at HEAD
 #   run-adversarial-pipeline.sh cleanup <checkout-path>               # removes a checkout this script made
-#   run-adversarial-pipeline.sh paths --base REF                      # prints this run's artifact paths
+#   run-adversarial-pipeline.sh paths --base REF                      # prints this run's artifact paths,
+#                               # then a final 'dossier_sizes <path>' line naming the size log
 # Every command also takes --repo DIR.
 #
 # Runs: artifacts live in a run directory keyed by the base and head commit SHAs, under
@@ -98,6 +99,16 @@
 # record is written to a temporary file and renamed into place. Sidecars are measurements only: they are not in any binding or stamp and never change
 # acceptance. One that cannot be written prints a WARNING, removes only its own temporary file and
 # changes no exit status.
+#
+# Size log: `dossier-sizes.md` in the run directory (`paths` names it) renders the sidecars present,
+# rebuilt after every completed sidecar write and after every sidecar removal point (a phase's start
+# and the phases it discards, whether or not a sidecar was there, and the `dossier` exit trap). It
+# lists sweep, hunt and arbitrate in that order: '<phase>: <bytes> bytes' followed by the sidecar's
+# `excluded` lines, or '<phase>: not run' without a usable sidecar. Under --no-sweep the sweep line is
+# 'sweep: absent (--no-sweep)' and any sweep sidecar is ignored. A final 'total: <bytes> bytes' line
+# appears once every phase --no-sweep does not disable has a sidecar, and sums those phases. The log
+# is a view only: no phase demands it, it is in no binding or stamp, and one that cannot be written
+# prints one WARNING and changes no exit status or acceptance.
 #
 # Env equivalents: ADVERSARIAL_REPO, ADVERSARIAL_TEST_CMD, ADVERSARIAL_TEST_DIR, ADVERSARIAL_BASE,
 # ADVERSARIAL_SPEC_FILE, ADVERSARIAL_SCRATCH, ADVERSARIAL_AGENT_CMD, ADVERSARIAL_MODEL,
@@ -500,12 +511,14 @@ invalidate_downstream() {  # $1 = phase: a re-run discards every later phase, in
     rm -f -- "$a" "$a.stamp" "$RUN_DIR/$p.launch" "$RUN_DIR/$p.binding" "$RUN_DIR/$p.primary" \
       "$RUN_DIR/$p.dossier"
   done
+  # Rebuilt whether or not a sidecar was there, so the log never shows a discarded phase.
+  write_dossier_sizes
 }
 
 begin_phase() {  # $1 = phase: drop stale output and later phases, bind the inputs, mark the launch time
   local art; art="$(artifact_for "$1")"
   rm -f -- "$art" "$art.stamp" "$RUN_DIR/$1.dossier"
-  invalidate_downstream "$1"
+  invalidate_downstream "$1"   # also rebuilds the size log, after this phase's own removal
   : > "$RUN_DIR/$1.launch"
 }
 
@@ -1063,7 +1076,67 @@ write_size_sidecar() {  # $1 = phase, $2 = the dossier just written
   } 2>/dev/null; then
     [ -z "$tmp" ] || rm -f -- "$tmp" 2>/dev/null || true
     printf 'WARNING: could not write the %s dossier size sidecar %q; the phase is unaffected.\n' "$1" "$side" >&2
+    return 0
   fi
+  write_dossier_sizes
+}
+
+# The size log's text (see "Size log" in the header), built from the sidecars present now into
+# DOSSIER_SIZES_TEXT. A sidecar that is not a regular file, cannot be read, or carries no byte count
+# of at most 18 digits (so three still sum without overflow) gives no size: that phase reads
+# 'not run' and the rest of the log is still rebuilt.
+DOSSIER_SIZES_TEXT=""
+dossier_sizes_text() {
+  local p side content line bytes total=0 complete=1 text=""
+  local -a excluded=()
+  for p in sweep hunt arbitrate; do
+    if [ "$p" = "sweep" ] && [ "$NO_SWEEP" -eq 1 ]; then
+      text+="sweep: absent (--no-sweep)"$'\n'
+      continue
+    fi
+    side="$RUN_DIR/$p.dossier"
+    bytes=""
+    excluded=()
+    if [ -f "$side" ] && content="$(cat -- "$side" 2>/dev/null)"; then
+      while IFS= read -r line; do
+        case "$line" in
+          bytes=*) bytes="${line#bytes=}" ;;
+          "excluded "*) excluded+=("$line") ;;
+        esac
+      done <<< "$content"
+    fi
+    if ! [[ "$bytes" =~ ^[0-9]{1,18}$ ]]; then
+      text+="$p: not run"$'\n'
+      complete=0
+      continue
+    fi
+    text+="$p: $bytes bytes"$'\n'
+    for line in "${excluded[@]}"; do text+="$line"$'\n'; done
+    total=$(( total + 10#$bytes ))
+  done
+  if [ "$complete" -eq 1 ]; then text+="total: $total bytes"$'\n'; fi
+  DOSSIER_SIZES_TEXT="$text"
+}
+
+# Rewrites the size log whole: a temporary file renamed into place, so no partial log is published.
+# A log that cannot be written warns once per invocation and never changes an exit status or
+# acceptance; `mv -T` refuses to move the record into a directory standing in the log's place.
+DOSSIER_SIZES_WARNED=0
+write_dossier_sizes() {
+  local log="$RUN_DIR/dossier-sizes.md" tmp=""
+  if ! {
+    dossier_sizes_text &&
+    tmp="$(mktemp "$log.tmp.XXXXXX")" &&
+    printf '%s' "$DOSSIER_SIZES_TEXT" > "$tmp" &&
+    mv -fT -- "$tmp" "$log"
+  } 2>/dev/null; then
+    [ -z "$tmp" ] || rm -f -- "$tmp" 2>/dev/null || true
+    if [ "$DOSSIER_SIZES_WARNED" -eq 0 ]; then
+      DOSSIER_SIZES_WARNED=1
+      printf 'WARNING: could not write the dossier size log %q; the phase is unaffected.\n' "$log" >&2
+    fi
+  fi
+  return 0
 }
 
 # Every dossier names the phase's throwaway checkout and the base, so anything not embedded inline
@@ -1474,6 +1547,7 @@ case "$cmd" in
     unstart_phase() {
       rm -f -- "$dossier" "$RUN_DIR/$phase.launch" "$RUN_DIR/$phase.binding" "$RUN_DIR/$phase.primary" \
         "$RUN_DIR/$phase.dossier"
+      write_dossier_sizes
     }
     checkout_rc=0
     checkout="$(make_checkout)" || checkout_rc=$?
@@ -1631,7 +1705,7 @@ case "$cmd" in
 
   checkout) make_checkout || die 2 "could not create the throwaway checkout" ;;
   paths)
-    printf 'run %s\npreflight %s\nsuite_log %s\nsweep %s\nhunt %s\narbitrate %s\n' \
-      "$RUN_DIR" "$PHASE0" "$SUITE_LOG" "$PHASE1" "$PHASE2" "$PHASE3"
+    printf 'run %s\npreflight %s\nsuite_log %s\nsweep %s\nhunt %s\narbitrate %s\ndossier_sizes %s\n' \
+      "$RUN_DIR" "$PHASE0" "$SUITE_LOG" "$PHASE1" "$PHASE2" "$PHASE3" "$RUN_DIR/dossier-sizes.md"
     ;;
 esac

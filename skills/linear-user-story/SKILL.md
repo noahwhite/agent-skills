@@ -51,6 +51,8 @@ After the story exists, triage and implementation follow the shared lifecycle in
 - **State:** create in the backlog state; never create in progress.
 - **Assignee:** always `profile.tracker.assignee`, never a person's named seat the profile does not name.
 - **Estimate:** not set at creation; triage sets it.
+- **Acceptance Criteria:** an acceptance criterion that needs behavioural evidence must be one-pass producible, as [references/linear.md](references/linear.md) "Acceptance criteria and scope" states.
+- **Definition of Ready:** the "observable behaviour" box is checked against the rule that behavioural evidence must be one-pass producible, as [references/linear.md](references/linear.md) "Acceptance criteria and scope" states.
 
 ## Template (the description)
 
