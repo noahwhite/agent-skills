@@ -51,6 +51,17 @@ def test_skill_file_exists() -> None:
     assert SKILL.is_file(), f"missing {SKILL.relative_to(ROOT)}"
 
 
+def test_description_names_the_recorded_instruction_as_the_one_exception() -> None:
+    # SKL-249: since SKL-245 a recorded instruction can remove unmerged work, so the description
+    # qualifies the guard instead of claiming it refuses all unmerged work.
+    description = repository_test_helper("split_frontmatter")(SKILL)[0]["description"]
+    assert (
+        "under a guarded inventory that refuses anything still holding unmerged work unless the invocation "
+        "carries an explicit recorded instruction naming it."
+    ) in description, description
+    assert "holding unmerged work." not in description, description
+
+
 def test_manifest_registers_skill_with_its_capabilities() -> None:
     assert {"todo-tracking", "linear", "github"} <= set(MANIFEST["skills"]["cleanup"])
 
@@ -185,7 +196,9 @@ def test_deletion_requires_merge_evidence_from_the_storys_pull_requests() -> Non
         # SKL-220: a persistent-memory note is guarded by tracker state, not merge evidence.
         "Before each removal other than a persistent-memory note, after `git fetch origin`, establish merge evidence",
         "A merged PR whose head commit is the tip: `gh pr view <n> --json state,headRefOid`",
-        "from `git ls-remote --heads origin <branch>` for a remote one",
+        # SKL-248: the local tip is read by its full ref, so a same-named tag never answers.
+        "equals the tip from `git rev-parse refs/heads/<branch>` for a local branch, "
+        "or from `git ls-remote --heads origin <branch>` for a remote one",
         "`git merge-base --is-ancestor",
         "origin/<profile.git.integration_branch>",
     ):
@@ -213,7 +226,7 @@ def test_containment_is_merge_evidence_for_a_local_branch_under_every_merge_meth
     for phrase in (
         "after `git fetch origin` exits 0, `git merge-base --is-ancestor <tip> origin/<profile.git.integration_branch>` "
         "exiting 0 is merge evidence for a local branch under every `profile.git.merge_method`, including when no PR heads it",
-        "`<tip>` is the output of `git rev-parse <branch>`.",
+        "`<tip>` is the output of `git rev-parse refs/heads/<branch>`.",
         "A tip reachable from the integration branch has every commit on it in the integration branch, "
         "whatever the merge method.",
         'Exit 1 is not evidence and is not reported as "unmerged": the branch then needs a merged PR whose head commit '
@@ -256,7 +269,7 @@ def test_a_local_branch_tip_is_read_again_before_its_delete() -> None:
     body = section(text(), "3. Delete only with merge evidence")
     local = bullet(body, "**Local branch.**", "**Remote branch.**")
     phrase = (
-        "Read the tip with `git rev-parse <branch>` a second time immediately before `git branch -D` and refuse if "
+        "Read the tip with `git rev-parse refs/heads/<branch>` a second time immediately before `git branch -D` and refuse if "
         "it moved; when containment is the evidence, run `git merge-base --is-ancestor <tip> "
         "origin/<profile.git.integration_branch>` again with that tip and refuse unless it exits 0, running the "
         "delete immediately after these reads with no other step between."
@@ -267,6 +280,14 @@ def test_a_local_branch_tip_is_read_again_before_its_delete() -> None:
         "`git branch -D` takes no expected tip; this narrow window is accepted rather than closed."
     )
     assert window in local, window
+
+
+def test_every_local_branch_tip_read_names_its_full_ref() -> None:
+    # SKL-248: a bare `git rev-parse <branch>` resolves a same-named tag first, so every branch tip
+    # read names `refs/heads/<branch>`.
+    bare = re.findall(r"git rev-parse <[^>]*>", text())
+    assert not bare, f"bare branch tip reads: {bare}"
+    assert text().count("git rev-parse refs/heads/<branch>") == 5
 
 
 def test_each_artifact_kind_has_its_guarded_removal() -> None:
