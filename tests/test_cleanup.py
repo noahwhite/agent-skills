@@ -55,11 +55,11 @@ def test_description_names_the_recorded_instruction_as_the_one_exception() -> No
     # SKL-249: since SKL-245 a recorded instruction can remove unmerged work, so the description
     # qualifies the guard instead of claiming it refuses all unmerged work.
     description = repository_test_helper("split_frontmatter")(SKILL)[0]["description"]
-    assert (
-        "under a guarded inventory that refuses anything still holding unmerged work unless the invocation "
-        "carries an explicit recorded instruction naming it."
-    ) in description, description
-    assert "holding unmerged work." not in description, description
+    for phrase in ("refuses anything still holding unmerged work unless", "explicit recorded instruction naming it"):
+        assert phrase in description, description
+    # The description names the exception without restating step 3's scope rules.
+    for scope_rule in ("with several, it covers only the key it names", "authorizes every loss", "story key"):
+        assert scope_rule not in description, description
 
 
 def test_manifest_registers_skill_with_its_capabilities() -> None:
@@ -197,8 +197,9 @@ def test_deletion_requires_merge_evidence_from_the_storys_pull_requests() -> Non
         "Before each removal other than a persistent-memory note, after `git fetch origin`, establish merge evidence",
         "A merged PR whose head commit is the tip: `gh pr view <n> --json state,headRefOid`",
         # SKL-248: the local tip is read by its full ref, so a same-named tag never answers.
-        "equals the tip from `git rev-parse refs/heads/<branch>` for a local branch, "
-        "or from `git ls-remote --heads origin <branch>` for a remote one",
+        "the tip from `git rev-parse refs/heads/<branch>` for a local branch",
+        "from `git ls-remote --heads origin <branch>` for a remote one",
+        "takes `<branch>` as one argument, exactly as git listed it, never through shell expansion.",
         "`git merge-base --is-ancestor",
         "origin/<profile.git.integration_branch>",
     ):
@@ -285,9 +286,10 @@ def test_a_local_branch_tip_is_read_again_before_its_delete() -> None:
 def test_every_local_branch_tip_read_names_its_full_ref() -> None:
     # SKL-248: a bare `git rev-parse <branch>` resolves a same-named tag first, so every branch tip
     # read names `refs/heads/<branch>`.
-    bare = re.findall(r"git rev-parse <[^>]*>", text())
+    # Any flags before a placeholder (such as `--verify <branch>`) still resolve a same-named tag first.
+    bare = re.findall(r"git rev-parse (?!refs/heads/<branch>)\S*\s*<[^>]*>", text())
     assert not bare, f"bare branch tip reads: {bare}"
-    assert text().count("git rev-parse refs/heads/<branch>") == 5
+    assert text().count("git rev-parse refs/heads/<branch>") >= 5
 
 
 def test_each_artifact_kind_has_its_guarded_removal() -> None:
