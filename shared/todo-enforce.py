@@ -128,6 +128,22 @@ def record_owner(session, task, owner):
     os.replace(tmp, os.path.join(path, task))
 
 
+def owners_writable(session):
+    """False, with a log, when no task owner could be recorded for this session."""
+    path = os.path.join(state_dir(session), "owners")
+    probe = os.path.join(path, ".probe.%d" % os.getpid())
+    try:
+        os.makedirs(path, mode=0o700, exist_ok=True)
+        with open(probe, "w"):
+            pass
+        os.remove(probe)
+    except OSError as exc:
+        log("task owners cannot be recorded, the state is unwritable: %s: %s"
+            % (type(exc).__name__, exc))
+        return False
+    return True
+
+
 def task_status(session, task):
     with open(os.path.join(tasks_dir(session), task + ".json")) as fh:
         data = json.load(fh)
@@ -242,6 +258,8 @@ def on_pre_tool_use(payload, session):
         return 0
     reason = NO_TASK_IN_PROGRESS.format(tool=tool)
     if not owned:
+        if not owners_writable(session):
+            return 0
         reason += NO_TASK_RECORDED
     return deny(reason)
 
