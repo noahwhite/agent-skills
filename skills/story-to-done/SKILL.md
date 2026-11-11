@@ -47,6 +47,7 @@ A value not yet resolved is written as `unresolved` wherever the four values are
 - Each value resolves on its own: the explicit argument, else the seat's field (`model` for a model, `effort` for an effort), else, for an effort only, `high`; a model has no default.
 - An explicit argument overrides the seat field by field: it replaces only the value it names, and the seat's other fields still apply.
 - When a seat argument is absent and the profile yields no usable value for it (no profile, no `profile.story_to_done` object, no `engineer` or `qa` entry, or an entry with no `model`), stop before spawning either role and ask the user for that seat's model and effort, asking only for the values the arguments left unset and the profile does not supply.
+  The `high` effort default never answers that question: it applies only to a seat whose model resolved.
   A caller-supplied argument is used even when the seat entry is absent.
   Never fall back to a model id written in this skill, and never probe or fall back across a list of model ids.
 - The seat's `runtime` decides the launch.

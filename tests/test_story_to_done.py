@@ -107,6 +107,7 @@ SEAT_RULES = (
     "`profile.story_to_done` object, no `engineer` or `qa` entry, or an entry with no `model`), stop before "
     "spawning either role and ask the user for that seat's model and effort, asking only for the values the "
     "arguments left unset and the profile does not supply.",
+    "The `high` effort default never answers that question: it applies only to a seat whose model resolved.",
     "A caller-supplied argument is used even when the seat entry is absent.",
     "Never fall back to a model id written in this skill, and never probe or fall back across a list of "
     "model ids.",
