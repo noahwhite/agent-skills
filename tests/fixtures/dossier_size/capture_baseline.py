@@ -1,5 +1,6 @@
 """Regenerates baseline-arbitrate.txt: the arbitrate dossier of the pipeline script at commit
-21f026593944ded43af3bd6b64f16bcae441095e (before SKL-241), run on this fixture and normalized.
+21f026593944ded43af3bd6b64f16bcae441095e (the parent of SKL-86's squash commit, the last version
+that embedded the full diff in the arbitrate dossier), run on this fixture and normalized.
 
 Run by hand from the repository root, with that commit present locally:
 
@@ -28,8 +29,9 @@ def main() -> None:
     with tempfile.TemporaryDirectory() as tmp_name:
         tmp = Path(tmp_name).resolve()
         old = tmp / "old"
+        env = fixture.fixed_env()
         subprocess.run(["git", "-C", str(ROOT), "worktree", "add", "-q", "--detach", str(old),
-                        BASELINE_COMMIT], check=True)
+                        BASELINE_COMMIT], env=env, check=True)
         try:
             work = tmp / "work"
             work.mkdir()
@@ -38,8 +40,10 @@ def main() -> None:
                                          run_dir=run["run_dir"], tmp_root=run["tmp_root"],
                                          commits=run["commits"])
         finally:
+            # No check: a failed removal must not mask a capture failure; `git worktree prune`
+            # clears a leftover registration.
             subprocess.run(["git", "-C", str(ROOT), "worktree", "remove", "--force", str(old)],
-                           check=True)
+                           env=env, check=False)
     fixture.BASELINE.write_bytes(baseline)
     print(f"{fixture.BASELINE.relative_to(ROOT)}: {len(baseline)} bytes")
 

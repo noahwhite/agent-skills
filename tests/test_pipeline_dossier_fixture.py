@@ -8,6 +8,7 @@ fixture. tests/fixtures/dossier_size/capture_baseline.py regenerates that baseli
 of that commit; this test never runs it and reads only the committed baseline.
 """
 
+import hashlib
 import importlib.util
 import math
 import re
@@ -33,10 +34,12 @@ PINNED_FILE_SIZES = {
     "phase2-hunt.txt": 7797,
     "source-base.txt": 1250,
     "source-head.txt": 3254,
-    "dossier_fixture.py": 9089,
-    "capture_baseline.py": 2015,
+    "dossier_fixture.py": 9373,
+    "capture_baseline.py": 2302,
     "baseline-arbitrate.txt": 139645,
 }
+# The baseline's content, not only its length: a re-capture that changes any byte changes this.
+PINNED_BASELINE_SHA256 = "40a98db7b3063585e5ba9521cca3e67418951c82daae8a0a4a21406ea5be2b25"
 PINNED_DIFF_FILES = 25
 PINNED_DIFF_BYTES = 114450
 # The fixture is fully determined (content, identity, dates), so its commit IDs are too.
@@ -85,7 +88,12 @@ def test_the_fixture_files_are_ascii_and_lf_only():
 
 
 def test_the_fixture_file_sizes_are_pinned():
-    assert {p.name: len(p.read_bytes()) for p in committed_files()} == PINNED_FILE_SIZES
+    sizes = {p.relative_to(FIXTURE_DIR).as_posix(): len(p.read_bytes()) for p in committed_files()}
+    assert sizes == PINNED_FILE_SIZES
+
+
+def test_the_baseline_content_is_pinned():
+    assert hashlib.sha256(fixture.BASELINE.read_bytes()).hexdigest() == PINNED_BASELINE_SHA256
 
 
 def test_the_spec_and_reports_are_in_their_size_ranges():
@@ -101,6 +109,9 @@ def test_the_fixture_environment_is_fixed():
     assert "GIT_DIR" not in env and "ADVERSARIAL_MODEL" not in env
     assert env["GIT_CONFIG_GLOBAL"] == "/dev/null"
     assert env["GIT_CONFIG_NOSYSTEM"] == "1"
+    assert env["GIT_ATTR_NOSYSTEM"] == "1"
+    assert (env["GIT_CONFIG_COUNT"], env["GIT_CONFIG_KEY_0"], env["GIT_CONFIG_VALUE_0"]) == (
+        "1", "core.attributesFile", "/dev/null")
     assert env["COLUMNS"] == "80"
     for role in ("AUTHOR", "COMMITTER"):
         assert env[f"GIT_{role}_DATE"] == "2026-01-01T00:00:00+0000"
@@ -158,6 +169,17 @@ def test_normalization_leaves_spec_report_and_diff_content_unchanged(current):
     for content in (fixture.SPEC.read_bytes(), fixture.PHASE1_REPORT.read_bytes(),
                     fixture.PHASE2_REPORT.read_bytes()):
         assert content in current["normalized"]
+
+
+def test_normalization_replaces_each_value_with_its_placeholder():
+    base, head = "a" * 40, "b" * 40
+    text = (f"checkout /t/run/co/x\nrun /t/run/r\ntmp /t/s\nbase {base}\nhead {head}\n").encode()
+    normalized = fixture.normalize(text, checkout="/t/run/co/x", run_dir="/t/run/r", tmp_root="/t",
+                                   commits=(base, head))
+    commit = fixture.COMMIT_PLACEHOLDER
+    assert normalized == (f"checkout <CHECKOUT>\nrun <RUN-DIR>\ntmp <TMP-ROOT>/s\n"
+                          f"base {commit}\nhead {commit}\n").encode()
+    assert len(commit) == 40
 
 
 def test_normalization_rejects_a_value_that_is_not_a_commit_id():

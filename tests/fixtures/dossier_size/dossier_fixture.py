@@ -51,13 +51,19 @@ def render(template: Path, n: int) -> str:
 
 
 def fixed_env(base_env: dict[str, str] | None = None) -> dict[str, str]:
-    """The environment of every git and script call: no user or system git config, a fixed identity
-    and date, a fixed terminal width and locale, and no inherited ADVERSARIAL_* settings."""
+    """The environment of every git and script call: no user or system git config, no user or
+    system git attributes (core.attributesFile would otherwise default to
+    $XDG_CONFIG_HOME/git/attributes), a fixed identity and date, a fixed terminal width and locale,
+    and no inherited ADVERSARIAL_* settings."""
     env = {k: v for k, v in (base_env if base_env is not None else os.environ).items()
            if not k.startswith(("ADVERSARIAL_", "GIT_"))}
     env.update({
         "GIT_CONFIG_GLOBAL": "/dev/null",
         "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_ATTR_NOSYSTEM": "1",
+        "GIT_CONFIG_COUNT": "1",
+        "GIT_CONFIG_KEY_0": "core.attributesFile",
+        "GIT_CONFIG_VALUE_0": "/dev/null",
         "GIT_AUTHOR_NAME": "Fixture Author",
         "GIT_AUTHOR_EMAIL": "fixture@example.com",
         "GIT_AUTHOR_DATE": "2026-01-01T00:00:00+0000",
