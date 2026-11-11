@@ -78,26 +78,27 @@ RULE_KEY_PHRASES = {
     "closing": ("## Rules", 8, ("every item is completed", "named as not done with the reason")),
 }
 RULE_PHRASES = [(rule, phrase) for rule, (_, _, phrases) in RULE_KEY_PHRASES.items() for phrase in phrases]
-# A key phrase right after a negation, or after a negation and one comma-set aside ("Never, even when
-# work starts, <phrase>"), states the opposite rule, so it does not count as present. A negation inside
-# a leading condition ("Where a count is not known up front, <phrase>") does not govern the phrase.
-NEGATED_LEAD_RE = re.compile(r"\b(?:never|not|no|don't|do not)(?:\s*,[^,.;:]*,)?\s+$", re.IGNORECASE)
+# A key phrase right after a negation, or after a negation and any number of comma-set asides ("Never,
+# even when work starts, despite a deadline, <phrase>"), states the opposite rule, so it does not count
+# as present. A negation inside a leading condition ("Where a count is not known up front, <phrase>")
+# does not govern the phrase.
+NEGATED_LEAD_RE = re.compile(r"\b(?:never|not|no|don't|do not)(?:\s*,(?:[^,.;:]*,)+)?\s+$", re.IGNORECASE)
 
 # SKL-246 guard on the no-todo-tool fallback: its sentence is the only pre-list profile access, and it
 # names one key. Removing the allowed key and closing clause must leave no profile, reference or
-# overlay mention in it, and no other sentence in the skill may order anything before the checklist.
+# overlay mention in it, and no other sentence in the skill may order a read before the checklist.
 FALLBACK_LEAD = "With no todo tool,"
 FALLBACK_KEY = "`profile.workspace.scratch_dir`"
 FALLBACK_CLOSING = "no other profile content is read before the checklist file exists"
 FALLBACK_REQUIRED = {
     "compose the primary-session checklist first": re.compile(r"compose the primary-session checklist first"),
-    "read that one key": re.compile(r"read (?:only |just )?(?:that|this) (?:one )?key"),
+    # Any short wording that reads a single key; the closing clause carries the "nothing else" limit.
+    "read that one key": re.compile(r"\bread (?:[\w-]+ ){0,3}key\b"),
     FALLBACK_CLOSING: re.compile(re.escape(FALLBACK_CLOSING)),
 }
 FALLBACK_TARGET_RE = re.compile(r"\bprofiles?\b|\breferences?\b|\boverlays?\b", re.IGNORECASE)
-BEFORE_CHECKLIST_RE = re.compile(
-    r"before (?:the |its |creating the |you create the )?(?:primary-session )?checklist", re.IGNORECASE
-)
+# "before" followed within a few words by "checklist", whatever the determiner or verb between them.
+BEFORE_CHECKLIST_RE = re.compile(r"\bbefore (?:[\w-]+ ){0,3}checklist\b", re.IGNORECASE)
 
 # SKL-246 guard on list-creation order. The scope is the skill text from its title to the end of
 # the section that creates the list, so Arguments, Read first and Metrics are covered too.
@@ -280,9 +281,9 @@ def fallback_faults(text: str, heading: str) -> list[str]:
     faults += [f"the fallback names another pre-list target: {hit!r}" for hit in FALLBACK_TARGET_RE.findall(rest)]
     skill = flat(text[text.index("\n# "):])
     faults += [
-        f"another sentence orders something before the checklist: {part!r}"
+        f"another sentence orders a read before the checklist: {part!r}"
         for part in re.split(r"(?<=\.) ", skill)
-        if part != sentence and BEFORE_CHECKLIST_RE.search(part)
+        if part != sentence and BEFORE_CHECKLIST_RE.search(part) and orders_read(part.lower())
     ]
     return faults
 
@@ -341,7 +342,9 @@ def test_deleting_either_half_of_a_rule_fails_the_guard(rule: str, phrase: str) 
 
 
 @pytest.mark.parametrize(("rule", "phrase"), RULE_PHRASES)
-@pytest.mark.parametrize("negation", ["Never ", "do not ", "Never, even when work starts, "])
+@pytest.mark.parametrize(
+    "negation", ["Never ", "do not ", "Never, even when work starts, ", "Never, even when work starts, despite a deadline, "]
+)
 def test_negating_any_rule_fails_the_guard(rule: str, phrase: str, negation: str) -> None:
     """Mutation proof: a negation earlier in a key phrase's clause reverses its rule and the guard names that rule."""
     text = TODO.read_text()
@@ -501,16 +504,25 @@ def test_a_broadened_fallback_fails_the_guard(skill: str, old: str, new: str) ->
 
 
 @pytest.mark.parametrize("skill", list(LIST_CREATION_SECTIONS))
-def test_a_separate_pre_checklist_read_fails_the_guard(skill: str) -> None:
+@pytest.mark.parametrize("checklist", ["the checklist", "your checklist", "creating the primary-session checklist"])
+def test_a_separate_pre_checklist_read_fails_the_guard(skill: str, checklist: str) -> None:
     """Mutation proof: a second sentence that orders a profile read before the checklist fails the guard."""
     text = skill_text(skill)
     line = next(line for line in text.splitlines() if line.startswith(FALLBACK_LEAD))
-    mutated = text.replace(line, line + "\nRead the entire profile before the checklist exists.")
+    mutated = text.replace(line, line + f"\nRead the entire profile before {checklist} exists.")
     assert fallback_faults(mutated, LIST_CREATION_SECTIONS[skill])
 
 
 @pytest.mark.parametrize("skill", list(LIST_CREATION_SECTIONS))
-@pytest.mark.parametrize("wording", ["read only that key", "read just that one key"])
+def test_a_sentence_forbidding_a_pre_checklist_read_keeps_the_guard_green(skill: str) -> None:
+    text = skill_text(skill)
+    line = next(line for line in text.splitlines() if line.startswith(FALLBACK_LEAD))
+    mutated = text.replace(line, line + "\nDo not read the profile before the checklist exists.")
+    assert fallback_faults(mutated, LIST_CREATION_SECTIONS[skill]) == []
+
+
+@pytest.mark.parametrize("skill", list(LIST_CREATION_SECTIONS))
+@pytest.mark.parametrize("wording", ["read only that key", "read just that one key", "read the single key"])
 def test_an_equivalent_one_key_wording_keeps_the_fallback_guard_green(skill: str, wording: str) -> None:
     text = mutated_skill(skill, "read that one key", wording)
     assert fallback_faults(text, LIST_CREATION_SECTIONS[skill]) == []
