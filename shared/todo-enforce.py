@@ -12,7 +12,8 @@ hook_event_name and, per session_id:
 - records each created task's owner, armed or not: "main" without agent_id, else that agent_id;
 - in an armed session that has the task tools, denies a main-thread tool call outside
   TaskCreate, TaskUpdate, TaskList, TaskGet, ToolSearch and Skill unless a main-owned task is
-  in_progress, and allows it with a stderr warning when a main-owned task file is unreadable;
+  in_progress, and allows it with a stderr warning when the only main-owned task files that
+  exist are unreadable;
 - in an armed session that has the task tools, refuses (exit 2) a main-owned task's completion
   from a subagent, or from the main thread unless its task file still says in_progress
   (TaskCompleted fires before the status is written) or when that file is unreadable.
@@ -40,6 +41,10 @@ NO_TASK_IN_PROGRESS = (
     "todo-enforce: {tool} was not run because no task you created is in_progress. "
     "Mark the task for this step in_progress with TaskUpdate, or create it with TaskCreate "
     "and then mark it in_progress, then retry."
+)
+NO_TASK_RECORDED = (
+    " No task created in this session has been recorded: if you did create one, tell the user "
+    "the todo-enforce TaskCreated hook may not be registered."
 )
 SUBAGENT_COMPLETES_MAIN = (
     "todo-enforce: task {task} belongs to the main thread, so a subagent cannot complete it. "
@@ -106,7 +111,7 @@ def arm(session):
 def owner_of(session, task):
     try:
         with open(os.path.join(state_dir(session), "owners", task)) as fh:
-            return fh.read()
+            return fh.read().strip()
     except FileNotFoundError:
         return None
 
@@ -129,7 +134,8 @@ def task_status(session, task):
 
 
 def main_task_in_progress(session):
-    """True, False, or None when a main-owned task file exists but cannot be read."""
+    """(progress, owned): progress is True, False, or None when the main-owned task files that
+    exist are all unreadable; owned counts the main-owned tasks recorded."""
     try:
         tasks = os.listdir(os.path.join(state_dir(session), "owners"))
     except FileNotFoundError:
@@ -150,16 +156,16 @@ def main_task_in_progress(session):
             continue
         readable += 1
         if status == "in_progress":
-            return True
-    if unreadable is not None:
-        return None
+            return True, owned
+    if unreadable is not None and not readable:
+        return None, owned
     if not owned:
         log("no main-created task is recorded for this session; if one was created, "
             "check that the TaskCreated hook is registered")
     elif not readable:
         log("none of this session's %d main-created tasks has a task file under %s"
             % (owned, tasks_dir(session)))
-    return False
+    return False, owned
 
 
 def has_task_tools(transcript):
@@ -225,13 +231,16 @@ def on_pre_tool_use(payload, session):
         return 0
     if not has_task_tools(payload.get("transcript_path")):
         return 0
-    progress = main_task_in_progress(session)
+    progress, owned = main_task_in_progress(session)
     if progress is None:
         log("allowing %s: a main-created task's state is unknown" % tool)
         return 0
     if progress:
         return 0
-    return deny(NO_TASK_IN_PROGRESS.format(tool=tool))
+    reason = NO_TASK_IN_PROGRESS.format(tool=tool)
+    if not owned:
+        reason += NO_TASK_RECORDED
+    return deny(reason)
 
 
 def on_task_created(payload, session):

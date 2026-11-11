@@ -194,6 +194,11 @@ def test_an_armed_session_with_no_task_denies_a_tool_call(rig):
     res = rig.tool()
     assert_denied(res)
     assert "TaskCreated hook" in res.stderr
+    assert "TaskCreated hook" in json.loads(res.stdout)["hookSpecificOutput"]["permissionDecisionReason"]
+    rig.main_task("1", "pending")
+    res = rig.tool()
+    assert_denied(res)
+    assert "TaskCreated" not in res.stdout
 
 
 def test_an_armed_session_with_a_pending_main_task_denies_and_allows_once_it_is_in_progress(rig):
@@ -400,6 +405,28 @@ def test_an_unreadable_main_task_file_allows_tool_calls_and_refuses_its_completi
     assert_refused(res, "task 1", "could not be read")
 
 
+def test_an_unreadable_main_task_file_does_not_hide_a_readable_pending_one(rig):
+    rig.arm()
+    rig.main_task("1", "pending")
+    rig.main_task("2", "pending")
+    (rig.config / "tasks" / SESSION / "1.json").write_text("{broken")
+    assert_denied(rig.tool())
+
+
+def test_completing_a_main_task_with_no_task_file_is_refused(rig):
+    rig.arm()
+    assert_allowed(rig.send("main_task_created", task_id="7"))
+    assert_refused(rig.send("main_task_completed", task_id="7"), "task 7", "could not be read")
+
+
+def test_an_owner_file_with_a_trailing_newline_still_reads_as_main(rig):
+    rig.arm()
+    rig.main_task("1", "pending")
+    owner = rig.state / "agent-skills" / "todo-enforce" / SESSION / "owners" / "1"
+    owner.write_text("main\n")
+    assert_refused(rig.send("main_task_completed", task_id="1"), "task 1", "pending")
+
+
 def refuse_main_completion_of_an_unreadable_task(rig):
     rig.arm()
     rig.main_task("1", "pending")
@@ -434,7 +461,7 @@ def test_an_empty_agent_id_records_no_owner(rig):
 
 BRANCHES = {
     "deny without a main in_progress task": (
-        "    return deny(NO_TASK_IN_PROGRESS.format(tool=tool))\n",
+        "    return deny(reason)\n",
         [deny_without_any_task, deny_with_a_pending_main_task, deny_with_only_a_subagent_task_in_progress],
     ),
     "only main-owned tasks count": (
@@ -455,7 +482,7 @@ BRANCHES = {
     ),
 }
 NEUTRAL = {
-    "    return deny(NO_TASK_IN_PROGRESS.format(tool=tool))\n": "    return 0\n",
+    "    return deny(reason)\n": "    return 0\n",
     "or owner_of(session, task) != MAIN:": "or owner_of(session, task) is None:",
     "        return refuse(SUBAGENT_COMPLETES_MAIN.format(task=task))\n": "        pass\n",
     "        return refuse(NOT_IN_PROGRESS.format(task=task, status=status))\n": "        return 0\n",
