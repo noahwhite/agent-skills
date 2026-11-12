@@ -2634,3 +2634,188 @@ def test_the_case_runner_detects_a_change_made_through_an_untracked_link(tmp_pat
     )
     assert result.returncode == 2, result.stdout + result.stderr
     assert "the agent changed" in result.stderr, result.stderr
+
+
+# SKL-254: interim senior-engineer handbacks get a deadline and a primary-source read.
+INTERIM = ROOT / "skills" / "story-to-done" / "references" / "interim-handbacks.md"
+INTERIM_STEP_0_POINTER = (
+    "An interim handback from the senior engineer is classified first, before the checklist read-back below, under "
+    "[references/interim-handbacks.md](references/interim-handbacks.md)."
+)
+STEP_0_CHECKLIST_READ = (
+    "When a senior engineer or QA agent hands back, read that subagent's checklist file before acting on the result"
+)
+INTERIM_STEP_2_POINTER = (
+    "An interim handback goes to [references/interim-handbacks.md](references/interim-handbacks.md) before the "
+    "step 0 checklist read-back and every check below; any other handback continues here."
+)
+STEP_2_READ_BACK_FIRST = "When it hands back, do the step 0 checklist read-back first"
+STEP_2_STOP_CLAUSE = "If it handed back blocked or the story is not in deployment review, stop and report why."
+INTERIM_NO_RESUME = "So the awaited item gets the deadline below, never step 0's read-back resume."
+INTERIM_DEFINITION = (
+    "An interim handback is a handback from the senior engineer that names an awaited item of its own background "
+    "work (a CI run, a deploy, a tracker move, a review in flight) and is neither a final handback nor blocked. "
+    "Naming the awaited item does not make it a blocked handback or a stated blocker."
+)
+INTERIM_ORDER = (
+    "The coordinator classifies an interim handback before step 0's checklist read-back and before step 2's "
+    "deployment-review check and stop."
+)
+INTERIM_RECORD = (
+    "On an interim handback the coordinator records on the todo list the awaited item, its primary source, its "
+    "target state, and an absolute UTC deadline measured from receipt of the handback: the expected duration the "
+    "handback states, or 30 minutes when it states none, plus the greater of 10 minutes and 50% of that duration."
+)
+INTERIM_CLEAR = (
+    "If the engineer hands back again before the deadline, the coordinator clears the deadline and handles that "
+    "handback."
+)
+INTERIM_READ = (
+    "Otherwise, at the deadline the coordinator reads the awaited item's state from its primary source (for a CI "
+    "run, the run's status from the forge; for a tracker move, the tracker), never from the subagent, and stops."
+)
+INTERIM_STOP = (
+    "Its report to the owner names the awaited item, its primary source, the state or read error observed, and "
+    "the deadline; it launches nothing further, makes no tracker write beyond the one Boundaries permits with "
+    "`metrics` on, and rules on nothing."
+)
+INTERIM_WAIT = (
+    "It never waits on the subagent's own wake-up alone: it reaches the deadline with a bounded foreground wait on "
+    "the awaited item's primary source that returns at or before the deadline (for a CI run, a watch on the run "
+    "under a timeout), repeated until the deadline."
+)
+INTERIM_WAIT_CAP = (
+    "Each wait lasts the lesser of 90 seconds and the time left to the deadline less 5 seconds for process "
+    "start-up, under a timeout that also bounds every read inside it, so it returns at or before the deadline, "
+    "the runtime never moves it to the background, and a handback that arrives during a wait is handled when that "
+    "wait returns."
+)
+INTERIM_NO_SHORT_WAIT = (
+    "With 5 seconds or less left, it starts no further wait, lets the deadline pass, and only then makes the deadline "
+    "read below, so that read never comes before the deadline."
+)
+INTERIM_RECEIPT = "Receipt is the coordinator's first clock read after the handback arrives."
+INTERIM_STATED_BLOCKER = (
+    "Step 0's stated-blocker sentence covers only the other handbacks, since an interim handback never reaches the "
+    "read-back."
+)
+INTERIM_PR_WATCH = (
+    "When the awaited CI run belongs to a PR, it also watches the PR, so a new head and its new run are not missed "
+    "([references/code-review.md](code-review.md), Watching the PR)."
+)
+INTERIM_VOCABULARY = (
+    "interim", "awaited", "deadline", "minutes", "seconds", "primary source", "foreground", "timeout", "wake-up",
+    "hour", "half an", "poll", "timer", "elapse", "expir", "end the run",
+)
+INTERIM_CLEAR_LATE = (
+    "A handback that arrived before the deadline clears it even when the coordinator sees it only after the "
+    "deadline."
+)
+INTERIM_LIMITS = (
+    "This rule changes no step logic for final or blocked handbacks, and leaves step 2's stop clause, every QA "
+    "step, and the no-write and no-verdict constraints unchanged; it only comes before step 0's read-back and "
+    "step 2's check."
+)
+
+
+def interim_text() -> str:
+    assert INTERIM.is_file(), f"missing {INTERIM.relative_to(ROOT)}"
+    return " ".join(INTERIM.read_text().split())
+
+
+def test_step_0_points_to_the_interim_handbacks_reference() -> None:
+    step_0 = " ".join(section(SKILL.read_text(), "0. Track everything on a todo list").split())
+    assert INTERIM_STEP_0_POINTER in step_0
+
+
+def test_step_0_classifies_an_interim_handback_before_reading_the_checklist() -> None:
+    step_0 = " ".join(section(SKILL.read_text(), "0. Track everything on a todo list").split())
+    assert step_0.index(INTERIM_STEP_0_POINTER) < step_0.index(STEP_0_CHECKLIST_READ)
+
+
+def test_step_2_points_to_the_interim_handbacks_reference_and_uses_none_of_its_vocabulary() -> None:
+    step_2 = " ".join(section(SKILL.read_text(), "2. Senior engineer: implement to deployment review").split())
+    assert INTERIM_STEP_2_POINTER in step_2
+    rest = step_2.replace(INTERIM_STEP_2_POINTER, "").lower()
+    for token in INTERIM_VOCABULARY + ("50%",):
+        assert token not in rest, f"step 2 restates the interim rule ({token!r}) instead of pointing to it"
+    for sentence in INTERIM.read_text().splitlines():
+        sentence = " ".join(sentence.split())
+        if len(sentence) > 40:
+            assert sentence not in step_2, f"step 2 restates {sentence!r}"
+
+
+def test_step_2_sends_an_interim_handback_on_before_the_read_back_and_the_stop() -> None:
+    step_2 = " ".join(section(SKILL.read_text(), "2. Senior engineer: implement to deployment review").split())
+    pointer = step_2.index(INTERIM_STEP_2_POINTER)
+    assert pointer < step_2.index(STEP_2_READ_BACK_FIRST) < step_2.index(STEP_2_STOP_CLAUSE)
+
+
+def test_an_interim_handback_never_gets_the_read_back_resume() -> None:
+    assert INTERIM_NO_RESUME in interim_text()
+
+
+def test_the_interim_rule_runs_wait_then_clear_then_read_then_stop() -> None:
+    text = interim_text()
+    phrases = (INTERIM_WAIT, INTERIM_WAIT_CAP, INTERIM_CLEAR, INTERIM_CLEAR_LATE, INTERIM_READ, INTERIM_STOP)
+    positions = [text.index(phrase) for phrase in phrases]
+    assert positions == sorted(positions)
+
+
+def test_a_handback_seen_late_still_clears_a_deadline_it_beat() -> None:
+    assert INTERIM_CLEAR_LATE in interim_text()
+
+
+def test_a_ci_run_on_a_pr_is_watched_through_the_pr() -> None:
+    assert INTERIM_PR_WATCH in interim_text()
+
+
+def test_each_wait_is_capped_so_a_handback_during_it_is_handled() -> None:
+    assert INTERIM_WAIT_CAP in interim_text()
+
+
+def test_no_wait_starts_in_the_last_five_seconds() -> None:
+    text = interim_text()
+    assert text.index(INTERIM_WAIT_CAP) < text.index(INTERIM_NO_SHORT_WAIT) < text.index(INTERIM_CLEAR)
+
+
+def test_the_interim_rule_limits_are_pinned() -> None:
+    assert INTERIM_LIMITS in interim_text()
+
+
+def test_the_interim_handback_definition_is_pinned() -> None:
+    assert INTERIM_DEFINITION in interim_text()
+
+
+def test_step_0_stated_blocker_sentence_never_covers_an_interim_handback() -> None:
+    text = interim_text()
+    assert text.index(INTERIM_DEFINITION) < text.index(INTERIM_STATED_BLOCKER)
+
+
+def test_an_interim_handback_is_classified_before_the_read_back_and_the_step_2_check() -> None:
+    assert INTERIM_ORDER in interim_text()
+
+
+def test_an_interim_handback_records_a_deadline_with_its_default_and_margin() -> None:
+    assert INTERIM_RECORD in interim_text()
+
+
+def test_receipt_is_the_first_clock_read_after_the_handback() -> None:
+    text = interim_text()
+    assert text.index(INTERIM_RECORD) < text.index(INTERIM_RECEIPT)
+
+
+def test_a_handback_before_the_deadline_clears_it() -> None:
+    assert INTERIM_CLEAR in interim_text()
+
+
+def test_the_deadline_reads_the_primary_source_never_the_subagent() -> None:
+    assert INTERIM_READ in interim_text()
+
+
+def test_the_deadline_stop_reports_and_makes_no_tracker_write() -> None:
+    assert INTERIM_STOP in interim_text()
+
+
+def test_the_deadline_is_reached_by_a_bounded_foreground_wait() -> None:
+    assert INTERIM_WAIT in interim_text()
