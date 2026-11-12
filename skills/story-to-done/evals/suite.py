@@ -49,6 +49,8 @@ VOID_LINE = re.compile(r"^(HARNESS|run\.sh):")
 # The record fields --resume compares with this run, each against its run context key.
 RECORD_FIELDS = {"label": "label", "checkout_commit": "checkout_commit", "harness_commit": "harness_commit",
                  "model": "model", "reasoning_effort": "effort", "agent_command": "agent_command"}
+# The outcome each run.sh exit status gives; None is an attempt past its deadline.
+OUTCOMES = {0: "pass", 1: "fail", 2: "void", None: "void"}
 GRADE_FILE = re.compile(r"grader(?:-(?P<grade>[A-Za-z0-9._-]+))?-output\.txt")
 MODEL_FLAG = re.compile(r"--model=(\S+)|(?:^|\s)(?:--model|-m)\s+(\S+)")
 VARIANCE = "k/n × (1 - k/n)"
@@ -200,16 +202,17 @@ def read(path: Path) -> str:
     return path.read_text(encoding="utf-8", errors="replace")
 
 
-def verdicts(run_dir: Path, name: str, outcome: str) -> tuple[dict[str, str], str | None]:
-    """Each grade's verdict, named for its scenario, or why there is none. run.sh's exit status
-    is the scenario's verdict unless it writes further grades: grader-output.txt is then the
-    scenario's own grade and grader-<g>-output.txt a further grade named <scenario>-<g>, since
-    the status mixes them. The status must still be pass exactly when every grade passes."""
+def verdicts(grades: dict, name: str, outcome: str) -> tuple[dict[str, str], str | None]:
+    """Each grade's verdict, named for its scenario, or why there is none, from the lines of
+    each grade file. run.sh's exit status is the scenario's verdict unless it writes further
+    grades: grader-output.txt is then the scenario's own grade and grader-<g>-output.txt a
+    further grade named <scenario>-<g>, since the status mixes them. The status must still be
+    pass exactly when every grade passes."""
     found = {}
-    for output in sorted(run_dir.glob("grader*-output.txt")):
-        match = GRADE_FILE.fullmatch(output.name)
+    for file_name in sorted(grades):
+        match = GRADE_FILE.fullmatch(file_name)
         if match:
-            lines = [line.strip() for line in read(output).splitlines() if line.strip()]
+            lines = [line.strip() for line in grades[file_name] if line.strip()]
             grade = name + (f"-{match['grade']}" if match["grade"] else "")
             found[grade] = "pass" if lines and lines[-1] == "PASS" else "fail"
     if len(found) <= 1 and set(found) <= {name}:
@@ -245,39 +248,76 @@ def run_attempt(case_dir: Path, name: str, run_dir: Path, ctx: dict) -> tuple[in
         raise
 
 
+def other_grades(tally: dict, marks: dict) -> str | None:
+    """Why a graded attempt's grades cannot be counted beside the earlier ones: every graded
+    attempt of a scenario must write the same grades, or a grade's n would count attempts
+    that hold no verdict for it."""
+    if tally["graded"] is not None and set(marks) != tally["graded"]:
+        return (f"run.sh wrote the grades {sorted(marks)}, but an earlier attempt wrote "
+                f"{sorted(tally['graded'])}; every graded attempt must write the same grades")
+    return None
+
+
 def tally_record(tally: dict, record: dict) -> None:
     if record["outcome"] == "void":
         tally["voids"].append(f"attempt {record['attempt']}: {record['void_reason']}")
         return
+    reason = other_grades(tally, record["verdicts"])
+    if reason:
+        raise Broken(f"{record['case']} {record['scenario']} attempt {record['attempt']}: {reason}")
+    tally["graded"] = set(record["verdicts"])
     tally["n"] += 1
     for grade, verdict in record["verdicts"].items():
         tally["k"][grade] = tally["k"].get(grade, 0) + (verdict == "pass")
 
 
-def resumed(record_path: Path, ctx: dict) -> dict:
+def resumed(record_path: Path, name: str, ctx: dict) -> dict:
     """An existing record that --resume counts: it must come from this run's configuration,
-    and a broken attempt is never counted, so it stops the resume."""
+    its outcome and verdicts must be the ones its exit code and grades give, and a broken
+    attempt is never counted, so it stops the resume."""
     record = json.loads(read(record_path))
     differ = [field for field, key in RECORD_FIELDS.items() if record.get(field) != ctx[key]]
     if differ:
         raise Refused(f"{record_path} records a different {', '.join(differ)} than this run; "
                       "--resume continues only the same configuration")
-    if record.get("outcome") not in ("pass", "fail", "void"):
+    outcome, grades = record.get("outcome"), record.get("grades")
+    if outcome not in ("pass", "fail", "void"):
         raise Refused(f"{record_path} records a broken attempt; fix the case and start a new LABEL")
+    if not isinstance(grades, dict) or not all(isinstance(lines, list) for lines in grades.values()):
+        grades = None
+    given = ({}, None) if outcome == "void" or grades is None else verdicts(grades, name, outcome)
+    if (record.get("scenario") != name or OUTCOMES.get(record.get("exit_code")) != outcome
+            or grades is None or given != (record.get("verdicts"), None)):
+        raise Refused(f"{record_path} records an outcome or verdicts that its exit code and grades do not give; "
+                      "--resume counts only records the suite wrote")
     return record
+
+
+def label_records(label: str) -> set[Path]:
+    """Every run record on disk that names LABEL, in any case's results."""
+    found = set()
+    for path in EVALS.glob(f"*/results/{label}-*.json"):
+        try:
+            named = json.loads(read(path)).get("label")
+        except (ValueError, AttributeError):
+            named = label  # an unreadable record is never silently left out
+        if named == label:
+            found.add(path)
+    return found
 
 
 def run_scenario(case_dir: Path, scenario: dict, runs: int, ctx: dict) -> dict:
     name = scenario["name"]
     results = case_dir / "results"
-    tally = {"n": 0, "k": {}, "voids": []}
+    tally = {"n": 0, "k": {}, "voids": [], "graded": None}
     attempt = 0
     while tally["n"] < runs and attempt < 2 * runs:
         attempt += 1
         stem = f"{ctx['label']}-{name}-{ctx['checkout_short']}-harness-{ctx['harness_short']}-{attempt}"
         record_path, calls_path = results / f"{stem}.json", results / f"{stem}-calls.jsonl"
         if ctx["resume"] and record_path.is_file() and calls_path.is_file():
-            tally_record(tally, resumed(record_path, ctx))
+            tally_record(tally, resumed(record_path, name, ctx))
+            ctx["counted"].add(record_path)
             continue
         for path in (record_path, calls_path):
             if path.exists():
@@ -288,7 +328,7 @@ def run_scenario(case_dir: Path, scenario: dict, runs: int, ctx: dict) -> dict:
         code, stderr = run_attempt(case_dir, name, run_dir, ctx)
         normalise = Normaliser(ctx["leaks"], ctx["secrets"], run_dir=run_dir, tmp=ctx["tmp"], checkout=ctx["checkout"],
                                harness=ctx["harness"], tmpdir=Path(tempfile.gettempdir()), home=Path.home())
-        outcome = {0: "pass", 1: "fail", 2: "void", None: "void"}.get(code, "error")
+        outcome = OUTCOMES.get(code, "error")
         reason = None
         if code is None:
             reason = f"run.sh did not finish within {ctx['deadline']} seconds"
@@ -303,7 +343,8 @@ def run_scenario(case_dir: Path, scenario: dict, runs: int, ctx: dict) -> dict:
         if outcome in ("pass", "fail"):
             for output in sorted(run_dir.glob("grader*-output.txt")):
                 grades[output.name] = normalise(read(output)).splitlines()
-            marks, reason = verdicts(run_dir, name, outcome)
+            marks, reason = verdicts(grades, name, outcome)
+            reason = reason or other_grades(tally, marks)
             if reason:
                 outcome = "error"
             # Keep every run-directory file the grader names, beside the call record, so the
@@ -322,6 +363,7 @@ def run_scenario(case_dir: Path, scenario: dict, runs: int, ctx: dict) -> dict:
         }
         write_new(calls_path, normalise(read(actions)) if actions.is_file() else "")
         write_new(record_path, json.dumps(record, indent=2, ensure_ascii=False) + "\n")
+        ctx["counted"].add(record_path)
         if run_dir.exists():  # run.sh may refuse before it creates the directory
             shutil.rmtree(run_dir)  # scratch only: the records above are what is kept
         if outcome == "error":
@@ -395,7 +437,11 @@ def agent_env() -> tuple[dict[str, str], list[str]]:
     bad = [name for name in passed if not ENV_NAME.fullmatch(name)]
     if bad:
         raise Refused(f"EVAL_PASS_ENV names {bad}, which are not variable names")
-    env = {name: value for name, value in os.environ.items()
+    short = [name for name in passed if name in os.environ and len(os.environ[name]) < MIN_REDACTED]
+    if short:
+        raise Refused(f"EVAL_PASS_ENV names {short}, whose values are shorter than {MIN_REDACTED} characters "
+                      "and so could not be redacted from the records")
+    env ={name: value for name, value in os.environ.items()
            if name in BASE_ENV or name.startswith(BASE_ENV_PREFIXES) or name in passed}
     return env, [os.environ[name] for name in passed if name in os.environ]
 
@@ -412,6 +458,10 @@ def main(argv: list[str]) -> int:
     summary_path = EVALS / "results" / f"suite-{args.label}.md"
     if summary_path.exists():
         raise Refused(f"{summary_path} exists; a suite run never overwrites a summary")
+    existing = label_records(args.label)
+    if existing and not args.resume:
+        raise Refused(f"{min(existing)} exists, a record of {args.label}; start a new LABEL, "
+                      "or --resume with the arguments that run started with")
     harness, harness_commit, harness_short = commit_of(EVALS, "harness")
     checkout, checkout_commit, checkout_short = commit_of(args.checkout, "skill")
     cases = args.cases or sorted(path.parent.name for path in EVALS.glob("*/case.yaml"))
@@ -456,7 +506,7 @@ def main(argv: list[str]) -> int:
                "checkout_commit": checkout_commit, "checkout_short": checkout_short,
                "harness_commit": harness_commit, "harness_short": harness_short, "leaks": leaks,
                "secrets": secrets, "env": env, "deadline": deadline, "unchanged": unchanged,
-               "agent_command": command, "model": model, "effort": effort}
+               "agent_command": command, "model": model, "effort": effort, "counted": set()}
         for case in cases:
             case_dir, spec = EVALS / case, specs[case]
             # A relative path the grader's code names, such as sessions.json, is a file it
@@ -468,7 +518,13 @@ def main(argv: list[str]) -> int:
             rows = [run_scenario(case_dir, scenario, args.runs, ctx) for scenario in spec["scenarios"]]
             sections.append({"case": case, "kind": ctx["kind"], "model": model, "effort": effort, "rows": rows})
         unchanged()
-        short = [f"{s['case']} {r['name']}" for s in sections for r in s["rows"] if r["n"] < args.runs]
+        # The summary accounts for every record of its label: a resume with fewer runs or
+        # cases than the run started with would leave records out of it.
+        uncounted = sorted(label_records(args.label) - ctx["counted"])
+        if uncounted:
+            raise Refused(f"{uncounted[0]} records an attempt of {args.label} that this run did not count; "
+                          "--resume with the --runs and cases that run started with")
+        short =[f"{s['case']} {r['name']}" for s in sections for r in s["rows"] if r["n"] < args.runs]
         (EVALS / "results").mkdir(exist_ok=True)
         write_new(summary_path, summary(args.label, args.runs, sections, short, ctx))
     finally:

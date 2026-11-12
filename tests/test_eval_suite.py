@@ -69,6 +69,9 @@ fi
 if [ "$scenario" = both-pass ]; then
   printf 'ok   the further check\nPASS\n' > "$run/grader-extra-output.txt"
 fi
+if [ "$scenario" = extra-once ] && [ "${run##*-}" = 1 ]; then
+  printf 'ok   the further check\nPASS\n' > "$run/grader-extra-output.txt"
+fi
 if [ "$scenario" = further-only ]; then
   exit 1
 fi
@@ -106,7 +109,7 @@ count=$(( $(cat "$state" 2>/dev/null || echo 0) + 1 ))
 echo "$count" > "$state"
 echo "$run" >> "$STUB_STATE/run-dirs"
 case "$scenario" in
-  pass|two-grades|further-only|late-fail|both-pass) action=pass ;;
+  pass|two-grades|further-only|late-fail|both-pass|extra-once) action=pass ;;
   fail) action=stop ;;
   void-once) [ "$count" -gt 1 ] || exit 3; action=pass ;;
   void-thrice) [ "$count" -gt 3 ] || exit 3; action=pass ;;
@@ -361,6 +364,15 @@ def test_grades_that_contradict_the_exit_status_stop_the_suite(suite) -> None:
     assert record["outcome"] == "error" and record["verdicts"] == {}
 
 
+def test_a_grade_set_that_changes_between_attempts_stops_the_suite(suite) -> None:
+    suite["recommit"]("extra-once")
+    result = suite["run"]("--runs", "2", str(suite["checkout"]), "lab-1")
+    assert result.returncode == 1 and "every graded attempt must write the same grades" in result.stderr, result.stderr
+    record = json.loads(next((suite["evals"] / "stub" / "results").glob("*-extra-once-*-2.json")).read_text())
+    assert record["outcome"] == "error"
+    assert not (suite["evals"] / "results" / "suite-lab-1.md").exists()
+
+
 def test_an_attempt_that_changes_a_checkout_stops_the_suite(suite) -> None:
     suite["recommit"]("dirty-once")
     result = suite["run"]("--runs", "1", str(suite["checkout"]), "lab-1")
@@ -383,6 +395,15 @@ def test_the_agent_gets_only_the_base_environment_and_the_variables_passed(suite
         record = json.loads(next(results.glob(f"{label}-pass-*.json")).read_text())
         assert json.loads(record["grader_inputs"]["evidence.json"])["canary"] == seen, label
     assert all(canary not in path.read_text() for path in results.iterdir())
+
+
+def test_a_passed_value_too_short_to_redact_is_refused(suite) -> None:
+    suite["recommit"]("pass")
+    result = suite["run"]("--runs", "1", str(suite["checkout"]), "lab-1", CANARY="abc123",
+                          EVAL_PASS_ENV="STUB_STATE STUB_UUID CANARY")
+    assert result.returncode == 2 and "shorter than 8 characters" in result.stderr, result.stderr
+    assert "abc123" not in result.stderr
+    assert not (suite["state"] / "pass").exists(), "nothing ran"
 
 
 def test_the_recorded_model_is_normalised(suite) -> None:
@@ -444,21 +465,29 @@ def test_resume_continues_an_interrupted_run_from_its_records(suite) -> None:
     assert int((suite["state"] / "pass").read_text()) == 2, "no attempt with a record runs again"
 
 
-@pytest.mark.parametrize("change", ["model", "broken"])
+@pytest.mark.parametrize("change", ["model", "broken", "outcome", "verdicts", "fewer-runs"])
 def test_resume_refuses_records_it_cannot_count(suite, change: str) -> None:
     suite["recommit"]("pass")
     suite["run"]("--runs", "2", str(suite["checkout"]), "lab-1")
-    (suite["evals"] / "results" / "suite-lab-1.md").unlink()
-    extra = {}
+    summary = suite["evals"] / "results" / "suite-lab-1.md"
+    summary.unlink()
+    extra, runs = {}, "2"
+    record_path = next((suite["evals"] / "stub" / "results").glob("lab-1-pass-*-1.json"))
+    record = json.loads(record_path.read_text())
     if change == "model":
         extra["EVAL_AGENT_CMD"] = suite["env"]["EVAL_AGENT_CMD"].replace("agent-model", "other-model")
-    else:
-        record_path = next((suite["evals"] / "stub" / "results").glob("lab-1-pass-*-1.json"))
-        record = json.loads(record_path.read_text())
+    elif change == "broken":
         record_path.write_text(json.dumps({**record, "outcome": "error"}))
-    resumed = suite["run"]("--runs", "2", "--resume", str(suite["checkout"]), "lab-1", **extra)
+    elif change == "outcome":
+        record_path.write_text(json.dumps({**record, "outcome": "fail", "verdicts": {"pass": "fail"}}))
+    elif change == "verdicts":
+        record_path.write_text(json.dumps({**record, "verdicts": {"pass": "pass", "pass-extra": "pass"}}))
+    else:
+        runs = "1"
+    resumed = suite["run"]("--runs", runs, "--resume", str(suite["checkout"]), "lab-1", **extra)
     assert resumed.returncode == 2, resumed.stderr
     assert int((suite["state"] / "pass").read_text()) == 2, "nothing ran"
+    assert not summary.exists()
 
 
 @pytest.mark.parametrize("args", [

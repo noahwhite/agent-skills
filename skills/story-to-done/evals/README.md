@@ -13,7 +13,7 @@ Each case runs a real agent against a fixed scenario and grades the tool calls i
   It must name its model with `--model provider/model[#variant]`; the runner records that model, the variant as the reasoning effort (`default` without one), and the command itself.
 - `EVAL_PASS_ENV` names, separated by spaces, the variables an attempt gets beyond its base environment, such as the provider credential: `EVAL_PASS_ENV="DEEPSEEK_API_KEY"`.
   The base environment is `PATH`, `HOME`, `USER`, `LOGNAME`, `SHELL`, `LANG`, `TERM`, `TZ`, `TMPDIR`, `EVAL_AGENT_CMD`, `EVAL_TIMEOUT` and every `LC_*` and `XDG_*` variable.
-  Each passed value of 8 or more characters is rewritten to `{redacted}` in every record.
+  Each passed value is rewritten to `{redacted}` in every record; the runner refuses a passed value shorter than 8 characters, which is too common a string to redact.
 - `EVAL_TIMEOUT` (optional) bounds each agent command in seconds, 900 by default.
 - `EVAL_GRADING_MARGIN` (optional) is the seconds an attempt may run past `EVAL_TIMEOUT` for its setup and grading, 300 by default.
   Both are whole numbers of at least 1; the runner refuses any other value.
@@ -53,7 +53,8 @@ The runner lists cases from the harness checkout, never from `<checkout>`, so a 
 It refuses a harness or skill checkout with any uncommitted change, tracked or untracked, because the commit it records would not describe the run; only the suite's own uncommitted records under a `results/` directory are allowed.
 
 A run that stopped before writing its summary is continued with `--resume` and the same arguments and environment: each attempt that already has both records is counted from them instead of running again.
-Resume refuses a record whose label, commits, model, reasoning effort or agent command differ from this run's, and a record of a broken attempt.
+Resume refuses a record whose label, commits, model, reasoning effort or agent command differ from this run's, a record whose outcome or verdicts are not the ones its exit code and grades give, and a record of a broken attempt.
+A run without `--resume` refuses a label that already has records, and no run writes a summary while a record of its label is one it did not count, as a resume with fewer runs or cases would leave.
 
 ## Runner behaviour
 
@@ -63,7 +64,7 @@ Resume refuses a record whose label, commits, model, reasoning effort or agent c
 - A void run is not counted as graded and is retried until the scenario has N graded runs or 2×N attempts.
   Its record names the runner's classified reason (`run.sh exited 2: void`, or `run.sh did not finish within N seconds`), never text from `run.sh`; the first `HARNESS:` or `run.sh:` line `run.sh` wrote to stderr goes to the operator's stderr only.
 - The exit status is the scenario's verdict; only a scenario with further grades is counted from its grade files, and its status must still be 0 exactly when every grade passes.
-- Any other exit status, further grades without the scenario's own `grader-output.txt`, or grade files that contradict the status mean the case or the machine is broken: the attempt is recorded with outcome `error` and the suite stops with exit 1, writing no summary.
+- Any other exit status, further grades without the scenario's own `grader-output.txt`, further grade files that contradict the status, or grades that differ from an earlier graded attempt's of the same scenario mean the case or the machine is broken: the attempt is recorded with outcome `error` and the suite stops with exit 1, writing no summary.
 - Before each attempt and before the summary, the runner checks that both checkouts are still clean and at their commits; a checkout an attempt changed stops the suite with exit 1.
 - A case that names a scenario twice is refused.
 - The runner exits 0 when every scenario has N graded runs, 1 when any has fewer or it stopped on a broken attempt, and 2 when it refuses to start or would overwrite a file.
