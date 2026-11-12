@@ -126,6 +126,6 @@ Details:
 Notes, non-blocking:
 
 - The committed summaries name harness commit `e46615c`, a pre-squash branch commit not reachable from `main`, and `suite.py` changed after it, so those records were not produced by the merged harness.
-- A provider credential held only in the environment and not listed in `EVAL_PASS_ENV` voids every attempt with the recorded reason `run.sh exited 2: void`, and `run.sh` says only that "the agent command exited 1", which does not point at `EVAL_PASS_ENV`.
+- A provider credential held only in the environment and not listed in `EVAL_PASS_ENV` voids every attempt with the recorded reason `run.sh exited 2: void`, and `run.sh` says that "the agent command exited 1", which does not point at `EVAL_PASS_ENV`.
 
 Closing decision: SKL-164 moves to Done once this evidence PR merges.
