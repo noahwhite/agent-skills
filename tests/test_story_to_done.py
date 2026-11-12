@@ -190,7 +190,7 @@ def test_codex_seat_never_launches_read_only_and_needs_recorded_outer_sandbox() 
         assert phrase in body, f"codex seat sandbox rule missing: {phrase}"
 
 
-SCHEMA =json.loads((ROOT / "profile" / "schema.json").read_text())
+SCHEMA = json.loads((ROOT / "profile" / "schema.json").read_text())
 SEAT = {"name": "Engineer", "runtime": "opencode", "model": "example/strong", "effort": "high"}
 COMMAND_SEAT = {
     "name": "Engineer",
