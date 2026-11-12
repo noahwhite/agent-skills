@@ -61,15 +61,23 @@ if [ "$status" -ne 0 ]; then
   echo "HARNESS: the agent command exited $status; nothing was graded." >&2
   exit 2
 fi
-if [ "$scenario" = two-grades ]; then
+if [ "$scenario" = two-grades ] || [ "$scenario" = further-only ]; then
   printf 'FAIL the further check\nFAIL\n' > "$run/grader-extra-output.txt"
 fi
+if [ "$scenario" = further-only ]; then
+  exit 1
+fi
 python3 "$(dirname "$0")/grader.py" "$run" | tee "$run/grader-output.txt"
+# Like the real case's new-round, a failing further grade fails the run's exit status.
+if [ "$scenario" = two-grades ]; then
+  exit 1
+fi
 """
 
 STUB_GRADER = r"""#!/usr/bin/env python3
 import json, pathlib, sys
 run = pathlib.Path(sys.argv[1])
+NESTED = "nested/kept.md"
 calls = [json.loads(line) for line in (run / "actions.jsonl").read_text(errors="replace").splitlines()]
 ok = calls and calls[-1]["action"] == "pass" and (run / "evidence.json").is_file()
 print("ok   the recorded call" if ok else "FAIL the recorded call")
@@ -79,9 +87,11 @@ sys.exit(0 if ok else 1)
 
 # The stub agent: pass and fail record one call; void-once is void on its first attempt only,
 # void-thrice on its first three; void-always is void every time; hang outlives any deadline;
-# bad-bytes records a byte that is not UTF-8. It writes its run directory into the call, so the
-# record shows whether the runner normalised the path. EVAL_AGENT_CMD passes --model MODEL
-# first, as a real agent command names its model.
+# bad-bytes records a byte that is not UTF-8; dirty-once changes CHECKOUT on its first attempt
+# and is void, as a real run.sh voids an agent that changed it. It writes its run directory into
+# the call, so the record shows whether the runner normalised the path, and the CANARY variable
+# into evidence.json, so the record shows what environment it got. EVAL_AGENT_CMD passes
+# --model MODEL first, as a real agent command names its model.
 STUB_AGENT = r"""#!/usr/bin/env bash
 set -euo pipefail
 shift 2
@@ -91,17 +101,20 @@ count=$(( $(cat "$state" 2>/dev/null || echo 0) + 1 ))
 echo "$count" > "$state"
 echo "$run" >> "$STUB_STATE/run-dirs"
 case "$scenario" in
-  pass|two-grades) action=pass ;;
+  pass|two-grades|further-only) action=pass ;;
   fail) action=stop ;;
   void-once) [ "$count" -gt 1 ] || exit 3; action=pass ;;
   void-thrice) [ "$count" -gt 3 ] || exit 3; action=pass ;;
   void-always) exit 3 ;;
   hang) sleep 30; action=pass ;;
   bad-bytes) action=pass ;;
+  dirty-once) [ "$count" -gt 1 ] || { echo dirt > "$checkout/dirt.txt"; exit 3; }; action=pass ;;
 esac
 printf '{"action": "%s", "run_dir": "%s", "id": "%s"}\n' "$action" "$run" "$STUB_UUID" > "$run/actions.jsonl"
 if [ "$scenario" = bad-bytes ]; then printf '\xff\n' >> "$run/actions.jsonl"; fi
-printf '{"seen_in": "%s"}\n' "$run" > "$run/evidence.json"
+printf '{"seen_in": "%s", "canary": "%s"}\n' "$run" "${CANARY-unset}" > "$run/evidence.json"
+mkdir -p "$run/nested"
+echo kept > "$run/nested/kept.md"
 """
 
 STUB_SCENARIOS = ("pass", "fail", "void-once", "void-always")
@@ -114,7 +127,7 @@ def stub_case(case_dir: Path, scenarios=STUB_SCENARIOS) -> None:
     (case_dir / "results").mkdir(parents=True)
     (case_dir / "results" / ".keep").write_text("")
     for name in scenarios:
-        (case_dir / "scenarios" / name).mkdir(parents=True)
+        (case_dir / "scenarios" / name).mkdir(parents=True, exist_ok=True)
         (case_dir / "scenarios" / name / "scenario.md").write_text(f"{name}\n")
     reference = yaml.safe_load((REFERENCE_CASE / "case.yaml").read_text())
     case = {key: reference[key] for key in reference}
@@ -162,9 +175,10 @@ def suite(tmp_path: Path):
     state = tmp_path / "state"
     state.mkdir()
     env = {**os.environ, "EVAL_AGENT_CMD": f"{agent} --model stub/agent-model#high", "STUB_STATE": str(state),
-           "STUB_UUID": STUB_UUID, "TMPDIR": str(tmp_path)}
-    env.pop("EVAL_TIMEOUT", None)
-    env.pop("EVAL_GRADING_MARGIN", None)
+           "STUB_UUID": STUB_UUID, "EVAL_PASS_ENV": "STUB_STATE STUB_UUID", "TMPDIR": str(tmp_path)}
+    # CI's private leak patterns must not redact the stub's own strings.
+    for name in ("EVAL_TIMEOUT", "EVAL_GRADING_MARGIN", "LEAK_DENYLIST", "LEAK_DENYLIST_FILE", "CANARY"):
+        env.pop(name, None)
 
     def run(*args: str, **extra: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(["bash", str(evals / "run-suite.sh"), *args], capture_output=True, text=True,
@@ -223,8 +237,10 @@ def test_the_runner_counts_pass_fail_void_and_exhausted_void_retries(suite) -> N
     assert cell("fail", "Role") == "control (regression pin)"
     assert cell("pass", "Role") == "discriminating"
     for attempt in range(1, 5):
-        assert f"attempt {attempt}: HARNESS: the agent command exited 3" in cell("void-always", "Void reasons")
-    assert "noise" not in summary, "a void reason is the stated HARNESS line, never other output"
+        assert f"attempt {attempt}: run.sh exited 2: void" in cell("void-always", "Void reasons")
+    assert "noise" not in summary and "HARNESS" not in summary, "a void reason is classified, never run.sh's text"
+    assert "HARNESS: the agent command exited 3" in result.stderr, "the operator sees run.sh's stated reason"
+    assert "noise" not in result.stderr
     assert cell("pass", "Void reasons") == "none"
 
     # Retries stop at 2×N attempts, and a void-once scenario needs exactly one retry.
@@ -253,7 +269,7 @@ def test_every_attempt_writes_a_run_record_and_a_call_record_named_for_it(suite)
     assert {path.name for path in results.iterdir()} - {".keep"} == expected
 
     void = json.loads((results / f"lab-1-void-once-{sha}-harness-{harness_sha}-1.json").read_text())
-    assert void["outcome"] == "void" and "exited 3" in void["void_reason"]
+    assert void["outcome"] == "void" and void["void_reason"] == "run.sh exited 2: void"
     assert void["calls_record"] == "absent", "a void attempt that recorded no calls says so"
     graded = json.loads((results / f"lab-1-void-once-{sha}-harness-{harness_sha}-2.json").read_text())
     assert graded["outcome"] == "pass" and graded["void_reason"] is None
@@ -261,8 +277,9 @@ def test_every_attempt_writes_a_run_record_and_a_call_record_named_for_it(suite)
     assert graded["verdicts"] == {"void-once": "pass"}
     assert graded["model"] == "stub/agent-model" and graded["reasoning_effort"] == "high"
     assert graded["agent_command"] == "{tmpdir}/agent --model stub/agent-model#high"
-    assert json.loads(graded["grader_inputs"]["evidence.json"]) == {"seen_in": "{run_dir}"}, \
+    assert json.loads(graded["grader_inputs"]["evidence.json"]) == {"seen_in": "{run_dir}", "canary": "unset"}, \
         "a run-directory file the grader names is kept with the record"
+    assert graded["grader_inputs"]["nested/kept.md"] == "kept\n", "a relative path the grader names is kept too"
     calls = (results / f"lab-1-pass-{sha}-harness-{harness_sha}-1-calls.jsonl").read_text()
     assert json.loads(calls)["action"] == "pass"
 
@@ -285,11 +302,12 @@ def test_run_directories_sit_outside_both_checkouts_and_never_reach_a_record(sui
 
 
 def test_the_normaliser_rewrites_paths_and_leak_shapes_and_keeps_the_rest() -> None:
-    normalise = SUITE.Normaliser(SUITE.leak_patterns(), run_dir=Path("/scratch/run-1"), home=Path("/home/u"))
-    text = (f"/scratch/run-1/a.json /home/u/x /home/u2/y /opt/demo/local {STUB_ADDRESS} "
-            "https://github.com/a/b skills/story-to-done {run_dir}/kept")
-    assert normalise(text) == ("{run_dir}/a.json {home}/x {path} {path} {redacted} "
-                               "https://github.com/a/b skills/story-to-done {run_dir}/kept")
+    normalise = SUITE.Normaliser(SUITE.leak_patterns(), ["sk-passed-credential", "short"],
+                                 run_dir=Path("/scratch/run-1"), home=Path("/home/u"))
+    text = (f"/scratch/run-1/a.json /home/u/x /home/u2/y /srv/home/u/z /opt/demo/local {STUB_ADDRESS} "
+            "https://github.com/a/b skills/story-to-done {run_dir}/kept key=sk-passed-credential short")
+    assert normalise(text) == ("{run_dir}/a.json {home}/x {path} {path} {path} {redacted} "
+                               "https://github.com/a/b skills/story-to-done {run_dir}/kept key={redacted} short")
 
 
 def test_a_record_with_bytes_that_are_not_utf8_is_still_written(suite) -> None:
@@ -311,6 +329,48 @@ def test_a_scenario_graded_twice_reports_each_grade(suite) -> None:
     assert rows["two-grades-extra"][at["Role"]] == "discriminating (further grade of two-grades)"
 
 
+def test_a_further_grade_without_the_scenarios_own_grade_stops_the_suite(suite) -> None:
+    suite["recommit"]("further-only")
+    result = suite["run"]("--runs", "1", str(suite["checkout"]), "lab-1")
+    assert result.returncode == 1 and "no own verdict" in result.stderr, result.stderr
+    record = json.loads(next((suite["evals"] / "stub" / "results").glob("*-further-only-*.json")).read_text())
+    assert record["outcome"] == "error" and record["verdicts"] == {}
+
+
+def test_an_attempt_that_changes_a_checkout_stops_the_suite(suite) -> None:
+    suite["recommit"]("dirty-once")
+    result = suite["run"]("--runs", "1", str(suite["checkout"]), "lab-1")
+    assert result.returncode == 1 and "after an attempt of this run changed it" in result.stderr, result.stderr
+    assert int((suite["state"] / "dirty-once").read_text()) == 1, "no attempt runs against the changed checkout"
+    assert not (suite["evals"] / "results" / "suite-lab-1.md").exists()
+
+
+def test_the_agent_gets_only_the_base_environment_and_the_variables_passed(suite) -> None:
+    suite["recommit"]("pass")
+    canary = "fake-canary-credential"
+    result = suite["run"]("--runs", "1", str(suite["checkout"]), "lab-1", CANARY=canary)
+    assert result.returncode == 0, result.stderr
+    passed = suite["run"]("--runs", "1", str(suite["checkout"]), "lab-2", CANARY=canary,
+                          EVAL_PASS_ENV="STUB_STATE STUB_UUID CANARY")
+    assert passed.returncode == 0, passed.stderr
+    results = suite["evals"] / "stub" / "results"
+    for label, seen in (("lab-1", "unset"), ("lab-2", "{redacted}")):
+        record = json.loads(next(results.glob(f"{label}-pass-*.json")).read_text())
+        assert json.loads(record["grader_inputs"]["evidence.json"])["canary"] == seen, label
+    assert all(canary not in path.read_text() for path in results.iterdir())
+
+
+def test_the_recorded_model_is_normalised(suite) -> None:
+    suite["recommit"]("pass")
+    agent = suite["env"]["EVAL_AGENT_CMD"].split()[0]
+    result = suite["run"]("--runs", "1", str(suite["checkout"]), "lab-1",
+                          EVAL_AGENT_CMD=f"{agent} --model {STUB_ADDRESS}/m#high")
+    assert result.returncode == 0, result.stderr
+    record = json.loads(next((suite["evals"] / "stub" / "results").glob("lab-1-pass-*.json")).read_text())
+    assert STUB_ADDRESS not in record["model"] and "{redacted}" in record["model"]
+    assert STUB_ADDRESS not in (suite["evals"] / "results" / "suite-lab-1.md").read_text()
+
+
 def test_an_attempt_past_its_deadline_is_void(suite) -> None:
     suite["recommit"]("hang")
     result = suite["run"]("--runs", "1", str(suite["checkout"]), "lab-1", EVAL_TIMEOUT="1", EVAL_GRADING_MARGIN="1")
@@ -323,7 +383,7 @@ def test_an_attempt_past_its_deadline_is_void(suite) -> None:
 def test_an_undefined_exit_status_stops_the_suite(suite) -> None:
     suite["recommit"]("broken", "pass")
     result = suite["run"]("--runs", "2", str(suite["checkout"]), "lab-1")
-    assert result.returncode == 1 and "only 0, 1 and 2 are defined" in result.stderr, result.stderr
+    assert result.returncode == 1 and "a status the case contract does not define" in result.stderr, result.stderr
     records = list((suite["evals"] / "stub" / "results").glob("*-broken-*.json"))
     assert len(records) == 1, "the broken attempt is recorded once and never retried"
     assert json.loads(records[0].read_text())["outcome"] == "error"
@@ -359,6 +419,23 @@ def test_resume_continues_an_interrupted_run_from_its_records(suite) -> None:
     assert int((suite["state"] / "pass").read_text()) == 2, "no attempt with a record runs again"
 
 
+@pytest.mark.parametrize("change", ["model", "broken"])
+def test_resume_refuses_records_it_cannot_count(suite, change: str) -> None:
+    suite["recommit"]("pass")
+    suite["run"]("--runs", "2", str(suite["checkout"]), "lab-1")
+    (suite["evals"] / "results" / "suite-lab-1.md").unlink()
+    extra = {}
+    if change == "model":
+        extra["EVAL_AGENT_CMD"] = suite["env"]["EVAL_AGENT_CMD"].replace("agent-model", "other-model")
+    else:
+        record_path = next((suite["evals"] / "stub" / "results").glob("lab-1-pass-*-1.json"))
+        record = json.loads(record_path.read_text())
+        record_path.write_text(json.dumps({**record, "outcome": "error"}))
+    resumed = suite["run"]("--runs", "2", "--resume", str(suite["checkout"]), "lab-1", **extra)
+    assert resumed.returncode == 2, resumed.stderr
+    assert int((suite["state"] / "pass").read_text()) == 2, "nothing ran"
+
+
 @pytest.mark.parametrize("args", [
     ["--runs", "0", "CHECKOUT", "lab"],
     ["CHECKOUT", "bad/label"],
@@ -374,9 +451,36 @@ def test_the_runner_refuses_bad_arguments(suite, args) -> None:
     assert not (suite["state"] / "pass").exists(), "nothing ran"
 
 
-def test_an_agent_command_that_names_no_model_is_refused(suite) -> None:
-    result = suite["run"]("--runs", "1", str(suite["checkout"]), "lab", EVAL_AGENT_CMD="/bin/true")
+@pytest.mark.parametrize("command", ["/bin/true", ""])
+def test_an_agent_command_that_names_no_model_is_refused(suite, command: str) -> None:
+    result = suite["run"]("--runs", "1", str(suite["checkout"]), "lab", EVAL_AGENT_CMD=command)
     assert result.returncode == 2 and "--model" in result.stderr, result.stderr
+    assert not (suite["state"] / "pass").exists(), "nothing ran"
+
+
+@pytest.mark.parametrize("setting", [{"EVAL_TIMEOUT": "abc"}, {"EVAL_GRADING_MARGIN": "-5"},
+                                     {"EVAL_PASS_ENV": "NOT-A-NAME"}])
+def test_bad_settings_are_refused(suite, setting: dict) -> None:
+    result = suite["run"]("--runs", "1", str(suite["checkout"]), "lab", **setting)
+    assert result.returncode == 2 and "Traceback" not in result.stderr, result.stderr
+    assert not (suite["state"] / "pass").exists(), "nothing ran"
+
+
+def test_a_case_naming_a_scenario_twice_is_refused(suite) -> None:
+    suite["recommit"]("pass", "pass")
+    result = suite["run"]("--runs", "1", str(suite["checkout"]), "lab")
+    assert result.returncode == 2 and "more than once" in result.stderr, result.stderr
+
+
+@pytest.mark.parametrize("path, expected", [
+    ("skills/story-to-done/evals/results/suite-a.md", True),
+    ("skills/story-to-done/evals/case/results/a.json", True),
+    ("skills/story-to-done/results/a.md", False),
+    ("skills/story-to-done/evals/case/results/deep/a.json", False),
+    ("results/a.md", False),
+])
+def test_only_the_suites_own_outputs_count_as_records(path: str, expected: bool) -> None:
+    assert SUITE.is_record(path) is expected
 
 
 @pytest.mark.parametrize("change", ["tracked", "untracked"])
@@ -432,8 +536,11 @@ def test_a_run_with_every_scenario_graded_exits_0(suite) -> None:
 # --- AC3: the case contract -------------------------------------------------------------------
 
 REQUIRED_FIELDS = set(yaml.safe_load((REFERENCE_CASE / "case.yaml").read_text())) | {"kind"}
-# File names that hold the agent's prose rather than its tool calls.
-PROSE = re.compile(r"(?i)agent[-_]?output|transcript")
+# File names that hold the agent's prose rather than its tool calls: named for agent output, a
+# transcript, a stream or a response, or a plain-text or log file, which no call record is.
+PROSE = re.compile(r"(?i)agent[-_]?output|transcript|stdout|stderr|response|\.(?:txt|log)$")
+# A file run.sh redirects command output into, such as the agent's output.
+REDIRECT = re.compile(r'>\s*"?\$\{?run\}?/([^"\s;|&]+)')
 
 
 def contract_errors(case_dir: Path, tracked_mode) -> list[str]:
@@ -467,7 +574,10 @@ def contract_errors(case_dir: Path, tracked_mode) -> list[str]:
     names = SUITE.grader_names(case_dir / "grader.py") if (case_dir / "grader.py").is_file() else set()
     if not any("actions.jsonl" in name for name in names):
         errors.append("the grader does not read the tool-call record actions.jsonl")
-    prose = sorted(name for name in names if PROSE.search(name))
+    # Only strings shaped as file names count, so a grader's own messages may say "transcript".
+    files = {name for name in names if SUITE.RELATIVE_FILE.fullmatch(name)}
+    written = set(REDIRECT.findall((case_dir / "run.sh").read_text())) if (case_dir / "run.sh").is_file() else set()
+    prose = sorted(name for name in files if PROSE.search(name) or name in written)
     if prose:
         errors.append(f"the grader reads the agent's prose: {prose}")
     return errors
@@ -497,6 +607,7 @@ def test_every_case_directory_keeps_the_contract(case_dir: Path) -> None:
 @pytest.mark.parametrize("breakage", [
     "no-kind", "bad-kind", "no-prompt", "no-grader", "no-run", "run-not-executable",
     "no-results", "no-fixture", "prose-grader", "prose-beside-calls", "missing-field", "no-scenarios",
+    "prose-stdout", "prose-log", "prose-response", "prose-redirected",
 ])
 def test_the_contract_check_catches_each_breakage(tmp_path: Path, breakage: str) -> None:
     case_dir = tmp_path / "case"
@@ -527,6 +638,12 @@ def test_the_contract_check_catches_each_breakage(tmp_path: Path, breakage: str)
         (case_dir / "grader.py").write_text("open('agent-output.txt').read()\n")
     elif breakage == "prose-beside-calls":
         (case_dir / "grader.py").write_text("open('actions.jsonl').read()\nopen('transcript.txt').read()\n")
+    elif breakage.startswith("prose-") and breakage != "prose-grader":
+        read = {"prose-stdout": "stdout.txt", "prose-log": "agent.log", "prose-response": "response.md",
+                "prose-redirected": "said.md"}[breakage]
+        (case_dir / "grader.py").write_text(f"open('actions.jsonl').read()\nopen('{read}').read()\n")
+        with (case_dir / "run.sh").open("a") as run_sh:
+            run_sh.write('echo said > "$run/said.md"\n')
     (case_dir / "case.yaml").write_text(yaml.safe_dump(case, sort_keys=False))
     assert contract_errors(case_dir, file_mode) != []
 
@@ -535,6 +652,13 @@ def test_a_grader_docstring_is_not_a_file_it_reads(tmp_path: Path) -> None:
     grader = tmp_path / "grader.py"
     grader.write_text('"""Never reads the transcript."""\nopen("actions.jsonl")\n')
     assert SUITE.grader_names(grader) == {"actions.jsonl"}
+
+
+def test_a_grader_message_that_says_transcript_keeps_the_contract(tmp_path: Path) -> None:
+    case_dir = tmp_path / "case"
+    stub_case(case_dir)
+    (case_dir / "grader.py").write_text("open('actions.jsonl').read()\nprint('FAIL the transcript says nothing')\n")
+    assert contract_errors(case_dir, file_mode) == []
 
 
 def test_the_folded_case_is_discriminating_on_skl_159s_merge_commit() -> None:

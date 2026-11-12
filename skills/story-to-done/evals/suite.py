@@ -17,7 +17,6 @@ import importlib.util
 import json
 import os
 import re
-import shlex
 import shutil
 import signal
 import subprocess
@@ -29,12 +28,25 @@ import yaml
 
 EVALS = Path(__file__).resolve().parent
 ROOT = EVALS.parents[2]
+EVALS_PARTS = EVALS.relative_to(ROOT).parts
 NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
+# A relative file path a grader names, such as sessions.json or senior-engineer/todo.md.
+RELATIVE_FILE = re.compile(r"(?:[A-Za-z0-9][A-Za-z0-9._-]*/)*[A-Za-z0-9][A-Za-z0-9_-]*\.[A-Za-z0-9._-]+")
+ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+# The environment every attempt gets; anything else, credentials included, reaches it only
+# when EVAL_PASS_ENV names it.
+BASE_ENV = {"PATH", "HOME", "USER", "LOGNAME", "SHELL", "LANG", "TERM", "TZ", "TMPDIR"}
+BASE_ENV_PREFIXES = ("LC_", "XDG_", "EVAL_")
+# A passed value shorter than this is too common a string to redact from a record.
+MIN_REDACTED = 8
 UUID = re.compile(r"(?i)\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b")
 # An absolute path of two or more segments that no known root above accounted for. The
 # lookbehind keeps URLs (scheme://host/path) and relative paths (a/b/c) as they are.
 ABSOLUTE_PATH = re.compile(r"(?<![\w.:/{}~-])/(?:[\w.@+-]+/)+[\w.@+-]*")
 VOID_LINE = re.compile(r"^(HARNESS|run\.sh):")
+# The record fields --resume compares with this run, each against its run context key.
+RECORD_FIELDS = {"label": "label", "checkout_commit": "checkout_commit", "harness_commit": "harness_commit",
+                 "model": "model", "reasoning_effort": "effort", "agent_command": "agent_command"}
 GRADE_FILE = re.compile(r"grader(?:-(?P<grade>[A-Za-z0-9._-]+))?-output\.txt")
 MODEL_FLAG = re.compile(r"--model=(\S+)|(?:^|\s)(?:--model|-m)\s+(\S+)")
 VARIANCE = "k/n × (1 - k/n)"
@@ -47,7 +59,7 @@ class Refused(Exception):
 
 
 class Broken(Exception):
-    """An attempt exited with a status the case contract does not define: exit 1."""
+    """An attempt broke the case contract or changed a checkout: exit 1."""
 
 
 def git(repo: Path, *args: str) -> str:
@@ -58,9 +70,12 @@ def git(repo: Path, *args: str) -> str:
 
 
 def is_record(path: str) -> bool:
-    """True for a suite output path: a case's or the suite's results directory."""
+    """True for a file the suite writes: directly in the suite's results/ or in a case's."""
     parts = Path(path).parts
-    return "results" in parts[:-1]
+    if parts[:len(EVALS_PARTS)] != EVALS_PARTS:
+        return False
+    rest = parts[len(EVALS_PARTS):]
+    return (len(rest) == 2 and rest[0] == "results") or (len(rest) == 3 and rest[1] == "results")
 
 
 def commit_of(repo: Path, role: str) -> tuple[Path, str, str]:
@@ -101,7 +116,10 @@ def parse(argv: list[str]) -> argparse.Namespace:
 
 def grader_names(grader: Path) -> set[str]:
     """Every string the grader's code holds, docstrings excluded: the file names it can open."""
-    tree = ast.parse(grader.read_text(encoding="utf-8"))
+    try:
+        tree = ast.parse(read(grader))
+    except SyntaxError as error:
+        raise Refused(f"{grader} does not parse: {error}") from None
     docstrings = set()
     for node in ast.walk(tree):
         if isinstance(node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and node.body:
@@ -125,23 +143,27 @@ def leak_patterns() -> list[re.Pattern]:
 
 
 class Normaliser:
-    """Rewrites local and scratch paths and UUID shapes to placeholders, longest path first,
-    then any other absolute path to {path} and anything else the leak scan rejects to
-    {redacted}, so a record carries no path or identifier of the machine that ran it."""
+    """Rewrites the values of passed variables to {redacted}, local and scratch paths and UUID
+    shapes to placeholders, longest path first, then any other absolute path to {path} and
+    anything else the leak scan rejects to {redacted}, so a record carries no credential, path
+    or identifier of the machine that ran it."""
 
-    def __init__(self, leaks: list[re.Pattern], **paths: Path) -> None:
+    def __init__(self, leaks: list[re.Pattern], secrets: list[str] = (), **paths: Path) -> None:
         pairs = {}
         for name, path in paths.items():
             for form in {str(path), str(path.resolve())}:
                 if len(form) > 1:
                     pairs.setdefault(form, "{" + name + "}")
         self.pairs = sorted(pairs.items(), key=lambda pair: -len(pair[0]))
+        self.secrets = sorted({value for value in secrets if len(value) >= MIN_REDACTED}, key=len, reverse=True)
         self.leaks = leaks
 
     def __call__(self, text: str) -> str:
+        for value in self.secrets:
+            text = text.replace(value, "{redacted}")
         for path, placeholder in self.pairs:
-            # A root is only replaced whole: /home/user never rewrites /home/user2.
-            text = re.sub(re.escape(path) + r"(?![\w.-])", lambda _: placeholder, text)
+            # A root is only replaced whole: /home/user never rewrites /home/user2 or /srv/home/user.
+            text = re.sub(r"(?<![\w.-])" + re.escape(path) + r"(?![\w.-])", lambda _: placeholder, text)
         text = UUID.sub("{uuid}", text)
         text = ABSOLUTE_PATH.sub("{path}", text)
         for regex in self.leaks:
@@ -149,9 +171,9 @@ class Normaliser:
         return text
 
 
-def void_reason(stderr: str) -> str:
-    """The reason run.sh states on a HARNESS: or run.sh: line, never other output, so no
-    transcript text reaches a record or the summary."""
+def stated_reason(stderr: str) -> str:
+    """The first HARNESS: or run.sh: line run.sh wrote. It is shown to the operator only: a
+    record and the summary carry the classified reason, never text run.sh passed through."""
     lines = [line.strip() for line in stderr.splitlines() if line.strip()]
     return next((line for line in lines if VOID_LINE.match(line)), "run.sh stated no HARNESS: or run.sh: reason")
 
@@ -176,10 +198,11 @@ def read(path: Path) -> str:
     return path.read_text(encoding="utf-8", errors="replace")
 
 
-def verdicts(run_dir: Path, name: str, outcome: str) -> dict[str, str]:
+def verdicts(run_dir: Path, name: str, outcome: str) -> dict[str, str] | None:
     """Each grade's verdict, named for its scenario: grader-output.txt is the scenario's own
     grade, grader-<g>-output.txt a further grade named <scenario>-<g>. A case that writes no
-    grade file is graded by run.sh's exit status alone."""
+    grade file is graded by run.sh's exit status alone. None when further grades exist without
+    the scenario's own: run.sh's status then mixes grades, so it is no verdict for the scenario."""
     found = {}
     for output in sorted(run_dir.glob("grader*-output.txt")):
         match = GRADE_FILE.fullmatch(output.name)
@@ -187,24 +210,33 @@ def verdicts(run_dir: Path, name: str, outcome: str) -> dict[str, str]:
             lines = [line.strip() for line in read(output).splitlines() if line.strip()]
             grade = name + (f"-{match['grade']}" if match["grade"] else "")
             found[grade] = "pass" if lines and lines[-1] == "PASS" else "fail"
+    if found and name not in found:
+        return None
     found.setdefault(name, outcome)
     return found
+
+
+def kill_group(process: subprocess.Popen) -> None:
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:  # the group already exited
+        pass
 
 
 def run_attempt(case_dir: Path, name: str, run_dir: Path, ctx: dict) -> tuple[int | None, str]:
     """Run one attempt in its own process group; None as the status means it timed out."""
     process = subprocess.Popen(["bash", str(case_dir / "run.sh"), str(ctx["checkout"]), name, str(run_dir)],
                                stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                               start_new_session=True)
+                               start_new_session=True, env=ctx["env"])
     try:
         _, stderr = process.communicate(timeout=ctx["deadline"])
         return process.returncode, stderr.decode("utf-8", errors="replace")
     except subprocess.TimeoutExpired:
-        os.killpg(process.pid, signal.SIGKILL)
+        kill_group(process)
         process.communicate()
         return None, ""
     except BaseException:
-        os.killpg(process.pid, signal.SIGKILL)
+        kill_group(process)
         raise
 
 
@@ -217,6 +249,19 @@ def tally_record(tally: dict, record: dict) -> None:
         tally["k"][grade] = tally["k"].get(grade, 0) + (verdict == "pass")
 
 
+def resumed(record_path: Path, ctx: dict) -> dict:
+    """An existing record that --resume counts: it must come from this run's configuration,
+    and a broken attempt is never counted, so it stops the resume."""
+    record = json.loads(read(record_path))
+    differ = [field for field, key in RECORD_FIELDS.items() if record.get(field) != ctx[key]]
+    if differ:
+        raise Refused(f"{record_path} records a different {', '.join(differ)} than this run; "
+                      "--resume continues only the same configuration")
+    if record.get("outcome") not in ("pass", "fail", "void"):
+        raise Refused(f"{record_path} records a broken attempt; fix the case and start a new LABEL")
+    return record
+
+
 def run_scenario(case_dir: Path, scenario: dict, runs: int, ctx: dict) -> dict:
     name = scenario["name"]
     results = case_dir / "results"
@@ -227,32 +272,41 @@ def run_scenario(case_dir: Path, scenario: dict, runs: int, ctx: dict) -> dict:
         stem = f"{ctx['label']}-{name}-{ctx['checkout_short']}-harness-{ctx['harness_short']}-{attempt}"
         record_path, calls_path = results / f"{stem}.json", results / f"{stem}-calls.jsonl"
         if ctx["resume"] and record_path.is_file() and calls_path.is_file():
-            tally_record(tally, json.loads(read(record_path)))
+            tally_record(tally, resumed(record_path, ctx))
             continue
         for path in (record_path, calls_path):
             if path.exists():
                 raise Refused(f"{path} exists; a suite run never overwrites a record")
+        ctx["unchanged"]()
         run_dir = ctx["tmp"] / f"{case_dir.name}-{name}-{attempt}"
         print(f"run-suite: {case_dir.name} {name} attempt {attempt}", file=sys.stderr, flush=True)
         code, stderr = run_attempt(case_dir, name, run_dir, ctx)
-        normalise = Normaliser(ctx["leaks"], run_dir=run_dir, tmp=ctx["tmp"], checkout=ctx["checkout"],
+        normalise = Normaliser(ctx["leaks"], ctx["secrets"], run_dir=run_dir, tmp=ctx["tmp"], checkout=ctx["checkout"],
                                harness=ctx["harness"], tmpdir=Path(tempfile.gettempdir()), home=Path.home())
         outcome = {0: "pass", 1: "fail", 2: "void", None: "void"}.get(code, "error")
         reason = None
         if code is None:
             reason = f"run.sh did not finish within {ctx['deadline']} seconds"
-        elif outcome in ("void", "error"):
-            reason = normalise(void_reason(stderr))
+        elif code == 2:
+            reason = "run.sh exited 2: void"
+        elif outcome == "error":
+            reason = f"run.sh exited {code}, a status the case contract does not define"
+        if outcome in ("void", "error") and code is not None:
+            print(f"run-suite: {case_dir.name} {name} attempt {attempt}: {normalise(stated_reason(stderr))}",
+                  file=sys.stderr, flush=True)
         grades, inputs, marks = {}, {}, {}
         if outcome in ("pass", "fail"):
             for output in sorted(run_dir.glob("grader*-output.txt")):
                 grades[output.name] = normalise(read(output)).splitlines()
             marks = verdicts(run_dir, name, outcome)
+            if marks is None:
+                outcome, marks = "error", {}
+                reason = "run.sh wrote a further grade but no grader-output.txt, so the scenario has no own verdict"
             # Keep every run-directory file the grader names, beside the call record, so the
             # attempt can be graded again from what is committed.
             for file_name in sorted(ctx["grader_reads"]):
                 path = run_dir / file_name
-                if file_name != "actions.jsonl" and path.is_file():
+                if file_name != "actions.jsonl" and path.is_file() and run_dir.resolve() in path.resolve().parents:
                     inputs[file_name] = normalise(read(path))
         actions = run_dir / "actions.jsonl"
         record = {
@@ -267,8 +321,7 @@ def run_scenario(case_dir: Path, scenario: dict, runs: int, ctx: dict) -> dict:
         if run_dir.exists():  # run.sh may refuse before it creates the directory
             shutil.rmtree(run_dir)  # scratch only: the records above are what is kept
         if outcome == "error":
-            raise Broken(f"{case_dir.name} {name} attempt {attempt}: run.sh exited {code} ({reason}); "
-                         "only 0, 1 and 2 are defined, so the case or the machine is broken")
+            raise Broken(f"{case_dir.name} {name} attempt {attempt}: {reason}; the case or the machine is broken")
         tally_record(tally, record)
     role = "control (regression pin)" if "control" in scenario else ctx["kind"]
     grades = sorted(tally["k"], key=lambda grade: (grade != name, grade)) or [name]
@@ -316,20 +369,38 @@ def summary(label: str, runs: int, sections: list[dict], short: list[str], ctx: 
     return "\n".join(lines) + "\n"
 
 
-def agent_config(runtime: dict, normalise) -> tuple[str, str, str]:
-    """The agent command, model and reasoning effort an attempt runs with. An EVAL_AGENT_CMD
-    override must name its model with --model, and the model's #variant is its effort, so a
-    record never claims the case's configuration for another agent."""
-    override = os.environ.get("EVAL_AGENT_CMD", "").strip()
-    if not override:
-        return ("the case's run.sh default", str(runtime.get("model", "unset")),
-                str(runtime.get("reasoning_effort", "unset")))
-    match = MODEL_FLAG.search(override)
+def agent_config(normalise) -> tuple[str, str, str]:
+    """The agent command, model and reasoning effort every attempt runs with, all read from
+    EVAL_AGENT_CMD, which the suite requires: it names its model with --model, and the model's
+    #variant is its effort, so a record names the agent that ran rather than one a case claims."""
+    command = os.environ.get("EVAL_AGENT_CMD", "").strip()
+    if not command:
+        raise Refused("set EVAL_AGENT_CMD to the agent command, naming its model with --model, "
+                      "so the records name the agent that ran")
+    match = MODEL_FLAG.search(command)
     if not match:
         raise Refused("EVAL_AGENT_CMD must name its model with --model, so the records can name it")
-    model = match.group(1) or match.group(2)
-    model, _, variant = model.partition("#")
-    return normalise(override), model, variant or "default"
+    model, _, variant = (match.group(1) or match.group(2)).partition("#")
+    return normalise(command), normalise(model), normalise(variant or "default")
+
+
+def agent_env() -> tuple[dict[str, str], list[str]]:
+    """The environment every attempt runs in and the passed values to redact: the base names,
+    plus each variable EVAL_PASS_ENV names, such as the model provider's credential."""
+    passed = os.environ.get("EVAL_PASS_ENV", "").split()
+    bad = [name for name in passed if not ENV_NAME.fullmatch(name)]
+    if bad:
+        raise Refused(f"EVAL_PASS_ENV names {bad}, which are not variable names")
+    env = {name: value for name, value in os.environ.items()
+           if name in BASE_ENV or name.startswith(BASE_ENV_PREFIXES) or name in passed}
+    return env, [os.environ[name] for name in passed if name in os.environ]
+
+
+def seconds(name: str, default: int) -> int:
+    value = os.environ.get(name) or str(default)
+    if not value.isdigit() or int(value) < 1:
+        raise Refused(f"{name} must be a whole number of seconds, at least 1, not {value!r}")
+    return int(value)
 
 
 def main(argv: list[str]) -> int:
@@ -348,33 +419,51 @@ def main(argv: list[str]) -> int:
         scenarios = spec.get("scenarios") if isinstance(spec, dict) else None
         if not scenarios or not all(isinstance(s, dict) and NAME.fullmatch(str(s.get("name", ""))) for s in scenarios):
             raise Refused(f"case {case} names no scenarios, or a scenario without a valid name")
+        if len({s["name"] for s in scenarios}) != len(scenarios):
+            raise Refused(f"case {case} names a scenario more than once")
         if not os.access(EVALS / case / "run.sh", os.R_OK) or not (EVALS / case / "grader.py").is_file():
             raise Refused(f"case {case} has no readable run.sh and grader.py")
         specs[case] = spec
+    deadline = seconds("EVAL_TIMEOUT", 900) + seconds("EVAL_GRADING_MARGIN", GRADING_MARGIN)
+    env, secrets = agent_env()
     leaks = leak_patterns()
     tmp = Path(tempfile.mkdtemp(prefix="eval-suite-")).resolve()
     sections = []
+
+    def unchanged() -> None:
+        """Both checkouts are still at the commits the records name, with nothing uncommitted
+        but the suite's own records: an attempt that changed either stops the suite."""
+        for repo, role, commit in ((harness, "harness", harness_commit), (checkout, "skill", checkout_commit)):
+            try:
+                now = commit_of(repo, role)[1]
+            except Refused as error:
+                raise Broken(f"{error}, after an attempt of this run changed it") from None
+            if now != commit:
+                raise Broken(f"the {role} checkout moved from {commit} to {now} during the run")
+
     try:
         for root in (harness, checkout):
             if tmp == root or root in tmp.parents:
                 raise Refused(f"the run directory {tmp} sits inside {root}; set TMPDIR outside both checkouts")
         roots = {"checkout": checkout} if harness == checkout else {"checkout": checkout, "harness": harness}
-        names = Normaliser(leaks, tmp=tmp, **roots, tmpdir=Path(tempfile.gettempdir()), home=Path.home())
+        names = Normaliser(leaks, secrets, tmp=tmp, **roots, tmpdir=Path(tempfile.gettempdir()), home=Path.home())
+        command, model, effort = agent_config(names)
         ctx = {"label": args.label, "tmp": tmp, "checkout": checkout, "harness": harness, "resume": args.resume,
                "checkout_commit": checkout_commit, "checkout_short": checkout_short,
                "harness_commit": harness_commit, "harness_short": harness_short, "leaks": leaks,
-               "deadline": int(os.environ.get("EVAL_TIMEOUT") or 900)
-               + int(os.environ.get("EVAL_GRADING_MARGIN") or GRADING_MARGIN)}
+               "secrets": secrets, "env": env, "deadline": deadline, "unchanged": unchanged,
+               "agent_command": command, "model": model, "effort": effort}
         for case in cases:
             case_dir, spec = EVALS / case, specs[case]
-            runtime = spec.get("runtime") or {}
-            command, model, effort = agent_config(runtime, names)
-            ctx.update(kind=str(spec.get("kind", "unset")), agent_command=command, model=model, effort=effort,
+            # A relative path the grader's code names, such as sessions.json, is a file it
+            # reads from the run directory; actions.jsonl is kept as the tool-call record.
+            ctx.update(kind=str(spec.get("kind", "unset")),
                        grader_reads={name for name in grader_names(case_dir / "grader.py")
-                                     if NAME.fullmatch(name) and "." in name})
+                                     if RELATIVE_FILE.fullmatch(name) and ".." not in name.split("/")})
             (case_dir / "results").mkdir(exist_ok=True)
             rows = [run_scenario(case_dir, scenario, args.runs, ctx) for scenario in spec["scenarios"]]
             sections.append({"case": case, "kind": ctx["kind"], "model": model, "effort": effort, "rows": rows})
+        unchanged()
         short = [f"{s['case']} {r['name']}" for s in sections for r in s["rows"] if r["n"] < args.runs]
         (EVALS / "results").mkdir(exist_ok=True)
         write_new(summary_path, summary(args.label, args.runs, sections, short, ctx))

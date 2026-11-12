@@ -1,2 +1,0 @@
-{"action": "read", "at": "2026-11-12T06:48:38Z", "path": "qa-agent-round-1/qa-agent-round-1-todo.md"}
-{"action": "stop", "at": "2026-11-12T06:48:45Z", "reason": "QA not finished: the evidence PR QA round 1 opened is still unmerged while its review-of-record gate is still running; QA owns merging it once the gate completes. Story ABC-123 stays In Deployment Review; resume step 3 after it is cleared."}

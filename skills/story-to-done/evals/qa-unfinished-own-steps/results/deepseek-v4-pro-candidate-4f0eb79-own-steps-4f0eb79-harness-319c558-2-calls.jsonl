@@ -1,2 +1,0 @@
-{"action": "read", "at": "2026-11-12T07:16:24Z", "path": "qa-agent-round-1/qa-agent-round-1-todo.md"}
-{"action": "resume", "at": "2026-11-12T07:17:32Z", "label": "qa-agent-round-1", "message": "Story ABC-123: your current QA round is unfinished.\n\nResume the round and carry it to completion under qa-verification.\n\nYour scratch subdirectory for this round is qa-agent-round-1/ (its full path under the scratch directory is {run_dir}/qa-agent-round-1/).\n", "round": 1, "session": "qa-round-1-session"}
