@@ -211,6 +211,9 @@ def schema_errors(instance: dict) -> list[str]:
 def test_schema_accepts_a_story_to_done_seat_pair() -> None:
     assert not schema_errors(profile_with({"engineer": SEAT, "qa": COMMAND_SEAT}))
     assert not schema_errors(profile_with({"engineer": {"runtime": "codex", "model": "example/strong"}, "qa": SEAT}))
+    # A '#' inside a word is not a shell comment.
+    hash_in_word = 'agent --tag build#1 --model "{model}#{effort}" --title "{session_title}" --file "{prompt_file}" > "{output_file}"'
+    assert not schema_errors(profile_with({"engineer": COMMAND_SEAT | {"command": hash_in_word}, "qa": SEAT}))
     effort = SCHEMA["$defs"]["story_to_done_seat"]["properties"]["effort"]
     assert effort["enum"] == ["low", "medium", "high", "xhigh", "max"]
     assert effort["default"] == "high"
@@ -240,6 +243,7 @@ def test_schema_accepts_a_story_to_done_seat_pair() -> None:
         {"engineer": COMMAND_SEAT | {"command": 'agent --model "x" --title "t" --file "f" > "o" # {model} {effort} {session_title} {prompt_file} {output_file}'}, "qa": SEAT},
         {"engineer": COMMAND_SEAT | {"command": 'agent --model x # "{model}" "{effort}" "{prompt_file}" "{output_file}" "{session_title}"'}, "qa": SEAT},
         {"engineer": COMMAND_SEAT | {"command": 'agent --model {model}#{effort} --title {session_title} --file {prompt_file} > {output_file} # "{model}" "{effort}" "{prompt_file}" "{output_file}" "{session_title}"'}, "qa": SEAT},
+        {"engineer": COMMAND_SEAT | {"command": 'printf run \\" # {model} {effort} {prompt_file} {output_file} {session_title}'}, "qa": SEAT},
         {"engineer": COMMAND_SEAT | {"model": "example/strong\n"}, "qa": SEAT},
         {"engineer": {"runtime": "codex", "model": "x; touch /tmp/p"}, "qa": SEAT},
         {"engineer": {"runtime": "codex", "model": "example/strong\n"}, "qa": SEAT},
@@ -249,7 +253,8 @@ def test_schema_accepts_a_story_to_done_seat_pair() -> None:
          "command-model-with-shell-text", "command-model-with-substitution", "command-model-like-an-option", "command-without-prompt-file",
          "command-without-output-file", "command-without-session-title", "command-with-unquoted-model",
          "command-with-placeholders-only-in-a-comment", "command-with-quoted-placeholders-only-in-a-comment",
-         "command-with-unquoted-placeholders-and-a-quoted-comment-copy", "command-model-with-trailing-newline",
+         "command-with-unquoted-placeholders-and-a-quoted-comment-copy", "command-with-an-escaped-quote-before-a-comment",
+         "command-model-with-trailing-newline",
          "codex-model-with-shell-text", "codex-model-with-trailing-newline"],
 )
 def test_schema_refuses_a_malformed_story_to_done(story_to_done) -> None:
