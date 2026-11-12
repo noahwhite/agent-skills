@@ -786,16 +786,16 @@ def test_the_engineer_brief_stays_neutral_and_names_the_gate_and_branch() -> Non
 
 METRICS_ROW = "| `metrics` | whether the run collects and reports run metrics | `off` |"
 METRICS_LINE_SENTENCE = (
-    "Write the four resolved model and effort values and the `metrics: on|off` line at the top of "
-    "your todo list and in the closing report of every end state"
+    "Write the four resolved model and effort values, the `qa-round-cap: <n>` line, and the `metrics: on|off` "
+    "line at the top of your todo list and in the closing report of every end state"
 )
 
 
 def test_arguments_table_adds_the_metrics_switch_off_by_default() -> None:
     body = section(SKILL.read_text(), "Arguments")
     assert METRICS_ROW in body, "arguments table missing the metrics row and its off default"
-    assert "Five arguments are optional" in body
-    assert "Four arguments are optional" not in body
+    assert "Six arguments are optional" in body
+    assert "Five arguments are optional" not in body
 
 
 def test_metrics_switch_plain_words_are_mapped_or_asked() -> None:
@@ -817,6 +817,7 @@ def test_metrics_line_goes_in_the_todo_list_and_every_closing_report() -> None:
     assert "Write the four resolved values at the top of your todo list and in the final report" not in body
     close_out = " ".join(section(SKILL.read_text(), "5. Close out").split())
     assert "the four resolved model and effort values and the `metrics: on|off` line" in close_out
+    assert "the `metrics: on|off` line, the `qa-round-cap: <n>` line," in close_out
 
 
 METRICS_OPENING = "Only when `metrics` is on, read [references/metrics.md](references/metrics.md)"
@@ -1161,8 +1162,8 @@ METRICS_LINES = [
     "  The continuation does not increment the QA round count, reuses that round's scratch subdirectory and "
     "checklist, and with `metrics` on is recorded as its own launch row within that same round.",
     "Report the story identifier, its final state, the four resolved model and effort values and the "
-    "`metrics: on|off` line, each PR, the number of QA rounds with the items fixed in each, where QA recorded "
-    "its evidence, and any incidental defects left open.",
+    "`metrics: on|off` line, the `qa-round-cap: <n>` line, each PR, the number of QA rounds with the items "
+    "fixed in each, where QA recorded its evidence, and any incidental defects left open.",
     BOUNDARIES_ONLY_WRITE,
     # SKL-159: the Boundaries sentence that leaves the permitted tracker write unchanged.
     "- A continuation grants no new authority: it leaves that prohibition, and the single permitted tracker "
@@ -1228,7 +1229,7 @@ def test_metrics_off_changes_nothing_but_the_metrics_line() -> None:
 def test_arguments_prose_count_matches_the_table() -> None:
     body = section(SKILL.read_text(), "Arguments")
     rows = [line for line in body.splitlines() if line.startswith("| `")]
-    assert len(rows) == 5 and "Five arguments are optional" in body
+    assert len(rows) == 6 and "Six arguments are optional" in body
 
 
 def readme_row() -> str:
@@ -3045,3 +3046,121 @@ def test_the_deadline_stop_reports_and_makes_no_tracker_write() -> None:
 
 def test_the_deadline_is_reached_by_a_bounded_foreground_wait() -> None:
     assert INTERIM_WAIT in interim_text()
+
+
+# SKL-155: the `qa-round-cap` argument stops the loop at the cap-th counted QA round that ends in
+# `in_progress`, before the hand-back, and asks the user how many further rounds to run.
+QA_ROUND_CAP_ROW = (
+    "| `qa-round-cap` | the number of counted QA rounds after which the loop stops and asks the user | `3` |"
+)
+QA_ROUND_CAP_GIVEN = (
+    '- `qa-round-cap` is given as `qa-round-cap=<n>` or in plain words about capping QA rounds ("cap QA at <n> '
+    'rounds" and "stop after <n> failed QA rounds" mean <n>); a positive integer (1 or more) is valid, and zero, '
+    "a negative number, or a non-integer is invalid."
+)
+QA_ROUND_CAP_ASK = "- Ask the user about an invalid value and about any other phrasing about the cap; never guess."
+QA_ROUND_CAP_RESOLVE = "- Resolve `qa-round-cap` before step 0 creates the todo list; it sets no model or effort."
+QA_ROUND_CAP_ECHO = "- " + METRICS_LINE_SENTENCE + " (the step 5 report, or the report made at any stop, including one before step 0)."
+CAP_COUNT = (
+    "QA rounds are counted within this invocation: the first QA round this coordinator runs is round 1, a run "
+    "resumed at step 3 starts a new count that the report states, and only a round whose read-back is "
+    "`profile.tracker.states.in_progress` counts."
+)
+CAP_STOP = (
+    "When the `qa-round-cap`-th counted round ends here, stop before the hand-back below and launch nothing further."
+)
+CAP_PAYLOAD = (
+    "The stop report gives, per round, every failed item as QA recorded it in the tracker (the item, its verdict, "
+    "and the evidence it cites)."
+)
+CAP_PR = (
+    "It also gives, per PR, the link and head SHA, re-read from the tracker and the forge rather than taken from a "
+    "handback, reusing the merge reads steps 2 and 3 already make."
+)
+CAP_ASK = (
+    "The stop report asks the user how many further rounds to run or whether to stop, and waits for the reply; a "
+    "reply that does not say how many rounds or that it is a stop, or that gives an invalid value, is asked about "
+    "again, never guessed."
+)
+CAP_REARM = (
+    'On "N additional rounds", re-arm the same cap at N further counted rounds and resume the pending hand-back '
+    "below with every item failed so far; the next QA round runs with a new QA agent."
+)
+CAP_LEFT = (
+    'On "stop", end the invocation with the story left in the state QA left it: '
+    "`profile.tracker.states.in_progress`, failed items outstanding, the owner deciding next."
+)
+CAP_NO_WRITE = (
+    "In either case the coordinator writes nothing to the tracker, rules on no item, and relays no verdict of its own."
+)
+README_CAP_CLAUSE = (
+    "a `qa-round-cap` argument, `3` by default, stops the loop and asks the owner after that many failed QA rounds; "
+    "a `metrics` switch"
+)
+
+
+def arguments_lines() -> list[str]:
+    return section(SKILL.read_text(), "Arguments").splitlines()
+
+
+def in_progress_bullet() -> str:
+    bullet = state_bullets(section(SKILL.read_text(), "4. Act on the QA outcome"))["`profile.tracker.states.in_progress`"]
+    return " ".join(bullet.split())
+
+
+def test_qa_round_cap_row_defaults_to_three() -> None:
+    assert QA_ROUND_CAP_ROW in arguments_lines()
+
+
+def test_qa_round_cap_is_given_as_key_value_or_plain_words_with_a_positive_integer() -> None:
+    assert QA_ROUND_CAP_GIVEN in arguments_lines()
+
+
+def test_qa_round_cap_other_phrasing_and_invalid_values_are_asked_about() -> None:
+    assert QA_ROUND_CAP_ASK in arguments_lines()
+
+
+def test_qa_round_cap_resolves_before_step_0_and_sets_no_model_or_effort() -> None:
+    assert QA_ROUND_CAP_RESOLVE in arguments_lines()
+
+
+def test_qa_round_cap_is_echoed_in_the_todo_list_and_every_closing_report() -> None:
+    assert QA_ROUND_CAP_ECHO in arguments_lines()
+    close_out = " ".join(section(SKILL.read_text(), "5. Close out").split())
+    assert "the `qa-round-cap: <n>` line" in close_out
+
+
+def test_qa_rounds_count_within_the_invocation_and_only_in_progress_rounds_count() -> None:
+    assert CAP_COUNT in in_progress_bullet()
+
+
+def test_the_cap_stop_is_inside_the_in_progress_bullet_before_the_hand_back_with_no_sixth_bullet() -> None:
+    assert in_order(
+        in_progress_bullet(),
+        "Those failed items are the issues to fix.",
+        CAP_STOP,
+        "Hand them back to the senior engineer",
+    )
+    assert len(state_bullets(section(SKILL.read_text(), "4. Act on the QA outcome"))) == 5
+
+
+def test_the_stop_report_gives_every_failed_item_per_round() -> None:
+    assert CAP_PAYLOAD in in_progress_bullet()
+
+
+def test_the_stop_report_gives_each_pr_link_and_head_sha_from_the_tracker_and_forge() -> None:
+    assert CAP_PR in in_progress_bullet()
+
+
+def test_the_cap_stop_asks_and_waits_and_offers_re_arm_or_stop() -> None:
+    bullet = in_progress_bullet()
+    assert in_order(bullet, CAP_STOP, CAP_ASK, CAP_REARM, "Hand them back to the senior engineer")
+
+
+def test_a_stop_leaves_the_story_in_progress_for_the_owner_and_the_coordinator_writes_nothing() -> None:
+    bullet = in_progress_bullet()
+    assert in_order(bullet, CAP_REARM, CAP_LEFT, CAP_NO_WRITE, "Hand them back to the senior engineer")
+
+
+def test_readme_row_names_the_qa_round_cap_and_its_default_before_the_metrics_clause() -> None:
+    assert README_CAP_CLAUSE in readme_row()
