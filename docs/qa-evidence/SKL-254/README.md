@@ -58,7 +58,7 @@ Each wait runs [`wait-state.sh`](wait-state.sh), written by the coordinator at 0
 It polls `linear issue view SKL-264 --json` every 15 seconds, each read under its own timeout of at most 20 seconds, up to its third argument in seconds, and prints the last state it read.
 
 In both transcripts the scratch directory is shortened to `.../`, and the runtime's em dash in its Write result is shown as `-`.
-The handback is quoted with the engineer's agent id and the harness framing lines replaced by markers.
+The handback is quoted with the engineer's agent id and the harness framing lines replaced by markers, and the deadline read's `url` and `branchName` values, which name the tracker workspace, are replaced by markers.
 
 ```text
 [2026-11-12T01:20:36.675Z] USER:
@@ -125,8 +125,8 @@ SKL-264 state: Backlog at 2026-11-12T01:32:32Z
   "identifier": "SKL-264",
   "title": "[Tabletop fixture] SKL-254 interim handback deadline stop (sixth run)",
   "description": "Disposable fixture for SKL-254 AC6, run on the text fixed after the second delta review of record: one story-to-done run (metrics=off) whose senior engineer hands back an interim notice naming a tracker move of this issue that nothing performs, so the awaited item stays pending. This issue is canceled after the run. No work is to be done on it: a senior engineer briefed on this issue does no engineering, triage, branch, PR or tracker write.",
-  "url": "https://linear.app/officina-pub/issue/SKL-264/tabletop-fixture-skl-254-interim-handback-deadline-stop-sixth-run",
-  "branchName": "noahwhite/skl-264-tabletop-fixture-skl-254-interim-handback",
+  "url": "[Linear URL redacted]",
+  "branchName": "[branch name redacted]",
   "state": {
     "name": "Backlog",
     "color": "#bec2c8"
