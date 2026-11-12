@@ -41,6 +41,7 @@ BASE_ENV = {"PATH", "HOME", "USER", "LOGNAME", "SHELL", "LANG", "TERM", "TZ", "T
 BASE_ENV_PREFIXES = ("LC_", "XDG_")
 # A passed value shorter than this is too common a string to redact from a record.
 MIN_REDACTED = 8
+REDACTED = "{redacted}"
 UUID = re.compile(r"(?i)\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b")
 # An absolute path of two or more segments that no known root above accounted for. The
 # lookbehind keeps URLs (scheme://host/path) and relative paths (a/b/c) as they are.
@@ -164,14 +165,14 @@ class Normaliser:
 
     def __call__(self, text: str) -> str:
         for value in self.secrets:
-            text = text.replace(value, "{redacted}")
+            text = text.replace(value, REDACTED)
         for path, placeholder in self.pairs:
             # A root is only replaced whole: /home/user never rewrites /home/user2 or /srv/home/user.
             text = re.sub(r"(?<![\w.-])" + re.escape(path) + r"(?![\w.-])", lambda _: placeholder, text)
         text = UUID.sub("{uuid}", text)
         text = ABSOLUTE_PATH.sub("{path}", text)
         for regex in self.leaks:
-            text = regex.sub("{redacted}", text)
+            text = regex.sub(REDACTED, text)
         return text
 
 
@@ -202,12 +203,14 @@ def read(path: Path) -> str:
     return path.read_text(encoding="utf-8", errors="replace")
 
 
-def verdicts(grades: dict, name: str, outcome: str) -> tuple[dict[str, str], str | None]:
+def verdicts(grades: dict, name: str, outcome: str, kept: dict | None = None) -> tuple[dict[str, str], str | None]:
     """Each grade's verdict, named for its scenario, or why there is none, from the lines of
     each grade file. run.sh's exit status is the scenario's verdict unless it writes further
     grades: grader-output.txt is then the scenario's own grade and grader-<g>-output.txt a
     further grade named <scenario>-<g>, since the status mixes them. The status must still be
-    pass exactly when every grade passes."""
+    pass exactly when every grade passes. A run's own grades are read before normalisation;
+    from a record's normalised grades, a verdict line that redaction rewrote keeps the
+    verdict KEPT records for it."""
     found = {}
     for file_name in sorted(grades):
         match = GRADE_FILE.fullmatch(file_name)
@@ -215,6 +218,8 @@ def verdicts(grades: dict, name: str, outcome: str) -> tuple[dict[str, str], str
             lines = [line.strip() for line in grades[file_name] if line.strip()]
             grade = name + (f"-{match['grade']}" if match["grade"] else "")
             found[grade] = "pass" if lines and lines[-1] == "PASS" else "fail"
+            if kept and lines and REDACTED in lines[-1] and kept.get(grade) in ("pass", "fail"):
+                found[grade] = kept[grade]
     if len(found) <= 1 and set(found) <= {name}:
         return {name: outcome}, None
     if name not in found:
@@ -283,11 +288,15 @@ def resumed(record_path: Path, name: str, ctx: dict) -> dict:
     outcome, grades = record.get("outcome"), record.get("grades")
     if outcome not in ("pass", "fail", "void"):
         raise Refused(f"{record_path} records a broken attempt; fix the case and start a new LABEL")
-    if not isinstance(grades, dict) or not all(isinstance(lines, list) for lines in grades.values()):
+    if not isinstance(grades, dict) or not all(
+            isinstance(lines, list) and all(isinstance(line, str) for line in lines) for lines in grades.values()):
         grades = None
-    given = ({}, None) if outcome == "void" or grades is None else verdicts(grades, name, outcome)
-    if (record.get("scenario") != name or OUTCOMES.get(record.get("exit_code")) != outcome
-            or grades is None or given != (record.get("verdicts"), None)):
+    code, kept = record.get("exit_code"), record.get("verdicts")
+    status = OUTCOMES.get(code) if code is None or type(code) is int else "error"
+    given = ({}, None) if outcome == "void" or grades is None else verdicts(
+        grades, name, outcome, kept if isinstance(kept, dict) else None)
+    if (record.get("scenario") != name or status != outcome
+            or grades is None or given != (kept, None)):
         raise Refused(f"{record_path} records an outcome or verdicts that its exit code and grades do not give; "
                       "--resume counts only records the suite wrote")
     return record
@@ -341,9 +350,10 @@ def run_scenario(case_dir: Path, scenario: dict, runs: int, ctx: dict) -> dict:
                   file=sys.stderr, flush=True)
         grades, inputs, marks = {}, {}, {}
         if outcome in ("pass", "fail"):
-            for output in sorted(run_dir.glob("grader*-output.txt")):
-                grades[output.name] = normalise(read(output)).splitlines()
-            marks, reason = verdicts(grades, name, outcome)
+            raw = {output.name: read(output) for output in sorted(run_dir.glob("grader*-output.txt"))}
+            grades = {file_name: normalise(text).splitlines() for file_name, text in raw.items()}
+            # The verdicts come from the grades as written: redaction may rewrite a verdict line.
+            marks, reason = verdicts({file_name: text.splitlines() for file_name, text in raw.items()}, name, outcome)
             reason = reason or other_grades(tally, marks)
             if reason:
                 outcome = "error"

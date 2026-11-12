@@ -53,7 +53,7 @@ The runner lists cases from the harness checkout, never from `<checkout>`, so a 
 It refuses a harness or skill checkout with any uncommitted change, tracked or untracked, because the commit it records would not describe the run; only the suite's own uncommitted records under a `results/` directory are allowed.
 
 A run that stopped before writing its summary is continued with `--resume` and the same arguments and environment: each attempt that already has both records is counted from them instead of running again.
-Resume refuses a record whose label, commits, model, reasoning effort or agent command differ from this run's, a record whose outcome or verdicts are not the ones its exit code and grades give, and a record of a broken attempt.
+Resume refuses a record whose label, commits, model, reasoning effort or agent command differ from this run's, a record whose outcome or verdicts are not the ones its exit code and grades give (a verdict line that redaction rewrote keeps the recorded verdict), and a record of a broken attempt.
 A run without `--resume` refuses a label that already has records, and no run writes a summary while a record of its label is one it did not count, as a resume with fewer runs or cases would leave.
 
 ## Runner behaviour

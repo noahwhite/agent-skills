@@ -47,7 +47,7 @@ def commit_all(repo: Path) -> str:
 # or void (2), the same contract the real case's run.sh keeps. The broken scenario exits 5,
 # a status the contract does not define, and two-grades writes a second, failing grade.
 # late-fail grades PASS and then fails a later check; both-pass writes two passing grades and
-# still exits 1, so its grades contradict its status.
+# still exits 1, so its grades contradict its status; two-pass writes two passing grades and exits 0.
 STUB_RUN = r"""#!/usr/bin/env bash
 set -euo pipefail
 checkout="$1"; scenario="$2"; run="$3"
@@ -66,7 +66,7 @@ fi
 if [ "$scenario" = two-grades ] || [ "$scenario" = further-only ]; then
   printf 'FAIL the further check\nFAIL\n' > "$run/grader-extra-output.txt"
 fi
-if [ "$scenario" = both-pass ]; then
+if [ "$scenario" = both-pass ] || [ "$scenario" = two-pass ]; then
   printf 'ok   the further check\nPASS\n' > "$run/grader-extra-output.txt"
 fi
 if [ "$scenario" = extra-once ] && [ "${run##*-}" = 1 ]; then
@@ -109,7 +109,7 @@ count=$(( $(cat "$state" 2>/dev/null || echo 0) + 1 ))
 echo "$count" > "$state"
 echo "$run" >> "$STUB_STATE/run-dirs"
 case "$scenario" in
-  pass|two-grades|further-only|late-fail|both-pass|extra-once) action=pass ;;
+  pass|two-grades|further-only|late-fail|both-pass|extra-once|two-pass) action=pass ;;
   fail) action=stop ;;
   void-once) [ "$count" -gt 1 ] || exit 3; action=pass ;;
   void-thrice) [ "$count" -gt 3 ] || exit 3; action=pass ;;
@@ -364,6 +364,19 @@ def test_grades_that_contradict_the_exit_status_stop_the_suite(suite) -> None:
     assert record["outcome"] == "error" and record["verdicts"] == {}
 
 
+def test_a_verdict_line_that_redaction_rewrites_keeps_its_verdict(suite) -> None:
+    suite["recommit"]("two-pass")
+    env = {"CANARY": "the recorded call\nPASS", "EVAL_PASS_ENV": "STUB_STATE STUB_UUID CANARY"}
+    result = suite["run"]("--runs", "1", str(suite["checkout"]), "lab-1", **env)
+    assert result.returncode == 0, result.stderr
+    record = json.loads(next((suite["evals"] / "stub" / "results").glob("*-two-pass-*.json")).read_text())
+    assert record["outcome"] == "pass" and record["grades"]["grader-output.txt"][-1] == "ok   {redacted}"
+    assert record["verdicts"] == {"two-pass": "pass", "two-pass-extra": "pass"}
+    (suite["evals"] / "results" / "suite-lab-1.md").unlink()
+    resumed = suite["run"]("--runs", "1", "--resume", str(suite["checkout"]), "lab-1", **env)
+    assert resumed.returncode == 0, resumed.stderr
+
+
 def test_a_grade_set_that_changes_between_attempts_stops_the_suite(suite) -> None:
     suite["recommit"]("extra-once")
     result = suite["run"]("--runs", "2", str(suite["checkout"]), "lab-1")
@@ -465,7 +478,8 @@ def test_resume_continues_an_interrupted_run_from_its_records(suite) -> None:
     assert int((suite["state"] / "pass").read_text()) == 2, "no attempt with a record runs again"
 
 
-@pytest.mark.parametrize("change", ["model", "broken", "outcome", "verdicts", "fewer-runs"])
+@pytest.mark.parametrize("change", ["model", "broken", "outcome", "verdicts", "exit-code-type", "grade-line-type",
+                                    "fewer-runs"])
 def test_resume_refuses_records_it_cannot_count(suite, change: str) -> None:
     suite["recommit"]("pass")
     suite["run"]("--runs", "2", str(suite["checkout"]), "lab-1")
@@ -482,6 +496,10 @@ def test_resume_refuses_records_it_cannot_count(suite, change: str) -> None:
         record_path.write_text(json.dumps({**record, "outcome": "fail", "verdicts": {"pass": "fail"}}))
     elif change == "verdicts":
         record_path.write_text(json.dumps({**record, "verdicts": {"pass": "pass", "pass-extra": "pass"}}))
+    elif change == "exit-code-type":
+        record_path.write_text(json.dumps({**record, "exit_code": [0]}))
+    elif change == "grade-line-type":
+        record_path.write_text(json.dumps({**record, "grades": {"grader-output.txt": [1]}}))
     else:
         runs = "1"
     resumed = suite["run"]("--runs", runs, "--resume", str(suite["checkout"]), "lab-1", **extra)
