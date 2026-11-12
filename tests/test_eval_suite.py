@@ -89,7 +89,7 @@ sys.exit(0 if ok else 1)
 # void-thrice on its first three; void-always is void every time; hang outlives any deadline;
 # bad-bytes records a byte that is not UTF-8; dirty-once changes CHECKOUT on its first attempt
 # and is void, as a real run.sh voids an agent that changed it. It writes its run directory into
-# the call, so the record shows whether the runner normalised the path, and the CANARY variable
+# the call, so the record shows whether the runner normalised the path, and the CANARY or EVAL_CANARY variable
 # into evidence.json, so the record shows what environment it got. EVAL_AGENT_CMD passes
 # --model MODEL first, as a real agent command names its model.
 STUB_AGENT = r"""#!/usr/bin/env bash
@@ -112,7 +112,7 @@ case "$scenario" in
 esac
 printf '{"action": "%s", "run_dir": "%s", "id": "%s"}\n' "$action" "$run" "$STUB_UUID" > "$run/actions.jsonl"
 if [ "$scenario" = bad-bytes ]; then printf '\xff\n' >> "$run/actions.jsonl"; fi
-printf '{"seen_in": "%s", "canary": "%s"}\n' "$run" "${CANARY-unset}" > "$run/evidence.json"
+printf '{"seen_in": "%s", "canary": "%s"}\n' "$run" "${CANARY-${EVAL_CANARY-unset}}" > "$run/evidence.json"
 mkdir -p "$run/nested"
 echo kept > "$run/nested/kept.md"
 """
@@ -177,7 +177,7 @@ def suite(tmp_path: Path):
     env = {**os.environ, "EVAL_AGENT_CMD": f"{agent} --model stub/agent-model#high", "STUB_STATE": str(state),
            "STUB_UUID": STUB_UUID, "EVAL_PASS_ENV": "STUB_STATE STUB_UUID", "TMPDIR": str(tmp_path)}
     # CI's private leak patterns must not redact the stub's own strings.
-    for name in ("EVAL_TIMEOUT", "EVAL_GRADING_MARGIN", "LEAK_DENYLIST", "LEAK_DENYLIST_FILE", "CANARY"):
+    for name in ("EVAL_TIMEOUT", "EVAL_GRADING_MARGIN", "LEAK_DENYLIST", "LEAK_DENYLIST_FILE", "CANARY", "EVAL_CANARY"):
         env.pop(name, None)
 
     def run(*args: str, **extra: str) -> subprocess.CompletedProcess[str]:
@@ -345,13 +345,14 @@ def test_an_attempt_that_changes_a_checkout_stops_the_suite(suite) -> None:
     assert not (suite["evals"] / "results" / "suite-lab-1.md").exists()
 
 
-def test_the_agent_gets_only_the_base_environment_and_the_variables_passed(suite) -> None:
+@pytest.mark.parametrize("name", ["CANARY", "EVAL_CANARY"])
+def test_the_agent_gets_only_the_base_environment_and_the_variables_passed(suite, name) -> None:
     suite["recommit"]("pass")
     canary = "fake-canary-credential"
-    result = suite["run"]("--runs", "1", str(suite["checkout"]), "lab-1", CANARY=canary)
+    result = suite["run"]("--runs", "1", str(suite["checkout"]), "lab-1", **{name: canary})
     assert result.returncode == 0, result.stderr
-    passed = suite["run"]("--runs", "1", str(suite["checkout"]), "lab-2", CANARY=canary,
-                          EVAL_PASS_ENV="STUB_STATE STUB_UUID CANARY")
+    passed = suite["run"]("--runs", "1", str(suite["checkout"]), "lab-2", **{name: canary},
+                          EVAL_PASS_ENV=f"STUB_STATE STUB_UUID {name}")
     assert passed.returncode == 0, passed.stderr
     results = suite["evals"] / "stub" / "results"
     for label, seen in (("lab-1", "unset"), ("lab-2", "{redacted}")):

@@ -12,7 +12,7 @@ Each case runs a real agent against a fixed scenario and grades the tool calls i
   It is split on whitespace, so it carries no quoted argument.
   It must name its model with `--model provider/model[#variant]`; the runner records that model, the variant as the reasoning effort (`default` without one), and the command itself.
 - `EVAL_PASS_ENV` names, separated by spaces, the variables an attempt gets beyond its base environment, such as the provider credential: `EVAL_PASS_ENV="DEEPSEEK_API_KEY"`.
-  The base environment is `PATH`, `HOME`, `USER`, `LOGNAME`, `SHELL`, `LANG`, `TERM`, `TZ`, `TMPDIR` and every `LC_*`, `XDG_*` and `EVAL_*` variable.
+  The base environment is `PATH`, `HOME`, `USER`, `LOGNAME`, `SHELL`, `LANG`, `TERM`, `TZ`, `TMPDIR`, `EVAL_AGENT_CMD`, `EVAL_TIMEOUT` and every `LC_*` and `XDG_*` variable.
   Each passed value of 8 or more characters is rewritten to `{redacted}` in every record.
 - `EVAL_TIMEOUT` (optional) bounds each agent command in seconds, 900 by default.
 - `EVAL_GRADING_MARGIN` (optional) is the seconds an attempt may run past `EVAL_TIMEOUT` for its setup and grading, 300 by default.

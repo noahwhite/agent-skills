@@ -35,8 +35,10 @@ RELATIVE_FILE = re.compile(r"(?:[A-Za-z0-9][A-Za-z0-9._-]*/)*[A-Za-z0-9][A-Za-z0
 ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 # The environment every attempt gets; anything else, credentials included, reaches it only
 # when EVAL_PASS_ENV names it.
-BASE_ENV = {"PATH", "HOME", "USER", "LOGNAME", "SHELL", "LANG", "TERM", "TZ", "TMPDIR"}
-BASE_ENV_PREFIXES = ("LC_", "XDG_", "EVAL_")
+# EVAL_AGENT_CMD and EVAL_TIMEOUT are the case contract's settings; no other EVAL_ variable is passed.
+BASE_ENV = {"PATH", "HOME", "USER", "LOGNAME", "SHELL", "LANG", "TERM", "TZ", "TMPDIR",
+            "EVAL_AGENT_CMD", "EVAL_TIMEOUT"}
+BASE_ENV_PREFIXES = ("LC_", "XDG_")
 # A passed value shorter than this is too common a string to redact from a record.
 MIN_REDACTED = 8
 UUID = re.compile(r"(?i)\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b")
