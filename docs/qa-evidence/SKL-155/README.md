@@ -20,7 +20,30 @@ The fixture profile is a copy of the repository profile with `story_to_done.engi
 - Its stop report gives round 1's failed items as QA recorded them, the PR line (none), the `qa-round-cap: 1` and `metrics: off` lines, and asks for N more rounds or a stop.
 - The stop report carries no sixth state bullet.
 
-## Parent brief (verbatim)
+## What this run exercises
+
+- Exercised: the coordinator's step 4 `in_progress` branch at the cap, with no hand-back, no launch and no tracker write after the counted round, and the stop report's ask.
+- Scripted, not exercised: QA's verdicts and its move of SKL-266 to In Progress come from the tabletop paragraph in the parent brief, not from `qa-verification`.
+- Not exercised: the per-PR link and head SHA read, because the fixture has no PR (the stop report says "PRs: none"); that clause is covered only by `test_the_stop_report_gives_each_pr_link_and_head_sha_from_the_tracker_and_forge`.
+- The coordinator made no comment read: its failed-item lines come from QA's handback.
+  They match the comment QA wrote to SKL-266, read back by the implementing engineer after the run:
+
+```text
+## QA round 1 verdicts
+
+- AC1: NOT MET
+  - Command: `test -e /nonexistent/skl-155-fixture/marker; echo exit=$?`
+  - Output: `exit=1`
+- AC2: NOT MET
+  - Command: `test 2 -eq 3; echo exit=$?`
+  - Output: `exit=1`
+```
+
+- The PR head's `skills/story-to-done/SKILL.md` differs from the commit under test only by the order of the `metrics: on|off` and `qa-round-cap: <n>` lines in the Arguments echo bullet; the step 4 text the run exercised is unchanged.
+
+## Parent brief (verbatim, paths shortened)
+
+The `\"In Progress\"` escapes are in the brief as sent; replayed in a shell, the command needs plain quotes (`--state "In Progress"`).
 
 ```text
 Story to done SKL-266, metrics=off, qa-round-cap=1.

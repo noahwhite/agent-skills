@@ -786,7 +786,7 @@ def test_the_engineer_brief_stays_neutral_and_names_the_gate_and_branch() -> Non
 
 METRICS_ROW = "| `metrics` | whether the run collects and reports run metrics | `off` |"
 METRICS_LINE_SENTENCE = (
-    "Write the four resolved model and effort values, the `qa-round-cap: <n>` line, and the `metrics: on|off` "
+    "Write the four resolved model and effort values, the `metrics: on|off` line, and the `qa-round-cap: <n>` "
     "line at the top of your todo list and in the closing report of every end state"
 )
 
@@ -794,8 +794,6 @@ METRICS_LINE_SENTENCE = (
 def test_arguments_table_adds_the_metrics_switch_off_by_default() -> None:
     body = section(SKILL.read_text(), "Arguments")
     assert METRICS_ROW in body, "arguments table missing the metrics row and its off default"
-    assert "Six arguments are optional" in body
-    assert "Five arguments are optional" not in body
 
 
 def test_metrics_switch_plain_words_are_mapped_or_asked() -> None:
@@ -1230,6 +1228,7 @@ def test_arguments_prose_count_matches_the_table() -> None:
     body = section(SKILL.read_text(), "Arguments")
     rows = [line for line in body.splitlines() if line.startswith("| `")]
     assert len(rows) == 6 and "Six arguments are optional" in body
+    assert "Five arguments are optional" not in body and "Four arguments are optional" not in body
 
 
 def readme_row() -> str:

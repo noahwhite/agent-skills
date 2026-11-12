@@ -41,7 +41,7 @@ Six arguments are optional, given as `key=value` or in plain words ("QA on <mode
 - `qa-round-cap` is given as `qa-round-cap=<n>` or in plain words about capping QA rounds ("cap QA at <n> rounds" and "stop after <n> failed QA rounds" mean <n>); a positive integer (1 or more) is valid, and zero, a negative number, or a non-integer is invalid.
 - Ask the user about an invalid value and about any other phrasing about the cap; never guess.
 - Resolve `qa-round-cap` before step 0 creates the todo list; it sets no model or effort.
-- Write the four resolved model and effort values, the `qa-round-cap: <n>` line, and the `metrics: on|off` line at the top of your todo list and in the closing report of every end state (the step 5 report, or the report made at any stop, including one before step 0).
+- Write the four resolved model and effort values, the `metrics: on|off` line, and the `qa-round-cap: <n>` line at the top of your todo list and in the closing report of every end state (the step 5 report, or the report made at any stop, including one before step 0).
 
 ### Seat resolution
 
