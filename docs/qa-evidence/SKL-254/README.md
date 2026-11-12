@@ -203,3 +203,30 @@ Files are in .../:
 | No tracker write | Met: no `linear` write in the coordinator or engineer transcripts; SKL-264 read Backlog and unassigned at the deadline read, and the implementing engineer's cancel was the only later write |
 | No user message between handback and report | Met |
 | `metrics: off` | Met |
+
+## QA round 1
+
+Date: 2026-11-12 UTC, independent QA round 1.
+Build under test: `main` at `208cbd71d610515e1d96033844f28c8dcaabf3d2`, the squash merge of PR 210, whose reviewed head is `e6b5e855179509095a94ac884f9e5d387633c584`.
+The five files PR 210 changes are byte-identical at the reviewed head and at the merge; the only other change in `skills/story-to-done/` between the merge base `841d1e6` and the merge is `scripts/todo-enforce.py` from PR 209.
+Environment: none; the lanes are the repository (detached worktrees of the build), GitHub and the tracker.
+Fixtures: none beyond the fixture issue SKL-264 that AC6 names.
+The raw output, including the phrase-deletion checks, is attached to SKL-254 as `SKL-254-qa-round-1-assertions.txt`; there is no visual surface, so no screenshot applies.
+
+| Item | Verdict | Evidence |
+|---|---|---|
+| AC1: interim handback rule | Verified | Step 0 of `skills/story-to-done/SKILL.md` points to the new `references/interim-handbacks.md` before the checklist read-back, and step 2 points to it before the read-back and the stop without restating it. The reference states the definition, the "not a blocked handback or a stated blocker" sentence, the classification order, the todo record with receipt-based UTC deadline, and the formula (stated duration or 30 minutes, plus the greater of 10 minutes and 50%). Its worked examples (4 to 14, 60 to 90, none to 45) match the formula. |
+| AC2: deadline check | Verified | The reference clears the deadline on a handback before it, reads the awaited item's primary source at the deadline (the forge for a CI run, the tracker for a tracker move), never the subagent, and stops with a report naming the item, source, observed state or read error and deadline, with no further launch, no tracker write beyond the metrics one, and no ruling. |
+| AC3: mechanism | Verified | The reference names a bounded foreground wait on the primary source that returns at or before the deadline (for a CI run, a watch on the run under a timeout), repeated until the deadline. The merge changes no file under `shared/`. |
+| AC4: limits | Verified | The `SKILL.md` diff is two added lines and no removed or changed line, so final and blocked handback logic, step 2's stop clause, every QA step and the no-write and no-verdict constraints are unchanged; the reference's Limits paragraph states the same. |
+| AC5: text contracts | Verified | Each of the eight phrases AC5 lists has its own named test in `tests/test_story_to_done.py`. Deleting each phrase once on a throwaway worktree of the build failed its named test (8 of 8). The PR description has one line per guarded phrase naming the failing tests. On the build, `uv run --locked pytest -q` reported 1816 passed and `uv run --locked python scripts/vendor_shared.py --check` exited 0. |
+| AC6: fixture run | Verified | SKL-264 is a `[Tabletop fixture]` issue in SKL, canceled at 01:33:56Z, after the coordinator's report at 01:32:56Z. Its state history has one transition, Backlog to Canceled, so nothing wrote to it during the run. The run section above quotes the parent brief and the coordinator transcript, with the recorded deadline 01:32:38Z, the Linear read at 01:32:41.895Z, the runtime and `metrics: off`. The fixture ran on `2876cf6`, which differs from the reviewed head only under `docs/qa-evidence/SKL-254/`. The five replaced fixtures, SKL-259 to SKL-263, are canceled. |
+| AC7: size cap | Verified | Against merge base `841d1e6`, `skills/story-to-done/` grew from 318164 to 321647 bytes (101.09%) and its `SKILL.md` from 28298 to 28667 bytes (101.30%) at the reviewed head, both within 102.5%, and the PR description's table carries the same figures for that head. |
+| DoD: all acceptance criteria met | Verified | AC1 to AC7 above. |
+| DoD: tests written and passing | Verified | AC5. |
+| DoD: independently reviewed | Verified | Review 5867766545 names `e6b5e855179509095a94ac884f9e5d387633c584` in its first line and as its `commit_id`, the merged head, with no new findings. |
+| DoD: docs updated | Verified | The story needs a README Skills-table change only if a pinned row changes; PR 210 changes no pinned row and the full suite passes. |
+| DoD: verified in a deployed environment | Not applicable | The profile defines no environments; the build was verified on `main`. |
+| DoD: no critical bugs or regressions | Verified | CI `checks` and `discovery` passed on the reviewed head and on `main` (run 43137166378), and the full suite passed on the build. |
+
+Closing decision: SKL-254 moves to Done once this evidence merges.
