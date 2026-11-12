@@ -62,7 +62,8 @@ Resume refuses a record whose label, commits, model, reasoning effort or agent c
   An attempt still running `EVAL_TIMEOUT` + `EVAL_GRADING_MARGIN` seconds after it started is killed and void.
 - A void run is not counted as graded and is retried until the scenario has N graded runs or 2×N attempts.
   Its record names the runner's classified reason (`run.sh exited 2: void`, or `run.sh did not finish within N seconds`), never text from `run.sh`; the first `HARNESS:` or `run.sh:` line `run.sh` wrote to stderr goes to the operator's stderr only.
-- Any other exit status, or further grades without the scenario's own `grader-output.txt`, means the case or the machine is broken: the attempt is recorded with outcome `error` and the suite stops with exit 1, writing no summary.
+- The exit status is the scenario's verdict; only a scenario with further grades is counted from its grade files, and its status must still be 0 exactly when every grade passes.
+- Any other exit status, further grades without the scenario's own `grader-output.txt`, or grade files that contradict the status mean the case or the machine is broken: the attempt is recorded with outcome `error` and the suite stops with exit 1, writing no summary.
 - Before each attempt and before the summary, the runner checks that both checkouts are still clean and at their commits; a checkout an attempt changed stops the suite with exit 1.
 - A case that names a scenario twice is refused.
 - The runner exits 0 when every scenario has N graded runs, 1 when any has fewer or it stopped on a broken attempt, and 2 when it refuses to start or would overwrite a file.

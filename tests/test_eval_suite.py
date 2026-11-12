@@ -46,6 +46,8 @@ def commit_all(repo: Path) -> str:
 # what the stub agent recorded, so the agent's exit status decides pass (0), graded fail (1)
 # or void (2), the same contract the real case's run.sh keeps. The broken scenario exits 5,
 # a status the contract does not define, and two-grades writes a second, failing grade.
+# late-fail grades PASS and then fails a later check; both-pass writes two passing grades and
+# still exits 1, so its grades contradict its status.
 STUB_RUN = r"""#!/usr/bin/env bash
 set -euo pipefail
 checkout="$1"; scenario="$2"; run="$3"
@@ -64,14 +66,17 @@ fi
 if [ "$scenario" = two-grades ] || [ "$scenario" = further-only ]; then
   printf 'FAIL the further check\nFAIL\n' > "$run/grader-extra-output.txt"
 fi
+if [ "$scenario" = both-pass ]; then
+  printf 'ok   the further check\nPASS\n' > "$run/grader-extra-output.txt"
+fi
 if [ "$scenario" = further-only ]; then
   exit 1
 fi
 python3 "$(dirname "$0")/grader.py" "$run" | tee "$run/grader-output.txt"
 # Like the real case's new-round, a failing further grade fails the run's exit status.
-if [ "$scenario" = two-grades ]; then
-  exit 1
-fi
+case "$scenario" in
+  two-grades|late-fail|both-pass) exit 1 ;;
+esac
 """
 
 STUB_GRADER = r"""#!/usr/bin/env python3
@@ -101,7 +106,7 @@ count=$(( $(cat "$state" 2>/dev/null || echo 0) + 1 ))
 echo "$count" > "$state"
 echo "$run" >> "$STUB_STATE/run-dirs"
 case "$scenario" in
-  pass|two-grades|further-only) action=pass ;;
+  pass|two-grades|further-only|late-fail|both-pass) action=pass ;;
   fail) action=stop ;;
   void-once) [ "$count" -gt 1 ] || exit 3; action=pass ;;
   void-thrice) [ "$count" -gt 3 ] || exit 3; action=pass ;;
@@ -334,6 +339,25 @@ def test_a_further_grade_without_the_scenarios_own_grade_stops_the_suite(suite) 
     result = suite["run"]("--runs", "1", str(suite["checkout"]), "lab-1")
     assert result.returncode == 1 and "no own verdict" in result.stderr, result.stderr
     record = json.loads(next((suite["evals"] / "stub" / "results").glob("*-further-only-*.json")).read_text())
+    assert record["outcome"] == "error" and record["verdicts"] == {}
+
+
+def test_a_single_grade_follows_the_exit_status(suite) -> None:
+    suite["recommit"]("late-fail")
+    result = suite["run"]("--runs", "1", str(suite["checkout"]), "lab-1")
+    assert result.returncode == 0, result.stderr
+    summary = (suite["evals"] / "results" / "suite-lab-1.md").read_text()
+    rows, at = summary_rows(summary), columns(summary)
+    assert rows["late-fail"][at["n"]] == "1" and rows["late-fail"][at["k"]] == "0"
+    record = json.loads(next((suite["evals"] / "stub" / "results").glob("*-late-fail-*.json")).read_text())
+    assert record["outcome"] == "fail" and record["verdicts"] == {"late-fail": "fail"}
+
+
+def test_grades_that_contradict_the_exit_status_stop_the_suite(suite) -> None:
+    suite["recommit"]("both-pass")
+    result = suite["run"]("--runs", "1", str(suite["checkout"]), "lab-1")
+    assert result.returncode == 1 and "contradict" in result.stderr, result.stderr
+    record = json.loads(next((suite["evals"] / "stub" / "results").glob("*-both-pass-*.json")).read_text())
     assert record["outcome"] == "error" and record["verdicts"] == {}
 
 

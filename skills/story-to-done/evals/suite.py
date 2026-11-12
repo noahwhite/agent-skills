@@ -200,11 +200,11 @@ def read(path: Path) -> str:
     return path.read_text(encoding="utf-8", errors="replace")
 
 
-def verdicts(run_dir: Path, name: str, outcome: str) -> dict[str, str] | None:
-    """Each grade's verdict, named for its scenario: grader-output.txt is the scenario's own
-    grade, grader-<g>-output.txt a further grade named <scenario>-<g>. A case that writes no
-    grade file is graded by run.sh's exit status alone. None when further grades exist without
-    the scenario's own: run.sh's status then mixes grades, so it is no verdict for the scenario."""
+def verdicts(run_dir: Path, name: str, outcome: str) -> tuple[dict[str, str], str | None]:
+    """Each grade's verdict, named for its scenario, or why there is none. run.sh's exit status
+    is the scenario's verdict unless it writes further grades: grader-output.txt is then the
+    scenario's own grade and grader-<g>-output.txt a further grade named <scenario>-<g>, since
+    the status mixes them. The status must still be pass exactly when every grade passes."""
     found = {}
     for output in sorted(run_dir.glob("grader*-output.txt")):
         match = GRADE_FILE.fullmatch(output.name)
@@ -212,10 +212,13 @@ def verdicts(run_dir: Path, name: str, outcome: str) -> dict[str, str] | None:
             lines = [line.strip() for line in read(output).splitlines() if line.strip()]
             grade = name + (f"-{match['grade']}" if match["grade"] else "")
             found[grade] = "pass" if lines and lines[-1] == "PASS" else "fail"
-    if found and name not in found:
-        return None
-    found.setdefault(name, outcome)
-    return found
+    if len(found) <= 1 and set(found) <= {name}:
+        return {name: outcome}, None
+    if name not in found:
+        return {}, "run.sh wrote a further grade but no grader-output.txt, so the scenario has no own verdict"
+    if all(verdict == "pass" for verdict in found.values()) != (outcome == "pass"):
+        return {}, f"run.sh's grade files contradict its exit status, a graded {outcome}"
+    return found, None
 
 
 def kill_group(process: subprocess.Popen) -> None:
@@ -300,10 +303,9 @@ def run_scenario(case_dir: Path, scenario: dict, runs: int, ctx: dict) -> dict:
         if outcome in ("pass", "fail"):
             for output in sorted(run_dir.glob("grader*-output.txt")):
                 grades[output.name] = normalise(read(output)).splitlines()
-            marks = verdicts(run_dir, name, outcome)
-            if marks is None:
-                outcome, marks = "error", {}
-                reason = "run.sh wrote a further grade but no grader-output.txt, so the scenario has no own verdict"
+            marks, reason = verdicts(run_dir, name, outcome)
+            if reason:
+                outcome = "error"
             # Keep every run-directory file the grader names, beside the call record, so the
             # attempt can be graded again from what is committed.
             for file_name in sorted(ctx["grader_reads"]):
