@@ -3069,8 +3069,8 @@ CAP_STOP = (
     "When the `qa-round-cap`-th counted round ends here, stop before the hand-back below and launch nothing further."
 )
 CAP_PAYLOAD = (
-    "The stop report gives, per round, every failed item as QA recorded it in the tracker (the item, its verdict, "
-    "and the evidence it cites)."
+    "The stop report gives, per round, every failed item as QA recorded it in the tracker, re-read from the tracker "
+    "rather than taken from a handback (the item, its verdict, and the evidence it cites)."
 )
 CAP_PR = (
     "It also gives, per PR, the link and head SHA, re-read from the tracker and the forge rather than taken from a "
@@ -3089,8 +3089,10 @@ CAP_LEFT = (
     'On "stop", end the invocation with the story left in the state QA left it: '
     "`profile.tracker.states.in_progress`, failed items outstanding, the owner deciding next."
 )
+CAP_HISTORY = "Round numbers run on across re-arms, and each later stop report gives every counted round so far."
 CAP_NO_WRITE = (
-    "In either case the coordinator writes nothing to the tracker, rules on no item, and relays no verdict of its own."
+    "In either case the coordinator writes nothing to the tracker beyond what the Boundaries permit, rules on no "
+    "item, and relays no verdict of its own."
 )
 README_CAP_CLAUSE = (
     "a `qa-round-cap` argument, `3` by default, stops the loop and asks the owner after that many failed QA rounds; "
@@ -3154,6 +3156,10 @@ def test_the_stop_report_gives_each_pr_link_and_head_sha_from_the_tracker_and_fo
 def test_the_cap_stop_asks_and_waits_and_offers_re_arm_or_stop() -> None:
     bullet = in_progress_bullet()
     assert in_order(bullet, CAP_STOP, CAP_ASK, CAP_REARM, "Hand them back to the senior engineer")
+
+
+def test_a_re_arm_keeps_numbering_rounds_and_every_later_stop_report_gives_them_all() -> None:
+    assert in_order(in_progress_bullet(), CAP_REARM, CAP_HISTORY, "Hand them back to the senior engineer")
 
 
 def test_a_stop_leaves_the_story_in_progress_for_the_owner_and_the_coordinator_writes_nothing() -> None:

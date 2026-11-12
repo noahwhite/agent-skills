@@ -212,12 +212,13 @@ For a waived PR, compare the merged PR's `headRefOid` with the SHA recorded when
   Those failed items are the issues to fix.
   QA rounds are counted within this invocation: the first QA round this coordinator runs is round 1, a run resumed at step 3 starts a new count that the report states, and only a round whose read-back is `profile.tracker.states.in_progress` counts.
   When the `qa-round-cap`-th counted round ends here, stop before the hand-back below and launch nothing further.
-  The stop report gives, per round, every failed item as QA recorded it in the tracker (the item, its verdict, and the evidence it cites).
+  The stop report gives, per round, every failed item as QA recorded it in the tracker, re-read from the tracker rather than taken from a handback (the item, its verdict, and the evidence it cites).
   It also gives, per PR, the link and head SHA, re-read from the tracker and the forge rather than taken from a handback, reusing the merge reads steps 2 and 3 already make.
   The stop report asks the user how many further rounds to run or whether to stop, and waits for the reply; a reply that does not say how many rounds or that it is a stop, or that gives an invalid value, is asked about again, never guessed.
   On "N additional rounds", re-arm the same cap at N further counted rounds and resume the pending hand-back below with every item failed so far; the next QA round runs with a new QA agent.
+  Round numbers run on across re-arms, and each later stop report gives every counted round so far.
   On "stop", end the invocation with the story left in the state QA left it: `profile.tracker.states.in_progress`, failed items outstanding, the owner deciding next.
-  In either case the coordinator writes nothing to the tracker, rules on no item, and relays no verdict of its own.
+  In either case the coordinator writes nothing to the tracker beyond what the Boundaries permit, rules on no item, and relays no verdict of its own.
   Hand them back to the senior engineer: resume the same subagent if the runtime can, else spawn a new clean, neutral one on the same seat with the step 2 brief.
   Either way, add to the hand-back brief each failed item as QA recorded it on the story (the item, its verdict, and the evidence it cites), and instruct the engineer to fix them through `engineering-workflow` on this story and take it back to `profile.tracker.states.in_deployment_review`.
   Confirm that state as step 2 does, then run step 3 again with a new QA agent.
