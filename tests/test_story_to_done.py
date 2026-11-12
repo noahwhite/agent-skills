@@ -114,6 +114,25 @@ SEAT_RULES = (
     "One resolved seat serves its role in every round, unchanged: the senior engineer goes back to it for "
     "each fix round, and each new QA round spawns a new agent on it.",
 )
+# Owner decision 2026-11-11 (SKL-83 AC 4 amendment): profile values never reach a seat command
+# unchecked or unquoted, and a command seat from an unconfirmed profile needs one confirmation.
+SEAT_LAUNCH_SAFETY = (
+    "`command` or `codex` is a separate process launched by the shell-launched agents rule",
+    "A seat entry with no `runtime` is not a usable seat (the profile schema requires one)",
+    "the model must match `^[A-Za-z0-9][A-Za-z0-9._:/@-]*$`",
+    "the session title is `story-to-done-<STORY_ID>-<role>-<n>`",
+    "each file path must match `^/[A-Za-z0-9._/-]+$`",
+    "A value that fails its check stops the skill before that launch: say which value and why; never escape, "
+    "trim or rewrite it.",
+    "Fill each value inside the double quotes the `command` template puts around its placeholder",
+    "and the user has not confirmed in this conversation that the selected profile is trusted, show the user "
+    "the profile path and each such seat's `command` text and ask once whether to run them.",
+    "A yes covers every launch of those seats, with that `command` text unchanged, for the rest of the run; a "
+    "no stops the skill before either role is spawned.",
+    "resolving the four values never asks it.",
+    "Wherever steps 2 to 4 say to spawn or resume a subagent, a `command` or `codex` seat is instead a new "
+    "launch of that process with the same brief as its prompt file.",
+)
 SEAT_DIFFERENCES = (
     "no `family` field and no rule that the two seats sit on distinct families",
     "an explicit argument overrides the profile field by field",
@@ -148,6 +167,8 @@ def test_seats_resolve_from_the_profile() -> None:
         "stops the skill",
     ):
         assert phrase in body, f"seat launch missing: {phrase}"
+    for phrase in SEAT_LAUNCH_SAFETY:
+        assert phrase in body, f"seat launch safety missing: {phrase}"
     assert "Each role keeps the same model and effort in every round." not in body
 
 
@@ -171,7 +192,7 @@ def schema_errors(instance: dict) -> list[str]:
 
 def test_schema_accepts_a_story_to_done_seat_pair() -> None:
     assert not schema_errors(profile_with({"engineer": SEAT, "qa": COMMAND_SEAT}))
-    assert not schema_errors(profile_with({"engineer": {"model": "example/strong"}, "qa": SEAT}))
+    assert not schema_errors(profile_with({"engineer": {"runtime": "codex", "model": "example/strong"}, "qa": SEAT}))
     effort = SCHEMA["$defs"]["story_to_done_seat"]["properties"]["effort"]
     assert effort["enum"] == ["low", "medium", "high", "xhigh", "max"]
     assert effort["default"] == "high"
@@ -190,9 +211,16 @@ def test_schema_accepts_a_story_to_done_seat_pair() -> None:
         {"engineer": {k: v for k, v in COMMAND_SEAT.items() if k != "command"}, "qa": SEAT},
         {"engineer": COMMAND_SEAT | {"command": 'agent --model "example/strong#high"'}, "qa": SEAT},
         {"engineer": COMMAND_SEAT | {"command": 'agent --model "{model}#high"'}, "qa": SEAT},
+        {"engineer": {k: v for k, v in SEAT.items() if k != "runtime"}, "qa": SEAT},
+        {"engineer": COMMAND_SEAT | {"model": 'x"; touch /tmp/p; "'}, "qa": SEAT},
+        {"engineer": COMMAND_SEAT | {"model": "-rf"}, "qa": SEAT},
+        {"engineer": COMMAND_SEAT | {"command": 'agent --model "{model}#{effort}" > "{output_file}"'}, "qa": SEAT},
+        {"engineer": COMMAND_SEAT | {"command": 'agent --model "{model}#{effort}" --file "{prompt_file}"'}, "qa": SEAT},
     ],
     ids=["no-qa", "no-engineer", "extra-seat", "no-model", "family", "bad-effort", "bad-runtime",
-         "command-without-command", "command-without-placeholders", "command-without-effort"],
+         "command-without-command", "command-without-placeholders", "command-without-effort", "no-runtime",
+         "command-model-with-shell-text", "command-model-like-an-option", "command-without-prompt-file",
+         "command-without-output-file"],
 )
 def test_schema_refuses_a_malformed_story_to_done(story_to_done) -> None:
     assert schema_errors(profile_with(story_to_done))
@@ -206,6 +234,9 @@ def test_profiles_seat_story_to_done_on_verified_labs(path: Path) -> None:
     assert not schema_errors(profile_with(seats))
     assert (seats["engineer"]["model"], seats["engineer"]["effort"]) == ("deepseek/deepseek-flash", "high")
     assert (seats["qa"]["model"], seats["qa"]["effort"]) == ("deepseek/deepseek-v4-pro", "high")
+    for seat in seats.values():
+        # The shell-launched agents rule: stdin never stays on the terminal.
+        assert seat["runtime"] != "command" or "< /dev/null" in seat["command"], seat["command"]
     assert profile["review"]["adjudicator"]["model"] == "deepseek/deepseek-flash"
     assert "Interim: the owner will change this again" not in path.read_text()
 
@@ -416,6 +447,15 @@ def test_the_step_four_continuation_branch_is_pinned() -> None:
     body = in_deployment_review_branch()
     assert in_order(body, *STEP4_SENTENCES), "the continuation branch does not read its pinned sentences in order"
     assert STEP4_OLD_SENTENCE not in body, "the stop sentence this branch replaces is still stated"
+
+
+def test_a_command_qa_seat_continues_by_a_new_launch_on_the_same_seat() -> None:
+    body = " ".join(in_deployment_review_branch().split())
+    assert (
+        "A `command` or `codex` QA seat is never resumed, so its continuation is a new launch on the same seat "
+        "whose prompt file is the step 3 brief followed by that continuation message; it is still the same "
+        "round's continuation under every rule in this bullet."
+    ) in body
 
 
 def test_a_continuation_never_carries_a_verdict_or_an_earlier_conclusion() -> None:

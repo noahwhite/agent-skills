@@ -51,11 +51,22 @@ A value not yet resolved is written as `unresolved` wherever the four values are
   A caller-supplied argument is used even when the seat entry is absent.
   Never fall back to a model id written in this skill, and never probe or fall back across a list of model ids.
 - The seat's `runtime` decides the launch.
-  `claude-code` or `opencode` is a subagent of that runtime, and a seat with no `runtime`, or no entry at all when the arguments supply its model, is a subagent of your own runtime.
-  `command` is a separate process launched by the shell-launched agents rule in [references/runtimes.md](references/runtimes.md): fill `{model}`, `{effort}`, `{prompt_file}`, `{output_file}` and `{session_title}` in its `command` with the resolved model, the resolved effort, the brief's file, the file it hands back in, and a title unique to the launch.
+  `claude-code` or `opencode` is a subagent of that runtime, and no entry at all, when the arguments supply its model, is a subagent of your own runtime.
+  A seat entry with no `runtime` is not a usable seat (the profile schema requires one): stop before either role is spawned and say which seat and why.
+  `command` or `codex` is a separate process launched by the shell-launched agents rule in [references/runtimes.md](references/runtimes.md); for `command`, fill `{model}`, `{effort}`, `{prompt_file}`, `{output_file}` and `{session_title}` in its `command` with the resolved model, the resolved effort, the brief's file, the file it hands back in, and a title unique to the launch.
+  Wherever steps 2 to 4 say to spawn or resume a subagent, a `command` or `codex` seat is instead a new launch of that process with the same brief as its prompt file.
   A seat whose runtime you cannot launch, such as an `opencode` seat under another runtime, stops the skill before either role is spawned: say which seat and why.
+- Never put an unchecked value into a shell command.
+  Before a `command` or `codex` launch, check every value it fills: the model must match `^[A-Za-z0-9][A-Za-z0-9._:/@-]*$`, the effort must be one of the five levels, the session title is `story-to-done-<STORY_ID>-<role>-<n>` (`<role>` is `engineer` or `qa`, `<n>` counts that role's launches) and must match `^[A-Za-z0-9][A-Za-z0-9._-]*$`, and each file path must match `^/[A-Za-z0-9._/-]+$`.
+  A value that fails its check stops the skill before that launch: say which value and why; never escape, trim or rewrite it.
+  Fill each value inside the double quotes the `command` template puts around its placeholder, and pass each as its own argument in the `codex` base command.
+- Running a `command` seat runs shell text the profile supplies.
+  Right after seat resolution and before step 1, if either seat resolved to `runtime: command` and the user has not confirmed in this conversation that the selected profile is trusted, show the user the profile path and each such seat's `command` text and ask once whether to run them.
+  A yes covers every launch of those seats, with that `command` text unchanged, for the rest of the run; a no stops the skill before either role is spawned.
+  The confirmation is about running that text, not about the four values, and resolving the four values never asks it.
 - One resolved seat serves its role in every round, unchanged: the senior engineer goes back to it for each fix round, and each new QA round spawns a new agent on it.
-  A `command` seat is never resumed: step 4 hands the senior engineer's failed items to a new launch on the same seat with the step 2 brief, and a QA resume that step 0 or step 4 calls for is one the runtime cannot make.
+  A `command` or `codex` seat is never resumed: step 4 hands the senior engineer's failed items to a new launch on the same seat with the step 2 brief, and step 4's continuation of a QA round is a new launch on the same seat as that section says.
+  A step 0 read-back resume of such a seat is one the runtime cannot make.
 
 These seats reuse the refinement seat pattern of `profile.refinement`, with four differences: no `family` field and no rule that the two seats sit on distinct families; an explicit argument overrides the profile field by field; one resolved seat is reused unchanged in every round, with QA respawned on the same seat; and a `command` seat launches by the shell-launched agents rule rather than as a resumed subagent.
 
@@ -204,6 +215,7 @@ For a waived PR, compare the merged PR's `headRefOid` with the SHA recorded when
   After each continuation handback, step 3's state and merged-PR review-of-record read-backs repeat in full before this step applies again.
   If any outstanding item names any other owner - the owner, a maintainer's approval or access grant, a human merge, an external deploy, a pending acceptance-basis ruling - report exactly what remains and who owns it, and stop, even when QA-owned work also remains; a mixed remainder containing both an owner action and QA's own steps is reported and stopped, never resumed.
   If the runtime cannot resume that QA session, report the limitation and stop; never substitute a new clean, neutral subagent for it as a continuation of that round.
+  A `command` or `codex` QA seat is never resumed, so its continuation is a new launch on the same seat whose prompt file is the step 3 brief followed by that continuation message; it is still the same round's continuation under every rule in this bullet.
   A continuation is made at most once per observed change to the remainder: when a resumed handback leaves the same remaining items with no observed progress, report the stall and stop.
 - **`profile.tracker.states.blocked`:** report the blocking story and stop.
 - **Any other state:** report it and stop.

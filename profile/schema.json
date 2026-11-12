@@ -531,6 +531,7 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
+        "runtime",
         "model"
       ],
       "properties": {
@@ -545,7 +546,7 @@
             "codex",
             "command"
           ],
-          "description": "How the role is launched: as a subagent of that runtime, or as a shell command. Unset means a subagent of the orchestrator's own runtime."
+          "description": "How the role is launched: claude-code and opencode as a subagent of that runtime, codex and command as a separate process."
         },
         "model": {
           "type": "string",
@@ -565,7 +566,7 @@
         },
         "command": {
           "type": "string",
-          "description": "Required when runtime is command: the command line, with {model} and {effort} placeholders the skill fills with the resolved model and effort, plus {prompt_file}, {output_file} and {session_title} placeholders."
+          "description": "Required when runtime is command: the command line, with {model}, {effort}, {prompt_file} and {output_file} placeholders, and optionally {session_title}, each written inside double quotes. The skill fills them only with values that pass its allowlist checks, and runs the command only after the user confirms the profile is trusted."
         }
       },
       "allOf": [
@@ -585,6 +586,9 @@
               "command"
             ],
             "properties": {
+              "model": {
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@-]*$"
+              },
               "command": {
                 "allOf": [
                   {
@@ -592,6 +596,12 @@
                   },
                   {
                     "pattern": "\\{effort\\}"
+                  },
+                  {
+                    "pattern": "\\{prompt_file\\}"
+                  },
+                  {
+                    "pattern": "\\{output_file\\}"
                   }
                 ]
               }

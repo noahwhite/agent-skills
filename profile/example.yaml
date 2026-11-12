@@ -165,7 +165,7 @@ story_to_done:
     command: >-
       opencode run --model "{model}#{effort}" "Follow the instructions in the attached file exactly."
       --title "{session_title}"
-      --file "{prompt_file}" > "{output_file}"
+      --file "{prompt_file}" < /dev/null > "{output_file}"
   qa:
     name: DeepSeek V4 Pro
     runtime: command
@@ -174,7 +174,7 @@ story_to_done:
     command: >-
       opencode run --model "{model}#{effort}" "Follow the instructions in the attached file exactly."
       --title "{session_title}"
-      --file "{prompt_file}" > "{output_file}"
+      --file "{prompt_file}" < /dev/null > "{output_file}"
 workspace:
   # A base directory only: each session creates one directory inside it with mktemp -d
   # (shared/runtimes.md, Scratch files). Optional; the session falls back to a standalone

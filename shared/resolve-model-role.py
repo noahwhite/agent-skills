@@ -15,8 +15,9 @@ through to the next one:
      given, else the git work tree holding the working directory (none outside a work tree)
   3. ~/.config/agent-skills/profile.yaml
 
-On success it prints role, runtime, model (the effective model), source (the absolute
-profile path read) and, when the entry sets one, command, and nothing else: as "key: value"
+On success it prints role, runtime, model (the effective model), effort when the entry sets
+one, source (the absolute profile path read) and, when the entry sets one, command, and
+nothing else: as "key: value"
 lines in that order with backslashes, control characters, lone surrogates and Unicode
 line and paragraph separators escaped, or
 with --json as one JSON object. It only reads files; it never runs the command text or starts
@@ -40,6 +41,8 @@ NAME = "resolve-model-role"
 # The runtimes profile/schema.json defines for an agent entry (tests keep the two in step).
 MODEL_RUNTIMES = ("claude-code", "opencode", "codex")
 RUNTIMES = MODEL_RUNTIMES + ("command",)
+# The reasoning efforts profile/schema.json defines for a seat (tests keep the two in step).
+EFFORTS = ("low", "medium", "high", "xhigh", "max")
 ENTRY_KEYS = ("name", "runtime", "model", "command")
 SEGMENT = re.compile(r"([^.\[\]]+)((?:\[\d+\])*)")
 INDEX = re.compile(r"\[(\d+)\]")
@@ -242,6 +245,16 @@ def classify(entry: dict, role: str) -> tuple[str, str, str | None]:
     return runtime, model, None
 
 
+def effort_of(entry: dict, role: str) -> str | None:
+    """The entry's effort, or None when it sets none; a value outside the schema enum fails."""
+    if "effort" not in entry or entry["effort"] is None:
+        return None
+    effort = entry["effort"]
+    if not isinstance(effort, str) or effort not in EFFORTS:
+        raise Unresolved(f"role {role} has effort {effort!r}, which the profile schema does not define")
+    return effort
+
+
 def render(fields: dict[str, str], as_json: bool) -> str:
     if as_json:
         return json.dumps(fields) + "\n"
@@ -284,12 +297,17 @@ def main(argv: list[str]) -> int:
             raise
         yaml = import_yaml()
         role, path = parse_role(args.role)
-        runtime, model, command = classify(entry_at(load(source, yaml), role, path), role)
+        entry = entry_at(load(source, yaml), role, path)
+        runtime, model, command = classify(entry, role)
+        effort = effort_of(entry, role)
     except Unresolved as exc:
         where = "; searched: " + ", ".join(searched) if searched else ""
         emit(sys.stderr, escape(f"{NAME}: {exc}; profile key {args.role}{where}") + "\n")
         return EXIT_UNRESOLVED
-    fields = {"role": role, "runtime": runtime, "model": model, "source": source}
+    fields = {"role": role, "runtime": runtime, "model": model}
+    if effort is not None:
+        fields["effort"] = effort
+    fields["source"] = source
     if command is not None:
         fields["command"] = command
     emit(sys.stdout, render(fields, args.json))

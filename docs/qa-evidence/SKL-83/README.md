@@ -8,10 +8,10 @@ Resolution path for `story-to-done`'s engineer and QA seats, run on 2026-11-11 f
 
 ```
 $ python3 shared/resolve-model-role.py --role story_to_done.engineer --repo <checkout> --json
-{"role": "story_to_done.engineer", "runtime": "command", "model": "deepseek/deepseek-flash", "source": "<checkout>/.agent-skills/profile.yaml", "command": "opencode run --model \"{model}#{effort}\" \"Follow the instructions in the attached file exactly.\" --title \"{session_title}\" --file \"{prompt_file}\" > \"{output_file}\""}
+{"role": "story_to_done.engineer", "runtime": "command", "model": "deepseek/deepseek-flash", "effort": "high", "source": "<checkout>/.agent-skills/profile.yaml", "command": "opencode run --model \"{model}#{effort}\" \"Follow the instructions in the attached file exactly.\" --title \"{session_title}\" --file \"{prompt_file}\" < /dev/null > \"{output_file}\""}
 
 $ python3 shared/resolve-model-role.py --role story_to_done.qa --repo <checkout> --json
-{"role": "story_to_done.qa", "runtime": "command", "model": "deepseek/deepseek-v4-pro", "source": "<checkout>/.agent-skills/profile.yaml", "command": "opencode run --model \"{model}#{effort}\" \"Follow the instructions in the attached file exactly.\" --title \"{session_title}\" --file \"{prompt_file}\" > \"{output_file}\""}
+{"role": "story_to_done.qa", "runtime": "command", "model": "deepseek/deepseek-v4-pro", "effort": "high", "source": "<checkout>/.agent-skills/profile.yaml", "command": "opencode run --model \"{model}#{effort}\" \"Follow the instructions in the attached file exactly.\" --title \"{session_title}\" --file \"{prompt_file}\" < /dev/null > \"{output_file}\""}
 
 $ uv run --locked python -c "import yaml; p=yaml.safe_load(open('.agent-skills/profile.yaml'))['story_to_done']; print({k: (v['model'], v.get('effort')) for k, v in p.items()})"
 {'engineer': ('deepseek/deepseek-flash', 'high'), 'qa': ('deepseek/deepseek-v4-pro', 'high')}
@@ -30,6 +30,7 @@ A `deepseek/deepseek-flash` orchestrator given `SKILL.md`, this profile and the 
 | `qa-effort` | `high` | `story_to_done.qa.effort` |
 
 Both seats launch as `command` processes by the shell-launched agents rule, and its next action was `SPAWN senior engineer`.
+That dry run predates the owner decision of 2026-11-11: under the current `SKILL.md`, a run whose user has not confirmed this profile as trusted asks once before step 1 whether to run the two `command` seats, and the four values above resolve the same way without asking.
 
 ## With the `story_to_done` keys removed
 
