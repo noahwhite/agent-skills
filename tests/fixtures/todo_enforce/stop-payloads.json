@@ -1,0 +1,34 @@
+[
+  {
+    "session_id": "<session-id>",
+    "transcript_path": "~/.claude/projects/-workspace/<session-id>.jsonl",
+    "cwd": "/workspace",
+    "prompt_id": "<prompt-id>",
+    "permission_mode": "auto",
+    "effort": {
+      "level": "medium"
+    },
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+      "command": "echo probe",
+      "description": "Print probe"
+    },
+    "tool_use_id": "<tool-use-id>"
+  },
+  {
+    "session_id": "<session-id>",
+    "transcript_path": "~/.claude/projects/-workspace/<session-id>.jsonl",
+    "cwd": "/workspace",
+    "prompt_id": "<prompt-id>",
+    "permission_mode": "auto",
+    "effort": {
+      "level": "medium"
+    },
+    "hook_event_name": "Stop",
+    "stop_hook_active": false,
+    "last_assistant_message": "metrics: off\nresult: probe finished",
+    "background_tasks": [],
+    "session_crons": []
+  }
+]
