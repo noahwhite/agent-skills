@@ -76,6 +76,7 @@ After reading `references/todo-tracking.md`, expand the list to the seed items b
 Seed it with at least: read the story state, spawn the senior engineer, each check on its checklist until it hands back, the checklist read-back at each handback with each subagent's read-back resume count, read back the deployment-review state, each QA round, each read-back of QA's state, each failed item handed back, each fix round, and the final state read-back.
 With `metrics` on, seed two more items: collect the metrics figures; then post the metrics summary on the story and read it back before giving the summary in the closing report.
 Add an item for each new round as it starts; mark each done once its outcome is observed.
+An interim handback from the senior engineer is classified first, before the checklist read-back below, under [references/interim-handbacks.md](references/interim-handbacks.md).
 Every subagent brief requires a checklist file in that subagent's own subdirectory of the scratch directory; read it from there and mirror it into your list whenever you check on the subagent.
 When a senior engineer or QA agent hands back, read that subagent's checklist file before acting on the result; a missing or unreadable checklist counts as open items.
 If items remain open with no stated blocker, resume that subagent with "Your checklist still has open items. Continue with them; if one is blocked, say what blocks it", at most twice per subagent, and then record the remaining items in your report and continue with this skill's existing step logic.
@@ -86,7 +87,6 @@ If the runtime cannot resume the subagent, record the open items and continue wi
 A read-back resume of the QA agent happens before step 4 handling, carries no verdict, does not increment the round count, and has a cap separate from step 4's "once per observed change to the remainder".
 The items QA's handback names as outstanding with what they wait on or who owns them go to step 4's classification and never to a read-back resume, so a mixed remainder is reported and stopped as step 4 says; a read-back resume of QA applies to every other open checklist item, including one the handback names with no stated blocker.
 With `metrics` on, each read-back resume is its own launch row.
-An interim handback from the senior engineer is classified before step 0's checklist read-back above, under [references/interim-handbacks.md](references/interim-handbacks.md).
 If your todo tool is unavailable, use the primary-session checklist fallback in `references/todo-tracking.md`; never block.
 
 ## 1. Read the story and pick the starting point

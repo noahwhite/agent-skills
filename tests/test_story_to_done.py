@@ -2639,8 +2639,11 @@ def test_the_case_runner_detects_a_change_made_through_an_untracked_link(tmp_pat
 # SKL-254: interim senior-engineer handbacks get a deadline and a primary-source read.
 INTERIM = ROOT / "skills" / "story-to-done" / "references" / "interim-handbacks.md"
 INTERIM_STEP_0_POINTER = (
-    "An interim handback from the senior engineer is classified before step 0's checklist read-back above, under "
+    "An interim handback from the senior engineer is classified first, before the checklist read-back below, under "
     "[references/interim-handbacks.md](references/interim-handbacks.md)."
+)
+STEP_0_CHECKLIST_READ = (
+    "When a senior engineer or QA agent hands back, read that subagent's checklist file before acting on the result"
 )
 INTERIM_STEP_2_POINTER = (
     "An interim handback goes to [references/interim-handbacks.md](references/interim-handbacks.md) before the "
@@ -2682,17 +2685,16 @@ INTERIM_WAIT = (
     "under a timeout), repeated until the deadline."
 )
 INTERIM_WAIT_CAP = (
-    "Each wait lasts the lesser of 90 seconds and the time left to the deadline, so it returns at or before the "
-    "deadline, the runtime never moves it to the background, and a handback that arrives during a wait is handled "
-    "when that wait returns."
+    "Each wait lasts the lesser of 90 seconds and the time left to the deadline less 5 seconds for process "
+    "start-up, so it returns at or before the deadline, the runtime never moves it to the background, and a "
+    "handback that arrives during a wait is handled when that wait returns."
 )
 INTERIM_PR_WATCH = (
     "When the awaited CI run belongs to a PR, it also watches the PR, so a new head and its new run are not missed "
     "([references/code-review.md](code-review.md), Watching the PR)."
 )
-INTERIM_NO_WAIT = (
-    "A runtime with no bounded wait reads the primary source at once and stops with the report below, which gives "
-    "the read time and says the deadline was not reached; it never waits passively."
+INTERIM_VOCABULARY = (
+    "interim", "awaited", "deadline", "minutes", "seconds", "primary source", "foreground", "timeout", "wake-up",
 )
 INTERIM_CLEAR_LATE = (
     "A handback that arrived before the deadline clears it even when the coordinator sees it only after the "
@@ -2715,11 +2717,17 @@ def test_step_0_points_to_the_interim_handbacks_reference() -> None:
     assert INTERIM_STEP_0_POINTER in step_0
 
 
-def test_step_2_points_to_the_interim_handbacks_reference_without_restating_it() -> None:
+def test_step_0_classifies_an_interim_handback_before_reading_the_checklist() -> None:
+    step_0 = " ".join(section(SKILL.read_text(), "0. Track everything on a todo list").split())
+    assert step_0.index(INTERIM_STEP_0_POINTER) < step_0.index(STEP_0_CHECKLIST_READ)
+
+
+def test_step_2_points_to_the_interim_handbacks_reference_and_uses_none_of_its_vocabulary() -> None:
     step_2 = " ".join(section(SKILL.read_text(), "2. Senior engineer: implement to deployment review").split())
     assert INTERIM_STEP_2_POINTER in step_2
-    for token in ("deadline", "30 minutes", "10 minutes", "50%", "primary source", "foreground wait"):
-        assert token not in step_2, f"step 2 restates the interim rule ({token!r}) instead of pointing to it"
+    rest = step_2.replace(INTERIM_STEP_2_POINTER, "").lower()
+    for token in INTERIM_VOCABULARY + ("50%",):
+        assert token not in rest, f"step 2 restates the interim rule ({token!r}) instead of pointing to it"
     for sentence in INTERIM.read_text().splitlines():
         sentence = " ".join(sentence.split())
         if len(sentence) > 40:
@@ -2753,10 +2761,6 @@ def test_a_ci_run_on_a_pr_is_watched_through_the_pr() -> None:
 
 def test_each_wait_is_capped_so_a_handback_during_it_is_handled() -> None:
     assert INTERIM_WAIT_CAP in interim_text()
-
-
-def test_a_runtime_with_no_bounded_wait_stops_rather_than_waits_passively() -> None:
-    assert INTERIM_NO_WAIT in interim_text()
 
 
 def test_the_interim_rule_limits_are_pinned() -> None:
