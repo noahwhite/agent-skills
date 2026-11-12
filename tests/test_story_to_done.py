@@ -3098,8 +3098,9 @@ CAP_LEFT = (
 )
 CAP_HISTORY = "Round numbers run on across re-arms, and each later stop report gives every counted round so far."
 CAP_REREAD = (
-    "The reply never overrides the tracker state: before resuming, read the story's state again, and if it is "
-    "no longer `profile.tracker.states.in_progress`, report that state and stop."
+    "The reply never overrides the tracker state: before resuming, read the story's state again; if it is "
+    "`profile.tracker.states.done`, apply the `profile.tracker.states.done` bullet above, and if it is any other "
+    "state but `profile.tracker.states.in_progress`, report that state and stop."
 )
 CAP_NO_WRITE = (
     "In either case the coordinator writes nothing to the tracker beyond what the Boundaries permit, rules on no "

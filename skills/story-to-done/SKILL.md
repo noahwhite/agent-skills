@@ -216,7 +216,7 @@ For a waived PR, compare the merged PR's `headRefOid` with the SHA recorded when
   It also gives, per PR, the link and head SHA, re-read from the tracker and the forge rather than taken from a handback, reusing the merge reads steps 2 and 3 already make.
   The stop report asks the user how many further rounds to run or whether to stop, and waits for the reply; a reply that does not say how many rounds or that it is a stop, or that gives an invalid value, is asked about again, never guessed.
   On "N additional rounds", re-arm the same cap at N further counted rounds and resume the pending hand-back below with every item failed so far; the next QA round runs with a new QA agent.
-  The reply never overrides the tracker state: before resuming, read the story's state again, and if it is no longer `profile.tracker.states.in_progress`, report that state and stop.
+  The reply never overrides the tracker state: before resuming, read the story's state again; if it is `profile.tracker.states.done`, apply the `profile.tracker.states.done` bullet above, and if it is any other state but `profile.tracker.states.in_progress`, report that state and stop.
   Round numbers run on across re-arms, and each later stop report gives every counted round so far.
   On "stop", end the invocation with the story left in the state QA left it: `profile.tracker.states.in_progress`, failed items outstanding, the owner deciding next.
   In either case the coordinator writes nothing to the tracker beyond what the Boundaries permit, rules on no item, and relays no verdict of its own.
