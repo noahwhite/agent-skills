@@ -566,7 +566,7 @@
         },
         "command": {
           "type": "string",
-          "description": "Required when runtime is command: the command line, with {model}, {effort}, {prompt_file} and {output_file} placeholders, and optionally {session_title}, each written inside double quotes. The skill fills them only with values that pass its allowlist checks, and runs the command only after the user confirms the profile is trusted."
+          "description": "Required when runtime is command: the command line, with {model}, {effort}, {prompt_file}, {output_file} and {session_title} placeholders, each written inside a double-quoted word. The skill fills them only with values that pass its allowlist checks, and runs the command only after the user confirms the profile is trusted."
         }
       },
       "allOf": [
@@ -592,18 +592,40 @@
               "command": {
                 "allOf": [
                   {
-                    "pattern": "\\{model\\}"
+                    "pattern": "^[^\"]*(\"[^\"]*\"[^\"]*)*\"[^\"]*\\{model\\}"
                   },
                   {
-                    "pattern": "\\{effort\\}"
+                    "pattern": "^[^\"]*(\"[^\"]*\"[^\"]*)*\"[^\"]*\\{effort\\}"
                   },
                   {
-                    "pattern": "\\{prompt_file\\}"
+                    "pattern": "^[^\"]*(\"[^\"]*\"[^\"]*)*\"[^\"]*\\{prompt_file\\}"
                   },
                   {
-                    "pattern": "\\{output_file\\}"
+                    "pattern": "^[^\"]*(\"[^\"]*\"[^\"]*)*\"[^\"]*\\{output_file\\}"
+                  },
+                  {
+                    "pattern": "^[^\"]*(\"[^\"]*\"[^\"]*)*\"[^\"]*\\{session_title\\}"
                   }
                 ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "runtime": {
+                "const": "codex"
+              }
+            },
+            "required": [
+              "runtime"
+            ]
+          },
+          "then": {
+            "properties": {
+              "model": {
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@-]*$"
               }
             }
           }

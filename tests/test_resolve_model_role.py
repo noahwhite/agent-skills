@@ -311,6 +311,22 @@ def test_a_command_entry_without_a_model_is_unresolved_and_prints_its_command(ho
     )
 
 
+def test_require_model_fails_a_command_entry_without_a_model(home, home_profile, outside):
+    res = resolve("--role", "refinement.reviewers[1]", "--require-model", cwd=outside, env=base_env(home))
+    assert res.returncode == 16
+    assert res.stdout == ""
+    assert "no model" in res.stderr and "refinement.reviewers[1]" in res.stderr
+
+
+def test_require_model_keeps_a_command_entry_with_a_model(home, home_profile, outside):
+    res = resolve("--role", "refinement.reviewers[0]", "--require-model", cwd=outside, env=base_env(home))
+    assert res.returncode == 0, res.stderr
+    assert res.stdout == lines(
+        "refinement.reviewers[0]", "command", "first/model", home_profile,
+        'first-cli --model first/model --file "{prompt_file}"',
+    )
+
+
 def test_a_command_without_a_runtime_resolves_as_a_command_entry(home, home_profile, outside):
     res = resolve("--role", "refinement.reviewers[2]", cwd=outside, env=base_env(home))
     assert res.returncode == 0, res.stderr

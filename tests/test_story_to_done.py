@@ -120,7 +120,9 @@ SEAT_LAUNCH_SAFETY = (
     "`command` or `codex` is a separate process launched by the shell-launched agents rule",
     "A seat entry with no `runtime` is not a usable seat (the profile schema requires one)",
     "the model must match `^[A-Za-z0-9][A-Za-z0-9._:/@-]*$`",
-    "the session title is `story-to-done-<STORY_ID>-<role>-<n>`",
+    "the session title is `story-to-done-<STORY_ID>-<run>-<role>-<n>` (`<run>` is the last path component of "
+    "this run's scratch directory, which `mktemp -d` made unique",
+    "with the effort as its `-c model_reasoning_effort=<effort>` flag.",
     "each file path must match `^/[A-Za-z0-9._/-]+$`",
     "A value that fails its check stops the skill before that launch: say which value and why; never escape, "
     "trim or rewrite it.",
@@ -178,7 +180,7 @@ COMMAND_SEAT = {
     "name": "Engineer",
     "runtime": "command",
     "model": "example/strong",
-    "command": 'agent --model "{model}#{effort}" --file "{prompt_file}" > "{output_file}"',
+    "command": 'agent --model "{model}#{effort}" --title "{session_title}" --file "{prompt_file}" > "{output_file}"',
 }
 
 
@@ -215,13 +217,18 @@ def test_schema_accepts_a_story_to_done_seat_pair() -> None:
         {"engineer": COMMAND_SEAT | {"model": 'x"; touch /tmp/p; "'}, "qa": SEAT},
         {"engineer": COMMAND_SEAT | {"model": "$(printf INJECTED >&2)"}, "qa": SEAT},
         {"engineer": COMMAND_SEAT | {"model": "-rf"}, "qa": SEAT},
-        {"engineer": COMMAND_SEAT | {"command": 'agent --model "{model}#{effort}" > "{output_file}"'}, "qa": SEAT},
-        {"engineer": COMMAND_SEAT | {"command": 'agent --model "{model}#{effort}" --file "{prompt_file}"'}, "qa": SEAT},
+        {"engineer": COMMAND_SEAT | {"command": 'agent --model "{model}#{effort}" --title "{session_title}" > "{output_file}"'}, "qa": SEAT},
+        {"engineer": COMMAND_SEAT | {"command": 'agent --model "{model}#{effort}" --title "{session_title}" --file "{prompt_file}"'}, "qa": SEAT},
+        {"engineer": COMMAND_SEAT | {"command": 'agent --model "{model}#{effort}" --file "{prompt_file}" > "{output_file}"'}, "qa": SEAT},
+        {"engineer": COMMAND_SEAT | {"command": 'agent --model {model}#{effort} --title "{session_title}" --file "{prompt_file}" > "{output_file}"'}, "qa": SEAT},
+        {"engineer": COMMAND_SEAT | {"command": 'agent --model "x" --title "t" --file "f" > "o" # {model} {effort} {session_title} {prompt_file} {output_file}'}, "qa": SEAT},
+        {"engineer": {"runtime": "codex", "model": "x; touch /tmp/p"}, "qa": SEAT},
     ],
     ids=["no-qa", "no-engineer", "extra-seat", "no-model", "family", "bad-effort", "bad-runtime",
          "command-without-command", "command-without-placeholders", "command-without-effort", "no-runtime",
          "command-model-with-shell-text", "command-model-with-substitution", "command-model-like-an-option", "command-without-prompt-file",
-         "command-without-output-file"],
+         "command-without-output-file", "command-without-session-title", "command-with-unquoted-model",
+         "command-with-placeholders-only-in-a-comment", "codex-model-with-shell-text"],
 )
 def test_schema_refuses_a_malformed_story_to_done(story_to_done) -> None:
     assert schema_errors(profile_with(story_to_done))

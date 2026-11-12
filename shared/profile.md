@@ -34,7 +34,7 @@ The copy is not executable, because its generated header sits above the shebang.
 A model-launching script either calls it or takes the launch command or model as a required argument its caller resolved with it.
 
 ```bash
-python3 <path>/resolve-model-role.py --role <role-key> [--repo DIR] [--json] [--dry-run]
+python3 <path>/resolve-model-role.py --role <role-key> [--repo DIR] [--json] [--dry-run] [--require-model]
 ```
 
 - **Role key.** `<role-key>` is a dotted path into the profile, such as `review.pre_pr.arbiter`.
@@ -50,6 +50,7 @@ python3 <path>/resolve-model-role.py --role <role-key> [--repo DIR] [--json] [--
   `--json` prints exactly one JSON object with those keys, `effort` and `command` each absent when the entry sets none, and the command text unchanged.
 - **Entry classification.** An entry with a `command` and no `runtime` (or a null one) is read as `runtime: command`.
   A `runtime: command` entry is launched by its `command`: the resolver prints that command as the effective launch, with its `model` as the effective model when it sets one and `unresolved` when it does not.
+  `--require-model` makes a `runtime: command` entry with no `model` a failure instead, for a caller whose launch needs a model, such as a story-to-done seat.
   On any other runtime a `command` is ignored, so it never stands in for a missing model.
   The runtimes are the ones `profile/schema.json` defines for an agent entry; the resolver does not interpret `enabled`.
 - **Fail closed.** Each of these exits with code 16 before any model call, with one line on stderr naming the profile key and every path searched (the selected path included where the selected file is at fault), nothing on stdout, and no substitute model:
@@ -63,6 +64,7 @@ python3 <path>/resolve-model-role.py --role <role-key> [--repo DIR] [--json] [--
   - an `effort` outside the levels the profile schema defines (`low`, `medium`, `high`, `xhigh`, `max`);
   - a model-launching runtime (`claude-code`, `opencode`, `codex`) with no `model`;
   - a `runtime: command` entry with no non-empty `command`;
+  - with `--require-model`, a `runtime: command` entry with no `model`;
   - a missing, older or broken PyYAML, with an installation action and the resolver's own path, reported even when no profile exists.
 
   A selected file's failure never falls through to a lower-priority profile.

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Resolve one model-launching role to its agent entry in the consumer profile.
 
-  python3 resolve-model-role.py --role <role-key> [--repo DIR] [--json] [--dry-run]
+  python3 resolve-model-role.py --role <role-key> [--repo DIR] [--json] [--dry-run] [--require-model]
 
 <role-key> is a dotted path into the profile, such as review.pre_pr.arbiter, and may index
 a role array from zero, such as refinement.reviewers[1]; a leading "profile." is accepted
@@ -21,7 +21,9 @@ nothing else: as "key: value"
 lines in that order with backslashes, control characters, lone surrogates and Unicode
 line and paragraph separators escaped, or
 with --json as one JSON object. It only reads files; it never runs the command text or starts
-a model, and --dry-run prints exactly what a normal run prints. Every resolution failure exits
+a model, and --dry-run prints exactly what a normal run prints. --require-model makes a
+runtime: command entry with no model a resolution failure, for a caller such as story-to-done
+whose seat cannot launch without one. Every resolution failure exits
 16 with one line on stderr and nothing on stdout; a malformed command line exits 2 with
 argparse's usage message. Documented in shared/profile.md, "Resolve a model role".
 """
@@ -223,7 +225,7 @@ def text_value(entry: dict, key: str, role: str) -> str | None:
     return value if value.strip() else None
 
 
-def classify(entry: dict, role: str) -> tuple[str, str, str | None]:
+def classify(entry: dict, role: str, require_model: bool = False) -> tuple[str, str, str | None]:
     """(runtime, effective model, command or None) for a usable entry."""
     if entry.get("runtime") is None and entry.get("command") is None:
         raise Unresolved(f"role {role} sets neither runtime nor command")
@@ -238,6 +240,8 @@ def classify(entry: dict, role: str) -> tuple[str, str, str | None]:
         command = text_value(entry, "command", role)
         if command is None:
             raise Unresolved(f"role {role} has runtime command and no command")
+        if model is None and require_model:
+            raise Unresolved(f"role {role} has runtime command and no model, and --require-model is set")
         return runtime, model or "unresolved", command
     # A command on a model-launching runtime is ignored, so it never stands in for the model.
     if model is None:
@@ -286,6 +290,7 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--role", required=True, help="dotted role key, e.g. review.pre_pr.arbiter or refinement.reviewers[1]")
     parser.add_argument("--repo", help="root of the repository under review (default: the git work tree of the working directory)")
     parser.add_argument("--json", action="store_true", help="print one JSON object instead of key: value lines")
+    parser.add_argument("--require-model", action="store_true", help="fail when a runtime: command entry sets no model")
     parser.add_argument("--dry-run", action="store_true", help="print the resolution only; identical to a normal run, which never launches anything")
     args = parser.parse_args(argv)
     searched: list[str] = []
@@ -298,7 +303,7 @@ def main(argv: list[str]) -> int:
         yaml = import_yaml()
         role, path = parse_role(args.role)
         entry = entry_at(load(source, yaml), role, path)
-        runtime, model, command = classify(entry, role)
+        runtime, model, command = classify(entry, role, args.require_model)
         effort = effort_of(entry, role)
     except Unresolved as exc:
         where = "; searched: " + ", ".join(searched) if searched else ""

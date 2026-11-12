@@ -97,6 +97,7 @@ If your runtime is not listed, map each capability to its closest equivalent and
   Give it its prompt as a file and read its result from its output file.
   Never leave its stdin on the terminal (a CLI agent run in the background otherwise waits on stdin until it times out): redirect stdin from the prompt file when the CLI reads its prompt on stdin, as Codex does with `-`, and from `/dev/null` otherwise.
   For `runtime: codex`, the base command is `codex exec -m <model> -s read-only --cd <checkout> -o <output_file> - < <prompt_file>`.
+  When the launch has a reasoning effort, add `-c model_reasoning_effort=<effort>` (observed on the Codex CLI, whose session header then reads `reasoning effort: <effort>` for each of `xhigh` and `max`); if the CLI or the model rejects that level, stop and say so, never dropping the flag or substituting another level.
   The `-` makes Codex read the prompt from stdin, which here is the prompt file, so a long prompt never hits the argument-length limit and nothing waits on a terminal.
   Codex's `read-only` and `workspace-write` sandboxes need bubblewrap on Linux; where it cannot start, every command fails with a `bwrap:` error and the review comes back empty.
   ⛔ That error means the reviewer cannot run as configured: report the review unavailable, never empty or clean, and do not substitute another reviewer.
