@@ -482,6 +482,25 @@
         }
       }
     },
+    "story_to_done": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The seats story-to-done launches its two roles on when the invocation leaves a seat argument out. An explicit argument overrides a seat field by field; a seat with no usable model stops the skill to ask, never falling back to a built-in model.",
+      "required": [
+        "engineer",
+        "qa"
+      ],
+      "properties": {
+        "engineer": {
+          "$ref": "#/$defs/story_to_done_seat",
+          "description": "The senior engineer's seat, reused unchanged for every fix round."
+        },
+        "qa": {
+          "$ref": "#/$defs/story_to_done_seat",
+          "description": "The QA agent's seat; every QA round spawns a new agent on it."
+        }
+      }
+    },
     "workspace": {
       "type": "object",
       "additionalProperties": false,
@@ -508,6 +527,111 @@
     }
   },
   "$defs": {
+    "story_to_done_seat": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runtime",
+        "model"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Label used in the todo list and the closing report."
+        },
+        "runtime": {
+          "enum": [
+            "claude-code",
+            "opencode",
+            "codex",
+            "command"
+          ],
+          "description": "How the role is launched: claude-code and opencode as a subagent of that runtime, codex and command as a separate process."
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Model id in the launching runtime's syntax."
+        },
+        "effort": {
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ],
+          "default": "high",
+          "description": "Reasoning effort for the role."
+        },
+        "command": {
+          "type": "string",
+          "description": "Required when runtime is command: the command line, with {model}, {effort}, {prompt_file}, {output_file} and {session_title} placeholders, each written inside a double-quoted word. The skill fills them only with values that pass its allowlist checks, and runs the command only after the user confirms the profile is trusted."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "runtime": {
+                "const": "command"
+              }
+            },
+            "required": [
+              "runtime"
+            ]
+          },
+          "then": {
+            "required": [
+              "command"
+            ],
+            "properties": {
+              "model": {
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@-]*$(?!\\n)"
+              },
+              "command": {
+                "allOf": [
+                  {
+                    "pattern": "^(?:\\\\\\n)*(?:[^\"'\\\\#\\s;&|<>()`](?:#|\\\\\\n)*|[\\s;&|<>()`](?:\\\\\\n)*|\\\\[^\\n](?:#|\\\\\\n)*|'[^']*'(?:#|\\\\\\n)*|\"(?:[^\"\\\\]|\\\\[\\s\\S])*\"(?:#|\\\\\\n)*)*\"(?:[^\"\\\\]|\\\\[\\s\\S])*\\{model\\}"
+                  },
+                  {
+                    "pattern": "^(?:\\\\\\n)*(?:[^\"'\\\\#\\s;&|<>()`](?:#|\\\\\\n)*|[\\s;&|<>()`](?:\\\\\\n)*|\\\\[^\\n](?:#|\\\\\\n)*|'[^']*'(?:#|\\\\\\n)*|\"(?:[^\"\\\\]|\\\\[\\s\\S])*\"(?:#|\\\\\\n)*)*\"(?:[^\"\\\\]|\\\\[\\s\\S])*\\{effort\\}"
+                  },
+                  {
+                    "pattern": "^(?:\\\\\\n)*(?:[^\"'\\\\#\\s;&|<>()`](?:#|\\\\\\n)*|[\\s;&|<>()`](?:\\\\\\n)*|\\\\[^\\n](?:#|\\\\\\n)*|'[^']*'(?:#|\\\\\\n)*|\"(?:[^\"\\\\]|\\\\[\\s\\S])*\"(?:#|\\\\\\n)*)*\"(?:[^\"\\\\]|\\\\[\\s\\S])*\\{prompt_file\\}"
+                  },
+                  {
+                    "pattern": "^(?:\\\\\\n)*(?:[^\"'\\\\#\\s;&|<>()`](?:#|\\\\\\n)*|[\\s;&|<>()`](?:\\\\\\n)*|\\\\[^\\n](?:#|\\\\\\n)*|'[^']*'(?:#|\\\\\\n)*|\"(?:[^\"\\\\]|\\\\[\\s\\S])*\"(?:#|\\\\\\n)*)*\"(?:[^\"\\\\]|\\\\[\\s\\S])*\\{output_file\\}"
+                  },
+                  {
+                    "pattern": "^(?:\\\\\\n)*(?:[^\"'\\\\#\\s;&|<>()`](?:#|\\\\\\n)*|[\\s;&|<>()`](?:\\\\\\n)*|\\\\[^\\n](?:#|\\\\\\n)*|'[^']*'(?:#|\\\\\\n)*|\"(?:[^\"\\\\]|\\\\[\\s\\S])*\"(?:#|\\\\\\n)*)*\"(?:[^\"\\\\]|\\\\[\\s\\S])*\\{session_title\\}"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "runtime": {
+                "const": "codex"
+              }
+            },
+            "required": [
+              "runtime"
+            ]
+          },
+          "then": {
+            "properties": {
+              "model": {
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@-]*$(?!\\n)"
+              }
+            }
+          }
+        }
+      ]
+    },
     "agent": {
       "type": "object",
       "additionalProperties": false,

@@ -311,6 +311,22 @@ def test_a_command_entry_without_a_model_is_unresolved_and_prints_its_command(ho
     )
 
 
+def test_require_model_fails_a_command_entry_without_a_model(home, home_profile, outside):
+    res = resolve("--role", "refinement.reviewers[1]", "--require-model", cwd=outside, env=base_env(home))
+    assert res.returncode == 16
+    assert res.stdout == ""
+    assert "no model" in res.stderr and "refinement.reviewers[1]" in res.stderr
+
+
+def test_require_model_keeps_a_command_entry_with_a_model(home, home_profile, outside):
+    res = resolve("--role", "refinement.reviewers[0]", "--require-model", cwd=outside, env=base_env(home))
+    assert res.returncode == 0, res.stderr
+    assert res.stdout == lines(
+        "refinement.reviewers[0]", "command", "first/model", home_profile,
+        'first-cli --model first/model --file "{prompt_file}"',
+    )
+
+
 def test_a_command_without_a_runtime_resolves_as_a_command_entry(home, home_profile, outside):
     res = resolve("--role", "refinement.reviewers[2]", cwd=outside, env=base_env(home))
     assert res.returncode == 0, res.stderr
@@ -351,6 +367,48 @@ def test_json_mode_omits_command_when_the_entry_sets_none(home, home_profile, ou
     assert json.loads(res.stdout) == {
         "role": "review.reviewer", "runtime": "codex", "model": "gpt-test", "source": str(home_profile),
     }
+
+
+SEAT = "story_to_done:\n  qa:\n    name: Q\n    runtime: opencode\n    model: q/model\n"
+
+
+@pytest.mark.parametrize("effort", ["low", "medium", "high", "xhigh", "max"])
+def test_a_seat_effort_is_reported_after_the_model(home, outside, effort):
+    profile = write(home / ".config" / "agent-skills" / "profile.yaml", SEAT + f"    effort: {effort}\n")
+    res = resolve("--role", "story_to_done.qa", cwd=outside, env=base_env(home))
+    assert res.returncode == 0, res.stderr
+    assert res.stdout == (
+        f"role: story_to_done.qa\nruntime: opencode\nmodel: q/model\neffort: {effort}\nsource: {profile}\n"
+    )
+    res = resolve("--role", "story_to_done.qa", "--json", cwd=outside, env=base_env(home))
+    assert list(json.loads(res.stdout).items()) == [
+        ("role", "story_to_done.qa"), ("runtime", "opencode"), ("model", "q/model"),
+        ("effort", effort), ("source", str(profile)),
+    ]
+
+
+def test_an_entry_without_an_effort_prints_no_effort_line(home, outside):
+    profile = write(home / ".config" / "agent-skills" / "profile.yaml", SEAT)
+    res = resolve("--role", "story_to_done.qa", cwd=outside, env=base_env(home))
+    assert res.returncode == 0, res.stderr
+    assert res.stdout == lines("story_to_done.qa", "opencode", "q/model", profile)
+
+
+@pytest.mark.parametrize("effort", ["extreme", "MAX", "''", "3", "[high]"])
+def test_an_effort_outside_the_schema_enum_fails(home, outside, effort):
+    profile = write(home / ".config" / "agent-skills" / "profile.yaml", SEAT + f"    effort: {effort}\n")
+    line = assert_fails(resolve("--role", "story_to_done.qa", cwd=outside, env=base_env(home)), str(profile), "effort")
+    assert "unresolved" not in line
+
+
+def test_the_efforts_the_resolver_accepts_are_the_schema_efforts():
+    schema = json.loads((ROOT / "profile" / "schema.json").read_text())
+    tree = ast.parse(RESOLVER.read_text())
+    declared = next(
+        ast.literal_eval(node.value) for node in tree.body
+        if isinstance(node, ast.Assign) and [t.id for t in node.targets if isinstance(t, ast.Name)] == ["EFFORTS"]
+    )
+    assert list(declared) == schema["$defs"]["story_to_done_seat"]["properties"]["effort"]["enum"]
 
 
 def test_newlines_in_values_are_escaped_in_text_mode_and_kept_in_json(home, outside):
@@ -843,7 +901,7 @@ def test_the_profile_reference_documents_the_resolver():
     for fragment in (
         "python3 <path>/resolve-model-role.py --role <role-key> [--repo DIR] [--json] [--dry-run]",
         "`refinement.reviewers[1]`", "`profile.`", "git rev-parse --show-toplevel", "`--repo DIR`",
-        "`role`, `runtime`, `model` (the effective model), `source`", "`command` only when",
+        "`role`, `runtime`, `model` (the effective model), `effort` only when the entry sets one, `source`", "`command` only when",
         "`unresolved`", "code 16", "never falls through", "byte-identical", "`PyYAML>=6`", "`git`", "`python3`",
         "`override`", "SKL-68", "inherited `GIT_*` variable removed", "a tab as `\\t`", "a lone surrogate or a Unicode line or paragraph separator (U+2028, U+2029) as `\\uNNNN`",
         "through `python3`", "is not executable", "exits 2",
@@ -859,6 +917,7 @@ def test_the_profile_reference_documents_the_resolver():
         "- a role key absent from the profile, or a role path that does not resolve to an agent entry;",
         "- an entry with neither `runtime` nor `command`;",
         "- a runtime the profile schema does not define;",
+        "- an `effort` outside the levels the profile schema defines (`low`, `medium`, `high`, `xhigh`, `max`);",
         "- a model-launching runtime (`claude-code`, `opencode`, `codex`) with no `model`;",
         "- a `runtime: command` entry with no non-empty `command`;",
         "- a missing, older or broken PyYAML, with an installation action and the resolver's own path, reported even when no profile exists.",

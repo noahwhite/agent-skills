@@ -56,11 +56,10 @@ review:
     name: Codex GPT-6 Sol
     runtime: codex
     model: gpt-6-sol
-  # Interim: the owner will change this again once opencode 2.x is in the agent container.
   adjudicator:
-    name: DeepSeek V4 Pro
+    name: DeepSeek V4.1 Flash
     runtime: opencode
-    model: deepseek/deepseek-v4-pro
+    model: deepseek/deepseek-flash
   shadow_adjudicators: []
   merge_owner: agent
   pre_pr:
@@ -129,6 +128,28 @@ refinement:
         --file "{prompt_file}" > "{output_file}"
       family: openai
   point_cap: 5
+
+# The seats story-to-done falls back to when an invocation leaves a seat argument out (SKL-83).
+# Both labs verified 2026-10-25; a command seat runs from any orchestrator with a shell.
+story_to_done:
+  engineer:
+    name: DeepSeek V4.1 Flash
+    runtime: command
+    model: deepseek/deepseek-flash
+    effort: high
+    command: >-
+      opencode run --model "{model}#{effort}" "Follow the instructions in the attached file exactly."
+      --title "{session_title}"
+      --file "{prompt_file}" < /dev/null > "{output_file}"
+  qa:
+    name: DeepSeek V4 Pro
+    runtime: command
+    model: deepseek/deepseek-v4-pro
+    effort: high
+    command: >-
+      opencode run --model "{model}#{effort}" "Follow the instructions in the attached file exactly."
+      --title "{session_title}"
+      --file "{prompt_file}" < /dev/null > "{output_file}"
 
 workspace:
   scratch_dir: /tmp/agent-skills

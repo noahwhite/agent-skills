@@ -13,6 +13,7 @@ import time
 from decimal import Decimal
 from pathlib import Path
 
+import jsonschema
 import pytest
 import yaml
 
@@ -70,10 +71,10 @@ def test_skill_links_to_required_references() -> None:
 def test_arguments_table_pins_each_default() -> None:
     body = section(SKILL.read_text(), "Arguments")
     for row in (
-        "| `engineer-model` | the senior engineer's model | Sonnet 5.5 (`claude-sonnet-5-5`) |",
-        "| `engineer-effort` | the senior engineer's reasoning effort | `high` |",
-        "| `qa-model` | the QA agent's model | Opus 5.5 (`claude-opus-5-5`) |",
-        "| `qa-effort` | the QA agent's reasoning effort | `high` |",
+        "| `engineer-model` | the senior engineer's model | `profile.story_to_done.engineer` |",
+        "| `engineer-effort` | the senior engineer's reasoning effort | seat effort (default high) |",
+        "| `qa-model` | the QA agent's model | `profile.story_to_done.qa` |",
+        "| `qa-effort` | the QA agent's reasoning effort | seat effort (default high) |",
     ):
         assert row in body, f"defaults table missing: {row}"
     for phrase in (
@@ -84,6 +85,217 @@ def test_arguments_table_pins_each_default() -> None:
         "never substitute another model or level",
     ):
         assert phrase in body, f"arguments missing: {phrase}"
+
+
+# SKL-83: the engineer and QA seats resolve from the profile, never from a model id the skill
+# names. Any model id or model family name in the skill text is a hard-coded default creeping back
+# in; `claude-code` is a runtime name, not a model.
+MODEL_NAME = re.compile(
+    r"\b(claude-(?!code\b)[\w.-]+|sonnet|opus|haiku|gpt-[\w.-]+|deepseek[\w./-]*|gemini[\w.-]*|grok[\w.-]*"
+    r"|glm-[\w.-]+|kimi[\w.-]*|qwen[\w.-]*|mistral[\w./-]*|llama[\w.-]*)",
+    re.IGNORECASE,
+)
+SEAT_RULES = (
+    "The engineer seat is `profile.story_to_done.engineer` and the QA seat is `profile.story_to_done.qa`, "
+    "read from the profile the chain in [references/profile.md](references/profile.md) selects (Find the "
+    "profile), right after step 0 creates the todo list and before step 1.",
+    "Each value resolves on its own: the explicit argument, else the seat's field (`model` for a model, "
+    "`effort` for an effort), else, for an effort only, `high`; a model has no default.",
+    "An explicit argument overrides the seat field by field: it replaces only the value it names, and the "
+    "seat's other fields still apply.",
+    "When a seat argument is absent and the profile yields no usable value for it (no profile, no "
+    "`profile.story_to_done` object, no `engineer` or `qa` entry, or an entry with no `model`), stop before "
+    "spawning either role and ask the user for that seat's model and effort, asking only for the values the "
+    "arguments left unset and the profile does not supply.",
+    "The `high` effort default never answers that question: it applies only to a seat whose model resolved.",
+    "A caller-supplied argument is used even when the seat entry is absent.",
+    "Never fall back to a model id written in this skill, and never probe or fall back across a list of "
+    "model ids.",
+    "One resolved seat serves its role in every round, unchanged: the senior engineer goes back to it for "
+    "each fix round, and each new QA round spawns a new agent on it.",
+)
+# Owner decision 2026-11-11 (SKL-83 AC 4 amendment): profile values never reach a seat command
+# unchecked or unquoted, and a command seat from an unconfirmed profile needs one confirmation.
+SEAT_LAUNCH_SAFETY = (
+    "`command` or `codex` is a separate process launched by the shell-launched agents rule",
+    "A seat entry with no `runtime` is not a usable seat (the profile schema requires one)",
+    "the model must match `^[A-Za-z0-9][A-Za-z0-9._:/@-]*$`",
+    "the session title is `story-to-done-<STORY_ID>-<run>-<role>-<n>` (`<run>` is the last path component of "
+    "this run's scratch directory, which `mktemp -d` made unique",
+    "with the effort as its `-c model_reasoning_effort=<effort>` flag.",
+    "each file path must match `^/[A-Za-z0-9._/-]+$`",
+    "A value that fails its check stops the skill before that launch: say which value and why; never escape, "
+    "trim or rewrite it.",
+    "Fill each value inside the double quotes the `command` template puts around its placeholder",
+    "and the user has not confirmed in this conversation that the selected profile is trusted, show the user "
+    "the profile path and each such seat's `command` text and ask once whether to run them.",
+    "A yes covers every launch of those seats, with that `command` text unchanged, for the rest of the run; a "
+    "no stops the skill before either role is spawned.",
+    "resolving the four values never asks it.",
+    "Wherever steps 2 to 4 say to spawn or resume a subagent, a `command` or `codex` seat is instead a new "
+    "launch of that process with the same brief as its prompt file.",
+)
+SEAT_DIFFERENCES = (
+    "no `family` field and no rule that the two seats sit on distinct families",
+    "an explicit argument overrides the profile field by field",
+    "one resolved seat is reused unchanged in every round, with QA respawned on the same seat",
+    "a `command` seat launches by the shell-launched agents rule rather than as a resumed subagent",
+)
+
+
+def test_skill_names_no_model_id() -> None:
+    text = SKILL.read_text()
+    assert not MODEL_NAME.findall(text), f"hard-coded model names: {MODEL_NAME.findall(text)}"
+    assert "QA on <model> at max" in text, "the plain-words example names a placeholder, not a model"
+
+
+def test_model_name_guard_catches_the_removed_defaults() -> None:
+    for removed in ("Sonnet 5.5 (`claude-sonnet-5-5`)", "QA on Opus 5.5 at max", "`claude-opus-5-5`",
+                    "deepseek/deepseek-flash", "openai/gpt-6.1-sol", "mistral-large-4-0"):
+        assert MODEL_NAME.search(removed), removed
+    for allowed in ("runtime `claude-code`", "`opencode` seat", "QA on <model> at max"):
+        assert not MODEL_NAME.search(allowed), allowed
+
+
+def test_seats_resolve_from_the_profile() -> None:
+    body = " ".join(section(SKILL.read_text(), "Arguments").split())
+    for rule in SEAT_RULES:
+        assert rule in body, f"seat resolution missing: {rule}"
+    for difference in SEAT_DIFFERENCES:
+        assert difference in body, f"difference from the refinement seats missing: {difference}"
+    for phrase in (
+        "`{model}`, `{effort}`, `{prompt_file}`, `{output_file}` and `{session_title}`",
+        "A seat whose runtime you cannot launch",
+        "stops the skill",
+    ):
+        assert phrase in body, f"seat launch missing: {phrase}"
+    for phrase in SEAT_LAUNCH_SAFETY:
+        assert phrase in body, f"seat launch safety missing: {phrase}"
+    assert "Each role keeps the same model and effort in every round." not in body
+
+
+def test_codex_seat_never_launches_read_only_and_needs_recorded_outer_sandbox() -> None:
+    # Both roles write, commit, push and call the tracker: the shared `-s read-only` codex base command
+    # cannot serve them, and `-s danger-full-access` needs the operator's recorded outer-sandbox confirmation.
+    body = " ".join(section(SKILL.read_text(), "Arguments").split())
+    runtimes = " ".join((ROOT / "shared" / "runtimes.md").read_text().split())
+    assert "For `runtime: codex`, the base command is `codex exec -m <model> -s read-only" in runtimes
+    assert "the profile or an overlay records that confirmation, and an agent never assumes it" in runtimes
+    for phrase in (
+        "a `codex` seat launches with `-s danger-full-access` in place of `-s read-only`, under every "
+        "condition that rule sets for that flag;",
+        "when the profile or an overlay does not record the operator's outer-sandbox confirmation that rule "
+        "requires, stop before either role is spawned and say which seat and why.",
+    ):
+        assert phrase in body, f"codex seat sandbox rule missing: {phrase}"
+
+
+SCHEMA = json.loads((ROOT / "profile" / "schema.json").read_text())
+SEAT = {"name": "Engineer", "runtime": "opencode", "model": "example/strong", "effort": "high"}
+COMMAND_SEAT = {
+    "name": "Engineer",
+    "runtime": "command",
+    "model": "example/strong",
+    "command": 'agent --model "{model}#{effort}" --title "{session_title}" --file "{prompt_file}" > "{output_file}"',
+}
+
+
+def profile_with(story_to_done) -> dict:
+    return {"version": 1, "project": {"name": "Example"}, "story_to_done": story_to_done}
+
+
+def schema_errors(instance: dict) -> list[str]:
+    return [e.message for e in jsonschema.Draft202012Validator(SCHEMA).iter_errors(instance)]
+
+
+def test_schema_accepts_a_story_to_done_seat_pair() -> None:
+    assert not schema_errors(profile_with({"engineer": SEAT, "qa": COMMAND_SEAT}))
+    assert not schema_errors(profile_with({"engineer": {"runtime": "codex", "model": "example/strong"}, "qa": SEAT}))
+    # A '#' inside a word is not a shell comment.
+    hash_in_word = 'agent --tag build#1 --model "{model}#{effort}" --title "{session_title}" --file "{prompt_file}" > "{output_file}"'
+    assert not schema_errors(profile_with({"engineer": COMMAND_SEAT | {"command": hash_in_word}, "qa": SEAT}))
+    effort = SCHEMA["$defs"]["story_to_done_seat"]["properties"]["effort"]
+    assert effort["enum"] == ["low", "medium", "high", "xhigh", "max"]
+    assert effort["default"] == "high"
+
+
+@pytest.mark.parametrize("word", ["'release #1'", "'release;#1'", "release\\;#1", "release\\ #1", "'v1'#2", '"v1"#2', "release\\\n#1"])
+def test_schema_accepts_a_hash_the_shell_keeps_as_text(word) -> None:
+    # Single quotes, an escape or a closing quote keep the next '#' inside the word.
+    command = f'agent --tag {word} --model "{{model}}#{{effort}}" --title "{{session_title}}" --file "{{prompt_file}}" > "{{output_file}}"'
+    assert not schema_errors(profile_with({"engineer": COMMAND_SEAT | {"command": command}, "qa": SEAT}))
+
+
+@pytest.mark.parametrize(
+    "story_to_done",
+    [
+        {"engineer": SEAT},
+        {"qa": SEAT},
+        {"engineer": SEAT, "qa": SEAT, "extra": SEAT},
+        {"engineer": {k: v for k, v in SEAT.items() if k != "model"}, "qa": SEAT},
+        {"engineer": SEAT | {"family": "example"}, "qa": SEAT},
+        {"engineer": SEAT | {"effort": "extreme"}, "qa": SEAT},
+        {"engineer": SEAT | {"runtime": "shell"}, "qa": SEAT},
+        {"engineer": {k: v for k, v in COMMAND_SEAT.items() if k != "command"}, "qa": SEAT},
+        {"engineer": COMMAND_SEAT | {"command": 'agent --model "example/strong#high"'}, "qa": SEAT},
+        {"engineer": COMMAND_SEAT | {"command": 'agent --model "{model}#high"'}, "qa": SEAT},
+        {"engineer": {k: v for k, v in SEAT.items() if k != "runtime"}, "qa": SEAT},
+        {"engineer": COMMAND_SEAT | {"model": 'x"; touch /tmp/p; "'}, "qa": SEAT},
+        {"engineer": COMMAND_SEAT | {"model": "$(printf INJECTED >&2)"}, "qa": SEAT},
+        {"engineer": COMMAND_SEAT | {"model": "-rf"}, "qa": SEAT},
+        {"engineer": COMMAND_SEAT | {"command": 'agent --model "{model}#{effort}" --title "{session_title}" > "{output_file}"'}, "qa": SEAT},
+        {"engineer": COMMAND_SEAT | {"command": 'agent --model "{model}#{effort}" --title "{session_title}" --file "{prompt_file}"'}, "qa": SEAT},
+        {"engineer": COMMAND_SEAT | {"command": 'agent --model "{model}#{effort}" --file "{prompt_file}" > "{output_file}"'}, "qa": SEAT},
+        {"engineer": COMMAND_SEAT | {"command": 'agent --model {model}#{effort} --title "{session_title}" --file "{prompt_file}" > "{output_file}"'}, "qa": SEAT},
+        {"engineer": COMMAND_SEAT | {"command": 'agent --model "x" --title "t" --file "f" > "o" # {model} {effort} {session_title} {prompt_file} {output_file}'}, "qa": SEAT},
+        {"engineer": COMMAND_SEAT | {"command": 'agent --model x # "{model}" "{effort}" "{prompt_file}" "{output_file}" "{session_title}"'}, "qa": SEAT},
+        {"engineer": COMMAND_SEAT | {"command": 'agent --model {model}#{effort} --title {session_title} --file {prompt_file} > {output_file} # "{model}" "{effort}" "{prompt_file}" "{output_file}" "{session_title}"'}, "qa": SEAT},
+        {"engineer": COMMAND_SEAT | {"command": 'printf run \\" # {model} {effort} {prompt_file} {output_file} {session_title}'}, "qa": SEAT},
+        {"engineer": COMMAND_SEAT | {"model": "example/strong\n"}, "qa": SEAT},
+        {"engineer": {"runtime": "codex", "model": "x; touch /tmp/p"}, "qa": SEAT},
+        {"engineer": {"runtime": "codex", "model": "example/strong\n"}, "qa": SEAT},
+    ],
+    ids=["no-qa", "no-engineer", "extra-seat", "no-model", "family", "bad-effort", "bad-runtime",
+         "command-without-command", "command-without-placeholders", "command-without-effort", "no-runtime",
+         "command-model-with-shell-text", "command-model-with-substitution", "command-model-like-an-option", "command-without-prompt-file",
+         "command-without-output-file", "command-without-session-title", "command-with-unquoted-model",
+         "command-with-placeholders-only-in-a-comment", "command-with-quoted-placeholders-only-in-a-comment",
+         "command-with-unquoted-placeholders-and-a-quoted-comment-copy", "command-with-an-escaped-quote-before-a-comment",
+         "command-model-with-trailing-newline",
+         "codex-model-with-shell-text", "codex-model-with-trailing-newline"],
+)
+def test_schema_refuses_a_malformed_story_to_done(story_to_done) -> None:
+    assert schema_errors(profile_with(story_to_done))
+
+
+@pytest.mark.parametrize("operator", [";", "&", "|", "<", ">", "(", ")", "`"])
+def test_schema_refuses_placeholders_in_a_comment_after_a_shell_operator(operator) -> None:
+    # A '#' right after a shell operator starts a comment, like one after whitespace.
+    command = f'agent --model x{operator}# "{{model}}" "{{effort}}" "{{prompt_file}}" "{{output_file}}" "{{session_title}}"'
+    assert schema_errors(profile_with({"engineer": COMMAND_SEAT | {"command": command}, "qa": SEAT}))
+
+
+@pytest.mark.parametrize("prefix", ["printf live \\\n", "printf live;\\\n", "\\\n", "printf live \\\n\\\n"])
+def test_schema_refuses_placeholders_in_a_comment_after_a_line_continuation(prefix) -> None:
+    # The shell removes a backslash-newline first, so the '#' keeps whatever precedes the continuation.
+    command = prefix + '# "{model}" "{effort}" "{prompt_file}" "{output_file}" "{session_title}"'
+    assert schema_errors(profile_with({"engineer": COMMAND_SEAT | {"command": command}, "qa": SEAT}))
+
+
+@pytest.mark.parametrize("path", [ROOT / "profile" / "example.yaml", ROOT / ".agent-skills" / "profile.yaml"],
+                         ids=["example", "repository"])
+def test_profiles_seat_story_to_done_on_verified_labs(path: Path) -> None:
+    profile = yaml.safe_load(path.read_text())
+    seats = profile["story_to_done"]
+    assert not schema_errors(profile_with(seats))
+    assert (seats["engineer"]["model"], seats["engineer"]["effort"]) == ("deepseek/deepseek-flash", "high")
+    assert (seats["qa"]["model"], seats["qa"]["effort"]) == ("deepseek/deepseek-v4-pro", "high")
+    for seat in seats.values():
+        assert seat["runtime"] == "command", seat
+        # The shell-launched agents rule: stdin never stays on the terminal.
+        assert "< /dev/null" in seat["command"], seat["command"]
+    assert profile["review"]["adjudicator"]["model"] == "deepseek/deepseek-flash"
+    assert "Interim: the owner will change this again" not in path.read_text()
 
 
 def test_senior_engineer_uses_its_model_and_engineering_workflow() -> None:
@@ -292,6 +504,20 @@ def test_the_step_four_continuation_branch_is_pinned() -> None:
     body = in_deployment_review_branch()
     assert in_order(body, *STEP4_SENTENCES), "the continuation branch does not read its pinned sentences in order"
     assert STEP4_OLD_SENTENCE not in body, "the stop sentence this branch replaces is still stated"
+
+
+def test_a_command_qa_seat_continues_by_a_new_launch_on_the_same_seat() -> None:
+    body = " ".join(in_deployment_review_branch().split())
+    assert (
+        "A `command` or `codex` QA seat is never resumed, so its continuation is a new launch on the same seat "
+        "whose prompt file is the step 3 brief followed by that continuation message; it is still the same "
+        "round's continuation under every rule in this bullet."
+    ) in body
+    assert (
+        "its prompt file also tells it to read that round's existing checklist in the named subdirectory and the "
+        "story's open evidence PR, if any, before acting, and to continue from the first unfinished item, never "
+        "rewriting the checklist or opening a second evidence PR."
+    ) in body
 
 
 def test_a_continuation_never_carries_a_verdict_or_an_earlier_conclusion() -> None:
