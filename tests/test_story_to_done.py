@@ -219,7 +219,7 @@ def test_schema_accepts_a_story_to_done_seat_pair() -> None:
     assert effort["default"] == "high"
 
 
-@pytest.mark.parametrize("word", ["'release #1'", "'release;#1'", "release\\;#1", "release\\ #1", "'v1'#2", '"v1"#2'])
+@pytest.mark.parametrize("word", ["'release #1'", "'release;#1'", "release\\;#1", "release\\ #1", "'v1'#2", '"v1"#2', "release\\\n#1"])
 def test_schema_accepts_a_hash_the_shell_keeps_as_text(word) -> None:
     # Single quotes, an escape or a closing quote keep the next '#' inside the word.
     command = f'agent --tag {word} --model "{{model}}#{{effort}}" --title "{{session_title}}" --file "{{prompt_file}}" > "{{output_file}}"'
@@ -272,6 +272,13 @@ def test_schema_refuses_a_malformed_story_to_done(story_to_done) -> None:
 def test_schema_refuses_placeholders_in_a_comment_after_a_shell_operator(operator) -> None:
     # A '#' right after a shell operator starts a comment, like one after whitespace.
     command = f'agent --model x{operator}# "{{model}}" "{{effort}}" "{{prompt_file}}" "{{output_file}}" "{{session_title}}"'
+    assert schema_errors(profile_with({"engineer": COMMAND_SEAT | {"command": command}, "qa": SEAT}))
+
+
+@pytest.mark.parametrize("prefix", ["printf live \\\n", "printf live;\\\n", "\\\n", "printf live \\\n\\\n"])
+def test_schema_refuses_placeholders_in_a_comment_after_a_line_continuation(prefix) -> None:
+    # The shell removes a backslash-newline first, so the '#' keeps whatever precedes the continuation.
+    command = prefix + '# "{model}" "{effort}" "{prompt_file}" "{output_file}" "{session_title}"'
     assert schema_errors(profile_with({"engineer": COMMAND_SEAT | {"command": command}, "qa": SEAT}))
 
 
