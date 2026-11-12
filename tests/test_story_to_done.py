@@ -1089,6 +1089,12 @@ METRICS_CLOSING_REPORT = (
     "Give the summary, in the template `references/metrics.md` defines, in the closing report of every end "
     "state: Done, or any stop, including a stop before step 0 or before any senior engineer or QA agent is spawned."
 )
+# SKL-155: a qa-round-cap stop that waits for the reply is not yet an end state for the metrics summary.
+METRICS_CAP_STOP = (
+    "A `qa-round-cap` stop is not an end state while the coordinator waits for the reply: its stop report "
+    'carries no summary, the end form runs only when a "stop" reply ends the invocation, '
+    'and after "N additional rounds" the same invocation and its metrics file go on.'
+)
 METRICS_NO_LAUNCHES = (
     "The summary reads `no launches` only when the coordinator launched no role and no command; otherwise it "
     "has one row for each launch in launch order, the elapsed wall-clock, and the end state or stop reason."
@@ -1192,6 +1198,7 @@ PROTOCOL_LINES = [
     METRICS_NO_EDIT,
     METRICS_END_VERBATIM,
     METRICS_CLOSING_REPORT,
+    METRICS_CAP_STOP,
     METRICS_NO_LAUNCHES,
     METRICS_POST,
     METRICS_POST_BODY,
@@ -3156,6 +3163,12 @@ def test_the_stop_report_gives_each_pr_link_and_head_sha_from_the_tracker_and_fo
 def test_the_cap_stop_asks_and_waits_and_offers_re_arm_or_stop() -> None:
     bullet = in_progress_bullet()
     assert in_order(bullet, CAP_STOP, CAP_ASK, CAP_REARM, "Hand them back to the senior engineer")
+
+
+def test_a_cap_stop_waiting_for_the_reply_defers_the_metrics_summary_to_the_end_of_the_invocation() -> None:
+    lines = PROTOCOL.read_text().splitlines()
+    assert METRICS_CAP_STOP in lines
+    assert lines.index(METRICS_CAP_STOP) == lines.index(METRICS_CLOSING_REPORT) + 1
 
 
 def test_a_re_arm_keeps_numbering_rounds_and_every_later_stop_report_gives_them_all() -> None:

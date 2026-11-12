@@ -2,7 +2,7 @@
 
 Date: 2026-11-12 UTC.
 Skill under test: `skills/story-to-done/SKILL.md` as committed in `664ccf706670b021a61326aa8aa576923b643397` on `feature/SKL-155-qa-round-cap`, read from a worktree by path (the installed skill was not loaded).
-The only later commit on the branch adds this file.
+Later commits on the branch change only this file and `references/metrics-protocol.md`, which a `metrics: off` run never reads.
 Fixture issue: SKL-277 "[Tabletop fixture] SKL-155 AC5 qa-round-cap stop, run 2", created in In Deployment Review for this run with two deliberately unmeetable acceptance criteria, and canceled by the implementing engineer after the coordinator's report.
 This is a new fixture, not SKL-164's tabletop suite: that suite is not committed to the repository.
 An earlier run of the same fixture against an earlier commit (SKL-266) is superseded by this one.
