@@ -19,7 +19,7 @@ The fixture profile is a copy of the repository profile with `story_to_done.engi
 - The coordinator stopped at counted round 1 (the cap), before the hand-back to the senior engineer.
 - No senior engineer was launched: the run started in In Deployment Review, so step 2 did not run, and the cap stop launched nothing further.
 - The coordinator made no tracker write: its only tracker calls are two `linear issue view SKL-277 --json` reads (transcript below).
-- The second read returns the story's comments, including QA's "QA round 1 verdicts" comment by its full id `48d8aa3c-e987-450d-bceb-59cc21f5b815`; QA's handback carries only the short `#comment-48d8aa3c` link, so the failed items in the stop report come from that tracker read.
+- The second read returns the story's comments, including QA's "QA round 1 verdicts" comment with its body, verdicts and evidence (its full id, which begins `48d8aa3c-e987`, is cut here); QA's handback carries only the short `#comment-48d8aa3c` link, and the stop report heads its failed items "re-read from the tracker".
 - The stop report gives round 1's failed items as QA recorded them, the PR line (none), the `qa-round-cap: 1` and `metrics: off` lines, and asks for N more rounds or a stop.
 - The stop report carries no sixth state bullet.
 
@@ -103,7 +103,7 @@ Agent: description=QA round 1 SKL-277 (brief below)  -> async agent launched
 ToolSearch: select:Monitor
 Bash: timeout 900 bash -c 'f=.../fixture2/coordinator/qa-agent-round-1/qa-agent-round-1-todo.md; until [ -f "$f" ] && ! grep -q -- "- \[ \]" "$f"; do sleep 5; done; echo checklist-complete'  -> checklist-complete
 Read: .../fixture2/coordinator/qa-agent-round-1/qa-agent-round-1-todo.md  -> 9 items, all [x]
-Bash: linear issue view SKL-277 --json  -> { "identifier": "SKL-277", ... "state": { "name": "In Progress" ... }, "comments": { "nodes": [ { "id": "48d8aa3c-e987-450d-bceb-59cc21f5b815", "body": "## QA round 1 verdicts ..." ... } ] } ... }
+Bash: linear issue view SKL-277 --json  -> { "identifier": "SKL-277", ... "state": { "name": "In Progress" ... }, "comments": { "nodes": [ { "id": "48d8aa3c-e987-[...]", "body": "## QA round 1 verdicts ..." ... } ] } ... }
 Edit: .../fixture2/coordinator/coordinator-todo.md
 SubagentHandback: (stop report below)
 ```
