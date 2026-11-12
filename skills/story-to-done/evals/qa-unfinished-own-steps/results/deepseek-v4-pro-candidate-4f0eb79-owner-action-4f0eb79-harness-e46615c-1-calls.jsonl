@@ -1,0 +1,2 @@
+{"action": "read", "at": "2026-11-12T15:31:28Z", "path": "qa-agent-round-1/qa-agent-round-1-todo.md"}
+{"action": "stop", "at": "2026-11-12T15:31:33Z", "reason": "Mixed remainder: QA-owned evidence PR unmerged (review gate in flight) plus a maintainer's approval that only the story owner can grant; reported and stopped, not resumed."}

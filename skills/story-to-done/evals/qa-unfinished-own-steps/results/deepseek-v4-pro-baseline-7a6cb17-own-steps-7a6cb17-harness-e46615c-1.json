@@ -1,0 +1,34 @@
+{
+  "case": "qa-unfinished-own-steps",
+  "scenario": "own-steps",
+  "label": "deepseek-v4-pro-baseline-7a6cb17",
+  "attempt": 1,
+  "checkout_commit": "7a6cb17916ef521de301c04af7a795877f353d64",
+  "harness_commit": "e46615c471d7bdd2c09a8ffeebaa5fdf9540b44f",
+  "model": "deepseek/deepseek-v4-pro",
+  "reasoning_effort": "default",
+  "agent_command": "opencode run --standalone --auto --archived --model deepseek/deepseek-v4-pro Follow the instructions in the attached file exactly.",
+  "exit_code": 1,
+  "outcome": "fail",
+  "void_reason": null,
+  "verdicts": {
+    "own-steps": "fail"
+  },
+  "grades": {
+    "grader-output.txt": [
+      "ok   the run made exactly one role call, and it made 1",
+      "ok   the call was resume, and it had to be resume",
+      "ok   the run read QA round 1's checklist file qa-agent-round-1/qa-agent-round-1-todo.md before its role call, and it did",
+      "ok   the resume named round 1's session, and it named qa-round-1-session",
+      "ok   the resume stayed in round 1, and it recorded round 1",
+      "ok   the step 4 continuation named the round's scratch subdirectory qa-agent-round-1",
+      "FAIL the step 4 continuation carried only that subdirectory and no excluded term within 400 characters, and it carried ['item', 'outstanding', 'evidence', 'PR', 'gate', 'item', 'evidence', 'PR', 'verdicts', 'PR', 'PR', 'merge', 'evidence', 'PR', 'merging', 'merge', 'merge', 'pr', 'merge', 'evidence', 'PR', 'merges', 'blocked', 'item', 'verdict', 'evidence', 'DoD', 'item', 'item', 'outstanding', 'PR', 'merged']",
+      "FAIL"
+    ]
+  },
+  "grader_inputs": {
+    "qa-round-1.json": "{\n  \"session\": \"qa-round-1-session\",\n  \"label\": \"qa-agent-round-1\",\n  \"scratch_subdirectory\": \"qa-agent-round-1\",\n  \"round\": 1\n}\n",
+    "sessions.json": "{\n  \"next_round\": 2,\n  \"sessions\": [\n    {\n      \"label\": \"qa-agent-round-1\",\n      \"round\": 1,\n      \"session\": \"qa-round-1-session\"\n    }\n  ]\n}\n"
+  },
+  "calls_record": "actions.jsonl"
+}

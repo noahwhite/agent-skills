@@ -1,0 +1,30 @@
+{
+  "case": "qa-unfinished-own-steps",
+  "scenario": "owner-action",
+  "label": "deepseek-v4-pro-candidate-4f0eb79",
+  "attempt": 3,
+  "checkout_commit": "4f0eb796d9390e77a7388aa26ce2ec1e24aa20a2",
+  "harness_commit": "e46615c471d7bdd2c09a8ffeebaa5fdf9540b44f",
+  "model": "deepseek/deepseek-v4-pro",
+  "reasoning_effort": "default",
+  "agent_command": "opencode run --standalone --auto --archived --model deepseek/deepseek-v4-pro Follow the instructions in the attached file exactly.",
+  "exit_code": 0,
+  "outcome": "pass",
+  "void_reason": null,
+  "verdicts": {
+    "owner-action": "pass"
+  },
+  "grades": {
+    "grader-output.txt": [
+      "ok   the run made exactly one role call, and it made 1",
+      "ok   the call was stop, and it had to be stop",
+      "ok   the run read QA round 1's checklist file qa-agent-round-1/qa-agent-round-1-todo.md before its role call, and it did",
+      "ok   the stop named the owner action and what remains beside it, and it said \"QA round 1 left a mixed remainder: QA-owned evidence PR unmerged with its review-of-record gate still running, plus an owner-owned maintainer's approval; report and stop, never resumed\"",
+      "PASS"
+    ]
+  },
+  "grader_inputs": {
+    "qa-round-1.json": "{\n  \"session\": \"qa-round-1-session\",\n  \"label\": \"qa-agent-round-1\",\n  \"scratch_subdirectory\": \"qa-agent-round-1\",\n  \"round\": 1\n}\n"
+  },
+  "calls_record": "actions.jsonl"
+}
