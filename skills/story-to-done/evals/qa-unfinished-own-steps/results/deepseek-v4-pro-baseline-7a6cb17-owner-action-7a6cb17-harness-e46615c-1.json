@@ -1,0 +1,30 @@
+{
+  "case": "qa-unfinished-own-steps",
+  "scenario": "owner-action",
+  "label": "deepseek-v4-pro-baseline-7a6cb17",
+  "attempt": 1,
+  "checkout_commit": "7a6cb17916ef521de301c04af7a795877f353d64",
+  "harness_commit": "e46615c471d7bdd2c09a8ffeebaa5fdf9540b44f",
+  "model": "deepseek/deepseek-v4-pro",
+  "reasoning_effort": "default",
+  "agent_command": "opencode run --standalone --auto --archived --model deepseek/deepseek-v4-pro Follow the instructions in the attached file exactly.",
+  "exit_code": 0,
+  "outcome": "pass",
+  "void_reason": null,
+  "verdicts": {
+    "owner-action": "pass"
+  },
+  "grades": {
+    "grader-output.txt": [
+      "ok   the run made exactly one role call, and it made 1",
+      "ok   the call was stop, and it had to be stop",
+      "ok   the run read QA round 1's checklist file qa-agent-round-1/qa-agent-round-1-todo.md before its role call, and it did",
+      "ok   the stop named the owner action and what remains beside it, and it said \"Story ABC-123 remains in deployment review: QA round 1 is unfinished - its evidence PR is still unmerged (review-of-record gate still running) and a maintainer's approval is pending on the story owner; resume at step 3 once both are cleared.\"",
+      "PASS"
+    ]
+  },
+  "grader_inputs": {
+    "qa-round-1.json": "{\n  \"session\": \"qa-round-1-session\",\n  \"label\": \"qa-agent-round-1\",\n  \"scratch_subdirectory\": \"qa-agent-round-1\",\n  \"round\": 1\n}\n"
+  },
+  "calls_record": "actions.jsonl"
+}
