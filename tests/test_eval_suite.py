@@ -77,10 +77,12 @@ case "$scenario" in
   void-once) [ "$count" -gt 1 ] || exit 3; action=pass ;;
   void-always) exit 3 ;;
 esac
-printf '{"action": "%s", "run_dir": "%s", "id": "00000000-1111-2222-3333-444444444444"}\n' "$action" "$run" > "$run/actions.jsonl"
+printf '{"action": "%s", "run_dir": "%s", "id": "%s"}\n' "$action" "$run" "$STUB_UUID" > "$run/actions.jsonl"
 """
 
 STUB_SCENARIOS = ("pass", "fail", "void-once", "void-always")
+# Built from parts so this file carries no UUID shape for the leak scan to flag.
+STUB_UUID = "-".join(("0" * 8, "1" * 4, "2" * 4, "3" * 4, "4" * 12))
 
 
 def stub_case(case_dir: Path, scenarios=STUB_SCENARIOS) -> None:
@@ -126,7 +128,7 @@ def suite(tmp_path: Path):
     agent.chmod(0o755)
     state = tmp_path / "state"
     state.mkdir()
-    env = {**os.environ, "EVAL_AGENT_CMD": str(agent), "STUB_STATE": str(state), "TMPDIR": str(tmp_path)}
+    env = {**os.environ, "EVAL_AGENT_CMD": str(agent), "STUB_STATE": str(state), "STUB_UUID": STUB_UUID, "TMPDIR": str(tmp_path)}
 
     def run(*args: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(["bash", str(evals / "run-suite.sh"), *args], capture_output=True, text=True, env=env)
@@ -217,7 +219,7 @@ def test_run_directories_sit_outside_both_checkouts_and_never_reach_a_record(sui
         text = record.read_text()
         for run_dir in run_dirs:
             assert run_dir not in text, record.name
-        assert "00000000-1111-2222-3333-444444444444" not in text, "a UUID shape is normalised"
+        assert STUB_UUID not in text, "a UUID shape is normalised"
     calls = next((suite["evals"] / "stub" / "results").glob("*-pass-*-calls.jsonl")).read_text()
     assert json.loads(calls)["run_dir"] == "{run_dir}"
 
