@@ -174,7 +174,23 @@ def test_seats_resolve_from_the_profile() -> None:
     assert "Each role keeps the same model and effort in every round." not in body
 
 
-SCHEMA = json.loads((ROOT / "profile" / "schema.json").read_text())
+def test_codex_seat_never_launches_read_only_and_needs_recorded_outer_sandbox() -> None:
+    # Both roles write, commit, push and call the tracker: the shared `-s read-only` codex base command
+    # cannot serve them, and `-s danger-full-access` needs the operator's recorded outer-sandbox confirmation.
+    body = " ".join(section(SKILL.read_text(), "Arguments").split())
+    runtimes = " ".join((ROOT / "shared" / "runtimes.md").read_text().split())
+    assert "For `runtime: codex`, the base command is `codex exec -m <model> -s read-only" in runtimes
+    assert "the profile or an overlay records that confirmation, and an agent never assumes it" in runtimes
+    for phrase in (
+        "a `codex` seat launches with `-s danger-full-access` in place of `-s read-only`, under every "
+        "condition that rule sets for that flag;",
+        "when the profile or an overlay does not record the operator's outer-sandbox confirmation that rule "
+        "requires, stop before either role is spawned and say which seat and why.",
+    ):
+        assert phrase in body, f"codex seat sandbox rule missing: {phrase}"
+
+
+SCHEMA =json.loads((ROOT / "profile" / "schema.json").read_text())
 SEAT = {"name": "Engineer", "runtime": "opencode", "model": "example/strong", "effort": "high"}
 COMMAND_SEAT = {
     "name": "Engineer",
