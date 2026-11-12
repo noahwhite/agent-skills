@@ -344,6 +344,43 @@ def test_task_tools_removed_later_in_the_transcript_count_as_absent(rig):
     assert_allowed(rig.tool())
 
 
+def remove_task_tools_delta():
+    return json.dumps({"type": "attachment", "attachment": {
+        "type": "deferred_tools_delta", "addedNames": [], "removedNames": ["TaskCreate"], "readdedNames": []}}) + "\n"
+
+
+def test_the_transcript_is_read_only_past_what_an_earlier_call_read(rig):
+    rig.arm()
+    assert_denied(rig.tool())
+    size = rig.transcript.stat().st_size
+    rig.transcript.write_text("x" * (size - 1) + "\n")
+    assert_denied(rig.tool())
+    with rig.transcript.open("a") as fh:
+        fh.write(remove_task_tools_delta())
+    assert_allowed(rig.tool())
+
+
+def test_a_transcript_shorter_than_what_was_read_is_read_again(rig):
+    rig.arm()
+    assert_denied(rig.tool())
+    rig.use_transcript("without-task-tools")
+    rig.transcript.write_text(rig.transcript.read_text()[:40] + "\n")
+    assert_allowed(rig.tool())
+
+
+def test_a_partly_written_last_line_is_read_once_complete(rig):
+    rig.use_transcript("without-task-tools")
+    rig.arm()
+    assert_allowed(rig.tool())
+    line = (FIXTURES / "transcript-with-task-tools.jsonl").read_text()
+    with rig.transcript.open("a") as fh:
+        fh.write(line[:-20])
+    assert_allowed(rig.tool())
+    with rig.transcript.open("a") as fh:
+        fh.write(line[-20:])
+    assert_denied(rig.tool())
+
+
 def test_a_quoted_delta_that_is_not_an_attachment_does_not_count(rig):
     rig.use_transcript("without-task-tools")
     with rig.transcript.open("a") as fh:
@@ -443,12 +480,14 @@ def test_an_unreadable_main_task_file_allows_tool_calls_and_refuses_its_completi
     assert_refused(res, "task 1", "could not be read")
 
 
-def test_an_unreadable_main_task_file_does_not_hide_a_readable_pending_one(rig):
+def test_an_unreadable_main_task_file_beside_a_readable_pending_one_allows(rig):
     rig.arm()
     rig.main_task("1", "pending")
     rig.main_task("2", "pending")
     (rig.config / "tasks" / SESSION / "1.json").write_text("{broken")
-    assert_denied(rig.tool())
+    res = rig.tool()
+    assert_allowed(res)
+    assert "task 1 file unreadable" in res.stderr
 
 
 def test_completing_a_main_task_with_no_task_file_is_refused(rig):

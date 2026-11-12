@@ -12,8 +12,8 @@ hook_event_name and, per session_id:
 - records each created task's owner, armed or not: "main" without agent_id, else that agent_id;
 - in an armed session that has the task tools, denies a main-thread tool call outside
   TaskCreate, TaskUpdate, TaskList, TaskGet, ToolSearch, Skill and AskUserQuestion unless a
-  main-owned task is in_progress, and allows it with a stderr warning when the only main-owned
-  task files that exist are unreadable;
+  main-owned task is in_progress, and allows it with a stderr warning when a main-owned task
+  file that exists is unreadable;
 - in an armed session that has the task tools, refuses (exit 2) a main-owned task's completion
   (a task with no owner record counts as main-owned when the main thread completes it)
   from a subagent, or from the main thread unless its task file still says in_progress
@@ -153,8 +153,8 @@ def task_status(session, task):
 
 
 def main_task_in_progress(session):
-    """(progress, owned): progress is True, False, or None when the main-owned task files that
-    exist are all unreadable; owned counts the main-owned tasks recorded."""
+    """(progress, owned): progress is True, False, or None when no main-owned task is
+    in_progress and one that exists is unreadable; owned counts the main-owned tasks recorded."""
     try:
         tasks = os.listdir(os.path.join(state_dir(session), "owners"))
     except FileNotFoundError:
@@ -176,7 +176,7 @@ def main_task_in_progress(session):
         readable += 1
         if status == "in_progress":
             return True, owned
-    if unreadable is not None and not readable:
+    if unreadable is not None:
         return None, owned
     if not owned:
         log("no main-created task is recorded for this session; if one was created, "
@@ -187,14 +187,46 @@ def main_task_in_progress(session):
     return False, owned
 
 
-def has_task_tools(transcript):
-    """True when the transcript's deferred_tools_delta attachments leave TaskCreate available."""
+def read_tools_cache(path, transcript):
+    """(offset, names) an earlier call saved for this transcript, else (0, empty set)."""
+    try:
+        with open(path) as fh:
+            data = json.load(fh)
+        if data["transcript"] == transcript:
+            return int(data["offset"]), set(data["names"])
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+    return 0, set()
+
+
+def write_tools_cache(path, transcript, offset, names):
+    tmp = "%s.%d" % (path, os.getpid())
+    try:
+        with open(tmp, "w") as fh:
+            json.dump({"transcript": transcript, "offset": offset, "names": sorted(names)}, fh)
+        os.replace(tmp, path)
+    except OSError as exc:
+        log("transcript scan position not saved: %s: %s" % (type(exc).__name__, exc))
+
+
+def has_task_tools(session, transcript):
+    """True when the transcript's deferred_tools_delta attachments leave TaskCreate available.
+
+    The transcript only grows, so each call reads only the complete lines past the offset an
+    earlier call saved; a transcript shorter than that offset is read again from the start."""
     if not isinstance(transcript, str) or not transcript:
         return False
-    names = set()
+    cache = os.path.join(state_dir(session), "tools.json")
+    offset, names = read_tools_cache(cache, transcript)
     try:
         with open(os.path.expanduser(transcript), "rb") as fh:
+            if fh.seek(0, os.SEEK_END) < offset:
+                offset, names = 0, set()
+            fh.seek(offset)
             for line in fh:
+                if not line.endswith(b"\n"):
+                    break
+                offset += len(line)
                 if b"deferred_tools_delta" not in line:
                     continue
                 try:
@@ -212,6 +244,7 @@ def has_task_tools(transcript):
         log("transcript unreadable, treating the session as without task tools: %s: %s"
             % (type(exc).__name__, exc))
         return False
+    write_tools_cache(cache, transcript, offset, names)
     return "TaskCreate" in names
 
 
@@ -248,7 +281,7 @@ def on_pre_tool_use(payload, session):
             arm(session)
     if tool in EXEMPT or not is_armed(session):
         return 0
-    if not has_task_tools(payload.get("transcript_path")):
+    if not has_task_tools(session, payload.get("transcript_path")):
         return 0
     progress, owned = main_task_in_progress(session)
     if progress is None:
@@ -283,7 +316,7 @@ def on_task_completed(payload, session):
     owner = owner_of(session, task)
     if owner not in (None, MAIN) or (owner is None and agent is not None):
         return 0
-    if not has_task_tools(payload.get("transcript_path")):
+    if not has_task_tools(session, payload.get("transcript_path")):
         return 0
     if agent is not None:
         return refuse(SUBAGENT_COMPLETES_MAIN.format(task=task))
