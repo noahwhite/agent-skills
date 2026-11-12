@@ -178,3 +178,27 @@ QA checklist: .../fixture2/coordinator/qa-agent-round-1/qa-agent-round-1-todo.md
 ```
 
 No reply was sent to the coordinator; the fixture ends at the stop.
+
+## QA round 1
+
+Date: 2026-11-12 UTC, independent QA round 1.
+Build under test: `main` at `54320bc9bb2b7452f321833a6c979ef791effa98`, the squash merge of PR 216, whose reviewed head `5eda4b850b011e106992845d2b7a17099274499a` has an identical tree.
+Environment: none; the profile sets `environments: []`, so the lanes are the repository (detached worktrees of the build), GitHub and the tracker.
+Fixtures: none beyond the fixture issue SKL-277 that AC5 names.
+The raw output, including the phrase-deletion checks, is attached to SKL-155 as `SKL-155-qa-round-1-assertions.txt`; there is no visual surface, so no screenshot applies.
+
+| Item | Verdict | Evidence |
+|---|---|---|
+| AC1: the argument | Verified | The Arguments table has the `qa-round-cap` row with default `3`, and the prose says "Six arguments are optional". Bullets give `qa-round-cap=<n>` and the plain-words forms, positive integers as valid and zero, negative or non-integer as invalid, an ask rule for invalid values and other phrasing, and resolution before step 0 with "sets no model or effort". The `qa-round-cap: <n>` echo is in the Arguments bullet and in the step 5 report. `len(rows) == 6`, `METRICS_LINE_SENTENCE` and `METRICS_LINES` are updated. The README row names the argument and its default before the metrics clause, which `test_readme_row_names_the_qa_round_cap_and_its_default_before_the_metrics_clause` pins, and `test_readme_row_names_the_metrics_switch_and_its_default` stays green. |
+| AC2: the stop | Verified | Inside step 4's `in_progress` bullet, rounds are counted per invocation and only an `in_progress` read-back counts. The stop comes after "Those failed items are the issues to fix." and before "Hand them back to the senior engineer". The stop report gives each round's failed items re-read from the tracker and each PR's link and head SHA from the tracker and the forge. Step 4 still has five state bullets. |
+| AC3: continuation | Verified | The step asks and waits for the reply, asks again on a reply that gives no count, is not a stop, or gives an invalid value, and re-arms the same cap at N further rounds with a new QA agent. A "stop" reply leaves the story `in_progress` for the owner. The coordinator makes no tracker write beyond what the Boundaries permit, which is none with `metrics` off; QA's own comment and state move are outside that rule. Of the 17 `SKILL.md` lines the merge adds, the 2 that match `METRICS_WORDS` replace registered lines in the Arguments and step 5, and none is in step 4. |
+| AC4: text contracts | Verified | Each guarded phrase has its own named test in `tests/test_story_to_done.py`. On a throwaway worktree of the build, each of 21 phrase deletions or changes failed its named test, including a default change, a "Five" count and an injected sixth state bullet. The preserved tests pass (`test_failed_items_go_back_to_the_engineer_before_qa_reruns`, the README row tests and `test_metrics_off_changes_nothing_but_the_metrics_line`). The PR description has one line per guarded phrase naming the failing tests. On the build, `uv run --locked pytest -q` reported 1897 passed and `uv run --locked python scripts/vendor_shared.py --check` exited 0. |
+| AC5: fixture run | Verified | The run section above quotes the parent brief and the coordinator transcript. It names the runtime, step 4, `qa-round-cap: 1` and `metrics: off`, and states that the fixture is new rather than SKL-164's suite. SKL-277 is a canceled `[Tabletop fixture]` issue in SKL with two unmeetable criteria, created in a started state. Its "QA round 1 verdicts" comment records both items not met. The tracker API returns no state history for SKL-277, so its In Progress read-back rests on the transcript above. Between the fixture commit `664ccf7` and the reviewed head, only two lines under `skills/` changed, and a `metrics: off` run without a reply reaches neither. The superseded fixture SKL-266 is canceled. |
+| DoD: all acceptance criteria met | Verified | AC1 to AC5 above. |
+| DoD: tests written and passing | Verified | AC4. |
+| DoD: independently reviewed | Verified | Review 5870057039 names `5eda4b850b011e106992845d2b7a17099274499a` in its first line and as its `commit_id`, the merged head, with 0 findings. |
+| DoD: docs updated | Verified | The README Skills-table row names the argument and its default. |
+| DoD: verified in a deployed environment | Not applicable | The profile defines no environments; the build was verified on `main`. |
+| DoD: no critical bugs or regressions | Verified | CI `ci` passed on the reviewed head (run 43167831518) and on `main` (run 43168562316), and the full suite passed on the build. |
+
+Closing decision: SKL-155 moves to Done once this evidence merges.
