@@ -27,3 +27,32 @@ The raw output is attached to SKL-164 as `SKL-164-qa-round-1-assertions.txt`; th
 | DoD: no critical bugs or regressions | Verified | CI passed on the reviewed head (run 43256444066) and on `main` (run 43257667782), and the full suite passed on the build. |
 
 Closing decision: SKL-164 goes back to In Progress, with AC5 to be fixed.
+
+## QA round 2
+
+Date: 2026-11-12 UTC, independent QA round 2.
+Build under test: `main` at `2246531f0ad7a73be62c839489471452d0822bc6`, the squash merge of PR 220, whose reviewed head `89cc1f4a9b35d00a773491ece836ce4c6fa536e2` has an identical tree.
+PR 220 changes only `skills/story-to-done/evals/README.md`.
+Environment: none; the profile sets `environments: []`, so the lanes are the repository (standalone clones of the build), GitHub and the tracker.
+Fixtures: the committed case `qa-unfinished-own-steps`, the build itself as the skill under test, and stub agent commands (`true --model stub/graded`, `false --model stub/void`) for the runner probes.
+Live runs used opencode with `deepseek/deepseek-v4-pro`, the model the README names.
+The raw output is attached to SKL-164 as `SKL-164-qa-round-2-assertions.txt`; there is no visual surface, so no screenshot applies.
+
+| Item | Verdict | Evidence |
+|---|---|---|
+| AC1: suite runner | Verified | Through `run-suite.sh` at the build with a stub agent and `--runs 1`, the case's 4 scenarios each wrote a run record and a tool-call record named `<label>-<scenario>-<checkout short>-harness-<harness short>-<attempt>`, and the run exited 0. An always-void stub with `--runs 2` made 4 attempts per scenario and exited 1. Rerunning a used label exited 2 and left the records unchanged. |
+| AC2: summary | Verified | The stub runs' summaries give n, k, k/n, the variance with its formula, voids and void reasons, and name the model, the reasoning effort, the skill commit and the harness commit separately. The always-void summary shows n = 0 as `n/a`. The new records hold no local path. |
+| AC3: case contract | Verified | `run.sh` is mode 100755, and the contract tests pass in the full suite. |
+| AC4: fold | Verified | Unchanged since round 1: of the case's existing files only `case.yaml` differs from the branch point, and each committed label has 24 records. |
+| AC5: README | Verified | The Run section now sets `EVAL_AGENT_CMD` to the command the committed runs used, with the message last, and sets `EVAL_PASS_ENV` for an environment credential. From a fresh shell with both variables unset, the README's blocks run verbatim. One scenario printed PASS and exited 0. One case with `--runs 3` exited 0 with n = 3, k = 3 and no voids on all 5 summary rows. The whole suite exited 0 with the same counts. The other bullets checked in round 1 are unchanged. |
+| AC6: runner test | Verified | Each of 5 mutants of `suite.py` made `test_the_runner_counts_pass_fail_void_and_exhausted_void_retries` fail, and the unmutated file passed it. The mutants: retry cap N, a void counted as graded, n off by one, k counting every run, and the void count off by one. |
+| AC7: guards | Verified | On the build, `uv run --locked pytest -q` passed (1972 passed), the public leak scan exited 0, `skills-ref validate` passed for all 18 skills, and `bash scripts/smoke-opencode.sh` exited 0. CI run 43264106226 on PR 220's reviewed head passed `checks` (with the leak scan `--require-private`) and `discovery`. |
+| AC8: no skill change | Verified | `git diff --name-status ebf5534 2246531` changes nothing under `skills/story-to-done/` outside `evals/`. |
+| DoD: all acceptance criteria met | Verified | AC1 to AC8. |
+| DoD: tests written and passing | Verified | AC6 and AC7. |
+| DoD: independently reviewed | Verified | Review 5878657076 on PR 220 names `89cc1f4a9b35d00a773491ece836ce4c6fa536e2`, the merged head. |
+| DoD: docs updated | Verified | `skills/story-to-done/evals/README.md` gives the agent command. |
+| DoD: verified in a deployed environment | Not applicable | The profile defines no environments, so the build was verified on `main`. |
+| DoD: no critical bugs or regressions | Verified | CI passed on `main` at the build (run 43265280085), and the full suite passed on the build. |
+
+Closing decision: SKL-164 moves to Done.
