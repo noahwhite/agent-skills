@@ -2686,8 +2686,15 @@ INTERIM_WAIT = (
 )
 INTERIM_WAIT_CAP = (
     "Each wait lasts the lesser of 90 seconds and the time left to the deadline less 5 seconds for process "
-    "start-up, so it returns at or before the deadline, the runtime never moves it to the background, and a "
-    "handback that arrives during a wait is handled when that wait returns."
+    "start-up, under a timeout that also bounds every read inside it, so it returns at or before the deadline, "
+    "the runtime never moves it to the background, and a handback that arrives during a wait is handled when that "
+    "wait returns."
+)
+INTERIM_NO_SHORT_WAIT = "With 5 seconds or less left, it starts no further wait and makes the deadline read below."
+INTERIM_RECEIPT = "Receipt is the coordinator's first clock read after the handback arrives."
+INTERIM_STATED_BLOCKER = (
+    "Step 0's stated-blocker sentence covers only the other handbacks, since an interim handback never reaches the "
+    "read-back."
 )
 INTERIM_PR_WATCH = (
     "When the awaited CI run belongs to a PR, it also watches the PR, so a new head and its new run are not missed "
@@ -2695,6 +2702,7 @@ INTERIM_PR_WATCH = (
 )
 INTERIM_VOCABULARY = (
     "interim", "awaited", "deadline", "minutes", "seconds", "primary source", "foreground", "timeout", "wake-up",
+    "hour", "half an", "poll", "timer", "elapse", "expir", "end the run",
 )
 INTERIM_CLEAR_LATE = (
     "A handback that arrived before the deadline clears it even when the coordinator sees it only after the "
@@ -2763,6 +2771,11 @@ def test_each_wait_is_capped_so_a_handback_during_it_is_handled() -> None:
     assert INTERIM_WAIT_CAP in interim_text()
 
 
+def test_no_wait_starts_in_the_last_five_seconds() -> None:
+    text = interim_text()
+    assert text.index(INTERIM_WAIT_CAP) < text.index(INTERIM_NO_SHORT_WAIT) < text.index(INTERIM_CLEAR)
+
+
 def test_the_interim_rule_limits_are_pinned() -> None:
     assert INTERIM_LIMITS in interim_text()
 
@@ -2771,12 +2784,22 @@ def test_the_interim_handback_definition_is_pinned() -> None:
     assert INTERIM_DEFINITION in interim_text()
 
 
+def test_step_0_stated_blocker_sentence_never_covers_an_interim_handback() -> None:
+    text = interim_text()
+    assert text.index(INTERIM_DEFINITION) < text.index(INTERIM_STATED_BLOCKER)
+
+
 def test_an_interim_handback_is_classified_before_the_read_back_and_the_step_2_check() -> None:
     assert INTERIM_ORDER in interim_text()
 
 
 def test_an_interim_handback_records_a_deadline_with_its_default_and_margin() -> None:
     assert INTERIM_RECORD in interim_text()
+
+
+def test_receipt_is_the_first_clock_read_after_the_handback() -> None:
+    text = interim_text()
+    assert text.index(INTERIM_RECORD) < text.index(INTERIM_RECEIPT)
 
 
 def test_a_handback_before_the_deadline_clears_it() -> None:
