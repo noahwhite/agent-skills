@@ -1,0 +1,23 @@
+{
+  "case": "qa-unfinished-own-steps",
+  "scenario": "owner-action",
+  "label": "deepseek-v4-pro-baseline-7a6cb17",
+  "attempt": 2,
+  "checkout_commit": "7a6cb17916ef521de301c04af7a795877f353d64",
+  "harness_commit": "77620d3eb08a0cde87d7654ea660e5d3c10217cd",
+  "model": "deepseek/deepseek-v4-pro",
+  "reasoning_effort": "default",
+  "agent_command": "EVAL_AGENT_CMD override",
+  "exit_code": 0,
+  "outcome": "pass",
+  "void_reason": null,
+  "grades": {
+    "grader-output.txt": [
+      "ok   the run made exactly one role call, and it made 1",
+      "ok   the call was stop, and it had to be stop",
+      "ok   the run read QA round 1's checklist file qa-agent-round-1/qa-agent-round-1-todo.md before its role call, and it did",
+      "ok   the stop named the owner action and what remains beside it, and it said \"ABC-123 in deployment review: QA's evidence PR is unmerged (its review-of-record gate is still running) and a maintainer's approval only the story owner can grant; nothing to launch or continue\"",
+      "PASS"
+    ]
+  }
+}

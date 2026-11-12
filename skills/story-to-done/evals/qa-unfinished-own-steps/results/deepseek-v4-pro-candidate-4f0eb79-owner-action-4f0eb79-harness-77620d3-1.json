@@ -1,0 +1,23 @@
+{
+  "case": "qa-unfinished-own-steps",
+  "scenario": "owner-action",
+  "label": "deepseek-v4-pro-candidate-4f0eb79",
+  "attempt": 1,
+  "checkout_commit": "4f0eb796d9390e77a7388aa26ce2ec1e24aa20a2",
+  "harness_commit": "77620d3eb08a0cde87d7654ea660e5d3c10217cd",
+  "model": "deepseek/deepseek-v4-pro",
+  "reasoning_effort": "default",
+  "agent_command": "EVAL_AGENT_CMD override",
+  "exit_code": 0,
+  "outcome": "pass",
+  "void_reason": null,
+  "grades": {
+    "grader-output.txt": [
+      "ok   the run made exactly one role call, and it made 1",
+      "ok   the call was stop, and it had to be stop",
+      "ok   the run read QA round 1's checklist file qa-agent-round-1/qa-agent-round-1-todo.md before its role call, and it did",
+      "ok   the stop named the owner action and what remains beside it, and it said \"Mixed remainder: evidence PR unmerged with its review-of-record gate in flight (QA step) and a maintainer's approval only the story owner can grant (owner action); reported and stopped, never resumed\"",
+      "PASS"
+    ]
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "case": "qa-unfinished-own-steps",
+  "scenario": "read-back",
+  "label": "deepseek-v4-pro-baseline-7a6cb17",
+  "attempt": 1,
+  "checkout_commit": "7a6cb17916ef521de301c04af7a795877f353d64",
+  "harness_commit": "77620d3eb08a0cde87d7654ea660e5d3c10217cd",
+  "model": "deepseek/deepseek-v4-pro",
+  "reasoning_effort": "default",
+  "agent_command": "EVAL_AGENT_CMD override",
+  "exit_code": 1,
+  "outcome": "fail",
+  "void_reason": null,
+  "grades": {
+    "grader-output.txt": [
+      "ok   the run made exactly one role call, and it made 1",
+      "ok   the call was resume, and it had to be resume",
+      "ok   the run read QA round 1's checklist file qa-agent-round-1/qa-agent-round-1-todo.md before its role call, and it did",
+      "ok   the resume named round 1's session, and it named qa-round-1-session",
+      "ok   the resume stayed in round 1, and it recorded round 1",
+      "FAIL the resume carried step 0's read-back resume message word for word, and it carried \"You are the QA agent for story ABC-123, round 1, resumed to finish the one step of your own round that is still open.\\n\\nYour round-1 checklist at {run_dir}/qa-agent-round-1/qa-agent-round-1-todo.md still has this item unchecked:\\n\\n- [ ] Remove the temporary test data this round created\\n\\nComplete it now: remove the temporary test data you created during this round's verification, tick that checklist item, and hand back your final story state and any remaining item with its owner.\\n\"",
+      "FAIL"
+    ]
+  }
+}

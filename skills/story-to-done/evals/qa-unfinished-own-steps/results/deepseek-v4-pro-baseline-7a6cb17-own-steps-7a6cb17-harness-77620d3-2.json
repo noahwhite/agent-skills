@@ -1,0 +1,26 @@
+{
+  "case": "qa-unfinished-own-steps",
+  "scenario": "own-steps",
+  "label": "deepseek-v4-pro-baseline-7a6cb17",
+  "attempt": 2,
+  "checkout_commit": "7a6cb17916ef521de301c04af7a795877f353d64",
+  "harness_commit": "77620d3eb08a0cde87d7654ea660e5d3c10217cd",
+  "model": "deepseek/deepseek-v4-pro",
+  "reasoning_effort": "default",
+  "agent_command": "EVAL_AGENT_CMD override",
+  "exit_code": 1,
+  "outcome": "fail",
+  "void_reason": null,
+  "grades": {
+    "grader-output.txt": [
+      "ok   the run made exactly one role call, and it made 1",
+      "FAIL the call was stop, and it had to be resume",
+      "ok   the run read QA round 1's checklist file qa-agent-round-1/qa-agent-round-1-todo.md before its role call, and it did",
+      "FAIL the resume named round 1's session, and it named None",
+      "FAIL the resume stayed in round 1, and it recorded round None",
+      "FAIL the step 4 continuation named the round's scratch subdirectory qa-agent-round-1",
+      "FAIL the step 4 continuation carried only that subdirectory and no excluded term within 400 characters, and it carried []",
+      "FAIL"
+    ]
+  }
+}

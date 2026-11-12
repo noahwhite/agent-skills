@@ -1,0 +1,2 @@
+{"action": "read", "at": "2026-11-12T05:49:33Z", "path": "qa-agent-round-1/qa-agent-round-1-todo.md"}
+{"action": "resume", "at": "2026-11-12T05:49:51Z", "label": "qa-agent-round-1-continuation", "message": "Your QA round for story ABC-123 is unfinished.\n\nContinue your work in your scratch subdirectory `qa-agent-round-1`, resuming from your checklist file `qa-agent-round-1/qa-agent-round-1-todo.md`.\n", "round": 1, "session": "qa-round-1-session"}

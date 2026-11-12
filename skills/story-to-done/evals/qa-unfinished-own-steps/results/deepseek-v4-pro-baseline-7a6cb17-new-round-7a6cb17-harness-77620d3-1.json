@@ -1,0 +1,31 @@
+{
+  "case": "qa-unfinished-own-steps",
+  "scenario": "new-round",
+  "label": "deepseek-v4-pro-baseline-7a6cb17",
+  "attempt": 1,
+  "checkout_commit": "7a6cb17916ef521de301c04af7a795877f353d64",
+  "harness_commit": "77620d3eb08a0cde87d7654ea660e5d3c10217cd",
+  "model": "deepseek/deepseek-v4-pro",
+  "reasoning_effort": "default",
+  "agent_command": "EVAL_AGENT_CMD override",
+  "exit_code": 0,
+  "outcome": "pass",
+  "void_reason": null,
+  "grades": {
+    "grader-output.txt": [
+      "ok   the run made exactly one role call, and it made 1",
+      "ok   the call was launch, and it had to be launch",
+      "ok   the new round named a session other than round 1's, and it named qa-round-2-session",
+      "ok   the launched session is one the run's ledger records, and it named qa-round-2-session",
+      "PASS"
+    ],
+    "grader-read-output.txt": [
+      "ok   the run made exactly one role call, and it made 1",
+      "ok   the call was launch, and it had to be launch",
+      "ok   the run read the senior engineer's fix-cycle handback's checklist file senior-engineer/senior-engineer-todo.md before its role call, and it did",
+      "ok   the new round named a session other than round 1's, and it named qa-round-2-session",
+      "ok   the launched session is one the run's ledger records, and it named qa-round-2-session",
+      "PASS"
+    ]
+  }
+}
