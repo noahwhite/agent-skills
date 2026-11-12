@@ -143,8 +143,12 @@
     "qa-verification": [
       "check-signing-key.sh"
     ],
+    "story-refinement": [
+      "todo-enforce.py"
+    ],
     "story-to-done": [
-      "check-signing-key.sh"
+      "check-signing-key.sh",
+      "todo-enforce.py"
     ]
   }
 }
