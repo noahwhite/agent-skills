@@ -3097,6 +3097,10 @@ CAP_LEFT = (
     "`profile.tracker.states.in_progress`, failed items outstanding, the owner deciding next."
 )
 CAP_HISTORY = "Round numbers run on across re-arms, and each later stop report gives every counted round so far."
+CAP_REREAD = (
+    "The reply never overrides the tracker state: before resuming, read the story's state again and act on it "
+    "under this step."
+)
 CAP_NO_WRITE = (
     "In either case the coordinator writes nothing to the tracker beyond what the Boundaries permit, rules on no "
     "item, and relays no verdict of its own."
@@ -3169,6 +3173,10 @@ def test_a_cap_stop_waiting_for_the_reply_defers_the_metrics_summary_to_the_end_
     lines = PROTOCOL.read_text().splitlines()
     assert METRICS_CAP_STOP in lines
     assert lines.index(METRICS_CAP_STOP) == lines.index(METRICS_CLOSING_REPORT) + 1
+
+
+def test_a_re_arm_reads_the_story_state_again_before_resuming_the_hand_back() -> None:
+    assert in_order(in_progress_bullet(), CAP_REARM, CAP_REREAD, "Hand them back to the senior engineer")
 
 
 def test_a_re_arm_keeps_numbering_rounds_and_every_later_stop_report_gives_them_all() -> None:
