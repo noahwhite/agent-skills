@@ -19,7 +19,7 @@ You run the loop; you do not write the code or run the QA yourself.
 Its team prefix is the team for every read and write this skill performs on or for that issue, and it need not equal `profile.tracker.team_key`.
 If none was given, ask the user for one before doing anything else; never guess a story number.
 
-Five arguments are optional, given as `key=value` or in plain words ("QA on <model> at max" sets `qa-model` and `qa-effort`):
+Six arguments are optional, given as `key=value` or in plain words ("QA on <model> at max" sets `qa-model` and `qa-effort`):
 
 | Argument | Sets | Default |
 |---|---|---|
@@ -28,6 +28,7 @@ Five arguments are optional, given as `key=value` or in plain words ("QA on <mod
 | `qa-model` | the QA agent's model | `profile.story_to_done.qa` |
 | `qa-effort` | the QA agent's reasoning effort | seat effort (default high) |
 | `metrics` | whether the run collects and reports run metrics | `off` |
+| `qa-round-cap` | the number of counted QA rounds after which the loop stops and asks the user | `3` |
 
 - An argument left out takes its default.
 - Effort is one of `low`, `medium`, `high`, `xhigh`, or `max`.
@@ -37,7 +38,10 @@ Five arguments are optional, given as `key=value` or in plain words ("QA on <mod
 - `metrics` is given as `metrics=on` or `metrics=off`, or in plain words: "with metrics" and "metrics on" mean on, "without metrics" and "metrics off" mean off; ask the user about any other phrasing about metrics; never guess.
 - Resolve `metrics` before step 0 creates the todo list; it sets no model or effort.
 - With `metrics` off or omitted, read no metrics reference, collect no figure, create no metrics file, post no metrics comment, and add no metrics content to any brief, report, todo list, or tracker write, other than the `metrics: off` line.
-- Write the four resolved model and effort values and the `metrics: on|off` line at the top of your todo list and in the closing report of every end state (the step 5 report, or the report made at any stop, including one before step 0).
+- `qa-round-cap` is given as `qa-round-cap=<n>` or in plain words about capping QA rounds ("cap QA at <n> rounds" and "stop after <n> failed QA rounds" mean <n>); a positive integer (1 or more) is valid, and zero, a negative number, or a non-integer is invalid.
+- Ask the user about an invalid value and about any other phrasing about the cap; never guess.
+- Resolve `qa-round-cap` before step 0 creates the todo list; it sets no model or effort.
+- Write the four resolved model and effort values, the `metrics: on|off` line, and the `qa-round-cap: <n>` line at the top of your todo list and in the closing report of every end state (the step 5 report, or the report made at any stop, including one before step 0).
 
 ### Seat resolution
 
@@ -206,6 +210,16 @@ For a waived PR, compare the merged PR's `headRefOid` with the SHA recorded when
   If all three hold, go to step 5; if any does not, report the mismatch and stop.
 - **`profile.tracker.states.in_progress`:** QA ruled at least one AC or DoD item not met and reopened the story.
   Those failed items are the issues to fix.
+  QA rounds are counted within this invocation: the first QA round this coordinator runs is round 1, a run resumed at step 3 starts a new count that the report states, and only a round whose read-back is `profile.tracker.states.in_progress` counts.
+  When the `qa-round-cap`-th counted round ends here, stop before the hand-back below and launch nothing further.
+  The stop report gives, per round, every failed item as QA recorded it in the tracker, re-read from the tracker rather than taken from a handback (the item, its verdict, and the evidence it cites).
+  It also gives, per PR, the link and head SHA, re-read from the tracker and the forge rather than taken from a handback, reusing the merge reads steps 2 and 3 already make.
+  The stop report asks the user how many further rounds to run or whether to stop, and waits for the reply; a reply that does not say how many rounds or that it is a stop, or that gives an invalid value, is asked about again, never guessed.
+  On "N additional rounds", re-arm the same cap at N further counted rounds and resume the pending hand-back below with every item failed so far; the next QA round runs with a new QA agent.
+  The reply never overrides the tracker state: before resuming, read the story's state again; if it is `profile.tracker.states.done`, apply the `profile.tracker.states.done` bullet above, and if it is any other state but `profile.tracker.states.in_progress`, report that state and stop.
+  Round numbers run on across re-arms, and each later stop report gives every counted round so far.
+  On "stop", end the invocation with the story left in the state QA left it: `profile.tracker.states.in_progress`, failed items outstanding, the owner deciding next.
+  In either case the coordinator writes nothing to the tracker beyond what the Boundaries permit, rules on no item, and relays no verdict of its own.
   Hand them back to the senior engineer: resume the same subagent if the runtime can, else spawn a new clean, neutral one on the same seat with the step 2 brief.
   Either way, add to the hand-back brief each failed item as QA recorded it on the story (the item, its verdict, and the evidence it cites), and instruct the engineer to fix them through `engineering-workflow` on this story and take it back to `profile.tracker.states.in_deployment_review`.
   Confirm that state as step 2 does, then run step 3 again with a new QA agent.
@@ -234,7 +248,7 @@ After each round, tell the user its number, the failed items, and the outcome.
 ## 5. Close out
 
 Read the story back and confirm it is in `profile.tracker.states.done` with the completion record step 4 checks, then finish your todo list.
-Report the story identifier, its final state, the four resolved model and effort values and the `metrics: on|off` line, each PR, the number of QA rounds with the items fixed in each, where QA recorded its evidence, and any incidental defects left open.
+Report the story identifier, its final state, the four resolved model and effort values and the `metrics: on|off` line, the `qa-round-cap: <n>` line, each PR, the number of QA rounds with the items fixed in each, where QA recorded its evidence, and any incidental defects left open.
 
 ## Boundaries
 
