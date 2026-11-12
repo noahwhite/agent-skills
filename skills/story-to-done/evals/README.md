@@ -115,4 +115,4 @@ The stories that add into this layout are SKL-274 (regression-pin cases), SKL-27
 
 | Case | Kind | Recorded runs meet the definition |
 |---|---|---|
-| `qa-unfinished-own-steps` | discriminating | inconclusive: no recorded runs from this runner yet |
+| `qa-unfinished-own-steps` | discriminating | not discriminating (DeepSeek V4 Pro, 3 graded runs per scenario at 7a6cb17 and 4f0eb79): `own-steps` fails 0/3 at baseline and passes 3/3 at candidate, `read-back` passes 0/3 at both commits, the `new-round-read` grade passes 3/3 at both commits, and the `owner-action` and `new-round` controls pass 3/3 at both commits; see `results/suite-deepseek-v4-pro-baseline-7a6cb17.md` and `results/suite-deepseek-v4-pro-candidate-4f0eb79.md` |

@@ -1,0 +1,2 @@
+{"action": "read", "at": "2026-11-12T06:53:03Z", "path": "qa-agent-round-1/qa-agent-round-1-todo.md"}
+{"action": "stop", "at": "2026-11-12T06:53:39Z", "reason": "QA round 1 is unfinished: the QA agent still owns removing the temporary test data it created, so ABC-123 stays In Deployment Review until that is cleared"}

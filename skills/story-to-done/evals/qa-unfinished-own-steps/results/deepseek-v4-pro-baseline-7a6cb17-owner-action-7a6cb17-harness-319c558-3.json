@@ -1,0 +1,30 @@
+{
+  "case": "qa-unfinished-own-steps",
+  "scenario": "owner-action",
+  "label": "deepseek-v4-pro-baseline-7a6cb17",
+  "attempt": 3,
+  "checkout_commit": "7a6cb17916ef521de301c04af7a795877f353d64",
+  "harness_commit": "319c558ae81d39e492bb12b0c6b231dd9852fd73",
+  "model": "deepseek/deepseek-v4-pro",
+  "reasoning_effort": "default",
+  "agent_command": "opencode run --standalone --auto --archived --model deepseek/deepseek-v4-pro Follow the instructions in the attached file exactly.",
+  "exit_code": 0,
+  "outcome": "pass",
+  "void_reason": null,
+  "verdicts": {
+    "owner-action": "pass"
+  },
+  "grades": {
+    "grader-output.txt": [
+      "ok   the run made exactly one role call, and it made 1",
+      "ok   the call was stop, and it had to be stop",
+      "ok   the run read QA round 1's checklist file qa-agent-round-1/qa-agent-round-1-todo.md before its role call, and it did",
+      "ok   the stop named the owner action and what remains beside it, and it said 'QA round 1 unfinished: evidence PR review-of-record gate still running and maintainer approval pending (story owner action); resume at step 3 once cleared'",
+      "PASS"
+    ]
+  },
+  "grader_inputs": {
+    "qa-round-1.json": "{\n  \"session\": \"qa-round-1-session\",\n  \"label\": \"qa-agent-round-1\",\n  \"scratch_subdirectory\": \"qa-agent-round-1\",\n  \"round\": 1\n}\n"
+  },
+  "calls_record": "actions.jsonl"
+}

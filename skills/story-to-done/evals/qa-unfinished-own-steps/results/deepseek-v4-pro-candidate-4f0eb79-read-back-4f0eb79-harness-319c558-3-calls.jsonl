@@ -1,0 +1,2 @@
+{"action": "resume", "at": "2026-11-12T07:23:25Z", "label": "qa-agent-round-1", "message": "Your QA round is unfinished. Continue in your scratch subdirectory qa-agent-round-1.\n", "round": 1, "session": "qa-round-1-session"}
+{"action": "read", "at": "2026-11-12T07:23:47Z", "path": "qa-agent-round-1/qa-agent-round-1-todo.md"}
