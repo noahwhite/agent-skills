@@ -92,7 +92,7 @@ def test_arguments_table_pins_each_default() -> None:
 # in; `claude-code` is a runtime name, not a model.
 MODEL_NAME = re.compile(
     r"\b(claude-(?!code\b)[\w.-]+|sonnet|opus|haiku|gpt-[\w.-]+|deepseek[\w./-]*|gemini[\w.-]*|grok[\w.-]*"
-    r"|glm-[\w.-]+|kimi[\w.-]*|qwen[\w.-]*)",
+    r"|glm-[\w.-]+|kimi[\w.-]*|qwen[\w.-]*|mistral[\w./-]*|llama[\w.-]*)",
     re.IGNORECASE,
 )
 SEAT_RULES = (
@@ -149,7 +149,7 @@ def test_skill_names_no_model_id() -> None:
 
 def test_model_name_guard_catches_the_removed_defaults() -> None:
     for removed in ("Sonnet 5.5 (`claude-sonnet-5-5`)", "QA on Opus 5.5 at max", "`claude-opus-5-5`",
-                    "deepseek/deepseek-flash", "openai/gpt-6.1-sol"):
+                    "deepseek/deepseek-flash", "openai/gpt-6.1-sol", "mistral-large-4-0"):
         assert MODEL_NAME.search(removed), removed
     for allowed in ("runtime `claude-code`", "`opencode` seat", "QA on <model> at max"):
         assert not MODEL_NAME.search(allowed), allowed
@@ -213,13 +213,14 @@ def test_schema_accepts_a_story_to_done_seat_pair() -> None:
         {"engineer": COMMAND_SEAT | {"command": 'agent --model "{model}#high"'}, "qa": SEAT},
         {"engineer": {k: v for k, v in SEAT.items() if k != "runtime"}, "qa": SEAT},
         {"engineer": COMMAND_SEAT | {"model": 'x"; touch /tmp/p; "'}, "qa": SEAT},
+        {"engineer": COMMAND_SEAT | {"model": "$(printf INJECTED >&2)"}, "qa": SEAT},
         {"engineer": COMMAND_SEAT | {"model": "-rf"}, "qa": SEAT},
         {"engineer": COMMAND_SEAT | {"command": 'agent --model "{model}#{effort}" > "{output_file}"'}, "qa": SEAT},
         {"engineer": COMMAND_SEAT | {"command": 'agent --model "{model}#{effort}" --file "{prompt_file}"'}, "qa": SEAT},
     ],
     ids=["no-qa", "no-engineer", "extra-seat", "no-model", "family", "bad-effort", "bad-runtime",
          "command-without-command", "command-without-placeholders", "command-without-effort", "no-runtime",
-         "command-model-with-shell-text", "command-model-like-an-option", "command-without-prompt-file",
+         "command-model-with-shell-text", "command-model-with-substitution", "command-model-like-an-option", "command-without-prompt-file",
          "command-without-output-file"],
 )
 def test_schema_refuses_a_malformed_story_to_done(story_to_done) -> None:
@@ -235,8 +236,9 @@ def test_profiles_seat_story_to_done_on_verified_labs(path: Path) -> None:
     assert (seats["engineer"]["model"], seats["engineer"]["effort"]) == ("deepseek/deepseek-flash", "high")
     assert (seats["qa"]["model"], seats["qa"]["effort"]) == ("deepseek/deepseek-v4-pro", "high")
     for seat in seats.values():
+        assert seat["runtime"] == "command", seat
         # The shell-launched agents rule: stdin never stays on the terminal.
-        assert seat["runtime"] != "command" or "< /dev/null" in seat["command"], seat["command"]
+        assert "< /dev/null" in seat["command"], seat["command"]
     assert profile["review"]["adjudicator"]["model"] == "deepseek/deepseek-flash"
     assert "Interim: the owner will change this again" not in path.read_text()
 
