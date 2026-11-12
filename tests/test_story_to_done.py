@@ -238,13 +238,19 @@ def test_schema_accepts_a_story_to_done_seat_pair() -> None:
         {"engineer": COMMAND_SEAT | {"command": 'agent --model "{model}#{effort}" --file "{prompt_file}" > "{output_file}"'}, "qa": SEAT},
         {"engineer": COMMAND_SEAT | {"command": 'agent --model {model}#{effort} --title "{session_title}" --file "{prompt_file}" > "{output_file}"'}, "qa": SEAT},
         {"engineer": COMMAND_SEAT | {"command": 'agent --model "x" --title "t" --file "f" > "o" # {model} {effort} {session_title} {prompt_file} {output_file}'}, "qa": SEAT},
+        {"engineer": COMMAND_SEAT | {"command": 'agent --model x # "{model}" "{effort}" "{prompt_file}" "{output_file}" "{session_title}"'}, "qa": SEAT},
+        {"engineer": COMMAND_SEAT | {"command": 'agent --model {model}#{effort} --title {session_title} --file {prompt_file} > {output_file} # "{model}" "{effort}" "{prompt_file}" "{output_file}" "{session_title}"'}, "qa": SEAT},
+        {"engineer": COMMAND_SEAT | {"model": "example/strong\n"}, "qa": SEAT},
         {"engineer": {"runtime": "codex", "model": "x; touch /tmp/p"}, "qa": SEAT},
+        {"engineer": {"runtime": "codex", "model": "example/strong\n"}, "qa": SEAT},
     ],
     ids=["no-qa", "no-engineer", "extra-seat", "no-model", "family", "bad-effort", "bad-runtime",
          "command-without-command", "command-without-placeholders", "command-without-effort", "no-runtime",
          "command-model-with-shell-text", "command-model-with-substitution", "command-model-like-an-option", "command-without-prompt-file",
          "command-without-output-file", "command-without-session-title", "command-with-unquoted-model",
-         "command-with-placeholders-only-in-a-comment", "codex-model-with-shell-text"],
+         "command-with-placeholders-only-in-a-comment", "command-with-quoted-placeholders-only-in-a-comment",
+         "command-with-unquoted-placeholders-and-a-quoted-comment-copy", "command-model-with-trailing-newline",
+         "codex-model-with-shell-text", "codex-model-with-trailing-newline"],
 )
 def test_schema_refuses_a_malformed_story_to_done(story_to_done) -> None:
     assert schema_errors(profile_with(story_to_done))
@@ -480,6 +486,11 @@ def test_a_command_qa_seat_continues_by_a_new_launch_on_the_same_seat() -> None:
         "A `command` or `codex` QA seat is never resumed, so its continuation is a new launch on the same seat "
         "whose prompt file is the step 3 brief followed by that continuation message; it is still the same "
         "round's continuation under every rule in this bullet."
+    ) in body
+    assert (
+        "its prompt file also tells it to read that round's existing checklist in the named subdirectory and the "
+        "story's open evidence PR, if any, before acting, and to continue from the first unfinished item, never "
+        "rewriting the checklist or opening a second evidence PR."
     ) in body
 
 

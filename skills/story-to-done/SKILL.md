@@ -217,6 +217,7 @@ For a waived PR, compare the merged PR's `headRefOid` with the SHA recorded when
   If any outstanding item names any other owner - the owner, a maintainer's approval or access grant, a human merge, an external deploy, a pending acceptance-basis ruling - report exactly what remains and who owns it, and stop, even when QA-owned work also remains; a mixed remainder containing both an owner action and QA's own steps is reported and stopped, never resumed.
   If the runtime cannot resume that QA session, report the limitation and stop; never substitute a new clean, neutral subagent for it as a continuation of that round.
   A `command` or `codex` QA seat is never resumed, so its continuation is a new launch on the same seat whose prompt file is the step 3 brief followed by that continuation message; it is still the same round's continuation under every rule in this bullet.
+  Because the new process carries none of the earlier one's working state, its prompt file also tells it to read that round's existing checklist in the named subdirectory and the story's open evidence PR, if any, before acting, and to continue from the first unfinished item, never rewriting the checklist or opening a second evidence PR.
   A continuation is made at most once per observed change to the remainder: when a resumed handback leaves the same remaining items with no observed progress, report the stall and stop.
 - **`profile.tracker.states.blocked`:** report the blocking story and stop.
 - **Any other state:** report it and stop.
