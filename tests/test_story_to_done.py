@@ -2690,7 +2690,10 @@ INTERIM_WAIT_CAP = (
     "the runtime never moves it to the background, and a handback that arrives during a wait is handled when that "
     "wait returns."
 )
-INTERIM_NO_SHORT_WAIT = "With 5 seconds or less left, it starts no further wait and makes the deadline read below."
+INTERIM_NO_SHORT_WAIT = (
+    "With 5 seconds or less left, it starts no further wait, lets the deadline pass, and only then makes the deadline "
+    "read below, so that read never comes before the deadline."
+)
 INTERIM_RECEIPT = "Receipt is the coordinator's first clock read after the handback arrives."
 INTERIM_STATED_BLOCKER = (
     "Step 0's stated-blocker sentence covers only the other handbacks, since an interim handback never reaches the "

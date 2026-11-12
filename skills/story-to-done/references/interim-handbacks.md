@@ -15,7 +15,7 @@ Receipt is the coordinator's first clock read after the handback arrives.
 For example, a stated 4 minutes gives 14 minutes, a stated 60 minutes gives 90, and no stated duration gives 45.
 It never waits on the subagent's own wake-up alone: it reaches the deadline with a bounded foreground wait on the awaited item's primary source that returns at or before the deadline (for a CI run, a watch on the run under a timeout), repeated until the deadline.
 Each wait lasts the lesser of 90 seconds and the time left to the deadline less 5 seconds for process start-up, under a timeout that also bounds every read inside it, so it returns at or before the deadline, the runtime never moves it to the background, and a handback that arrives during a wait is handled when that wait returns.
-With 5 seconds or less left, it starts no further wait and makes the deadline read below.
+With 5 seconds or less left, it starts no further wait, lets the deadline pass, and only then makes the deadline read below, so that read never comes before the deadline.
 When the awaited CI run belongs to a PR, it also watches the PR, so a new head and its new run are not missed ([references/code-review.md](code-review.md), Watching the PR).
 
 If the engineer hands back again before the deadline, the coordinator clears the deadline and handles that handback.
