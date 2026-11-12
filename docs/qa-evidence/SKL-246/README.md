@@ -63,14 +63,14 @@ Date: 2026-11-12 UTC, independent QA round 3, against the rescoped story (hook e
 Build under test: `main` at `d2c2b0fba7e49b8479ee9fda1fe93bb52f727a29`, the squash merge of PR 209, whose reviewed head is `5ec94c287c7f476e1998eb7152dee5fc6bae666d`.
 The merge tree and the reviewed head tree are the same tree, `44e16c1120a436679abe2328ac1ff2b049da6b1b`.
 Environment: none; the lanes are the repository (a detached worktree of the build), GitHub and the tracker.
-Fixtures: none; the enforcer test fixtures copied from the AC2 probe are the surface for AC9.
+Fixtures: no fixture accounts apply; AC9 runs on the committed enforcer test fixtures under `tests/fixtures/todo_enforce/`, copied from the AC2 probe.
 The raw output, including every mutation proof, is attached to SKL-246 as `SKL-246-qa-round-3-assertions.txt`; there is no visual surface, so no screenshot applies.
 
 | Item | Verdict | Evidence |
 |---|---|---|
 | AC1: baseline | Verified (round 1) | The attachment "SKL-246 AC1 reproduction and cause" is still linked. |
 | AC2: pre-implementation probe | Verified | The probe record was attached at 21:27:37 UTC on 2026-11-11, before the first enforcer commit `38bfda9` at 21:38:30 UTC. It answers (a), (b) and (c) and finds no contradiction with the Fix. Its logging hook was registered through a `--settings` file rather than `~/.claude/settings.json`, a deviation the record states. |
-| AC3: briefs | Verified | The "Track your work" lines in both skills are identical to the pre-story text, and neither SKILL.md names a task tool or `ToolSearch`. PR 209 changes neither SKILL.md. |
+| AC3: briefs | Verified | The two "Track your work" lines in `story-to-done` are identical to the pre-story text, `story-refinement` carries no inline brief before or after, and neither SKILL.md names a task tool or `ToolSearch`. PR 209 changes neither SKILL.md. |
 | AC4: list-creation order and the five rules | Verified | The creation sentence precedes the first `references/` read in both skills, and all five rule phrases are in `shared/todo-tracking.md`. |
 | AC5: unchanged files and no ToolSearch wording | Verified | `shared/runtimes.md` and its copies have no diff over PR 209 or over the whole story, and the "Missing todo tools" section is identical. PR 209 adds 45 Markdown lines, none with `ToolSearch` or deferred-tool wording. |
 | AC6: `todo-tracking.md` vendoring | Verified | Two runs of `scripts/vendor_shared.py` left the tree clean, `--check` exited 0, and all 18 copies equal the generated header plus the source. |
