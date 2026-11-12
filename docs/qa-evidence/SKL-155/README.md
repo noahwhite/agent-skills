@@ -159,7 +159,7 @@ SKL-277 stopped at the QA round cap: 1 counted round, and the story is In Progre
 - Step 3, round 1: one new QA agent, briefed per step 3 with the tabletop paragraph appended word for word. No environment was named, so the brief left it out.
 - QA checklist read-back: all 9 items done, so no read-back resume was needed (0 resumes).
 
-**Round 1 failed items, re-read from the tracker** (comment "QA round 1 verdicts", https://linear.app/officina-pub/issue/SKL-277/tabletop-fixture-skl-155-ac5-qa-round-cap-stop-run-2#comment-48d8aa3c)
+**Round 1 failed items, re-read from the tracker** (comment "QA round 1 verdicts" on SKL-277, `#comment-48d8aa3c`)
 - AC1 (the file `/nonexistent/skl-155-fixture/marker` exists): NOT MET. Evidence: `test -e /nonexistent/skl-155-fixture/marker; echo exit=$?` printed `exit=1`.
 - AC2 (`test 2 -eq 3` exits 0): NOT MET. Evidence: `test 2 -eq 3; echo exit=$?` printed `exit=1`.
 - The story lists no DoD items.
