@@ -1,5 +1,6 @@
 """SKL-164: the story-to-done eval suite runner and the case contract."""
 
+import importlib.util
 import json
 import os
 import re
@@ -14,7 +15,13 @@ import yaml
 ROOT = Path(__file__).resolve().parent.parent
 EVALS = ROOT / "skills" / "story-to-done" / "evals"
 REFERENCE_CASE = EVALS / "qa-unfinished-own-steps"
-HARNESS_FILES = ("run-suite.sh", "suite.py")
+# The repository files the runner needs besides its own: it normalises records against the
+# leak scan's patterns.
+SUPPORT_FILES = ("scripts/leak_scan.py", "scripts/leak-patterns.txt")
+
+_spec = importlib.util.spec_from_file_location("eval_suite", EVALS / "suite.py")
+SUITE = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(SUITE)
 
 
 def git(repo: Path, *args: str) -> str:
@@ -37,16 +44,25 @@ def commit_all(repo: Path) -> str:
 
 # The stub case: its run.sh hands the scenario and run directory to EVAL_AGENT_CMD and grades
 # what the stub agent recorded, so the agent's exit status decides pass (0), graded fail (1)
-# or void (2), the same contract the real case's run.sh keeps.
+# or void (2), the same contract the real case's run.sh keeps. The broken scenario exits 5,
+# a status the contract does not define, and two-grades writes a second, failing grade.
 STUB_RUN = r"""#!/usr/bin/env bash
 set -euo pipefail
 checkout="$1"; scenario="$2"; run="$3"
 mkdir -p "$run"
+if [ "$scenario" = broken ]; then
+  echo "run.sh: the stub is broken on purpose" >&2
+  exit 5
+fi
 status=0
 $EVAL_AGENT_CMD "$checkout" "$scenario" "$run" || status=$?
 if [ "$status" -ne 0 ]; then
+  echo "agent noise that is no reason" >&2
   echo "HARNESS: the agent command exited $status; nothing was graded." >&2
   exit 2
+fi
+if [ "$scenario" = two-grades ]; then
+  printf 'FAIL the further check\nFAIL\n' > "$run/grader-extra-output.txt"
 fi
 python3 "$(dirname "$0")/grader.py" "$run" | tee "$run/grader-output.txt"
 """
@@ -54,35 +70,44 @@ python3 "$(dirname "$0")/grader.py" "$run" | tee "$run/grader-output.txt"
 STUB_GRADER = r"""#!/usr/bin/env python3
 import json, pathlib, sys
 run = pathlib.Path(sys.argv[1])
-calls = [json.loads(line) for line in (run / "actions.jsonl").read_text().splitlines()]
-ok = calls and calls[-1]["action"] == "pass"
+calls = [json.loads(line) for line in (run / "actions.jsonl").read_text(errors="replace").splitlines()]
+ok = calls and calls[-1]["action"] == "pass" and (run / "evidence.json").is_file()
 print("ok   the recorded call" if ok else "FAIL the recorded call")
 print("PASS" if ok else "FAIL")
 sys.exit(0 if ok else 1)
 """
 
-# The stub agent: pass and fail record one call; void-once is void on its first attempt only;
-# void-always is void every time. It writes its run directory into the call, so the record shows
-# whether the runner normalised the path.
+# The stub agent: pass and fail record one call; void-once is void on its first attempt only,
+# void-thrice on its first three; void-always is void every time; hang outlives any deadline;
+# bad-bytes records a byte that is not UTF-8. It writes its run directory into the call, so the
+# record shows whether the runner normalised the path. EVAL_AGENT_CMD passes --model MODEL
+# first, as a real agent command names its model.
 STUB_AGENT = r"""#!/usr/bin/env bash
 set -euo pipefail
+shift 2
 checkout="$1"; scenario="$2"; run="$3"
 state="$STUB_STATE/$scenario"
 count=$(( $(cat "$state" 2>/dev/null || echo 0) + 1 ))
 echo "$count" > "$state"
 echo "$run" >> "$STUB_STATE/run-dirs"
 case "$scenario" in
-  pass) action=pass ;;
+  pass|two-grades) action=pass ;;
   fail) action=stop ;;
   void-once) [ "$count" -gt 1 ] || exit 3; action=pass ;;
+  void-thrice) [ "$count" -gt 3 ] || exit 3; action=pass ;;
   void-always) exit 3 ;;
+  hang) sleep 30; action=pass ;;
+  bad-bytes) action=pass ;;
 esac
 printf '{"action": "%s", "run_dir": "%s", "id": "%s"}\n' "$action" "$run" "$STUB_UUID" > "$run/actions.jsonl"
+if [ "$scenario" = bad-bytes ]; then printf '\xff\n' >> "$run/actions.jsonl"; fi
+printf '{"seen_in": "%s"}\n' "$run" > "$run/evidence.json"
 """
 
 STUB_SCENARIOS = ("pass", "fail", "void-once", "void-always")
-# Built from parts so this file carries no UUID shape for the leak scan to flag.
+# Built from parts so this file carries no UUID or address shape for the leak scan to flag.
 STUB_UUID = "-".join(("0" * 8, "1" * 4, "2" * 4, "3" * 4, "4" * 12))
+STUB_ADDRESS = "ops" + "@" + "corp.test"
 
 
 def stub_case(case_dir: Path, scenarios=STUB_SCENARIOS) -> None:
@@ -104,6 +129,11 @@ def stub_case(case_dir: Path, scenarios=STUB_SCENARIOS) -> None:
         (case_dir / name).chmod(0o755)
 
 
+def set_scenarios(case_dir: Path, scenarios) -> None:
+    shutil.rmtree(case_dir)
+    stub_case(case_dir, scenarios)
+
+
 @pytest.fixture
 def suite(tmp_path: Path):
     """A temporary harness checkout holding the runner and the stub case, a separate skill
@@ -112,8 +142,11 @@ def suite(tmp_path: Path):
     evals = harness / "skills" / "story-to-done" / "evals"
     evals.mkdir(parents=True)
     init_repo(harness)
-    for name in HARNESS_FILES:
-        shutil.copy2(EVALS / name, evals / name)
+    for path in [*EVALS.glob("*.py"), *EVALS.glob("*.sh")]:
+        shutil.copy2(path, evals / path.name)
+    for name in SUPPORT_FILES:
+        (harness / name).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(ROOT / name, harness / name)
     stub_case(evals / "stub")
     harness_sha = commit_all(harness)
 
@@ -128,22 +161,36 @@ def suite(tmp_path: Path):
     agent.chmod(0o755)
     state = tmp_path / "state"
     state.mkdir()
-    env = {**os.environ, "EVAL_AGENT_CMD": str(agent), "STUB_STATE": str(state), "STUB_UUID": STUB_UUID, "TMPDIR": str(tmp_path)}
+    env = {**os.environ, "EVAL_AGENT_CMD": f"{agent} --model stub/agent-model#high", "STUB_STATE": str(state),
+           "STUB_UUID": STUB_UUID, "TMPDIR": str(tmp_path)}
+    env.pop("EVAL_TIMEOUT", None)
+    env.pop("EVAL_GRADING_MARGIN", None)
 
-    def run(*args: str) -> subprocess.CompletedProcess[str]:
-        return subprocess.run(["bash", str(evals / "run-suite.sh"), *args], capture_output=True, text=True, env=env)
+    def run(*args: str, **extra: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(["bash", str(evals / "run-suite.sh"), *args], capture_output=True, text=True,
+                              env={**env, **extra})
+
+    def recommit(*scenarios: str) -> str:
+        set_scenarios(evals / "stub", scenarios)
+        return commit_all(harness)
 
     return {"run": run, "evals": evals, "harness": harness, "checkout": checkout, "state": state,
-            "harness_sha": harness_sha, "checkout_sha": checkout_sha}
+            "harness_sha": harness_sha, "checkout_sha": checkout_sha, "env": env, "recommit": recommit}
 
 
 def summary_rows(text: str) -> dict[str, list[str]]:
     rows = {}
     for line in text.splitlines():
         cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
-        if line.startswith("|") and cells[0] in STUB_SCENARIOS:
+        if line.startswith("|") and cells[0] not in ("Scenario", "---"):
             rows[cells[0]] = cells
     return rows
+
+
+def columns(text: str) -> dict[str, int]:
+    header = next(line for line in text.splitlines() if line.startswith("| Scenario"))
+    names = [cell.strip() for cell in header.strip().strip("|").split("|")]
+    return {name: index for index, name in enumerate(names)}
 
 
 def test_the_runner_counts_pass_fail_void_and_exhausted_void_retries(suite) -> None:
@@ -152,12 +199,8 @@ def test_the_runner_counts_pass_fail_void_and_exhausted_void_retries(suite) -> N
 
     summary = (suite["evals"] / "results" / "suite-lab-1.md").read_text()
     assert "k/n × (1 - k/n)" in summary, "the summary states the variance formula"
-    rows = summary_rows(summary)
-    header = next(line for line in summary.splitlines() if line.startswith("| Scenario"))
-    columns = [cell.strip() for cell in header.strip().strip("|").split("|")]
-    at = {name: columns.index(name) for name in ("n", "k", "Pass rate k/n", "Variance", "Voids", "Void reasons",
-                                                 "Skill commit", "Harness commit", "Model", "Reasoning effort",
-                                                 "Role")}
+    assert "Scenarios short of N graded runs: stub void-always." in summary
+    rows, at = summary_rows(summary), columns(summary)
 
     def cell(scenario: str, column: str) -> str:
         return rows[scenario][at[column]]
@@ -175,11 +218,13 @@ def test_the_runner_counts_pass_fail_void_and_exhausted_void_retries(suite) -> N
         assert cell(scenario, "Variance") == variance, scenario
         assert cell(scenario, "Skill commit") == suite["checkout_sha"]
         assert cell(scenario, "Harness commit") == suite["harness_sha"]
-        assert cell(scenario, "Model") == "stub/model-1"
-        assert cell(scenario, "Reasoning effort") == "low"
+        assert cell(scenario, "Model") == "stub/agent-model", "the model is the one the agent command names"
+        assert cell(scenario, "Reasoning effort") == "high", "the effort is the model's #variant"
     assert cell("fail", "Role") == "control (regression pin)"
     assert cell("pass", "Role") == "discriminating"
-    assert "the agent command exited 3" in cell("void-always", "Void reasons")
+    for attempt in range(1, 5):
+        assert f"attempt {attempt}: HARNESS: the agent command exited 3" in cell("void-always", "Void reasons")
+    assert "noise" not in summary, "a void reason is the stated HARNESS line, never other output"
     assert cell("pass", "Void reasons") == "none"
 
     # Retries stop at 2×N attempts, and a void-once scenario needs exactly one retry.
@@ -187,6 +232,15 @@ def test_the_runner_counts_pass_fail_void_and_exhausted_void_retries(suite) -> N
     assert attempts == {"pass": 2, "fail": 2, "void-once": 3, "void-always": 4}
     assert "checkout-only" not in summary, "cases are listed from the harness checkout, never CHECKOUT"
     assert not (suite["state"] / "checkout-only").exists()
+
+
+def test_a_graded_run_on_the_last_allowed_attempt_counts(suite) -> None:
+    suite["recommit"]("void-thrice")
+    result = suite["run"]("--runs", "2", str(suite["checkout"]), "lab-1")
+    assert result.returncode == 1, result.stderr
+    rows = summary_rows((suite["evals"] / "results" / "suite-lab-1.md").read_text())
+    assert rows["void-thrice"][6:8] == ["1", "1"], "attempt 4 of 2×2 is graded and counted"
+    assert int((suite["state"] / "void-thrice").read_text()) == 4
 
 
 def test_every_attempt_writes_a_run_record_and_a_call_record_named_for_it(suite) -> None:
@@ -200,9 +254,15 @@ def test_every_attempt_writes_a_run_record_and_a_call_record_named_for_it(suite)
 
     void = json.loads((results / f"lab-1-void-once-{sha}-harness-{harness_sha}-1.json").read_text())
     assert void["outcome"] == "void" and "exited 3" in void["void_reason"]
+    assert void["calls_record"] == "absent", "a void attempt that recorded no calls says so"
     graded = json.loads((results / f"lab-1-void-once-{sha}-harness-{harness_sha}-2.json").read_text())
     assert graded["outcome"] == "pass" and graded["void_reason"] is None
     assert graded["grades"]["grader-output.txt"][-1] == "PASS"
+    assert graded["verdicts"] == {"void-once": "pass"}
+    assert graded["model"] == "stub/agent-model" and graded["reasoning_effort"] == "high"
+    assert graded["agent_command"] == "{tmpdir}/agent --model stub/agent-model#high"
+    assert json.loads(graded["grader_inputs"]["evidence.json"]) == {"seen_in": "{run_dir}"}, \
+        "a run-directory file the grader names is kept with the record"
     calls = (results / f"lab-1-pass-{sha}-harness-{harness_sha}-1-calls.jsonl").read_text()
     assert json.loads(calls)["action"] == "pass"
 
@@ -224,6 +284,53 @@ def test_run_directories_sit_outside_both_checkouts_and_never_reach_a_record(sui
     assert json.loads(calls)["run_dir"] == "{run_dir}"
 
 
+def test_the_normaliser_rewrites_paths_and_leak_shapes_and_keeps_the_rest() -> None:
+    normalise = SUITE.Normaliser(SUITE.leak_patterns(), run_dir=Path("/scratch/run-1"), home=Path("/home/u"))
+    text = (f"/scratch/run-1/a.json /home/u/x /home/u2/y /opt/demo/local {STUB_ADDRESS} "
+            "https://github.com/a/b skills/story-to-done {run_dir}/kept")
+    assert normalise(text) == ("{run_dir}/a.json {home}/x {path} {path} {redacted} "
+                               "https://github.com/a/b skills/story-to-done {run_dir}/kept")
+
+
+def test_a_record_with_bytes_that_are_not_utf8_is_still_written(suite) -> None:
+    suite["recommit"]("bad-bytes")
+    result = suite["run"]("--runs", "1", str(suite["checkout"]), "lab-1")
+    assert result.returncode == 0, result.stderr
+    calls = next((suite["evals"] / "stub" / "results").glob("*-bad-bytes-*-calls.jsonl")).read_text()
+    assert "�" in calls
+
+
+def test_a_scenario_graded_twice_reports_each_grade(suite) -> None:
+    suite["recommit"]("two-grades")
+    result = suite["run"]("--runs", "2", str(suite["checkout"]), "lab-1")
+    assert result.returncode == 0, result.stderr
+    summary = (suite["evals"] / "results" / "suite-lab-1.md").read_text()
+    rows, at = summary_rows(summary), columns(summary)
+    assert rows["two-grades"][at["k"]] == "2", "the scenario's own grade counts its own verdict"
+    assert rows["two-grades-extra"][at["k"]] == "0" and rows["two-grades-extra"][at["n"]] == "2"
+    assert rows["two-grades-extra"][at["Role"]] == "discriminating (further grade of two-grades)"
+
+
+def test_an_attempt_past_its_deadline_is_void(suite) -> None:
+    suite["recommit"]("hang")
+    result = suite["run"]("--runs", "1", str(suite["checkout"]), "lab-1", EVAL_TIMEOUT="1", EVAL_GRADING_MARGIN="1")
+    assert result.returncode == 1, result.stderr
+    rows = summary_rows((suite["evals"] / "results" / "suite-lab-1.md").read_text())
+    assert rows["hang"][6] == "0" and rows["hang"][10] == "2"
+    assert "did not finish within 2 seconds" in rows["hang"][11]
+
+
+def test_an_undefined_exit_status_stops_the_suite(suite) -> None:
+    suite["recommit"]("broken", "pass")
+    result = suite["run"]("--runs", "2", str(suite["checkout"]), "lab-1")
+    assert result.returncode == 1 and "only 0, 1 and 2 are defined" in result.stderr, result.stderr
+    records = list((suite["evals"] / "stub" / "results").glob("*-broken-*.json"))
+    assert len(records) == 1, "the broken attempt is recorded once and never retried"
+    assert json.loads(records[0].read_text())["outcome"] == "error"
+    assert not (suite["state"] / "pass").exists(), "nothing runs after a broken attempt"
+    assert not (suite["evals"] / "results" / "suite-lab-1.md").exists()
+
+
 def test_the_runner_refuses_to_overwrite_and_exits_2(suite) -> None:
     first = suite["run"]("--runs", "1", str(suite["checkout"]), "lab-1", "stub")
     summary = suite["evals"] / "results" / "suite-lab-1.md"
@@ -239,11 +346,25 @@ def test_the_runner_refuses_to_overwrite_and_exits_2(suite) -> None:
     assert "exists" in record_clash.stderr
 
 
+def test_resume_continues_an_interrupted_run_from_its_records(suite) -> None:
+    first = suite["run"]("--runs", "2", str(suite["checkout"]), "lab-1", "stub")
+    summary = suite["evals"] / "results" / "suite-lab-1.md"
+    before = summary.read_text()
+    summary.unlink()  # as if the run had stopped before its summary
+    records = sorted(path.name for path in (suite["evals"] / "stub" / "results").iterdir())
+    resumed = suite["run"]("--runs", "2", "--resume", str(suite["checkout"]), "lab-1", "stub")
+    assert (first.returncode, resumed.returncode) == (1, 1), resumed.stderr
+    assert summary.read_text() == before, "the resumed summary counts the existing records"
+    assert sorted(path.name for path in (suite["evals"] / "stub" / "results").iterdir()) == records
+    assert int((suite["state"] / "pass").read_text()) == 2, "no attempt with a record runs again"
+
+
 @pytest.mark.parametrize("args", [
     ["--runs", "0", "CHECKOUT", "lab"],
     ["CHECKOUT", "bad/label"],
     ["CHECKOUT", "lab", "no-such-case"],
     ["CHECKOUT", "lab", "checkout-only"],
+    ["CHECKOUT", "lab", "stub", "stub"],
     ["NOT-A-DIR", "lab"],
 ])
 def test_the_runner_refuses_bad_arguments(suite, args) -> None:
@@ -253,13 +374,57 @@ def test_the_runner_refuses_bad_arguments(suite, args) -> None:
     assert not (suite["state"] / "pass").exists(), "nothing ran"
 
 
-def test_a_run_with_every_scenario_graded_exits_0(suite) -> None:
-    stub = suite["evals"] / "stub"
-    shutil.rmtree(stub / "scenarios" / "void-always")
-    case = yaml.safe_load((stub / "case.yaml").read_text())
-    case["scenarios"] = [s for s in case["scenarios"] if s["name"] != "void-always"]
-    (stub / "case.yaml").write_text(yaml.safe_dump(case, sort_keys=False))
+def test_an_agent_command_that_names_no_model_is_refused(suite) -> None:
+    result = suite["run"]("--runs", "1", str(suite["checkout"]), "lab", EVAL_AGENT_CMD="/bin/true")
+    assert result.returncode == 2 and "--model" in result.stderr, result.stderr
+
+
+@pytest.mark.parametrize("change", ["tracked", "untracked"])
+@pytest.mark.parametrize("where", ["harness", "checkout"])
+def test_a_checkout_with_changes_is_refused(suite, where: str, change: str) -> None:
+    repo = suite[where]
+    if change == "tracked":
+        (repo / "skills" / "story-to-done" / "evals" / ("stub" if where == "harness" else "checkout-only")
+         / "prompt.md").write_text("changed\n")
+    else:
+        (repo / "skills" / "story-to-done" / "new-file.md").write_text("new\n")
+    result = suite["run"]("--runs", "1", str(suite["checkout"]), "lab")
+    assert result.returncode == 2 and "uncommitted changes" in result.stderr, result.stderr
+    assert not (suite["state"] / "pass").exists(), "nothing ran"
+
+
+def test_uncommitted_records_do_not_block_a_later_run(suite) -> None:
+    suite["recommit"]("pass")
+    assert suite["run"]("--runs", "1", str(suite["checkout"]), "lab-1").returncode == 0
+    assert git(suite["harness"], "status", "--porcelain", "--untracked-files=all"), "the records are untracked"
+    second = suite["run"]("--runs", "1", str(suite["checkout"]), "lab-2")
+    assert second.returncode == 0, second.stderr
+
+
+def test_a_run_directory_inside_a_checkout_is_refused(suite) -> None:
+    inside = suite["checkout"] / ".git" / "scratch"
+    inside.mkdir()
+    result = suite["run"]("--runs", "1", str(suite["checkout"]), "lab", TMPDIR=str(inside))
+    assert result.returncode == 2 and "set TMPDIR outside both checkouts" in result.stderr, result.stderr
+    assert not (suite["state"] / "pass").exists(), "nothing ran"
+
+
+@pytest.mark.parametrize("scenarios", [None, []])
+def test_a_case_without_scenarios_is_refused(suite, scenarios) -> None:
+    case_file = suite["evals"] / "stub" / "case.yaml"
+    case = yaml.safe_load(case_file.read_text())
+    if scenarios is None:
+        del case["scenarios"]
+    else:
+        case["scenarios"] = scenarios
+    case_file.write_text(yaml.safe_dump(case, sort_keys=False))
     commit_all(suite["harness"])
+    result = suite["run"]("--runs", "1", str(suite["checkout"]), "lab")
+    assert result.returncode == 2 and "names no scenarios" in result.stderr, result.stderr
+
+
+def test_a_run_with_every_scenario_graded_exits_0(suite) -> None:
+    suite["recommit"]("pass", "fail", "void-once")
     result = suite["run"]("--runs", "3", str(suite["checkout"]), "lab-3", "stub")
     assert result.returncode == 0, result.stderr
 
@@ -267,6 +432,8 @@ def test_a_run_with_every_scenario_graded_exits_0(suite) -> None:
 # --- AC3: the case contract -------------------------------------------------------------------
 
 REQUIRED_FIELDS = set(yaml.safe_load((REFERENCE_CASE / "case.yaml").read_text())) | {"kind"}
+# File names that hold the agent's prose rather than its tool calls.
+PROSE = re.compile(r"(?i)agent[-_]?output|transcript")
 
 
 def contract_errors(case_dir: Path, tracked_mode) -> list[str]:
@@ -286,19 +453,23 @@ def contract_errors(case_dir: Path, tracked_mode) -> list[str]:
     for name in ("prompt.md", "grader.py", "run.sh"):
         if not (case_dir / name).is_file():
             errors.append(f"no {name}")
-    if (case_dir / "run.sh").is_file() and tracked_mode(case_dir / "run.sh") != "100755":
-        errors.append("run.sh is not mode 100755")
+    if (case_dir / "run.sh").is_file() and (mode := tracked_mode(case_dir / "run.sh")) != "100755":
+        errors.append(f"run.sh is {mode}, not mode 100755")
     if not (case_dir / "results").is_dir():
         errors.append("no results/")
-    for scenario in case.get("scenarios") or []:
+    scenarios = case.get("scenarios")
+    if not isinstance(scenarios, list) or not scenarios:
+        errors.append("case.yaml names no scenarios")
+    for scenario in scenarios if isinstance(scenarios, list) else []:
         name = scenario.get("name") if isinstance(scenario, dict) else None
         if not name or not (case_dir / "scenarios" / name).is_dir():
             errors.append(f"no fixtures for scenario {name!r}")
-    grader = (case_dir / "grader.py").read_text() if (case_dir / "grader.py").is_file() else ""
-    if "actions.jsonl" not in grader:
+    names = SUITE.grader_names(case_dir / "grader.py") if (case_dir / "grader.py").is_file() else set()
+    if not any("actions.jsonl" in name for name in names):
         errors.append("the grader does not read the tool-call record actions.jsonl")
-    if "agent-output" in grader:
-        errors.append("the grader reads the agent's prose")
+    prose = sorted(name for name in names if PROSE.search(name))
+    if prose:
+        errors.append(f"the grader reads the agent's prose: {prose}")
     return errors
 
 
@@ -325,7 +496,7 @@ def test_every_case_directory_keeps_the_contract(case_dir: Path) -> None:
 
 @pytest.mark.parametrize("breakage", [
     "no-kind", "bad-kind", "no-prompt", "no-grader", "no-run", "run-not-executable",
-    "no-results", "no-fixture", "prose-grader", "missing-field",
+    "no-results", "no-fixture", "prose-grader", "prose-beside-calls", "missing-field", "no-scenarios",
 ])
 def test_the_contract_check_catches_each_breakage(tmp_path: Path, breakage: str) -> None:
     case_dir = tmp_path / "case"
@@ -338,6 +509,8 @@ def test_the_contract_check_catches_each_breakage(tmp_path: Path, breakage: str)
         case["kind"] = "tabletop"
     elif breakage == "missing-field":
         del case["graded_on"]
+    elif breakage == "no-scenarios":
+        case["scenarios"] = []
     elif breakage == "no-prompt":
         (case_dir / "prompt.md").unlink()
     elif breakage == "no-grader":
@@ -352,8 +525,16 @@ def test_the_contract_check_catches_each_breakage(tmp_path: Path, breakage: str)
         shutil.rmtree(case_dir / "scenarios" / "fail")
     elif breakage == "prose-grader":
         (case_dir / "grader.py").write_text("open('agent-output.txt').read()\n")
+    elif breakage == "prose-beside-calls":
+        (case_dir / "grader.py").write_text("open('actions.jsonl').read()\nopen('transcript.txt').read()\n")
     (case_dir / "case.yaml").write_text(yaml.safe_dump(case, sort_keys=False))
     assert contract_errors(case_dir, file_mode) != []
+
+
+def test_a_grader_docstring_is_not_a_file_it_reads(tmp_path: Path) -> None:
+    grader = tmp_path / "grader.py"
+    grader.write_text('"""Never reads the transcript."""\nopen("actions.jsonl")\n')
+    assert SUITE.grader_names(grader) == {"actions.jsonl"}
 
 
 def test_the_folded_case_is_discriminating_on_skl_159s_merge_commit() -> None:

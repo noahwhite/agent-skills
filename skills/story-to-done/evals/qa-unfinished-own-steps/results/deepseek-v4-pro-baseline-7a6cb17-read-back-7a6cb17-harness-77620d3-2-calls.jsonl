@@ -1,2 +1,0 @@
-{"action": "read", "at": "2026-11-12T05:31:58Z", "path": "qa-agent-round-1/qa-agent-round-1-todo.md"}
-{"action": "stop", "at": "2026-11-12T05:32:27Z", "reason": "QA not finished - 'remove the temporary test data this round created' remains outstanding, owned by QA; story stays In Deployment Review"}
