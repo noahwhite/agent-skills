@@ -261,6 +261,13 @@ def test_schema_refuses_a_malformed_story_to_done(story_to_done) -> None:
     assert schema_errors(profile_with(story_to_done))
 
 
+@pytest.mark.parametrize("operator", [";", "&", "|", "<", ">", "(", ")", "`"])
+def test_schema_refuses_placeholders_in_a_comment_after_a_shell_operator(operator) -> None:
+    # A '#' right after a shell operator starts a comment, like one after whitespace.
+    command = f'agent --model x{operator}# "{{model}}" "{{effort}}" "{{prompt_file}}" "{{output_file}}" "{{session_title}}"'
+    assert schema_errors(profile_with({"engineer": COMMAND_SEAT | {"command": command}, "qa": SEAT}))
+
+
 @pytest.mark.parametrize("path", [ROOT / "profile" / "example.yaml", ROOT / ".agent-skills" / "profile.yaml"],
                          ids=["example", "repository"])
 def test_profiles_seat_story_to_done_on_verified_labs(path: Path) -> None:
