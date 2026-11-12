@@ -23,6 +23,19 @@ Each case runs a real agent against a fixed scenario and grades the tool calls i
 From a fresh shell, at the root of a checkout of this repository (the harness checkout).
 `<checkout>` is the checkout holding the skill under test, and `<scratch>` any directory outside both checkouts.
 
+First set the agent command, which every command below uses.
+This is the command the committed runs used; the message comes last, because `run.sh` appends the prompt to it as `--file`:
+
+```sh
+export EVAL_AGENT_CMD="opencode run --standalone --auto --archived --model deepseek/deepseek-v4-pro Follow the instructions in the attached file exactly."
+```
+
+When the provider credential is an environment variable rather than stored `opencode` auth, also pass it to the agent:
+
+```sh
+export EVAL_PASS_ENV="DEEPSEEK_API_KEY"
+```
+
 One scenario, through the case's own `run.sh`:
 
 ```sh
