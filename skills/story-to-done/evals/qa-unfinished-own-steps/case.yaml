@@ -1,5 +1,6 @@
 case: qa-unfinished-own-steps
 skill: story-to-done
+kind: discriminating
 purpose: >-
   Show that a QA round which hands back with only its own work outstanding is continued in
   the same round by the same agent, instead of halting the loop, and that the stop and
@@ -7,17 +8,18 @@ purpose: >-
 split: >-
   SKL-159 owns this case's content: its prompt, case.yaml, grader, scenarios and rerun
   instructions, and the recorded baseline and candidate runs below. SKL-164 owns the suite
-  harness, the README and the repeat-run machinery; whichever of the two lands second folds
-  its copy into the other's layout.
+  harness, the README and the repeat-run machinery (../run-suite.sh, ../README.md), and the
+  case content stays SKL-159's.
 baseline:
   commit: 7a6cb17
   note: the skill as committed on origin/main before this change; the baseline stops instead of continuing.
 candidate:
-  commit: 1f24df1
+  commit: 4f0eb79
   note: >-
-    the branch commit that carries the skill change, the checklist read-back rule and this case;
-    the candidate continues the round it is in. The results file named for that commit is the
-    run it records, and the current baseline record is baseline-7a6cb17-harness-1f24df1.
+    SKL-159's merge commit on main, whose parent is the baseline 7a6cb17. The branch commit
+    1f24df1 named before is not reachable from main; its candidate-1f24df1 and
+    baseline-7a6cb17-harness-1f24df1 records stay as history, and the suite's repeat runs at
+    both commits are recorded under results/ and in ../results/.
 runtime:
   command: opencode run --standalone --auto --archived --model deepseek/deepseek-v4-pro
   model: deepseek/deepseek-v4-pro
