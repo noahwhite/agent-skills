@@ -2631,11 +2631,14 @@ def test_step_one_type_check_runs_after_the_roster_and_before_the_probe_and_ever
         "When the team of `STORY_ID` differs from `profile.tracker.team_key`, confirm those four labels on that team "
         "under the differing-team rule in Team resolution in [references/linear.md](references/linear.md) before "
         "naming the type.",
-        "Name the issue type from the labels read in item 1: `profile.tracker.labels.bug` names a Bug, "
+        "An issue carrying `profile.tracker.labels.user_story` is a User Story whatever other labels it has (the "
+        "`linear-user-story` skill files maintenance defect stories as `user_story` plus `bug`): it runs the ceremony "
+        "as a User Story with `type: estimated`, even when it also carries one or more of the three type labels.",
+        "Otherwise, name the issue type from the labels read in item 1: `profile.tracker.labels.bug` names a Bug, "
         "`profile.tracker.labels.investigation` an Investigation and `profile.tracker.labels.spike` a Spike.",
-        "An issue carrying two or more of those three labels, or one of them together with "
-        "`profile.tracker.labels.user_story`, stops with `needs input` naming the labels; any other co-label, for "
-        "example `profile.tracker.labels.rtb`, does not affect the type check.",
+        "An issue without `profile.tracker.labels.user_story` carrying two or more of those three labels stops with "
+        "`needs input` naming the labels; any other co-label, for example `profile.tracker.labels.rtb`, does not "
+        "affect the type check.",
         "An issue with none of the three type labels, maintenance work included, runs the ceremony as a User Story "
         "with `type: estimated`.",
         "Record `type: <Bug|Investigation|Spike|estimated>` on the todo list; the type is final once written there, "
@@ -2651,8 +2654,8 @@ def test_step_one_type_check_states_the_rule(sentence: str) -> None:
 def test_step_one_stop_names_the_type_check_stops() -> None:
     """B1: both type stops are Step 1 stop conditions."""
     assert (
-        "the type check stops on an unset type-label key or on conflicting type labels (two or more type labels, "
-        "or a type label with the user story label)" in bullet(operative_step(STEP_ONE), "Stop")
+        "the type check stops on an unset type-label key or on conflicting type labels (two or more type labels on "
+        "an issue without the user story label)" in bullet(operative_step(STEP_ONE), "Stop")
     )
 
 
@@ -2665,7 +2668,7 @@ TYPE_FIXTURES = [
     ("user story", {"user_story", "feature"}, set(), "estimated", "run"),
     ("maintenance, rtb only", {"rtb"}, set(), "estimated", "run"),
     ("two type labels", {"bug", "investigation"}, set(), "needs input", "stop: names the labels"),
-    ("type label with user_story", {"spike", "user_story"}, set(), "needs input", "stop: names the labels"),
+    ("user_story with a type label (maintenance defect)", {"user_story", "bug", "rtb"}, set(), "estimated", "run"),
     ("unset type-label key", {"user_story"}, {"investigation"}, "needs input", "stop: names the key"),
     ("unset user_story key, no type label", {"feature"}, {"user_story"}, "needs input", "stop: names the key"),
 ]
@@ -2685,10 +2688,15 @@ def documented_type(labels: set[str], unset: set[str]) -> tuple[str, str]:
     assert names == TYPE_NAMES
     lead = section(SKILL.read_text(), UNESTIMATED).split("- **Refinement only:**", 1)[1].split("skips Stage 2", 1)[0]
     skipped = set(re.findall(r"\b(Bug|Investigation|Spike)\b", lead))
+    story = re.search(r"An issue carrying `profile\.tracker\.labels\.(\w+)` is a User Story whatever other labels", item)
+    assert story, "the type item names the label that makes an issue a User Story"
+    assert "carrying two or more of those three labels stops with `needs input` naming the labels" in item
     if unset & keys:
         return "needs input", "stop: names the key"
+    if story.group(1) in labels:
+        return "estimated", "run"
     kinds = labels & set(names)
-    if len(kinds) > 1 or (kinds and "user_story" in labels):
+    if len(kinds) > 1:
         return "needs input", "stop: names the labels"
     if kinds:
         kind = names[kinds.pop()]
@@ -2764,20 +2772,20 @@ def test_type_fixture_table_maps_each_label_set_to_its_documented_path(
 
 
 def test_type_fixture_table_covers_every_type_and_stop() -> None:
-    """B8a: one Bug, Investigation, Spike and User Story row, plus one row per B1 stop."""
+    """B8a: one Bug, Investigation, Spike and User Story row, one row per B1 stop, and one row for `user_story`
+    together with a type label."""
     outcomes = [(row[3], row[4]) for row in TYPE_FIXTURES]
     for expected in (
         ("Bug", "skip"),
         ("Investigation", "skip"),
         ("Spike", "skip"),
+        ("needs input", "stop: names the labels"),
     ):
         assert outcomes.count(expected) == 1, expected
-    for expected in (
-        ("estimated", "run"),
-        ("needs input", "stop: names the labels"),
-        ("needs input", "stop: names the key"),
-    ):
-        assert outcomes.count(expected) == 2, expected
+    assert outcomes.count(("needs input", "stop: names the key")) == 2
+    assert outcomes.count(("estimated", "run")) == 3
+    story_with_type = [row for row in TYPE_FIXTURES if "user_story" in row[1] and row[1] & set(TYPE_NAMES)]
+    assert [(row[3], row[4]) for row in story_with_type] == [("estimated", "run")]
 
 
 def test_unestimated_section_skips_stage_two_entirely() -> None:
@@ -2856,8 +2864,13 @@ def test_unestimated_section_decides_priority_on_every_outcome() -> None:
         "A Bug, an Investigation or a Spike moves to `profile.tracker.states.ready` only when all three voters "
         "returned `ACCEPT`, no blocker remains, the priority is read back equal to the decided value, every "
         "Definition of Ready box its template has is ticked with evidence (none do, so this is vacuous), and the "
-        "template's evidence sections are non-empty: Bug `Observed` and `Expected`, Investigation `Incident`, and "
-        "Spike `Timebox` and `Research Questions`.",
+        "template's evidence sections are non-empty and no longer the filing template's placeholder text: Bug "
+        "`Observed` and `Expected`, Investigation `Incident`, and Spike `Timebox` and `Research Questions`.",
+        "A section still holds placeholder text when any bracketed template instruction line remains in it: a "
+        "`[...]` line from the `linear-bug` or `linear-spike` template, such as `[What should have happened "
+        "instead.]` or `[Key question to answer]`, or a `<...>` line from the `linear-investigation` template, such "
+        "as `<Paging system> <incident reference> - <alert title> (<service>, <environment>, <affected component>).`; "
+        "a section that is empty or still holds one fails this condition.",
         "Otherwise it stays in `profile.tracker.states.backlog` and the Triage record's `State:` line names the "
         'unmet condition; on a move to ready the line reads "ready: all conditions met".',
     ],
@@ -2865,6 +2878,22 @@ def test_unestimated_section_decides_priority_on_every_outcome() -> None:
 def test_unestimated_section_states_the_ready_gate(sentence: str) -> None:
     """B4: the end state and the State: line."""
     assert flat(sentence) in unestimated_bullet("Ready gate")
+
+
+@pytest.mark.parametrize(
+    "skill, placeholder",
+    [
+        ("linear-bug", "[What should have happened instead.]"),
+        ("linear-spike", "[Key question to answer]"),
+        ("linear-investigation", "<Paging system> <incident reference> - <alert title> (<service>, <environment>, "
+                                 "<affected component>)."),
+    ],
+)
+def test_ready_gate_placeholder_examples_are_the_filing_templates_own(skill: str, placeholder: str) -> None:
+    """B4: each placeholder the ready gate quotes is a line of that filing template, so the example cannot drift."""
+    lines = (ROOT / "skills" / skill / "SKILL.md").read_text().splitlines()
+    assert any(re.fullmatch(rf"(?:\d+\. )?{re.escape(placeholder)}", line) for line in lines)
+    assert f"`{placeholder}`" in spaced(section(SKILL.read_text(), UNESTIMATED))
 
 
 def test_unestimated_section_has_no_metrics_mention() -> None:
