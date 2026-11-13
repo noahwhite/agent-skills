@@ -2,6 +2,7 @@
 
 Date: 2026-11-13 UTC.
 Skill under test: `skills/story-to-done/SKILL.md` and `skills/story-to-done/references/` as committed in `2d03538f2dc97ab18faf9e39c3d38c3664c4ae86` on `feature/skl-256-interim-redeadline`, read from a worktree by path (the installed skill was not loaded).
+The branch was then rebased onto `main` at `8569da2`, which rewrote that commit as `f8c888ff446c41dc87a7ad674e9fc71dcca649fc` and brought in a `SKILL.md` change to step 4's QA outcome handling (`pending owner ruling` items) only; `references/interim-handbacks.md` and steps 1 and 2, which this run exercised, are byte-identical in both commits.
 Fixture issue: SKL-303 "[Tabletop fixture] SKL-256 interim miss count and two-miss stop (PR head)", created in Backlog at 22:08:18.514Z for this run and canceled by the implementing engineer at 22:36:24.684Z, after the coordinator's report.
 An earlier run on SKL-302 (canceled at 21:21:57Z) exercised the wording before the pre-PR gate's fixes and is superseded by this one.
 Awaited item held pending deterministically: the fixture's senior engineer names the tracker move of SKL-303 to In Deployment Review, and nothing in the run moves SKL-303, so every read of it returns Backlog.
