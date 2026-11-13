@@ -83,7 +83,7 @@ The `linear` CLI (schpet/linear-cli) is the primary tool; the Linear MCP server 
   The team issue list renders it in its estimate column, which is a display path, not a read path for a script.
 - ⛔ Split a story estimated at 8 points or more at refinement, without asking, and present the slices.
   Keep the original issue for the core slice, create siblings for the rest, and wire blocked-by or related edges.
-- ⛔ At refinement, without asking, split a Bug or an Investigation whose accepted refinement comment's `Scope signal:` line reads `more than one independently reviewable change`: the original keeps the core slice and blocks each sibling, siblings come from its own filing template with its type label, no slice gets a point value or a slice estimate, and the split comment maps every acceptance criterion or findings-scope item to a slice; for these unestimated types that line, never an estimate, is the trigger.
+- ⛔ At refinement, without asking, split a Bug or an Investigation whose accepted refinement comment's `Scope signal:` line reads `more than one independently reviewable change`, with or without its `(<reason>)`: the original keeps the core slice and blocks each sibling, siblings come from its own filing template with its type label, no slice gets a point value or a slice estimate, and the split comment maps every acceptance criterion or findings-scope item to a slice; for these unestimated types that line, never an estimate, is the trigger.
 - ⛔ Never split an issue at close time to carve off unfinished work; that is status laundering.
 
 ## Acceptance criteria and scope

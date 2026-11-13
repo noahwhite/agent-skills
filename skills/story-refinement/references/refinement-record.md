@@ -109,8 +109,8 @@ A re-split sibling gets its own split comment on that sibling.
 ```markdown
 ## Split record
 
-- Refinement comment split: <accepted refinement comment id>
-- Core slice: <original issue key> - <its slice> - Scope signal: <reading>
+- Refinement comment split: <accepted refinement comment id; for a re-split sibling, the parent split comment id and the sibling key>
+- Core slice: <original issue key> - <its slice> - Scope signal: <reading> - description trimmed to this slice
 - Siblings, each from the `<linear-bug|linear-investigation>` template with the `<type label>` label, blocked by the original:
   - <sibling key> - <its slice> - Scope signal: <reading>
 - Mapping: <each acceptance criterion, or for an Investigation each findings-scope item, and the slice it maps to>
@@ -134,7 +134,7 @@ The priority is the value read back after the PO applied it; when the PO could n
 
 - Priority: <the decided value, read back; or unset when the PO could not decide>
 - Priority comparison: <each comparable story's identifier and priority; or `needs input` with the open question when the PO could not decide>
-- State: <for a Bug, an Investigation or a Spike: ready: all conditions met, or backlog with each unmet condition, or for an issue already in progress or later its retained state with all conditions met or with each unmet condition; for a Spike with more than one independent research thread the unmet condition reads re-file as separate Spikes (owner); omitted for a User Story>
+- State: <for a Bug, an Investigation or a Spike: ready: all conditions met, or backlog with each unmet condition, or for an issue already in progress or later its retained state with all conditions met or with each unmet condition; for a Spike with more than one independent research thread the unmet condition reads re-file as separate Spikes (owner); when the `Scope signal:` line is missing or carries neither of its type's readings the unmet condition reads scope signal missing; omitted for a User Story>
 - Tracker writes: product owner
 ```
 
