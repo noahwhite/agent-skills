@@ -969,7 +969,8 @@ METRICS_TIMED_LAUNCHES = (
 )
 METRICS_LAUNCH_POINTS = (
     "The senior engineer's timed launches are the first launch in step 2, each checklist read-back resume "
-    "of the senior engineer under step 0, and each resume or re-spawn in step 4; each QA round is a launch "
+    "of the senior engineer under step 0, each interim-deadline resume of the senior engineer under "
+    "`references/interim-handbacks.md`, and each resume or re-spawn in step 4; each QA round is a launch "
     "row in step 3, a continuation of that round under step 4 is a further launch row within the same "
     "round, and each checklist read-back resume of a QA agent under step 0 is a launch row of its own "
     "within that QA agent's round."
@@ -3086,6 +3087,30 @@ def test_a_runtime_that_cannot_resume_the_engineer_stops_without_a_new_subagent(
 
 def test_a_deadline_resume_does_not_count_against_the_read_back_resume_cap() -> None:
     assert INTERIM_RESUME_CAP in interim_text()
+
+
+INTERIM_RESUME_ROW = "With `metrics` on, each deadline resume is its own launch row."
+INTERIM_DEADLINE_BLOCK = (
+    INTERIM_READ, INTERIM_CONCLUDED_RESUME, INTERIM_NO_RESUME_STOP, INTERIM_RESUME_CAP, INTERIM_RESUME_ROW,
+    INTERIM_NARROWED_STOP, INTERIM_STOP,
+)
+
+
+def test_with_metrics_on_each_deadline_resume_is_its_own_launch_row() -> None:
+    assert INTERIM_RESUME_ROW in interim_text()
+
+
+def test_the_deadline_rule_states_each_outcome_once_in_one_uninterrupted_block() -> None:
+    text = interim_text()
+    for phrase in INTERIM_DEADLINE_BLOCK:
+        assert text.count(phrase) == 1, f"{phrase!r} must appear exactly once"
+    assert " ".join(INTERIM_DEADLINE_BLOCK) in text
+
+
+def test_no_other_sentence_stops_at_the_deadline() -> None:
+    sentences = re.split(r"(?<=\.)\s+", interim_text())
+    stops = [s for s in sentences if "deadline" in s.lower() and "stop" in s.lower()]
+    assert stops == [INTERIM_NO_RESUME_STOP, INTERIM_NARROWED_STOP]
 
 
 # SKL-155: the `qa-round-cap` argument stops the loop at the cap-th counted QA round that ends in

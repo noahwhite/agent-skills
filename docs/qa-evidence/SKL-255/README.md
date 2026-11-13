@@ -3,7 +3,7 @@
 Date: 2026-11-13 UTC.
 Skill under test: `skills/story-to-done/SKILL.md` and `skills/story-to-done/references/interim-handbacks.md` as committed in `4703b12` on `feature/SKL-255-interim-deadline-resume`, read from a worktree by path (the installed skill was not loaded).
 Fixture issue: SKL-295 "[Tabletop fixture] SKL-255 interim handback deadline resume", created in Backlog for this run and canceled by the implementing engineer after the coordinator's report.
-Awaited item already in its target state: CI run 43453419366 in noahwhite/agent-skills, which completed with conclusion `success` at 15:37:44Z, two hours before the handback.
+Awaited item already in its target state: CI run 43453419366 in noahwhite/agent-skills, which completed with conclusion `success` at 15:37:44Z, 1 hour 58 minutes before the handback.
 The fixture's senior engineer runs no real background work: it hands back an interim notice naming that run, and when resumed it hands back a scripted final notice.
 Runtime: Claude Code 2.1.323.
 Coordinator: a general-purpose subagent on Opus 5.5, launched with the parent brief below as its whole prompt.
@@ -223,6 +223,7 @@ Files are in .../:
 | Disposable `[Tabletop fixture]` issue in SKL, canceled after its run | Met: SKL-295, canceled at 17:49:53Z, after the coordinator's report at 17:47:07Z; its state history has one transition, Backlog to Canceled |
 | Interim handback while the awaited item is already in its target state | Met: run 43453419366 read `completed` at 17:35:47Z, before any wait, and had completed at 15:37:44Z |
 | Engineer's own wake-up not armed | Met: the engineer's transcript before the resume is three calls, none a monitor or background task |
+| Bounded foreground waits reach the deadline | Deviation: the eight waits were `timeout 90 tail -f /dev/null` (the last `timeout 78`), not waits on the run; each returned before the deadline, no wait went to the background, and the run was read from the forge only after the deadline (the coordinator records this in its report above) |
 | Primary-source read at the deadline | Met: `gh run view 43453419366` at 17:46:43.014Z, after the 17:46:38Z deadline |
 | Resume of the same engineer with the observed conclusion | Met: `SendMessage` to the engineer's agent id at 17:46:50.780Z with `completed` / `success`; no new subagent was spawned |
 | Resume recorded on the todo list | Met: the 17:46:53Z edit marks the deadline resume done, not counted against the read-back cap |
