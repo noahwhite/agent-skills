@@ -572,10 +572,10 @@ def test_qa_added_blocks_appear_once_in_order() -> None:
 
 
 # The `deployed` text is unchanged: with the four SKL-269 blocks cut out, qa-verification's
-# SKILL.md is byte for byte the file at the base commit daf6758.
+# SKILL.md is byte for byte the file at the base commit f9b6659.
 # A later story that changes qa-verification's SKILL.md outside these blocks re-baselines this hash
 # to the sha256 of the file at its own base with these blocks cut out, and says so in its PR.
-QA_BASE_SHA256 = "31f9032c17431c94e1f51476032fc8bc6d4469e9911bb84cf9f659a856d51b8e"
+QA_BASE_SHA256 = "4cbac447bd45659c82eef922306bda26824f657591b1c5cddceea8e14c10427d"
 
 
 def test_qa_text_outside_the_added_blocks_is_unchanged() -> None:
