@@ -123,8 +123,9 @@ RESPLIT_BULLET = " ".join(
         "Each resulting slice gets its own estimate, made the way the story's was (at refinement, filing or triage), "
         "before it is tested against that trigger.",
         "A slice that cannot be estimated is recorded as unpointed and reported as `needs input` to the owner, "
-        "naming the story, the slice and the derived values, as the unpointed variance stop in story-refinement's "
-        "Split rule is; that report is not an exit for an oversize slice.",
+        "naming the story and the slice, and also the derived values when a refinement voter round produced them, "
+        "as the unpointed variance stop in story-refinement's Split rule does; that report is not an exit for an "
+        "oversize slice.",
         "Split along the first boundary that applies, in this order:",
         "1. the planned PR or slice boundary;",
         "2. an acceptance criterion;",

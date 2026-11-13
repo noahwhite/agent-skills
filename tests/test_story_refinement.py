@@ -3575,7 +3575,7 @@ def test_missing_scope_signal_stops_with_needs_input() -> None:
     [
         "Otherwise the [Split rule](#split-rule) applies as written: siblings in the team of `STORY_ID`, the "
         "differing-team confirmation of `profile.tracker.states.backlog` and each label, and the split comment; these "
-        "differences override its `linear-user-story` template, its slice estimate round and its escalation.",
+        "differences override its `linear-user-story` template and its slice estimate round.",
         "Each sibling is assigned to `profile.tracker.assignee`, keeps the original's project and cycle, and its body "
         "fills its filing template with its slice's content from the accepted refinement comment, never the "
         "template's placeholder text.",
