@@ -2636,7 +2636,7 @@ def test_step_one_type_check_runs_after_the_roster_and_before_the_probe_and_ever
         "as a User Story with `type: estimated`, even when it also carries one or more of the three type labels.",
         "Otherwise, name the issue type from the labels read in item 1: `profile.tracker.labels.bug` names a Bug, "
         "`profile.tracker.labels.investigation` an Investigation and `profile.tracker.labels.spike` a Spike.",
-        "An issue without `profile.tracker.labels.user_story` carrying two or more of those three labels stops with "
+        "An issue without `profile.tracker.labels.user_story` carrying two or more of the three type labels stops with "
         "`needs input` naming the labels; any other co-label, for example `profile.tracker.labels.rtb`, does not "
         "affect the type check.",
         "An issue with none of the three type labels, maintenance work included, runs the ceremony as a User Story "
@@ -2690,7 +2690,7 @@ def documented_type(labels: set[str], unset: set[str]) -> tuple[str, str]:
     skipped = set(re.findall(r"\b(Bug|Investigation|Spike)\b", lead))
     story = re.search(r"An issue carrying `profile\.tracker\.labels\.(\w+)` is a User Story whatever other labels", item)
     assert story, "the type item names the label that makes an issue a User Story"
-    assert "carrying two or more of those three labels stops with `needs input` naming the labels" in item
+    assert "carrying two or more of the three type labels stops with `needs input` naming the labels" in item
     if unset & keys:
         return "needs input", "stop: names the key"
     if story.group(1) in labels:
@@ -2866,11 +2866,14 @@ def test_unestimated_section_decides_priority_on_every_outcome() -> None:
         "Definition of Ready box its template has is ticked with evidence (none do, so this is vacuous), and the "
         "template's evidence sections are non-empty and no longer the filing template's placeholder text: Bug "
         "`Observed` and `Expected`, Investigation `Incident`, and Spike `Timebox` and `Research Questions`.",
-        "A section still holds placeholder text when any bracketed template instruction line remains in it: a "
-        "`[...]` line from the `linear-bug` or `linear-spike` template, such as `[What should have happened "
-        "instead.]` or `[Key question to answer]`, or a `<...>` line from the `linear-investigation` template, such "
-        "as `<Paging system> <incident reference> - <alert title> (<service>, <environment>, <affected component>).`; "
-        "a section that is empty or still holds one fails this condition.",
+        "A section still holds placeholder text when any bracketed template instruction that the filing template "
+        "puts in that section remains in it verbatim, compared with each run of whitespace read as one space: each "
+        "`[...]` instruction of the `linear-bug` or `linear-spike` template, whether on a line of its own like `[What "
+        "should have happened instead.]`, wrapped across lines like the Bug `Observed` instruction, inline after the "
+        "section label like `**Timebox:** [X days]`, or numbered like `1. [Key question to answer]`, and each `<...>` "
+        "token of the `linear-investigation` template's `Incident` line, such as `<Paging system>`; a section that "
+        "is empty or still holds one fails this condition.",
+        "Text the author wrote in brackets, such as a Markdown link, is not template placeholder text.",
         "Otherwise it stays in `profile.tracker.states.backlog` and the Triage record's `State:` line names the "
         'unmet condition; on a move to ready the line reads "ready: all conditions met".',
     ],
@@ -2880,20 +2883,75 @@ def test_unestimated_section_states_the_ready_gate(sentence: str) -> None:
     assert flat(sentence) in unestimated_bullet("Ready gate")
 
 
-@pytest.mark.parametrize(
-    "skill, placeholder",
-    [
-        ("linear-bug", "[What should have happened instead.]"),
-        ("linear-spike", "[Key question to answer]"),
-        ("linear-investigation", "<Paging system> <incident reference> - <alert title> (<service>, <environment>, "
-                                 "<affected component>)."),
-    ],
-)
-def test_ready_gate_placeholder_examples_are_the_filing_templates_own(skill: str, placeholder: str) -> None:
-    """B4: each placeholder the ready gate quotes is a line of that filing template, so the example cannot drift."""
-    lines = (ROOT / "skills" / skill / "SKILL.md").read_text().splitlines()
-    assert any(re.fullmatch(rf"(?:\d+\. )?{re.escape(placeholder)}", line) for line in lines)
-    assert f"`{placeholder}`" in spaced(section(SKILL.read_text(), UNESTIMATED))
+def filing_section(skill: str, start: str, end: str) -> str:
+    """The text of one evidence section of a filing template, from its label up to the next label or rule."""
+    text = (ROOT / "skills" / skill / "SKILL.md").read_text()
+    template = text[text.index("## Template (the description)"):]
+    body = template[template.index(start) + len(start):]
+    return body[: body.index(end)]
+
+
+# Each evidence section the ready gate names, the filing template's text that bounds it, and the bracket kind the
+# gate's placeholder rule names for that template.
+EVIDENCE_SECTIONS = [
+    ("linear-bug", "**Observed**", "**Expected**", r"\[[^\]]+\]"),
+    ("linear-bug", "**Expected**", "**Fix**", r"\[[^\]]+\]"),
+    ("linear-investigation", "**Incident**", "---", r"<[^>]+>"),
+    ("linear-spike", "**Timebox:**", "\n", r"\[[^\]]+\]"),
+    ("linear-spike", "**📝 Research Questions**", "---", r"\[[^\]]+\]"),
+]
+
+
+@pytest.mark.parametrize("skill, start, end, kind", EVIDENCE_SECTIONS, ids=[f"{r[0]} {r[1]}" for r in EVIDENCE_SECTIONS])
+def test_ready_gate_placeholder_rule_covers_every_evidence_section(skill: str, start: str, end: str, kind: str) -> None:
+    """B4: every evidence section the gate names carries a filing placeholder of the bracket kind the rule detects,
+    and every instruction in it is caught whatever its layout (own line, wrapped, inline after the label, numbered)."""
+    body = filing_section(skill, start, end)
+    spans = [" ".join(span.split()) for span in re.findall(kind, body)]
+    assert spans, f"{skill} {start} has no placeholder the rule can detect"
+    gate = spaced(section(SKILL.read_text(), UNESTIMATED))
+    bracket = "`[...]` instruction of the `linear-bug` or `linear-spike` template" if kind.startswith(r"\[") else (
+        "each `<...>` token of the `linear-investigation` template's `Incident` line"
+    )
+    assert bracket in gate
+    assert "remains in it verbatim, compared with each run of whitespace read as one space" in gate
+
+
+def test_ready_gate_placeholder_examples_are_the_filing_templates_own() -> None:
+    """B4: each layout example the gate quotes is the filing template's own text, so the examples cannot drift."""
+    bug = (ROOT / "skills" / "linear-bug" / "SKILL.md").read_text()
+    spike = (ROOT / "skills" / "linear-spike" / "SKILL.md").read_text()
+    investigation = (ROOT / "skills" / "linear-investigation" / "SKILL.md").read_text()
+    assert "\n[What should have happened instead.]\n" in bug
+    assert "[Concrete evidence:" in filing_section("linear-bug", "**Observed**", "**Expected**")
+    assert "\n" in filing_section("linear-bug", "**Observed**", "**Expected**").strip(), "the Observed text wraps"
+    assert "\n**Timebox:** [X days]\n" in spike
+    assert "\n1. [Key question to answer]\n" in spike
+    assert "<Paging system>" in filing_section("linear-investigation", "**Incident**", "---")
+    assert "<Paging system>" in investigation
+
+
+def test_unestimated_section_removes_an_existing_estimate() -> None:
+    """B2 and B8a: a Bug, an Investigation or a Spike never keeps an estimate, so its read-back is null."""
+    assert flat(
+        "The ceremony writes no point value; when the issue already carries an estimate, the PO removes it (sets the "
+        "estimate to null) as a triage write and reads it back as null before the Triage record is posted."
+    ) in unestimated_bullet("No estimate kept")
+
+
+def test_type_item_states_user_story_precedence_before_the_stop_and_the_naming() -> None:
+    """B1: the type item reads in rule order: user_story wins, then the two-label stop, then the type names."""
+    item = type_item()
+    story = item.index("is a User Story whatever other labels it has")
+    stop = item.index("carrying two or more of the three type labels stops with `needs input`")
+    naming = item.index("Otherwise, name the issue type")
+    assert story < stop < naming
+
+
+def test_pointing_record_template_is_never_posted_for_an_unestimated_type() -> None:
+    assert "Never post it for a Bug, an Investigation or a Spike, which is never pointed." in (
+        SKILL.parent / "references" / "refinement-record.md"
+    ).read_text().split("## Pointing record", 1)[1].split("```", 1)[0]
 
 
 def test_unestimated_section_has_no_metrics_mention() -> None:

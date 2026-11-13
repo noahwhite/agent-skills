@@ -417,7 +417,8 @@ INDEPENDENCE_AND_POSTING = [
         id="refinement-order-after-record",
     ),
     pytest.param(
-        "On a stop before such a record exists, the comment is posted only after the three Stage 1 "
+        "On a stop before the pointing, unpointed or split record exists (for a Bug, an Investigation or a "
+        "Spike, before the refinement comment exists), the comment is posted only after the three Stage 1 "
         "voter inputs are recorded and every voter context launched in the round that stopped "
         "has finished or stopped.",
         id="refinement-order-early-stop",
