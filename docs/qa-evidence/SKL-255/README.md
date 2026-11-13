@@ -277,3 +277,28 @@ Files are in .../:
 | Resume recorded on the todo list | Met: the 19:17:00Z and 19:17:12Z edits record the deadline read and mark the deadline resume done, not counted against the read-back cap |
 | No user message between the interim handback and the resume | Met |
 | Runtime named, `metrics: off` | Met: Claude Code 2.1.323, `metrics: off` |
+
+## QA round 1
+
+Date: 2026-11-13 UTC, independent QA round 1.
+Build under test: `main` at `9bbe5da43ce896ef01f3be831435e40d2b068cab`, the squash merge of PR 231, whose reviewed head `62a8d11f4276c12ad0c918a1487f786a8464f076` has an identical tree on every path the story changes.
+Environment: none; the profile sets `environments: []`, so the lanes are the repository (detached worktrees of the build and the reviewed head), GitHub and the tracker.
+Fixtures: none beyond the fixture issue SKL-300 that AC5 names.
+The raw output, including the phrase-deletion checks, is attached to SKL-255 as `SKL-255-qa-round-1-assertions.txt`; there is no visual surface, so no screenshot applies.
+
+| Item | Verdict | Evidence |
+|---|---|---|
+| AC1: concluded-item resume | Verified | `references/interim-handbacks.md` states the resume sentence once (line 24): the same engineer is resumed with the awaited item and its observed conclusion, the resume is recorded on the todo list, and the next handback is handled as usual. The narrowed stop, "Only a pending item or an unreadable primary source leads to the deadline stop", appears once (line 29), after the read and before the report sentence. |
+| AC2: no-resume stop | Verified | Line 26 states that a runtime that cannot resume the engineer reports the limitation and the observed state and stops, spawning no new subagent. |
+| AC3: limits | Verified | Line 27 states the read-back-cap independence and line 28 the `metrics` launch row. The only line the merge removes from the rule is the old read sentence ending "and stops"; `SKILL.md` is not in the diff. The one other skill file, `references/metrics-protocol.md`, adds the interim-deadline resume to the senior engineer's timed launches. |
+| AC4: text contracts | Verified | `tests/test_story_to_done.py` has a named test for each of the four phrases. On a throwaway worktree of the build, deleting each phrase once failed its named test, and the file passed again once restored. The PR description has one line per guarded phrase naming the failing test. On the reviewed head, `uv run --locked pytest -q` reported 2136 passed and `uv run --locked python scripts/vendor_shared.py --check` exited 0. |
+| AC5: fixture run | Verified | SKL-300 is a `[Tabletop fixture]` issue in SKL, created at 19:04:41Z and canceled at 19:18:19Z, with one state transition, Backlog to Canceled. Run 43453419366 completed with `success` at 15:37:44Z, before the run began. The section above quotes the parent brief, the resume message and the coordinator transcript with the recorded deadline 19:16:51Z and the read at 19:16:52.454Z, names Claude Code 2.1.323, and states `metrics: off`. The superseded fixture SKL-295 is also canceled. |
+| AC6: size cap | Verified | Between the merge base `daf6758` and the reviewed head, `skills/story-to-done/` grows from 460475 to 461507 bytes (100.22%) and `SKILL.md` stays at 37093 bytes (100.00%), matching the table in the PR description. `skills/story-to-done/` is the only skill directory changed. |
+| DoD: all acceptance criteria met | Verified | AC1 to AC6 above. |
+| DoD: tests written and passing | Verified | AC4. |
+| DoD: independently reviewed | Verified | Review 5897423660 is `COMMENTED`, names `62a8d11f4276c12ad0c918a1487f786a8464f076` in its first line and as its `commit_id`, the merged head, and closes three rounds with no open findings. Its adjudicator was DeepSeek V4 Pro, not the profile's DeepSeek V4.1 Flash; the review names the model it used. |
+| DoD: docs updated | Verified | `references/interim-handbacks.md` and `references/metrics-protocol.md` carry the change. |
+| DoD: verified in a deployed environment | Not applicable | The profile defines no environments; the build was verified on `main`. |
+| DoD: no critical bugs or regressions | Verified | CI `checks` and `discovery` passed on the reviewed head and on `main`, and the full suite passed on the reviewed head. |
+
+Closing decision: SKL-255 moves to Done once this evidence merges.
