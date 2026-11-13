@@ -1,5 +1,6 @@
 """Contract checks for the story-refinement skill and its profile keys."""
 
+import inspect
 import json
 import re
 from pathlib import Path
@@ -63,12 +64,30 @@ RUNTIME_TERMS = re.compile(
 
 
 def section(text: str, heading: str, level: int = 2) -> str:
-    text = re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)  # commented-out text is not operative
-    match = re.search(rf"^{'#' * level} {re.escape(heading)}\s*$", text, re.MULTILINE)
-    assert match, f"missing section: {heading}"
-    rest = text[match.end():]
-    following = re.search(rf"^#{{1,{level}}} ", rest, re.MULTILINE)
-    return rest[: following.start()] if following else rest
+    """The operative text under a heading, up to the next heading of the same or a higher level.
+
+    HTML comments are removed first, since commented-out text is not operative, and a heading-like line inside a
+    fenced code block (a record template's own `## ...` title, for example) is neither the heading nor its end.
+    """
+    text = re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)
+    lines = text.splitlines(keepends=True)
+    own = re.compile(rf"{'#' * level} {re.escape(heading)}\s*$")
+    ends = re.compile(rf"#{{1,{level}}} ")
+    fenced = False
+    start = None
+    for index, line in enumerate(lines):
+        if line.startswith("```"):
+            fenced = not fenced
+            continue
+        if fenced:
+            continue
+        if start is None:
+            if own.match(line):
+                start = index + 1
+        elif ends.match(line):
+            return "".join(lines[start:index])
+    assert start is not None, f"missing section: {heading}"
+    return "".join(lines[start:])
 
 
 def flat(text: str) -> str:
@@ -537,11 +556,8 @@ def squash(text: str) -> str:
 
 
 def step(text: str, heading: str) -> str:
-    match = re.search(rf"^### {re.escape(heading)}\s*$", text, re.MULTILINE)
-    assert match, heading
-    rest = text[match.end():]
-    following = re.search(r"^###? ", rest, re.MULTILINE)
-    return rest[: following.start()] if following else rest
+    """A step's operative text, scoped by `section()` at the step heading's level."""
+    return section(text, heading, level=3)
 
 
 def step_one_item_index(prefix: str) -> int:
@@ -747,16 +763,11 @@ WRITES_FACILITATOR_LINE = (
 
 
 def template_block(heading: str) -> tuple[str, str]:
-    """The first fenced block under the heading, and the text from the heading to the next template."""
-    text = RECORD.read_text()
-    start = re.search(rf"^## {re.escape(heading)}\s*$", text, re.MULTILINE)
-    assert start, heading
-    rest = text[start.end():]
-    block = re.search(r"```markdown\n(.*?)```", rest, re.DOTALL)
+    """The first fenced block in the heading's `section()`, and that section's text after the block."""
+    body = section(RECORD.read_text(), heading)
+    block = re.search(r"```markdown\n(.*?)```", body, re.DOTALL)
     assert block, f"no template block under {heading}"
-    after = rest[block.end():]
-    nxt = re.search(r"^## ", after, re.MULTILINE)
-    return block.group(1), after[: nxt.start()] if nxt else after
+    return block.group(1), body[block.end():]
 
 
 def template(heading: str) -> str:
@@ -857,8 +868,8 @@ POINTING_BASIS = (
 
 
 def operative_step(heading: str) -> str:
-    """A step's text with HTML comments removed, since commented-out text is not operative."""
-    return step(re.sub(r"<!--.*?-->", "", SKILL.read_text(), flags=re.DOTALL), heading)
+    """A step's operative text; `section()` removes HTML comments, since commented-out text is not operative."""
+    return step(SKILL.read_text(), heading)
 
 
 def spaced(text: str) -> str:
@@ -3343,7 +3354,8 @@ def test_vendored_linear_copies_carry_the_unestimated_split_trigger() -> None:
     copies = sorted(ROOT.glob("skills/*/references/linear.md"))
     assert copies
     for copy in copies:
-        assert SHARED_LINEAR_SPLIT in copy.read_text().splitlines(), copy.relative_to(ROOT)
+        lines = section(copy.read_text(), "Estimation and slicing").splitlines()
+        assert SHARED_LINEAR_SPLIT in lines, copy.relative_to(ROOT)
 
 
 def test_reviewer_output_contract_states_the_scope_signal_reading() -> None:
@@ -3612,9 +3624,18 @@ def test_closing_message_names_a_missing_scope_signal() -> None:
     ],
 )
 def test_split_comment_section_states_its_author_and_fallback(sentence: str) -> None:
-    text = RECORD.read_text()
-    body = text.split("\n## Split comment\n", 1)[1].split("\n## Triage record\n", 1)[0]
-    assert sentence in spaced(body)
+    assert sentence in spaced(section(RECORD.read_text(), "Split comment"))
+
+
+def test_section_scopes_template_and_step_helpers() -> None:
+    """B8b: section() drops commented-out text and fenced headings, and the template and step helpers go through it."""
+    text = "## A\n\n<!--\n```markdown\n## Hidden\n- gone\n```\n-->\n```markdown\n## Kept\n- here\n```\nafter\n## B\nnext\n"
+    body = section(text, "A")
+    assert "gone" not in body and "- here" in body and "after" in body and "next" not in body
+    with pytest.raises(AssertionError):
+        section(text, "Kept")
+    for helper in (template_block, step):
+        assert "section(" in inspect.getsource(helper), helper.__name__
 
 
 def test_readme_row_names_the_split_and_the_refile() -> None:
