@@ -194,8 +194,12 @@ SPIKE_NO_CHANGE_PINS = {
     ),
     "spike-untracked-deliverable": (
         "An untracked file is not a tracked-file change, so a deliverable that exists only as an untracked "
-        "file is linked on the story as an attachment only after you confirm it holds no secret, and the "
-        "step 12 note says it had no PR review or CI check."
+        "file is linked on the story as an attachment, and the step 12 note says it had no PR review or CI "
+        "check."
+    ),
+    "spike-deliverable-no-secret": (
+        "Before you link any deliverable on the story, as a comment or an attachment, confirm it holds no "
+        "secret."
     ),
     "spike-change-runs-gates": (
         "If a tracked-file change appears at any point, complete steps 4 to 10 with every applicable gate, and "
@@ -232,9 +236,9 @@ STEP_TWELVE_PINS = {
     "handoff-after-merge": (
         "Run this step once a fetch of `origin` shows the merged commit on "
         "`origin/<profile.git.integration_branch>` (`git merge-base --is-ancestor <merged commit> "
-        "origin/<profile.git.integration_branch>` exits 0) and no later commit on it reverts the merged "
-        "commit (`git log --oneline -i --grep=revert <merged commit>..origin/<profile.git.integration_branch>` "
-        "lists none that reverts the merged commit or this story's PR)."
+        "origin/<profile.git.integration_branch>` exits 0) and `git log --oneline -i --grep=revert "
+        "<merged commit>..origin/<profile.git.integration_branch>` lists no commit that reverts the merged "
+        "commit or this story's PR."
     ),
     "handoff-spike-no-change": (
         "For a spike with no tracked-file change, run it instead once the checks repeated immediately before "
@@ -296,7 +300,7 @@ def added_blocks() -> list[str]:
     spike = (
         f"{p['spike-subsection']}\n\n{p['spike-three-checks']}\n{p['spike-no-hidden-changes']}\n"
         f"{p['spike-check-failure-stops']}\n{p['spike-skip-and-recheck']}\n{p['spike-untracked-deliverable']}\n"
-        f"{p['spike-change-runs-gates']}\n{p['spike-merge-path-sticks']}\n{p['spike-pr-gates-unchanged']}\n\n"
+        f"{p['spike-deliverable-no-secret']}\n{p['spike-change-runs-gates']}\n{p['spike-merge-path-sticks']}\n{p['spike-pr-gates-unchanged']}\n\n"
     )
     eleven = f"{p['deploy-deployed-only']}\n{p['deploy-skipped']}\n{p['steps-through-merge-unchanged']}\n\n"
     twelve = (
@@ -344,19 +348,27 @@ def test_steps_two_to_twelve_outside_the_handoff_blocks_are_unchanged() -> None:
 
 # SKL-282: the lifecycle rules in `references/linear.md` (vendored from `shared/linear.md`) govern
 # step 12, so they scope their deploy conditions for the `no-deployment` and `spike` handoff.
-LINEAR_HANDOFF_PIN = (
-    "- On the `no-deployment` and `spike` paths that `engineering-workflow` selects in its step 1, nothing is "
-    "deployed: the move to deployment review follows the handoff its step 12 defines, and every condition in "
-    "this file on a deploy or a deployed environment reads as verification against the merged commit, or, for "
-    "a spike with no tracked-file change, against the deliverables the step 12 note links."
-)
+LINEAR_HANDOFF_PINS = {
+    "linear-handoff": (
+        "- On the `no-deployment` and `spike` paths that `engineering-workflow` selects in its step 1, nothing "
+        "is deployed: the move to deployment review follows the handoff its step 12 defines, and every "
+        "condition in this file on a deploy or a deployed environment reads as verification against the "
+        "merged commit, or, for a spike with no tracked-file change, against the deliverables the step 12 note "
+        "links."
+    ),
+    "linear-handoff-no-pr": (
+        "  A spike with no tracked-file change has no PR, so for it every condition in this file on a merged PR "
+        "reads as the deliverables the step 12 note links."
+    ),
+}
+LINEAR_FILES = {
+    "shared": ROOT / "shared" / "linear.md",
+    "engineering-workflow": ROOT / "skills" / "engineering-workflow" / "references" / "linear.md",
+}
 
 
-@pytest.mark.parametrize(
-    "path",
-    [ROOT / "shared" / "linear.md", ROOT / "skills" / "engineering-workflow" / "references" / "linear.md"],
-    ids=["shared", "engineering-workflow"],
-)
-def test_linear_lifecycle_scopes_deploy_conditions_to_the_deployed_path(path: Path) -> None:
-    lines = section(path.read_text(encoding="utf-8"), "Status lifecycle").splitlines()
-    assert LINEAR_HANDOFF_PIN in lines
+@pytest.mark.parametrize("copy", list(LINEAR_FILES))
+@pytest.mark.parametrize("key", list(LINEAR_HANDOFF_PINS))
+def test_linear_lifecycle_scopes_deploy_conditions_to_the_deployed_path(key: str, copy: str) -> None:
+    lines = section(LINEAR_FILES[copy].read_text(encoding="utf-8"), "Status lifecycle").splitlines()
+    assert LINEAR_HANDOFF_PINS[key] in lines
