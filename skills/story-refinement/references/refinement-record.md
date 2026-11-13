@@ -11,12 +11,14 @@ Quote or attach any file content a reader needs in the record.
 Post this as a tracker comment authored by the product owner, the only author of tracker writes, and posted by the product owner or, under the denied tracker writes fallback, by the facilitator verbatim.
 Its comment id is the refined story identifier for both stages.
 For a Bug, an Investigation or a Spike, the comment carries the `Pointing skipped` line; for a User Story it omits that line.
+For a Bug, an Investigation or a Spike, the comment also carries the `Scope signal:` line with the reading `SKILL.md` (Unestimated issue types) defines; for a User Story it omits that line.
 
 ```markdown
 ## Refinement record
 
 - Story: <issue key> at <description version or commit>
 - Pointing skipped: <Bug|Investigation|Spike> is unestimated (references/linear.md, Estimation and slicing)
+- Scope signal: <for a Bug or an Investigation: single change, or more than one independently reviewable change (<reason>); for a Spike: single research thread, or more than one independent research thread (<reason>)>
 - Tracker-write preflight: comment <id>
 - Refined story identifier: <this comment id>
 - Refined story snapshot: <the complete refined story and ACs where the filing template has them, or an immutable link/commit>
@@ -108,7 +110,7 @@ The priority is the value read back after the PO applied it; when the PO could n
 
 - Priority: <the decided value, read back; or unset when the PO could not decide>
 - Priority comparison: <each comparable story's identifier and priority; or `needs input` with the open question when the PO could not decide>
-- State: <for a Bug, an Investigation or a Spike: ready: all conditions met, or backlog with each unmet condition, or for an issue already in progress or later its retained state with all conditions met or with each unmet condition; omitted for a User Story>
+- State: <for a Bug, an Investigation or a Spike: ready: all conditions met, or backlog with each unmet condition, or for an issue already in progress or later its retained state with all conditions met or with each unmet condition; for a Spike with more than one independent research thread the unmet condition reads re-file as separate Spikes (owner); omitted for a User Story>
 - Tracker writes: product owner
 ```
 
