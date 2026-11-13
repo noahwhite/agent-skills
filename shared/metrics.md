@@ -55,7 +55,7 @@ What each runtime's usage report returns is in the "Read a subagent's usage (dur
   A Step 4 basis-challenge round is not a blind value collection, so it is not a pointing round: its launches are the timed-launch rows, counted like every other launch.
 - **Re-votes:** one per Step 4 re-vote.
 - **Anchoring events:** the number of anchoring events.
-- **Outcome:** one of: the recorded estimate; unpointed, which on the Step 4 residual variance rule is the variance stop that names the story and the derived values; split with the slice count, plus `needs input` for each slice that stopped unpointed; or the stop reason, including `needs input` on a denied tracker write, `missing valid value` on a Step 3 off-sequence stop, or the Step 4 unpointed variance stop.
+- **Outcome:** one of: the recorded estimate; "refined, not pointed (<type>)" for an accepted Bug, Investigation or Spike; "not accepted" with the two-round cap for a Bug, an Investigation or a Spike; unpointed, which on the Step 4 residual variance rule is the variance stop that names the story and the derived values; split with the slice count, plus `needs input` for each slice that stopped unpointed; or the stop reason, including `needs input` on a denied tracker write, `missing valid value` on a Step 3 off-sequence stop, or the Step 4 unpointed variance stop.
 - **Denied tracker writes fallback:** whether the denied tracker writes fallback was used.
 
 ### `story-to-done` extras
@@ -116,7 +116,8 @@ With no launches, the table is replaced by the line `no launches`, the elapsed w
 ### `story-refinement` order
 
 - The comment is posted only when no further voter round will run in this invocation, after the pointing, unpointed, or split record and every slice re-estimate.
-- On a stop before such a record exists, the comment is posted only after the three Stage 1 voter inputs are recorded and every voter context launched in the round that stopped has finished or stopped.
+- For a Bug, an Investigation or a Spike, which has no pointing record, the comment is posted after the refinement comment, every Accept round result comment and the triage writes are read back, on an accepted and on a "not accepted" outcome alike.
+- On a stop before the pointing, unpointed or split record exists (for a Bug, an Investigation or a Spike, before the refinement comment exists), the comment is posted only after the three Stage 1 voter inputs are recorded and every voter context launched in the round that stopped has finished or stopped.
 - Both are subject to the denied tracker writes fallback.
   While a tracker write is denied and the owner has not authorized the denied tracker writes fallback, no post is attempted.
 - The comment is never posted while an anchoring recovery, its Step 3 re-run, or any Step 4 re-vote that follows them, is still to run in this invocation.

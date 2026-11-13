@@ -167,7 +167,9 @@ REFINEMENT_EXTRAS = [
     ),
     pytest.param("- **Anchoring events:** the number of anchoring events.", id="anchoring-events"),
     pytest.param(
-        "- **Outcome:** one of: the recorded estimate; unpointed, which on the Step 4 residual "
+        '- **Outcome:** one of: the recorded estimate; "refined, not pointed (<type>)" for an accepted Bug, '
+        'Investigation or Spike; "not accepted" with the two-round cap for a Bug, an Investigation or a Spike; '
+        "unpointed, which on the Step 4 residual "
         "variance rule is the variance stop that names the story and the derived values; split with the "
         "slice count, plus `needs input` for each slice that stopped unpointed; or the stop reason, including "
         "`needs input` on a denied tracker write, `missing valid value` on a Step 3 off-sequence stop, or the "
@@ -415,7 +417,8 @@ INDEPENDENCE_AND_POSTING = [
         id="refinement-order-after-record",
     ),
     pytest.param(
-        "On a stop before such a record exists, the comment is posted only after the three Stage 1 "
+        "On a stop before the pointing, unpointed or split record exists (for a Bug, an Investigation or a "
+        "Spike, before the refinement comment exists), the comment is posted only after the three Stage 1 "
         "voter inputs are recorded and every voter context launched in the round that stopped "
         "has finished or stopped.",
         id="refinement-order-early-stop",

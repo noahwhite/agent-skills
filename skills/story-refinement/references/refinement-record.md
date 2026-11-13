@@ -10,14 +10,16 @@ Quote or attach any file content a reader needs in the record.
 
 Post this as a tracker comment authored by the product owner, the only author of tracker writes, and posted by the product owner or, under the denied tracker writes fallback, by the facilitator verbatim.
 Its comment id is the refined story identifier for both stages.
+For a Bug, an Investigation or a Spike, the comment carries the `Pointing skipped` line; for a User Story it omits that line.
 
 ```markdown
 ## Refinement record
 
 - Story: <issue key> at <description version or commit>
+- Pointing skipped: <Bug|Investigation|Spike> is unestimated (references/linear.md, Estimation and slicing)
 - Tracker-write preflight: comment <id>
 - Refined story identifier: <this comment id>
-- Refined story snapshot: <the complete refined story and ACs, or an immutable link/commit>
+- Refined story snapshot: <the complete refined story and ACs where the filing template has them, or an immutable link/commit>
 - Refined story identifier after blocking amendments: <the new comment id, or none>
 - Voter inputs, each recorded in its own separate context:
   - Engineer one (<family or model>): <file base name>
@@ -52,12 +54,14 @@ Never edit the refinement comment to add the result; its id keeps identifying on
 - Engineer one (<family or model>): <ACCEPT or OBJECT>
 - Engineer two (<family or model>): <ACCEPT or OBJECT>
 - Engineer three (<family or model>): <ACCEPT or OBJECT>
-- Outcome: <accepted, another round, or unpointed>
+- Outcome: <accepted, another round, or unpointed for a User Story; accepted, another round, or not accepted for a Bug, an Investigation or a Spike>
+- Blocking amendments: <each objecting voter's blocking amendments when any voter returned OBJECT; otherwise none>
 ```
 
 ## Pointing record
 
 Post this once Step 4 has recorded the estimate, or record it as an unpointed result; the basis review in Step 4 item 2 always runs before it is posted.
+Never post it for a Bug, an Investigation or a Spike, which is never pointed.
 The three values are recorded before any SM/EM sizing comment or discussion; a void before all three exist leaves the values block at the values recorded so far and carries no superseded values, and once the blind re-run finishes the values block carries the three standing values while the superseded line carries the voided ones.
 Outside the recorded numeric values and the superseded-values line, no line of the posted record carries a point value named before the reveal or a prescription of this story's value: the Challenges and Anchoring events lines record a ground by its kind, its author (a voter, or the SM/EM for a sizing comment) and its outcome or recovery, and every field that could quote a participant elides those two classes permanently, because the posted record stays on the story surface that later voters read; the verbatim quote lives in the session's raw record, cited by its base name.
 A sizing comment that names a point value before the reveal, prescribes this story's value, or states elapsed time, effort or run cost voids the round under the Anchoring guardrail recovery as soon as the facilitator sees it, as does any ground that is neither restated nor retracted, and the void records the voided consensus under Superseded values after a void, so the Consensus field carries the vote that stands, or n/a when the consensus check or the residual variance rule recorded the estimate.
@@ -104,6 +108,7 @@ The priority is the value read back after the PO applied it; when the PO could n
 
 - Priority: <the decided value, read back; or unset when the PO could not decide>
 - Priority comparison: <each comparable story's identifier and priority; or `needs input` with the open question when the PO could not decide>
+- State: <for a Bug, an Investigation or a Spike: ready: all conditions met, or backlog with each unmet condition, or for an issue already in progress or later its retained state with all conditions met or with each unmet condition; omitted for a User Story>
 - Tracker writes: product owner
 ```
 

@@ -1697,7 +1697,10 @@ def test_record_has_the_accept_round_result_template_with_exactly_the_fields() -
         "- Engineer one (<family or model>): <ACCEPT or OBJECT>",
         "- Engineer two (<family or model>): <ACCEPT or OBJECT>",
         "- Engineer three (<family or model>): <ACCEPT or OBJECT>",
-        "- Outcome: <accepted, another round, or unpointed>",
+        "- Outcome: <accepted, another round, or unpointed for a User Story; "
+        "accepted, another round, or not accepted for a Bug, an Investigation or a Spike>",
+        "- Blocking amendments: <each objecting voter's blocking amendments when any voter returned OBJECT; "
+        "otherwise none>",
     ]
 
 
@@ -2182,8 +2185,8 @@ def test_todo_tracking_seed_posts_the_metrics_summary_only_when_the_switch_is_on
     seed = story_refinement_seed(ROOT)
     marker = "only when the `metrics` switch is on, "
     assert marker in seed, "the metrics-on condition is missing from the seed line"
-    assert seed.endswith(
-        "record invocation start (metrics on), collect metrics, and post the metrics summary on the story."
+    assert (
+        "record invocation start (metrics on), collect metrics, and post the metrics summary on the story." in seed
     )
 
 
@@ -2298,6 +2301,9 @@ def test_record_has_the_triage_record_template_with_exactly_the_fields() -> None
         "- Priority: <the decided value, read back; or unset when the PO could not decide>",
         "- Priority comparison: <each comparable story's identifier and priority; or `needs input` with the open "
         "question when the PO could not decide>",
+        "- State: <for a Bug, an Investigation or a Spike: ready: all conditions met, or backlog with each unmet "
+        "condition, or for an issue already in progress or later its retained state with all conditions met or with "
+        "each unmet condition; omitted for a User Story>",
         "- Tracker writes: product owner",
     ]
 
@@ -2576,3 +2582,652 @@ def test_skill_names_none_of_this_repository_guards() -> None:
     assert "## repository guards" in text, "the added section is present"
     for name, pattern in THIS_REPOSITORY_GUARD_PATTERNS.items():
         assert not re.search(pattern, text), name
+
+
+# --- SKL-237: a Bug, an Investigation or a Spike is refined and never pointed -------------------------
+
+UNESTIMATED = "Unestimated issue types"
+UNESTIMATED_LINK = "[Unestimated issue types](#unestimated-issue-types)"
+TYPE_ITEM = "Run the type check after the roster check and before the tracker-write preflight"
+STEP_ONE = "Step 1: Independent refinement"
+POINTING_SKIPPED = (
+    "Pointing skipped: <Bug|Investigation|Spike> is unestimated (references/linear.md, Estimation and slicing)"
+)
+
+
+def unestimated_bullet(label: str) -> str:
+    """One labelled bullet of the issue-type section, flattened, nested bullets included."""
+    return bullet(section(SKILL.read_text(), UNESTIMATED), label)
+
+
+def type_item() -> str:
+    return process_item(STEP_ONE, TYPE_ITEM)
+
+
+def test_step_one_reads_the_labels_with_the_story() -> None:
+    """B1: the todo list exists first, then the story read carries the issue's labels."""
+    assert process_items(STEP_ONE)[0].startswith(
+        "With the todo list already created (Read first), read the story completely, including its labels and "
+        "`linear issue relation list <ID>` for every blocker."
+    )
+
+
+def test_step_one_type_check_runs_after_the_roster_and_before_the_probe_and_every_voter() -> None:
+    """B1: roster check, then the type check, then the preflight, then the voter launch."""
+    roster = step_one_item_index("Validate the refinement roster before the tracker-write preflight")
+    kind = step_one_item_index(TYPE_ITEM)
+    probe = step_one_item_index("Run the tracker-write preflight before any voter launches")
+    launch = step_one_item_index("Launch the three engineers in separate contexts")
+    assert roster < kind < probe < launch
+
+
+@pytest.mark.parametrize(
+    "sentence",
+    [
+        "Run the type check after the roster check and before the tracker-write preflight, so a type stop posts no "
+        "comment, and complete it before any voter launch.",
+        "Resolve `profile.tracker.labels.user_story`, `profile.tracker.labels.bug`, "
+        "`profile.tracker.labels.investigation` and `profile.tracker.labels.spike` after profile defaults; a key "
+        "that is unset stops with `needs input` naming the key, in every ceremony, User Story ceremonies included.",
+        "When the team of `STORY_ID` differs from `profile.tracker.team_key`, confirm those four labels on that team "
+        "under the differing-team rule in Team resolution in [references/linear.md](references/linear.md) before "
+        "naming the type.",
+        "An issue carrying `profile.tracker.labels.user_story` is a User Story whatever other labels it has (the "
+        "`linear-user-story` skill files maintenance defect stories as `user_story` plus `bug`): it runs the ceremony "
+        "as a User Story with `type: estimated`, even when it also carries one or more of the three type labels.",
+        "Otherwise, name the issue type from the labels read in item 1: `profile.tracker.labels.bug` names a Bug, "
+        "`profile.tracker.labels.investigation` an Investigation and `profile.tracker.labels.spike` a Spike.",
+        "An issue without `profile.tracker.labels.user_story` carrying two or more of the three type labels stops with "
+        "`needs input` naming the labels; any other co-label, for example `profile.tracker.labels.rtb`, does not "
+        "affect the type check.",
+        "An issue with none of the three type labels, maintenance work included, runs the ceremony as a User Story "
+        "with `type: estimated`.",
+        "Record `type: <Bug|Investigation|Spike|estimated>` on the todo list; the type is final once written there, "
+        "and for a Bug, an Investigation or a Spike the list omits every Stage 2 item, as the story-refinement seed "
+        "line in [references/todo-tracking.md](references/todo-tracking.md) states.",
+    ],
+)
+def test_step_one_type_check_states_the_rule(sentence: str) -> None:
+    """B1: the type rule, each stop, the differing-team confirmation and the todo record."""
+    assert sentence in type_item()
+
+
+def test_step_one_stop_names_the_type_check_stops() -> None:
+    """B1: both type stops are Step 1 stop conditions."""
+    assert (
+        "the type check stops on an unset type-label key or on conflicting type labels (two or more type labels on "
+        "an issue without the user story label)" in bullet(operative_step(STEP_ONE), "Stop")
+    )
+
+
+# B8a: one row per documented path. Each row is the label set an issue carries, the type-label keys left unset
+# after profile defaults, the documented result, and the Stage 2 decision ("skip", "run", or the stop).
+TYPE_FIXTURES = [
+    ("bug", {"bug"}, set(), "Bug", "skip"),
+    ("investigation", {"investigation", "rtb"}, set(), "Investigation", "skip"),
+    ("spike", {"spike"}, set(), "Spike", "skip"),
+    ("user story", {"user_story", "feature"}, set(), "estimated", "run"),
+    ("maintenance, rtb only", {"rtb"}, set(), "estimated", "run"),
+    ("two type labels", {"bug", "investigation"}, set(), "needs input", "stop: names the labels"),
+    ("user_story with a type label (maintenance defect)", {"user_story", "bug", "rtb"}, set(), "estimated", "run"),
+    ("user_story with two type labels", {"user_story", "bug", "spike"}, set(), "estimated", "run"),
+    ("unset type-label key", {"user_story"}, {"investigation"}, "needs input", "stop: names the key"),
+    ("unset user_story key, no type label", {"feature"}, {"user_story"}, "needs input", "stop: names the key"),
+]
+TYPE_LABEL_KEYS = ("user_story", "bug", "investigation", "spike")
+TYPE_NAMES = {"bug": "Bug", "investigation": "Investigation", "spike": "Spike"}
+
+
+def documented_type(labels: set[str], unset: set[str]) -> tuple[str, str]:
+    """The type check applied to one fixture row, with its keys, its label-to-type map and the Stage 2 skip
+    list read from the skill text rather than restated here."""
+    item = type_item()
+    resolve = re.search(r"Resolve (.*?) after profile defaults", item)
+    assert resolve, "the type item names the keys it resolves"
+    keys = set(re.findall(r"`profile\.tracker\.labels\.(\w+)`", resolve.group(1)))
+    assert keys == set(TYPE_LABEL_KEYS)
+    names = dict(re.findall(r"`profile\.tracker\.labels\.(\w+)` (?:names )?an? (Bug|Investigation|Spike)\b", item))
+    assert names == TYPE_NAMES
+    lead = section(SKILL.read_text(), UNESTIMATED).split("- **Refinement only:**", 1)[1].split("skips Stage 2", 1)[0]
+    skipped = set(re.findall(r"\b(Bug|Investigation|Spike)\b", lead))
+    story = re.search(r"An issue carrying `profile\.tracker\.labels\.(\w+)` is a User Story whatever other labels", item)
+    assert story, "the type item names the label that makes an issue a User Story"
+    assert "carrying two or more of the three type labels stops with `needs input` naming the labels" in item
+    if unset & keys:
+        return "needs input", "stop: names the key"
+    if story.group(1) in labels:
+        return "estimated", "run"
+    kinds = labels & set(names)
+    if len(kinds) > 1:
+        return "needs input", "stop: names the labels"
+    if kinds:
+        kind = names[kinds.pop()]
+        return kind, "skip" if kind in skipped else "run"
+    return "estimated", "run"
+
+
+def test_step_one_mentions_stage_two_only_to_omit_it() -> None:
+    """B1: Step 1 names Stage 2 only in the todo-list omission and removal sentences, never as a path to run."""
+    lines = [spaced(line) for line in operative_step(STEP_ONE).splitlines() if "stage 2" in line.lower()]
+    assert lines == [
+        "Record `type: <Bug|Investigation|Spike|estimated>` on the todo list; the type is final once written there, "
+        "and for a Bug, an Investigation or a Spike the list omits every Stage 2 item, as the story-refinement seed "
+        "line in [references/todo-tracking.md](references/todo-tracking.md) states.",
+        "When the type written is Bug, Investigation or Spike, remove from the list every Stage 2 item, whether the "
+        "bootstrap list (its Step 3 and Step 4 items) or the Read first seed placed it there, in the same update that "
+        "writes the type.",
+    ]
+
+
+def test_step_one_inputs_and_reconciliation_take_the_template_as_it_is() -> None:
+    """B3: an Investigation template has no acceptance criteria and no Definition of Done, so neither is demanded."""
+    step_one = spaced(operative_step(STEP_ONE))
+    assert (
+        "the Definition of Ready and Definition of Done template from the matching filing skill, where that template "
+        "has them." in step_one
+    )
+    assert (
+        "The facilitator reconciles the inputs into one refined story: story text, refined acceptance criteria where "
+        "the filing template has them," in process_items(STEP_TWO)[0]
+    )
+    assert (
+        "The refinement comment includes the complete refined story and ACs where the filing template has them, or"
+        in process_items(STEP_TWO)[1]
+    )
+    assert (
+        "- Refined story snapshot: <the complete refined story and ACs where the filing template has them, or an "
+        "immutable link/commit>" in template("Refinement comment").splitlines()
+    )
+
+
+def test_readme_row_says_unestimated_types_are_never_pointed() -> None:
+    row = next(line for line in (ROOT / "README.md").read_text().splitlines() if "[`story-refinement`]" in line)
+    assert "a Bug, an Investigation or a Spike is refined and never pointed" in row
+
+
+# The skill text that documents each fixture row's path: the Step 1 type item, then for an unestimated type the
+# type's own content bullet in the issue-type section, which every one of the three types must have.
+TYPE_FIXTURE_TEXT = {
+    "Bug": ("`profile.tracker.labels.bug` names a Bug", "Bug (`linear-bug` template):"),
+    "Investigation": (
+        "`profile.tracker.labels.investigation` an Investigation",
+        "Investigation (`linear-investigation` template):",
+    ),
+    "Spike": ("`profile.tracker.labels.spike` a Spike", "Spike (`linear-spike` template):"),
+    "estimated": ("runs the ceremony as a User Story with `type: estimated`", None),
+    "stop: names the labels": ("stops with `needs input` naming the labels", None),
+    "stop: names the key": ("a key that is unset stops with `needs input` naming the key", None),
+}
+
+
+@pytest.mark.parametrize("name, labels, unset, result, stage_two", TYPE_FIXTURES, ids=[row[0] for row in TYPE_FIXTURES])
+def test_type_fixture_table_maps_each_label_set_to_its_documented_path(
+    name: str, labels: set[str], unset: set[str], result: str, stage_two: str
+) -> None:
+    """B8a: each label set reaches the documented type and Stage 2 decision, and the skill documents that path."""
+    assert documented_type(labels, unset) == (result, stage_two), name
+    key = result if result != "needs input" else stage_two
+    item_text, content_text = TYPE_FIXTURE_TEXT[key]
+    assert item_text in type_item(), name
+    if content_text:
+        assert "skips stage 2 entirely" in unestimated_bullet("Refinement only"), name
+        assert f"- {content_text}" in section(SKILL.read_text(), UNESTIMATED), name
+
+
+def test_type_fixture_table_covers_every_type_and_stop() -> None:
+    """B8a: one Bug, Investigation, Spike and User Story row, one row per B1 stop, and rows for `user_story`
+    together with one and with two type labels, each run as an estimated User Story."""
+    outcomes = [(row[3], row[4]) for row in TYPE_FIXTURES]
+    for expected in (
+        ("Bug", "skip"),
+        ("Investigation", "skip"),
+        ("Spike", "skip"),
+        ("needs input", "stop: names the labels"),
+    ):
+        assert outcomes.count(expected) == 1, expected
+    assert outcomes.count(("needs input", "stop: names the key")) == 2
+    assert outcomes.count(("estimated", "run")) == 4
+    story_with_type = [row for row in TYPE_FIXTURES if "user_story" in row[1] and row[1] & set(TYPE_NAMES)]
+    assert sorted(len(row[1] & set(TYPE_NAMES)) for row in story_with_type) == [1, 2]
+    assert {(row[3], row[4]) for row in story_with_type} == {("estimated", "run")}
+
+
+def test_unestimated_section_skips_stage_two_entirely() -> None:
+    """B2: all of Stage 1 runs and every Stage 2 activity is skipped."""
+    assert flat(
+        "A Bug, an Investigation or a Spike runs all of Stage 1 (independent inputs, the refinement comment and the "
+        "accept round) and skips Stage 2 entirely: no pointing launch, no point value, no SM/EM sizing context, no "
+        "consensus check, no basis-challenge round, no discussion or re-vote, no estimate write, no pointing record, "
+        "no anchoring check, and no estimate-triggered split under the [Split rule](#split-rule)."
+    ) in unestimated_bullet("Refinement only")
+
+
+def test_unestimated_section_names_the_pointing_skipped_line() -> None:
+    """B2: the refinement comment carries the exact line."""
+    assert f"The refinement comment carries the line `{POINTING_SKIPPED}`." in spaced(
+        section(SKILL.read_text(), UNESTIMATED)
+    ), "the line is pinned case-sensitively, as the record template copy is"
+
+
+def test_unestimated_section_reads_not_accepted_never_unpointed() -> None:
+    """B2: the two-round cap reads not accepted, and the round 2 result is the stop record."""
+    assert flat(
+        'After two accept rounds without three `ACCEPT`, the outcome reads "not accepted", never "unpointed": '
+        "Step 2 item 7 authors no unpointed pointing record for these types, and the round 2 Accept round result "
+        "comment is the stop record and carries the objecting voters' blocking amendments."
+    ) in unestimated_bullet("Not accepted")
+
+
+def test_unestimated_section_states_the_closing_outcome() -> None:
+    """B2: the closing outcome on an accepted and on a not accepted outcome."""
+    assert flat(
+        'On an accepted outcome the closing message outcome reads "refined, not pointed (<type>)"; on a "not '
+        'accepted" outcome it names that outcome and the two-round cap as the stop reason, never "unpointed".'
+    ) in unestimated_bullet("Closing outcome")
+
+
+@pytest.mark.parametrize(
+    "sentence",
+    [
+        "Bug (`linear-bug` template): the symptom, the mechanism if known, the observed evidence, the expected "
+        "behaviour, the fix scope, the acceptance criteria and the Definition of Done; a completed fix or verified "
+        "root cause is not a prerequisite of refinement.",
+        "Investigation (`linear-investigation` template): the incident reference, the question to answer, the "
+        "findings scope, the remediation hand-off and the evidence to collect; the template has no acceptance "
+        "criteria and no Definition of Done, so none is required, and completed findings or a root cause are not "
+        "prerequisites of refinement.",
+        "Spike (`linear-spike` template): the research questions, the success criteria, the deliverables, the "
+        "timebox and the Definition of Done.",
+    ],
+)
+def test_unestimated_section_names_the_content_per_type(sentence: str) -> None:
+    """B3: what the three voters refine for each type."""
+    assert flat(sentence) in unestimated_bullet("Content per type")
+
+
+def test_unestimated_section_dor_verdict_reads_template_has_none() -> None:
+    """B3: the verdict covers only the template's boxes, and none of the three has any."""
+    assert flat(
+        "The voters' Definition of Ready verdict covers only the boxes the filing template has; none of the three "
+        'templates has any, so the verdict reads "template has no Definition of Ready".'
+    ) in unestimated_bullet("Definition of Ready verdict")
+
+
+def test_unestimated_section_decides_priority_on_every_outcome() -> None:
+    """B4: priority on an accepted and on a not accepted outcome, with the priority stop unchanged."""
+    assert flat(
+        "The PO decides and reads back a priority from at least one comparable prioritised story in the team of "
+        '`STORY_ID`, as for a story, on an accepted and on a "not accepted" outcome alike, and posts the Triage '
+        "record; the priority stop for a team with no comparable story applies unchanged."
+    ) in unestimated_bullet("Priority")
+
+
+@pytest.mark.parametrize(
+    "sentence",
+    [
+        "A Bug, an Investigation or a Spike moves to `profile.tracker.states.ready` only when all three voters "
+        "returned `ACCEPT`, no blocker remains, the priority is read back equal to the decided value, every "
+        "Definition of Ready box its template has is ticked with evidence (none do, so this is vacuous), and the "
+        "template's evidence sections are non-empty and no longer the filing template's placeholder text: Bug "
+        "`Observed` and `Expected`, Investigation `Incident`, and Spike `Timebox` and `Research Questions`.",
+        "A section still holds placeholder text when any bracketed template instruction that the filing template "
+        "puts in that section remains in it verbatim, compared with each run of whitespace read as one space: each "
+        "`[...]` instruction of the `linear-bug` or `linear-spike` template, whether on a line of its own like `[What "
+        "should have happened instead.]`, wrapped across lines like the Bug `Observed` instruction, inline after the "
+        "section label like `**Timebox:** [X days]`, or numbered like `1. [Key question to answer]`, and each of the "
+        "`linear-investigation` template's own `<...>` tokens on its `Incident` line, such as `<Paging system>`; a "
+        "section that is empty or still holds one fails this condition.",
+        "Text the author wrote in brackets, such as a Markdown link, is not template placeholder text.",
+        "Otherwise it stays in `profile.tracker.states.backlog` and the Triage record's `State:` line names the "
+        'unmet condition; on a move to ready the line reads "ready: all conditions met".',
+        "An issue already in `profile.tracker.states.ready` whose gate fails is moved back to "
+        "`profile.tracker.states.backlog`, and its `State:` line names the unmet condition the same way.",
+        "An issue already in `profile.tracker.states.in_progress` or a later state keeps its state and no state is "
+        "written.",
+        "When its gate fails, the Triage record's `State:` line reads its retained state with each unmet condition, "
+        "and the ceremony reports `needs input` to the owner; when its gate passes, the line reads \"<retained "
+        'state>: all conditions met".',
+    ],
+)
+def test_unestimated_section_states_the_ready_gate(sentence: str) -> None:
+    """B4: the end state and the State: line."""
+    assert flat(sentence) in unestimated_bullet("Ready gate")
+
+
+def filing_section(skill: str, start: str, end: str) -> str:
+    """The text of one evidence section of a filing template, from its label up to the next label or rule."""
+    text = (ROOT / "skills" / skill / "SKILL.md").read_text()
+    template = text[text.index("## Template (the description)"):]
+    body = template[template.index(start) + len(start):]
+    return body[: body.index(end)]
+
+
+# Each evidence section the ready gate names, the filing template's text that bounds it, and the bracket kind the
+# gate's placeholder rule names for that template.
+EVIDENCE_SECTIONS = [
+    ("linear-bug", "**Observed**", "**Expected**", r"\[[^\]]+\]"),
+    ("linear-bug", "**Expected**", "**Fix**", r"\[[^\]]+\]"),
+    ("linear-investigation", "**Incident**", "---", r"<[^>]+>"),
+    ("linear-spike", "**Timebox:**", "\n", r"\[[^\]]+\]"),
+    ("linear-spike", "**📝 Research Questions**", "---", r"\[[^\]]+\]"),
+]
+
+
+@pytest.mark.parametrize("skill, start, end, kind", EVIDENCE_SECTIONS, ids=[f"{r[0]} {r[1]}" for r in EVIDENCE_SECTIONS])
+def test_ready_gate_placeholder_rule_covers_every_evidence_section(skill: str, start: str, end: str, kind: str) -> None:
+    """B4: every evidence section the gate names carries a filing placeholder of the bracket kind the rule detects,
+    and every instruction in it is caught whatever its layout (own line, wrapped, inline after the label, numbered)."""
+    body = filing_section(skill, start, end)
+    spans = [" ".join(span.split()) for span in re.findall(kind, body)]
+    assert spans, f"{skill} {start} has no placeholder the rule can detect"
+    gate = spaced(section(SKILL.read_text(), UNESTIMATED))
+    bracket = "`[...]` instruction of the `linear-bug` or `linear-spike` template" if kind.startswith(r"\[") else (
+        "each of the `linear-investigation` template's own `<...>` tokens on its `Incident` line"
+    )
+    assert bracket in gate
+    assert "remains in it verbatim, compared with each run of whitespace read as one space" in gate
+
+
+def test_ready_gate_placeholder_examples_are_the_filing_templates_own() -> None:
+    """B4: each layout example the gate quotes is the filing template's own text, so the examples cannot drift."""
+    bug = (ROOT / "skills" / "linear-bug" / "SKILL.md").read_text()
+    spike = (ROOT / "skills" / "linear-spike" / "SKILL.md").read_text()
+    investigation = (ROOT / "skills" / "linear-investigation" / "SKILL.md").read_text()
+    assert "\n[What should have happened instead.]\n" in bug
+    assert "[Concrete evidence:" in filing_section("linear-bug", "**Observed**", "**Expected**")
+    assert "\n" in filing_section("linear-bug", "**Observed**", "**Expected**").strip(), "the Observed text wraps"
+    assert "\n**Timebox:** [X days]\n" in spike
+    assert "\n1. [Key question to answer]\n" in spike
+    assert "<Paging system>" in filing_section("linear-investigation", "**Incident**", "---")
+    assert "<Paging system>" in investigation
+
+
+def test_unestimated_section_has_no_estimate_write_instruction() -> None:
+    """B2: no estimate write, so the section never tells the PO to set or clear an estimate."""
+    text = spaced(section(SKILL.read_text(), UNESTIMATED)).lower()
+    assert "no estimate write" in text
+    for phrase in ("sets the estimate", "set the estimate", "removes it", "clears the estimate", "estimate to null"):
+        assert phrase not in text, phrase
+
+
+def placeholder_spans(skill: str, start: str, end: str, kind: str) -> list[str]:
+    return [" ".join(span.split()) for span in re.findall(kind, filing_section(skill, start, end))]
+
+
+def gate_admits(sections: dict[tuple[str, str], str]) -> bool:
+    """The ready gate's evidence condition as the skill states it: each named section is non-empty and holds none
+    of its filing template's own bracketed instructions verbatim, with each run of whitespace read as one space."""
+    for skill, start, end, kind in EVIDENCE_SECTIONS:
+        if (skill, start) not in sections:
+            continue
+        text = " ".join(sections[(skill, start)].split())
+        if not text or any(span in text for span in placeholder_spans(skill, start, end, kind)):
+            return False
+    return True
+
+
+BUG_OBSERVED = ("linear-bug", "**Observed**")
+BUG_EXPECTED = ("linear-bug", "**Expected**")
+
+
+@pytest.mark.parametrize(
+    "name, observed, expected, admitted",
+    [
+        ("compliant Bug", "The export returns 500 for a 2 MB file.", "The export returns the file.", True),
+        ("placeholder Bug", "The export returns 500.", "[What should have happened instead.]", False),
+        ("empty Bug section", "The export returns 500.", "  \n ", False),
+        (
+            "author-written bracketed note",
+            "The export returns 500, see [the log](https://example.invalid/log) [sic].",
+            "The export returns the file.",
+            True,
+        ),
+    ],
+)
+def test_ready_gate_admits_and_denies_bug_evidence(name: str, observed: str, expected: str, admitted: bool) -> None:
+    """B4: a filled Bug passes, a placeholder or empty section fails, and an author's own brackets do not fail it."""
+    assert "Text the author wrote in brackets, such as a Markdown link, is not template placeholder text." in spaced(
+        section(SKILL.read_text(), UNESTIMATED)
+    )
+    assert gate_admits({BUG_OBSERVED: observed, BUG_EXPECTED: expected}) is admitted, name
+
+
+def test_ready_gate_denies_the_wrapped_bug_observed_instruction() -> None:
+    """B4: the Observed instruction wraps in the template; rewrapped in an issue it is still placeholder text."""
+    (wrapped,) = placeholder_spans("linear-bug", "**Observed**", "**Expected**", r"\[[^\]]+\]")
+    rewrapped = wrapped.replace(" ", "\n", 3)
+    assert not gate_admits({BUG_OBSERVED: rewrapped, BUG_EXPECTED: "The export returns the file."})
+
+
+@pytest.mark.parametrize(
+    "path, sentence",
+    [
+        (
+            "skills/story-refinement/SKILL.md",
+            "For a Bug, an Investigation or a Spike, the brief also carries the type written on the todo list and that "
+            "type's bullet under Content per type in [Unestimated issue types](#unestimated-issue-types).",
+        ),
+        (
+            "skills/story-refinement/SKILL.md",
+            "For a Bug, an Investigation or a Spike, per-AC gaps and refined AC deltas apply only where the filing "
+            'template has acceptance criteria, and the Definition of Ready verdict reads "template has no Definition '
+            'of Ready".',
+        ),
+        (
+            "skills/story-refinement/SKILL.md",
+            "For those types the stop ends Stage 1 only: the PO still decides and reads back the priority and posts "
+            "the Triage record on this outcome, as [Unestimated issue types](#unestimated-issue-types) states, before "
+            "the closing message.",
+        ),
+        ("skills/story-refinement/SKILL.md", "A Bug, an Investigation or a Spike is refined and never pointed."),
+        (
+            "skills/story-refinement/SKILL.md",
+            "For those types, a stop after the refinement comment exists but before an accept round outcome (a voter "
+            "is missing, or the tracker writes are denied without the fallback) posts only after the refinement "
+            "comment and every Accept round result comment posted so far are read back.",
+        ),
+        (
+            "shared/linear.md",
+            "The estimate applies only to an estimated issue type: a Bug or an Investigation carries no estimate, and "
+            "a Spike carries a timebox instead.",
+        ),
+    ],
+)
+def test_unestimated_types_reach_every_rule_that_assumes_a_pointed_story(path: str, sentence: str) -> None:
+    """B2 and B3: the voter brief, output contract, accept round stop, description, metrics and triage rule each
+    carve out a Bug, an Investigation and a Spike."""
+    assert sentence in spaced((ROOT / path).read_text())
+
+
+def test_type_item_states_user_story_precedence_before_the_stop_and_the_naming() -> None:
+    """B1: the type item reads in rule order: user_story wins, then the two-label stop, then the type names."""
+    item = type_item()
+    story = item.index("is a User Story whatever other labels it has")
+    stop = item.index("carrying two or more of the three type labels stops with `needs input`")
+    naming = item.index("Otherwise, name the issue type")
+    assert story < stop < naming
+
+
+def test_pointing_record_template_is_never_posted_for_an_unestimated_type() -> None:
+    assert "Never post it for a Bug, an Investigation or a Spike, which is never pointed." in (
+        SKILL.parent / "references" / "refinement-record.md"
+    ).read_text().split("## Pointing record", 1)[1].split("```", 1)[0]
+
+
+def test_unestimated_section_has_no_metrics_mention() -> None:
+    assert "metric" not in section(SKILL.read_text(), UNESTIMATED).lower()
+
+
+def test_overview_defers_to_the_issue_type_section() -> None:
+    """B2: the overview names the unestimated reading."""
+    text = SKILL.read_text()
+    overview = spaced(text[text.index("# Story refinement"): text.index("## Arguments")])
+    assert (
+        "A Bug, an Investigation or a Spike is unestimated: it runs Stage 1 only and is never pointed, as "
+        f"{UNESTIMATED_LINK} states." in overview
+    )
+
+
+def test_read_first_todo_bullet_omits_stage_two_for_unestimated_types() -> None:
+    """B2: the Read first todo-tracking bullet states the unestimated reading."""
+    read_first = section(SKILL.read_text(), "Read first")
+    lines = read_first.splitlines()
+    start = next(i for i, line in enumerate(lines) if line.startswith("- [references/todo-tracking.md]"))
+    end = next((i for i in range(start + 1, len(lines)) if not lines[i].startswith("  ")), len(lines))
+    todo_bullet = spaced("\n".join(lines[start:end]))
+    assert "For a Bug, an Investigation or a Spike the list omits every Stage 2 item, as that seed line states." in (
+        todo_bullet
+    )
+
+
+def test_step_two_items_state_the_unestimated_reading() -> None:
+    """B2: Step 2 items 4 and 7 state the not accepted reading."""
+    assert (
+        "For a Bug, an Investigation or a Spike the outcome is accepted, another round, or not accepted, never "
+        "unpointed." in process_item(STEP_TWO, RESULT_ITEM)
+    )
+    assert (
+        "For a Bug, an Investigation or a Spike the PO authors no unpointed record: the round 2 Accept round result "
+        "comment is the stop record, its outcome reads not accepted, and it carries the objecting voters' blocking "
+        "amendments." in process_item(STEP_TWO, "If all three voters have not returned `ACCEPT` after two rounds")
+    )
+
+
+def test_step_two_outputs_and_stop_state_the_unestimated_reading() -> None:
+    """B2: the Outputs and Stop lines of Step 2."""
+    body = operative_step(STEP_TWO)
+    assert (
+        'or a recorded unpointed result (for a bug, an investigation or a spike, a "not accepted" round 2 accept '
+        'round result)' in bullet(body, "Outputs")
+    )
+    assert (
+        'two accept rounds without all three `accept` (unpointed for a user story, "not accepted" for a bug, an '
+        "investigation or a spike)" in bullet(body, "Stop")
+    )
+
+
+def test_stage_two_states_the_unestimated_skip() -> None:
+    stage_two = spaced(section(SKILL.read_text(), "Stage 2: pointing"))
+    assert stage_two.startswith(f"A Bug, an Investigation or a Spike skips this stage, as {UNESTIMATED_LINK} states.")
+
+
+def test_records_states_the_unestimated_reading() -> None:
+    assert (
+        "For a Bug, an Investigation or a Spike, no pointing record is posted: the refinement comment carries the "
+        '`Pointing skipped` line, a "not accepted" round 2 Accept round result comment is the stop record with the '
+        "objecting voters' blocking amendments, and the Triage record carries the `State:` line, as "
+        f"{UNESTIMATED_LINK} states." in spaced(section(SKILL.read_text(), "Records"))
+    )
+
+
+def test_triage_applies_the_unestimated_ready_gate() -> None:
+    assert (
+        "- For a Bug, an Investigation or a Spike, the PO also applies the ready gate and the `State:` line in "
+        f"{UNESTIMATED_LINK}." in spaced(section(SKILL.read_text(), "Triage"))
+    )
+
+
+def test_metrics_order_covers_a_story_with_no_pointing_record() -> None:
+    """B2: the summary posts after every Stage 1 record and the triage writes, on either outcome."""
+    body = metrics_body()
+    assert (
+        "When no pointing record exists because the story is a Bug, an Investigation or a Spike, the comment is the "
+        "invocation's last tracker write and posts only after the refinement comment, every Accept round result "
+        'comment and the invocation\'s triage writes have been applied and read back, on an accepted and on a "not '
+        'accepted" outcome alike.' in body
+    )
+    assert (
+        'For a Bug, an Investigation or a Spike, this rule applies unchanged with "pointing record" read as '
+        '"refinement comment".' in body
+    )
+
+
+def test_closing_message_states_the_unestimated_outcomes_and_type_stops() -> None:
+    assert (
+        'For a Bug, an Investigation or a Spike, an accepted outcome reads "refined, not pointed (<type>)", and a '
+        '"not accepted" outcome names that outcome and the two-round cap as the stop reason, never unpointed, as '
+        f"{UNESTIMATED_LINK} states; the stop reason also names each `needs input` of the Step 1 type check: an "
+        "unset type-label key or conflicting type labels." in skill_section(CLOSING)
+    )
+
+
+def test_refinement_template_carries_the_pointing_skipped_line() -> None:
+    """B7: the line sits in the Refinement comment template, scoped to the unestimated types."""
+    assert f"- {POINTING_SKIPPED}" in template("Refinement comment").splitlines()
+    assert (
+        "For a Bug, an Investigation or a Spike, the comment carries the `Pointing skipped` line; for a User Story "
+        "it omits that line." in spaced(section(RECORD.read_text(), "Refinement comment"))
+    )
+
+
+SEED_UNESTIMATED = (
+    "For a Bug, an Investigation and a Spike, the todo list omits each point value, the SM/EM sizing context, the "
+    "consensus check, the basis-challenge round, the discussion and re-vote, the residual variance outcome or "
+    "unpointed variance stop, each slice estimate, the pointing record and the anchoring check, and keeps the type "
+    "check with the type recorded, the story read and its relations, the voter inputs, the reconciliation, each "
+    "accept round, each split, priority, each PO write and read-back, the refinement record and, when metrics is "
+    "on, the metrics items."
+)
+
+
+def test_todo_tracking_seed_states_the_unestimated_list() -> None:
+    """B7: the seed line by exact substring in shared/todo-tracking.md."""
+    seed = story_refinement_seed(ROOT)
+    assert seed.endswith(
+        "record invocation start (metrics on), collect metrics, and post the metrics summary on the story. "
+        + SEED_UNESTIMATED
+    ), "the unestimated clause directly follows the metrics clause and closes the seed line"
+    assert seed.startswith("- **story-refinement:** read the story and its relations, the type check with the type "
+                           "recorded, ")
+
+
+UNESTIMATED_TYPE_NAME = re.compile(r"\b(Bug|Investigation|Spike)s?\b", re.IGNORECASE)
+
+
+@pytest.mark.parametrize("heading", [STEP_THREE, STEP_FOUR])
+def test_pointing_steps_carry_no_unestimated_type_path(heading: str) -> None:
+    """B2: Stage 2 has no path for an unestimated type; the Stage 2 heading's skip sentence is its only rule."""
+    assert not UNESTIMATED_TYPE_NAME.search(operative_step(heading)), heading
+
+
+def test_priority_box_rules_apply_only_where_the_template_has_the_box() -> None:
+    """B3/B4: the "Priority is clear" tick and untick are vacuous for the three unestimated templates."""
+    assert (
+        'Both "Priority is clear" rules apply only where the filing template has that Definition of Ready box; a '
+        "Bug, an Investigation or a Spike template has none, so for those types no box is ticked or left unticked."
+        in priority_bullet()
+    )
+
+
+SHARED_METRICS = ROOT / "shared" / "metrics.md"
+
+
+def test_shared_metrics_outcome_names_the_unestimated_outcomes() -> None:
+    """B2: the metrics summary Outcome has a value for each unestimated end state, never unpointed."""
+    outcome = bullet(section(SHARED_METRICS.read_text(), "`story-refinement` extras", level=3), "Outcome")
+    assert (
+        'the recorded estimate; "refined, not pointed (<type>)" for an accepted bug, investigation or spike; "not '
+        'accepted" with the two-round cap for a bug, an investigation or a spike; unpointed,' in outcome
+    )
+
+
+def test_shared_metrics_order_posts_after_the_unestimated_records() -> None:
+    """B2: the shared order rule agrees with the SKILL.md Metrics Order sentence."""
+    order = spaced(section(SHARED_METRICS.read_text(), "`story-refinement` order", level=3))
+    assert (
+        "- For a Bug, an Investigation or a Spike, which has no pointing record, the comment is posted after the "
+        "refinement comment, every Accept round result comment and the triage writes are read back, on an accepted "
+        'and on a "not accepted" outcome alike.' in order
+    )
+
+
+def test_engineering_workflow_triage_accepts_a_refined_unestimated_type() -> None:
+    """B2: the implementation gate does not demand a pointing a Bug, an Investigation or a Spike never gets."""
+    triage = spaced(section((ROOT / "skills" / "engineering-workflow" / "SKILL.md").read_text(), "1. Triage the story"))
+    assert (
+        "If the story is not refined and pointed, run `story-refinement` first; a Bug, an Investigation or a Spike "
+        "is never pointed, so for one of those types refined is enough." in triage
+    )
+    assert (
+        "for a Bug, an Investigation or a Spike it runs the refinement and the accept round only." in triage
+    )
