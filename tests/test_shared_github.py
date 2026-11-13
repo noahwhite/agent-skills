@@ -30,7 +30,7 @@ PER_STORY_SENTENCES = (
     "Stop and report when any commit of that PR, from its `commits` list, has a subject that does not carry the story's issue key, because another story's change is riding along inside that PR and a squash or merge commit would carry it unnoticed.",
     "Stop and report as well when that list holds 100 commits or more, because the list is truncated there and cannot be checked whole.",
     "Record the PR number and the selected commit SHAs in the promotion PR body.",
-    "Before carrying them, confirm the story's change is still present on `origin/<profile.git.integration_branch>`: the lines the selection adds are present in that branch's version of each file and the lines it removes are absent, checked one line at a time as whole lines by saving the file with `git show origin/<profile.git.integration_branch>:<path> > <file>` (`<path>` relative to the repository root, as `git diff` prints it), writing the line alone with a trailing newline to `<pattern>` with a file tool rather than the shell, and running `grep -F -x -q -f <pattern> <file>`, which exits 0 when the line is present and 1 when it is absent; stop and report the story as reverted when they are not, count a file the selection deletes as absent when `git show` cannot read it, and stop and report the check as failed on any other `git show` failure or any other `grep` exit status.",
+    "Before carrying them, confirm the story's change is still present on `origin/<profile.git.integration_branch>`: the lines the selection adds are present in that branch's version of each file and the lines it removes are absent, checked one line at a time as whole lines, with `<path>` relative to the repository root as `git diff --name-only` prints it and `<file>` and `<pattern>` absolute paths in a scratch directory outside the repository: save the file with `git show origin/<profile.git.integration_branch>:<path> > <file>`, write the line alone with a trailing newline to `<pattern>` with a file tool rather than the shell, and run `grep -F -x -q -f <pattern> <file>`, which exits 0 when the line is present and 1 when it is absent; stop and report the story as reverted when they are not, count a file the selection deletes as absent only when `git cat-file -e <first selected commit>^:<path>` exits 0 and `git show` cannot read it, and stop and report the check as failed on any other `git show` failure or any other `grep` exit status.",
     # Carrying the selected commits onto the promotion branch.
     "Carry the selected commits onto the promotion branch by cherry-picking them one at a time in their original order, with `-m 1` when a selected commit is a merge commit, or by applying non-merge selections with `git cherry-pick -n` in order and making one commit.",
     # The promotion PR, and the explicit refusal of a whole-branch PR under per-story.
@@ -193,7 +193,7 @@ EXPECTED_PROMOTION_SECTION = (
     "   Stop and report when any commit of that PR, from its `commits` list, has a subject that does not carry the story's issue key, because another story's change is riding along inside that PR and a squash or merge commit would carry it unnoticed.\n"
     '   Stop and report as well when that list holds 100 commits or more, because the list is truncated there and cannot be checked whole.\n'
     '   Record the PR number and the selected commit SHAs in the promotion PR body.\n'
-    "   Before carrying them, confirm the story's change is still present on `origin/<profile.git.integration_branch>`: the lines the selection adds are present in that branch's version of each file and the lines it removes are absent, checked one line at a time as whole lines by saving the file with `git show origin/<profile.git.integration_branch>:<path> > <file>` (`<path>` relative to the repository root, as `git diff` prints it), writing the line alone with a trailing newline to `<pattern>` with a file tool rather than the shell, and running `grep -F -x -q -f <pattern> <file>`, which exits 0 when the line is present and 1 when it is absent; stop and report the story as reverted when they are not, count a file the selection deletes as absent when `git show` cannot read it, and stop and report the check as failed on any other `git show` failure or any other `grep` exit status.\n"
+    "   Before carrying them, confirm the story's change is still present on `origin/<profile.git.integration_branch>`: the lines the selection adds are present in that branch's version of each file and the lines it removes are absent, checked one line at a time as whole lines, with `<path>` relative to the repository root as `git diff --name-only` prints it and `<file>` and `<pattern>` absolute paths in a scratch directory outside the repository: save the file with `git show origin/<profile.git.integration_branch>:<path> > <file>`, write the line alone with a trailing newline to `<pattern>` with a file tool rather than the shell, and run `grep -F -x -q -f <pattern> <file>`, which exits 0 when the line is present and 1 when it is absent; stop and report the story as reverted when they are not, count a file the selection deletes as absent only when `git cat-file -e <first selected commit>^:<path>` exits 0 and `git show` cannot read it, and stop and report the check as failed on any other `git show` failure or any other `grep` exit status.\n"
     '3. Carry the selected commits onto the promotion branch by cherry-picking them one at a time in their original order, with `-m 1` when a selected commit is a merge commit, or by applying non-merge selections with `git cherry-pick -n` in order and making one commit.\n'
     "4. Run the promotion branch's local checks, push it, then open the promotion PR from it to `profile.git.release_branch` and let its CI run.\n"
     '   A whole-branch integration-to-release PR is not used under `per-story`.\n'
@@ -242,21 +242,24 @@ def test_promotion_no_longer_prescribes_git_grep_line_regexp() -> None:
     assert "git grep --fixed-strings -x" not in section(GITHUB.read_text(), "Promotion")
 
 
-def presence_check_commands() -> tuple[str, str]:
-    """The `git show` and `grep` commands the reverted-story check prescribes, as written."""
-    line = next(
+def presence_check_commands() -> tuple[str, str, str]:
+    """The `git show`, `grep` and `git cat-file` commands the reverted-story check prescribes, as written."""
+    lines = [
         line for line in section(GITHUB.read_text(), "Promotion").splitlines()
         if "Before carrying them, confirm the story's change" in line
-    )
-    spans = re.findall(r"`([^`]+)`", line)
-    show = [span for span in spans if span.startswith("git show ")]
-    grep = [span for span in spans if span.startswith("grep ")]
-    assert len(show) == 1 and len(grep) == 1, spans
-    return show[0], grep[0]
+    ]
+    assert len(lines) == 1, "the reverted-story check sentence is missing from Promotion"
+    spans = re.findall(r"`([^`]+)`", lines[0])
+    commands = []
+    for prefix in ("git show ", "grep ", "git cat-file "):
+        found = [span for span in spans if span.startswith(prefix)]
+        assert len(found) == 1, (prefix, spans)
+        commands.append(found[0])
+    return commands[0], commands[1], commands[2]
 
 
 def test_prescribed_presence_check_runs_and_matches_whole_lines(tmp_path: Path) -> None:
-    show, grep = presence_check_commands()
+    show, grep, cat_file = presence_check_commands()
     repo = tmp_path / "repo"
     (repo / "docs").mkdir(parents=True)
     lines = [
@@ -267,14 +270,25 @@ def test_prescribed_presence_check_runs_and_matches_whole_lines(tmp_path: Path) 
         "tail",
     ]
     (repo / "docs" / "f.md").write_text("\n".join(lines) + "\n")
-    git = ["git", "-C", str(repo)]
-    subprocess.run(git + ["init", "-q"], check=True)
-    subprocess.run(git + ["add", "docs/f.md"], check=True)
-    tree = subprocess.run(git + ["write-tree"], check=True, capture_output=True, text=True).stdout.strip()
-    subprocess.run(git + ["update-ref", "refs/remotes/origin/main", tree], check=True)
+    (repo / "docs" / "gone.md").write_text("deleted by the story\n")
+
+    def git(*args: str) -> str:
+        return subprocess.run(
+            ["git", "-C", str(repo), *args], check=True, capture_output=True, text=True
+        ).stdout.strip()
+
+    git("init", "-q")
+    git("add", "docs")
+    git("update-ref", "refs/tags/before", git("write-tree"))
+    git("rm", "-q", "--cached", "docs/gone.md")
+    (repo / "docs" / "gone.md").unlink()
+    git("update-ref", "refs/remotes/origin/main", git("write-tree"))
+    git("add", "docs")
+    status_before = git("status", "--porcelain", "--untracked-files=all")
 
     def run(command: str, **values: str) -> subprocess.CompletedProcess:
         command = command.replace("origin/<profile.git.integration_branch>", "origin/main")
+        command = command.replace("<first selected commit>^", "before")
         for name, value in values.items():
             command = command.replace(f"<{name}>", shlex.quote(value))
         assert "<" not in command.replace(" > ", " "), command
@@ -288,9 +302,7 @@ def test_prescribed_presence_check_runs_and_matches_whole_lines(tmp_path: Path) 
 
     def status(text: str) -> int:
         pattern.write_text(text + "\n")
-        result = run(grep, pattern=str(pattern), file=saved)
-        assert result.stderr == "", result.stderr
-        return result.returncode
+        return run(grep, pattern=str(pattern), file=saved).returncode
 
     for present in lines:
         assert status(present) == 0, present
@@ -298,4 +310,11 @@ def test_prescribed_presence_check_runs_and_matches_whole_lines(tmp_path: Path) 
     assert status("alpha beta") == 1
     assert status("absent line") == 1
     assert not (repo / "pwned").exists()
-    assert run(show, path="docs/missing.md", file=saved).returncode != 0
+
+    # A file the story deleted: readable before the selection, unreadable on the branch.
+    assert run(cat_file, path="docs/gone.md").returncode == 0
+    assert run(show, path="docs/gone.md", file=saved).returncode != 0
+    # A wrong path, such as the diff header's b/ prefix, is not readable before either.
+    assert run(cat_file, path="b/docs/f.md").returncode != 0
+    # Scratch files outside the repository leave the working tree untouched.
+    assert git("status", "--porcelain", "--untracked-files=all") == status_before
