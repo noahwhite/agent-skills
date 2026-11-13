@@ -969,7 +969,8 @@ METRICS_TIMED_LAUNCHES = (
 )
 METRICS_LAUNCH_POINTS = (
     "The senior engineer's timed launches are the first launch in step 2, each checklist read-back resume "
-    "of the senior engineer under step 0, and each resume or re-spawn in step 4; each QA round is a launch "
+    "of the senior engineer under step 0, each interim-deadline resume of the senior engineer under "
+    "`references/interim-handbacks.md`, and each resume or re-spawn in step 4; each QA round is a launch "
     "row in step 3, a continuation of that round under step 4 is a further launch row within the same "
     "round, and each checklist read-back resume of a QA agent under step 0 is a launch row of its own "
     "within that QA agent's round."
@@ -2905,7 +2906,7 @@ INTERIM_CLEAR = (
 )
 INTERIM_READ = (
     "Otherwise, at the deadline the coordinator reads the awaited item's state from its primary source (for a CI "
-    "run, the run's status from the forge; for a tracker move, the tracker), never from the subagent, and stops."
+    "run, the run's status from the forge; for a tracker move, the tracker), never from the subagent."
 )
 INTERIM_STOP = (
     "Its report to the owner names the awaited item, its primary source, the state or read error observed, and "
@@ -3052,6 +3053,73 @@ def test_the_deadline_stop_reports_and_makes_no_tracker_write() -> None:
 
 def test_the_deadline_is_reached_by_a_bounded_foreground_wait() -> None:
     assert INTERIM_WAIT in interim_text()
+
+
+# SKL-255: a concluded awaited item resumes the engineer at the deadline instead of stopping.
+INTERIM_CONCLUDED_RESUME = (
+    "If the awaited item has concluded (success, failure, or cancelled), the coordinator resumes the same engineer "
+    "with the awaited item and its observed conclusion, records the resume on the todo list, and handles the "
+    "engineer's next handback as usual."
+)
+INTERIM_NARROWED_STOP = (
+    "Only a pending item or an unreadable primary source leads to the deadline stop: the coordinator stops."
+)
+INTERIM_NO_RESUME_STOP = (
+    "If the runtime cannot resume the engineer, the coordinator reports the limitation and the observed state and "
+    "stops; it spawns no new subagent for a deadline resume."
+)
+INTERIM_RESUME_CAP = "A deadline resume does not count against step 0's read-back resume cap."
+
+
+def test_a_concluded_awaited_item_resumes_the_same_engineer() -> None:
+    text = interim_text()
+    assert text.index(INTERIM_READ) < text.index(INTERIM_CONCLUDED_RESUME)
+
+
+def test_only_a_pending_item_or_an_unreadable_source_reaches_the_deadline_stop() -> None:
+    text = interim_text()
+    assert text.index(INTERIM_READ) < text.index(INTERIM_NARROWED_STOP) < text.index(INTERIM_STOP)
+
+
+def test_a_runtime_that_cannot_resume_the_engineer_stops_without_a_new_subagent() -> None:
+    assert INTERIM_NO_RESUME_STOP in interim_text()
+
+
+def test_a_deadline_resume_does_not_count_against_the_read_back_resume_cap() -> None:
+    assert INTERIM_RESUME_CAP in interim_text()
+
+
+INTERIM_RESUME_ROW = "With `metrics` on, each deadline resume is its own launch row."
+INTERIM_CONCLUDED_CATCH_ALL = (
+    "An item not yet in a terminal state is pending (a CI run `requested`, `queued`, `waiting`, `pending` or "
+    "`in_progress`; a tracker item still in a non-terminal state short of its target state); any terminal state "
+    "counts as concluded, so a CI run `completed` with any conclusion resumes the engineer."
+)
+INTERIM_DEADLINE_BLOCK = (
+    INTERIM_READ, INTERIM_CONCLUDED_RESUME, INTERIM_CONCLUDED_CATCH_ALL, INTERIM_NO_RESUME_STOP, INTERIM_RESUME_CAP, INTERIM_RESUME_ROW,
+    INTERIM_NARROWED_STOP, INTERIM_STOP,
+)
+
+
+def test_with_metrics_on_each_deadline_resume_is_its_own_launch_row() -> None:
+    assert INTERIM_RESUME_ROW in interim_text()
+
+
+def test_an_unfinished_item_is_pending_and_any_terminal_state_counts_as_concluded() -> None:
+    assert INTERIM_CONCLUDED_CATCH_ALL in interim_text()
+
+
+def test_the_deadline_rule_states_each_outcome_once_in_one_uninterrupted_block() -> None:
+    text = interim_text()
+    for phrase in INTERIM_DEADLINE_BLOCK:
+        assert text.count(phrase) == 1, f"{phrase!r} must appear exactly once"
+    assert " ".join(INTERIM_DEADLINE_BLOCK) in text
+
+
+def test_no_other_sentence_stops_at_the_deadline() -> None:
+    sentences = re.split(r"(?<=\.)\s+", interim_text())
+    stops = [s for s in sentences if "deadline" in s.lower() and "stop" in s.lower()]
+    assert stops == [INTERIM_NO_RESUME_STOP, INTERIM_NARROWED_STOP]
 
 
 # SKL-155: the `qa-round-cap` argument stops the loop at the cap-th counted QA round that ends in

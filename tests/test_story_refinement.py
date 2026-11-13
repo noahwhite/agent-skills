@@ -2303,7 +2303,9 @@ def test_record_has_the_triage_record_template_with_exactly_the_fields() -> None
         "question when the PO could not decide>",
         "- State: <for a Bug, an Investigation or a Spike: ready: all conditions met, or backlog with each unmet "
         "condition, or for an issue already in progress or later its retained state with all conditions met or with "
-        "each unmet condition; omitted for a User Story>",
+        "each unmet condition; for a Spike with more than one independent research thread the unmet condition reads "
+        "re-file as separate Spikes (owner); when the `Scope signal:` line is missing or carries neither of its type's "
+        "readings the unmet condition reads scope signal missing; omitted for a User Story>",
         "- Tracker writes: product owner",
     ]
 
@@ -2837,7 +2839,7 @@ def test_unestimated_section_states_the_closing_outcome() -> None:
         "criteria and no Definition of Done, so none is required, and completed findings or a root cause are not "
         "prerequisites of refinement.",
         "Spike (`linear-spike` template): the research questions, the success criteria, the deliverables, the "
-        "timebox and the Definition of Done.",
+        "timebox, refined in place of an estimate, and the Definition of Done.",
     ],
 )
 def test_unestimated_section_names_the_content_per_type(sentence: str) -> None:
@@ -3230,4 +3232,394 @@ def test_engineering_workflow_triage_accepts_a_refined_unestimated_type() -> Non
     )
     assert (
         "for a Bug, an Investigation or a Spike it runs the refinement and the accept round only." in triage
+    )
+
+
+# --- SKL-239: the oversize split of a Bug or an Investigation and the multi-thread Spike re-file -----------------
+
+SPLIT_ITEM = "For a Bug or an Investigation, after the accept round has accepted the refinement comment"
+SCOPE_SIGNAL_LINE = "- Scope signal: <reading>"
+SHARED_LINEAR_SPLIT = (
+    "- ⛔ At refinement, without asking, split a Bug or an Investigation whose accepted refinement comment's `Scope "
+    "signal:` line reads `more than one independently reviewable change`, with or without its `(<reason>)`: the "
+    "original keeps the core slice and "
+    "blocks each sibling, siblings come from its own filing template with its type label, no slice gets a point "
+    "value or a slice estimate, and the split comment maps every acceptance criterion or findings-scope item to a "
+    "slice; for these unestimated types that line, never an estimate, is the trigger."
+)
+
+
+@pytest.mark.parametrize(
+    "sentence",
+    [
+        "For a Bug or an Investigation the refinement comment carries a `Scope signal:` line reading `single change` "
+        "or `more than one independently reviewable change (<reason>)`, for example more than one root cause or more "
+        "than one independently shippable fix.",
+        "For a Spike the line reads `single research thread` or `more than one independent research thread "
+        "(<reason>)`.",
+    ],
+)
+def test_scope_signal_bullet_states_each_reading(sentence: str) -> None:
+    """B5 and B6: the two readings per type, in the issue-type section's Scope signal bullet."""
+    assert flat(sentence) in unestimated_bullet("Scope signal")
+
+
+@pytest.mark.parametrize(
+    "sentence",
+    [
+        "The reading `more than one independently reviewable change` on the accepted refinement comment of a Bug or "
+        "an Investigation splits the issue on the same terms as a story under Estimation and slicing in "
+        "[references/linear.md](references/linear.md), with these differences from the story split:",
+        "the trigger is that line, not a point value;",
+        "the split decision runs in Step 2 after the accept round and before the Triage record, not in Stage 2;",
+        "siblings are created from the issue's own filing template (`linear-bug` or `linear-investigation`), never "
+        "`linear-user-story`;",
+        "each sibling carries the original's type label (`profile.tracker.labels.bug` or "
+        "`profile.tracker.labels.investigation`), confirmed on that team under the differing-team rule in Team "
+        "resolution in [references/linear.md](references/linear.md) when the team of `STORY_ID` differs from "
+        "`profile.tracker.team_key`, and read back with that label;",
+        "and no slice receives a point value or a slice estimate.",
+        "The original stays the core slice, blocks each sibling, and every acceptance criterion (or, for an "
+        "Investigation, every findings-scope item) is mapped to a slice in the split comment.",
+        "A sibling that still needs more than one change is split again under this rule and never escalated.",
+    ],
+)
+def test_oversize_split_states_the_trigger_and_each_difference(sentence: str) -> None:
+    """B5: the trigger, the Step 2 placement, the sibling template and label, no slice estimate, and the re-split."""
+    assert flat(sentence) in unestimated_bullet("Oversize split")
+
+
+def test_oversize_split_lists_the_differences_in_order() -> None:
+    """B5: the five differences read in the order the acceptance criterion gives them."""
+    body = unestimated_bullet("Oversize split")
+    marks = [
+        "the trigger is that line",
+        "the split decision runs in step 2",
+        "siblings are created from the issue's own filing template",
+        "each sibling carries the original's type label",
+        "no slice receives a point value",
+    ]
+    assert [body.index(mark) for mark in marks] == sorted(body.index(mark) for mark in marks)
+
+
+def test_step_two_runs_the_split_after_the_accept_round_and_before_the_triage_record() -> None:
+    """B5: the split decision is a Step 2 item after the accept round items, and names the Triage record bound."""
+    items = process_items(STEP_TWO)
+    split = [i for i, item in enumerate(items) if item.startswith(SPLIT_ITEM)]
+    assert len(split) == 1
+    accept = [i for i, item in enumerate(items) if item.startswith("Run the accept round on that exact")]
+    cap = [i for i, item in enumerate(items) if item.startswith("If all three voters have not returned `ACCEPT`")]
+    assert accept[0] < cap[0] < split[0]
+    item = items[split[0]]
+    assert (
+        "and before the PO posts the Triage record, the PO applies the oversize split in "
+        f"{UNESTIMATED_LINK} when the accepted `Scope signal:` line reads `more than one independently reviewable "
+        "change`" in item
+    )
+    assert (
+        "for a Spike the accepted line reading `more than one independent research thread` takes the Spike re-file "
+        "instead, and no split runs." in item
+    )
+
+
+def test_step_two_split_writes_follow_the_apply_rule() -> None:
+    """B5: the split is PO-authored, applied by the facilitator only under the fallback."""
+    assert (
+        "The PO authors and applies the sibling issues, their relations and the split comment, or under the denied "
+        "tracker writes fallback the facilitator applies them verbatim." in process_item(STEP_TWO, SPLIT_ITEM)
+    )
+
+
+def test_shared_linear_states_the_unestimated_split_trigger() -> None:
+    """B5: one line in Estimation and slicing states the trigger for unestimated types, next to the story rule."""
+    body = section((ROOT / "shared" / "linear.md").read_text(), "Estimation and slicing")
+    lines = body.splitlines()
+    assert SHARED_LINEAR_SPLIT in lines
+    story = next(i for i, line in enumerate(lines) if line.startswith("- ⛔ Split a story estimated at 8 points"))
+    assert lines.index(SHARED_LINEAR_SPLIT) > story
+
+
+def test_vendored_linear_copies_carry_the_unestimated_split_trigger() -> None:
+    copies = sorted(ROOT.glob("skills/*/references/linear.md"))
+    assert copies
+    for copy in copies:
+        assert SHARED_LINEAR_SPLIT in copy.read_text().splitlines(), copy.relative_to(ROOT)
+
+
+def test_reviewer_output_contract_states_the_scope_signal_reading() -> None:
+    assert (
+        "for a bug, an investigation or a spike, the input also states its `scope signal:` reading, as "
+        "[unestimated issue types](#unestimated-issue-types) defines it."
+        in bullet(operative_step(STEP_ONE), "Reviewer output contract")
+    )
+
+
+@pytest.mark.parametrize(
+    "sentence",
+    [
+        "The reading `more than one independent research thread` on the accepted refinement comment of a Spike does "
+        "not split the Spike: it stays in `profile.tracker.states.backlog`, the Triage `State:` line reads \"re-file "
+        "as separate Spikes (owner)\", and the Closing message outcome reads \"refined, not pointed (Spike); needs "
+        "input: re-file as separate Spikes\" naming the story.",
+    ],
+)
+def test_spike_refile_bullet_states_the_end_state(sentence: str) -> None:
+    """B6: a multi-thread Spike is not split, stays in backlog, and names the re-file."""
+    assert flat(sentence) in unestimated_bullet("Spike re-file")
+
+
+def test_ready_gate_holds_a_multi_thread_spike() -> None:
+    """B6: the ready gate requires a single research thread, so the re-file reading never reaches ready."""
+    assert flat(
+        "A Spike also needs its `Scope signal:` line to read `single research thread`; when it reads `more than one "
+        "independent research thread` its unmet condition reads \"re-file as separate Spikes (owner)\", and when it is "
+        "missing or carries neither of its type's readings its unmet condition reads \"scope signal missing\", as the "
+        "Scope signal bullet states."
+    ) in unestimated_bullet("Ready gate")
+
+
+def test_spike_path_names_every_unestimated_type() -> None:
+    """B6: the type list and the content section name all three types, the Spike refining its timebox."""
+    assert "`profile.tracker.labels.spike` a Spike" in type_item()
+    content = unestimated_bullet("Content per type")
+    for name in ("bug (`linear-bug` template)", "investigation (`linear-investigation` template)",
+                 "spike (`linear-spike` template)"):
+        assert name in content, name
+    assert "the timebox" in content.split("spike (`linear-spike` template)", 1)[1]
+
+
+def test_closing_outcome_bullet_names_the_split_and_the_refile() -> None:
+    """B7b: the closing outcome names the split and the slice count, and the Spike re-file."""
+    assert flat(
+        "When the oversize split splits a Bug or an Investigation, the accepted outcome reads \"refined, not pointed "
+        "(<type>); split into <n> slices\", naming the split and the slice count; a Spike with the re-file reading "
+        "closes as the Spike re-file bullet states."
+    ) in unestimated_bullet("Closing outcome")
+
+
+def test_closing_message_section_names_the_split_and_the_refile() -> None:
+    assert (
+        "When the oversize split splits a Bug or an Investigation, the outcome names the split and the slice count, "
+        "and a Spike with the re-file reading closes with \"refined, not pointed (Spike); needs input: re-file as "
+        f"separate Spikes\" naming the story, as {UNESTIMATED_LINK} states." in skill_section(CLOSING)
+    )
+
+
+def test_records_names_the_scope_signal_and_the_split_comment() -> None:
+    assert (
+        "For a Bug, an Investigation or a Spike, the refinement comment also carries the `Scope signal:` line, and "
+        "an oversize split of a Bug or an Investigation posts the split comment that maps every acceptance criterion "
+        "or findings-scope item to a slice." in spaced(section(SKILL.read_text(), "Records"))
+    )
+
+
+def test_refinement_template_carries_the_scope_signal_line() -> None:
+    """B7b: the line sits in the Refinement comment template, right after the Pointing skipped line."""
+    lines = template("Refinement comment").splitlines()
+    assert SCOPE_SIGNAL_LINE in lines
+    assert lines.index(SCOPE_SIGNAL_LINE) == lines.index(f"- {POINTING_SKIPPED}") + 1
+    assert (
+        "For a Bug, an Investigation or a Spike, the comment also carries the `Scope signal:` line with the reading "
+        "`SKILL.md` (Unestimated issue types) defines; for a User Story it omits that line."
+        in spaced(section(RECORD.read_text(), "Refinement comment"))
+    )
+    assert (
+        "Replace `<reading>` with one whole reading: for a Bug or an Investigation `single change` or `more than one "
+        "independently reviewable change (<reason>)`, and for a Spike `single research thread` or `more than one "
+        "independent research thread (<reason>)`, with `<reason>` replaced too; when the Step 2 reconciliation finds "
+        "no category with two or more voters, replace it with `missing`, which `SKILL.md` treats as a missing line."
+        in spaced(section(RECORD.read_text(), "Refinement comment"))
+    )
+
+
+def test_voter_brief_carries_the_scope_signal_bullet() -> None:
+    """Gate fix: each voter is told the readings it must choose between."""
+    assert (
+        f"For those types the brief also carries the Scope signal bullet in {UNESTIMATED_LINK}, so each voter states "
+        "one of its type's two readings." in process_item(STEP_ONE, "Launch the three engineers")
+    )
+
+
+def test_reconciliation_carries_the_majority_scope_signal_reading() -> None:
+    """Gate fix: the reconciled reading is the category two or more voters gave, carried verbatim into the comment."""
+    item = process_item(STEP_TWO, "The facilitator reconciles")
+    assert (
+        "For a Bug, an Investigation or a Spike, the reconciled story also carries the `Scope signal:` category that "
+        f"two or more voters gave, as the Scope signal bullet in {UNESTIMATED_LINK} defines a category; for a category "
+        "that takes a reason, the reconciled reading is that category followed by `(<reason>)` holding each of those "
+        "voters' reasons, joined with `; `." in item
+    )
+    assert (
+        "A voter whose line carries neither of its type's readings counts toward no category; when no category has "
+        "two or more voters, the reconciled reading is `missing`, which the Scope signal bullet treats as a missing "
+        "line." in item
+    )
+    assert (
+        "For a Bug, an Investigation or a Spike, the refinement comment carries the reconciled reading verbatim on "
+        "its `Scope signal:` line." in process_item(STEP_TWO, "The PO authors the refinement comment")
+    )
+
+
+def test_missing_scope_signal_stops_with_needs_input() -> None:
+    assert flat(
+        "An accepted refinement comment whose `Scope signal:` line is missing or carries neither of its type's "
+        "readings runs no split and no re-file: the issue fails the ready gate with the unmet condition \"scope "
+        "signal missing\", and the closing message reports `needs input` naming the story and that gap."
+    ) in unestimated_bullet("Scope signal")
+    assert flat(
+        "Each of the three types also needs a `Scope signal:` line carrying one of its type's readings, as the Scope "
+        "signal bullet states."
+    ) in unestimated_bullet("Ready gate")
+
+
+@pytest.mark.parametrize(
+    "sentence",
+    [
+        "Otherwise the [Split rule](#split-rule) applies as written: siblings in the team of `STORY_ID`, the "
+        "differing-team confirmation of `profile.tracker.states.backlog` and each label, and the split comment; these "
+        "differences override its `linear-user-story` template, its slice estimate round and its escalation.",
+        "Each sibling is assigned to `profile.tracker.assignee`, keeps the original's project and cycle, and its body "
+        "fills its filing template with its slice's content from the accepted refinement comment, never the "
+        "template's placeholder text.",
+        "The split comment, from the Split comment template in [references/refinement-record.md]"
+        "(references/refinement-record.md), names the accepted refinement comment id and gives each slice its own "
+        "`Scope signal:` reading.",
+        "That is a sibling whose reading in the split comment is `more than one independently reviewable change`; it "
+        "is split at once, in the same invocation, and its split comment maps the sibling's own items.",
+        "A run that finds a split comment already naming the accepted refinement comment id creates no sibling again.",
+    ],
+)
+def test_oversize_split_states_the_mechanics_siblings_and_resplit_trigger(sentence: str) -> None:
+    """Gate fix: Split rule mechanics with overrides, sibling content, the re-split trigger and idempotency."""
+    assert flat(sentence) in unestimated_bullet("Oversize split")
+
+
+def test_spike_refile_keeps_a_retained_state() -> None:
+    assert flat(
+        "A Spike already in `profile.tracker.states.in_progress` or a later state keeps its state under the Ready gate "
+        "bullet, and its `State:` line names the re-file as its unmet condition."
+    ) in unestimated_bullet("Spike re-file")
+
+
+def test_closing_outcome_defines_the_slice_count() -> None:
+    assert flat("`<n>` counts the original and every sibling, re-split siblings included.") in unestimated_bullet(
+        "Closing outcome"
+    )
+
+
+def test_step_two_outputs_name_the_split() -> None:
+    body = operative_step(STEP_TWO)
+    outputs = spaced(re.search(r"^- \*\*Outputs:\*\*(.*?)(?=^- \*\*)", body, re.MULTILINE | re.DOTALL).group(1))
+    assert outputs.endswith("when the oversize split ran, also the split comment id and each sibling identifier.")
+
+
+def test_metrics_order_waits_for_the_split() -> None:
+    assert (
+        "When the oversize split ran, the comment also posts only after the split comment, each sibling issue it "
+        "created and each sibling's Triage record have been applied and read back." in skill_section("Metrics")
+    )
+
+
+def test_description_names_the_unestimated_split_and_refile() -> None:
+    assert (
+        "split an oversized story, Bug or Investigation, flag a multi-thread Spike for re-filing"
+        in spaced(SKILL.read_text().split("---", 2)[1])
+    )
+
+
+def test_split_comment_template_has_the_fields() -> None:
+    assert template("Split comment").splitlines() == [
+        "## Split record",
+        "",
+        "- Refinement comment split: <accepted refinement comment id; for a re-split sibling, the parent split "
+        "comment id and the sibling key>",
+        "- Core slice: <original issue key> - <its slice> - Scope signal: <reading> - description trimmed to this "
+        "slice",
+        "- Siblings, each from the `<linear-bug|linear-investigation>` template with the `<type label>` label, "
+        "blocked by the original:",
+        "  - <sibling key> - <its slice> - Scope signal: <reading>",
+        "- Mapping: <each acceptance criterion, or for an Investigation each findings-scope item, and the slice it "
+        "maps to>",
+        "- Estimates: none; no slice receives a point value or a slice estimate",
+        "- Tracker writes: product owner",
+    ]
+    assert "Use the Split comment template in the same file for the oversize split of a Bug or an Investigation." in (
+        skill_section("Records")
+    )
+
+
+def test_triage_state_template_keeps_the_plain_ready_wording() -> None:
+    state = next(line for line in template("Triage record").splitlines() if line.startswith("- State:"))
+    assert "ready: all conditions met" in state
+
+
+def test_scope_signal_matches_a_reading_by_its_category() -> None:
+    """Re-verify fix: a reading with its `(<reason>)` matches every rule that names the bare category."""
+    body = unestimated_bullet("Scope signal")
+    assert flat(
+        "A reading's category is its text before ` (<reason>)`: `single change`, `more than one independently "
+        "reviewable change`, `single research thread` or `more than one independent research thread`."
+    ) in body
+    assert flat(
+        "Every rule in this skill that names a reading, Step 2 included, matches the line's category, so `more than "
+        "one independently reviewable change (two root causes)` reads `more than one independently reviewable "
+        "change`."
+    ) in body
+
+
+def test_scope_signal_field_name_keeps_its_case() -> None:
+    """Re-verify fix: flat() lowercases, so pin the literal `Scope signal:` field name case-sensitively."""
+    raw = spaced(section(SKILL.read_text(), "Unestimated issue types"))
+    assert "`Scope signal:`" in raw
+    assert "`scope signal:`" not in raw
+    assert SCOPE_SIGNAL_LINE in template("Refinement comment").splitlines()
+
+
+@pytest.mark.parametrize(
+    "sentence",
+    [
+        "Each sibling is filed under the rules of its filing skill (`linear-bug` or `linear-investigation`), its "
+        "duplicate search included; the differences above take precedence where they conflict.",
+        "The PO trims the original's description to its core slice, and the split comment's `Core slice:` line "
+        "records the trim; the accepted refinement comment stays the full immutable snapshot.",
+        "A re-split sibling's split comment names, on its `Refinement comment split:` line, the parent split comment "
+        "id and the sibling key, and a run that finds a split comment already naming that pair creates no sibling "
+        "again.",
+    ],
+)
+def test_oversize_split_files_siblings_trims_the_original_and_keys_resplits(sentence: str) -> None:
+    assert flat(sentence) in unestimated_bullet("Oversize split")
+
+
+def test_closing_message_names_a_missing_scope_signal() -> None:
+    assert (
+        "For a Bug, an Investigation or a Spike whose `Scope signal:` line is missing or carries neither of its type's "
+        "readings, it also names that `needs input`, naming the story and the gap, as the Scope signal bullet in "
+        f"{UNESTIMATED_LINK} states." in skill_section(CLOSING)
+    )
+
+
+@pytest.mark.parametrize(
+    "sentence",
+    [
+        "Post this on the original issue when the oversize split in `SKILL.md` (Unestimated issue types) splits a Bug "
+        "or an Investigation, authored by the product owner and posted by the product owner or, under the denied "
+        "tracker writes fallback, by the facilitator verbatim.",
+        "A re-split sibling gets its own split comment on that sibling.",
+        "Under the denied tracker writes fallback in `SKILL.md`, replace the tracker-writes line with:",
+        "- Tracker writes: facilitator on the product owner's behalf (owner's direct authorization: \"<verbatim "
+        "quote>\", <date>)",
+    ],
+)
+def test_split_comment_section_states_its_author_and_fallback(sentence: str) -> None:
+    text = RECORD.read_text()
+    body = text.split("\n## Split comment\n", 1)[1].split("\n## Triage record\n", 1)[0]
+    assert sentence in spaced(body)
+
+
+def test_readme_row_names_the_split_and_the_refile() -> None:
+    row = next(line for line in (ROOT / "README.md").read_text().splitlines() if "skills/story-refinement/SKILL.md" in line)
+    assert (
+        "an oversized Bug or Investigation is split without an estimate, and a multi-thread Spike is flagged for "
+        "re-filing" in row
     )
