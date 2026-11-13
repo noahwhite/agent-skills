@@ -81,6 +81,7 @@ The `linear` CLI (schpet/linear-cli) is the primary tool; the Linear MCP server 
   The team issue list renders it in its estimate column, which is a display path, not a read path for a script.
 - ⛔ Split a story estimated at 8 points or more at refinement, without asking, and present the slices.
   Keep the original issue for the core slice, create siblings for the rest, and wire blocked-by or related edges.
+- ⛔ Split a story estimated above the point cap along its planned PR or slice boundaries before work is delegated.
 - ⛔ Never split an issue at close time to carve off unfinished work; that is status laundering.
 
 ## Acceptance criteria and scope

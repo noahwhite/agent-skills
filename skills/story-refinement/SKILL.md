@@ -329,7 +329,7 @@ If the split trigger is met, split the story.
 - Every acceptance criterion is mapped to a slice in the split comment.
 - Each slice gets its own three-voter estimate in the same blind round, with newly created voter contexts, and that round runs the same Step 4 consensus check, basis review and residual variance rule, so a slice records an estimate or takes the unpointed variance stop on the same terms.
   A slice that takes the unpointed variance stop is recorded as unpointed in the split comment with its derived values, and the ceremony reports `needs input` to the owner naming the story, the slice and those values, so a partially pointed split always ends in that report rather than in an estimate, and its recorded outcome is the slice count with `needs input` for each unpointed slice.
-- A slice still at or above the split trigger is split again or escalated.
+- A slice still at or above the split trigger is split again, repeated until every slice is at or below `profile.refinement.point_cap`; an oversize slice is never escalated.
 
 Cite [references/linear.md](references/linear.md) for the split mechanics; do not restate them here.
 
