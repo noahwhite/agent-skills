@@ -83,6 +83,7 @@ The `linear` CLI (schpet/linear-cli) is the primary tool; the Linear MCP server 
   This is one split rule for an estimate recorded at refinement and for one made outside a ceremony, at filing or triage.
   Keep the original issue for the core slice, create siblings for the rest, and wire blocked-by or related edges.
 - ⛔ Split every resulting slice that still meets that trigger again, as many rounds as it takes, until no slice meets it; there is no escalation exit.
+  Each resulting slice gets its own estimate, made the way the story's was (at refinement, filing or triage), before it is tested against that trigger.
   Split along the first boundary that applies, in this order:
   1. the planned PR or slice boundary;
   2. an acceptance criterion;

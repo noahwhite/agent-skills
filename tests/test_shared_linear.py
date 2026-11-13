@@ -103,9 +103,9 @@ def test_named_issue_key_decides_the_team(path: Path) -> None:
 
 # --- SKL-230: one split rule for refinement, filing and triage; re-split with no escalation exit ------
 
-# Owner decision (SKL-230): pin only the split rule, whitespace-normalised, as its two bullets. A line added inside
-# either bullet fails; sibling bullets elsewhere in the section (such as SKL-239's, which may sit between the two)
-# and a rewrap still pass.
+# Owner decision (SKL-230): pin only the split rule, whitespace-normalised, as two whole top-level bullets, plus the
+# unchanged close-time bullet. A line added inside a pinned bullet, or a pinned bullet nested under another, fails;
+# sibling bullets elsewhere in the section (such as SKL-239's, which may sit between the two) and a rewrap pass.
 SPLIT_BULLET = " ".join(
     (
         "- ⛔ Split a story whose estimate is above `profile.refinement.point_cap` or is 8 or more, without asking, "
@@ -120,6 +120,8 @@ RESPLIT_BULLET = " ".join(
     (
         "- ⛔ Split every resulting slice that still meets that trigger again, as many rounds as it takes, "
         "until no slice meets it; there is no escalation exit.",
+        "Each resulting slice gets its own estimate, made the way the story's was (at refinement, filing or triage), "
+        "before it is tested against that trigger.",
         "Split along the first boundary that applies, in this order:",
         "1. the planned PR or slice boundary;",
         "2. an acceptance criterion;",
@@ -134,25 +136,25 @@ RESPLIT_BULLET = " ".join(
 CLOSE_TIME = "- ⛔ Never split an issue at close time to carve off unfinished work; that is status laundering."
 
 
-def whole_bullet(flat: str, bullet: str) -> int:
-    """Index of `bullet` in `flat`, asserting it is a whole top-level bullet: the next bullet or the end follows."""
-    start = flat.find(bullet)
-    assert start != -1, f"Estimation and slicing does not hold the SKL-230 bullet: {bullet[:60]}"
-    after = flat[start + len(bullet) :]
-    assert after == "" or after.startswith(" - "), f"a line was added inside the SKL-230 bullet: {bullet[:60]}"
-    return start
+def top_level_bullets(section_text: str) -> list[str]:
+    """The section's top-level bullets, each whitespace-normalised; an indented line belongs to the bullet above."""
+    bullets: list[str] = []
+    for line in section_text.splitlines():
+        if line.startswith("- "):
+            bullets.append(line)
+        elif bullets:
+            bullets[-1] += "\n" + line
+    return [spaced(bullet) for bullet in bullets]
 
 
 @pytest.mark.parametrize("path", [SHARED_LINEAR, *VENDORED_LINEAR], ids=lambda p: str(p.relative_to(ROOT)))
 def test_one_split_rule_resplits_in_boundary_order_with_no_escalation_exit(path: Path) -> None:
-    estimation = spaced(section(path.read_text(), "Estimation and slicing"))
-    split_at = whole_bullet(estimation, SPLIT_BULLET)
-    resplit_at = whole_bullet(estimation, RESPLIT_BULLET)
-    assert split_at < resplit_at, "the re-split bullet must follow the split bullet"
-    assert spaced(CLOSE_TIME) in estimation, "the close-time status-laundering bullet must stay unchanged"
-    rest = estimation.replace(SPLIT_BULLET, "").replace(RESPLIT_BULLET, "")
-    stray = re.findall(r"escalat\w*", rest, re.IGNORECASE)
-    assert not stray, f"an escalation mention outside the split rule's 'no escalation exit': {stray}"
+    bullets = top_level_bullets(section(path.read_text(), "Estimation and slicing"))
+    for bullet in (SPLIT_BULLET, RESPLIT_BULLET, CLOSE_TIME):
+        assert bullet in bullets, f"Estimation and slicing has no top-level bullet equal to: {bullet[:60]}"
+    assert bullets.index(SPLIT_BULLET) < bullets.index(RESPLIT_BULLET) < bullets.index(CLOSE_TIME), (
+        "the split, re-split and close-time bullets are out of order"
+    )
 
 
 def test_vendored_linear_copies_are_found() -> None:
