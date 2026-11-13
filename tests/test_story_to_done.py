@@ -1,6 +1,7 @@
 """Contract checks for the story-to-done skill."""
 
 import ast
+import hashlib
 import json
 import os
 import re
@@ -470,7 +471,8 @@ STEP4_READBACKS = (
 )
 STEP4_OTHER_OWNER = (
     "If any outstanding item names any other owner - the owner, a maintainer's approval or access grant, a "
-    "human merge, an external deploy, a pending acceptance-basis ruling - report exactly what remains and who "
+    "human merge, an external deploy, a pending acceptance-basis ruling (an item QA recorded as `pending owner "
+    "ruling`) - report exactly what remains and who "
     "owns it, and stop, even when QA-owned work also remains; a mixed remainder containing both an owner "
     "action and QA's own steps is reported and stopped, never resumed."
 )
@@ -3385,21 +3387,40 @@ def test_the_record_shape_pattern_matches_the_record_and_not_the_bare_word_readi
         assert not RECORD_SHAPE.search(line), f"the record shape pattern matches the bare word: {line}"
 
 
+# QA's brief is unchanged by a ruling: a ruling reaches QA only as the product owner's dated AC amendment
+# in the tracker. A record-shape scan cannot catch every paraphrase of a ruling, so the step 3 section is
+# also pinned whole; change this digest only together with a reviewed change to the QA brief.
+STEP_3_HEADING = "3. QA agent: verify the deployed story"
+STEP_3_SHA256 = "cad1e67bc899ba7d255c3923674592ae90a3066aa871eb7d9f998ad0973c0ac2"
+# The only lines of a state bullet that may state the pending owner ruling record.
+IN_DEPLOYMENT_REVIEW_RECORD_LINES = ("  " + STEP4_OTHER_OWNER, PENDING_REPORT, PENDING_NO_RULING)
+IN_PROGRESS_RECORD_LINES = (PENDING_IN_PROGRESS, PENDING_CAP_REPORT, PENDING_HAND_BACK_OMITTED)
+
+
+def record_shape_offenders(lines: list[str], allowed: tuple[str, ...]) -> list[str]:
+    return [line for line in lines if line not in allowed and RECORD_SHAPE.search(line)]
+
+
 def test_the_qa_brief_source_carries_no_pending_ruling_record() -> None:
-    lines = section(SKILL.read_text(), "3. QA agent: verify the deployed story").splitlines()
-    offenders = [line for line in lines if RECORD_SHAPE.search(line)]
+    body = section(SKILL.read_text(), STEP_3_HEADING)
+    offenders = [line for line in body.splitlines() if RECORD_SHAPE.search(line)]
     assert not offenders, f"the QA brief source carries a ruling, a competing reading or a pending item: {offenders}"
+    assert hashlib.sha256(body.encode()).hexdigest() == STEP_3_SHA256, (
+        "the step 3 QA brief source changed; a ruling must never reach QA through it"
+    )
 
 
 def test_the_continuation_message_carries_no_pending_ruling_record() -> None:
     lines = bullet_lines("`profile.tracker.states.in_deployment_review`")
-    for line in CONTINUATION_LINES:
-        assert line in lines, f"the continuation line moved or changed: {line}"
-        assert not RECORD_SHAPE.search(line), f"the continuation message carries the pending record: {line}"
+    for line in CONTINUATION_LINES + IN_DEPLOYMENT_REVIEW_RECORD_LINES:
+        assert line in lines, f"the pinned line moved or changed: {line}"
+    offenders = record_shape_offenders(lines, IN_DEPLOYMENT_REVIEW_RECORD_LINES)
+    assert not offenders, f"a line outside the owner report carries the pending record: {offenders}"
 
 
 def test_the_engineer_hand_back_instruction_carries_no_pending_item() -> None:
     lines = bullet_lines("`profile.tracker.states.in_progress`")
-    for line in (HAND_BACK_LINE, HAND_BACK_BRIEF_LINE, "  " + CAP_REARM):
-        assert line in lines, f"the hand-back instruction line moved or changed: {line}"
-        assert not RECORD_SHAPE.search(line), f"the hand-back instruction carries a pending item: {line}"
+    for line in (HAND_BACK_LINE, HAND_BACK_BRIEF_LINE, "  " + CAP_REARM) + IN_PROGRESS_RECORD_LINES:
+        assert line in lines, f"the pinned line moved or changed: {line}"
+    offenders = record_shape_offenders(lines, IN_PROGRESS_RECORD_LINES)
+    assert not offenders, f"a hand-back line carries a pending item: {offenders}"
