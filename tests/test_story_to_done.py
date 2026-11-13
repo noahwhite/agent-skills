@@ -2911,9 +2911,9 @@ INTERIM_READ = (
     "run, the run's status from the forge; for a tracker move, the tracker), never from the subagent."
 )
 INTERIM_STOP = (
-    "Its report to the owner names the awaited item, its primary source, the state or read error observed, and "
-    "the deadline; it launches nothing further, makes no tracker write beyond the one Boundaries permits with "
-    "`metrics` on, and rules on nothing."
+    "Its report to the owner names the awaited item, its primary source, the state or read error observed at "
+    "each deadline, and both deadlines; it launches nothing further, makes no tracker write beyond the one "
+    "Boundaries permits with `metrics` on, and rules on nothing."
 )
 INTERIM_WAIT = (
     "It never waits on the subagent's own wake-up alone: it reaches the deadline with a bounded foreground wait on "
@@ -3049,7 +3049,7 @@ def test_the_deadline_reads_the_primary_source_never_the_subagent() -> None:
     assert INTERIM_READ in interim_text()
 
 
-def test_the_deadline_stop_reports_and_makes_no_tracker_write() -> None:
+def test_the_two_miss_stop_reports_both_deadlines_and_makes_no_tracker_write() -> None:
     assert INTERIM_STOP in interim_text()
 
 
@@ -3063,9 +3063,19 @@ INTERIM_CONCLUDED_RESUME = (
     "with the awaited item and its observed conclusion, records the resume on the todo list, and handles the "
     "engineer's next handback as usual."
 )
-INTERIM_NARROWED_STOP = (
-    "Only a pending item or an unreadable primary source leads to the deadline stop: the coordinator stops."
+# SKL-256 replaces the first-miss stop with one re-deadline and a two-miss escalation stop.
+INTERIM_REDEADLINE = (
+    "When the initial deadline is missed (the item still pending, or its primary source unreadable), the "
+    "coordinator records on the todo list a new deadline measured from the missed deadline by the same rule, and "
+    "checks again at it exactly as at the initial deadline, including the before-deadline handback, the "
+    "concluded-item resume and the no-resume stop."
 )
+INTERIM_TWO_MISS_STOP = (
+    "When the initial deadline and the one deadline set after it are both missed on the same awaited item, the "
+    "coordinator stops before setting another deadline."
+)
+INTERIM_SAME_ITEM_NO_RESET = "A repeated interim handback on the same awaited item does not reset the count;"
+INTERIM_NEW_ITEM_NEW_COUNT = "an interim handback on a different awaited item starts a new count."
 INTERIM_NO_RESUME_STOP = (
     "If the runtime cannot resume the engineer, the coordinator reports the limitation and the observed state and "
     "stops; it spawns no new subagent for a deadline resume."
@@ -3078,9 +3088,22 @@ def test_a_concluded_awaited_item_resumes_the_same_engineer() -> None:
     assert text.index(INTERIM_READ) < text.index(INTERIM_CONCLUDED_RESUME)
 
 
-def test_only_a_pending_item_or_an_unreadable_source_reaches_the_deadline_stop() -> None:
+def test_a_missed_initial_deadline_sets_one_new_deadline_from_the_missed_deadline() -> None:
     text = interim_text()
-    assert text.index(INTERIM_READ) < text.index(INTERIM_NARROWED_STOP) < text.index(INTERIM_STOP)
+    assert text.index(INTERIM_READ) < text.index(INTERIM_REDEADLINE) < text.index(INTERIM_STOP)
+
+
+def test_two_missed_deadlines_on_the_same_item_stop_before_another_deadline() -> None:
+    text = interim_text()
+    assert text.index(INTERIM_REDEADLINE) < text.index(INTERIM_TWO_MISS_STOP) < text.index(INTERIM_STOP)
+
+
+def test_a_repeated_interim_handback_on_the_same_item_does_not_reset_the_count() -> None:
+    assert INTERIM_SAME_ITEM_NO_RESET in interim_text()
+
+
+def test_an_interim_handback_on_a_different_item_starts_a_new_count() -> None:
+    assert INTERIM_NEW_ITEM_NEW_COUNT in interim_text()
 
 
 def test_a_runtime_that_cannot_resume_the_engineer_stops_without_a_new_subagent() -> None:
@@ -3099,7 +3122,7 @@ INTERIM_CONCLUDED_CATCH_ALL = (
 )
 INTERIM_DEADLINE_BLOCK = (
     INTERIM_READ, INTERIM_CONCLUDED_RESUME, INTERIM_CONCLUDED_CATCH_ALL, INTERIM_NO_RESUME_STOP, INTERIM_RESUME_CAP, INTERIM_RESUME_ROW,
-    INTERIM_NARROWED_STOP, INTERIM_STOP,
+    INTERIM_REDEADLINE, INTERIM_TWO_MISS_STOP, INTERIM_SAME_ITEM_NO_RESET, INTERIM_NEW_ITEM_NEW_COUNT, INTERIM_STOP,
 )
 
 
@@ -3121,7 +3144,7 @@ def test_the_deadline_rule_states_each_outcome_once_in_one_uninterrupted_block()
 def test_no_other_sentence_stops_at_the_deadline() -> None:
     sentences = re.split(r"(?<=\.)\s+", interim_text())
     stops = [s for s in sentences if "deadline" in s.lower() and "stop" in s.lower()]
-    assert stops == [INTERIM_NO_RESUME_STOP, INTERIM_NARROWED_STOP]
+    assert stops == [INTERIM_NO_RESUME_STOP, INTERIM_REDEADLINE, INTERIM_TWO_MISS_STOP]
 
 
 # SKL-155: the `qa-round-cap` argument stops the loop at the cap-th counted QA round that ends in

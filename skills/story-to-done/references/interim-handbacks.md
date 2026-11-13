@@ -26,8 +26,10 @@ An item not yet in a terminal state is pending (a CI run `requested`, `queued`, 
 If the runtime cannot resume the engineer, the coordinator reports the limitation and the observed state and stops; it spawns no new subagent for a deadline resume.
 A deadline resume does not count against step 0's read-back resume cap.
 With `metrics` on, each deadline resume is its own launch row.
-Only a pending item or an unreadable primary source leads to the deadline stop: the coordinator stops.
-Its report to the owner names the awaited item, its primary source, the state or read error observed, and the deadline; it launches nothing further, makes no tracker write beyond the one Boundaries permits with `metrics` on, and rules on nothing.
+When the initial deadline is missed (the item still pending, or its primary source unreadable), the coordinator records on the todo list a new deadline measured from the missed deadline by the same rule, and checks again at it exactly as at the initial deadline, including the before-deadline handback, the concluded-item resume and the no-resume stop.
+When the initial deadline and the one deadline set after it are both missed on the same awaited item, the coordinator stops before setting another deadline.
+A repeated interim handback on the same awaited item does not reset the count; an interim handback on a different awaited item starts a new count.
+Its report to the owner names the awaited item, its primary source, the state or read error observed at each deadline, and both deadlines; it launches nothing further, makes no tracker write beyond the one Boundaries permits with `metrics` on, and rules on nothing.
 
 ## Limits
 
