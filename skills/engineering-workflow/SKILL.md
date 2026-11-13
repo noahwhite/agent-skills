@@ -302,8 +302,8 @@ Done comes later, after the acceptance criteria are verified in the deployed env
 ### Handoff on the `no-deployment` and `spike` paths
 
 The merged commit is the commit that merging this story's PR in step 10 put on the integration branch, as `profile.git.merge_method` produced it: the merge commit, the squash commit or the last rebased commit, which `gh pr view <PR number> --json mergeCommit --jq .mergeCommit.oid` prints.
-Run this step once a fetch of `origin` shows the merged commit on `origin/<profile.git.integration_branch>` (`git merge-base --is-ancestor <merged commit> origin/<profile.git.integration_branch>` exits 0) and the story's change is still present there: in a detached worktree of `origin/<profile.git.integration_branch>`, `git apply --check --reverse` of the diff `gh pr diff <PR number>` prints exits 0.
-When it exits non-zero, stop and report that the story's change is not intact on `origin/<profile.git.integration_branch>`.
+Run this step once a fetch of `origin` shows the merged commit on `origin/<profile.git.integration_branch>` (`git merge-base --is-ancestor <merged commit> origin/<profile.git.integration_branch>` exits 0) and no later commit there undoes the story's change: `git log --oneline <merged commit>..origin/<profile.git.integration_branch> -- <files>`, with the files `gh pr diff <PR number> --name-only` prints, lists every later commit that touched a file the PR changed, and you read the diff of each listed commit.
+When a listed commit removes or reverses what the story's PR changed, stop and report that the story's change is not intact on `origin/<profile.git.integration_branch>`; a commit that builds on the change, or edits other lines of those files, does not stop this step.
 For a spike with no tracked-file change, run it instead once the checks repeated immediately before this step still show no tracked-file change and each deliverable is linked on the story as a comment or an attachment.
 
 1. Add a concise implementation and handoff note naming the path and the merged commit.
