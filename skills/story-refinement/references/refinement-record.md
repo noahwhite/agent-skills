@@ -10,11 +10,13 @@ Quote or attach any file content a reader needs in the record.
 
 Post this as a tracker comment authored by the product owner, the only author of tracker writes, and posted by the product owner or, under the denied tracker writes fallback, by the facilitator verbatim.
 Its comment id is the refined story identifier for both stages.
+For a Bug, an Investigation or a Spike, the comment carries the `Pointing skipped` line; for a User Story it omits that line.
 
 ```markdown
 ## Refinement record
 
 - Story: <issue key> at <description version or commit>
+- Pointing skipped: <Bug|Investigation|Spike> is unestimated (references/linear.md, Estimation and slicing)
 - Tracker-write preflight: comment <id>
 - Refined story identifier: <this comment id>
 - Refined story snapshot: <the complete refined story and ACs, or an immutable link/commit>
@@ -52,7 +54,8 @@ Never edit the refinement comment to add the result; its id keeps identifying on
 - Engineer one (<family or model>): <ACCEPT or OBJECT>
 - Engineer two (<family or model>): <ACCEPT or OBJECT>
 - Engineer three (<family or model>): <ACCEPT or OBJECT>
-- Outcome: <accepted, another round, or unpointed>
+- Outcome: <accepted, another round, or unpointed for a User Story; accepted, another round, or not accepted for a Bug, an Investigation or a Spike>
+- Blocking amendments: <each objecting voter's blocking amendments when the outcome is not accepted; otherwise none>
 ```
 
 ## Pointing record
@@ -104,6 +107,7 @@ The priority is the value read back after the PO applied it; when the PO could n
 
 - Priority: <the decided value, read back; or unset when the PO could not decide>
 - Priority comparison: <each comparable story's identifier and priority; or `needs input` with the open question when the PO could not decide>
+- State: <for a Bug, an Investigation or a Spike: ready: all conditions met, or backlog with each unmet condition; omitted for a User Story>
 - Tracker writes: product owner
 ```
 
