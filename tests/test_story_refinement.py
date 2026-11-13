@@ -492,12 +492,16 @@ def test_split_rule_has_no_size_clause() -> None:
 
 def test_shared_linear_rule_has_no_size_clause() -> None:
     lines = (ROOT / "shared" / "linear.md").read_text().splitlines()
-    start = next(index for index, line in enumerate(lines) if line.startswith("- ⛔ Split a story estimated at 8 points"))
+    start = next(
+        (index for index, line in enumerate(lines) if line.startswith("- ⛔ Split a story whose estimate is")), None
+    )
+    assert start is not None, "shared/linear.md has no bullet starting '- ⛔ Split a story whose estimate is'"
     end = next(index for index in range(start + 1, len(lines)) if lines[index] and not lines[index].startswith(" "))
     bullet = flat(" ".join(lines[start:end]))
     assert bullet.startswith(
-        "- ⛔ split a story estimated at 8 points or more at refinement, without asking, and present the slices."
-    ), "the 8-point rule starts with one unqualified sentence"
+        "- ⛔ split a story whose estimate is above `profile.refinement.point_cap` or is 8 or more, without asking, "
+        "before it is assigned or work is delegated, and present the slices."
+    ), "the split rule starts with one unqualified sentence"
     assert "equivalent" not in bullet, "no scale parenthetical survives"
     assert not SIZE_VOCABULARY.search(bullet), "the split rule names no size"
 
@@ -511,6 +515,100 @@ def test_split_rule_keeps_the_split_mechanics() -> None:
         "every acceptance criterion is mapped to a slice in the split comment",
     ):
         assert rule in body, rule
+
+
+# --- SKL-230: a slice above the point cap is split again until every slice fits, never escalated -------
+
+RESPLIT_BULLET = (
+    "- A slice that meets the split trigger is split again under these same bullets: it stays the core slice and "
+    "blocks its new siblings, every acceptance criterion of the slice is mapped to a sub-slice in a split comment, "
+    "and each sub-slice, the core slice included, gets its own three-voter blind estimate; the split repeats until "
+    "no slice meets the split trigger."
+)
+NO_ESCALATION_EXIT = (
+    "There is no escalation exit for an oversize slice: a slice with no natural boundary left is split along the "
+    "boundary order in Estimation and slicing in [references/linear.md](references/linear.md)."
+)
+UNPOINTED_SLICE_STOP = (
+    "A slice that takes the unpointed variance stop is recorded as unpointed in the split comment with its derived "
+    "values, and the ceremony reports `needs input` to the owner naming the story, the slice and those values, so a "
+    "partially pointed split always ends in that report rather than in an estimate, and its recorded outcome is the "
+    "slice count with `needs input` for each unpointed slice."
+)
+# Phrases only the boundary order in shared/linear.md states; the Split rule cites it instead.
+BOUNDARY_ORDER_PHRASES = (
+    "planned PR or slice boundary",
+    "narrower observable criteria",
+    "interface or schema first",
+)
+SPLIT_RULE_SECTION = " ".join(
+    (
+        "The effective accepted maximum is `profile.refinement.point_cap` (default 5), with a schema maximum of 8.",
+        "A story is split when its recorded estimate is above `profile.refinement.point_cap` or is 8 or more; the "
+        "recorded estimate is the consensus, or the value the Step 4 consensus check or residual variance rule "
+        "records.",
+        "The lower trigger applies, and the 8-point rule in [references/linear.md](references/linear.md) is never "
+        "relaxed.",
+        "If the split trigger is met, split the story.",
+        "- The original issue stays the core slice.",
+        "- Siblings are created in the team of `STORY_ID`, as Team resolution in "
+        "[references/linear.md](references/linear.md) states.",
+        "- When the team of `STORY_ID` differs from `profile.tracker.team_key`, confirm "
+        "`profile.tracker.states.backlog` and each sibling label on that team before creating any sibling, under the "
+        "differing-team rule in Team resolution in [references/linear.md](references/linear.md).",
+        "- Siblings are created from the `linear-user-story` template.",
+        "- The original issue blocks each sibling.",
+        "- Every acceptance criterion is mapped to a slice in the split comment.",
+        "- Each slice gets its own three-voter estimate in the same blind round, with newly created voter contexts, "
+        "and that round runs the same Step 4 consensus check, basis review and residual variance rule, so a slice "
+        "records an estimate or takes the unpointed variance stop on the same terms.",
+        UNPOINTED_SLICE_STOP,
+        RESPLIT_BULLET,
+        NO_ESCALATION_EXIT,
+        "Cite [references/linear.md](references/linear.md) for the split mechanics; do not restate them here.",
+    )
+)
+SPLIT_TRIGGER_PATTERN = re.compile(r"is above (`profile\.refinement\.point_cap`) or is (\d+) or more")
+
+
+def test_split_rule_resplits_an_oversize_slice_until_none_meets_the_trigger() -> None:
+    body = spaced(section(SKILL.read_text(), "Split rule"))
+    assert RESPLIT_BULLET in body
+    assert NO_ESCALATION_EXIT in body
+
+
+def test_split_rule_has_no_escalation_exit() -> None:
+    body = spaced(section(SKILL.read_text(), "Split rule"))
+    assert "or escalated" not in body, "the Split rule still offers escalation as an exit"
+    stray = re.findall(r"escalat\w*", re.sub(r"no escalation exit", "", body, flags=re.IGNORECASE), re.IGNORECASE)
+    assert not stray, f"an escalation mention other than 'no escalation exit' remains: {stray}"
+
+
+def test_split_rule_section_is_exactly_the_rule() -> None:
+    """Pin the whole section, so an added stop, approval or hand-off for an oversize slice fails."""
+    assert spaced(section(SKILL.read_text(), "Split rule")) == SPLIT_RULE_SECTION
+
+
+def test_split_rule_cites_the_boundary_order_without_restating_it() -> None:
+    body = spaced(section(SKILL.read_text(), "Split rule"))
+    assert "boundary order in Estimation and slicing in [references/linear.md](references/linear.md)" in body
+    for phrase in BOUNDARY_ORDER_PHRASES:
+        assert phrase not in body, f"the Split rule restates the boundary order: {phrase}"
+
+
+def test_split_rule_keeps_the_unpointed_variance_stop() -> None:
+    body = spaced(section(SKILL.read_text(), "Split rule"))
+    assert UNPOINTED_SLICE_STOP in body
+
+
+def test_skill_and_shared_linear_state_the_same_split_trigger() -> None:
+    skill = SPLIT_TRIGGER_PATTERN.findall(spaced(section(SKILL.read_text(), "Split rule")))
+    shared = SPLIT_TRIGGER_PATTERN.findall(
+        spaced(section((ROOT / "shared" / "linear.md").read_text(), "Estimation and slicing"))
+    )
+    assert len(skill) == 1, f"the Split rule states one trigger, found {skill}"
+    assert len(shared) == 1, f"Estimation and slicing states one trigger, found {shared}"
+    assert skill == shared, f"the triggers differ: SKILL.md {skill}, shared/linear.md {shared}"
 
 
 def pointing_template() -> list[str]:
@@ -3378,7 +3476,7 @@ def test_shared_linear_states_the_unestimated_split_trigger() -> None:
     body = prose(section((ROOT / "shared" / "linear.md").read_text(), "Estimation and slicing"))
     lines = body.splitlines()
     assert SHARED_LINEAR_SPLIT in lines
-    story = next(i for i, line in enumerate(lines) if line.startswith("- ⛔ Split a story estimated at 8 points"))
+    story = next(i for i, line in enumerate(lines) if line.startswith("- ⛔ Split a story whose estimate is above"))
     assert lines.index(SHARED_LINEAR_SPLIT) > story
 
 
@@ -3524,7 +3622,7 @@ def test_missing_scope_signal_stops_with_needs_input() -> None:
     [
         "Otherwise the [Split rule](#split-rule) applies as written: siblings in the team of `STORY_ID`, the "
         "differing-team confirmation of `profile.tracker.states.backlog` and each label, and the split comment; these "
-        "differences override its `linear-user-story` template, its slice estimate round and its escalation.",
+        "differences override its `linear-user-story` template and its slice estimate round.",
         "Each sibling is assigned to `profile.tracker.assignee`, keeps the original's project and cycle, and its body "
         "fills its filing template with its slice's content from the accepted refinement comment, never the "
         "template's placeholder text.",
