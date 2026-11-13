@@ -461,14 +461,19 @@ QA_ENV_PINS = {
     "qa-env-dependency-rule": (
         "On both paths, every later condition on a deploy, a deployed build or the environment under test "
         "reads as the path's target, so step 1's dependency status rule verifies an item directly only when "
-        "its dependency's change is contained in the target (its merged commit is an ancestor of the target "
-        "commit: `git merge-base --is-ancestor <dependency merged commit> <target commit>` exits 0, or, when "
-        "the dependency or the target has no commit, such as a spike deliverable, the dependency is in "
-        "`profile.tracker.states.in_deployment_review` or `profile.tracker.states.done`), and flags it "
-        "blocked when it is not."
+        "its dependency is in `profile.tracker.states.in_deployment_review` or `profile.tracker.states.done` "
+        "and its change is contained in the target, and flags it blocked otherwise."
+    ),
+    "qa-env-containment": (
+        "A dependency's change is contained in the target when its merged commit is an ancestor of the target "
+        "commit (`git merge-base --is-ancestor <dependency merged commit> <target commit>` exits 0), or of "
+        "`origin/<profile.git.integration_branch>` when the target has no commit; a dependency with no commit, "
+        "such as a spike deliverable, is contained only when the target links each deliverable the "
+        "dependency's `engineering-workflow` step 12 note links."
     ),
     "qa-env-no-lanes": (
-        "On both paths, steps 2 and 3 apply to the `deployed` path only: QA verifies each AC and DoD item by "
+        "On both paths, steps 2 and 3 apply to the `deployed` path only, except step 3's rule on mutating "
+        "confirms (its item 3), which applies on every path: QA verifies each AC and DoD item by "
         "inspecting the target (the committed artifacts, or a deliverable linked as a comment or an "
         "attachment), and the item's evidence is the commands QA ran with their output, or the deliverable it "
         "read; no screenshot is required."
@@ -511,6 +516,7 @@ QA_PIN_KEYS = (
     "qa-env-record-spike",
     "qa-env-no-environment",
     "qa-env-dependency-rule",
+    "qa-env-containment",
     "qa-env-no-lanes",
     "qa-env-dod-not-needed",
 )
@@ -601,7 +607,7 @@ def qa_added_blocks() -> list[str]:
     env = (
         f"\n{e['qa-env-other-paths']}\n\n{e['qa-env-target-no-deployment']}\n{e['qa-env-target-spike']}\n\n"
         f"{e['qa-env-record-no-deployment']}\n{e['qa-env-record-spike']}\n{e['qa-env-no-environment']}\n"
-        f"{e['qa-env-dependency-rule']}\n{e['qa-env-no-lanes']}\n{e['qa-env-dod-not-needed']}\n"
+        f"{e['qa-env-dependency-rule']}\n{e['qa-env-containment']}\n{e['qa-env-no-lanes']}\n{e['qa-env-dod-not-needed']}\n"
     )
     return [description, intro, path, env]
 
