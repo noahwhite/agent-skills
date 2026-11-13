@@ -106,6 +106,13 @@ State the slice sequence and the first slice before coding.
 If the architecture makes strict TDD impractical for a slice, say why.
 Preserve existing tests and conventions.
 
+### Spike with no tracked-file change
+
+On the `spike` path, before step 4, fetch `origin` and check for a tracked-file change in the working tree (`git diff --name-only`), the index (`git diff --cached --name-only`) and the commits relative to `origin/<integration branch>` (`git diff --name-only origin/<integration branch>...HEAD`).
+Skip steps 4 to 10 only when all three checks show no tracked-file change, and repeat the fetch and the three checks before step 12.
+If a tracked-file change appears at any point, complete steps 4 to 10 with every applicable gate, and the merge path of step 12 applies.
+Any PR a spike produces runs every gate steps 4 to 10 define: the `spike` path changes no gate, waiver, admin override or expected-head condition.
+
 ## 4. Pre-PR adversarial gate (required)
 
 Load the `adversarial-review-pipeline` skill and run it to completion on every review; its arbitration report is this gate's output.
@@ -263,6 +270,10 @@ An update-branch after the review, even one that brings in only base changes, is
 
 ## 11. Deploy and verify
 
+This step runs on the `deployed` path only.
+On the `no-deployment` and `spike` paths, skip it: claim no deploy and verify none.
+Every step through the merge runs on those two paths as on the `deployed` path, except the steps a spike with no tracked-file change skips (step 3, "Spike with no tracked-file change").
+
 1. Find the environment in `profile.environments` whose `branch` is the integration branch.
 2. Deploy as its `deploy` value says; if deployment is automatic, observe it rather than triggering a duplicate.
 3. Monitor the deployment to completion.
@@ -280,6 +291,22 @@ Only after the deployment is verified:
 3. Read the story back to confirm the state.
 
 Done comes later, after the acceptance criteria are verified in the deployed environment (see `references/linear.md`).
+
+"Only after the deployment is verified", its "(never on merge alone)" parenthetical and the Done sentence above apply to the `deployed` path only.
+
+### Handoff on the `no-deployment` and `spike` paths
+
+Run this step once a fetch of `origin` shows the merge commit on `origin/<integration branch>`.
+For a spike with no tracked-file change, run it instead once the repeated checks before step 12 still show no tracked-file change and each deliverable is linked on the story as a comment or an attachment.
+
+1. Move the story to `profile.tracker.states.in_deployment_review`.
+2. Add a concise implementation and handoff note naming the path and the merged commit.
+   For a spike with no tracked-file change, the note names the path, states there is no merged commit, and says the spike had no tracked-file change and that steps 4 to 10 were skipped.
+   On `spike`, the note also names, for each deliverable the spike's Deliverables section lists, its link and, when the deliverable is a tracked artifact, its commit.
+3. Read the story back to confirm the state.
+
+Done comes later, after the acceptance criteria are verified against the merged commit, not in a deployed environment (see `references/linear.md`).
+For a spike with no tracked-file change, Done comes later, after the acceptance criteria are verified against the deliverables the step 12 note links.
 
 ## Operational rules
 
