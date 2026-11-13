@@ -375,3 +375,32 @@ SKL-303 stopped: the engineer's interim handback missed its deadline twice, so s
 | Stop with the AC2 report | Met: the report names the awaited item, its primary source, `Backlog` at each missed deadline, and both missed deadlines; it sets no further deadline, launches nothing and rules on nothing |
 | No tracker write | Met: no `linear` write between the spawn and the report; `metrics: off` |
 | Runtime named, `metrics: off` | Met: Claude Code 2.1.325, `metrics: off` |
+
+## QA round 1
+
+Date: 2026-11-13 UTC, independent QA round 1.
+Path: no-deployment; the repository profile sets `environments: []`, so the lanes are the repository (detached worktrees of the target, the reviewed head and the merge base), GitHub and the tracker.
+Target: `main` at `b862cc6f38429cbf3291399d2e0cc3976a5065ea`, the squash merge of PR 242, confirmed an ancestor of `origin/main`.
+Reviewed head: `5f091a1f17aee79f5a23c019cee143ec0c5de7de`; merge base with `main`: `8569da294f82c8645adcaa346156a671baeafe4a`.
+Dependencies: SKL-254 and SKL-255 are Done, and their merges (`208cbd7`, `9bbe5da`) are ancestors of the target.
+Fixtures: none beyond the fixture issue SKL-303 that AC5 names.
+The raw output, including the phrase-deletion checks, is attached to SKL-256 as `SKL-256-qa-round-1-assertions.txt`; there is no visual surface, so no screenshot applies.
+
+| Item | Verdict | Evidence |
+|---|---|---|
+| AC1: re-deadline | Verified | `references/interim-handbacks.md` line 29 defines a miss as a pending item or an unreadable primary source and records it on the todo list. Line 30 records a new deadline measured from the missed deadline by the same rule and checks it exactly as the initial deadline, including the before-deadline handback, the concluded-item resume and the no-resume stop. |
+| AC2: escalation | Verified | Line 31 stops after the second miss on the same awaited item before setting another deadline, launches nothing, makes no tracker write beyond the one Boundaries permits with `metrics` on, and rules on nothing. Line 32 keeps the count across a same-item repeat and starts a new count for a different item. Line 33 has the report name the awaited item, its primary source, the state or read error at each missed deadline, and both missed deadlines. |
+| AC3: limits | Verified | Between the merge base and the reviewed head the rule changes only in its deadline paragraph, where the first-miss stop and its single-deadline report sentence are replaced. `SKILL.md` is not in the diff, and its two pointers to the rule (lines 114 and 169) are unchanged. |
+| AC4: text contracts | Verified | The SKL-254 first-miss pin and its phrase are gone from `tests/` and `skills/`. Each of the four phrases has its own named test, and all pass on `main`. On a throwaway worktree of the reviewed head, deleting each phrase once failed its named test, and the file passed again (261) once restored. The PR description has one line per guarded phrase naming the failing test. On the reviewed head, `vendor_shared.py --check` exited 0 and CI run 43527305233 ran `uv run --locked pytest -q` with `success`. |
+| AC5: fixture run | Verified | SKL-303 is a `[Tabletop fixture]` issue in SKL, created at 22:08:18Z, whose only history entry is Backlog to Canceled at 22:36:24Z, after the run. The sections above quote the parent brief and the coordinator transcript with the deadlines and both primary-source read timestamps (22:20:52.808Z and 22:35:25.291Z), record the repeat as not resetting the count, end in the two-miss stop and report with no tracker write, name Claude Code 2.1.325, and state `metrics: off`. The rule the run exercised (`f8c888f`) is identical to the reviewed head. |
+| AC6: size cap | Verified | Between the merge base and the reviewed head, `skills/story-to-done/` grows from 463453 to 464154 bytes (100.15%), and no `SKILL.md` changes, matching the table in the PR description. `skills/story-to-done/` is the only skill directory changed. |
+| DoD: all acceptance criteria met | Verified | AC1 to AC6 above. |
+| DoD: tests written and passing | Verified | AC4; the full suite passed on `main` (2274 passed). |
+| DoD: independently reviewed | Verified | Review 5899564764 is `COMMENTED`, names `5f091a1f17aee79f5a23c019cee143ec0c5de7de` in its first line and as its `commit_id`, the merged head, and closes three rounds with no open finding. |
+| DoD: docs updated | Verified | `references/interim-handbacks.md` carries the change. |
+| DoD: verified in a deployed environment | Correct by design | The no-deployment path: the profile defines no environment, so the target is the merged commit on `main`. |
+| DoD: no critical bugs or regressions | Verified | CI `checks` and `discovery` passed on the reviewed head, push CI run 43528213903 passed on `main`, and the full suite passed on `main`. |
+
+The repeat-handback refinement proposal on SKL-256 is not an acceptance criterion and stays with the product owner.
+
+Closing decision: SKL-256 moves to Done once this evidence merges.
