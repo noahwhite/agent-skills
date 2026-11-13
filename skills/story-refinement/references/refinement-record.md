@@ -11,12 +11,15 @@ Quote or attach any file content a reader needs in the record.
 Post this as a tracker comment authored by the product owner, the only author of tracker writes, and posted by the product owner or, under the denied tracker writes fallback, by the facilitator verbatim.
 Its comment id is the refined story identifier for both stages.
 For a Bug, an Investigation or a Spike, the comment carries the `Pointing skipped` line; for a User Story it omits that line.
+For a Bug, an Investigation or a Spike, the comment also carries the `Scope signal:` line with the reading `SKILL.md` (Unestimated issue types) defines; for a User Story it omits that line.
+Replace `<reading>` with one whole reading: for a Bug or an Investigation `single change` or `more than one independently reviewable change (<reason>)`, and for a Spike `single research thread` or `more than one independent research thread (<reason>)`, with `<reason>` replaced too; when the Step 2 reconciliation finds no category with two or more voters, replace it with `missing`, which `SKILL.md` treats as a missing line.
 
 ```markdown
 ## Refinement record
 
 - Story: <issue key> at <description version or commit>
 - Pointing skipped: <Bug|Investigation|Spike> is unestimated (references/linear.md, Estimation and slicing)
+- Scope signal: <reading>
 - Tracker-write preflight: comment <id>
 - Refined story identifier: <this comment id>
 - Refined story snapshot: <the complete refined story and ACs where the filing template has them, or an immutable link/commit>
@@ -98,6 +101,29 @@ Under the denied tracker writes fallback in `SKILL.md`, replace the tracker-writ
 - Tracker writes: facilitator on the product owner's behalf (owner's direct authorization: "<verbatim quote>", <date>)
 ```
 
+## Split comment
+
+Post this on the original issue when the oversize split in `SKILL.md` (Unestimated issue types) splits a Bug or an Investigation, authored by the product owner and posted by the product owner or, under the denied tracker writes fallback, by the facilitator verbatim.
+A re-split sibling gets its own split comment on that sibling.
+
+```markdown
+## Split record
+
+- Refinement comment split: <accepted refinement comment id; for a re-split sibling, the parent split comment id and the sibling key>
+- Core slice: <original issue key> - <its slice> - Scope signal: <reading> - description trimmed to this slice
+- Siblings, each from the `<linear-bug|linear-investigation>` template with the `<type label>` label, blocked by the original:
+  - <sibling key> - <its slice> - Scope signal: <reading>
+- Mapping: <each acceptance criterion, or for an Investigation each findings-scope item, and the slice it maps to>
+- Estimates: none; no slice receives a point value or a slice estimate
+- Tracker writes: product owner
+```
+
+Under the denied tracker writes fallback in `SKILL.md`, replace the tracker-writes line with:
+
+```markdown
+- Tracker writes: facilitator on the product owner's behalf (owner's direct authorization: "<verbatim quote>", <date>)
+```
+
 ## Triage record
 
 Post this as a tracker comment authored by the product owner as a triage write, on every refinement outcome and on each split sibling, and posted by the product owner or, under the denied tracker writes fallback, by the facilitator verbatim.
@@ -108,7 +134,7 @@ The priority is the value read back after the PO applied it; when the PO could n
 
 - Priority: <the decided value, read back; or unset when the PO could not decide>
 - Priority comparison: <each comparable story's identifier and priority; or `needs input` with the open question when the PO could not decide>
-- State: <for a Bug, an Investigation or a Spike: ready: all conditions met, or backlog with each unmet condition, or for an issue already in progress or later its retained state with all conditions met or with each unmet condition; omitted for a User Story>
+- State: <for a Bug, an Investigation or a Spike: ready: all conditions met, or backlog with each unmet condition, or for an issue already in progress or later its retained state with all conditions met or with each unmet condition; for a Spike with more than one independent research thread the unmet condition reads re-file as separate Spikes (owner); when the `Scope signal:` line is missing or carries neither of its type's readings the unmet condition reads scope signal missing; omitted for a User Story>
 - Tracker writes: product owner
 ```
 
