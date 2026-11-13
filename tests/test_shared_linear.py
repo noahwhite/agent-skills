@@ -103,15 +103,26 @@ def test_named_issue_key_decides_the_team(path: Path) -> None:
 
 # --- SKL-230: one split rule for refinement, filing and triage; re-split with no escalation exit ------
 
-# The split rule runs from its first bullet to the end of the section, verbatim: any sentence added inside it,
-# an owner hand-off, a stop condition or an approval of an oversize slice, fails the exact match.
-SPLIT_RULE_FIRST_LINE = (
-    "- ⛔ Split a story whose estimate is above `profile.refinement.point_cap` or is 8 or more, without asking, "
-    "before it is assigned or work is delegated, and present the slices."
+# The section from its start through the split rule is matched verbatim, so a sentence added before or inside
+# the rule (an owner hand-off, a stop condition, an approval of an oversize slice, assigning before splitting)
+# fails. Bullets after the rule belong to other work; only the close-time bullet is asserted there.
+ESTIMATION_HEAD = "\n".join(
+    (
+        "- Estimates use `profile.tracker.estimate_scale`.",
+        "  Only user stories and maintenance work get estimates; spikes carry a timebox instead, and bugs and "
+        "investigations are unestimated.",
+        "- `linear issue view --json` omits `estimate`, as it omits relations, even when the issue carries one, and "
+        "the plain view prints no estimate line.",
+        "  Read an estimate with `linear api 'query { issue(id: \"ABC-123\") { estimate } }'`, or through the Linear "
+        "MCP `get_issue` with the `estimate` field.",
+        "  The team issue list renders it in its estimate column, which is a display path, not a read path for a "
+        "script.",
+    )
 )
 SPLIT_RULE_BLOCK = "\n".join(
     (
-        SPLIT_RULE_FIRST_LINE,
+        "- ⛔ Split a story whose estimate is above `profile.refinement.point_cap` or is 8 or more, without asking, "
+        "before it is assigned or work is delegated, and present the slices.",
         "  This is one split rule for an estimate recorded at refinement and for one made outside a ceremony, "
         "at filing or triage.",
         "  Keep the original issue for the core slice, create siblings for the rest, and wire blocked-by or related "
@@ -128,20 +139,23 @@ SPLIT_RULE_BLOCK = "\n".join(
         "such as interface or schema first and behaviour second.",
         "",
         "  No rung discards scope, delegates an oversize slice or hands one to the owner as an estimate.",
-        "- ⛔ Never split an issue at close time to carve off unfinished work; that is status laundering.",
     )
 )
+CLOSE_TIME = "- ⛔ Never split an issue at close time to carve off unfinished work; that is status laundering."
 
 
 @pytest.mark.parametrize("path", [SHARED_LINEAR, *VENDORED_LINEAR], ids=lambda p: str(p.relative_to(ROOT)))
 def test_one_split_rule_resplits_in_boundary_order_with_no_escalation_exit(path: Path) -> None:
-    estimation = section(path.read_text(), "Estimation and slicing")
-    start = estimation.find(SPLIT_RULE_FIRST_LINE)
-    assert start != -1, "Estimation and slicing has no split rule bullet"
-    assert estimation[start:].strip() == SPLIT_RULE_BLOCK, "the split rule differs from the SKL-230 rule"
-    mentions = re.findall(r"escalat\w*", estimation, re.IGNORECASE)
-    expected = re.findall(r"no escalation exit", estimation, re.IGNORECASE)
-    assert len(mentions) == len(expected), f"an escalation mention other than 'no escalation exit' remains: {mentions}"
+    estimation = section(path.read_text(), "Estimation and slicing").lstrip("\n")
+    assert estimation.startswith(f"{ESTIMATION_HEAD}\n{SPLIT_RULE_BLOCK}\n"), (
+        "Estimation and slicing, from its start through the split rule, differs from the SKL-230 rule"
+    )
+    assert CLOSE_TIME in estimation.splitlines(), "the close-time status-laundering bullet must stay unchanged"
+    tail = estimation[len(f"{ESTIMATION_HEAD}\n{SPLIT_RULE_BLOCK}\n") :]
+    exits = re.findall(r"\b(?:owner\w*|hand\w*|oversize)\b", tail, re.IGNORECASE)
+    assert not exits, f"a bullet after the split rule gives an oversize slice another exit: {exits}"
+    stray = re.findall(r"escalat\w*", re.sub(r"no escalation exit", "", estimation, flags=re.IGNORECASE), re.I)
+    assert not stray, f"an escalation mention other than 'no escalation exit' remains: {stray}"
 
 
 def test_vendored_linear_copies_are_found() -> None:

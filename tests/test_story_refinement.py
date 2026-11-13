@@ -515,9 +515,8 @@ def test_split_rule_resplits_an_oversize_slice_until_none_meets_the_trigger() ->
 def test_split_rule_has_no_escalation_exit() -> None:
     body = spaced(section(SKILL.read_text(), "Split rule"))
     assert "or escalated" not in body, "the Split rule still offers escalation as an exit"
-    mentions = re.findall(r"escalat\w*", body, re.IGNORECASE)
-    expected = re.findall(r"no escalation exit", body, re.IGNORECASE)
-    assert len(mentions) == len(expected), f"an escalation mention other than 'no escalation exit' remains: {mentions}"
+    stray = re.findall(r"escalat\w*", re.sub(r"no escalation exit", "", body, flags=re.IGNORECASE), re.IGNORECASE)
+    assert not stray, f"an escalation mention other than 'no escalation exit' remains: {stray}"
 
 
 def test_split_rule_section_is_exactly_the_rule() -> None:
