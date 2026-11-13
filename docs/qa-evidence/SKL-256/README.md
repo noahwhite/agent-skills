@@ -81,7 +81,7 @@ Its only input between its first handback and the repeat is the harness resume.
 Earlier calls read the skill, its references and the profile, read SKL-303 in Backlog under step 1 at 22:09:16.312Z, wrote the checklist, spawned the engineer at 22:09:39.321Z and wrote `engineer-id.txt`.
 
 In both transcripts the scratch directory is shortened to `.../`, and the runtime's em dash in its Write and Edit results is shown as `-`.
-Agent ids, the background task id and the harness framing lines are replaced by markers.
+Agent ids, the background task id and the harness framing lines are replaced by markers, and the deadline reads' `url` and `branchName` values, which name the tracker workspace, are replaced by markers.
 The runtime logged some calls and results twice without a timestamp; only the timestamped entry is kept.
 
 ```text
@@ -135,8 +135,8 @@ File created successfully at: .../coordinator/wait-state.sh (file state is curre
   "identifier": "SKL-303",
   "title": "[Tabletop fixture] SKL-256 interim miss count and two-miss stop (PR head)",
   "description": "Disposable tabletop fixture for SKL-256 AC5. Nothing moves this issue; it is canceled after the run.",
-  "url": "https://linear.app/officina-pub/issue/SKL-303/tabletop-fixture-skl-256-interim-miss-count-and-two-miss-stop-pr-head",
-  "branchName": "noahwhite/skl-303-tabletop-fixture-skl-256-interim-miss",
+  "url": "[Linear URL redacted]",
+  "branchName": "[branch name redacted]",
   "state": {
     "name": "Backlog",
     "color": "#bec2c8"
@@ -241,8 +241,8 @@ Exit code 124
   "identifier": "SKL-303",
   "title": "[Tabletop fixture] SKL-256 interim miss count and two-miss stop (PR head)",
   "description": "Disposable tabletop fixture for SKL-256 AC5. Nothing moves this issue; it is canceled after the run.",
-  "url": "https://linear.app/officina-pub/issue/SKL-303/tabletop-fixture-skl-256-interim-miss-count-and-two-miss-stop-pr-head",
-  "branchName": "noahwhite/skl-303-tabletop-fixture-skl-256-interim-miss",
+  "url": "[Linear URL redacted]",
+  "branchName": "[branch name redacted]",
   "state": {
     "name": "Backlog",
     "color": "#bec2c8"
