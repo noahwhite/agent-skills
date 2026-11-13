@@ -215,7 +215,7 @@ For a waived PR, compare the merged PR's `headRefOid` with the SHA recorded when
   QA rounds are counted within this invocation: the first QA round this coordinator runs is round 1, a run resumed at step 3 starts a new count that the report states, and only a round whose read-back is `profile.tracker.states.in_progress` counts.
   When the `qa-round-cap`-th counted round ends here, stop before the hand-back below and launch nothing further.
   The stop report gives, per round, every failed item as QA recorded it in the tracker, re-read from the tracker rather than taken from a handback (the item, its verdict, and the evidence it cites).
-  It lists apart, per round, each item QA recorded as `pending owner ruling`, with the AC or DoD text QA quoted and each reading with its verdict, never among the failed items.
+  It lists apart, per round, each item QA recorded as `pending owner ruling`, with the AC or DoD text QA quoted and each reading with its verdict, as QA recorded them in the tracker, never among the failed items.
   It also gives, per PR, the link and head SHA, re-read from the tracker and the forge rather than taken from a handback, reusing the merge reads steps 2 and 3 already make.
   The stop report asks the user how many further rounds to run or whether to stop, and waits for the reply; a reply that does not say how many rounds or that it is a stop, or that gives an invalid value, is asked about again, never guessed.
   On "N additional rounds", re-arm the same cap at N further counted rounds and resume the pending hand-back below with every item failed so far; the next QA round runs with a new QA agent.

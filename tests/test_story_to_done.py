@@ -3276,7 +3276,7 @@ PENDING_IN_PROGRESS = (
 )
 PENDING_CAP_REPORT = (
     "  It lists apart, per round, each item QA recorded as `pending owner ruling`, with the AC or DoD text QA "
-    "quoted and each reading with its verdict, never among the failed items."
+    "quoted and each reading with its verdict, as QA recorded them in the tracker, never among the failed items."
 )
 HAND_BACK_LINE = (
     "  Hand them back to the senior engineer: resume the same subagent if the runtime can, else spawn a new clean, "
@@ -3388,10 +3388,13 @@ def test_the_record_shape_pattern_matches_the_record_and_not_the_bare_word_readi
 
 
 # QA's brief is unchanged by a ruling: a ruling reaches QA only as the product owner's dated AC amendment
-# in the tracker. A record-shape scan cannot catch every paraphrase of a ruling, so the step 3 section is
-# also pinned whole; change this digest only together with a reviewed change to the QA brief.
+# in the tracker. A record-shape scan cannot catch every paraphrase of a ruling or of a pending item, so the
+# step 3 section and the two step 4 bullets that brief QA and the engineer are also pinned whole; change a
+# digest only together with a reviewed change to the text it covers.
 STEP_3_HEADING = "3. QA agent: verify the deployed story"
 STEP_3_SHA256 = "cad1e67bc899ba7d255c3923674592ae90a3066aa871eb7d9f998ad0973c0ac2"
+IN_PROGRESS_SHA256 = "fd4768e7d39be8e29341cd0f5d186bfaf96a8bf7bfc8eebb8b1e39b101eb95e7"
+IN_DEPLOYMENT_REVIEW_SHA256 = "36da368bed892519776e5be61064d2fad186151ca58ae90aff897e9a1ffaa968"
 # The only lines of a state bullet that may state the pending owner ruling record.
 IN_DEPLOYMENT_REVIEW_RECORD_LINES = ("  " + STEP4_OTHER_OWNER, PENDING_REPORT, PENDING_NO_RULING)
 IN_PROGRESS_RECORD_LINES = (PENDING_IN_PROGRESS, PENDING_CAP_REPORT, PENDING_HAND_BACK_OMITTED)
@@ -3399,6 +3402,10 @@ IN_PROGRESS_RECORD_LINES = (PENDING_IN_PROGRESS, PENDING_CAP_REPORT, PENDING_HAN
 
 def record_shape_offenders(lines: list[str], allowed: tuple[str, ...]) -> list[str]:
     return [line for line in lines if line not in allowed and RECORD_SHAPE.search(line)]
+
+
+def digest(lines: list[str]) -> str:
+    return hashlib.sha256("\n".join(lines).encode()).hexdigest()
 
 
 def test_the_qa_brief_source_carries_no_pending_ruling_record() -> None:
@@ -3416,6 +3423,9 @@ def test_the_continuation_message_carries_no_pending_ruling_record() -> None:
         assert line in lines, f"the pinned line moved or changed: {line}"
     offenders = record_shape_offenders(lines, IN_DEPLOYMENT_REVIEW_RECORD_LINES)
     assert not offenders, f"a line outside the owner report carries the pending record: {offenders}"
+    assert digest(lines) == IN_DEPLOYMENT_REVIEW_SHA256, (
+        "the `in_deployment_review` bullet changed; no line of it may carry a pending item into a continuation"
+    )
 
 
 def test_the_engineer_hand_back_instruction_carries_no_pending_item() -> None:
@@ -3424,3 +3434,6 @@ def test_the_engineer_hand_back_instruction_carries_no_pending_item() -> None:
         assert line in lines, f"the pinned line moved or changed: {line}"
     offenders = record_shape_offenders(lines, IN_PROGRESS_RECORD_LINES)
     assert not offenders, f"a hand-back line carries a pending item: {offenders}"
+    assert digest(lines) == IN_PROGRESS_SHA256, (
+        "the `in_progress` bullet changed; no line of it may carry a pending item into a hand-back"
+    )
