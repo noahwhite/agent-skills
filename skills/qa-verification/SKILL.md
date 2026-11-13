@@ -77,19 +77,24 @@ When a finding needs a code fix, hand it to `engineering-workflow` (and its [ref
 
 ## 4. Adjudicate and record
 
-1. Map every AC and DoD item to its evidence with a verdict: verified, correct by design, out of scope (naming the owning story), or not covered.
-2. **Spot-check self-reported coverage claims.**
+1. Map every AC and DoD item to its evidence with a verdict: verified, correct by design, out of scope (naming the owning story), not covered, or `pending owner ruling`.
+2. **Pending owner ruling.**
+   Record an item as `pending owner ruling` only when two or more readings of the item's quoted AC or DoD text give different verdicts on the same evidence.
+   Missing evidence, access or execution alone does not qualify.
+   An item that fails under every reading is a failure, and an item met under every reading is verified.
+   The record goes in the QA evidence comment on the story (item 5) and gives the item, its quoted text, each reading with the verdict and the evidence under it, and the product owner as its owner.
+3. **Spot-check self-reported coverage claims.**
    If an earlier QA pass left a gap as unit-only or not reproducible live, and a later PR claims to close it, read the merged diff and confirm the new test drives the guarded code path through a realistic caller and asserts the specific failure the gap described.
    This is a diff read, not a rebuild: rerunning or mutating the suite is `engineering-workflow`'s job, and a green local run says nothing about what runs in the environment under test.
    If the diff does not hold up, the gap stays open.
-3. If the runtime can publish a hosted page, publish an evidence page with the screenshots and per-item verdicts and give the user the link; also deliver the raw screenshots to the user directly.
+4. If the runtime can publish a hosted page, publish an evidence page with the screenshots and per-item verdicts and give the user the link; also deliver the raw screenshots to the user directly.
    Every screenshot on the page must be zoomable: click opens it full screen at natural resolution, Esc or a click outside closes it.
    An evidence page with screenshots scaled to cards is incomplete.
    The hosted-page link is for the user's review only; it never goes into the tracker (step 4).
-4. Attach the evidence to the story itself, then post the QA evidence comment that cites it.
+5. Attach the evidence to the story itself, then post the QA evidence comment that cites it.
    Upload the key screenshots and the sanitized raw assertion output for each item with no visual surface (as a text file) as tracker attachments.
    Also attach the evidence page as a local file when step 3 built one and it is self-contained (screenshots inlined); otherwise skip it, since the attached screenshots and assertion output are the record.
-   Post a concise QA evidence comment on the story: build SHA, environment, fixtures used, per-item verdict, and any gaps.
+   Post a concise QA evidence comment on the story: build SHA, environment, fixtures used, per-item verdict, each pending owner ruling record (item 2), and any gaps.
    The comment cites the attachment behind each verdict.
    When `profile.qa.evidence_dir` is set, edit the comment to cite the in-repo evidence path once the evidence PR merges (section 5), never before; otherwise the comment says the tracker attachments are the record.
    Never put a hosted-page link in the tracker: a hosted page can be private to its owner or deleted, which leaves a dead link on the story.
@@ -116,12 +121,18 @@ If `profile.qa.evidence_dir` is unset, the project does not keep in-repo evidenc
 - **QA not finished: stay in `profile.tracker.states.in_deployment_review`.**
   A pending owner action, a live trigger still to run, or missing access means QA is in flight, not that the story failed.
   State exactly what remains and who owns it, and finish the verification when it is done.
-- Once QA is finished, the story ends in exactly one state:
+  With only `pending owner ruling` items outstanding and no failed item, QA is not finished and the story stays here; the QA evidence comment names each pending item, its owner and the ruling it waits on.
+- **A ruling reaches QA only as the product owner's dated AC amendment on the tracker.**
+  After that amendment, a new QA round (a new QA agent on an unchanged brief) verifies the amended item against the amended text with fresh evidence.
+- Once QA is finished, the story ends in exactly one state; a failed item finishes QA even while other items are `pending owner ruling`:
   - **`profile.tracker.states.done`**: every AC and DoD item is verified as met, and the evidence PR is merged (when in-repo evidence is kept).
     Tick the boxes you verified.
     Never mark done on merge alone, and never split or reword a story to close it.
+    Never mark done on an AC amendment alone, and never while any item is still `pending owner ruling`.
   - **`profile.tracker.states.in_progress`**: an item failed because the delivered work did not meet it.
     Reopen this story per `references/linear.md`, amend the AC with a dated deployment-review note, and hand the fix to `engineering-workflow`; never file a new bug for it.
+    Items also `pending owner ruling` are listed apart in the QA evidence comment as not for the engineer.
+    Write no deployment-review AC amendment for a pending item.
   - **`profile.tracker.states.blocked`**: the story is blocked by another story that must complete first.
     Record the blocking story in the body.
 
