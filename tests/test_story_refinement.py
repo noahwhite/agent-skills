@@ -1,8 +1,10 @@
 """Contract checks for the story-refinement skill and its profile keys."""
 
+import ast
 import inspect
 import json
 import re
+import textwrap
 from pathlib import Path
 
 import jsonschema
@@ -63,6 +65,35 @@ RUNTIME_TERMS = re.compile(
 )
 
 
+FENCE_OPEN = re.compile(r" {0,3}(`{3,}|~{3,})")
+
+
+def fence_ids(lines: list[str]) -> list[int]:
+    """Per line, the index of the fenced code block it belongs to (delimiters included), or -1 for prose.
+
+    A fence opens with three or more backticks or tildes indented at most three spaces, and closes with a line of
+    the same character, at least as long, and nothing else; an unclosed fence fails as its own error, so a broken
+    fence is never reported as a missing section.
+    """
+    ids, current, marker = [], -1, ""
+    count = 0
+    for line in lines:
+        if marker:
+            ids.append(current)
+            if re.fullmatch(rf" {{0,3}}{re.escape(marker[0])}{{{len(marker)},}}[ \t]*", line.rstrip("\r\n")):
+                marker = ""
+            continue
+        opening = FENCE_OPEN.match(line)
+        if opening:
+            marker, current = opening.group(1), count
+            count += 1
+            ids.append(current)
+            continue
+        ids.append(-1)
+    assert not marker, f"unclosed code fence (block {current})"
+    return ids
+
+
 def section(text: str, heading: str, level: int = 2) -> str:
     """The operative text under a heading, up to the next heading of the same or a higher level.
 
@@ -71,15 +102,12 @@ def section(text: str, heading: str, level: int = 2) -> str:
     """
     text = re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)
     lines = text.splitlines(keepends=True)
+    ids = fence_ids(lines)
     own = re.compile(rf"{'#' * level} {re.escape(heading)}\s*$")
     ends = re.compile(rf"#{{1,{level}}} ")
-    fenced = False
     start = None
     for index, line in enumerate(lines):
-        if line.startswith("```"):
-            fenced = not fenced
-            continue
-        if fenced:
+        if ids[index] != -1:
             continue
         if start is None:
             if own.match(line):
@@ -88,6 +116,24 @@ def section(text: str, heading: str, level: int = 2) -> str:
             return "".join(lines[start:index])
     assert start is not None, f"missing section: {heading}"
     return "".join(lines[start:])
+
+
+def segments(body: str) -> list[tuple[str, str]]:
+    """A section body split in order into ("prose", text) and ("fence", content without its delimiters) parts."""
+    lines = body.splitlines(keepends=True)
+    ids = fence_ids(lines)
+    parts: list[tuple[int, list[str]]] = []
+    for line, block in zip(lines, ids):
+        if parts and parts[-1][0] == block:
+            parts[-1][1].append(line)
+        else:
+            parts.append((block, [line]))
+    return [("prose", "".join(chunk)) if block == -1 else ("fence", "".join(chunk[1:-1])) for block, chunk in parts]
+
+
+def prose(body: str) -> str:
+    """A section body without its fenced code blocks, so a prose rule cannot be met by template text."""
+    return "".join(text for kind, text in segments(body) if kind == "prose")
 
 
 def flat(text: str) -> str:
@@ -468,16 +514,8 @@ def test_split_rule_keeps_the_split_mechanics() -> None:
 
 
 def pointing_template() -> list[str]:
-    body, inside, fenced = [], False, False
-    for line in RECORD.read_text().splitlines():
-        if line.startswith("```"):
-            fenced = not fenced
-        elif not fenced and line.startswith("## "):
-            inside = line == "## Pointing record"
-            continue
-        if inside:
-            body.append(line)
-    templates = re.findall(r"^```markdown\n(## Pointing record\n.*?)^```", "\n".join(body) + "\n", re.MULTILINE | re.DOTALL)
+    fences = [text for kind, text in segments(section(RECORD.read_text(), "Pointing record")) if kind == "fence"]
+    templates = [text for text in fences if text.startswith("## Pointing record\n")]
     assert len(templates) == 1, f"expected one pointing-record template, found {len(templates)}"
     return templates[0].splitlines()
 
@@ -742,7 +780,9 @@ def test_probe_denial_has_a_resume_path_under_the_fallback() -> None:
 
 
 def test_record_allows_facilitator_posting_under_the_fallback() -> None:
-    assert "posted by the product owner or, under the denied tracker writes fallback, by the facilitator verbatim" in squash(RECORD.read_text())
+    assert "posted by the product owner or, under the denied tracker writes fallback, by the facilitator verbatim" in squash(
+        prose(section(RECORD.read_text(), "Refinement comment"))
+    )
 
 
 def test_runtimes_rule_does_not_claim_an_unobserved_fact() -> None:
@@ -763,11 +803,18 @@ WRITES_FACILITATOR_LINE = (
 
 
 def template_block(heading: str) -> tuple[str, str]:
-    """The first fenced block in the heading's `section()`, and that section's text after the block."""
-    body = section(RECORD.read_text(), heading)
-    block = re.search(r"```markdown\n(.*?)```", body, re.DOTALL)
-    assert block, f"no template block under {heading}"
-    return block.group(1), body[block.end():]
+    """The first fenced block in the heading's `section()`, and the fallback alternative right after it.
+
+    The alternative is the prose between the template and the next fenced block plus that block, so neither a later
+    fence nor text elsewhere in the section can stand in for it.
+    """
+    parts = segments(section(RECORD.read_text(), heading))
+    fenced = [index for index, (kind, _) in enumerate(parts) if kind == "fence"]
+    assert fenced, f"no template block under {heading}"
+    first = fenced[0]
+    following = parts[first + 1: first + 3]
+    alternative = "".join(text for _, text in following) if [kind for kind, _ in following] == ["prose", "fence"] else ""
+    return parts[first][1], alternative
 
 
 def template(heading: str) -> str:
@@ -1604,7 +1651,7 @@ def test_pointing_template_records_each_challenge_and_outcome() -> None:
         "blind vote that replaced them>"
         in pointing_template()
     )
-    body = spaced(section(RECORD.read_text(), "Pointing record"))
+    body = spaced(prose(section(RECORD.read_text(), "Pointing record")))
     assert (
         "Outside the recorded numeric values and the superseded-values line, no line of the posted record carries "
         "a point value named before the reveal or a prescription of this story's value: the Challenges and Anchoring events "
@@ -1716,7 +1763,7 @@ def test_record_has_the_accept_round_result_template_with_exactly_the_fields() -
 
 
 def test_record_says_the_result_comment_is_separate_and_posted_after_each_round() -> None:
-    body = spaced(section(RECORD.read_text(), "Accept round result"))
+    body = spaced(prose(section(RECORD.read_text(), "Accept round result")))
     assert (
         "Post this as a separate tracker comment after each accept round, "
         "authored by the product owner and posted by the product owner or, under the denied tracker writes fallback, "
@@ -2322,29 +2369,14 @@ def test_record_has_the_triage_record_template_with_exactly_the_fields() -> None
 
 
 def record_triage_section() -> str:
-    """The Triage record section of the record reference, fenced template and fallback included.
-
-    `section()` would stop at the template's own `## Triage record` line inside the fence, so this slices from the
-    section heading to the next `## ` heading outside a code fence, whichever section that is.
-    """
-    lines = RECORD.read_text().splitlines()
-    start = next((i for i, line in enumerate(lines) if line.rstrip() == "## Triage record"), None)
-    assert start is not None, "the record reference has a Triage record section"
-    in_fence = False
-    end = len(lines)
-    for i in range(start + 1, len(lines)):
-        if lines[i].startswith("```"):
-            in_fence = not in_fence
-        elif not in_fence and lines[i].startswith("## "):
-            end = i
-            break
-    return "\n".join(lines[start + 1: end])
+    """The Triage record section of the record reference, fenced template and fallback included."""
+    return section(RECORD.read_text(), "Triage record")
 
 
 def test_record_says_the_triage_record_is_a_po_triage_write() -> None:
     raw = record_triage_section()
-    body = spaced(raw)
-    assert "- Priority comparison: <" in raw, "the section holds its own template"
+    body = spaced(prose(raw))
+    assert "- Priority comparison: <" in template("Triage record"), "the section holds its own template"
     assert (
         "Post this as a tracker comment authored by the product owner as a triage write, on every refinement "
         "outcome and on each split sibling, and posted by the product owner or, under the denied tracker writes "
@@ -3169,7 +3201,7 @@ def test_refinement_template_carries_the_pointing_skipped_line() -> None:
     assert f"- {POINTING_SKIPPED}" in template("Refinement comment").splitlines()
     assert (
         "For a Bug, an Investigation or a Spike, the comment carries the `Pointing skipped` line; for a User Story "
-        "it omits that line." in spaced(section(RECORD.read_text(), "Refinement comment"))
+        "it omits that line." in spaced(prose(section(RECORD.read_text(), "Refinement comment")))
     )
 
 
@@ -3343,7 +3375,7 @@ def test_step_two_split_writes_follow_the_apply_rule() -> None:
 
 def test_shared_linear_states_the_unestimated_split_trigger() -> None:
     """B5: one line in Estimation and slicing states the trigger for unestimated types, next to the story rule."""
-    body = section((ROOT / "shared" / "linear.md").read_text(), "Estimation and slicing")
+    body = prose(section((ROOT / "shared" / "linear.md").read_text(), "Estimation and slicing"))
     lines = body.splitlines()
     assert SHARED_LINEAR_SPLIT in lines
     story = next(i for i, line in enumerate(lines) if line.startswith("- ⛔ Split a story estimated at 8 points"))
@@ -3354,7 +3386,10 @@ def test_vendored_linear_copies_carry_the_unestimated_split_trigger() -> None:
     copies = sorted(ROOT.glob("skills/*/references/linear.md"))
     assert copies
     for copy in copies:
-        lines = section(copy.read_text(), "Estimation and slicing").splitlines()
+        try:
+            lines = prose(section(copy.read_text(), "Estimation and slicing")).splitlines()
+        except AssertionError as error:
+            raise AssertionError(f"{copy.relative_to(ROOT)}: {error}") from error
         assert SHARED_LINEAR_SPLIT in lines, copy.relative_to(ROOT)
 
 
@@ -3433,14 +3468,14 @@ def test_refinement_template_carries_the_scope_signal_line() -> None:
     assert (
         "For a Bug, an Investigation or a Spike, the comment also carries the `Scope signal:` line with the reading "
         "`SKILL.md` (Unestimated issue types) defines; for a User Story it omits that line."
-        in spaced(section(RECORD.read_text(), "Refinement comment"))
+        in spaced(prose(section(RECORD.read_text(), "Refinement comment")))
     )
     assert (
         "Replace `<reading>` with one whole reading: for a Bug or an Investigation `single change` or `more than one "
         "independently reviewable change (<reason>)`, and for a Spike `single research thread` or `more than one "
         "independent research thread (<reason>)`, with `<reason>` replaced too; when the Step 2 reconciliation finds "
         "no category with two or more voters, replace it with `missing`, which `SKILL.md` treats as a missing line."
-        in spaced(section(RECORD.read_text(), "Refinement comment"))
+        in spaced(prose(section(RECORD.read_text(), "Refinement comment")))
     )
 
 
@@ -3618,24 +3653,70 @@ def test_closing_message_names_a_missing_scope_signal() -> None:
         "or an Investigation, authored by the product owner and posted by the product owner or, under the denied "
         "tracker writes fallback, by the facilitator verbatim.",
         "A re-split sibling gets its own split comment on that sibling.",
-        "Under the denied tracker writes fallback in `SKILL.md`, replace the tracker-writes line with:",
-        "- Tracker writes: facilitator on the product owner's behalf (owner's direct authorization: \"<verbatim "
-        "quote>\", <date>)",
     ],
 )
 def test_split_comment_section_states_its_author_and_fallback(sentence: str) -> None:
-    assert sentence in spaced(section(RECORD.read_text(), "Split comment"))
+    assert sentence in spaced(prose(section(RECORD.read_text(), "Split comment")))
 
 
-def test_section_scopes_template_and_step_helpers() -> None:
-    """B8b: section() drops commented-out text and fenced headings, and the template and step helpers go through it."""
-    text = "## A\n\n<!--\n```markdown\n## Hidden\n- gone\n```\n-->\n```markdown\n## Kept\n- here\n```\nafter\n## B\nnext\n"
-    body = section(text, "A")
-    assert "gone" not in body and "- here" in body and "after" in body and "next" not in body
-    with pytest.raises(AssertionError):
-        section(text, "Kept")
-    for helper in (template_block, step):
-        assert "section(" in inspect.getsource(helper), helper.__name__
+def test_split_comment_carries_the_facilitator_writes_alternative() -> None:
+    alternative = fallback_alternative("Split comment").splitlines()
+    assert "Under the denied tracker writes fallback in `SKILL.md`, replace the tracker-writes line with:" in alternative
+    assert WRITES_FACILITATOR_LINE in alternative
+
+
+SECTION_FIXTURE = (
+    "## A\n\n<!--\n```markdown\n## Hidden\n- gone\n```\n-->\n```markdown\n## Kept\n- here\n```\n"
+    "````\n## Four\n````\n~~~markdown\n## Tilde\n~~~\n- item\n  ```text\n  ## Indented\n  ```\nafter\n"
+    "### Step\n\nstep text\n```\n### Fenced step\n```\nstep tail\n### Next step\nother\n## B\nnext\n"
+)
+
+
+def test_section_drops_comments_and_skips_every_fence_kind() -> None:
+    """B8b: commented-out text is not operative, and no fenced heading starts or ends a section, at either level."""
+    body = section(SECTION_FIXTURE, "A")
+    assert "gone" not in body and "- here" in body and "after" in body and "other" in body and "next" not in body
+    for fenced in ("Hidden", "Kept", "Four", "Tilde", "Indented"):
+        with pytest.raises(AssertionError, match="missing section"):
+            section(SECTION_FIXTURE, fenced)
+    step_body = section(SECTION_FIXTURE, "Step", level=3)
+    assert "step text" in step_body and "step tail" in step_body and "other" not in step_body
+    assert "Fenced step" not in prose(step_body)
+    with pytest.raises(AssertionError, match="unclosed code fence"):
+        section("## A\n```\n## B\n", "A")
+
+
+def helper_calls(function) -> set[str]:
+    """The names a helper's body calls, its docstring excluded."""
+    tree = ast.parse(textwrap.dedent(inspect.getsource(function)))
+    body = tree.body[0].body
+    if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant):
+        body = body[1:]
+    return {
+        node.func.id
+        for statement in body
+        for node in ast.walk(statement)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+    }
+
+
+def test_every_scoping_helper_goes_through_section() -> None:
+    """B8b: each helper behind a listed assertion reaches section() through its own calls, not its docstring."""
+    helpers = {
+        helper.__name__: helper
+        for helper in (
+            step, operative_step, process_items, process_item, template_block, template, fallback_alternative,
+            pointing_template, record_triage_section, unestimated_bullet, type_item, skill_section,
+        )
+    }
+    scoped = {"section"}
+    pending = dict(helpers)
+    while pending:
+        reached = {name for name, helper in pending.items() if helper_calls(helper) & scoped}
+        assert reached, f"helpers that never reach section(): {sorted(pending)}"
+        scoped |= reached
+        for name in reached:
+            del pending[name]
 
 
 def test_readme_row_names_the_split_and_the_refile() -> None:
