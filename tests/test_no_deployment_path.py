@@ -179,12 +179,14 @@ SPIKE_NO_CHANGE_PINS = {
         "(`git diff --name-only origin/<profile.git.integration_branch>...HEAD`)."
     ),
     "spike-no-hidden-changes": (
-        "A stash or an assume-unchanged file hides a tracked-file change from those checks, so "
-        "`git stash list` and `git ls-files -v | grep '^[a-z]'` must also print nothing."
+        "A stash or a file marked assume-unchanged or skip-worktree hides a tracked-file change from those "
+        "checks, so `git stash list` must print no entry made on the spike's branch (one that reads "
+        "`WIP on <branch>:` or `On <branch>:`), and `git ls-files -v` must print no line whose tag is a "
+        "lowercase letter (assume-unchanged) or `S` (skip-worktree)."
     ),
     "spike-check-failure-stops": (
-        "A failed fetch, or a check command that exits non-zero, never reads as no tracked-file change: stop "
-        "and resolve it before deciding."
+        "A failed fetch, or a `git` command above that exits non-zero, never reads as no tracked-file change: "
+        "stop and resolve it before deciding."
     ),
     "spike-skip-and-recheck": (
         "Skip steps 4 to 10 only when all three checks show no tracked-file change, and repeat the fetch, the "
@@ -192,8 +194,8 @@ SPIKE_NO_CHANGE_PINS = {
     ),
     "spike-untracked-deliverable": (
         "An untracked file is not a tracked-file change, so a deliverable that exists only as an untracked "
-        "file is linked on the story as an attachment, and the step 12 note says it had no PR review or CI "
-        "check."
+        "file is linked on the story as an attachment only after you confirm it holds no secret, and the "
+        "step 12 note says it had no PR review or CI check."
     ),
     "spike-change-runs-gates": (
         "If a tracked-file change appears at any point, complete steps 4 to 10 with every applicable gate, and "
@@ -230,7 +232,9 @@ STEP_TWELVE_PINS = {
     "handoff-after-merge": (
         "Run this step once a fetch of `origin` shows the merged commit on "
         "`origin/<profile.git.integration_branch>` (`git merge-base --is-ancestor <merged commit> "
-        "origin/<profile.git.integration_branch>` exits 0)."
+        "origin/<profile.git.integration_branch>` exits 0) and no later commit on it reverts the merged "
+        "commit (`git log --oneline -i --grep=revert <merged commit>..origin/<profile.git.integration_branch>` "
+        "lists none that reverts the merged commit or this story's PR)."
     ),
     "handoff-spike-no-change": (
         "For a spike with no tracked-file change, run it instead once the checks repeated immediately before "
@@ -336,3 +340,23 @@ def test_steps_two_to_twelve_outside_the_handoff_blocks_are_unchanged() -> None:
     for block in added_blocks():
         text = text.replace(block, "", 1)
     assert hashlib.sha256(text.encode()).hexdigest() == STEPS_TWO_TO_TWELVE_SHA256
+
+
+# SKL-282: the lifecycle rules in `references/linear.md` (vendored from `shared/linear.md`) govern
+# step 12, so they scope their deploy conditions for the `no-deployment` and `spike` handoff.
+LINEAR_HANDOFF_PIN = (
+    "- On the `no-deployment` and `spike` paths that `engineering-workflow` selects in its step 1, nothing is "
+    "deployed: the move to deployment review follows the handoff its step 12 defines, and every condition in "
+    "this file on a deploy or a deployed environment reads as verification against the merged commit, or, for "
+    "a spike with no tracked-file change, against the deliverables the step 12 note links."
+)
+
+
+@pytest.mark.parametrize(
+    "path",
+    [ROOT / "shared" / "linear.md", ROOT / "skills" / "engineering-workflow" / "references" / "linear.md"],
+    ids=["shared", "engineering-workflow"],
+)
+def test_linear_lifecycle_scopes_deploy_conditions_to_the_deployed_path(path: Path) -> None:
+    lines = section(path.read_text(encoding="utf-8"), "Status lifecycle").splitlines()
+    assert LINEAR_HANDOFF_PIN in lines

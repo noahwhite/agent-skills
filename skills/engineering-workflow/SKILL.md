@@ -109,10 +109,10 @@ Preserve existing tests and conventions.
 ### Spike with no tracked-file change
 
 On the `spike` path, before step 4, fetch `origin`, confirm the checkout is on the spike's branch (`git branch --show-current` names it) and that the branch contains every commit of `origin/<profile.git.integration_branch>` (`git rev-list --count HEAD..origin/<profile.git.integration_branch>` prints `0`; otherwise update the branch first), and check for a tracked-file change in the working tree (`git diff --name-only`), the index (`git diff --cached --name-only`) and the commits relative to `origin/<profile.git.integration_branch>` (`git diff --name-only origin/<profile.git.integration_branch>...HEAD`).
-A stash or an assume-unchanged file hides a tracked-file change from those checks, so `git stash list` and `git ls-files -v | grep '^[a-z]'` must also print nothing.
-A failed fetch, or a check command that exits non-zero, never reads as no tracked-file change: stop and resolve it before deciding.
+A stash or a file marked assume-unchanged or skip-worktree hides a tracked-file change from those checks, so `git stash list` must print no entry made on the spike's branch (one that reads `WIP on <branch>:` or `On <branch>:`), and `git ls-files -v` must print no line whose tag is a lowercase letter (assume-unchanged) or `S` (skip-worktree).
+A failed fetch, or a `git` command above that exits non-zero, never reads as no tracked-file change: stop and resolve it before deciding.
 Skip steps 4 to 10 only when all three checks show no tracked-file change, and repeat the fetch, the branch confirmations and every check immediately before step 12.
-An untracked file is not a tracked-file change, so a deliverable that exists only as an untracked file is linked on the story as an attachment, and the step 12 note says it had no PR review or CI check.
+An untracked file is not a tracked-file change, so a deliverable that exists only as an untracked file is linked on the story as an attachment only after you confirm it holds no secret, and the step 12 note says it had no PR review or CI check.
 If a tracked-file change appears at any point, complete steps 4 to 10 with every applicable gate, and the merge path of step 12 applies.
 Once a tracked-file change has appeared, the spike stays on that merge path and the checks are not repeated, so a merged spike is never sent back through steps 4 to 10.
 Any PR a spike produces runs every gate steps 4 to 10 define: the `spike` path changes no gate, waiver, admin override or expected-head condition.
@@ -301,7 +301,7 @@ Done comes later, after the acceptance criteria are verified in the deployed env
 ### Handoff on the `no-deployment` and `spike` paths
 
 The merged commit is the commit that merging this story's PR in step 10 put on the integration branch, as `profile.git.merge_method` produced it: the merge commit, the squash commit or the last rebased commit, which `gh pr view <PR number> --json mergeCommit --jq .mergeCommit.oid` prints.
-Run this step once a fetch of `origin` shows the merged commit on `origin/<profile.git.integration_branch>` (`git merge-base --is-ancestor <merged commit> origin/<profile.git.integration_branch>` exits 0).
+Run this step once a fetch of `origin` shows the merged commit on `origin/<profile.git.integration_branch>` (`git merge-base --is-ancestor <merged commit> origin/<profile.git.integration_branch>` exits 0) and no later commit on it reverts the merged commit (`git log --oneline -i --grep=revert <merged commit>..origin/<profile.git.integration_branch>` lists none that reverts the merged commit or this story's PR).
 For a spike with no tracked-file change, run it instead once the checks repeated immediately before this step still show no tracked-file change and each deliverable is linked on the story as a comment or an attachment.
 
 1. Add a concise implementation and handoff note naming the path and the merged commit.

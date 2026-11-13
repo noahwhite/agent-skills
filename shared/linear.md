@@ -21,6 +21,7 @@ The `linear` CLI (schpet/linear-cli) is the primary tool; the Linear MCP server 
   A merge is not a deployment; verify the acceptance criteria in the deployed environment first.
 - ⛔ Never move an issue to deployment review on merge.
   Leave it in review between merge and deploy; move it once the deploy has landed the build in the target environment.
+- On the `no-deployment` and `spike` paths that `engineering-workflow` selects in its step 1, nothing is deployed: the move to deployment review follows the handoff its step 12 defines, and every condition in this file on a deploy or a deployed environment reads as verification against the merged commit, or, for a spike with no tracked-file change, against the deliverables the step 12 note links.
 - ⛔ Never advance an issue because a docs-only or adjacent PR merged; advance only when the merged PR implements the issue's own criteria.
 - Do not rely on the tracker's GitHub integration to advance status.
   Drive every transition yourself, then read the issue back (`linear issue view ABC-123`) to confirm it.
