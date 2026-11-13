@@ -170,12 +170,17 @@ def test_path_selection_sentence_appears_only_in_step_one(key: str) -> None:
 SPIKE_NO_CHANGE_PINS = {
     "spike-subsection": "### Spike with no tracked-file change",
     "spike-three-checks": (
-        "On the `spike` path, before step 4, fetch `origin`, confirm the spike's branch is up to date with "
+        "On the `spike` path, before step 4, fetch `origin`, confirm the checkout is on the spike's branch "
+        "(`git branch --show-current` names it) and that the branch contains every commit of "
         "`origin/<profile.git.integration_branch>` (`git rev-list --count "
         "HEAD..origin/<profile.git.integration_branch>` prints `0`; otherwise update the branch first), and "
         "check for a tracked-file change in the working tree (`git diff --name-only`), the index "
         "(`git diff --cached --name-only`) and the commits relative to `origin/<profile.git.integration_branch>` "
         "(`git diff --name-only origin/<profile.git.integration_branch>...HEAD`)."
+    ),
+    "spike-no-hidden-changes": (
+        "A stash or an assume-unchanged file hides a tracked-file change from those checks, so "
+        "`git stash list` and `git ls-files -v | grep '^[a-z]'` must also print nothing."
     ),
     "spike-check-failure-stops": (
         "A failed fetch, or a check command that exits non-zero, never reads as no tracked-file change: stop "
@@ -183,11 +188,12 @@ SPIKE_NO_CHANGE_PINS = {
     ),
     "spike-skip-and-recheck": (
         "Skip steps 4 to 10 only when all three checks show no tracked-file change, and repeat the fetch, the "
-        "up-to-date confirmation and the three checks immediately before step 12."
+        "branch confirmations and every check immediately before step 12."
     ),
     "spike-untracked-deliverable": (
         "An untracked file is not a tracked-file change, so a deliverable that exists only as an untracked "
-        "file is linked on the story as an attachment."
+        "file is linked on the story as an attachment, and the step 12 note says it had no PR review or CI "
+        "check."
     ),
     "spike-change-runs-gates": (
         "If a tracked-file change appears at any point, complete steps 4 to 10 with every applicable gate, and "
@@ -216,25 +222,35 @@ STEP_TWELVE_PINS = {
         "sentence above apply to the `deployed` path only."
     ),
     "handoff-subsection": "### Handoff on the `no-deployment` and `spike` paths",
+    "handoff-merged-commit-defined": (
+        "The merged commit is the commit that merging this story's PR in step 10 put on the integration "
+        "branch, as `profile.git.merge_method` produced it: the merge commit, the squash commit or the last "
+        "rebased commit, which `gh pr view <PR number> --json mergeCommit --jq .mergeCommit.oid` prints."
+    ),
     "handoff-after-merge": (
-        "Run this step once a fetch of `origin` shows this story's merge commit, the commit step 10 created by "
-        "merging its PR, on `origin/<profile.git.integration_branch>` (`git merge-base --is-ancestor "
-        "<merge commit> origin/<profile.git.integration_branch>` exits 0)."
+        "Run this step once a fetch of `origin` shows the merged commit on "
+        "`origin/<profile.git.integration_branch>` (`git merge-base --is-ancestor <merged commit> "
+        "origin/<profile.git.integration_branch>` exits 0)."
     ),
     "handoff-spike-no-change": (
         "For a spike with no tracked-file change, run it instead once the checks repeated immediately before "
         "this step still show no tracked-file change and each deliverable is linked on the story as a comment "
         "or an attachment."
     ),
-    "handoff-move": "1. Move the story to `profile.tracker.states.in_deployment_review`.",
-    "handoff-note": "2. Add a concise implementation and handoff note naming the path and the merged commit.",
+    "handoff-note": "1. Add a concise implementation and handoff note naming the path and the merged commit.",
     "handoff-note-no-change": (
         "   For a spike with no tracked-file change, the note names the path, states there is no merged commit, "
         "and says the spike had no tracked-file change and that steps 4 to 10 were skipped."
     ),
     "handoff-note-deliverables": (
         "   On `spike`, the note also names, for each deliverable the spike's Deliverables section lists, its "
-        "link and, when the deliverable is a tracked artifact, its commit."
+        "link and, when the deliverable is a tracked artifact, its commit on "
+        "`origin/<profile.git.integration_branch>`."
+    ),
+    "handoff-move": "2. Move the story to `profile.tracker.states.in_deployment_review`.",
+    "handoff-state-absent": (
+        "   If the profile sets no `in_deployment_review` state, stop and say the transition was not "
+        "performed; never invent a state name."
     ),
     "handoff-read-back": "3. Read the story back to confirm the state.",
     "handoff-done-merged-commit": (
@@ -274,15 +290,16 @@ def added_blocks() -> list[str]:
     """The exact text SKL-282 inserts into steps 3, 11 and 12, built from the pins in order."""
     p = HANDOFF_PINS
     spike = (
-        f"{p['spike-subsection']}\n\n{p['spike-three-checks']}\n{p['spike-check-failure-stops']}\n"
-        f"{p['spike-skip-and-recheck']}\n{p['spike-untracked-deliverable']}\n{p['spike-change-runs-gates']}\n"
-        f"{p['spike-merge-path-sticks']}\n{p['spike-pr-gates-unchanged']}\n\n"
+        f"{p['spike-subsection']}\n\n{p['spike-three-checks']}\n{p['spike-no-hidden-changes']}\n"
+        f"{p['spike-check-failure-stops']}\n{p['spike-skip-and-recheck']}\n{p['spike-untracked-deliverable']}\n"
+        f"{p['spike-change-runs-gates']}\n{p['spike-merge-path-sticks']}\n{p['spike-pr-gates-unchanged']}\n\n"
     )
     eleven = f"{p['deploy-deployed-only']}\n{p['deploy-skipped']}\n{p['steps-through-merge-unchanged']}\n\n"
     twelve = (
-        f"\n{p['deployed-conditions-scoped']}\n\n{p['handoff-subsection']}\n\n{p['handoff-after-merge']}\n"
-        f"{p['handoff-spike-no-change']}\n\n{p['handoff-move']}\n{p['handoff-note']}\n"
-        f"{p['handoff-note-no-change']}\n{p['handoff-note-deliverables']}\n{p['handoff-read-back']}\n\n"
+        f"\n{p['deployed-conditions-scoped']}\n\n{p['handoff-subsection']}\n\n"
+        f"{p['handoff-merged-commit-defined']}\n{p['handoff-after-merge']}\n{p['handoff-spike-no-change']}\n\n"
+        f"{p['handoff-note']}\n{p['handoff-note-no-change']}\n{p['handoff-note-deliverables']}\n"
+        f"{p['handoff-move']}\n{p['handoff-state-absent']}\n{p['handoff-read-back']}\n\n"
         f"{p['handoff-done-merged-commit']}\n{p['handoff-done-deliverables']}\n"
     )
     return [spike, eleven, twelve]
