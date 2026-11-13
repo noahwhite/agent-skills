@@ -460,9 +460,12 @@ QA_ENV_PINS = {
     ),
     "qa-env-dependency-rule": (
         "On both paths, every later condition on a deploy, a deployed build or the environment under test "
-        "reads as the path's target, so step 1's dependency status rule verifies an item directly when its "
-        "dependency is in `profile.tracker.states.in_deployment_review` or `profile.tracker.states.done`, and "
-        "flags it blocked only when it is not."
+        "reads as the path's target, so step 1's dependency status rule verifies an item directly only when "
+        "its dependency's change is contained in the target (its merged commit is an ancestor of the target "
+        "commit: `git merge-base --is-ancestor <dependency merged commit> <target commit>` exits 0, or, when "
+        "the dependency or the target has no commit, such as a spike deliverable, the dependency is in "
+        "`profile.tracker.states.in_deployment_review` or `profile.tracker.states.done`), and flags it "
+        "blocked when it is not."
     ),
     "qa-env-no-lanes": (
         "On both paths, steps 2 and 3 apply to the `deployed` path only: QA verifies each AC and DoD item by "
