@@ -3,10 +3,11 @@
 ## QA round 1
 
 Date: 2026-11-13 UTC, independent QA round 1.
-Build under test: `main` at `d883eb5a158cedf67077e6a049375ce629ab37cd`, the squash merge of PR 241.
-The reviewed head is `3dcfee632722cd2b40be0542ace8fe108bc101d6`; `git diff` between the head and the build touches only `docs/qa-evidence/SKL-239/README.md`, so none of the PR's 22 files differ.
-Environment: none; the profile sets `environments: []`, so the lanes are the repository (a fresh clone of `origin/main`), GitHub, the tracker and the persistent memory store.
-Fixtures: none needed; the probes read `skills/story-refinement/SKILL.md` and `shared/linear.md` at the build, mutate them in the clone, and run the repository's guards.
+Path: `no-deployment`, as the brief states, since `.agent-skills/profile.yaml` sets `environments: []`.
+Target: merged commit `d883eb5a158cedf67077e6a049375ce629ab37cd` on `main`, the squash merge of PR 241, confirmed with `git merge-base --is-ancestor` after a fetch.
+Its reviewed head `3dcfee632722cd2b40be0542ace8fe108bc101d6` differs from the target only in `docs/qa-evidence/SKL-239/README.md`, so none of the PR's 22 files differ.
+Environment and deployed build SHA: none on this path; the evidence comes from a fresh clone of `origin/main`, GitHub, the tracker and the persistent memory store.
+Fixtures: none needed; the probes read `skills/story-refinement/SKILL.md` and `shared/linear.md` at the target, mutate them in the clone, and run the repository's guards.
 The raw output is attached to SKL-230 as `SKL-230-qa-round-1-assertions.txt`; there is no visual surface, so no screenshot applies.
 
 | Item | Verdict | Evidence |
@@ -19,8 +20,8 @@ The raw output is attached to SKL-230 as `SKL-230-qa-round-1-assertions.txt`; th
 | DoD: tests written and passing | Verified | K3. |
 | DoD: independently reviewed | Verified | The PR 241 review of record names `3dcfee632722cd2b40be0542ace8fe108bc101d6` in its first line and as its `commit_id`, the merged head, with Codex GPT-6 Sol reviewing and DeepSeek V4.1 Flash adjudicating, and no open finding. |
 | DoD: docs updated | Verified | The change is the skill and shared reference text itself. |
-| DoD: verified in a deployed environment | Not applicable | The profile defines no environments, so the build was verified on `main`. |
-| DoD: no critical bugs or regressions | Verified | CI passed on the reviewed head (run 43522915543) and on `main` (run 43523610496), and the full suite passed locally on the build. |
+| DoD: verified in a deployed environment | Correct by design | Not needed on the `no-deployment` path. |
+| DoD: no critical bugs or regressions | Verified | CI passed on the reviewed head (run 43522915543) and on `main` (run 43523610496), and the full suite passed locally on the target. |
 
 Details:
 
@@ -37,10 +38,10 @@ Details:
   - Line 94 states that no rung discards scope, delegates an oversize slice or hands one to the owner as an estimate.
   - The "without asking" wording stays, and the close-time bullet (line 96) is unchanged.
 - K3:
-  - On the build, `tests/test_story_refinement.py` and `tests/test_shared_linear.py` passed (463 tests), and the full `uv run --locked pytest -q` passed (2270 tests locally; CI collects 2288).
+  - On the target, `tests/test_story_refinement.py` and `tests/test_shared_linear.py` passed (463 tests), and the full `uv run --locked pytest -q` passed (2270 tests locally; CI collects 2288).
   - Adding an escalation line to the Split rule fails 2 tests; restoring the original "or escalated" line fails 4 tests.
   - Changing the shared trigger to 13 fails the test that compares the `SKILL.md` and `shared/linear.md` triggers.
-  - `scripts/vendor_shared.py --check` exits 0 on the build and lists all 18 copies as stale after an unvendored edit.
+  - `scripts/vendor_shared.py --check` exits 0 on the target and lists all 18 copies as stale after an unvendored edit.
   - The public leak scan exited 0; its private half runs only in CI.
   - CI run 43522915543 on the reviewed head passed `checks` (2288 tests, the leak scan with `--require-private`, and `skills-ref validate` for all 18 skills) and `discovery` (all 18 skills in each of 6 layouts).
   - CI run 43523610496 on `main` passed both jobs.
