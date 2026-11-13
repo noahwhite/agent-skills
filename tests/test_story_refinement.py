@@ -2879,8 +2879,11 @@ def test_unestimated_section_decides_priority_on_every_outcome() -> None:
         "Text the author wrote in brackets, such as a Markdown link, is not template placeholder text.",
         "Otherwise it stays in `profile.tracker.states.backlog` and the Triage record's `State:` line names the "
         'unmet condition; on a move to ready the line reads "ready: all conditions met".',
-        "An issue already in `profile.tracker.states.ready` or a later state whose gate fails is moved back to "
+        "An issue already in `profile.tracker.states.ready` whose gate fails is moved back to "
         "`profile.tracker.states.backlog`, and its `State:` line names the unmet condition the same way.",
+        "An issue already in `profile.tracker.states.in_progress` or a later state keeps its state: the Triage "
+        "record's `State:` line names the unmet condition and the ceremony reports `needs input` to the owner instead "
+        "of writing a state.",
     ],
 )
 def test_unestimated_section_states_the_ready_gate(sentence: str) -> None:

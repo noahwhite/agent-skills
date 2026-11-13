@@ -351,7 +351,8 @@ A Bug, an Investigation and a Spike carry no estimate under Estimation and slici
   A section still holds placeholder text when any bracketed template instruction that the filing template puts in that section remains in it verbatim, compared with each run of whitespace read as one space: each `[...]` instruction of the `linear-bug` or `linear-spike` template, whether on a line of its own like `[What should have happened instead.]`, wrapped across lines like the Bug `Observed` instruction, inline after the section label like `**Timebox:** [X days]`, or numbered like `1. [Key question to answer]`, and each of the `linear-investigation` template's own `<...>` tokens on its `Incident` line, such as `<Paging system>`; a section that is empty or still holds one fails this condition.
   Text the author wrote in brackets, such as a Markdown link, is not template placeholder text.
   Otherwise it stays in `profile.tracker.states.backlog` and the Triage record's `State:` line names the unmet condition; on a move to ready the line reads "ready: all conditions met".
-  An issue already in `profile.tracker.states.ready` or a later state whose gate fails is moved back to `profile.tracker.states.backlog`, and its `State:` line names the unmet condition the same way.
+  An issue already in `profile.tracker.states.ready` whose gate fails is moved back to `profile.tracker.states.backlog`, and its `State:` line names the unmet condition the same way.
+  An issue already in `profile.tracker.states.in_progress` or a later state keeps its state: the Triage record's `State:` line names the unmet condition and the ceremony reports `needs input` to the owner instead of writing a state.
 
 ## Triage
 
