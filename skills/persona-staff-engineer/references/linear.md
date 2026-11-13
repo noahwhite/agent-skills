@@ -94,6 +94,7 @@ The `linear` CLI (schpet/linear-cli) is the primary tool; the Linear MCP server 
   4. the smallest outcome that can be reviewed, merged and verified on its own, including enabling work such as interface or schema first and behaviour second.
 
   No rung discards scope, delegates an oversize slice or hands one to the owner as an estimate.
+- ⛔ At refinement, without asking, split a Bug or an Investigation whose accepted refinement comment's `Scope signal:` line reads `more than one independently reviewable change`, with or without its `(<reason>)`: the original keeps the core slice and blocks each sibling, siblings come from its own filing template with its type label, no slice gets a point value or a slice estimate, and the split comment maps every acceptance criterion or findings-scope item to a slice; for these unestimated types that line, never an estimate, is the trigger.
 - ⛔ Never split an issue at close time to carve off unfinished work; that is status laundering.
 
 ## Acceptance criteria and scope

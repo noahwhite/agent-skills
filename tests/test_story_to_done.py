@@ -1,6 +1,7 @@
 """Contract checks for the story-to-done skill."""
 
 import ast
+import hashlib
 import json
 import os
 import re
@@ -470,7 +471,8 @@ STEP4_READBACKS = (
 )
 STEP4_OTHER_OWNER = (
     "If any outstanding item names any other owner - the owner, a maintainer's approval or access grant, a "
-    "human merge, an external deploy, a pending acceptance-basis ruling - report exactly what remains and who "
+    "human merge, an external deploy, a pending acceptance-basis ruling (an item QA recorded as `pending owner "
+    "ruling`) - report exactly what remains and who "
     "owns it, and stop, even when QA-owned work also remains; a mixed remainder containing both an owner "
     "action and QA's own steps is reported and stopped, never resumed."
 )
@@ -969,7 +971,8 @@ METRICS_TIMED_LAUNCHES = (
 )
 METRICS_LAUNCH_POINTS = (
     "The senior engineer's timed launches are the first launch in step 2, each checklist read-back resume "
-    "of the senior engineer under step 0, and each resume or re-spawn in step 4; each QA round is a launch "
+    "of the senior engineer under step 0, each interim-deadline resume of the senior engineer under "
+    "`references/interim-handbacks.md`, and each resume or re-spawn in step 4; each QA round is a launch "
     "row in step 3, a continuation of that round under step 4 is a further launch row within the same "
     "round, and each checklist read-back resume of a QA agent under step 0 is a launch row of its own "
     "within that QA agent's round."
@@ -2905,7 +2908,7 @@ INTERIM_CLEAR = (
 )
 INTERIM_READ = (
     "Otherwise, at the deadline the coordinator reads the awaited item's state from its primary source (for a CI "
-    "run, the run's status from the forge; for a tracker move, the tracker), never from the subagent, and stops."
+    "run, the run's status from the forge; for a tracker move, the tracker), never from the subagent."
 )
 INTERIM_STOP = (
     "Its report to the owner names the awaited item, its primary source, the state or read error observed, and "
@@ -3054,6 +3057,73 @@ def test_the_deadline_is_reached_by_a_bounded_foreground_wait() -> None:
     assert INTERIM_WAIT in interim_text()
 
 
+# SKL-255: a concluded awaited item resumes the engineer at the deadline instead of stopping.
+INTERIM_CONCLUDED_RESUME = (
+    "If the awaited item has concluded (success, failure, or cancelled), the coordinator resumes the same engineer "
+    "with the awaited item and its observed conclusion, records the resume on the todo list, and handles the "
+    "engineer's next handback as usual."
+)
+INTERIM_NARROWED_STOP = (
+    "Only a pending item or an unreadable primary source leads to the deadline stop: the coordinator stops."
+)
+INTERIM_NO_RESUME_STOP = (
+    "If the runtime cannot resume the engineer, the coordinator reports the limitation and the observed state and "
+    "stops; it spawns no new subagent for a deadline resume."
+)
+INTERIM_RESUME_CAP = "A deadline resume does not count against step 0's read-back resume cap."
+
+
+def test_a_concluded_awaited_item_resumes_the_same_engineer() -> None:
+    text = interim_text()
+    assert text.index(INTERIM_READ) < text.index(INTERIM_CONCLUDED_RESUME)
+
+
+def test_only_a_pending_item_or_an_unreadable_source_reaches_the_deadline_stop() -> None:
+    text = interim_text()
+    assert text.index(INTERIM_READ) < text.index(INTERIM_NARROWED_STOP) < text.index(INTERIM_STOP)
+
+
+def test_a_runtime_that_cannot_resume_the_engineer_stops_without_a_new_subagent() -> None:
+    assert INTERIM_NO_RESUME_STOP in interim_text()
+
+
+def test_a_deadline_resume_does_not_count_against_the_read_back_resume_cap() -> None:
+    assert INTERIM_RESUME_CAP in interim_text()
+
+
+INTERIM_RESUME_ROW = "With `metrics` on, each deadline resume is its own launch row."
+INTERIM_CONCLUDED_CATCH_ALL = (
+    "An item not yet in a terminal state is pending (a CI run `requested`, `queued`, `waiting`, `pending` or "
+    "`in_progress`; a tracker item still in a non-terminal state short of its target state); any terminal state "
+    "counts as concluded, so a CI run `completed` with any conclusion resumes the engineer."
+)
+INTERIM_DEADLINE_BLOCK = (
+    INTERIM_READ, INTERIM_CONCLUDED_RESUME, INTERIM_CONCLUDED_CATCH_ALL, INTERIM_NO_RESUME_STOP, INTERIM_RESUME_CAP, INTERIM_RESUME_ROW,
+    INTERIM_NARROWED_STOP, INTERIM_STOP,
+)
+
+
+def test_with_metrics_on_each_deadline_resume_is_its_own_launch_row() -> None:
+    assert INTERIM_RESUME_ROW in interim_text()
+
+
+def test_an_unfinished_item_is_pending_and_any_terminal_state_counts_as_concluded() -> None:
+    assert INTERIM_CONCLUDED_CATCH_ALL in interim_text()
+
+
+def test_the_deadline_rule_states_each_outcome_once_in_one_uninterrupted_block() -> None:
+    text = interim_text()
+    for phrase in INTERIM_DEADLINE_BLOCK:
+        assert text.count(phrase) == 1, f"{phrase!r} must appear exactly once"
+    assert " ".join(INTERIM_DEADLINE_BLOCK) in text
+
+
+def test_no_other_sentence_stops_at_the_deadline() -> None:
+    sentences = re.split(r"(?<=\.)\s+", interim_text())
+    stops = [s for s in sentences if "deadline" in s.lower() and "stop" in s.lower()]
+    assert stops == [INTERIM_NO_RESUME_STOP, INTERIM_NARROWED_STOP]
+
+
 # SKL-155: the `qa-round-cap` argument stops the loop at the cap-th counted QA round that ends in
 # `in_progress`, before the hand-back, and asks the user how many further rounds to run.
 QA_ROUND_CAP_ROW = (
@@ -3191,3 +3261,179 @@ def test_a_stop_leaves_the_story_in_progress_for_the_owner_and_the_coordinator_w
 
 def test_readme_row_names_the_qa_round_cap_and_its_default_before_the_metrics_clause() -> None:
     assert README_CAP_CLAUSE in readme_row()
+
+
+# SKL-296: step 4 puts each `pending owner ruling` item (qa-verification step 4, SKL-156) to the user,
+# keeps it out of every engineer hand-back, lists it apart in the cap stop report, and the done
+# read-back rejects a completion with a pending item or one set on an AC amendment alone.
+# Each pin is a whole source line with its bullet indentation.
+STEP_4_HEADING = "4. Act on the QA outcome"
+FAILED_ITEMS_LINE = "  Those failed items are the issues to fix."
+PENDING_IN_PROGRESS = (
+    "  Items QA listed apart as `pending owner ruling` are not failed items: put each to the user as the "
+    "`profile.tracker.states.in_deployment_review` bullet below does, while the hand-back below goes on with the "
+    "failed items alone."
+)
+PENDING_CAP_REPORT = (
+    "  It lists apart, per round, each item QA recorded as `pending owner ruling`, with the AC or DoD text QA "
+    "quoted and each reading with its verdict, as QA recorded them in the tracker, never among the failed items."
+)
+HAND_BACK_LINE = (
+    "  Hand them back to the senior engineer: resume the same subagent if the runtime can, else spawn a new clean, "
+    "neutral one on the same seat with the step 2 brief."
+)
+HAND_BACK_BRIEF_LINE = (
+    "  Either way, add to the hand-back brief each failed item as QA recorded it on the story (the item, its "
+    "verdict, and the evidence it cites), and instruct the engineer to fix them through `engineering-workflow` on "
+    "this story and take it back to `profile.tracker.states.in_deployment_review`."
+)
+PENDING_HAND_BACK_OMITTED = (
+    "  Leave out of every hand-back brief each item still `pending owner ruling` in QA's latest record, including "
+    "one carried from an earlier failed round."
+)
+PENDING_REPORT = (
+    "  For each item QA recorded as `pending owner ruling`, that report puts the item to the user with the AC or "
+    "DoD text QA quoted and each reading with its verdict, as QA recorded them in the tracker."
+)
+PENDING_NO_RULING = (
+    "  The coordinator rules on none of those items and relays none of them to the senior engineer or a QA agent; "
+    "a ruling reaches QA only as the product owner's dated AC amendment in the tracker, followed by a new QA round."
+)
+DONE_READ_BACK_LINE = (
+    "  On read-back every AC and DoD box is ticked, QA's handback rules every item verified, and, when "
+    "`profile.qa.evidence_dir` is set, the evidence PR is merged on the head its review of record covered."
+)
+DONE_NO_AMENDMENT = (
+    "  Done is never set on an AC amendment alone, so the record also needs no item still `pending owner ruling` "
+    "in QA's handback or its record in the tracker, and a verified verdict, from a new QA round (a new QA agent on "
+    "the unchanged step 3 brief) run after the product owner's dated AC amendment, for each item that amendment "
+    "ruled on."
+)
+DONE_ALL_HOLD = "  If all of these hold, go to step 5; if any does not, report the mismatch and stop."
+# The line DONE_ALL_HOLD replaces: the done read-back now checks more than three conditions.
+DONE_OLD_ALL_HOLD = "  If all three hold, go to step 5; if any does not, report the mismatch and stop."
+CONTINUATION_LINES = (
+    "  " + STEP4_RESUME,
+    "  " + STEP4_CARRY,
+    "  A `command` or `codex` QA seat is never resumed, so its continuation is a new launch on the same seat "
+    "whose prompt file is the step 3 brief followed by that continuation message; it is still the same round's "
+    "continuation under every rule in this bullet.",
+    "  Because the new process carries none of the earlier one's working state, its prompt file also tells it to "
+    "read that round's existing checklist in the named subdirectory and the story's open evidence PR, if any, "
+    "before acting, and to continue from the first unfinished item, never rewriting the checklist or opening a "
+    "second evidence PR.",
+)
+# The pending owner ruling record's shape: the ruling itself, a competing reading, a reading with its
+# verdict, QA's quoted text, or a pending item. The bare word "reading" is not the shape.
+RECORD_SHAPE = re.compile(
+    r"pending owner ruling|\brulings?\b|\bcompeting readings?\b|\breadings? with (?:its|their|the) verdicts?\b"
+    r"|\bquoted (?:AC or DoD )?text\b|\btext QA quoted\b|\bpending items?\b",
+    re.IGNORECASE,
+)
+
+
+def step_4_lines() -> list[str]:
+    return section(SKILL.read_text(), STEP_4_HEADING).splitlines()
+
+
+def bullet_lines(label: str) -> list[str]:
+    return state_bullets(section(SKILL.read_text(), STEP_4_HEADING))[label].splitlines()
+
+
+def follows(lines: list[str], before: str, after: str) -> bool:
+    return before in lines and after in lines and lines.index(after) == lines.index(before) + 1
+
+
+def test_in_deployment_review_report_puts_each_pending_item_to_the_user_and_rules_on_none() -> None:
+    lines = bullet_lines("`profile.tracker.states.in_deployment_review`")
+    assert follows(lines, "  " + STEP4_OTHER_OWNER, PENDING_REPORT), (
+        "the report-and-stop must put each pending item to the user right after it is stated"
+    )
+    assert follows(lines, PENDING_REPORT, PENDING_NO_RULING), "the coordinator must rule on and relay no pending item"
+
+
+def test_in_progress_puts_pending_items_to_the_user_while_the_hand_back_goes_on() -> None:
+    lines = bullet_lines("`profile.tracker.states.in_progress`")
+    assert follows(lines, FAILED_ITEMS_LINE, PENDING_IN_PROGRESS), (
+        "pending items must be set apart from the failed items before the cap and the hand-back"
+    )
+    assert lines.index(PENDING_IN_PROGRESS) < lines.index("  " + CAP_STOP) < lines.index(HAND_BACK_LINE)
+
+
+def test_every_hand_back_brief_leaves_out_pending_items_from_every_round() -> None:
+    lines = bullet_lines("`profile.tracker.states.in_progress`")
+    assert follows(lines, HAND_BACK_BRIEF_LINE, PENDING_HAND_BACK_OMITTED)
+    assert lines.index("  " + CAP_REARM) < lines.index(PENDING_HAND_BACK_OMITTED), (
+        "the omission must cover the hand-back a re-arm resumes with every item failed so far"
+    )
+
+
+def test_the_cap_stop_report_lists_pending_items_apart() -> None:
+    lines = bullet_lines("`profile.tracker.states.in_progress`")
+    assert follows(lines, "  " + CAP_PAYLOAD, PENDING_CAP_REPORT)
+
+
+def test_the_done_read_back_rejects_a_pending_item_and_a_completion_on_an_amendment_alone() -> None:
+    lines = bullet_lines("`profile.tracker.states.done`")
+    assert follows(lines, DONE_READ_BACK_LINE, DONE_NO_AMENDMENT)
+    assert follows(lines, DONE_NO_AMENDMENT, DONE_ALL_HOLD)
+    assert DONE_OLD_ALL_HOLD not in step_4_lines(), "the three-condition line DONE_ALL_HOLD replaces is still stated"
+
+
+def test_the_record_shape_pattern_matches_the_record_and_not_the_bare_word_reading() -> None:
+    for line in (PENDING_REPORT, PENDING_CAP_REPORT, PENDING_NO_RULING, "a competing reading of AC 2"):
+        assert RECORD_SHAPE.search(line), f"the record shape pattern misses: {line}"
+    for line in ("QA is reading the story", "the step 0 read-back", "each reading of the checklist"):
+        assert not RECORD_SHAPE.search(line), f"the record shape pattern matches the bare word: {line}"
+
+
+# QA's brief is unchanged by a ruling: a ruling reaches QA only as the product owner's dated AC amendment
+# in the tracker. A record-shape scan cannot catch every paraphrase of a ruling or of a pending item, so the
+# step 3 section and the two step 4 bullets that brief QA and the engineer are also pinned whole; change a
+# digest only together with a reviewed change to the text it covers.
+STEP_3_HEADING = "3. QA agent: verify the deployed story"
+STEP_3_SHA256 = "cad1e67bc899ba7d255c3923674592ae90a3066aa871eb7d9f998ad0973c0ac2"
+IN_PROGRESS_SHA256 = "fd4768e7d39be8e29341cd0f5d186bfaf96a8bf7bfc8eebb8b1e39b101eb95e7"
+IN_DEPLOYMENT_REVIEW_SHA256 = "36da368bed892519776e5be61064d2fad186151ca58ae90aff897e9a1ffaa968"
+# The only lines of a state bullet that may state the pending owner ruling record.
+IN_DEPLOYMENT_REVIEW_RECORD_LINES = ("  " + STEP4_OTHER_OWNER, PENDING_REPORT, PENDING_NO_RULING)
+IN_PROGRESS_RECORD_LINES = (PENDING_IN_PROGRESS, PENDING_CAP_REPORT, PENDING_HAND_BACK_OMITTED)
+
+
+def record_shape_offenders(lines: list[str], allowed: tuple[str, ...]) -> list[str]:
+    return [line for line in lines if line not in allowed and RECORD_SHAPE.search(line)]
+
+
+def digest(lines: list[str]) -> str:
+    return hashlib.sha256("\n".join(lines).encode()).hexdigest()
+
+
+def test_the_qa_brief_source_carries_no_pending_ruling_record() -> None:
+    body = section(SKILL.read_text(), STEP_3_HEADING)
+    offenders = [line for line in body.splitlines() if RECORD_SHAPE.search(line)]
+    assert not offenders, f"the QA brief source carries a ruling, a competing reading or a pending item: {offenders}"
+    assert hashlib.sha256(body.encode()).hexdigest() == STEP_3_SHA256, (
+        "the step 3 QA brief source changed; a ruling must never reach QA through it"
+    )
+
+
+def test_the_continuation_message_carries_no_pending_ruling_record() -> None:
+    lines = bullet_lines("`profile.tracker.states.in_deployment_review`")
+    for line in CONTINUATION_LINES + IN_DEPLOYMENT_REVIEW_RECORD_LINES:
+        assert line in lines, f"the pinned line moved or changed: {line}"
+    offenders = record_shape_offenders(lines, IN_DEPLOYMENT_REVIEW_RECORD_LINES)
+    assert not offenders, f"a line outside the owner report carries the pending record: {offenders}"
+    assert digest(lines) == IN_DEPLOYMENT_REVIEW_SHA256, (
+        "the `in_deployment_review` bullet changed; no line of it may carry a pending item into a continuation"
+    )
+
+
+def test_the_engineer_hand_back_instruction_carries_no_pending_item() -> None:
+    lines = bullet_lines("`profile.tracker.states.in_progress`")
+    for line in (HAND_BACK_LINE, HAND_BACK_BRIEF_LINE, "  " + CAP_REARM) + IN_PROGRESS_RECORD_LINES:
+        assert line in lines, f"the pinned line moved or changed: {line}"
+    offenders = record_shape_offenders(lines, IN_PROGRESS_RECORD_LINES)
+    assert not offenders, f"a hand-back line carries a pending item: {offenders}"
+    assert digest(lines) == IN_PROGRESS_SHA256, (
+        "the `in_progress` bullet changed; no line of it may carry a pending item into a hand-back"
+    )
