@@ -1,4 +1,8 @@
-"""SKL-162: engineering-workflow selects exactly one run path (spike, no-deployment or deployed) in step 1."""
+"""SKL-162 and SKL-282: engineering-workflow's run paths (spike, no-deployment, deployed).
+
+SKL-162 selects exactly one path in step 1; SKL-282 hands the no-deployment and spike paths off to
+deployment review in steps 11 and 12 without a deploy.
+"""
 
 import hashlib
 import re
@@ -160,13 +164,218 @@ def test_path_selection_sentence_appears_only_in_step_one(key: str) -> None:
     assert lines.count(PINS[key]) == 1, f"{key} must appear exactly once in the skill"
 
 
-# AC3: the text of steps 2 to 12 ("## 2. Plan slices" up to "## Operational rules") is unchanged
-# from the base commit 7ae1b94. A story in scope to change those steps updates this digest.
+# SKL-282: steps 11 and 12 hand a `no-deployment` or `spike` run off to deployment review without a
+# deploy, and a spike with no tracked-file change skips steps 4 to 10.
+# Each normative sentence SKL-282 adds, pinned whole on its own line within its step, so a deleted
+# or reworded sentence fails its own test id.
+SPIKE_NO_CHANGE_PINS = {
+    "spike-subsection": "### Spike with no tracked-file change",
+    "spike-three-checks": (
+        "On the `spike` path, before step 4, fetch `origin`, confirm the checkout is on the spike's branch "
+        "(`git branch --show-current` names it) and that the branch contains every commit of "
+        "`origin/<profile.git.integration_branch>` (`git rev-list --count "
+        "HEAD..origin/<profile.git.integration_branch>` prints `0`; otherwise update the branch first), and "
+        "check for a tracked-file change in the working tree (`git diff --name-only`), the index "
+        "(`git diff --cached --name-only`) and the commits relative to `origin/<profile.git.integration_branch>` "
+        "(`git diff --name-only origin/<profile.git.integration_branch>...HEAD`)."
+    ),
+    "spike-no-hidden-changes": (
+        "A stash or a file marked assume-unchanged or skip-worktree hides a tracked-file change from those "
+        "checks, so `git stash list` must print no entry made on the spike's branch (one that reads "
+        "`WIP on <branch>:` or `On <branch>:`), and `git ls-files -v` must print no line whose tag is a "
+        "lowercase letter (assume-unchanged) or `S` (skip-worktree)."
+    ),
+    "spike-check-failure-stops": (
+        "A failed fetch, or a `git` command above that exits non-zero, never reads as no tracked-file change: "
+        "stop and resolve it before deciding."
+    ),
+    "spike-skip-and-recheck": (
+        "Skip steps 4 to 10 only when all three checks show no tracked-file change, and repeat the fetch, the "
+        "branch confirmations and every check immediately before step 12."
+    ),
+    "spike-untracked-deliverable": (
+        "An untracked file is not a tracked-file change, so a deliverable that exists only as an untracked "
+        "file is linked on the story as an attachment, and the step 12 note says it had no PR review or CI "
+        "check."
+    ),
+    "spike-deliverable-no-secret": (
+        "Before you link any deliverable on the story, as a comment or an attachment, confirm it holds no "
+        "secret."
+    ),
+    "spike-change-runs-gates": (
+        "If a tracked-file change appears at any point, complete steps 4 to 10 with every applicable gate, and "
+        "the merge path of step 12 applies."
+    ),
+    "spike-merge-path-sticks": (
+        "Once a tracked-file change has appeared, the spike stays on that merge path and the checks are not "
+        "repeated, so a merged spike is never sent back through steps 4 to 10."
+    ),
+    "spike-pr-gates-unchanged": (
+        "Any PR a spike produces runs every gate steps 4 to 10 define: the `spike` path changes no gate, "
+        "waiver, admin override or expected-head condition."
+    ),
+}
+STEP_ELEVEN_PINS = {
+    "deploy-deployed-only": "This step runs on the `deployed` path only.",
+    "deploy-skipped": "On the `no-deployment` and `spike` paths, skip it: claim no deploy and verify none.",
+    "steps-through-merge-unchanged": (
+        "Every step up to and including the merge runs on those two paths as on the `deployed` path, except "
+        'steps 4 to 10 when the "Spike with no tracked-file change" subsection lets a spike skip them.'
+    ),
+}
+STEP_TWELVE_PINS = {
+    "deployed-conditions-scoped": (
+        '"Only after the deployment is verified", its "(never on merge alone)" parenthetical and the Done '
+        "sentence above apply to the `deployed` path only."
+    ),
+    "handoff-subsection": "### Handoff on the `no-deployment` and `spike` paths",
+    "handoff-merged-commit-defined": (
+        "The merged commit is the commit that merging this story's PR in step 10 put on the integration "
+        "branch, as `profile.git.merge_method` produced it: the merge commit, the squash commit or the last "
+        "rebased commit, which `gh pr view <PR number> --json mergeCommit --jq .mergeCommit.oid` prints."
+    ),
+    # `handoff-after-merge` pins exactly AC1's condition: the merged commit confirmed on the
+    # integration branch after a fetch (ancestry check only). It replaces an earlier pin of the same id
+    # that also required the story's change to still be in effect on that branch, and the
+    # `handoff-reverted-stops` pin that stopped the handoff when it was not. Both were dropped by the
+    # owner's scope ruling on PR 224 (option (b)): that check went beyond AC1 and drew a new valid
+    # finding in each of six review rounds. AC1's coverage is kept by this pin together with
+    # `handoff-merged-commit-defined` and `test_handoff_blocks_appear_once_in_order`.
+    "handoff-after-merge": (
+        "Run this step once a fetch of `origin` shows the merged commit on "
+        "`origin/<profile.git.integration_branch>` (`git merge-base --is-ancestor <merged commit> "
+        "origin/<profile.git.integration_branch>` exits 0)."
+    ),
+    "handoff-spike-no-change": (
+        "For a spike with no tracked-file change, run it instead once the checks repeated immediately before "
+        "this step still show no tracked-file change and each deliverable is linked on the story as a comment "
+        "or an attachment."
+    ),
+    "handoff-note": "1. Add a concise implementation and handoff note naming the path and the merged commit.",
+    "handoff-note-no-change": (
+        "   For a spike with no tracked-file change, the note names the path, states there is no merged commit, "
+        "and says the spike had no tracked-file change and that steps 4 to 10 were skipped."
+    ),
+    "handoff-note-deliverables": (
+        "   On `spike`, the note also names, for each deliverable the spike's Deliverables section lists, its "
+        "link and, when the deliverable is a tracked artifact, its commit on "
+        "`origin/<profile.git.integration_branch>`."
+    ),
+    "handoff-move": "2. Move the story to `profile.tracker.states.in_deployment_review`.",
+    "handoff-state-absent": (
+        "   If the profile sets no `in_deployment_review` state, stop and say the transition was not "
+        "performed; never invent a state name."
+    ),
+    "handoff-read-back": "3. Read the story back to confirm the state.",
+    "handoff-done-merged-commit": (
+        "Done comes later, after the acceptance criteria are verified against the merged commit, not in a "
+        "deployed environment (see `references/linear.md`)."
+    ),
+    "handoff-done-deliverables": (
+        "For a spike with no tracked-file change, Done comes later, after the acceptance criteria are verified "
+        "against the deliverables the step 12 note links."
+    ),
+}
+HANDOFF_PINS = {
+    **SPIKE_NO_CHANGE_PINS,
+    **STEP_ELEVEN_PINS,
+    **STEP_TWELVE_PINS,
+}
+HANDOFF_SECTIONS = {
+    **dict.fromkeys(SPIKE_NO_CHANGE_PINS, "3. TDD per slice"),
+    **dict.fromkeys(STEP_ELEVEN_PINS, "11. Deploy and verify"),
+    **dict.fromkeys(STEP_TWELVE_PINS, "12. Deployment review"),
+}
+
+
+@pytest.mark.parametrize("key", list(HANDOFF_PINS), ids=list(HANDOFF_PINS))
+def test_handoff_pins_sentence_in_its_step(key: str) -> None:
+    lines = section(SKILL.read_text(encoding="utf-8"), HANDOFF_SECTIONS[key]).splitlines()
+    heading = STEP_TWELVE_PINS["handoff-subsection"]
+    if key in STEP_TWELVE_PINS and key not in ("deployed-conditions-scoped", "handoff-subsection"):
+        # The handoff list repeats the `deployed` read-back line, so these pins are looked up only
+        # below the handoff subsection heading.
+        assert heading in lines, "step 12 must hold the handoff subsection"
+        lines = lines[lines.index(heading):]
+    assert HANDOFF_PINS[key] in lines, f"step {HANDOFF_SECTIONS[key]} must read the pinned sentence: {key}"
+
+
+def added_blocks() -> list[str]:
+    """The exact text SKL-282 inserts into steps 3, 11 and 12, built from the pins in order."""
+    p = HANDOFF_PINS
+    spike = (
+        f"{p['spike-subsection']}\n\n{p['spike-three-checks']}\n{p['spike-no-hidden-changes']}\n"
+        f"{p['spike-check-failure-stops']}\n{p['spike-skip-and-recheck']}\n{p['spike-untracked-deliverable']}\n"
+        f"{p['spike-deliverable-no-secret']}\n{p['spike-change-runs-gates']}\n{p['spike-merge-path-sticks']}\n{p['spike-pr-gates-unchanged']}\n\n"
+    )
+    eleven = f"{p['deploy-deployed-only']}\n{p['deploy-skipped']}\n{p['steps-through-merge-unchanged']}\n\n"
+    twelve = (
+        f"\n{p['deployed-conditions-scoped']}\n\n{p['handoff-subsection']}\n\n"
+        f"{p['handoff-merged-commit-defined']}\n{p['handoff-after-merge']}\n"
+        f"{p['handoff-spike-no-change']}\n\n"
+        f"{p['handoff-note']}\n{p['handoff-note-no-change']}\n{p['handoff-note-deliverables']}\n"
+        f"{p['handoff-move']}\n{p['handoff-state-absent']}\n{p['handoff-read-back']}\n\n"
+        f"{p['handoff-done-merged-commit']}\n{p['handoff-done-deliverables']}\n"
+    )
+    return [spike, eleven, twelve]
+
+
+# SKL-282 replaced SKL-162's `test_steps_two_to_twelve_are_unchanged`, which hashed steps 2 to 12
+# whole against the base commit 7ae1b94 and so failed on any edit, including the step 3, 11 and 12
+# additions SKL-282 is in scope to make. Its coverage is kept, not loosened: the same digest of the
+# same text still has to match once the three SKL-282 blocks are cut out, so every pre-existing
+# sentence of steps 2 to 12 (the `deployed` path text of steps 11 and 12 included) must stay byte for
+# byte as it was, and the blocks themselves are kept whole and in order by the pins in
+# `HANDOFF_PINS` and `test_handoff_blocks_appear_once_in_order`.
 STEPS_TWO_TO_TWELVE_SHA256 = "a36c006733b7b3bc23d65530faee575a02b5e59c1b8c68d48d7657fcf639f2c3"
 
 
-def test_steps_two_to_twelve_are_unchanged() -> None:
+def steps_two_to_twelve() -> str:
     text = SKILL.read_text(encoding="utf-8")
     start = text.index("\n## 2. Plan slices\n") + 1
     end = text.index("\n## Operational rules\n") + 1
-    assert hashlib.sha256(text[start:end].encode()).hexdigest() == STEPS_TWO_TO_TWELVE_SHA256
+    return text[start:end]
+
+
+def test_handoff_blocks_appear_once_in_order() -> None:
+    text = steps_two_to_twelve()
+    positions = []
+    for block in added_blocks():
+        assert text.count(block) == 1, f"the SKL-282 block must appear exactly once, whole:\n{block}"
+        positions.append(text.index(block))
+    assert positions == sorted(positions)
+
+
+def test_steps_two_to_twelve_outside_the_handoff_blocks_are_unchanged() -> None:
+    text = steps_two_to_twelve()
+    for block in added_blocks():
+        text = text.replace(block, "", 1)
+    assert hashlib.sha256(text.encode()).hexdigest() == STEPS_TWO_TO_TWELVE_SHA256
+
+
+# SKL-282: the lifecycle rules in `references/linear.md` (vendored from `shared/linear.md`) govern
+# step 12, so they scope their deploy conditions for the `no-deployment` and `spike` handoff.
+LINEAR_HANDOFF_PINS = {
+    "linear-handoff": (
+        "- On the `no-deployment` and `spike` paths that `engineering-workflow` selects in its step 1, nothing "
+        "is deployed: the move to deployment review follows the handoff its step 12 defines, and every "
+        "condition in this file on a deploy or a deployed environment reads as verification against the "
+        "merged commit, or, for a spike with no tracked-file change, against the deliverables the step 12 note "
+        "links."
+    ),
+    "linear-handoff-no-pr": (
+        "  A spike with no tracked-file change has no PR, so for it every condition in this file on a merged PR "
+        "reads as the deliverables the step 12 note links."
+    ),
+}
+LINEAR_FILES = {
+    "shared": ROOT / "shared" / "linear.md",
+    "engineering-workflow": ROOT / "skills" / "engineering-workflow" / "references" / "linear.md",
+}
+
+
+@pytest.mark.parametrize("copy", list(LINEAR_FILES))
+@pytest.mark.parametrize("key", list(LINEAR_HANDOFF_PINS))
+def test_linear_lifecycle_scopes_deploy_conditions_to_the_deployed_path(key: str, copy: str) -> None:
+    lines = section(LINEAR_FILES[copy].read_text(encoding="utf-8"), "Status lifecycle").splitlines()
+    assert LINEAR_HANDOFF_PINS[key] in lines

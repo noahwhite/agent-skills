@@ -106,6 +106,18 @@ State the slice sequence and the first slice before coding.
 If the architecture makes strict TDD impractical for a slice, say why.
 Preserve existing tests and conventions.
 
+### Spike with no tracked-file change
+
+On the `spike` path, before step 4, fetch `origin`, confirm the checkout is on the spike's branch (`git branch --show-current` names it) and that the branch contains every commit of `origin/<profile.git.integration_branch>` (`git rev-list --count HEAD..origin/<profile.git.integration_branch>` prints `0`; otherwise update the branch first), and check for a tracked-file change in the working tree (`git diff --name-only`), the index (`git diff --cached --name-only`) and the commits relative to `origin/<profile.git.integration_branch>` (`git diff --name-only origin/<profile.git.integration_branch>...HEAD`).
+A stash or a file marked assume-unchanged or skip-worktree hides a tracked-file change from those checks, so `git stash list` must print no entry made on the spike's branch (one that reads `WIP on <branch>:` or `On <branch>:`), and `git ls-files -v` must print no line whose tag is a lowercase letter (assume-unchanged) or `S` (skip-worktree).
+A failed fetch, or a `git` command above that exits non-zero, never reads as no tracked-file change: stop and resolve it before deciding.
+Skip steps 4 to 10 only when all three checks show no tracked-file change, and repeat the fetch, the branch confirmations and every check immediately before step 12.
+An untracked file is not a tracked-file change, so a deliverable that exists only as an untracked file is linked on the story as an attachment, and the step 12 note says it had no PR review or CI check.
+Before you link any deliverable on the story, as a comment or an attachment, confirm it holds no secret.
+If a tracked-file change appears at any point, complete steps 4 to 10 with every applicable gate, and the merge path of step 12 applies.
+Once a tracked-file change has appeared, the spike stays on that merge path and the checks are not repeated, so a merged spike is never sent back through steps 4 to 10.
+Any PR a spike produces runs every gate steps 4 to 10 define: the `spike` path changes no gate, waiver, admin override or expected-head condition.
+
 ## 4. Pre-PR adversarial gate (required)
 
 Load the `adversarial-review-pipeline` skill and run it to completion on every review; its arbitration report is this gate's output.
@@ -263,6 +275,10 @@ An update-branch after the review, even one that brings in only base changes, is
 
 ## 11. Deploy and verify
 
+This step runs on the `deployed` path only.
+On the `no-deployment` and `spike` paths, skip it: claim no deploy and verify none.
+Every step up to and including the merge runs on those two paths as on the `deployed` path, except steps 4 to 10 when the "Spike with no tracked-file change" subsection lets a spike skip them.
+
 1. Find the environment in `profile.environments` whose `branch` is the integration branch.
 2. Deploy as its `deploy` value says; if deployment is automatic, observe it rather than triggering a duplicate.
 3. Monitor the deployment to completion.
@@ -280,6 +296,24 @@ Only after the deployment is verified:
 3. Read the story back to confirm the state.
 
 Done comes later, after the acceptance criteria are verified in the deployed environment (see `references/linear.md`).
+
+"Only after the deployment is verified", its "(never on merge alone)" parenthetical and the Done sentence above apply to the `deployed` path only.
+
+### Handoff on the `no-deployment` and `spike` paths
+
+The merged commit is the commit that merging this story's PR in step 10 put on the integration branch, as `profile.git.merge_method` produced it: the merge commit, the squash commit or the last rebased commit, which `gh pr view <PR number> --json mergeCommit --jq .mergeCommit.oid` prints.
+Run this step once a fetch of `origin` shows the merged commit on `origin/<profile.git.integration_branch>` (`git merge-base --is-ancestor <merged commit> origin/<profile.git.integration_branch>` exits 0).
+For a spike with no tracked-file change, run it instead once the checks repeated immediately before this step still show no tracked-file change and each deliverable is linked on the story as a comment or an attachment.
+
+1. Add a concise implementation and handoff note naming the path and the merged commit.
+   For a spike with no tracked-file change, the note names the path, states there is no merged commit, and says the spike had no tracked-file change and that steps 4 to 10 were skipped.
+   On `spike`, the note also names, for each deliverable the spike's Deliverables section lists, its link and, when the deliverable is a tracked artifact, its commit on `origin/<profile.git.integration_branch>`.
+2. Move the story to `profile.tracker.states.in_deployment_review`.
+   If the profile sets no `in_deployment_review` state, stop and say the transition was not performed; never invent a state name.
+3. Read the story back to confirm the state.
+
+Done comes later, after the acceptance criteria are verified against the merged commit, not in a deployed environment (see `references/linear.md`).
+For a spike with no tracked-file change, Done comes later, after the acceptance criteria are verified against the deliverables the step 12 note links.
 
 ## Operational rules
 
