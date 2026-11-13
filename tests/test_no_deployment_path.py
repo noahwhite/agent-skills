@@ -233,19 +233,17 @@ STEP_TWELVE_PINS = {
         "branch, as `profile.git.merge_method` produced it: the merge commit, the squash commit or the last "
         "rebased commit, which `gh pr view <PR number> --json mergeCommit --jq .mergeCommit.oid` prints."
     ),
+    # `handoff-after-merge` pins exactly AC1's condition: the merged commit confirmed on the
+    # integration branch after a fetch (ancestry check only). It replaces an earlier pin of the same id
+    # that also required the story's change to still be in effect on that branch, and the
+    # `handoff-reverted-stops` pin that stopped the handoff when it was not. Both were dropped by the
+    # owner's scope ruling on PR 224 (option (b)): that check went beyond AC1 and drew a new valid
+    # finding in each of six review rounds. AC1's coverage is kept by this pin together with
+    # `handoff-merged-commit-defined` and `test_handoff_blocks_appear_once_in_order`.
     "handoff-after-merge": (
         "Run this step once a fetch of `origin` shows the merged commit on "
         "`origin/<profile.git.integration_branch>` (`git merge-base --is-ancestor <merged commit> "
-        "origin/<profile.git.integration_branch>` exits 0) and the story's change is still in effect there: "
-        "`git diff --find-renames --name-status <merged commit> origin/<profile.git.integration_branch>` names "
-        "each file the PR changed under its current path, and `git diff --find-renames <merged commit> "
-        "origin/<profile.git.integration_branch> -- <old and current paths>` shows the net change to those files "
-        "since the merge, which you read against `gh pr diff <PR number>`."
-    ),
-    "handoff-reverted-stops": (
-        "When that net change removes or reverses what the story's PR changed, stop and report that the story's "
-        "change is not intact on `origin/<profile.git.integration_branch>`; a change that builds on the story's "
-        "change, or edits other lines of those files, does not stop this step."
+        "origin/<profile.git.integration_branch>` exits 0)."
     ),
     "handoff-spike-no-change": (
         "For a spike with no tracked-file change, run it instead once the checks repeated immediately before "
@@ -312,7 +310,7 @@ def added_blocks() -> list[str]:
     eleven = f"{p['deploy-deployed-only']}\n{p['deploy-skipped']}\n{p['steps-through-merge-unchanged']}\n\n"
     twelve = (
         f"\n{p['deployed-conditions-scoped']}\n\n{p['handoff-subsection']}\n\n"
-        f"{p['handoff-merged-commit-defined']}\n{p['handoff-after-merge']}\n{p['handoff-reverted-stops']}\n"
+        f"{p['handoff-merged-commit-defined']}\n{p['handoff-after-merge']}\n"
         f"{p['handoff-spike-no-change']}\n\n"
         f"{p['handoff-note']}\n{p['handoff-note-no-change']}\n{p['handoff-note-deliverables']}\n"
         f"{p['handoff-move']}\n{p['handoff-state-absent']}\n{p['handoff-read-back']}\n\n"
