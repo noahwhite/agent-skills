@@ -2,7 +2,7 @@
 
 Date: 2026-11-13 UTC.
 Skill under test: `skills/story-to-done/SKILL.md` and `skills/story-to-done/references/` as committed in `4fb59be878f052b005b3a8f51f53bf70140a929b` on `feature/SKL-255-interim-deadline-resume`, read from a worktree by path (the installed skill was not loaded).
-Later commits on the branch change only this file.
+Later commits on the branch add this file and, after review, reword the sentence in `references/interim-handbacks.md` that defines a pending item (and its test pin); the deadline read, the concluded-item resume, and the stops this run exercised are unchanged.
 Fixture issue: SKL-300 "[Tabletop fixture] SKL-255 interim handback deadline resume (PR head)", created in Backlog for this run and canceled by the implementing engineer after the coordinator's report.
 Awaited item already in its target state: CI run 43453419366 in noahwhite/agent-skills, which completed with conclusion `success` at 15:37:44Z, 3 hours 28 minutes before the handback.
 The fixture's senior engineer runs no real background work: it hands back an interim notice naming that run, and when resumed it hands back a scripted final notice.

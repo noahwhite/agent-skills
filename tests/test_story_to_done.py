@@ -3092,8 +3092,8 @@ def test_a_deadline_resume_does_not_count_against_the_read_back_resume_cap() -> 
 INTERIM_RESUME_ROW = "With `metrics` on, each deadline resume is its own launch row."
 INTERIM_CONCLUDED_CATCH_ALL = (
     "An item not yet in a terminal state is pending (a CI run `requested`, `queued`, `waiting`, `pending` or "
-    "`in_progress`; a tracker item short of its target state); any terminal state counts as concluded, so a CI "
-    "run `completed` with any conclusion resumes the engineer."
+    "`in_progress`; a tracker item still in a non-terminal state short of its target state); any terminal state "
+    "counts as concluded, so a CI run `completed` with any conclusion resumes the engineer."
 )
 INTERIM_DEADLINE_BLOCK = (
     INTERIM_READ, INTERIM_CONCLUDED_RESUME, INTERIM_CONCLUDED_CATCH_ALL, INTERIM_NO_RESUME_STOP, INTERIM_RESUME_CAP, INTERIM_RESUME_ROW,
