@@ -45,7 +45,7 @@ Details:
   - The text before step 1, steps 2 to 12, and the text from "Operational rules" to the end are byte-identical to the base.
   - The only removed line is the old item 6, "6. Move it to ...", which is now item 7.
 - AC4:
-  - The PR records `git grep -l -e engineering-workflow 7ae1b94... -- "tests/*.py"` and its output, and the same command returns the same 12 modules here.
+  - The PR records `git grep -l -e engineering-workflow 7ae1b94118bc711cb050a27586a939d741a9f4a8 -- "tests/*.py"` and its output, and the same command returns the same 12 modules here.
   - The PR edits no existing test module.
   - Those 12 modules pass on the build (880 passed).
   - No pin was replaced, so no replacement comment applies.
