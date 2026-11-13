@@ -20,7 +20,12 @@ When the awaited CI run belongs to a PR, it also watches the PR, so a new head a
 
 If the engineer hands back again before the deadline, the coordinator clears the deadline and handles that handback.
 A handback that arrived before the deadline clears it even when the coordinator sees it only after the deadline.
-Otherwise, at the deadline the coordinator reads the awaited item's state from its primary source (for a CI run, the run's status from the forge; for a tracker move, the tracker), never from the subagent, and stops.
+Otherwise, at the deadline the coordinator reads the awaited item's state from its primary source (for a CI run, the run's status from the forge; for a tracker move, the tracker), never from the subagent.
+If the awaited item has concluded (success, failure, or cancelled), the coordinator resumes the same engineer with the awaited item and its observed conclusion, records the resume on the todo list, and handles the engineer's next handback as usual.
+If the runtime cannot resume the engineer, the coordinator reports the limitation and the observed state and stops; it spawns no new subagent for a deadline resume.
+A deadline resume does not count against step 0's read-back resume cap.
+With `metrics` on, each deadline resume is its own launch row.
+Only a pending item or an unreadable primary source leads to the deadline stop: the coordinator stops.
 Its report to the owner names the awaited item, its primary source, the state or read error observed, and the deadline; it launches nothing further, makes no tracker write beyond the one Boundaries permits with `metrics` on, and rules on nothing.
 
 ## Limits

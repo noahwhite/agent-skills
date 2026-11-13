@@ -2905,7 +2905,7 @@ INTERIM_CLEAR = (
 )
 INTERIM_READ = (
     "Otherwise, at the deadline the coordinator reads the awaited item's state from its primary source (for a CI "
-    "run, the run's status from the forge; for a tracker move, the tracker), never from the subagent, and stops."
+    "run, the run's status from the forge; for a tracker move, the tracker), never from the subagent."
 )
 INTERIM_STOP = (
     "Its report to the owner names the awaited item, its primary source, the state or read error observed, and "
@@ -3052,6 +3052,40 @@ def test_the_deadline_stop_reports_and_makes_no_tracker_write() -> None:
 
 def test_the_deadline_is_reached_by_a_bounded_foreground_wait() -> None:
     assert INTERIM_WAIT in interim_text()
+
+
+# SKL-255: a concluded awaited item resumes the engineer at the deadline instead of stopping.
+INTERIM_CONCLUDED_RESUME = (
+    "If the awaited item has concluded (success, failure, or cancelled), the coordinator resumes the same engineer "
+    "with the awaited item and its observed conclusion, records the resume on the todo list, and handles the "
+    "engineer's next handback as usual."
+)
+INTERIM_NARROWED_STOP = (
+    "Only a pending item or an unreadable primary source leads to the deadline stop: the coordinator stops."
+)
+INTERIM_NO_RESUME_STOP = (
+    "If the runtime cannot resume the engineer, the coordinator reports the limitation and the observed state and "
+    "stops; it spawns no new subagent for a deadline resume."
+)
+INTERIM_RESUME_CAP = "A deadline resume does not count against step 0's read-back resume cap."
+
+
+def test_a_concluded_awaited_item_resumes_the_same_engineer() -> None:
+    text = interim_text()
+    assert text.index(INTERIM_READ) < text.index(INTERIM_CONCLUDED_RESUME)
+
+
+def test_only_a_pending_item_or_an_unreadable_source_reaches_the_deadline_stop() -> None:
+    text = interim_text()
+    assert text.index(INTERIM_READ) < text.index(INTERIM_NARROWED_STOP) < text.index(INTERIM_STOP)
+
+
+def test_a_runtime_that_cannot_resume_the_engineer_stops_without_a_new_subagent() -> None:
+    assert INTERIM_NO_RESUME_STOP in interim_text()
+
+
+def test_a_deadline_resume_does_not_count_against_the_read_back_resume_cap() -> None:
+    assert INTERIM_RESUME_CAP in interim_text()
 
 
 # SKL-155: the `qa-round-cap` argument stops the loop at the cap-th counted QA round that ends in
