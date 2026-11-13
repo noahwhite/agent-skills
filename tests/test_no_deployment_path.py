@@ -236,9 +236,13 @@ STEP_TWELVE_PINS = {
     "handoff-after-merge": (
         "Run this step once a fetch of `origin` shows the merged commit on "
         "`origin/<profile.git.integration_branch>` (`git merge-base --is-ancestor <merged commit> "
-        "origin/<profile.git.integration_branch>` exits 0) and `git log --oneline -i --grep=revert "
-        "<merged commit>..origin/<profile.git.integration_branch>` lists no commit that reverts the merged "
-        "commit or this story's PR."
+        "origin/<profile.git.integration_branch>` exits 0) and the story's change is still present there: in a "
+        "detached worktree of `origin/<profile.git.integration_branch>`, `git apply --check --reverse` of the "
+        "diff `gh pr diff <PR number>` prints exits 0."
+    ),
+    "handoff-reverted-stops": (
+        "When it exits non-zero, stop and report that the story's change is not intact on "
+        "`origin/<profile.git.integration_branch>`."
     ),
     "handoff-spike-no-change": (
         "For a spike with no tracked-file change, run it instead once the checks repeated immediately before "
@@ -305,7 +309,8 @@ def added_blocks() -> list[str]:
     eleven = f"{p['deploy-deployed-only']}\n{p['deploy-skipped']}\n{p['steps-through-merge-unchanged']}\n\n"
     twelve = (
         f"\n{p['deployed-conditions-scoped']}\n\n{p['handoff-subsection']}\n\n"
-        f"{p['handoff-merged-commit-defined']}\n{p['handoff-after-merge']}\n{p['handoff-spike-no-change']}\n\n"
+        f"{p['handoff-merged-commit-defined']}\n{p['handoff-after-merge']}\n{p['handoff-reverted-stops']}\n"
+        f"{p['handoff-spike-no-change']}\n\n"
         f"{p['handoff-note']}\n{p['handoff-note-no-change']}\n{p['handoff-note-deliverables']}\n"
         f"{p['handoff-move']}\n{p['handoff-state-absent']}\n{p['handoff-read-back']}\n\n"
         f"{p['handoff-done-merged-commit']}\n{p['handoff-done-deliverables']}\n"

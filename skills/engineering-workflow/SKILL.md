@@ -302,7 +302,8 @@ Done comes later, after the acceptance criteria are verified in the deployed env
 ### Handoff on the `no-deployment` and `spike` paths
 
 The merged commit is the commit that merging this story's PR in step 10 put on the integration branch, as `profile.git.merge_method` produced it: the merge commit, the squash commit or the last rebased commit, which `gh pr view <PR number> --json mergeCommit --jq .mergeCommit.oid` prints.
-Run this step once a fetch of `origin` shows the merged commit on `origin/<profile.git.integration_branch>` (`git merge-base --is-ancestor <merged commit> origin/<profile.git.integration_branch>` exits 0) and `git log --oneline -i --grep=revert <merged commit>..origin/<profile.git.integration_branch>` lists no commit that reverts the merged commit or this story's PR.
+Run this step once a fetch of `origin` shows the merged commit on `origin/<profile.git.integration_branch>` (`git merge-base --is-ancestor <merged commit> origin/<profile.git.integration_branch>` exits 0) and the story's change is still present there: in a detached worktree of `origin/<profile.git.integration_branch>`, `git apply --check --reverse` of the diff `gh pr diff <PR number>` prints exits 0.
+When it exits non-zero, stop and report that the story's change is not intact on `origin/<profile.git.integration_branch>`.
 For a spike with no tracked-file change, run it instead once the checks repeated immediately before this step still show no tracked-file change and each deliverable is linked on the story as a comment or an attachment.
 
 1. Add a concise implementation and handoff note naming the path and the merged commit.
