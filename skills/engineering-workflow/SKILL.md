@@ -50,8 +50,8 @@ Each script targets the repository of the current directory, or the one `--repo 
 
 ## 1. Triage the story
 
-If the story is not refined and pointed, run `story-refinement` first.
-It runs the independent refinement, the accept round, the secret pointing, the consensus check, and, where the check calls for them, the high/low discussion and consensus.
+If the story is not refined and pointed, run `story-refinement` first; a Bug, an Investigation or a Spike is never pointed, so for one of those types refined is enough.
+It runs the independent refinement, the accept round, the secret pointing, the consensus check, and, where the check calls for them, the high/low discussion and consensus; for a Bug, an Investigation or a Spike it runs the refinement and the accept round only.
 
 1. Read the story completely: acceptance criteria, comments, linked issues and context.
 2. Identify the desired behavior, acceptance criteria, constraints, likely affected components and test strategy.

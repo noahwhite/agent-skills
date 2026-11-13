@@ -55,7 +55,7 @@ Never edit the refinement comment to add the result; its id keeps identifying on
 - Engineer two (<family or model>): <ACCEPT or OBJECT>
 - Engineer three (<family or model>): <ACCEPT or OBJECT>
 - Outcome: <accepted, another round, or unpointed for a User Story; accepted, another round, or not accepted for a Bug, an Investigation or a Spike>
-- Blocking amendments: <each objecting voter's blocking amendments when the outcome is not accepted; otherwise none>
+- Blocking amendments: <each objecting voter's blocking amendments when any voter returned OBJECT; otherwise none>
 ```
 
 ## Pointing record
