@@ -207,12 +207,15 @@ For a waived PR, compare the merged PR's `headRefOid` with the SHA recorded when
 
 - **`profile.tracker.states.done`:** confirm the completion record before you accept it.
   On read-back every AC and DoD box is ticked, QA's handback rules every item verified, and, when `profile.qa.evidence_dir` is set, the evidence PR is merged on the head its review of record covered.
-  If all three hold, go to step 5; if any does not, report the mismatch and stop.
+  Done is never set on an AC amendment alone, so the record also needs no item still `pending owner ruling` in QA's handback or its record in the tracker, and a verified verdict, from a new QA round (a new QA agent on the unchanged step 3 brief) run after the product owner's dated AC amendment, for each item that amendment ruled on.
+  If all of these hold, go to step 5; if any does not, report the mismatch and stop.
 - **`profile.tracker.states.in_progress`:** QA ruled at least one AC or DoD item not met and reopened the story.
   Those failed items are the issues to fix.
+  Items QA listed apart as `pending owner ruling` are not failed items: put each to the user as the `profile.tracker.states.in_deployment_review` bullet below does, while the hand-back below goes on with the failed items alone.
   QA rounds are counted within this invocation: the first QA round this coordinator runs is round 1, a run resumed at step 3 starts a new count that the report states, and only a round whose read-back is `profile.tracker.states.in_progress` counts.
   When the `qa-round-cap`-th counted round ends here, stop before the hand-back below and launch nothing further.
   The stop report gives, per round, every failed item as QA recorded it in the tracker, re-read from the tracker rather than taken from a handback (the item, its verdict, and the evidence it cites).
+  It lists apart, per round, each item QA recorded as `pending owner ruling`, with the AC or DoD text QA quoted and each reading with its verdict, never among the failed items.
   It also gives, per PR, the link and head SHA, re-read from the tracker and the forge rather than taken from a handback, reusing the merge reads steps 2 and 3 already make.
   The stop report asks the user how many further rounds to run or whether to stop, and waits for the reply; a reply that does not say how many rounds or that it is a stop, or that gives an invalid value, is asked about again, never guessed.
   On "N additional rounds", re-arm the same cap at N further counted rounds and resume the pending hand-back below with every item failed so far; the next QA round runs with a new QA agent.
@@ -222,6 +225,7 @@ For a waived PR, compare the merged PR's `headRefOid` with the SHA recorded when
   In either case the coordinator writes nothing to the tracker beyond what the Boundaries permit, rules on no item, and relays no verdict of its own.
   Hand them back to the senior engineer: resume the same subagent if the runtime can, else spawn a new clean, neutral one on the same seat with the step 2 brief.
   Either way, add to the hand-back brief each failed item as QA recorded it on the story (the item, its verdict, and the evidence it cites), and instruct the engineer to fix them through `engineering-workflow` on this story and take it back to `profile.tracker.states.in_deployment_review`.
+  Leave out of every hand-back brief each item still `pending owner ruling` in QA's latest record, including one carried from an earlier failed round.
   Confirm that state as step 2 does, then run step 3 again with a new QA agent.
 - **`profile.tracker.states.in_deployment_review`:** QA is not finished: one or more items in its handback are outstanding.
   Classify each outstanding item by its owner.
@@ -231,6 +235,8 @@ For a waived PR, compare the merged PR's `headRefOid` with the SHA recorded when
   The continuation does not increment the QA round count, reuses that round's scratch subdirectory and checklist, and with `metrics` on is recorded as its own launch row within that same round.
   After each continuation handback, step 3's state and merged-PR review-of-record read-backs repeat in full before this step applies again.
   If any outstanding item names any other owner - the owner, a maintainer's approval or access grant, a human merge, an external deploy, a pending acceptance-basis ruling - report exactly what remains and who owns it, and stop, even when QA-owned work also remains; a mixed remainder containing both an owner action and QA's own steps is reported and stopped, never resumed.
+  For each item QA recorded as `pending owner ruling`, that report puts the item to the user with the AC or DoD text QA quoted and each reading with its verdict, as QA recorded them in the tracker.
+  The coordinator rules on none of those items and relays none of them to the senior engineer or a QA agent; a ruling reaches QA only as the product owner's dated AC amendment in the tracker, followed by a new QA round.
   If the runtime cannot resume that QA session, report the limitation and stop; never substitute a new clean, neutral subagent for it as a continuation of that round.
   A `command` or `codex` QA seat is never resumed, so its continuation is a new launch on the same seat whose prompt file is the step 3 brief followed by that continuation message; it is still the same round's continuation under every rule in this bullet.
   Because the new process carries none of the earlier one's working state, its prompt file also tells it to read that round's existing checklist in the named subdirectory and the story's open evidence PR, if any, before acting, and to continue from the first unfinished item, never rewriting the checklist or opening a second evidence PR.
