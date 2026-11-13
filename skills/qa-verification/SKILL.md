@@ -3,6 +3,7 @@ name: qa-verification
 description: >-
   Verify an already-deployed Linear story's acceptance criteria and Definition of Done against a live, non-production environment, capture reproducible evidence (structured assertions, plus screenshots for anything a user sees), record it on the story and in the repository, and decide whether the story moves to Done, back to In Progress, or to Blocked.
   Use when asked to QA, verify, validate, acceptance-test, deployment-review, post-deploy check, or run QA against a story that is in deployment review, or to check whether a story's acceptance criteria hold in a deployed environment (for example "does ABC-123 pass on dev?").
+  Also verifies a spike, or a story whose profile has no deployed environment, against its merged commit or its deliverables.
   Not for building, fixing, or reviewing code (use engineering-workflow), deploying or operating infrastructure (use persona-platform-sre), or backlog and scope decisions (use persona-product-owner).
 license: Apache-2.0
 compatibility: Requires git, gh, and the linear CLI (schpet/linear-cli); browser automation (for example Playwright) for UI lanes.
@@ -77,8 +78,10 @@ On the `no-deployment` and `spike` paths, QA chooses no environment and confirms
 
 On `no-deployment`, record the merged commit SHA.
 On `spike`, record each deliverable's link and its commit SHA when one exists, or record that the deliverable has no commit.
-Neither path requires or records an environment or a deployed build SHA; where a later step records the build SHA and the environment, record these instead.
-On both paths, rule the DoD line "Verified in a deployed environment (if needed)" not needed, giving the path as the reason.
+Neither path requires or records an environment or a deployed build SHA; where a later step records the build SHA and the environment (the step 4 evidence comment and the completion summary), record the path and the target records above instead.
+On both paths, step 1's dependency status rule reads "merged and deployed to the environment under test" as merged to `profile.git.integration_branch`: verify the item directly when its dependency is in `profile.tracker.states.in_deployment_review` or `profile.tracker.states.done`, and flag it blocked only when it is not.
+On both paths, step 2 and the probes and fixtures of step 3 apply to the `deployed` path only: QA verifies each AC and DoD item by inspecting the committed artifacts at the target, and the commands it runs and their output are the structured assertions step 3 captures.
+On both paths, rule the DoD line "Verified in a deployed environment (if needed)" not needed, giving the path as the reason, count it as met for step 6 and tick that box.
 
 ## 1. Read the story and enumerate what to verify
 

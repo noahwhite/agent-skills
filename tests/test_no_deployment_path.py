@@ -388,6 +388,12 @@ def test_linear_lifecycle_scopes_deploy_conditions_to_the_deployed_path(key: str
 # sentence fails its own test id. No existing pin is replaced.
 QA_SKILL = ROOT / "skills" / "qa-verification" / "SKILL.md"
 
+QA_DESCRIPTION_PINS = {
+    "qa-description": (
+        "  Also verifies a spike, or a story whose profile has no deployed environment, against its merged "
+        "commit or its deliverables."
+    ),
+}
 QA_INTRO_PINS = {
     "qa-intro-deployed-path": (
         "The deployed story, live environment and deployed behavior above belong to the `deployed` path, one "
@@ -408,6 +414,8 @@ QA_INTRO_PINS = {
 }
 # The path conditions use the wording of engineering-workflow step 1 (`PINS`), except the two
 # sentences that name what waits on the path: QA runs no verification and tests nothing until then.
+# The shared values are taken from `PINS` on purpose, since AC1 asks for the same wording: a change
+# to one of those engineering-workflow sentences must be made in qa-verification in the same change.
 QA_PATH_PINS = {
     "qa-path-section": "## The run's path",
     "qa-three-paths": PINS["three-paths"],
@@ -446,19 +454,42 @@ QA_ENV_PINS = {
     ),
     "qa-env-no-environment": (
         "Neither path requires or records an environment or a deployed build SHA; where a later step records "
-        "the build SHA and the environment, record these instead."
+        "the build SHA and the environment (the step 4 evidence comment and the completion summary), record "
+        "the path and the target records above instead."
+    ),
+    "qa-env-dependency-rule": (
+        "On both paths, step 1's dependency status rule reads \"merged and deployed to the environment under "
+        'test" as merged to `profile.git.integration_branch`: verify the item directly when its dependency is '
+        "in `profile.tracker.states.in_deployment_review` or `profile.tracker.states.done`, and flag it "
+        "blocked only when it is not."
+    ),
+    "qa-env-no-lanes": (
+        "On both paths, step 2 and the probes and fixtures of step 3 apply to the `deployed` path only: QA "
+        "verifies each AC and DoD item by inspecting the committed artifacts at the target, and the commands "
+        "it runs and their output are the structured assertions step 3 captures."
     ),
     "qa-env-dod-not-needed": (
         'On both paths, rule the DoD line "Verified in a deployed environment (if needed)" not needed, giving '
-        "the path as the reason."
+        "the path as the reason, count it as met for step 6 and tick that box."
     ),
 }
-QA_PINS = {**QA_INTRO_PINS, **QA_PATH_PINS, **QA_ENV_PINS}
+QA_PINS = {**QA_DESCRIPTION_PINS, **QA_INTRO_PINS, **QA_PATH_PINS, **QA_ENV_PINS}
+
+
+def text_between(text: str, start: str, end: str) -> str:
+    """The text from ``start`` up to ``end``, failing with the missing marker named."""
+    assert start in text, f"missing marker: {start!r}"
+    begin = text.index(start)
+    assert end in text[begin:], f"missing marker after {start!r}: {end!r}"
+    return text[begin : text.index(end, begin)]
+
+
+def qa_description_lines() -> list[str]:
+    return text_between(QA_SKILL.read_text(encoding="utf-8"), "\ndescription: >-\n", "\nlicense: ").splitlines()
 
 
 def qa_intro_lines() -> list[str]:
-    text = QA_SKILL.read_text(encoding="utf-8")
-    return text[text.index("\n# QA verification\n") : text.index("\n## Read first\n")].splitlines()
+    return text_between(QA_SKILL.read_text(encoding="utf-8"), "\n# QA verification\n", "\n## Read first\n").splitlines()
 
 
 def qa_path_lines() -> list[str]:
@@ -471,6 +502,7 @@ def qa_env_lines() -> list[str]:
 
 
 QA_SECTION_LINES = {
+    **dict.fromkeys(QA_DESCRIPTION_PINS, qa_description_lines),
     **dict.fromkeys(QA_INTRO_PINS, qa_intro_lines),
     **dict.fromkeys(QA_PATH_PINS, qa_path_lines),
     **dict.fromkeys(QA_ENV_PINS, qa_env_lines),
@@ -488,13 +520,17 @@ def test_qa_ask_cases_and_selection_use_the_engineering_workflow_wording() -> No
     assert block_after(lines, QA_PATH_PINS["qa-select-intro"]) == [PINS[key] for key in SELECTIONS]
 
 
+# The path section is closed on purpose: a sentence added to it must be added to `QA_PATH_PINS` too,
+# so every rule that decides the path is pinned.
 def test_qa_path_section_holds_only_the_pinned_sentences_in_order() -> None:
     assert [line for line in qa_path_lines() if line.strip()] == list(QA_PATH_PINS.values())
 
 
 def test_qa_path_section_comes_before_the_environment_section() -> None:
     text = QA_SKILL.read_text(encoding="utf-8")
-    assert text.index("\n## The run's path\n") < text.index("\n## The environment under test\n")
+    assert "\n## The environment under test\n" in text_between(
+        text, "\n## The run's path\n", "\n## 1. Read the story and enumerate what to verify\n"
+    )
 
 
 def test_qa_targets_are_exactly_the_two_paths() -> None:
@@ -506,7 +542,8 @@ def test_qa_targets_are_exactly_the_two_paths() -> None:
 
 def qa_added_blocks() -> list[str]:
     """The exact text SKL-269 inserts into qa-verification, built from the pins in order."""
-    intro = "".join(f"{line}\n" for line in QA_INTRO_PINS.values())
+    description = f"{QA_DESCRIPTION_PINS['qa-description']}\n"
+    intro ="".join(f"{line}\n" for line in QA_INTRO_PINS.values())
     p = QA_PATH_PINS
     asks = "".join(f"{p[f'qa-{key}']}\n" for key in ASK_CASES)
     selections = "".join(f"{p[f'qa-{key}']}\n" for key in SELECTIONS)
@@ -520,9 +557,9 @@ def qa_added_blocks() -> list[str]:
     env = (
         f"\n{e['qa-env-other-paths']}\n\n{e['qa-env-target-no-deployment']}\n{e['qa-env-target-spike']}\n\n"
         f"{e['qa-env-record-no-deployment']}\n{e['qa-env-record-spike']}\n{e['qa-env-no-environment']}\n"
-        f"{e['qa-env-dod-not-needed']}\n"
+        f"{e['qa-env-dependency-rule']}\n{e['qa-env-no-lanes']}\n{e['qa-env-dod-not-needed']}\n"
     )
-    return [intro, path, env]
+    return [description, intro, path, env]
 
 
 def test_qa_added_blocks_appear_once_in_order() -> None:
@@ -534,8 +571,10 @@ def test_qa_added_blocks_appear_once_in_order() -> None:
     assert positions == sorted(positions)
 
 
-# The `deployed` text is unchanged: with the three SKL-269 blocks cut out, qa-verification's
+# The `deployed` text is unchanged: with the four SKL-269 blocks cut out, qa-verification's
 # SKILL.md is byte for byte the file at the base commit daf6758.
+# A later story that changes qa-verification's SKILL.md outside these blocks re-baselines this hash
+# to the sha256 of the file at its own base with these blocks cut out, and says so in its PR.
 QA_BASE_SHA256 = "31f9032c17431c94e1f51476032fc8bc6d4469e9911bb84cf9f659a856d51b8e"
 
 
