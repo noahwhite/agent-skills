@@ -58,9 +58,9 @@ It runs the independent refinement, the accept round, the secret pointing, the c
 3. Enumerate dependencies from the formal relation graph, not just prose: `linear issue relation list <ID>` lists an issue's relations, while `linear issue view --json` does not include them (see `references/linear.md`, Triage).
 4. Confirm the story belongs in this repository.
 5. Apply the scope rules: no acceptance criterion changed on any story ([references/linear.md](references/linear.md) "Acceptance criteria and scope"), no skip keyed on another story ([references/engineering-practice.md](references/engineering-practice.md) "Make minimal, durable changes"), and the only two exits are a "Refinement proposal (not an AC)" or reporting the story blocked, as those sections state; step 5, "Prepare the PR", item 4, "Self-review against the acceptance criteria", checks them again.
-6. Move it to `profile.tracker.states.in_progress` and read it back to confirm.
+6. Select the run's path as "Select the path" below states, before any later step runs.
+7. Move it to `profile.tracker.states.in_progress` and read it back to confirm.
    Use the exact state names from the profile; never invent one.
-7. Select the run's path as "Select the path" below states, before any later step runs.
 
 If the tracker cannot be updated, stop and say the transition was not performed; never claim it was.
 

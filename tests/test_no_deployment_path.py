@@ -25,7 +25,8 @@ def step_one_lines() -> list[str]:
 # Each normative sentence of the step 1 path selection, pinned whole on its own line, so a
 # deleted or reworded sentence fails exactly one test id.
 PINS = {
-    "triage-item": '7. Select the run\'s path as "Select the path" below states, before any later step runs.',
+    "triage-item": '6. Select the run\'s path as "Select the path" below states, before any later step runs.',
+    "move-after-path": "7. Move it to `profile.tracker.states.in_progress` and read it back to confirm.",
     "subsection": "### Select the path",
     "three-paths": "A run follows exactly one path: `spike`, `no-deployment` or `deployed`.",
     "brief-governs": (
@@ -122,6 +123,22 @@ SUBSECTION_ORDER = (
     *SELECTIONS,
     "path-governs-run",
 )
+
+
+def test_path_is_selected_before_the_story_moves_to_in_progress() -> None:
+    lines = step_one_lines()
+    assert lines.index(PINS["triage-item"]) + 1 == lines.index(PINS["move-after-path"])
+
+
+# Step 1 holds no unpinned addition: its non-blank lines other than the pins hash to the base
+# commit 7ae1b94 step 1 without its "6. Move it to ..." line, which "move-after-path" renumbers.
+STEP_ONE_UNPINNED_SHA256 = "7d5d8ebe33801124a58a20739cfa5885c552f62eceac0ca050cdcd22bad8a901"
+
+
+def test_step_one_has_no_unpinned_line() -> None:
+    pins = set(PINS.values())
+    rest = [line for line in step_one_lines() if line.strip() and line not in pins]
+    assert hashlib.sha256("\n".join(rest).encode()).hexdigest() == STEP_ONE_UNPINNED_SHA256
 
 
 def test_subsection_directly_follows_the_tracker_fallback_paragraph() -> None:
