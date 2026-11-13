@@ -131,8 +131,9 @@ def test_path_is_selected_before_the_story_moves_to_in_progress() -> None:
 
 
 # Step 1 holds no unpinned addition: its non-blank lines other than the pins hash to the base
-# commit 7ae1b94 step 1 without its "6. Move it to ..." line, which "move-after-path" renumbers.
-STEP_ONE_UNPINNED_SHA256 = "7d5d8ebe33801124a58a20739cfa5885c552f62eceac0ca050cdcd22bad8a901"
+# commit 7ae1b94 step 1 without its "6. Move it to ..." line, which "move-after-path" renumbers, and with
+# SKL-237's unestimated-type reading of the two "refined and pointed" lines (tests/test_story_refinement.py).
+STEP_ONE_UNPINNED_SHA256 = "5b947c13a751f6608d794f636f864b0b5fdc82ffb13b986f2c4054c55f930222"
 
 
 def test_step_one_has_no_unpinned_line() -> None:
