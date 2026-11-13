@@ -19,7 +19,7 @@ def section(text: str, heading: str) -> str:
 
 
 def step_one_lines() -> list[str]:
-    return section(SKILL.read_text(), "1. Triage the story").splitlines()
+    return section(SKILL.read_text(encoding="utf-8"), "1. Triage the story").splitlines()
 
 
 # Each normative sentence of the step 1 path selection, pinned whole on its own line, so a
@@ -79,9 +79,10 @@ SELECTIONS = ("select-spike", "select-no-deployment", "select-deployed")
 
 
 def block_after(lines: list[str], intro: str) -> list[str]:
-    """The bullet lines that directly follow ``intro``, after one optional blank line."""
+    """The bullet lines that directly follow ``intro``, after any blank lines."""
+    assert intro in lines, f"missing block intro: {intro}"
     start = lines.index(intro) + 1
-    if start < len(lines) and not lines[start].strip():
+    while start < len(lines) and not lines[start].strip():
         start += 1
     block = []
     for line in lines[start:]:
@@ -137,7 +138,7 @@ def test_subsection_holds_only_the_pinned_sentences_in_order() -> None:
 # AC3: the path selection lives in step 1 only; no pinned sentence appears in any later step.
 @pytest.mark.parametrize("key", list(PINS), ids=list(PINS))
 def test_path_selection_sentence_appears_only_in_step_one(key: str) -> None:
-    lines = SKILL.read_text().splitlines()
+    lines = SKILL.read_text(encoding="utf-8").splitlines()
     assert lines.count(PINS[key]) == 1, f"{key} must appear exactly once in the skill"
 
 
@@ -147,7 +148,7 @@ STEPS_TWO_TO_TWELVE_SHA256 = "a36c006733b7b3bc23d65530faee575a02b5e59c1b8c68d48d
 
 
 def test_steps_two_to_twelve_are_unchanged() -> None:
-    text = SKILL.read_text()
+    text = SKILL.read_text(encoding="utf-8")
     start = text.index("\n## 2. Plan slices\n") + 1
     end = text.index("\n## Operational rules\n") + 1
     assert hashlib.sha256(text[start:end].encode()).hexdigest() == STEPS_TWO_TO_TWELVE_SHA256
