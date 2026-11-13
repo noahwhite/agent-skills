@@ -14,6 +14,10 @@ This is the post-deploy counterpart to `engineering-workflow`, which ends at mer
 This workflow starts there: it validates a deployed story's acceptance criteria (AC) and Definition of Done (DoD) against the live environment, with reproducible evidence, then decides the story's next state.
 It verifies deployed behavior; it never builds or reviews code changes.
 When this workflow runs as a delegated QA agent, that agent is clean and neutral as `references/code-review.md` defines: briefed with the story identifier, the environment, and the AC and DoD only, never the implementer's view or expected verdicts.
+The deployed story, live environment and deployed behavior above belong to the `deployed` path, one of the three paths "The run's path" below defines.
+On the `no-deployment` and `spike` paths, QA verifies the AC and DoD against the path's target that "The environment under test" names, without a live environment.
+There, inspecting committed artifacts for acceptance is permitted, and it does not replace the code-review gates.
+A delegated QA agent's brief may also state the run's path, and on the `no-deployment` and `spike` paths it names that path's target in place of the environment.
 
 ## Read first
 
@@ -26,6 +30,31 @@ When this workflow runs as a delegated QA agent, that agent is clean and neutral
 - [references/runtimes.md](references/runtimes.md) - maps the capabilities named here to your runtime.
 
 When a finding needs a code fix, hand it to `engineering-workflow` (and its [references/engineering-practice.md](references/engineering-practice.md)); QA verifies, it does not implement.
+
+## The run's path
+
+A run follows exactly one path: `spike`, `no-deployment` or `deployed`.
+When a brief states the path, that path governs: no ask case applies and you never reselect it.
+When no brief states a path, select exactly one path before any verification runs.
+
+Ask the user for the path, and test nothing until answered, in exactly these cases:
+
+- `profile.environments` is absent (an absent key is never read as `[]`);
+- `profile.environments` is non-empty and no entry's `branch` equals `profile.git.integration_branch`;
+- the story title starts with `[Spike]` and the story lacks the spike label (including when `profile.tracker.labels.spike` is unset);
+- the story carries the spike label and its title does not start with `[Spike]`.
+
+An ask case takes precedence over the selection conditions below.
+The answer is one of `spike`, `no-deployment` or `deployed`, and it is the path: it replaces the selection below.
+Never infer a path from prose, and ask nothing else about the path.
+
+Otherwise select:
+
+- `spike` when the story carries the label named by `profile.tracker.labels.spike`, looked up on the story's team under the differing-team rule in [references/linear.md](references/linear.md) "Team resolution";
+- otherwise `no-deployment` when `profile.environments` is present and is `[]`;
+- otherwise `deployed` when `profile.environments` has an entry whose `branch` equals `profile.git.integration_branch`.
+
+The selected path governs the whole run.
 
 ## The environment under test
 
@@ -40,6 +69,16 @@ When a finding needs a code fix, hand it to `engineering-workflow` (and its [ref
   A payment lane uses the provider's sandbox only, never live.
 - When logs or metrics are shared between environments, always filter by the environment label.
 - If the overlay provides a smoke check across all lanes, run it first and confirm every lane is green before per-story work.
+
+On the `no-deployment` and `spike` paths, QA chooses no environment and confirms no deployed build: the bullets above that do so apply to the `deployed` path only, and QA verifies against the path's target instead:
+
+- `no-deployment`: the target is the merged commit the `engineering-workflow` step 12 note names, confirmed on `profile.git.integration_branch` (after a fetch of `origin`, `git merge-base --is-ancestor <merged commit> origin/<profile.git.integration_branch>` exits 0); if it is not there, stop: the story is not yet testable.
+- `spike`: the target is each deliverable the `engineering-workflow` step 12 note links.
+
+On `no-deployment`, record the merged commit SHA.
+On `spike`, record each deliverable's link and its commit SHA when one exists, or record that the deliverable has no commit.
+Neither path requires or records an environment or a deployed build SHA; where a later step records the build SHA and the environment, record these instead.
+On both paths, rule the DoD line "Verified in a deployed environment (if needed)" not needed, giving the path as the reason.
 
 ## 1. Read the story and enumerate what to verify
 
