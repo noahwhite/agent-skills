@@ -170,17 +170,32 @@ def test_path_selection_sentence_appears_only_in_step_one(key: str) -> None:
 SPIKE_NO_CHANGE_PINS = {
     "spike-subsection": "### Spike with no tracked-file change",
     "spike-three-checks": (
-        "On the `spike` path, before step 4, fetch `origin` and check for a tracked-file change in the working "
-        "tree (`git diff --name-only`), the index (`git diff --cached --name-only`) and the commits relative to "
-        "`origin/<integration branch>` (`git diff --name-only origin/<integration branch>...HEAD`)."
+        "On the `spike` path, before step 4, fetch `origin`, confirm the spike's branch is up to date with "
+        "`origin/<profile.git.integration_branch>` (`git rev-list --count "
+        "HEAD..origin/<profile.git.integration_branch>` prints `0`; otherwise update the branch first), and "
+        "check for a tracked-file change in the working tree (`git diff --name-only`), the index "
+        "(`git diff --cached --name-only`) and the commits relative to `origin/<profile.git.integration_branch>` "
+        "(`git diff --name-only origin/<profile.git.integration_branch>...HEAD`)."
+    ),
+    "spike-check-failure-stops": (
+        "A failed fetch, or a check command that exits non-zero, never reads as no tracked-file change: stop "
+        "and resolve it before deciding."
     ),
     "spike-skip-and-recheck": (
-        "Skip steps 4 to 10 only when all three checks show no tracked-file change, and repeat the fetch and "
-        "the three checks before step 12."
+        "Skip steps 4 to 10 only when all three checks show no tracked-file change, and repeat the fetch, the "
+        "up-to-date confirmation and the three checks immediately before step 12."
+    ),
+    "spike-untracked-deliverable": (
+        "An untracked file is not a tracked-file change, so a deliverable that exists only as an untracked "
+        "file is linked on the story as an attachment."
     ),
     "spike-change-runs-gates": (
         "If a tracked-file change appears at any point, complete steps 4 to 10 with every applicable gate, and "
         "the merge path of step 12 applies."
+    ),
+    "spike-merge-path-sticks": (
+        "Once a tracked-file change has appeared, the spike stays on that merge path and the checks are not "
+        "repeated, so a merged spike is never sent back through steps 4 to 10."
     ),
     "spike-pr-gates-unchanged": (
         "Any PR a spike produces runs every gate steps 4 to 10 define: the `spike` path changes no gate, "
@@ -191,8 +206,8 @@ STEP_ELEVEN_PINS = {
     "deploy-deployed-only": "This step runs on the `deployed` path only.",
     "deploy-skipped": "On the `no-deployment` and `spike` paths, skip it: claim no deploy and verify none.",
     "steps-through-merge-unchanged": (
-        "Every step through the merge runs on those two paths as on the `deployed` path, except the steps a "
-        'spike with no tracked-file change skips (step 3, "Spike with no tracked-file change").'
+        "Every step up to and including the merge runs on those two paths as on the `deployed` path, except "
+        'steps 4 to 10 when the "Spike with no tracked-file change" subsection lets a spike skip them.'
     ),
 }
 STEP_TWELVE_PINS = {
@@ -202,11 +217,14 @@ STEP_TWELVE_PINS = {
     ),
     "handoff-subsection": "### Handoff on the `no-deployment` and `spike` paths",
     "handoff-after-merge": (
-        "Run this step once a fetch of `origin` shows the merge commit on `origin/<integration branch>`."
+        "Run this step once a fetch of `origin` shows this story's merge commit, the commit step 10 created by "
+        "merging its PR, on `origin/<profile.git.integration_branch>` (`git merge-base --is-ancestor "
+        "<merge commit> origin/<profile.git.integration_branch>` exits 0)."
     ),
     "handoff-spike-no-change": (
-        "For a spike with no tracked-file change, run it instead once the repeated checks before step 12 still "
-        "show no tracked-file change and each deliverable is linked on the story as a comment or an attachment."
+        "For a spike with no tracked-file change, run it instead once the checks repeated immediately before "
+        "this step still show no tracked-file change and each deliverable is linked on the story as a comment "
+        "or an attachment."
     ),
     "handoff-move": "1. Move the story to `profile.tracker.states.in_deployment_review`.",
     "handoff-note": "2. Add a concise implementation and handoff note naming the path and the merged commit.",
@@ -256,8 +274,9 @@ def added_blocks() -> list[str]:
     """The exact text SKL-282 inserts into steps 3, 11 and 12, built from the pins in order."""
     p = HANDOFF_PINS
     spike = (
-        f"{p['spike-subsection']}\n\n{p['spike-three-checks']}\n{p['spike-skip-and-recheck']}\n"
-        f"{p['spike-change-runs-gates']}\n{p['spike-pr-gates-unchanged']}\n\n"
+        f"{p['spike-subsection']}\n\n{p['spike-three-checks']}\n{p['spike-check-failure-stops']}\n"
+        f"{p['spike-skip-and-recheck']}\n{p['spike-untracked-deliverable']}\n{p['spike-change-runs-gates']}\n"
+        f"{p['spike-merge-path-sticks']}\n{p['spike-pr-gates-unchanged']}\n\n"
     )
     eleven = f"{p['deploy-deployed-only']}\n{p['deploy-skipped']}\n{p['steps-through-merge-unchanged']}\n\n"
     twelve = (
