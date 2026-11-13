@@ -122,6 +122,9 @@ RESPLIT_BULLET = " ".join(
         "until no slice meets it; there is no escalation exit.",
         "Each resulting slice gets its own estimate, made the way the story's was (at refinement, filing or triage), "
         "before it is tested against that trigger.",
+        "A slice that cannot be estimated is recorded as unpointed and reported as `needs input` to the owner, "
+        "naming the story and the slice, as story-refinement's unpointed variance stop is; that report is not an "
+        "exit for an oversize slice.",
         "Split along the first boundary that applies, in this order:",
         "1. the planned PR or slice boundary;",
         "2. an acceptance criterion;",
@@ -137,13 +140,20 @@ CLOSE_TIME = "- ⛔ Never split an issue at close time to carve off unfinished w
 
 
 def top_level_bullets(section_text: str) -> list[str]:
-    """The section's top-level bullets, each whitespace-normalised; an indented line belongs to the bullet above."""
+    """The section's top-level bullets, each whitespace-normalised.
+
+    An indented or blank line belongs to the bullet above; any other line (a heading, a paragraph) ends it.
+    """
     bullets: list[str] = []
+    open_bullet = False
     for line in section_text.splitlines():
         if line.startswith("- "):
             bullets.append(line)
-        elif bullets:
+            open_bullet = True
+        elif open_bullet and (not line.strip() or line[0].isspace()):
             bullets[-1] += "\n" + line
+        else:
+            open_bullet = False
     return [spaced(bullet) for bullet in bullets]
 
 
