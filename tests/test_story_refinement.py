@@ -3368,8 +3368,8 @@ def test_spike_refile_bullet_states_the_end_state(sentence: str) -> None:
 def test_ready_gate_holds_a_multi_thread_spike() -> None:
     """B6: the ready gate requires a single research thread, so the re-file reading never reaches ready."""
     assert (
-        "a spike also needs its `scope signal:` line to read `single research thread`, its unmet condition named "
-        "\"re-file as separate spikes (owner)\"." in unestimated_bullet("Ready gate")
+        "a spike also needs its `scope signal:` line to read `single research thread`; otherwise its unmet condition "
+        "reads \"re-file as separate spikes (owner)\"." in unestimated_bullet("Ready gate")
     )
 
 
