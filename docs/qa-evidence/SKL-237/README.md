@@ -44,7 +44,8 @@ Details:
 - B4:
   - Priority is decided and read back on an accepted and a "not accepted" outcome alike.
   - The ready gate lists every AC condition, including the filing template's own bracketed placeholders in each named evidence section.
-  - Otherwise the issue stays in backlog with a `State:` line naming the unmet condition, and a move to ready reads "ready: all conditions met".
+  - When the gate fails, an issue in backlog stays there and an issue in ready moves back to backlog, each with a `State:` line naming the unmet condition; an issue in progress or later keeps its state and its `State:` line reads that retained state with each unmet condition.
+  - A move to ready reads "ready: all conditions met".
 - B7:
   - `references/refinement-record.md` has the `Pointing skipped` line, the per-type `Outcome` reading and the `State:` line.
   - The story-refinement seed line in `shared/todo-tracking.md` ends with the AC's omit-and-keep sentence verbatim, and the vendored copy matches.
