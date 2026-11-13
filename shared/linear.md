@@ -43,6 +43,7 @@ The `linear` CLI (schpet/linear-cli) is the primary tool; the Linear MCP server 
 
 - Issues may be created in `profile.tracker.states.triage` or `profile.tracker.states.backlog`.
   Before in progress, finish triage: priority, estimate, assignee, and every DoR box.
+  The estimate applies only to an estimated issue type: a Bug or an Investigation carries no estimate, and a Spike carries a timebox instead.
 - ⛔ `linear issue view` and `linear issue view --json` return no relations field, so triage from them misses every blocks and blocked-by edge.
   Enumerate relations with `linear issue relation list <ID>`, which prints both directions under "Outgoing" and "Incoming" with each relation's type.
   The Linear MCP server's get_issue tool (its response includes `relations`) and the GraphQL API also return them:

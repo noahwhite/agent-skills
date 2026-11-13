@@ -3,6 +3,7 @@ name: story-refinement
 description: >-
   Run independent-context story refinement and secret pointing as the scrum master or engineering manager (SM/EM).
   Three voters refine the story, agree, then point it blind through a consensus check and, where it calls for them, at most one discussion and one re-vote, with a fresh independent vote after an anchoring recovery.
+  A Bug, an Investigation or a Spike is refined and never pointed.
   Use when asked to refine a story, run a refinement or pointing ceremony, decide Definition of Ready changes, estimate a story, split an oversized story, or record a refinement or pointing decision.
   The SM/EM facilitates and never votes; the three engineer voters are the voters and the product owner authors every tracker write.
   Not for implementing the story (use engineering-workflow) or verifying a deployed story (use qa-verification).
@@ -147,7 +148,7 @@ The guards and their commands come from the repository under refinement; this sk
      Otherwise, name the issue type from the labels read in item 1: `profile.tracker.labels.bug` names a Bug, `profile.tracker.labels.investigation` an Investigation and `profile.tracker.labels.spike` a Spike.
      An issue with none of the three type labels, maintenance work included, runs the ceremony as a User Story with `type: estimated`.
      Record `type: <Bug|Investigation|Spike|estimated>` on the todo list; the type is final once written there, and for a Bug, an Investigation or a Spike the list omits every Stage 2 item, as the story-refinement seed line in [references/todo-tracking.md](references/todo-tracking.md) states.
-     When the type written is Bug, Investigation or Spike, remove from the list every Stage 2 item the Read first seed placed on it, in the same update that writes the type.
+     When the type written is Bug, Investigation or Spike, remove from the list every Stage 2 item, whether the bootstrap list (its Step 3 and Step 4 items) or the Read first seed placed it there, in the same update that writes the type.
   4. Run the tracker-write preflight before any voter launches.
      The PO, in a separate context, posts one comment on the story under refinement that marks itself as the tracker-write preflight, and reads it back.
      On success the facilitator records the comment id for the refinement record.
@@ -157,6 +158,7 @@ The guards and their commands come from the repository under refinement; this sk
   5. Run the repository guard check in [Repository guards](#repository-guards) before any voter launches.
   6. Launch the three engineers in separate contexts with the same story surface.
      Give each voter only its own profile entry, the story, the guard list from [Repository guards](#repository-guards) when that check ran, and the session's scratch directory it writes into; never give it another voter's file or a summary of another input.
+     For a Bug, an Investigation or a Spike, the brief also carries the type written on the todo list and that type's bullet under Content per type in [Unestimated issue types](#unestimated-issue-types).
      A voter runs in its own child context and cannot derive the parent's directory, so the brief carries the path.
   7. Each voter writes only its own input file in the session's scratch directory (`references/runtimes.md`, Scratch files), under a subdirectory named after the story key and a role-specific name; never a path component outside that directory.
      The session's directory sits inside `profile.workspace.scratch_dir` when that is the base the runtime or the profile gives (the runtime's base wins), and is a standalone `mktemp -d` when neither gives one.
@@ -166,6 +168,7 @@ The guards and their commands come from the repository under refinement; this sk
   9. No voter sees another voter's refinement input or value before its own input is recorded.
      No tracker comment is posted until all three voter inputs are recorded, except the tracker-write preflight, which is the only exception.
 - **Reviewer output contract:** a refinement input includes a Definition of Ready verdict, a verdict on the guard list, per-AC gaps with exact proposed wording, scope and split, risks, refined AC deltas, and an `ACCEPT` or `OBJECT` position.
+  For a Bug, an Investigation or a Spike, per-AC gaps and refined AC deltas apply only where the filing template has acceptance criteria, and the Definition of Ready verdict reads "template has no Definition of Ready".
 - **Outputs:** three voter input files and one separate SM/EM contribution file in the session's scratch directory.
 - **Stop:** the roster check fails (a reviewer count other than three, fewer than three reviewers enabled, a required role unset, a missing or empty reviewer family, or a duplicate reviewer family or model id), the type check stops on an unset type-label key or on conflicting type labels (two or more type labels on an issue without the User Story label), a required profile key is unset, a voter cannot run on its configured runtime and model, a voter file is missing, a guard on the guard list cannot be run or still rejects the resolved output, or the tracker-write preflight is denied and the owner has not authorized the denied tracker writes fallback.
   The scratch directory is never such a key: without one the documented standalone `mktemp -d` fallback applies.
@@ -195,6 +198,7 @@ The three engineer voters decide whether an SM/EM concern is a blocking amendmen
      The accept round is capped at two rounds.
   7. If all three voters have not returned `ACCEPT` after two rounds, the PO authors the unpointed record and applies it, or under the denied tracker writes fallback the facilitator applies it verbatim, and the ceremony stops.
      For a Bug, an Investigation or a Spike the PO authors no unpointed record: the round 2 Accept round result comment is the stop record, its outcome reads not accepted, and it carries the objecting voters' blocking amendments.
+     For those types the stop ends Stage 1 only: the PO still decides and reads back the priority and posts the Triage record on this outcome, as [Unestimated issue types](#unestimated-issue-types) states, before the closing message.
 - **Outputs:** an accepted refined story identified by the refinement comment id, or a recorded unpointed result (for a Bug, an Investigation or a Spike, a "not accepted" round 2 Accept round result), and one Accept round result comment per accept round.
 - **Stop:** two accept rounds without all three `ACCEPT` (unpointed for a User Story, "not accepted" for a Bug, an Investigation or a Spike); a voter is missing; the PO cannot write to the tracker and the owner has not authorized the denied tracker writes fallback.
 
@@ -334,7 +338,6 @@ Cite [references/linear.md](references/linear.md) for the split mechanics; do no
 A Bug, an Investigation and a Spike carry no estimate under Estimation and slicing in [references/linear.md](references/linear.md); the Step 1 type check names the type.
 
 - **Refinement only:** A Bug, an Investigation or a Spike runs all of Stage 1 (independent inputs, the refinement comment and the accept round) and skips Stage 2 entirely: no pointing launch, no point value, no SM/EM sizing context, no consensus check, no basis-challenge round, no discussion or re-vote, no estimate write, no pointing record, no anchoring check, and no estimate-triggered split under the [Split rule](#split-rule).
-- **No estimate kept:** The ceremony writes no point value; when the issue already carries an estimate, the PO removes it (sets the estimate to null) as a triage write and reads it back as null before the Triage record is posted.
 - **Pointing skipped line:** The refinement comment carries the line `Pointing skipped: <Bug|Investigation|Spike> is unestimated (references/linear.md, Estimation and slicing)`.
 - **Not accepted:** After two accept rounds without three `ACCEPT`, the outcome reads "not accepted", never "unpointed": Step 2 item 7 authors no unpointed pointing record for these types, and the round 2 Accept round result comment is the stop record and carries the objecting voters' blocking amendments.
 - **Closing outcome:** On an accepted outcome the closing message outcome reads "refined, not pointed (<type>)"; on a "not accepted" outcome it names that outcome and the two-round cap as the stop reason, never "unpointed".
@@ -345,9 +348,10 @@ A Bug, an Investigation and a Spike carry no estimate under Estimation and slici
 - **Definition of Ready verdict:** The voters' Definition of Ready verdict covers only the boxes the filing template has; none of the three templates has any, so the verdict reads "template has no Definition of Ready".
 - **Priority:** The PO decides and reads back a priority from at least one comparable prioritised story in the team of `STORY_ID`, as for a story, on an accepted and on a "not accepted" outcome alike, and posts the Triage record; the priority stop for a team with no comparable story applies unchanged.
 - **Ready gate:** A Bug, an Investigation or a Spike moves to `profile.tracker.states.ready` only when all three voters returned `ACCEPT`, no blocker remains, the priority is read back equal to the decided value, every Definition of Ready box its template has is ticked with evidence (none do, so this is vacuous), and the template's evidence sections are non-empty and no longer the filing template's placeholder text: Bug `Observed` and `Expected`, Investigation `Incident`, and Spike `Timebox` and `Research Questions`.
-  A section still holds placeholder text when any bracketed template instruction that the filing template puts in that section remains in it verbatim, compared with each run of whitespace read as one space: each `[...]` instruction of the `linear-bug` or `linear-spike` template, whether on a line of its own like `[What should have happened instead.]`, wrapped across lines like the Bug `Observed` instruction, inline after the section label like `**Timebox:** [X days]`, or numbered like `1. [Key question to answer]`, and each `<...>` token of the `linear-investigation` template's `Incident` line, such as `<Paging system>`; a section that is empty or still holds one fails this condition.
+  A section still holds placeholder text when any bracketed template instruction that the filing template puts in that section remains in it verbatim, compared with each run of whitespace read as one space: each `[...]` instruction of the `linear-bug` or `linear-spike` template, whether on a line of its own like `[What should have happened instead.]`, wrapped across lines like the Bug `Observed` instruction, inline after the section label like `**Timebox:** [X days]`, or numbered like `1. [Key question to answer]`, and each of the `linear-investigation` template's own `<...>` tokens on its `Incident` line, such as `<Paging system>`; a section that is empty or still holds one fails this condition.
   Text the author wrote in brackets, such as a Markdown link, is not template placeholder text.
   Otherwise it stays in `profile.tracker.states.backlog` and the Triage record's `State:` line names the unmet condition; on a move to ready the line reads "ready: all conditions met".
+  An issue already in `profile.tracker.states.ready` or a later state whose gate fails is moved back to `profile.tracker.states.backlog`, and its `State:` line names the unmet condition the same way.
 
 ## Triage
 
@@ -409,6 +413,7 @@ This section applies only when `metrics` is on.
 - **Stop before a record:** On a stop before a pointing record exists, the comment posts only after every Step 1 voter input is recorded - with the three-voter roster, all three Stage 1 voter inputs - and every launched voter has returned or been stopped, with its end timestamp taken; on that path no pointing record and no triage write is required.
   A stop before every Step 1 voter input is recorded attempts no post, because Step 1 allows no tracker comment before then except the preflight, and the summary stays in the closing message.
   For a Bug, an Investigation or a Spike, this rule applies unchanged with "pointing record" read as "refinement comment".
+  For those types, a stop after the refinement comment exists but before an accept round outcome (a voter is missing, or the tracker writes are denied without the fallback) posts only after the refinement comment and every Accept round result comment posted so far are read back.
 - **Never during an anchoring recovery:** The comment is never posted while an anchoring recovery, its Step 3 re-run, or any Step 4 re-vote that follows them, is still to run.
 - **Resumed run:** A resumed run is a new invocation and posts its own comment covering only that invocation; a resume in the same session after the owner authorizes the denied tracker writes fallback is the same invocation and posts once.
 - **Denied post:** If the post is denied or unavailable, the closing message carries the summary and names the denied or unavailable write, and no other tool or server is tried.

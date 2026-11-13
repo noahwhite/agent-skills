@@ -2669,6 +2669,7 @@ TYPE_FIXTURES = [
     ("maintenance, rtb only", {"rtb"}, set(), "estimated", "run"),
     ("two type labels", {"bug", "investigation"}, set(), "needs input", "stop: names the labels"),
     ("user_story with a type label (maintenance defect)", {"user_story", "bug", "rtb"}, set(), "estimated", "run"),
+    ("user_story with two type labels", {"user_story", "bug", "spike"}, set(), "estimated", "run"),
     ("unset type-label key", {"user_story"}, {"investigation"}, "needs input", "stop: names the key"),
     ("unset user_story key, no type label", {"feature"}, {"user_story"}, "needs input", "stop: names the key"),
 ]
@@ -2711,8 +2712,9 @@ def test_step_one_mentions_stage_two_only_to_omit_it() -> None:
         "Record `type: <Bug|Investigation|Spike|estimated>` on the todo list; the type is final once written there, "
         "and for a Bug, an Investigation or a Spike the list omits every Stage 2 item, as the story-refinement seed "
         "line in [references/todo-tracking.md](references/todo-tracking.md) states.",
-        "When the type written is Bug, Investigation or Spike, remove from the list every Stage 2 item the Read first "
-        "seed placed on it, in the same update that writes the type.",
+        "When the type written is Bug, Investigation or Spike, remove from the list every Stage 2 item, whether the "
+        "bootstrap list (its Step 3 and Step 4 items) or the Read first seed placed it there, in the same update that "
+        "writes the type.",
     ]
 
 
@@ -2772,8 +2774,8 @@ def test_type_fixture_table_maps_each_label_set_to_its_documented_path(
 
 
 def test_type_fixture_table_covers_every_type_and_stop() -> None:
-    """B8a: one Bug, Investigation, Spike and User Story row, one row per B1 stop, and one row for `user_story`
-    together with a type label."""
+    """B8a: one Bug, Investigation, Spike and User Story row, one row per B1 stop, and rows for `user_story`
+    together with one and with two type labels, each run as an estimated User Story."""
     outcomes = [(row[3], row[4]) for row in TYPE_FIXTURES]
     for expected in (
         ("Bug", "skip"),
@@ -2783,9 +2785,10 @@ def test_type_fixture_table_covers_every_type_and_stop() -> None:
     ):
         assert outcomes.count(expected) == 1, expected
     assert outcomes.count(("needs input", "stop: names the key")) == 2
-    assert outcomes.count(("estimated", "run")) == 3
+    assert outcomes.count(("estimated", "run")) == 4
     story_with_type = [row for row in TYPE_FIXTURES if "user_story" in row[1] and row[1] & set(TYPE_NAMES)]
-    assert [(row[3], row[4]) for row in story_with_type] == [("estimated", "run")]
+    assert sorted(len(row[1] & set(TYPE_NAMES)) for row in story_with_type) == [1, 2]
+    assert {(row[3], row[4]) for row in story_with_type} == {("estimated", "run")}
 
 
 def test_unestimated_section_skips_stage_two_entirely() -> None:
@@ -2870,12 +2873,14 @@ def test_unestimated_section_decides_priority_on_every_outcome() -> None:
         "puts in that section remains in it verbatim, compared with each run of whitespace read as one space: each "
         "`[...]` instruction of the `linear-bug` or `linear-spike` template, whether on a line of its own like `[What "
         "should have happened instead.]`, wrapped across lines like the Bug `Observed` instruction, inline after the "
-        "section label like `**Timebox:** [X days]`, or numbered like `1. [Key question to answer]`, and each `<...>` "
-        "token of the `linear-investigation` template's `Incident` line, such as `<Paging system>`; a section that "
-        "is empty or still holds one fails this condition.",
+        "section label like `**Timebox:** [X days]`, or numbered like `1. [Key question to answer]`, and each of the "
+        "`linear-investigation` template's own `<...>` tokens on its `Incident` line, such as `<Paging system>`; a "
+        "section that is empty or still holds one fails this condition.",
         "Text the author wrote in brackets, such as a Markdown link, is not template placeholder text.",
         "Otherwise it stays in `profile.tracker.states.backlog` and the Triage record's `State:` line names the "
         'unmet condition; on a move to ready the line reads "ready: all conditions met".',
+        "An issue already in `profile.tracker.states.ready` or a later state whose gate fails is moved back to "
+        "`profile.tracker.states.backlog`, and its `State:` line names the unmet condition the same way.",
     ],
 )
 def test_unestimated_section_states_the_ready_gate(sentence: str) -> None:
@@ -2911,7 +2916,7 @@ def test_ready_gate_placeholder_rule_covers_every_evidence_section(skill: str, s
     assert spans, f"{skill} {start} has no placeholder the rule can detect"
     gate = spaced(section(SKILL.read_text(), UNESTIMATED))
     bracket = "`[...]` instruction of the `linear-bug` or `linear-spike` template" if kind.startswith(r"\[") else (
-        "each `<...>` token of the `linear-investigation` template's `Incident` line"
+        "each of the `linear-investigation` template's own `<...>` tokens on its `Incident` line"
     )
     assert bracket in gate
     assert "remains in it verbatim, compared with each run of whitespace read as one space" in gate
@@ -2931,12 +2936,101 @@ def test_ready_gate_placeholder_examples_are_the_filing_templates_own() -> None:
     assert "<Paging system>" in investigation
 
 
-def test_unestimated_section_removes_an_existing_estimate() -> None:
-    """B2 and B8a: a Bug, an Investigation or a Spike never keeps an estimate, so its read-back is null."""
-    assert flat(
-        "The ceremony writes no point value; when the issue already carries an estimate, the PO removes it (sets the "
-        "estimate to null) as a triage write and reads it back as null before the Triage record is posted."
-    ) in unestimated_bullet("No estimate kept")
+def test_unestimated_section_has_no_estimate_write_instruction() -> None:
+    """B2: no estimate write, so the section never tells the PO to set or clear an estimate."""
+    text = spaced(section(SKILL.read_text(), UNESTIMATED)).lower()
+    assert "no estimate write" in text
+    for phrase in ("sets the estimate", "set the estimate", "removes it", "clears the estimate", "estimate to null"):
+        assert phrase not in text, phrase
+
+
+def placeholder_spans(skill: str, start: str, end: str, kind: str) -> list[str]:
+    return [" ".join(span.split()) for span in re.findall(kind, filing_section(skill, start, end))]
+
+
+def gate_admits(sections: dict[tuple[str, str], str]) -> bool:
+    """The ready gate's evidence condition as the skill states it: each named section is non-empty and holds none
+    of its filing template's own bracketed instructions verbatim, with each run of whitespace read as one space."""
+    for skill, start, end, kind in EVIDENCE_SECTIONS:
+        if (skill, start) not in sections:
+            continue
+        text = " ".join(sections[(skill, start)].split())
+        if not text or any(span in text for span in placeholder_spans(skill, start, end, kind)):
+            return False
+    return True
+
+
+BUG_OBSERVED = ("linear-bug", "**Observed**")
+BUG_EXPECTED = ("linear-bug", "**Expected**")
+
+
+@pytest.mark.parametrize(
+    "name, observed, expected, admitted",
+    [
+        ("compliant Bug", "The export returns 500 for a 2 MB file.", "The export returns the file.", True),
+        ("placeholder Bug", "The export returns 500.", "[What should have happened instead.]", False),
+        ("empty Bug section", "The export returns 500.", "  \n ", False),
+        (
+            "author-written bracketed note",
+            "The export returns 500, see [the log](https://example.invalid/log) [sic].",
+            "The export returns the file.",
+            True,
+        ),
+    ],
+)
+def test_ready_gate_admits_and_denies_bug_evidence(name: str, observed: str, expected: str, admitted: bool) -> None:
+    """B4: a filled Bug passes, a placeholder or empty section fails, and an author's own brackets do not fail it."""
+    assert "Text the author wrote in brackets, such as a Markdown link, is not template placeholder text." in spaced(
+        section(SKILL.read_text(), UNESTIMATED)
+    )
+    assert gate_admits({BUG_OBSERVED: observed, BUG_EXPECTED: expected}) is admitted, name
+
+
+def test_ready_gate_denies_the_wrapped_bug_observed_instruction() -> None:
+    """B4: the Observed instruction wraps in the template; rewrapped in an issue it is still placeholder text."""
+    (wrapped,) = placeholder_spans("linear-bug", "**Observed**", "**Expected**", r"\[[^\]]+\]")
+    rewrapped = wrapped.replace(" ", "\n", 3)
+    assert not gate_admits({BUG_OBSERVED: rewrapped, BUG_EXPECTED: "The export returns the file."})
+
+
+@pytest.mark.parametrize(
+    "path, sentence",
+    [
+        (
+            "skills/story-refinement/SKILL.md",
+            "For a Bug, an Investigation or a Spike, the brief also carries the type written on the todo list and that "
+            "type's bullet under Content per type in [Unestimated issue types](#unestimated-issue-types).",
+        ),
+        (
+            "skills/story-refinement/SKILL.md",
+            "For a Bug, an Investigation or a Spike, per-AC gaps and refined AC deltas apply only where the filing "
+            'template has acceptance criteria, and the Definition of Ready verdict reads "template has no Definition '
+            'of Ready".',
+        ),
+        (
+            "skills/story-refinement/SKILL.md",
+            "For those types the stop ends Stage 1 only: the PO still decides and reads back the priority and posts "
+            "the Triage record on this outcome, as [Unestimated issue types](#unestimated-issue-types) states, before "
+            "the closing message.",
+        ),
+        ("skills/story-refinement/SKILL.md", "A Bug, an Investigation or a Spike is refined and never pointed."),
+        (
+            "skills/story-refinement/SKILL.md",
+            "For those types, a stop after the refinement comment exists but before an accept round outcome (a voter "
+            "is missing, or the tracker writes are denied without the fallback) posts only after the refinement "
+            "comment and every Accept round result comment posted so far are read back.",
+        ),
+        (
+            "shared/linear.md",
+            "The estimate applies only to an estimated issue type: a Bug or an Investigation carries no estimate, and "
+            "a Spike carries a timebox instead.",
+        ),
+    ],
+)
+def test_unestimated_types_reach_every_rule_that_assumes_a_pointed_story(path: str, sentence: str) -> None:
+    """B2 and B3: the voter brief, output contract, accept round stop, description, metrics and triage rule each
+    carve out a Bug, an Investigation and a Spike."""
+    assert sentence in spaced((ROOT / path).read_text())
 
 
 def test_type_item_states_user_story_precedence_before_the_stop_and_the_naming() -> None:
