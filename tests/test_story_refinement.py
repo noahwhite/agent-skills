@@ -2674,15 +2674,64 @@ TYPE_NAMES = {"bug": "Bug", "investigation": "Investigation", "spike": "Spike"}
 
 
 def documented_type(labels: set[str], unset: set[str]) -> tuple[str, str]:
-    """The type check as the Step 1 item states it, applied to one fixture row."""
-    if unset & set(TYPE_LABEL_KEYS):
+    """The type check applied to one fixture row, with its keys, its label-to-type map and the Stage 2 skip
+    list read from the skill text rather than restated here."""
+    item = type_item()
+    resolve = re.search(r"Resolve (.*?) after profile defaults", item)
+    assert resolve, "the type item names the keys it resolves"
+    keys = set(re.findall(r"`profile\.tracker\.labels\.(\w+)`", resolve.group(1)))
+    assert keys == set(TYPE_LABEL_KEYS)
+    names = dict(re.findall(r"`profile\.tracker\.labels\.(\w+)` (?:names )?an? (Bug|Investigation|Spike)\b", item))
+    assert names == TYPE_NAMES
+    lead = section(SKILL.read_text(), UNESTIMATED).split("- **Refinement only:**", 1)[1].split("skips Stage 2", 1)[0]
+    skipped = set(re.findall(r"\b(Bug|Investigation|Spike)\b", lead))
+    if unset & keys:
         return "needs input", "stop: names the key"
-    kinds = labels & set(TYPE_NAMES)
+    kinds = labels & set(names)
     if len(kinds) > 1 or (kinds and "user_story" in labels):
         return "needs input", "stop: names the labels"
     if kinds:
-        return TYPE_NAMES[kinds.pop()], "skip"
+        kind = names[kinds.pop()]
+        return kind, "skip" if kind in skipped else "run"
     return "estimated", "run"
+
+
+def test_step_one_mentions_stage_two_only_to_omit_it() -> None:
+    """B1: Step 1 names Stage 2 only in the todo-list omission and removal sentences, never as a path to run."""
+    lines = [spaced(line) for line in operative_step(STEP_ONE).splitlines() if "stage 2" in line.lower()]
+    assert lines == [
+        "Record `type: <Bug|Investigation|Spike|estimated>` on the todo list; the type is final once written there, "
+        "and for a Bug, an Investigation or a Spike the list omits every Stage 2 item, as the story-refinement seed "
+        "line in [references/todo-tracking.md](references/todo-tracking.md) states.",
+        "When the type written is Bug, Investigation or Spike, remove from the list every Stage 2 item the Read first "
+        "seed placed on it, in the same update that writes the type.",
+    ]
+
+
+def test_step_one_inputs_and_reconciliation_take_the_template_as_it_is() -> None:
+    """B3: an Investigation template has no acceptance criteria and no Definition of Done, so neither is demanded."""
+    step_one = spaced(operative_step(STEP_ONE))
+    assert (
+        "the Definition of Ready and Definition of Done template from the matching filing skill, where that template "
+        "has them." in step_one
+    )
+    assert (
+        "The facilitator reconciles the inputs into one refined story: story text, refined acceptance criteria where "
+        "the filing template has them," in process_items(STEP_TWO)[0]
+    )
+    assert (
+        "The refinement comment includes the complete refined story and ACs where the filing template has them, or"
+        in process_items(STEP_TWO)[1]
+    )
+    assert (
+        "- Refined story snapshot: <the complete refined story and ACs where the filing template has them, or an "
+        "immutable link/commit>" in template("Refinement comment").splitlines()
+    )
+
+
+def test_readme_row_says_unestimated_types_are_never_pointed() -> None:
+    row = next(line for line in (ROOT / "README.md").read_text().splitlines() if "[`story-refinement`]" in line)
+    assert "a Bug, an Investigation or a Spike is refined and never pointed" in row
 
 
 # The skill text that documents each fixture row's path: the Step 1 type item, then for an unestimated type the
@@ -2743,9 +2792,9 @@ def test_unestimated_section_skips_stage_two_entirely() -> None:
 
 def test_unestimated_section_names_the_pointing_skipped_line() -> None:
     """B2: the refinement comment carries the exact line."""
-    assert flat(f"The refinement comment carries the line `{POINTING_SKIPPED}`.") in unestimated_bullet(
-        "Pointing skipped line"
-    )
+    assert f"The refinement comment carries the line `{POINTING_SKIPPED}`." in spaced(
+        section(SKILL.read_text(), UNESTIMATED)
+    ), "the line is pinned case-sensitively, as the record template copy is"
 
 
 def test_unestimated_section_reads_not_accepted_never_unpointed() -> None:
@@ -2945,7 +2994,7 @@ def test_todo_tracking_seed_states_the_unestimated_list() -> None:
                            "recorded, ")
 
 
-UNESTIMATED_TYPE_NAME = re.compile(r"\b(Bug|Investigation|Spike)s?\b")
+UNESTIMATED_TYPE_NAME = re.compile(r"\b(Bug|Investigation|Spike)s?\b", re.IGNORECASE)
 
 
 @pytest.mark.parametrize("heading", [STEP_THREE, STEP_FOUR])

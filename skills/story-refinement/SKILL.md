@@ -133,7 +133,7 @@ The guards and their commands come from the repository under refinement; this sk
 
 ### Step 1: Independent refinement
 
-- **Inputs:** the story description, acceptance criteria, comments, and formal relations; the profile; the capability references; the Definition of Ready and Definition of Done template from the matching filing skill.
+- **Inputs:** the story description, acceptance criteria, comments, and formal relations; the profile; the capability references; the Definition of Ready and Definition of Done template from the matching filing skill, where that template has them.
 - **Process:**
   1. With the todo list already created (Read first), read the story completely, including its labels and `linear issue relation list <ID>` for every blocker.
   2. Validate the refinement roster before the tracker-write preflight and before any voter launch.
@@ -146,6 +146,7 @@ The guards and their commands come from the repository under refinement; this sk
      An issue carrying two or more of those three labels, or one of them together with `profile.tracker.labels.user_story`, stops with `needs input` naming the labels; any other co-label, for example `profile.tracker.labels.rtb`, does not affect the type check.
      An issue with none of the three type labels, maintenance work included, runs the ceremony as a User Story with `type: estimated`.
      Record `type: <Bug|Investigation|Spike|estimated>` on the todo list; the type is final once written there, and for a Bug, an Investigation or a Spike the list omits every Stage 2 item, as the story-refinement seed line in [references/todo-tracking.md](references/todo-tracking.md) states.
+     When the type written is Bug, Investigation or Spike, remove from the list every Stage 2 item the Read first seed placed on it, in the same update that writes the type.
   4. Run the tracker-write preflight before any voter launches.
      The PO, in a separate context, posts one comment on the story under refinement that marks itself as the tracker-write preflight, and reads it back.
      On success the facilitator records the comment id for the refinement record.
@@ -176,9 +177,9 @@ The three engineer voters decide whether an SM/EM concern is a blocking amendmen
 
 - **Inputs:** the three voter refinement inputs and the separate SM/EM contribution.
 - **Process:**
-  1. The facilitator reconciles the inputs into one refined story: story text, refined acceptance criteria, scope and split, Definition of Ready changes, and open risks.
+  1. The facilitator reconciles the inputs into one refined story: story text, refined acceptance criteria where the filing template has them, scope and split, Definition of Ready changes, and open risks.
   2. The PO authors the refinement comment and the refined description and applies both; otherwise, under the denied tracker writes fallback, the facilitator applies both verbatim.
-     The refinement comment includes the complete refined story and ACs, or an immutable snapshot reference; its id identifies the refined version for every later step.
+     The refinement comment includes the complete refined story and ACs where the filing template has them, or an immutable snapshot reference; its id identifies the refined version for every later step.
   3. Run the accept round on that exact refinement comment id.
      Each of the three voters returns `ACCEPT` or `OBJECT` against the same refined version.
   4. After each accept round, the PO authors and posts a separate Accept round result comment that names the refinement comment id it covers, the round number, each voter's `ACCEPT` or `OBJECT`, and the outcome: accepted, another round, or unpointed.

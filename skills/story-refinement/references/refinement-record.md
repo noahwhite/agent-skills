@@ -19,7 +19,7 @@ For a Bug, an Investigation or a Spike, the comment carries the `Pointing skippe
 - Pointing skipped: <Bug|Investigation|Spike> is unestimated (references/linear.md, Estimation and slicing)
 - Tracker-write preflight: comment <id>
 - Refined story identifier: <this comment id>
-- Refined story snapshot: <the complete refined story and ACs, or an immutable link/commit>
+- Refined story snapshot: <the complete refined story and ACs where the filing template has them, or an immutable link/commit>
 - Refined story identifier after blocking amendments: <the new comment id, or none>
 - Voter inputs, each recorded in its own separate context:
   - Engineer one (<family or model>): <file base name>
