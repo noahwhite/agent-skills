@@ -103,59 +103,56 @@ def test_named_issue_key_decides_the_team(path: Path) -> None:
 
 # --- SKL-230: one split rule for refinement, filing and triage; re-split with no escalation exit ------
 
-# The section from its start through the split rule is matched verbatim, so a sentence added before or inside
-# the rule (an owner hand-off, a stop condition, an approval of an oversize slice, assigning before splitting)
-# fails. Bullets after the rule belong to other work; only the close-time bullet is asserted there.
-ESTIMATION_HEAD = "\n".join(
-    (
-        "- Estimates use `profile.tracker.estimate_scale`.",
-        "  Only user stories and maintenance work get estimates; spikes carry a timebox instead, and bugs and "
-        "investigations are unestimated.",
-        "- `linear issue view --json` omits `estimate`, as it omits relations, even when the issue carries one, and "
-        "the plain view prints no estimate line.",
-        "  Read an estimate with `linear api 'query { issue(id: \"ABC-123\") { estimate } }'`, or through the Linear "
-        "MCP `get_issue` with the `estimate` field.",
-        "  The team issue list renders it in its estimate column, which is a display path, not a read path for a "
-        "script.",
-    )
-)
-SPLIT_RULE_BLOCK = "\n".join(
+# Owner decision (SKL-230): pin only the split rule, whitespace-normalised, as its two bullets. A line added inside
+# either bullet fails; sibling bullets elsewhere in the section (such as SKL-239's, which may sit between the two)
+# and a rewrap still pass.
+SPLIT_BULLET = " ".join(
     (
         "- ⛔ Split a story whose estimate is above `profile.refinement.point_cap` or is 8 or more, without asking, "
         "before it is assigned or work is delegated, and present the slices.",
-        "  This is one split rule for an estimate recorded at refinement and for one made outside a ceremony, "
+        "This is one split rule for an estimate recorded at refinement and for one made outside a ceremony, "
         "at filing or triage.",
-        "  Keep the original issue for the core slice, create siblings for the rest, and wire blocked-by or related "
+        "Keep the original issue for the core slice, create siblings for the rest, and wire blocked-by or related "
         "edges.",
+    )
+)
+RESPLIT_BULLET = " ".join(
+    (
         "- ⛔ Split every resulting slice that still meets that trigger again, as many rounds as it takes, "
         "until no slice meets it; there is no escalation exit.",
-        "  Split along the first boundary that applies, in this order:",
-        "  1. the planned PR or slice boundary;",
-        "  2. an acceptance criterion;",
-        "  3. where one acceptance criterion alone still meets the trigger, that criterion is rewritten at "
+        "Split along the first boundary that applies, in this order:",
+        "1. the planned PR or slice boundary;",
+        "2. an acceptance criterion;",
+        "3. where one acceptance criterion alone still meets the trigger, that criterion is rewritten at "
         "refinement or triage into narrower observable criteria (by artifact, case or environment) that keep the "
         "same coverage, and the slice is split along them;",
-        "  4. the smallest outcome that can be reviewed, merged and verified on its own, including enabling work "
+        "4. the smallest outcome that can be reviewed, merged and verified on its own, including enabling work "
         "such as interface or schema first and behaviour second.",
-        "",
-        "  No rung discards scope, delegates an oversize slice or hands one to the owner as an estimate.",
+        "No rung discards scope, delegates an oversize slice or hands one to the owner as an estimate.",
     )
 )
 CLOSE_TIME = "- ⛔ Never split an issue at close time to carve off unfinished work; that is status laundering."
 
 
+def whole_bullet(flat: str, bullet: str) -> int:
+    """Index of `bullet` in `flat`, asserting it is a whole top-level bullet: the next bullet or the end follows."""
+    start = flat.find(bullet)
+    assert start != -1, f"Estimation and slicing does not hold the SKL-230 bullet: {bullet[:60]}"
+    after = flat[start + len(bullet) :]
+    assert after == "" or after.startswith(" - "), f"a line was added inside the SKL-230 bullet: {bullet[:60]}"
+    return start
+
+
 @pytest.mark.parametrize("path", [SHARED_LINEAR, *VENDORED_LINEAR], ids=lambda p: str(p.relative_to(ROOT)))
 def test_one_split_rule_resplits_in_boundary_order_with_no_escalation_exit(path: Path) -> None:
-    estimation = section(path.read_text(), "Estimation and slicing").lstrip("\n")
-    assert estimation.startswith(f"{ESTIMATION_HEAD}\n{SPLIT_RULE_BLOCK}\n"), (
-        "Estimation and slicing, from its start through the split rule, differs from the SKL-230 rule"
-    )
-    assert CLOSE_TIME in estimation.splitlines(), "the close-time status-laundering bullet must stay unchanged"
-    tail = estimation[len(f"{ESTIMATION_HEAD}\n{SPLIT_RULE_BLOCK}\n") :]
-    exits = re.findall(r"\b(?:owner\w*|hand\w*|oversize)\b", tail, re.IGNORECASE)
-    assert not exits, f"a bullet after the split rule gives an oversize slice another exit: {exits}"
-    stray = re.findall(r"escalat\w*", re.sub(r"no escalation exit", "", estimation, flags=re.IGNORECASE), re.I)
-    assert not stray, f"an escalation mention other than 'no escalation exit' remains: {stray}"
+    estimation = spaced(section(path.read_text(), "Estimation and slicing"))
+    split_at = whole_bullet(estimation, SPLIT_BULLET)
+    resplit_at = whole_bullet(estimation, RESPLIT_BULLET)
+    assert split_at < resplit_at, "the re-split bullet must follow the split bullet"
+    assert spaced(CLOSE_TIME) in estimation, "the close-time status-laundering bullet must stay unchanged"
+    rest = estimation.replace(SPLIT_BULLET, "").replace(RESPLIT_BULLET, "")
+    stray = re.findall(r"escalat\w*", rest, re.IGNORECASE)
+    assert not stray, f"an escalation mention outside the split rule's 'no escalation exit': {stray}"
 
 
 def test_vendored_linear_copies_are_found() -> None:
