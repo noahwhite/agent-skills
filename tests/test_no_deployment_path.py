@@ -236,15 +236,16 @@ STEP_TWELVE_PINS = {
     "handoff-after-merge": (
         "Run this step once a fetch of `origin` shows the merged commit on "
         "`origin/<profile.git.integration_branch>` (`git merge-base --is-ancestor <merged commit> "
-        "origin/<profile.git.integration_branch>` exits 0) and no later commit there undoes the story's change: "
-        "`git log --oneline <merged commit>..origin/<profile.git.integration_branch> -- <files>`, with the files "
-        "`gh pr diff <PR number> --name-only` prints, lists every later commit that touched a file the PR "
-        "changed, and you read the diff of each listed commit."
+        "origin/<profile.git.integration_branch>` exits 0) and the story's change is still in effect there: "
+        "`git diff --find-renames --name-status <merged commit> origin/<profile.git.integration_branch>` names "
+        "each file the PR changed under its current path, and `git diff --find-renames <merged commit> "
+        "origin/<profile.git.integration_branch> -- <old and current paths>` shows the net change to those files "
+        "since the merge, which you read against `gh pr diff <PR number>`."
     ),
     "handoff-reverted-stops": (
-        "When a listed commit removes or reverses what the story's PR changed, stop and report that the story's "
-        "change is not intact on `origin/<profile.git.integration_branch>`; a commit that builds on the change, "
-        "or edits other lines of those files, does not stop this step."
+        "When that net change removes or reverses what the story's PR changed, stop and report that the story's "
+        "change is not intact on `origin/<profile.git.integration_branch>`; a change that builds on the story's "
+        "change, or edits other lines of those files, does not stop this step."
     ),
     "handoff-spike-no-change": (
         "For a spike with no tracked-file change, run it instead once the checks repeated immediately before "
