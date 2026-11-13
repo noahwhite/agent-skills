@@ -466,10 +466,10 @@ QA_ENV_PINS = {
     ),
     "qa-env-containment": (
         "A dependency's change is contained in the target when its merged commit is an ancestor of the target "
-        "commit (`git merge-base --is-ancestor <dependency merged commit> <target commit>` exits 0), or of "
-        "`origin/<profile.git.integration_branch>` when the target has no commit; a dependency with no commit, "
-        "such as a spike deliverable, is contained only when the target links each deliverable the "
-        "dependency's `engineering-workflow` step 12 note links."
+        "commit (`git merge-base --is-ancestor <dependency merged commit> <target commit>` exits 0); when the "
+        "target or the dependency has no commit, such as a spike deliverable, the change is contained only "
+        "when the target links the dependency's merged commit or, for a dependency with no commit, each "
+        "deliverable the dependency's `engineering-workflow` step 12 note links."
     ),
     "qa-env-no-lanes": (
         "On both paths, steps 2 and 3 apply to the `deployed` path only, except step 3's rule on mutating "
