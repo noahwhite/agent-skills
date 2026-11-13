@@ -60,8 +60,34 @@ It runs the independent refinement, the accept round, the secret pointing, the c
 5. Apply the scope rules: no acceptance criterion changed on any story ([references/linear.md](references/linear.md) "Acceptance criteria and scope"), no skip keyed on another story ([references/engineering-practice.md](references/engineering-practice.md) "Make minimal, durable changes"), and the only two exits are a "Refinement proposal (not an AC)" or reporting the story blocked, as those sections state; step 5, "Prepare the PR", item 4, "Self-review against the acceptance criteria", checks them again.
 6. Move it to `profile.tracker.states.in_progress` and read it back to confirm.
    Use the exact state names from the profile; never invent one.
+7. Select the run's path as "Select the path" below states, before any later step runs.
 
 If the tracker cannot be updated, stop and say the transition was not performed; never claim it was.
+
+### Select the path
+
+A run follows exactly one path: `spike`, `no-deployment` or `deployed`.
+When a brief states the path, that path governs: no ask case applies and you never reselect it.
+When no brief states a path, select exactly one path before any later step runs.
+
+Ask the user for the path, and run no later step until answered, in exactly these cases:
+
+- `profile.environments` is absent (an absent key is never read as `[]`);
+- `profile.environments` is non-empty and no entry's `branch` equals `profile.git.integration_branch`;
+- the story title starts with `[Spike]` and the story lacks the spike label (including when `profile.tracker.labels.spike` is unset);
+- the story carries the spike label and its title does not start with `[Spike]`.
+
+An ask case takes precedence over the selection conditions below.
+The answer is one of `spike`, `no-deployment` or `deployed`, and it is the path: it replaces the selection below.
+Never infer a path from prose, and ask nothing else about the path.
+
+Otherwise select:
+
+- `spike` when the story carries the label named by `profile.tracker.labels.spike`, looked up on the story's team under the differing-team rule in [references/linear.md](references/linear.md) "Team resolution";
+- otherwise `no-deployment` when `profile.environments` is present and is `[]`;
+- otherwise `deployed` when `profile.environments` has an entry whose `branch` equals `profile.git.integration_branch`.
+
+The selected path governs the whole run.
 
 ## 2. Plan slices
 
