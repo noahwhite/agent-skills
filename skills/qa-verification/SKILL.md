@@ -71,17 +71,17 @@ The selected path governs the whole run.
 - When logs or metrics are shared between environments, always filter by the environment label.
 - If the overlay provides a smoke check across all lanes, run it first and confirm every lane is green before per-story work.
 
-On the `no-deployment` and `spike` paths, QA chooses no environment and confirms no deployed build: the bullets above that do so apply to the `deployed` path only, and QA verifies against the path's target instead:
+On the `no-deployment` and `spike` paths, QA chooses no environment and confirms no deployed build: every bullet above except the QA credentials bullet applies to the `deployed` path only, and QA verifies against the path's target instead:
 
-- `no-deployment`: the target is the merged commit the `engineering-workflow` step 12 note names, confirmed on `profile.git.integration_branch` (after a fetch of `origin`, `git merge-base --is-ancestor <merged commit> origin/<profile.git.integration_branch>` exits 0); if it is not there, stop: the story is not yet testable.
-- `spike`: the target is each deliverable the `engineering-workflow` step 12 note links.
+- `no-deployment`: the target is the merged commit the `engineering-workflow` step 12 note names, confirmed on `profile.git.integration_branch` (after a fetch of `origin`, `git merge-base --is-ancestor <merged commit> origin/<profile.git.integration_branch>` exits 0); if it is not there, stop: the story is not yet testable, and it stays in `profile.tracker.states.in_deployment_review`.
+- `spike`: the target is each deliverable the `engineering-workflow` step 12 note links, read at its commit on `profile.git.integration_branch` when it has one.
 
 On `no-deployment`, record the merged commit SHA.
 On `spike`, record each deliverable's link and its commit SHA when one exists, or record that the deliverable has no commit.
-Neither path requires or records an environment or a deployed build SHA; where a later step records the build SHA and the environment (the step 4 evidence comment and the completion summary), record the path and the target records above instead.
-On both paths, step 1's dependency status rule reads "merged and deployed to the environment under test" as merged to `profile.git.integration_branch`: verify the item directly when its dependency is in `profile.tracker.states.in_deployment_review` or `profile.tracker.states.done`, and flag it blocked only when it is not.
-On both paths, step 2 and the probes and fixtures of step 3 apply to the `deployed` path only: QA verifies each AC and DoD item by inspecting the committed artifacts at the target, and the commands it runs and their output are the structured assertions step 3 captures.
-On both paths, rule the DoD line "Verified in a deployed environment (if needed)" not needed, giving the path as the reason, count it as met for step 6 and tick that box.
+Neither path requires or records an environment or a deployed build SHA; where a later step records the build SHA, the environment or the fixtures (the step 4 evidence comment, the step 5 evidence `README.md` and the completion summary), record the path and the target records above instead.
+On both paths, every later condition on a deploy, a deployed build or the environment under test reads as the path's target, so step 1's dependency status rule verifies an item directly when its dependency is in `profile.tracker.states.in_deployment_review` or `profile.tracker.states.done`, and flags it blocked only when it is not.
+On both paths, steps 2 and 3 apply to the `deployed` path only: QA verifies each AC and DoD item by inspecting the target (the committed artifacts, or a deliverable linked as a comment or an attachment), and the item's evidence is the commands QA ran with their output, or the deliverable it read; no screenshot is required.
+On both paths, rule the DoD line "Verified in a deployed environment (if needed)" not needed with the verdict correct by design, giving the path as the reason, count it as met for step 6 and tick that box.
 
 ## 1. Read the story and enumerate what to verify
 

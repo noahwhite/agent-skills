@@ -435,17 +435,18 @@ QA_PATH_PINS = {
 QA_ENV_PINS = {
     "qa-env-other-paths": (
         "On the `no-deployment` and `spike` paths, QA chooses no environment and confirms no deployed build: "
-        "the bullets above that do so apply to the `deployed` path only, and QA verifies against the path's "
-        "target instead:"
+        "every bullet above except the QA credentials bullet applies to the `deployed` path only, and QA "
+        "verifies against the path's target instead:"
     ),
     "qa-env-target-no-deployment": (
         "- `no-deployment`: the target is the merged commit the `engineering-workflow` step 12 note names, "
         "confirmed on `profile.git.integration_branch` (after a fetch of `origin`, `git merge-base "
         "--is-ancestor <merged commit> origin/<profile.git.integration_branch>` exits 0); if it is not there, "
-        "stop: the story is not yet testable."
+        "stop: the story is not yet testable, and it stays in `profile.tracker.states.in_deployment_review`."
     ),
     "qa-env-target-spike": (
-        "- `spike`: the target is each deliverable the `engineering-workflow` step 12 note links."
+        "- `spike`: the target is each deliverable the `engineering-workflow` step 12 note links, read at its "
+        "commit on `profile.git.integration_branch` when it has one."
     ),
     "qa-env-record-no-deployment": "On `no-deployment`, record the merged commit SHA.",
     "qa-env-record-spike": (
@@ -454,26 +455,66 @@ QA_ENV_PINS = {
     ),
     "qa-env-no-environment": (
         "Neither path requires or records an environment or a deployed build SHA; where a later step records "
-        "the build SHA and the environment (the step 4 evidence comment and the completion summary), record "
-        "the path and the target records above instead."
+        "the build SHA, the environment or the fixtures (the step 4 evidence comment, the step 5 evidence "
+        "`README.md` and the completion summary), record the path and the target records above instead."
     ),
     "qa-env-dependency-rule": (
-        "On both paths, step 1's dependency status rule reads \"merged and deployed to the environment under "
-        'test" as merged to `profile.git.integration_branch`: verify the item directly when its dependency is '
-        "in `profile.tracker.states.in_deployment_review` or `profile.tracker.states.done`, and flag it "
-        "blocked only when it is not."
+        "On both paths, every later condition on a deploy, a deployed build or the environment under test "
+        "reads as the path's target, so step 1's dependency status rule verifies an item directly when its "
+        "dependency is in `profile.tracker.states.in_deployment_review` or `profile.tracker.states.done`, and "
+        "flags it blocked only when it is not."
     ),
     "qa-env-no-lanes": (
-        "On both paths, step 2 and the probes and fixtures of step 3 apply to the `deployed` path only: QA "
-        "verifies each AC and DoD item by inspecting the committed artifacts at the target, and the commands "
-        "it runs and their output are the structured assertions step 3 captures."
+        "On both paths, steps 2 and 3 apply to the `deployed` path only: QA verifies each AC and DoD item by "
+        "inspecting the target (the committed artifacts, or a deliverable linked as a comment or an "
+        "attachment), and the item's evidence is the commands QA ran with their output, or the deliverable it "
+        "read; no screenshot is required."
     ),
     "qa-env-dod-not-needed": (
-        'On both paths, rule the DoD line "Verified in a deployed environment (if needed)" not needed, giving '
-        "the path as the reason, count it as met for step 6 and tick that box."
+        'On both paths, rule the DoD line "Verified in a deployed environment (if needed)" not needed with the '
+        "verdict correct by design, giving the path as the reason, count it as met for step 6 and tick that box."
     ),
 }
 QA_PINS = {**QA_DESCRIPTION_PINS, **QA_INTRO_PINS, **QA_PATH_PINS, **QA_ENV_PINS}
+# The pin inventory, listed apart from the pins so a pinned sentence cannot be dropped together with
+# its pin and its block entry while the suite stays green.
+QA_PIN_KEYS = (
+    "qa-description",
+    "qa-intro-deployed-path",
+    "qa-intro-other-paths",
+    "qa-intro-committed-artifacts",
+    "qa-intro-brief",
+    "qa-path-section",
+    "qa-three-paths",
+    "qa-brief-governs",
+    "qa-select-before-verification",
+    "qa-ask-intro",
+    "qa-ask-environments-absent",
+    "qa-ask-no-integration-entry",
+    "qa-ask-spike-title-no-label",
+    "qa-ask-spike-label-no-title",
+    "qa-ask-precedence",
+    "qa-ask-answer-is-path",
+    "qa-no-inference",
+    "qa-select-intro",
+    "qa-select-spike",
+    "qa-select-no-deployment",
+    "qa-select-deployed",
+    "qa-path-governs-run",
+    "qa-env-other-paths",
+    "qa-env-target-no-deployment",
+    "qa-env-target-spike",
+    "qa-env-record-no-deployment",
+    "qa-env-record-spike",
+    "qa-env-no-environment",
+    "qa-env-dependency-rule",
+    "qa-env-no-lanes",
+    "qa-env-dod-not-needed",
+)
+
+
+def test_qa_pin_inventory_is_complete() -> None:
+    assert tuple(QA_PINS) == QA_PIN_KEYS
 
 
 def text_between(text: str, start: str, end: str) -> str:
@@ -543,7 +584,7 @@ def test_qa_targets_are_exactly_the_two_paths() -> None:
 def qa_added_blocks() -> list[str]:
     """The exact text SKL-269 inserts into qa-verification, built from the pins in order."""
     description = f"{QA_DESCRIPTION_PINS['qa-description']}\n"
-    intro ="".join(f"{line}\n" for line in QA_INTRO_PINS.values())
+    intro = "".join(f"{line}\n" for line in QA_INTRO_PINS.values())
     p = QA_PATH_PINS
     asks = "".join(f"{p[f'qa-{key}']}\n" for key in ASK_CASES)
     selections = "".join(f"{p[f'qa-{key}']}\n" for key in SELECTIONS)
