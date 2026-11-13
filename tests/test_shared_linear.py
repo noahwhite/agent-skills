@@ -137,16 +137,25 @@ def test_one_split_rule_resplits_with_no_escalation_exit(path: Path) -> None:
     assert RESPLIT in estimation
     assert NO_RUNG_ESCAPES in estimation
     assert "or escalated" not in estimation
+    mentions = re.findall(r"escalat\w*", estimation, re.IGNORECASE)
+    assert len(mentions) == estimation.count("no escalation exit"), (
+        f"an escalation mention other than 'no escalation exit' remains: {mentions}"
+    )
+    handoffs = re.findall(r"\b(?:owner|hand\w*)\b", estimation.replace(NO_RUNG_ESCAPES, ""), re.IGNORECASE)
+    assert not handoffs, f"the split rule hands an oversize slice to someone: {handoffs}"
     assert CLOSE_TIME in estimation, "the close-time status-laundering bullet must stay unchanged"
 
 
 @pytest.mark.parametrize("path", [SHARED_LINEAR, *VENDORED_LINEAR], ids=lambda p: str(p.relative_to(ROOT)))
 def test_boundary_order_rungs_are_in_order(path: Path) -> None:
-    estimation = spaced(section(path.read_text(), "Estimation and slicing"))
-    positions = [estimation.find(rung) for rung in BOUNDARY_ORDER]
-    assert -1 not in positions, f"missing rung: {[r for r, p in zip(BOUNDARY_ORDER, positions) if p == -1]}"
-    assert positions == sorted(positions), "the boundary order rungs are out of order"
-    assert estimation.find(RESPLIT) < positions[0] < positions[-1] < estimation.find(NO_RUNG_ESCAPES)
+    raw = section(path.read_text(), "Estimation and slicing")
+    estimation = spaced(raw)
+    start = estimation.find(RESPLIT)
+    assert start != -1, "the re-split bullet that introduces the boundary order is missing"
+    block = " ".join((RESPLIT, *BOUNDARY_ORDER, NO_RUNG_ESCAPES))
+    assert estimation[start:].startswith(block), "the boundary order does not follow the re-split bullet, in order"
+    for rung in BOUNDARY_ORDER:
+        assert f"\n  {rung[:3]}" in raw, f"rung is not a nested list item under the re-split bullet: {rung}"
 
 
 def test_vendored_linear_copies_are_found() -> None:

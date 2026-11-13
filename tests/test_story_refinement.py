@@ -427,7 +427,10 @@ def test_split_rule_has_no_size_clause() -> None:
 
 def test_shared_linear_rule_has_no_size_clause() -> None:
     lines = (ROOT / "shared" / "linear.md").read_text().splitlines()
-    start = next(index for index, line in enumerate(lines) if line.startswith("- ⛔ Split a story whose estimate is"))
+    start = next(
+        (index for index, line in enumerate(lines) if line.startswith("- ⛔ Split a story whose estimate is")), None
+    )
+    assert start is not None, "shared/linear.md has no bullet starting '- ⛔ Split a story whose estimate is'"
     end = next(index for index in range(start + 1, len(lines)) if lines[index] and not lines[index].startswith(" "))
     bullet = flat(" ".join(lines[start:end]))
     assert bullet.startswith(
@@ -489,6 +492,8 @@ def test_split_rule_has_no_escalation_exit() -> None:
     assert len(mentions) == body.count("no escalation exit"), (
         f"an escalation mention other than 'no escalation exit' remains: {mentions}"
     )
+    handoffs = re.findall(r"\b(?:owner|hand\w*)\b", body.replace(UNPOINTED_SLICE_STOP, ""), re.IGNORECASE)
+    assert not handoffs, f"the Split rule hands an oversize slice to someone: {handoffs}"
 
 
 def test_split_rule_cites_the_boundary_order_without_restating_it() -> None:
