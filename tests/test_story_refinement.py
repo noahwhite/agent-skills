@@ -65,15 +65,28 @@ RUNTIME_TERMS = re.compile(
 )
 
 
-FENCE_OPEN = re.compile(r" {0,3}(`{3,}|~{3,})")
+FENCE_OPEN = re.compile(r" {0,3}(?:(`{3,})([^`]*)|(~{3,})(.*))")
 
 
-def fence_ids(lines: list[str]) -> list[int]:
+def fence_opening(line: str) -> tuple[str, str] | None:
+    """The fence marker and info string a line opens a fenced code block with, or None.
+
+    A fence opens with three or more backticks or tildes indented at most three spaces; a backtick fence's info
+    string holds no backtick, so a line that only starts with an inline code span opens nothing.
+    """
+    match = FENCE_OPEN.fullmatch(line.rstrip("\r\n"))
+    if not match:
+        return None
+    marker = match.group(1) or match.group(3)
+    info = match.group(2) if match.group(1) else match.group(4)
+    return marker, info.strip()
+
+
+def fence_ids(lines: list[str], where: str = "") -> list[int]:
     """Per line, the index of the fenced code block it belongs to (delimiters included), or -1 for prose.
 
-    A fence opens with three or more backticks or tildes indented at most three spaces, and closes with a line of
-    the same character, at least as long, and nothing else; an unclosed fence fails as its own error, so a broken
-    fence is never reported as a missing section.
+    A fence closes with a line of the same character, at least as long, and nothing else; an unclosed fence fails as
+    its own error, naming `where`, so a broken fence is never reported as a missing section.
     """
     ids, current, marker = [], -1, ""
     count = 0
@@ -83,28 +96,30 @@ def fence_ids(lines: list[str]) -> list[int]:
             if re.fullmatch(rf" {{0,3}}{re.escape(marker[0])}{{{len(marker)},}}[ \t]*", line.rstrip("\r\n")):
                 marker = ""
             continue
-        opening = FENCE_OPEN.match(line)
+        opening = fence_opening(line)
         if opening:
-            marker, current = opening.group(1), count
+            marker, current = opening[0], count
             count += 1
             ids.append(current)
             continue
         ids.append(-1)
-    assert not marker, f"unclosed code fence (block {current})"
+    assert not marker, f"unclosed code fence (block {current}){where}"
     return ids
 
 
-def section(text: str, heading: str, level: int = 2) -> str:
-    """The operative text under a heading, up to the next heading of the same or a higher level.
+def section(text: str, heading: str, level: int = 2, until: int | None = None) -> str:
+    """The operative text under a heading, up to the next heading of level `until` (default: the same) or higher.
 
-    HTML comments are removed first, since commented-out text is not operative, and a heading-like line inside a
-    fenced code block (a record template's own `## ...` title, for example) is neither the heading nor its end.
+    HTML comments are removed first, since commented-out text is not operative, and an unclosed one fails rather
+    than leaving the text it opens operative; a heading-like line inside a fenced code block (a record template's own
+    `## ...` title, for example) is neither the heading nor its end.
     """
     text = re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)
+    assert "<!--" not in text, f"unclosed HTML comment (looking for {heading})"
     lines = text.splitlines(keepends=True)
-    ids = fence_ids(lines)
+    ids = fence_ids(lines, f" (looking for {heading})")
     own = re.compile(rf"{'#' * level} {re.escape(heading)}\s*$")
-    ends = re.compile(rf"#{{1,{level}}} ")
+    ends = re.compile(rf"#{{1,{until or level}}} ")
     start = None
     for index, line in enumerate(lines):
         if ids[index] != -1:
@@ -118,8 +133,11 @@ def section(text: str, heading: str, level: int = 2) -> str:
     return "".join(lines[start:])
 
 
-def segments(body: str) -> list[tuple[str, str]]:
-    """A section body split in order into ("prose", text) and ("fence", content without its delimiters) parts."""
+def segments(body: str) -> list[tuple[str, str, str]]:
+    """A section body split in order into ("prose", text, "") and ("fence", content, info string) parts.
+
+    A fence part's content excludes its delimiter lines.
+    """
     lines = body.splitlines(keepends=True)
     ids = fence_ids(lines)
     parts: list[tuple[int, list[str]]] = []
@@ -128,12 +146,15 @@ def segments(body: str) -> list[tuple[str, str]]:
             parts[-1][1].append(line)
         else:
             parts.append((block, [line]))
-    return [("prose", "".join(chunk)) if block == -1 else ("fence", "".join(chunk[1:-1])) for block, chunk in parts]
+    return [
+        ("prose", "".join(chunk), "") if block == -1 else ("fence", "".join(chunk[1:-1]), fence_opening(chunk[0])[1])
+        for block, chunk in parts
+    ]
 
 
 def prose(body: str) -> str:
     """A section body without its fenced code blocks, so a prose rule cannot be met by template text."""
-    return "".join(text for kind, text in segments(body) if kind == "prose")
+    return "".join(text for kind, text, _ in segments(body) if kind == "prose")
 
 
 def flat(text: str) -> str:
@@ -141,6 +162,9 @@ def flat(text: str) -> str:
 
 
 def bullet(body: str, label: str) -> str:
+    """One labelled bullet of a section body, flattened; fenced blocks are dropped first, so a bullet moved into a
+    code fence is not a bullet."""
+    body = prose(body)
     match = re.search(rf"^- \*\*{re.escape(label)}:\*\*(.*?)(?=^- \*\*|\Z)", body, re.MULTILINE | re.DOTALL)
     assert match, f"missing {label} line"
     return flat(match.group(1))
@@ -612,7 +636,7 @@ def test_skill_and_shared_linear_state_the_same_split_trigger() -> None:
 
 
 def pointing_template() -> list[str]:
-    fences = [text for kind, text in segments(section(RECORD.read_text(), "Pointing record")) if kind == "fence"]
+    fences = [text for kind, text, _ in segments(section(RECORD.read_text(), "Pointing record")) if kind == "fence"]
     templates = [text for text in fences if text.startswith("## Pointing record\n")]
     assert len(templates) == 1, f"expected one pointing-record template, found {len(templates)}"
     return templates[0].splitlines()
@@ -900,27 +924,32 @@ WRITES_FACILITATOR_LINE = (
 )
 
 
-def template_block(heading: str) -> tuple[str, str]:
-    """The first fenced block in the heading's `section()`, and the fallback alternative right after it.
-
-    The alternative is the prose between the template and the next fenced block plus that block, so neither a later
-    fence nor text elsewhere in the section can stand in for it.
-    """
+def template_block(heading: str) -> tuple[str, list[tuple[str, str, str]]]:
+    """The first `markdown` fenced block in the heading's `section()`, and the two `segments()` parts after it."""
     parts = segments(section(RECORD.read_text(), heading))
-    fenced = [index for index, (kind, _) in enumerate(parts) if kind == "fence"]
-    assert fenced, f"no template block under {heading}"
+    fenced = [index for index, (kind, _, info) in enumerate(parts) if kind == "fence" and info == "markdown"]
+    assert fenced, f"no ```markdown template block under {heading}"
     first = fenced[0]
-    following = parts[first + 1: first + 3]
-    alternative = "".join(text for _, text in following) if [kind for kind, _ in following] == ["prose", "fence"] else ""
-    return parts[first][1], alternative
+    assert parts[first][1].strip(), f"empty template block under {heading}"
+    return parts[first][1], parts[first + 1: first + 3]
 
 
 def template(heading: str) -> str:
     return template_block(heading)[0]
 
 
-def fallback_alternative(heading: str) -> str:
-    return template_block(heading)[1]
+def fallback_alternative(heading: str) -> tuple[str, str]:
+    """The prose introducing the fallback alternative right after the template, and the `markdown` block it introduces.
+
+    Only those two parts, in that order, are the alternative, so neither a later fence nor text elsewhere in the
+    section can stand in for it, and drift in that shape fails here by name.
+    """
+    _, following = template_block(heading)
+    shape = [(kind, info) for kind, _, info in following]
+    assert shape == [("prose", ""), ("fence", "markdown")], (
+        f"under {heading}, expected prose then a ```markdown fallback block after the template, found {shape}"
+    )
+    return following[0][1], following[1][1]
 
 
 @pytest.mark.parametrize("heading", ["Refinement comment", "Pointing record"])
@@ -935,9 +964,9 @@ def test_template_carries_the_product_owner_writes_line(heading: str) -> None:
 
 @pytest.mark.parametrize("heading", ["Refinement comment", "Pointing record"])
 def test_template_carries_the_facilitator_writes_alternative(heading: str) -> None:
-    alternative = fallback_alternative(heading)
-    assert WRITES_FACILITATOR_LINE in alternative.splitlines()
-    assert "Under the denied tracker writes fallback in `SKILL.md`, replace the tracker-writes line with:" in alternative.splitlines()
+    intro, block = fallback_alternative(heading)
+    assert WRITES_FACILITATOR_LINE in block.splitlines()
+    assert "Under the denied tracker writes fallback in `SKILL.md`, replace the tracker-writes line with:" in intro.splitlines()
 
 
 def test_roles_po_authors_and_applies_except_under_the_fallback() -> None:
@@ -1897,7 +1926,7 @@ def test_skill_records_never_request_local_paths(phrase: str) -> None:
 
 
 def test_record_intro_excludes_local_paths_and_includes_needed_content() -> None:
-    intro = spaced(RECORD.read_text().split("## Refinement comment", 1)[0])
+    intro = spaced(prose(section(RECORD.read_text(), "Refinement and pointing records", level=1, until=2)))
     assert "The record never carries a local path; cite each raw voter file by its base name only." in intro
     assert "Quote or attach any file content a reader needs in the record." in intro
 
@@ -2484,10 +2513,9 @@ def test_record_says_the_triage_record_is_a_po_triage_write() -> None:
         "The priority is the value read back after the PO applied it; when the PO could not decide, the priority "
         "stays unset and the comparison line carries `needs input` with the open question."
     ) in body
-    assert (
-        "Under the denied tracker writes fallback in `SKILL.md`, replace the tracker-writes line with:"
-    ) in body
-    assert WRITES_FACILITATOR_LINE in fallback_alternative("Triage record").splitlines()
+    intro, block = fallback_alternative("Triage record")
+    assert "Under the denied tracker writes fallback in `SKILL.md`, replace the tracker-writes line with:" in intro.splitlines()
+    assert WRITES_FACILITATOR_LINE in block.splitlines()
 
 
 # --- SKL-247: refinement checks repository guards against what a story commits -------------------
@@ -3039,8 +3067,7 @@ def test_unestimated_section_states_the_ready_gate(sentence: str) -> None:
 
 def filing_section(skill: str, start: str, end: str) -> str:
     """The text of one evidence section of a filing template, from its label up to the next label or rule."""
-    text = (ROOT / "skills" / skill / "SKILL.md").read_text()
-    template = text[text.index("## Template (the description)"):]
+    template = section((ROOT / "skills" / skill / "SKILL.md").read_text(), "Template (the description)")
     body = template[template.index(start) + len(start):]
     return body[: body.index(end)]
 
@@ -3192,9 +3219,9 @@ def test_type_item_states_user_story_precedence_before_the_stop_and_the_naming()
 
 
 def test_pointing_record_template_is_never_posted_for_an_unestimated_type() -> None:
-    assert "Never post it for a Bug, an Investigation or a Spike, which is never pointed." in (
-        SKILL.parent / "references" / "refinement-record.md"
-    ).read_text().split("## Pointing record", 1)[1].split("```", 1)[0]
+    assert "Never post it for a Bug, an Investigation or a Spike, which is never pointed." in spaced(
+        prose(section(RECORD.read_text(), "Pointing record"))
+    )
 
 
 def test_unestimated_section_has_no_metrics_mention() -> None:
@@ -3203,8 +3230,7 @@ def test_unestimated_section_has_no_metrics_mention() -> None:
 
 def test_overview_defers_to_the_issue_type_section() -> None:
     """B2: the overview names the unestimated reading."""
-    text = SKILL.read_text()
-    overview = spaced(text[text.index("# Story refinement"): text.index("## Arguments")])
+    overview = spaced(prose(section(SKILL.read_text(), "Story refinement", level=1, until=2)))
     assert (
         "A Bug, an Investigation or a Spike is unestimated: it runs Stage 1 only and is never pointed, as "
         f"{UNESTIMATED_LINK} states." in overview
@@ -3476,7 +3502,8 @@ def test_shared_linear_states_the_unestimated_split_trigger() -> None:
     body = prose(section((ROOT / "shared" / "linear.md").read_text(), "Estimation and slicing"))
     lines = body.splitlines()
     assert SHARED_LINEAR_SPLIT in lines
-    story = next(i for i, line in enumerate(lines) if line.startswith("- ⛔ Split a story whose estimate is above"))
+    story = next((i for i, line in enumerate(lines) if line.startswith("- ⛔ Split a story whose estimate is above")), None)
+    assert story is not None, "missing the story split rule in Estimation and slicing"
     assert lines.index(SHARED_LINEAR_SPLIT) > story
 
 
@@ -3753,68 +3780,161 @@ def test_closing_message_names_a_missing_scope_signal() -> None:
         "A re-split sibling gets its own split comment on that sibling.",
     ],
 )
-def test_split_comment_section_states_its_author_and_fallback(sentence: str) -> None:
+def test_split_comment_section_states_its_author(sentence: str) -> None:
     assert sentence in spaced(prose(section(RECORD.read_text(), "Split comment")))
 
 
 def test_split_comment_carries_the_facilitator_writes_alternative() -> None:
-    alternative = fallback_alternative("Split comment").splitlines()
-    assert "Under the denied tracker writes fallback in `SKILL.md`, replace the tracker-writes line with:" in alternative
-    assert WRITES_FACILITATOR_LINE in alternative
+    intro, block = fallback_alternative("Split comment")
+    assert "Under the denied tracker writes fallback in `SKILL.md`, replace the tracker-writes line with:" in intro.splitlines()
+    assert WRITES_FACILITATOR_LINE in block.splitlines()
 
 
 SECTION_FIXTURE = (
+    "# Title\n\nintro\n"
     "## A\n\n<!--\n```markdown\n## Hidden\n- gone\n```\n-->\n```markdown\n## Kept\n- here\n```\n"
-    "````\n## Four\n````\n~~~markdown\n## Tilde\n~~~\n- item\n  ```text\n  ## Indented\n  ```\nafter\n"
-    "### Step\n\nstep text\n```\n### Fenced step\n```\nstep tail\n### Next step\nother\n## B\nnext\n"
+    "````\n## Four\n`````\n~~~markdown\n## Tilde\n```\n## Mixed\n~~~\n- item\n  ```text\n  ## Indented\n  ```\n"
+    "   ```\n## Three\n   ```\n```inline``` span\n## Not fenced\nafter\n"
+    "### Step\n\nstep text\n<!-- ### Commented step -->\n```\n### Fenced step\n```\nstep tail\n### Next step\nother\n"
+    "    ```\n### Open step\nopen tail\n## B\nnext\n"
 )
 
 
 def test_section_drops_comments_and_skips_every_fence_kind() -> None:
-    """B8b: commented-out text is not operative, and no fenced heading starts or ends a section, at either level."""
+    """B8b: commented-out text is not operative, and no fenced heading starts or ends a section, at any level.
+
+    Covered: a commented-out fence, backtick fences of three and four (closed by a longer run), a tilde fence that a
+    backtick line does not close, fences indented two and three spaces, a four-space indent that opens no fence, a
+    line starting with an inline code span that opens no fence, and an unclosed fence or HTML comment.
+    """
+    assert "intro" in section(SECTION_FIXTURE, "Title", level=1, until=2)
+    assert "here" not in section(SECTION_FIXTURE, "Title", level=1, until=2)
     body = section(SECTION_FIXTURE, "A")
-    assert "gone" not in body and "- here" in body and "after" in body and "other" in body and "next" not in body
-    for fenced in ("Hidden", "Kept", "Four", "Tilde", "Indented"):
+    assert "gone" not in body and "- here" in body and "- item" in body and "after" not in body
+    for fenced in ("Hidden", "Kept", "Four", "Tilde", "Mixed", "Indented", "Three"):
         with pytest.raises(AssertionError, match="missing section"):
             section(SECTION_FIXTURE, fenced)
+    assert "after" in section(SECTION_FIXTURE, "Not fenced")
     step_body = section(SECTION_FIXTURE, "Step", level=3)
     assert "step text" in step_body and "step tail" in step_body and "other" not in step_body
     assert "Fenced step" not in prose(step_body)
-    with pytest.raises(AssertionError, match="unclosed code fence"):
+    with pytest.raises(AssertionError, match="missing section"):
+        section(SECTION_FIXTURE, "Commented step", level=3)
+    assert "open tail" in section(SECTION_FIXTURE, "Open step", level=3)
+    with pytest.raises(AssertionError, match=r"unclosed code fence \(block 0\) \(looking for A\)"):
         section("## A\n```\n## B\n", "A")
+    with pytest.raises(AssertionError, match="unclosed HTML comment"):
+        section("## A\n<!--\nrule\n## B\n", "A")
 
 
-def helper_calls(function) -> set[str]:
-    """The names a helper's body calls, its docstring excluded."""
-    tree = ast.parse(textwrap.dedent(inspect.getsource(function)))
-    body = tree.body[0].body
-    if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant):
-        body = body[1:]
-    return {
-        node.func.id
-        for statement in body
-        for node in ast.walk(statement)
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+NESTED_SCOPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)
+
+
+def own_nodes(node: ast.AST):
+    """`node` and every node under it, without descending into a nested function, lambda or class, whose code the
+    helper itself never runs."""
+    yield node
+    for child in ast.iter_child_nodes(node):
+        if not isinstance(child, NESTED_SCOPES):
+            yield from own_nodes(child)
+
+
+def called_name(node: ast.AST) -> str | None:
+    return node.func.id if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) else None
+
+
+def returns_scoped_text(function, scoped: set[str]) -> bool:
+    """Whether every value the helper returns is derived from a call to a `scoped` function.
+
+    A name is tainted once it is assigned (or iterated) from an expression holding a scoped call or a tainted name;
+    a scoped call whose result is discarded, or one inside a nested function or lambda, taints nothing.
+    """
+    definition = ast.parse(textwrap.dedent(inspect.getsource(function))).body[0]
+    tainted: set[str] = set()
+
+    def derived(expression: ast.AST) -> bool:
+        return any(
+            called_name(node) in scoped or (isinstance(node, ast.Name) and node.id in tainted)
+            for node in own_nodes(expression)
+        )
+
+    def targets(target: ast.AST) -> set[str]:
+        return {node.id for node in ast.walk(target) if isinstance(node, ast.Name)}
+
+    changed = True
+    while changed:
+        changed = False
+        for node in own_nodes(definition):
+            if isinstance(node, ast.Assign):
+                names, source = set().union(*(targets(target) for target in node.targets)), node.value
+            elif isinstance(node, (ast.AnnAssign, ast.AugAssign)) and node.value is not None:
+                names, source = targets(node.target), node.value
+            elif isinstance(node, (ast.For, ast.comprehension)):
+                names, source = targets(node.target), node.iter
+            else:
+                continue
+            if derived(source) and not names <= tainted:
+                tainted |= names
+                changed = True
+    returns = [node for node in own_nodes(definition) if isinstance(node, ast.Return)]
+    return bool(returns) and all(node.value is not None and derived(node.value) for node in returns)
+
+
+def unscoped_reads(function, scoped: set[str]) -> list[str]:
+    """Each `.read_text()` call in the helper that is not passed straight to a scoped function."""
+    definition = ast.parse(textwrap.dedent(inspect.getsource(function))).body[0]
+    passed = {
+        id(argument)
+        for node in own_nodes(definition)
+        if called_name(node) in scoped
+        for argument in node.args
     }
+    return [
+        ast.unparse(node)
+        for node in own_nodes(definition)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "read_text"
+        and id(node) not in passed
+    ]
+
+
+SCOPING_HELPERS = (
+    step, operative_step, process_items, process_item, template_block, template, fallback_alternative,
+    pointing_template, record_triage_section, unestimated_bullet, type_item, skill_section,
+)
 
 
 def test_every_scoping_helper_goes_through_section() -> None:
-    """B8b: each helper behind a listed assertion reaches section() through its own calls, not its docstring."""
-    helpers = {
-        helper.__name__: helper
-        for helper in (
-            step, operative_step, process_items, process_item, template_block, template, fallback_alternative,
-            pointing_template, record_triage_section, unestimated_bullet, type_item, skill_section,
-        )
-    }
+    """B8b: every value each helper behind a listed assertion returns is derived from section(), directly or through
+    another such helper, and the helper reads no file except straight into one of them."""
     scoped = {"section"}
-    pending = dict(helpers)
+    pending = {helper.__name__: helper for helper in SCOPING_HELPERS}
     while pending:
-        reached = {name for name, helper in pending.items() if helper_calls(helper) & scoped}
-        assert reached, f"helpers that never reach section(): {sorted(pending)}"
+        reached = {name for name, helper in pending.items() if returns_scoped_text(helper, scoped)}
+        assert reached, f"helpers whose result is not derived from section(): {sorted(pending)}"
         scoped |= reached
         for name in reached:
             del pending[name]
+    for helper in SCOPING_HELPERS:
+        assert not unscoped_reads(helper, scoped), f"{helper.__name__} reads a file outside section(): {unscoped_reads(helper, scoped)}"
+
+
+def test_no_assertion_slices_a_file_on_a_heading_or_fence() -> None:
+    """B8b: no test scopes text by splitting it on a heading or a code fence; section() does that scoping."""
+    tree = ast.parse(Path(__file__).read_text())
+    found = [
+        f"line {node.lineno}: {ast.unparse(node)}"
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr in {"split", "rsplit", "partition", "rpartition", "index", "find"}
+        and node.args
+        and isinstance(node.args[0], ast.Constant)
+        and isinstance(node.args[0].value, str)
+        and re.match(r"#|```|~~~", node.args[0].value)
+    ]
+    assert not found, found
 
 
 def test_readme_row_names_the_split_and_the_refile() -> None:
