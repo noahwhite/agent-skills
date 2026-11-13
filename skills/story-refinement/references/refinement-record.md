@@ -12,13 +12,14 @@ Post this as a tracker comment authored by the product owner, the only author of
 Its comment id is the refined story identifier for both stages.
 For a Bug, an Investigation or a Spike, the comment carries the `Pointing skipped` line; for a User Story it omits that line.
 For a Bug, an Investigation or a Spike, the comment also carries the `Scope signal:` line with the reading `SKILL.md` (Unestimated issue types) defines; for a User Story it omits that line.
+Replace `<reading>` with one whole reading: for a Bug or an Investigation `single change` or `more than one independently reviewable change (<reason>)`, and for a Spike `single research thread` or `more than one independent research thread (<reason>)`, with `<reason>` replaced too.
 
 ```markdown
 ## Refinement record
 
 - Story: <issue key> at <description version or commit>
 - Pointing skipped: <Bug|Investigation|Spike> is unestimated (references/linear.md, Estimation and slicing)
-- Scope signal: <for a Bug or an Investigation: single change, or more than one independently reviewable change (<reason>); for a Spike: single research thread, or more than one independent research thread (<reason>)>
+- Scope signal: <reading>
 - Tracker-write preflight: comment <id>
 - Refined story identifier: <this comment id>
 - Refined story snapshot: <the complete refined story and ACs where the filing template has them, or an immutable link/commit>
@@ -91,6 +92,29 @@ A sizing comment that names a point value before the reveal, prescribes this sto
 - Owner decision: <n/a when the round did not stop unpointed, otherwise pending owner decision in a later run until the later run edits this line, then the value the owner decided and the basis, or unpointed with the owner's reason>
 - Superseded values after a void: <none, or the voided values, the voided estimate, the voided `Consensus check:` outcome, the voided consensus, the voided derived values and their outcome, and the blind vote that replaced them>
 - Anchoring events: <none, or the comment and the recovery, including the newly created voter contexts, with the verbatim comment in the raw session record and its base name cited here>
+- Tracker writes: product owner
+```
+
+Under the denied tracker writes fallback in `SKILL.md`, replace the tracker-writes line with:
+
+```markdown
+- Tracker writes: facilitator on the product owner's behalf (owner's direct authorization: "<verbatim quote>", <date>)
+```
+
+## Split comment
+
+Post this on the original issue when the oversize split in `SKILL.md` (Unestimated issue types) splits a Bug or an Investigation, authored by the product owner and posted by the product owner or, under the denied tracker writes fallback, by the facilitator verbatim.
+A re-split sibling gets its own split comment on that sibling.
+
+```markdown
+## Split record
+
+- Refinement comment split: <accepted refinement comment id>
+- Core slice: <original issue key> - <its slice> - Scope signal: <reading>
+- Siblings, each from the `<linear-bug|linear-investigation>` template with the `<type label>` label, blocked by the original:
+  - <sibling key> - <its slice> - Scope signal: <reading>
+- Mapping: <each acceptance criterion, or for an Investigation each findings-scope item, and the slice it maps to>
+- Estimates: none; no slice receives a point value or a slice estimate
 - Tracker writes: product owner
 ```
 
