@@ -61,3 +61,45 @@ Details:
   - CI run 43476178093 on the reviewed head and run 43477463570 on `main` passed.
 
 Closing decision: SKL-237 moves back to In Progress for the B8a PR quotes.
+
+## QA round 2
+
+Date: 2026-11-13 UTC, independent QA round 2.
+Build under test: `main` at `4159bd384e02de0dc758b4aedb5377b0e67a1afd`, which contains the PR 225 squash merge `eb8ec19a0e876c313b501de1697f3ca30239efd3`.
+The story's files (`skills/story-refinement/SKILL.md`, its `references/refinement-record.md` and `references/todo-tracking.md`, `shared/todo-tracking.md` and `tests/test_story_refinement.py`) are byte-identical to `eb8ec19`, so the round 1 verdicts for B1, B2, B3, B4, B7 and B9 still hold; the commits since then are SKL-282 and the round 1 evidence.
+Environment: none; the profile sets `environments: []`, so the lanes are the repository (a detached worktree of the build), GitHub and the tracker.
+Fixtures: SKL-291 (Bug), SKL-292 (Investigation, RTB), SKL-293 (Spike) and SKL-294 (User Story, Improvement), read back from the tracker.
+The raw output is attached to SKL-237 as `SKL-237-qa-round-2-assertions.txt`; there is no visual surface, so no screenshot applies.
+
+| Item | Verdict | Evidence |
+|---|---|---|
+| B1: type check | Verified | Round 1, on unchanged text; the story-refinement tests pass on the build. |
+| B2: refinement only | Verified | Round 1, on unchanged text; the story-refinement tests pass on the build. |
+| B3: content per type | Verified | Round 1, on unchanged text; the story-refinement tests pass on the build. |
+| B4: priority and state | Verified | Round 1, on unchanged text; the story-refinement tests pass on the build. |
+| B7: records and todo | Verified | Round 1, on unchanged text; the story-refinement tests pass on the build. |
+| B8a: tests and proof | Verified | The PR 225 body now links the four scratch issues and quotes each line the AC names; each quote matches the tracker; details below. |
+| B9: regeneration and gate | Verified | `vendor_shared.py --check` exit 0 and the suite passes on the build; CI passed on `main`; details below. |
+| DoD: all acceptance criteria met | Verified | Every AC above. |
+| DoD: tests written and passing | Verified | B8a and B9. |
+| DoD: independently reviewed | Verified | The last review of record on PR 225 has `commit_id` `0d12eaf718e3983ff5bd714b21ed1f315238160f`, the merged head. |
+| DoD: docs updated | Verified | Round 1: the skill text and the README row for `story-refinement`. |
+| DoD: verified in a deployed environment | Not applicable | The profile defines no environments, so the build was verified on `main`. |
+| DoD: no critical bugs or regressions | Verified | CI passed on `eb8ec19` (run 43477463570) and on `4159bd3` (run 43480721652). |
+
+Details:
+
+- B8a:
+  - The PR 225 body links SKL-291, SKL-292, SKL-293 and SKL-294.
+  - For SKL-291, SKL-292 and SKL-293 it quotes the `Pointing skipped` line and the Triage `State:` line, each naming its source comment, and the Closing outcome as the run's closing message line.
+  - Each quoted `Pointing skipped` line (`- Pointing skipped: <type> is unestimated (references/linear.md, Estimation and slicing)`) is present verbatim in the named refinement record comment on that issue.
+  - Each quoted `State:` line (`- State: ready: all conditions met`) is present verbatim in the named Triage record comment on that issue.
+  - The Closing outcome lines are session output, not tracker records, so they cannot be matched against the tracker; each carries the documented reading "refined, not pointed (<type>)".
+  - SKL-291, SKL-292 and SKL-293 read back estimate null; SKL-294 reads back estimate 2 with a Pointing record; all four are Canceled.
+  - `uv run --locked pytest -q tests/test_story_refinement.py` passed on the build (368 passed).
+- B9:
+  - `uv run --locked python scripts/vendor_shared.py --check` exited 0 on the build.
+  - `uv run --locked pytest -q` passed on the build (2128 passed).
+  - CI run 43480721652 on `4159bd3` passed.
+
+Closing decision: SKL-237 moves to Done once this evidence merges.
