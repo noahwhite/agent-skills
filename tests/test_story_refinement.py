@@ -2302,7 +2302,8 @@ def test_record_has_the_triage_record_template_with_exactly_the_fields() -> None
         "- Priority comparison: <each comparable story's identifier and priority; or `needs input` with the open "
         "question when the PO could not decide>",
         "- State: <for a Bug, an Investigation or a Spike: ready: all conditions met, or backlog with each unmet "
-        "condition; omitted for a User Story>",
+        "condition, or for an issue already in progress or later its retained state with all conditions met or with "
+        "each unmet condition; omitted for a User Story>",
         "- Tracker writes: product owner",
     ]
 
@@ -2881,9 +2882,11 @@ def test_unestimated_section_decides_priority_on_every_outcome() -> None:
         'unmet condition; on a move to ready the line reads "ready: all conditions met".',
         "An issue already in `profile.tracker.states.ready` whose gate fails is moved back to "
         "`profile.tracker.states.backlog`, and its `State:` line names the unmet condition the same way.",
-        "An issue already in `profile.tracker.states.in_progress` or a later state keeps its state: the Triage "
-        "record's `State:` line names the unmet condition and the ceremony reports `needs input` to the owner instead "
-        "of writing a state.",
+        "An issue already in `profile.tracker.states.in_progress` or a later state keeps its state and no state is "
+        "written.",
+        "When its gate fails, the Triage record's `State:` line reads its retained state with each unmet condition, "
+        "and the ceremony reports `needs input` to the owner; when its gate passes, the line reads \"<retained "
+        'state>: all conditions met".',
     ],
 )
 def test_unestimated_section_states_the_ready_gate(sentence: str) -> None:

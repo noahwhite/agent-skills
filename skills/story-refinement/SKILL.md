@@ -352,7 +352,8 @@ A Bug, an Investigation and a Spike carry no estimate under Estimation and slici
   Text the author wrote in brackets, such as a Markdown link, is not template placeholder text.
   Otherwise it stays in `profile.tracker.states.backlog` and the Triage record's `State:` line names the unmet condition; on a move to ready the line reads "ready: all conditions met".
   An issue already in `profile.tracker.states.ready` whose gate fails is moved back to `profile.tracker.states.backlog`, and its `State:` line names the unmet condition the same way.
-  An issue already in `profile.tracker.states.in_progress` or a later state keeps its state: the Triage record's `State:` line names the unmet condition and the ceremony reports `needs input` to the owner instead of writing a state.
+  An issue already in `profile.tracker.states.in_progress` or a later state keeps its state and no state is written.
+  When its gate fails, the Triage record's `State:` line reads its retained state with each unmet condition, and the ceremony reports `needs input` to the owner; when its gate passes, the line reads "<retained state>: all conditions met".
 
 ## Triage
 

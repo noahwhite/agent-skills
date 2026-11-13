@@ -108,7 +108,7 @@ The priority is the value read back after the PO applied it; when the PO could n
 
 - Priority: <the decided value, read back; or unset when the PO could not decide>
 - Priority comparison: <each comparable story's identifier and priority; or `needs input` with the open question when the PO could not decide>
-- State: <for a Bug, an Investigation or a Spike: ready: all conditions met, or backlog with each unmet condition; omitted for a User Story>
+- State: <for a Bug, an Investigation or a Spike: ready: all conditions met, or backlog with each unmet condition, or for an issue already in progress or later its retained state with all conditions met or with each unmet condition; omitted for a User Story>
 - Tracker writes: product owner
 ```
 
