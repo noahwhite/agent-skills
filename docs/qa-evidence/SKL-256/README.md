@@ -309,6 +309,7 @@ Between the first handback and the report the coordinator ran no Agent call, sen
 
 - When the repeat arrived, the runtime moved the coordinator's running wait (started 22:23:54.737Z) to the background so the message could reach it. The coordinator did not stop it: it read the empty output file, then waited on that output with `timeout 80 tail -f` from 22:24:32.609Z; the background wait printed `Backlog` at 22:25:20Z and the `tail` ended at its own timeout (exit 124) at 22:25:52.855Z, well before the 22:35:23Z deadline.
 - The fixture profile carries two `story_to_done` keys; the resolver took the later one, so the run used the claude-code seats.
+- The report's "The engineer was never resumed" refers to the coordinator: it made no deadline resume. The harness did resume the engineer once (see Harness instrumentation) to produce the repeated handback.
 - The coordinator's `printenv` check of the model and effort override variables was denied, as its report states.
 
 ## Coordinator report to the owner (verbatim)
