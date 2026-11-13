@@ -11,7 +11,7 @@ STEP_6 = "6. Decide status"
 
 # Step 4: the verdict, the qualifying test and the record.
 STEP_4_LINES = (
-    "1. Map every AC and DoD item to its evidence with a verdict: verified, correct by design, "
+    "1. Map every AC and DoD item to its evidence with a verdict: verified, failed, correct by design, "
     "out of scope (naming the owning story), not covered, or `pending owner ruling`.",
     "2. **Pending owner ruling.**",
     "   Record an item as `pending owner ruling` only when two or more readings of the item's quoted AC or DoD "
@@ -22,6 +22,22 @@ STEP_4_LINES = (
     "each reading with the verdict and the evidence under it, and the product owner as its owner.",
     "   Post a concise QA evidence comment on the story: build SHA, environment, fixtures used, per-item verdict, "
     "each pending owner ruling record (item 2), and any gaps.",
+)
+
+# Step 4: cross-references to the renumbered items 4 (evidence page) and 5 (tracker).
+STEP_4_CROSS_REFERENCE_LINES = (
+    "   The hosted-page link is for the user's review only; it never goes into the tracker (item 5).",
+    "   Also attach the evidence page as a local file when item 4 built one and it is self-contained "
+    "(screenshots inlined); otherwise skip it, since the attached screenshots and assertion output are the record.",
+)
+
+# Exact bodies: a line added inside these blocks (for example a contradicting exception) fails the pin.
+STEP_4_ITEM_2_BODY = (
+    "2. **Pending owner ruling.**",
+    STEP_4_LINES[2],
+    STEP_4_LINES[3],
+    STEP_4_LINES[4],
+    STEP_4_LINES[5],
 )
 
 # Step 6: routing with pending items outstanding.
@@ -42,6 +58,22 @@ STEP_6_RULING_LINES = (
     "    Never mark done on an AC amendment alone, and never while any item is still `pending owner ruling`.",
 )
 
+STEP_6_DONE_BODY = (
+    "  - **`profile.tracker.states.done`**: every AC and DoD item is verified as met, and the evidence PR is "
+    "merged (when in-repo evidence is kept).",
+    "    Tick the boxes you verified.",
+    "    Never mark done on merge alone, and never split or reword a story to close it.",
+    STEP_6_RULING_LINES[2],
+)
+
+STEP_6_IN_PROGRESS_BODY = (
+    "  - **`profile.tracker.states.in_progress`**: an item failed because the delivered work did not meet it.",
+    "    Reopen this story per `references/linear.md`, amend the AC with a dated deployment-review note, and hand "
+    "the fix to `engineering-workflow`; never file a new bug for it.",
+    STEP_6_ROUTING_LINES[2],
+    STEP_6_ROUTING_LINES[3],
+)
+
 
 def section(text: str, heading: str) -> str:
     match = re.search(rf"^## {re.escape(heading)}\s*$", text, re.MULTILINE)
@@ -53,6 +85,17 @@ def section(text: str, heading: str) -> str:
 
 def lines_of(heading: str) -> list[str]:
     return section(SKILL.read_text(), heading).splitlines()
+
+
+def block(lines: list[str], first: str, is_next: "re.Pattern[str]") -> tuple[str, ...]:
+    """The lines from `first` up to the next line matching `is_next`, blank lines dropped."""
+    start = lines.index(first)
+    end = next((i for i in range(start + 1, len(lines)) if is_next.match(lines[i])), len(lines))
+    return tuple(line for line in lines[start:end] if line.strip())
+
+
+NUMBERED_ITEM = re.compile(r"^\d+\. ")
+STATE_BULLET = re.compile(r"^ {0,2}- ")
 
 
 def test_step_4_pins_the_pending_owner_ruling_verdict_test_and_record() -> None:
@@ -105,3 +148,21 @@ def test_step_6_done_guard_sits_in_the_done_bullet() -> None:
     done = next(i for i, l in enumerate(lines) if l.startswith("  - **`profile.tracker.states.done`**"))
     in_progress = next(i for i, l in enumerate(lines) if l.startswith("  - **`profile.tracker.states.in_progress`**"))
     assert done < lines.index(STEP_6_RULING_LINES[2]) < in_progress
+
+
+def test_step_4_cross_references_name_the_renumbered_items() -> None:
+    lines = lines_of(STEP_4)
+    for pin in STEP_4_CROSS_REFERENCE_LINES:
+        assert pin in lines, f"step 4 is missing the pinned line: {pin}"
+
+
+def test_step_4_item_2_body_is_exactly_the_qualifying_test_and_record() -> None:
+    assert block(lines_of(STEP_4), STEP_4_ITEM_2_BODY[0], NUMBERED_ITEM) == STEP_4_ITEM_2_BODY
+
+
+def test_step_6_done_bullet_body_is_exact() -> None:
+    assert block(lines_of(STEP_6), STEP_6_DONE_BODY[0], STATE_BULLET) == STEP_6_DONE_BODY
+
+
+def test_step_6_in_progress_bullet_body_is_exact() -> None:
+    assert block(lines_of(STEP_6), STEP_6_IN_PROGRESS_BODY[0], STATE_BULLET) == STEP_6_IN_PROGRESS_BODY

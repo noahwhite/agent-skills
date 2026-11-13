@@ -77,7 +77,7 @@ When a finding needs a code fix, hand it to `engineering-workflow` (and its [ref
 
 ## 4. Adjudicate and record
 
-1. Map every AC and DoD item to its evidence with a verdict: verified, correct by design, out of scope (naming the owning story), not covered, or `pending owner ruling`.
+1. Map every AC and DoD item to its evidence with a verdict: verified, failed, correct by design, out of scope (naming the owning story), not covered, or `pending owner ruling`.
 2. **Pending owner ruling.**
    Record an item as `pending owner ruling` only when two or more readings of the item's quoted AC or DoD text give different verdicts on the same evidence.
    Missing evidence, access or execution alone does not qualify.
@@ -90,10 +90,10 @@ When a finding needs a code fix, hand it to `engineering-workflow` (and its [ref
 4. If the runtime can publish a hosted page, publish an evidence page with the screenshots and per-item verdicts and give the user the link; also deliver the raw screenshots to the user directly.
    Every screenshot on the page must be zoomable: click opens it full screen at natural resolution, Esc or a click outside closes it.
    An evidence page with screenshots scaled to cards is incomplete.
-   The hosted-page link is for the user's review only; it never goes into the tracker (step 4).
+   The hosted-page link is for the user's review only; it never goes into the tracker (item 5).
 5. Attach the evidence to the story itself, then post the QA evidence comment that cites it.
    Upload the key screenshots and the sanitized raw assertion output for each item with no visual surface (as a text file) as tracker attachments.
-   Also attach the evidence page as a local file when step 3 built one and it is self-contained (screenshots inlined); otherwise skip it, since the attached screenshots and assertion output are the record.
+   Also attach the evidence page as a local file when item 4 built one and it is self-contained (screenshots inlined); otherwise skip it, since the attached screenshots and assertion output are the record.
    Post a concise QA evidence comment on the story: build SHA, environment, fixtures used, per-item verdict, each pending owner ruling record (item 2), and any gaps.
    The comment cites the attachment behind each verdict.
    When `profile.qa.evidence_dir` is set, edit the comment to cite the in-repo evidence path once the evidence PR merges (section 5), never before; otherwise the comment says the tracker attachments are the record.
