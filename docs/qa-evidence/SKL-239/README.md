@@ -56,3 +56,39 @@ Details:
   - `shared/todo-tracking.md` did not change in PR 234; its story-refinement seed line, from SKL-237, already keeps each split for these types, and the drift check shows every copy current.
 
 Closing decision: SKL-239 stays In Deployment Review, pending the product owner's ruling on B8b.
+
+## QA round 2
+
+Date: 2026-11-13 UTC, independent QA round 2, after the product owner's dated B8b clarification of 2026-11-13.
+The clarification reads: `bullet()` is required only where the asserted target is a labelled bullet, `section()` applies to every assertion, and "links a ceremony run" means real hyperlinks in the PR body.
+Path: `no-deployment`, since the profile sets `environments: []`.
+Target: the merged commit `784b609abb4efd41cba14c8e03936ad9c1f58583` (PR 234, reviewed head `fdcb179f74a452d19056fc075313fc3f5100e396`), an ancestor of `origin/main`.
+Fixtures: SKL-298 (Bug), SKL-299 (Spike) and SKL-301 (split sibling), read back from the tracker.
+The raw output is attached to SKL-239 as `SKL-239-qa-round-2-assertions.txt`; there is no visual surface, so no screenshot applies.
+
+| Item | Verdict | Evidence |
+|---|---|---|
+| B5: oversize split | Verified | The Scope signal and Oversize split bullets, Step 2 item 8, and the `shared/linear.md` line in the shared file and all 18 vendored copies. |
+| B6: Spikes | Verified | The Refinement only, Scope signal, Spike re-file and Content per type bullets, and the Step 1 type check. |
+| B7b: scope signal line | Verified | `- Scope signal: <reading>` in the Refinement comment template after the `Pointing skipped` line, limited to the three types; the Closing outcome and Closing message name the split and the slice count. |
+| B8b: tests and proof | Failed | The PR 234 body now hyperlinks the run, but several assertions on the listed targets do not go through `section()`; details below. |
+| B9: regeneration and gate | Verified | `refinement-record.md` is hand-written, `vendor_shared.py --check` exits 0, `pytest` passes on the target (2197 passed), and CI passed on the reviewed head (run 43506149781) and on the merge (run 43507578006). |
+| DoD: all acceptance criteria met | Not met | B8b. |
+| DoD: tests written and passing | Verified | B9. |
+| DoD: independently reviewed | Verified | The latest review of record on PR 234 names `fdcb179f74a452d19056fc075313fc3f5100e396` in its first line and as its `commit_id`. |
+| DoD: docs updated | Verified | The skill text and the README row for `story-refinement`. |
+| DoD: verified in a deployed environment | Correct by design | Not needed on the `no-deployment` path. |
+| DoD: no critical bugs or regressions | Verified | CI passed on the reviewed head and on the merge. |
+
+B8b details:
+
+- The rendered PR 234 body links SKL-298, its refinement comment `d7d1467a`, its split comment `449d8c02`, SKL-301, SKL-299 and its Triage record `2ce31050`, so the hyperlink clause is met.
+- The tracker holds the runs: SKL-301 carries the labels Bug and RTB and is blocked by SKL-298, SKL-299's Triage record reads "- State: backlog: re-file as separate Spikes (owner)", and all three issues are Canceled with estimate null.
+- `section()` strips HTML comments and scopes by heading; `template()` and `step()` (behind `process_item()`) parse headings with their own regular expressions and do not call `section()`.
+- The B7b record line is asserted only through `template()` in `test_refinement_template_carries_the_scope_signal_line` and `test_scope_signal_field_name_keeps_its_case`.
+- The Split comment template's sibling template, sibling label and no-estimate lines are asserted through `template()` in `test_split_comment_template_has_the_fields`.
+- The `shared/linear.md` line in each vendored copy is asserted on the whole file in `test_vendored_linear_copies_carry_the_unestimated_split_trigger`.
+- The B5 trigger and B6 re-file wording in Step 2 item 8, and the scope signal in the voter brief, reconciliation and reviewer output contract, are asserted through `process_item()` or `operative_step()`.
+- A probe on a scratch copy of the target wrapped the whole Refinement comment template in an HTML comment, and both B7b record-line tests still passed (2 passed).
+
+Closing decision: SKL-239 returns to In Progress for the B8b fix.
