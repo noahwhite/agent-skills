@@ -2,6 +2,7 @@
 
 Date: 2026-11-13 UTC.
 Skill under test: `skills/story-to-done/SKILL.md` and `skills/story-to-done/references/` as committed in `6b5e0ba39eafa01239ac4a4f58f538a53b0a2392` on `feature/skl-256-interim-redeadline`, read from a worktree by path (the installed skill was not loaded).
+The branch was later rebased onto newer `main`, which rewrote that commit under a new SHA; the rebase changed nothing under `skills/story-to-done/` except one added line in `skills/story-to-done/references/linear.md`, outside the interim-handback rule.
 Fixture issue: SKL-302 "[Tabletop fixture] SKL-256 interim re-deadline and two-miss stop", created in Backlog at 20:54:04Z for this run and canceled by the implementing engineer at 21:21:57Z, after the coordinator's report.
 Awaited item held pending deterministically: the fixture's senior engineer names the tracker move of SKL-302 to In Deployment Review, and nothing in the run moves SKL-302, so every read of it returns Backlog.
 The fixture's senior engineer runs no real background work: it hands back an interim notice and arms no wake-up, and when resumed it repeats the same interim notice to the coordinator.
