@@ -12,7 +12,7 @@ Post this as a tracker comment authored by the product owner, the only author of
 Its comment id is the refined story identifier for both stages.
 For a Bug, an Investigation or a Spike, the comment carries the `Pointing skipped` line; for a User Story it omits that line.
 For a Bug, an Investigation or a Spike, the comment also carries the `Scope signal:` line with the reading `SKILL.md` (Unestimated issue types) defines; for a User Story it omits that line.
-Replace `<reading>` with one whole reading: for a Bug or an Investigation `single change` or `more than one independently reviewable change (<reason>)`, and for a Spike `single research thread` or `more than one independent research thread (<reason>)`, with `<reason>` replaced too.
+Replace `<reading>` with one whole reading: for a Bug or an Investigation `single change` or `more than one independently reviewable change (<reason>)`, and for a Spike `single research thread` or `more than one independent research thread (<reason>)`, with `<reason>` replaced too; when the Step 2 reconciliation finds no category with two or more voters, replace it with `missing`, which `SKILL.md` treats as a missing line.
 
 ```markdown
 ## Refinement record

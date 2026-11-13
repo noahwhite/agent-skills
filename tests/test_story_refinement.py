@@ -3426,7 +3426,8 @@ def test_refinement_template_carries_the_scope_signal_line() -> None:
     assert (
         "Replace `<reading>` with one whole reading: for a Bug or an Investigation `single change` or `more than one "
         "independently reviewable change (<reason>)`, and for a Spike `single research thread` or `more than one "
-        "independent research thread (<reason>)`, with `<reason>` replaced too."
+        "independent research thread (<reason>)`, with `<reason>` replaced too; when the Step 2 reconciliation finds "
+        "no category with two or more voters, replace it with `missing`, which `SKILL.md` treats as a missing line."
         in spaced(section(RECORD.read_text(), "Refinement comment"))
     )
 
