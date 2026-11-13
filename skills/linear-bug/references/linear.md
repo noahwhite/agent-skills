@@ -81,8 +81,17 @@ The `linear` CLI (schpet/linear-cli) is the primary tool; the Linear MCP server 
 - `linear issue view --json` omits `estimate`, as it omits relations, even when the issue carries one, and the plain view prints no estimate line.
   Read an estimate with `linear api 'query { issue(id: "ABC-123") { estimate } }'`, or through the Linear MCP `get_issue` with the `estimate` field.
   The team issue list renders it in its estimate column, which is a display path, not a read path for a script.
-- ⛔ Split a story estimated at 8 points or more at refinement, without asking, and present the slices.
+- ⛔ Split a story whose estimate is above `profile.refinement.point_cap` or is 8 or more, without asking, before it is assigned or work is delegated, and present the slices.
+  This is one split rule for an estimate recorded at refinement and for one made outside a ceremony, at filing or triage.
   Keep the original issue for the core slice, create siblings for the rest, and wire blocked-by or related edges.
+- ⛔ Split every resulting slice that still meets that trigger again, as many rounds as it takes, until no slice meets it; there is no escalation exit.
+  Split along the first boundary that applies, in this order:
+  1. the planned PR or slice boundary;
+  2. an acceptance criterion;
+  3. where one acceptance criterion alone still meets the trigger, that criterion is rewritten at refinement or triage into narrower observable criteria (by artifact, case or environment) that keep the same coverage, and the slice is split along them;
+  4. the smallest outcome that can be reviewed, merged and verified on its own, including enabling work such as interface or schema first and behaviour second.
+
+  No rung discards scope, delegates an oversize slice or hands one to the owner as an estimate.
 - ⛔ Never split an issue at close time to carve off unfinished work; that is status laundering.
 
 ## Acceptance criteria and scope

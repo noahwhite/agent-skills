@@ -427,12 +427,13 @@ def test_split_rule_has_no_size_clause() -> None:
 
 def test_shared_linear_rule_has_no_size_clause() -> None:
     lines = (ROOT / "shared" / "linear.md").read_text().splitlines()
-    start = next(index for index, line in enumerate(lines) if line.startswith("- ⛔ Split a story estimated at 8 points"))
+    start = next(index for index, line in enumerate(lines) if line.startswith("- ⛔ Split a story whose estimate is"))
     end = next(index for index in range(start + 1, len(lines)) if lines[index] and not lines[index].startswith(" "))
     bullet = flat(" ".join(lines[start:end]))
     assert bullet.startswith(
-        "- ⛔ split a story estimated at 8 points or more at refinement, without asking, and present the slices."
-    ), "the 8-point rule starts with one unqualified sentence"
+        "- ⛔ split a story whose estimate is above `profile.refinement.point_cap` or is 8 or more, without asking, "
+        "before it is assigned or work is delegated, and present the slices."
+    ), "the split rule starts with one unqualified sentence"
     assert "equivalent" not in bullet, "no scale parenthetical survives"
     assert not SIZE_VOCABULARY.search(bullet), "the split rule names no size"
 
@@ -446,6 +447,70 @@ def test_split_rule_keeps_the_split_mechanics() -> None:
         "every acceptance criterion is mapped to a slice in the split comment",
     ):
         assert rule in body, rule
+
+
+# --- SKL-230: a slice above the point cap is split again until every slice fits, never escalated -------
+
+RESPLIT_BULLET = (
+    "- A slice that meets the split trigger is split again under these same bullets: it stays the core slice and "
+    "blocks its new siblings, every acceptance criterion of the slice is mapped to a sub-slice in a split comment, "
+    "and each sub-slice, the core slice included, gets its own three-voter blind estimate; the split repeats until "
+    "no slice meets the split trigger."
+)
+NO_ESCALATION_EXIT = (
+    "There is no escalation exit for an oversize slice: a slice with no natural boundary left is split along the "
+    "boundary order in Estimation and slicing in [references/linear.md](references/linear.md)."
+)
+UNPOINTED_SLICE_STOP = (
+    "A slice that takes the unpointed variance stop is recorded as unpointed in the split comment with its derived "
+    "values, and the ceremony reports `needs input` to the owner naming the story, the slice and those values, so a "
+    "partially pointed split always ends in that report rather than in an estimate, and its recorded outcome is the "
+    "slice count with `needs input` for each unpointed slice."
+)
+# Phrases only the boundary order in shared/linear.md states; the Split rule cites it instead.
+BOUNDARY_ORDER_PHRASES = (
+    "planned PR or slice boundary",
+    "narrower observable criteria",
+    "interface or schema first",
+)
+SPLIT_TRIGGER_PATTERN = re.compile(r"is above (`profile\.refinement\.point_cap`) or is (\d+) or more")
+
+
+def test_split_rule_resplits_an_oversize_slice_until_none_meets_the_trigger() -> None:
+    body = spaced(section(SKILL.read_text(), "Split rule"))
+    assert RESPLIT_BULLET in body
+    assert NO_ESCALATION_EXIT in body
+
+
+def test_split_rule_has_no_escalation_exit() -> None:
+    body = spaced(section(SKILL.read_text(), "Split rule"))
+    assert "or escalated" not in body, "the Split rule still offers escalation as an exit"
+    mentions = re.findall(r"escalat\w*", body, re.IGNORECASE)
+    assert len(mentions) == body.count("no escalation exit"), (
+        f"an escalation mention other than 'no escalation exit' remains: {mentions}"
+    )
+
+
+def test_split_rule_cites_the_boundary_order_without_restating_it() -> None:
+    body = spaced(section(SKILL.read_text(), "Split rule"))
+    assert "boundary order in Estimation and slicing in [references/linear.md](references/linear.md)" in body
+    for phrase in BOUNDARY_ORDER_PHRASES:
+        assert phrase not in body, f"the Split rule restates the boundary order: {phrase}"
+
+
+def test_split_rule_keeps_the_unpointed_variance_stop() -> None:
+    body = spaced(section(SKILL.read_text(), "Split rule"))
+    assert UNPOINTED_SLICE_STOP in body
+
+
+def test_skill_and_shared_linear_state_the_same_split_trigger() -> None:
+    skill = SPLIT_TRIGGER_PATTERN.findall(spaced(section(SKILL.read_text(), "Split rule")))
+    shared = SPLIT_TRIGGER_PATTERN.findall(
+        spaced(section((ROOT / "shared" / "linear.md").read_text(), "Estimation and slicing"))
+    )
+    assert len(skill) == 1, f"the Split rule states one trigger, found {skill}"
+    assert len(shared) == 1, f"Estimation and slicing states one trigger, found {shared}"
+    assert skill == shared, f"the triggers differ: SKILL.md {skill}, shared/linear.md {shared}"
 
 
 def pointing_template() -> list[str]:
