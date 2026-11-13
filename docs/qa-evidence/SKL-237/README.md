@@ -91,7 +91,7 @@ Details:
 
 - B8a:
   - The PR 225 body links SKL-291, SKL-292, SKL-293 and SKL-294.
-  - For SKL-291, SKL-292 and SKL-293 it quotes the `Pointing skipped` line, the Triage `State:` line and the Closing outcome, each naming its source comment.
+  - For SKL-291, SKL-292 and SKL-293 it quotes the `Pointing skipped` line and the Triage `State:` line, each naming its source comment, and the Closing outcome as the run's closing message line.
   - Each quoted `Pointing skipped` line (`- Pointing skipped: <type> is unestimated (references/linear.md, Estimation and slicing)`) is present verbatim in the named refinement record comment on that issue.
   - Each quoted `State:` line (`- State: ready: all conditions met`) is present verbatim in the named Triage record comment on that issue.
   - The Closing outcome lines are session output, not tracker records, so they cannot be matched against the tracker; each carries the documented reading "refined, not pointed (<type>)".
@@ -102,4 +102,4 @@ Details:
   - `uv run --locked pytest -q` passed on the build (2128 passed).
   - CI run 43480721652 on `4159bd3` passed.
 
-Closing decision: SKL-237 moves to Done.
+Closing decision: SKL-237 moves to Done once this evidence merges.
