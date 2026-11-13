@@ -476,6 +476,33 @@ BOUNDARY_ORDER_PHRASES = (
     "narrower observable criteria",
     "interface or schema first",
 )
+SPLIT_RULE_SECTION = " ".join(
+    (
+        "The effective accepted maximum is `profile.refinement.point_cap` (default 5), with a schema maximum of 8.",
+        "A story is split when its recorded estimate is above `profile.refinement.point_cap` or is 8 or more; the "
+        "recorded estimate is the consensus, or the value the Step 4 consensus check or residual variance rule "
+        "records.",
+        "The lower trigger applies, and the 8-point rule in [references/linear.md](references/linear.md) is never "
+        "relaxed.",
+        "If the split trigger is met, split the story.",
+        "- The original issue stays the core slice.",
+        "- Siblings are created in the team of `STORY_ID`, as Team resolution in "
+        "[references/linear.md](references/linear.md) states.",
+        "- When the team of `STORY_ID` differs from `profile.tracker.team_key`, confirm "
+        "`profile.tracker.states.backlog` and each sibling label on that team before creating any sibling, under the "
+        "differing-team rule in Team resolution in [references/linear.md](references/linear.md).",
+        "- Siblings are created from the `linear-user-story` template.",
+        "- The original issue blocks each sibling.",
+        "- Every acceptance criterion is mapped to a slice in the split comment.",
+        "- Each slice gets its own three-voter estimate in the same blind round, with newly created voter contexts, "
+        "and that round runs the same Step 4 consensus check, basis review and residual variance rule, so a slice "
+        "records an estimate or takes the unpointed variance stop on the same terms.",
+        UNPOINTED_SLICE_STOP,
+        RESPLIT_BULLET,
+        NO_ESCALATION_EXIT,
+        "Cite [references/linear.md](references/linear.md) for the split mechanics; do not restate them here.",
+    )
+)
 SPLIT_TRIGGER_PATTERN = re.compile(r"is above (`profile\.refinement\.point_cap`) or is (\d+) or more")
 
 
@@ -489,11 +516,13 @@ def test_split_rule_has_no_escalation_exit() -> None:
     body = spaced(section(SKILL.read_text(), "Split rule"))
     assert "or escalated" not in body, "the Split rule still offers escalation as an exit"
     mentions = re.findall(r"escalat\w*", body, re.IGNORECASE)
-    assert len(mentions) == body.count("no escalation exit"), (
-        f"an escalation mention other than 'no escalation exit' remains: {mentions}"
-    )
-    handoffs = re.findall(r"\b(?:owner|hand\w*)\b", body.replace(UNPOINTED_SLICE_STOP, ""), re.IGNORECASE)
-    assert not handoffs, f"the Split rule hands an oversize slice to someone: {handoffs}"
+    expected = re.findall(r"no escalation exit", body, re.IGNORECASE)
+    assert len(mentions) == len(expected), f"an escalation mention other than 'no escalation exit' remains: {mentions}"
+
+
+def test_split_rule_section_is_exactly_the_rule() -> None:
+    """Pin the whole section, so an added stop, approval or hand-off for an oversize slice fails."""
+    assert spaced(section(SKILL.read_text(), "Split rule")) == SPLIT_RULE_SECTION
 
 
 def test_split_rule_cites_the_boundary_order_without_restating_it() -> None:

@@ -103,59 +103,45 @@ def test_named_issue_key_decides_the_team(path: Path) -> None:
 
 # --- SKL-230: one split rule for refinement, filing and triage; re-split with no escalation exit ------
 
-SPLIT_RULE = (
+# The split rule runs from its first bullet to the end of the section, verbatim: any sentence added inside it,
+# an owner hand-off, a stop condition or an approval of an oversize slice, fails the exact match.
+SPLIT_RULE_FIRST_LINE = (
     "- ⛔ Split a story whose estimate is above `profile.refinement.point_cap` or is 8 or more, without asking, "
-    "before it is assigned or work is delegated, and present the slices. "
-    "This is one split rule for an estimate recorded at refinement and for one made outside a ceremony, "
-    "at filing or triage. "
-    "Keep the original issue for the core slice, create siblings for the rest, and wire blocked-by or related edges."
+    "before it is assigned or work is delegated, and present the slices."
 )
-RESPLIT = (
-    "- ⛔ Split every resulting slice that still meets that trigger again, as many rounds as it takes, "
-    "until no slice meets it; there is no escalation exit. "
-    "Split along the first boundary that applies, in this order:"
-)
-BOUNDARY_ORDER = (
-    "1. the planned PR or slice boundary;",
-    "2. an acceptance criterion;",
-    "3. where one acceptance criterion alone still meets the trigger, that criterion is rewritten at refinement or "
-    "triage into narrower observable criteria (by artifact, case or environment) that keep the same coverage, and "
-    "the slice is split along them;",
-    "4. the smallest outcome that can be reviewed, merged and verified on its own, including enabling work such as "
-    "interface or schema first and behaviour second.",
-)
-NO_RUNG_ESCAPES = (
-    "No rung discards scope, delegates an oversize slice or hands one to the owner as an estimate."
-)
-CLOSE_TIME = "- ⛔ Never split an issue at close time to carve off unfinished work; that is status laundering."
-
-
-@pytest.mark.parametrize("path", [SHARED_LINEAR, *VENDORED_LINEAR], ids=lambda p: str(p.relative_to(ROOT)))
-def test_one_split_rule_resplits_with_no_escalation_exit(path: Path) -> None:
-    estimation = spaced(section(path.read_text(), "Estimation and slicing"))
-    assert SPLIT_RULE in estimation
-    assert RESPLIT in estimation
-    assert NO_RUNG_ESCAPES in estimation
-    assert "or escalated" not in estimation
-    mentions = re.findall(r"escalat\w*", estimation, re.IGNORECASE)
-    assert len(mentions) == estimation.count("no escalation exit"), (
-        f"an escalation mention other than 'no escalation exit' remains: {mentions}"
+SPLIT_RULE_BLOCK = "\n".join(
+    (
+        SPLIT_RULE_FIRST_LINE,
+        "  This is one split rule for an estimate recorded at refinement and for one made outside a ceremony, "
+        "at filing or triage.",
+        "  Keep the original issue for the core slice, create siblings for the rest, and wire blocked-by or related "
+        "edges.",
+        "- ⛔ Split every resulting slice that still meets that trigger again, as many rounds as it takes, "
+        "until no slice meets it; there is no escalation exit.",
+        "  Split along the first boundary that applies, in this order:",
+        "  1. the planned PR or slice boundary;",
+        "  2. an acceptance criterion;",
+        "  3. where one acceptance criterion alone still meets the trigger, that criterion is rewritten at "
+        "refinement or triage into narrower observable criteria (by artifact, case or environment) that keep the "
+        "same coverage, and the slice is split along them;",
+        "  4. the smallest outcome that can be reviewed, merged and verified on its own, including enabling work "
+        "such as interface or schema first and behaviour second.",
+        "",
+        "  No rung discards scope, delegates an oversize slice or hands one to the owner as an estimate.",
+        "- ⛔ Never split an issue at close time to carve off unfinished work; that is status laundering.",
     )
-    handoffs = re.findall(r"\b(?:owner|hand\w*)\b", estimation.replace(NO_RUNG_ESCAPES, ""), re.IGNORECASE)
-    assert not handoffs, f"the split rule hands an oversize slice to someone: {handoffs}"
-    assert CLOSE_TIME in estimation, "the close-time status-laundering bullet must stay unchanged"
+)
 
 
 @pytest.mark.parametrize("path", [SHARED_LINEAR, *VENDORED_LINEAR], ids=lambda p: str(p.relative_to(ROOT)))
-def test_boundary_order_rungs_are_in_order(path: Path) -> None:
-    raw = section(path.read_text(), "Estimation and slicing")
-    estimation = spaced(raw)
-    start = estimation.find(RESPLIT)
-    assert start != -1, "the re-split bullet that introduces the boundary order is missing"
-    block = " ".join((RESPLIT, *BOUNDARY_ORDER, NO_RUNG_ESCAPES))
-    assert estimation[start:].startswith(block), "the boundary order does not follow the re-split bullet, in order"
-    for rung in BOUNDARY_ORDER:
-        assert f"\n  {rung[:3]}" in raw, f"rung is not a nested list item under the re-split bullet: {rung}"
+def test_one_split_rule_resplits_in_boundary_order_with_no_escalation_exit(path: Path) -> None:
+    estimation = section(path.read_text(), "Estimation and slicing")
+    start = estimation.find(SPLIT_RULE_FIRST_LINE)
+    assert start != -1, "Estimation and slicing has no split rule bullet"
+    assert estimation[start:].strip() == SPLIT_RULE_BLOCK, "the split rule differs from the SKL-230 rule"
+    mentions = re.findall(r"escalat\w*", estimation, re.IGNORECASE)
+    expected = re.findall(r"no escalation exit", estimation, re.IGNORECASE)
+    assert len(mentions) == len(expected), f"an escalation mention other than 'no escalation exit' remains: {mentions}"
 
 
 def test_vendored_linear_copies_are_found() -> None:
