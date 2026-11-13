@@ -101,5 +101,72 @@ def test_named_issue_key_decides_the_team(path: Path) -> None:
     assert MCP_TEAM in spaced(section(text, "Linear MCP fallback"))
 
 
+# --- SKL-230: one split rule for refinement, filing and triage; re-split with no escalation exit ------
+
+# Owner decision (SKL-230): pin only the split rule, whitespace-normalised, as two whole top-level bullets, plus the
+# unchanged close-time bullet. A line added inside a pinned bullet, or a pinned bullet nested under another, fails;
+# sibling bullets elsewhere in the section (such as SKL-239's, which may sit between the two) and a rewrap pass.
+SPLIT_BULLET = " ".join(
+    (
+        "- ⛔ Split a story whose estimate is above `profile.refinement.point_cap` or is 8 or more, without asking, "
+        "before it is assigned or work is delegated, and present the slices.",
+        "This is one split rule for an estimate recorded at refinement and for one made outside a ceremony, "
+        "at filing or triage.",
+        "Keep the original issue for the core slice, create siblings for the rest, and wire blocked-by or related "
+        "edges.",
+    )
+)
+RESPLIT_BULLET = " ".join(
+    (
+        "- ⛔ Split every resulting slice that still meets that trigger again, as many rounds as it takes, "
+        "until no slice meets it; there is no escalation exit.",
+        "Each resulting slice gets its own estimate, made the way the story's was (at refinement, filing or triage), "
+        "before it is tested against that trigger.",
+        "A slice that cannot be estimated is recorded as unpointed and reported as `needs input` to the owner, "
+        "naming the story and the slice, and also the derived values when a refinement voter round produced them, "
+        "as the unpointed variance stop in story-refinement's Split rule does; that report is not an exit for an "
+        "oversize slice.",
+        "Split along the first boundary that applies, in this order:",
+        "1. the planned PR or slice boundary;",
+        "2. an acceptance criterion;",
+        "3. where one acceptance criterion alone still meets the trigger, that criterion is rewritten at "
+        "refinement or triage into narrower observable criteria (by artifact, case or environment) that keep the "
+        "same coverage, and the slice is split along them;",
+        "4. the smallest outcome that can be reviewed, merged and verified on its own, including enabling work "
+        "such as interface or schema first and behaviour second.",
+        "No rung discards scope, delegates an oversize slice or hands one to the owner as an estimate.",
+    )
+)
+CLOSE_TIME = "- ⛔ Never split an issue at close time to carve off unfinished work; that is status laundering."
+
+
+def top_level_bullets(section_text: str) -> list[str]:
+    """The section's top-level bullets, each whitespace-normalised.
+
+    An indented or blank line belongs to the bullet above; any other line (a heading, a paragraph) ends it.
+    """
+    bullets: list[str] = []
+    open_bullet = False
+    for line in section_text.splitlines():
+        if line.startswith("- "):
+            bullets.append(line)
+            open_bullet = True
+        elif open_bullet and (not line.strip() or line[0].isspace()):
+            bullets[-1] += "\n" + line
+        else:
+            open_bullet = False
+    return [spaced(bullet) for bullet in bullets]
+
+
+@pytest.mark.parametrize("path", [SHARED_LINEAR, *VENDORED_LINEAR], ids=lambda p: str(p.relative_to(ROOT)))
+def test_one_split_rule_resplits_in_boundary_order_with_no_escalation_exit(path: Path) -> None:
+    bullets = top_level_bullets(section(path.read_text(), "Estimation and slicing"))
+    for bullet in (SPLIT_BULLET, RESPLIT_BULLET, CLOSE_TIME):
+        assert bullet in bullets, f"Estimation and slicing has no top-level bullet equal to: {bullet[:60]}"
+    assert bullets.index(SPLIT_BULLET) < bullets.index(RESPLIT_BULLET) < bullets.index(CLOSE_TIME), (
+        "the split, re-split and close-time bullets are out of order"
+    )
+
+
 def test_vendored_linear_copies_are_found() -> None:
     assert VENDORED_LINEAR, "no skill vendors references/linear.md; the copy checks above would be vacuous"
