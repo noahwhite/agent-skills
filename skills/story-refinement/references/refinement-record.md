@@ -83,11 +83,12 @@ A sizing comment that names a point value before the reveal, prescribes this sto
 - SM/EM sizing context, after all three values: <file base name> or verbatim, eliding a pre-reveal value or a prescription, or none
 - Discussion: <high <value>, low <value>; or none when the discussion ran and recorded nothing; or skipped, when the consensus check recorded the estimate; the shared content names only the high and the low, while a voter's own recorded value and rationale are carried privately in that voter's prompt>
 - Re-vote: <accepted set per voter, with complexity rationale; or no consensus, with its complexity rationale, for a voter that records none; or none when it ran and recorded nothing; or skipped, when the consensus check recorded the estimate>
-- Consensus: <the highest value in the intersection of the vote that stands, or n/a when the consensus check or the residual variance rule recorded the estimate, or none when the round stopped unpointed>
+- Consensus: <the highest value in the intersection of the vote that stands (the lowest for a slice), or n/a when the consensus check or the residual variance rule recorded the estimate, or none when the round stopped unpointed>
 - Residual variance: <each voter's derived value, the gap between the highest and the lowest in scale steps, the rule applied and the resulting value, or the unpointed variance stop; n/a only when all three voters recorded an accepted set and the intersection is not empty, or when the consensus check, or the re-run of it that supersedes that outcome, recorded the estimate>
 - Recorded estimate: <the value recorded, or unpointed with the gap between the highest and the lowest in scale steps when the round stopped there>
+- Slice consensus: <n/a for a story that is not a slice; for a slice, the lower value, which is recorded, and the higher value, which Step 4 records for an unsplit story; or, for a slice that took the unpointed variance stop, unpointed with its lowest and highest derived values>
 - Effective maximum: <profile.refinement.point_cap; the 8-point rule still triggers at 8 or more>
-- Split: <none, or the slice mapping and sibling issue keys>
+- Split: <none, or the slice mapping, each slice criterion with the exactly one criterion of the story it is split from and each criterion of that story with its slice, and sibling issue keys>
 - Challenges: <none, or each ground challenged by kind, its author (a voter, or the SM/EM for a sizing comment), the restatement, withdrawal or retraction, and any replacement value it produced, or the void; elide a pre-reveal value or a prescription>
 - Owner decision: <n/a when the round did not stop unpointed, otherwise pending owner decision in a later run until the later run edits this line, then the value the owner decided and the basis, or unpointed with the owner's reason>
 - Superseded values after a void: <none, or the voided values, the voided estimate, the voided `Consensus check:` outcome, the voided consensus, the voided derived values and their outcome, and the blind vote that replaced them>
@@ -113,7 +114,7 @@ A re-split sibling gets its own split comment on that sibling.
 - Core slice: <original issue key> - <its slice> - Scope signal: <reading> - description trimmed to this slice
 - Siblings, each from the `<linear-bug|linear-investigation>` template with the `<type label>` label, blocked by the original:
   - <sibling key> - <its slice> - Scope signal: <reading>
-- Mapping: <each acceptance criterion, or for an Investigation each findings-scope item, and the slice it maps to>
+- Mapping: <each acceptance criterion, or for an Investigation each findings-scope item, and the slice it maps to; and each slice criterion or item and the exactly one criterion or item of the issue it is split from>
 - Estimates: none; no slice receives a point value or a slice estimate
 - Tracker writes: product owner
 ```
@@ -129,16 +130,17 @@ Under the denied tracker writes fallback in `SKILL.md`, replace the tracker-writ
 After each split round of a story split the facilitator runs the split bounds in Estimation and slicing in `references/linear.md` and fills in the block below.
 A round with no stop posts the block in the split comment.
 A round with a leaf slice recorded as unpointed and no stop posts the block in the split comment with result pending, naming the unpointed slices, and the pending checks run once the owner's answer gives every leaf slice a recorded value.
-A stop posts nothing to the tracker: it reports `needs input` to the owner in one message carrying the block, and no further split round, slice record or tracker write for the slices happens until the owner answers.
+A stop posts nothing to the tracker: it reports `needs input` to the owner in one message carrying the block, its warning line included, and no further split round, slice record or tracker write for the slices happens until the owner answers.
+A mapping-check stop also posts nothing to the tracker, and because it comes before any slice is pointed it fills no block: its one `needs input` message carries a `Mapping check, round <1 | 2>: stop` line naming each slice criterion with no counterpart and each evidence pass, fixture, test obligation or behaviour a slice adds beyond the story it is split from.
 
 ```markdown
 - Split bounds, round <1 | 2>: <clear | warning | stop | pending: unpointed <slice keys>>
-  - Whole-story sum: base <original whole-story recorded estimate>; 1.0 times = <value>, 1.5 times = <value>; sum <sum with each leaf slice's lower consensus value> (lower), <sum with each leaf slice's higher consensus value> (higher); band <clear | warning | stop>
+  - Whole-story sum: base <original whole-story recorded estimate>; 1.0 times = <value>, 1.5 times = <value>; sum <sum with each leaf slice's lower consensus value> (lower), <sum with each leaf slice's higher consensus value> (higher); band <clear | warning | stop> (lower, governs), <clear | warning | stop> (higher)
   - Saturated base: <n/a, or: the base <value> is the highest value of the step sequence for <scale>, so the base is saturated and the 1.0 and 1.5 bounds computed from it are lower bounds on the true size>
-  - Per-parent sum, one line per parent split this round: parent <key> <recorded value>; 1.0 times = <value>, 1.5 times = <value>; sum of its slices <value> (lower), <value> (higher); band <clear | warning | stop>
+  - Per-parent sum, one line per parent split this round: <n/a in round 1, whose only parent is the original story, so the whole-story sum line records its band once; otherwise parent <key> <recorded value>; 1.0 times = <value>, 1.5 times = <value>; sum of its slices <value> (lower), <value> (higher); band <clear | warning | stop> (lower, governs), <clear | warning | stop> (higher)>
   - Per-parent bound: <pass, or each slice at or above its parent: parent <key> <value>, slice <key> <value>, band <band of that parent's sum>>
   - Round cap: <n/a before split round 2; pass; or each slice still meeting the split trigger after split round 2, with its value>
-  - Warning for the human at triage: <none, or each warning band with its sums and bounds above>
+  - Warning for the human at triage: <none, or one entry listing every warning of the round with its sums, bands and bounds above, posted in the split comment; a round that stops also carries it in its `needs input` message and posts it once the owner answers>
 ```
 
 The round's result is the most severe of its lines: any stop makes the round a stop, else any warning makes it a warning, else it is clear.
@@ -146,11 +148,14 @@ With a leaf slice recorded as unpointed, the whole-story sum line and the per-pa
 The round's result then ranks stop, then pending, then warning, then clear, and a warning on a computed line is still listed in the warning line.
 
 Worked examples on `fibonacci` (1, 2, 3, 5, 8, 13) with `profile.refinement.point_cap` 5 unless stated.
-In round 1 the only parent is the original story, so its per-parent sum and the whole-story sum share one base and one band; a slice at or above that parent still stops on its own.
+In round 1 the only parent is the original story, so its per-parent sum and the whole-story sum share one base and one band, recorded once on the whole-story sum line; a slice at or above that parent still stops on its own.
+Each slice is listed by its recorded lower-consensus value, with its higher value in brackets where the two differ.
 
 | Case | Original | Slices | Sum against 1.0 and 1.5 times | Result |
 |---|---|---|---|---|
-| Hard stop: the lowest sum above 1.5 times an original of 8 with every slice below 8 | 8 | 5, 5, 3 | 13 against 8 and 12 | stop: `needs input` naming the sums 13 (lower) and 13 (higher), the bounds 8 and 12, and round 1 |
+| Hard stop: the lowest sum above 1.5 times an original of 8 with every slice below 8 | 8 | 5, 5, 3 | 13 against 8 and 12 | stop: `needs input` naming the sums 13 (lower) and 13 (higher), the bands stop (lower) and stop (higher), the bounds 8 and 12, and round 1 |
+| Lower consensus governs: the lower sum warns while the higher sum would stop | 8 | 3 (5), 3 (5), 3 (5) | 9 (lower) and 15 (higher) against 8 and 12 | proceeds; the split comment carries the warning naming the sums 9 (lower) and 15 (higher), the bands warning (lower) and stop (higher), the bounds 8 and 12, and round 1 |
+| Two failures in one round | 8 | 8, 5 | 13 against 8 and 12 | stop: one `needs input` message naming both failures, the per-parent bound (parent 8, slice 8) and the band stop of the sum 13 |
 | Warning band: the highest sum at or below 1.5 times an original of 8 | 8 | 5, 5, 2 | 12 against 8 and 12 | proceeds; the split comment carries the warning |
 | Clear band: the highest sum at or below 1.0 times an original of 8 | 8 | 5, 3 | 8 against 8 and 12 | proceeds with no flag |
 | Per-parent bound: a child equal to its parent | 8 | 8, 3 | 11 against 8 and 12 | stop: parent 8, slice 8, both values, band warning |
@@ -159,6 +164,13 @@ In round 1 the only parent is the original story, so its per-parent sum and the 
 | Round cap, `point_cap` 3: a slice still meets the trigger after split round 2 | 13; round 1 8, 5 | round 2: 8 into 5, 3; 5 into 3, 2 | leaf sum 13 against 13 and 19.5 | stop before a third split: `needs input` naming the slice at 5 |
 | Round cap, `point_cap` 3: a split that completes within two rounds | 8; round 1 5, 3 | round 2: 5 into 3, 2 | leaf sum 8 against 8 and 12 | proceeds unchanged |
 | Saturated base: a top-of-scale whole story | 13 | 8, 8, 5 | 21 against 13 and 19.5 | stop: the message names the base 13 saturated and the bounds 13 and 19.5 as lower bounds on the true size |
+
+Mapping check worked examples, in split round 1 of a story with criteria AC1 to AC3.
+
+| Case | Story criteria | Slice criteria mapped | Result |
+|---|---|---|---|
+| Mapping check stop: a slice criterion with no counterpart | AC1, AC2, AC3 | slice A: A1 -> AC1, A2 -> AC2; slice B: B1 -> AC3, B2 -> none | stop before any slice is pointed: one `needs input` message with `Mapping check, round 1: stop` naming B2; no slice is pointed and no split bound runs |
+| Mapping check clear: every slice criterion maps to exactly one criterion of the story | AC1, AC2, AC3 | slice A: A1 -> AC1, A2 -> AC1, A3 -> AC2; slice B: B1 -> AC3 | proceeds unchanged: the slices are pointed and the split bounds run |
 
 ## Triage record
 
