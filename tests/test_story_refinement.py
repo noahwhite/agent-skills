@@ -587,6 +587,26 @@ UNPOINTED_SLICE_STOP = (
     "partially pointed split always ends in that report rather than in an estimate, and its recorded outcome is the "
     "slice count with `needs input` for each unpointed slice."
 )
+# SKL-305: the mapping check runs before pointing, and a mapping failure is one `needs input` message.
+MAPPING_CHECK = (
+    "- Each split round runs the no-scope-growth mapping check in Estimation and slicing in "
+    "[references/linear.md](references/linear.md) before any slice is pointed, then the slice pointing, then the "
+    "split bounds in the order stated there; a mapping failure stops the round before any slice is pointed, with one "
+    "`needs input` message naming every slice criterion that has no counterpart in the story it is split from."
+)
+# SKL-305: a slice's within-one-step consensus is the lower value; an unsplit story keeps Step 4 verbatim.
+LOWER_CONSENSUS = (
+    "- A story produced by a split is a slice, the core slice included, and its within-one-step consensus is the "
+    "lower value: for a slice, the Step 4 item 1 tolerance value, the item 5 consensus, each item 6 derived value and "
+    "the item 6 tolerance value are the lowest value where an unsplit story records the highest, and a spread of two "
+    "or more steps still runs the discussion and the re-vote. "
+    "The split trigger, the per-parent bound, the split-bound sums and the tracker estimate use that lower value, the "
+    "pointing record shows both values per slice, and an unsplit story keeps Step 4 unchanged."
+)
+STEP_FOUR_SLICE_POINTER = (
+    "For a slice, each highest value this step records is the lowest instead, under the lower consensus in the "
+    "[Split rule](#split-rule)."
+)
 # Phrases only the boundary order in shared/linear.md states; the Split rule cites it instead.
 BOUNDARY_ORDER_PHRASES = (
     "planned PR or slice boundary",
@@ -611,10 +631,12 @@ SPLIT_RULE_SECTION = " ".join(
         "- Siblings are created from the `linear-user-story` template.",
         "- The original issue blocks each sibling.",
         "- Every acceptance criterion is mapped to a slice in the split comment.",
+        MAPPING_CHECK,
         "- Each slice gets its own three-voter estimate in the same blind round, with newly created voter contexts, "
         "and that round runs the same Step 4 consensus check, basis review and residual variance rule, so a slice "
         "records an estimate or takes the unpointed variance stop on the same terms.",
         UNPOINTED_SLICE_STOP,
+        LOWER_CONSENSUS,
         RESPLIT_BULLET,
         ROUND_CAP,
         SPLIT_BOUNDS,
@@ -629,6 +651,22 @@ def test_split_rule_bounds_a_split_by_two_rounds_and_the_split_bounds() -> None:
     body = spaced(section(SKILL.read_text(), "Split rule"))
     for sentence in (RESPLIT_BULLET, ROUND_CAP, SPLIT_BOUNDS, SUPERSESSION):
         assert sentence in body, sentence
+
+
+def test_split_rule_runs_the_mapping_check_before_any_slice_is_pointed() -> None:
+    body = spaced(section(SKILL.read_text(), "Split rule"))
+    assert MAPPING_CHECK in body
+    assert body.index(MAPPING_CHECK) < body.index("- Each slice gets its own three-voter estimate"), (
+        "the mapping check bullet precedes the slice pointing bullet"
+    )
+
+
+def test_split_rule_points_a_slice_to_the_lower_consensus() -> None:
+    assert LOWER_CONSENSUS in spaced(section(SKILL.read_text(), "Split rule"))
+    item = process_items(STEP_FOUR)[8]
+    assert STEP_FOUR_SLICE_POINTER in item
+    # The unsplit rule stays verbatim: the one-step branch still records the highest value.
+    assert CONSENSUS_CHECK_BRANCHES in process_items(STEP_FOUR)[0]
 
 
 def test_split_rule_drops_the_superseded_never_escalate_sentences() -> None:
@@ -658,14 +696,17 @@ SPLIT_BOUNDS_FIELDS = (
     "- Split bounds, round <1 | 2>: <clear | warning | stop | pending: unpointed <slice keys>>",
     "- Whole-story sum: base <original whole-story recorded estimate>; 1.0 times = <value>, 1.5 times = <value>; "
     "sum <sum with each leaf slice's lower consensus value> (lower), <sum with each leaf slice's higher consensus "
-    "value> (higher); band <clear | warning | stop>",
+    "value> (higher); band <clear | warning | stop> (lower, governs), <clear | warning | stop> (higher)",
     "- Saturated base: <n/a, or: the base <value> is the highest value of the step sequence for <scale>, so the base "
     "is saturated and the 1.0 and 1.5 bounds computed from it are lower bounds on the true size>",
-    "- Per-parent sum, one line per parent split this round: parent <key> <recorded value>; 1.0 times = <value>, "
-    "1.5 times = <value>; sum of its slices <value> (lower), <value> (higher); band <clear | warning | stop>",
+    "- Per-parent sum, one line per parent split this round: <n/a in round 1, whose only parent is the original "
+    "story, so the whole-story sum line records its band once; otherwise parent <key> <recorded value>; 1.0 times = "
+    "<value>, 1.5 times = <value>; sum of its slices <value> (lower), <value> (higher); band <clear | warning | stop> "
+    "(lower, governs), <clear | warning | stop> (higher)>",
     "- Per-parent bound:",
     "- Round cap:",
-    "- Warning for the human at triage:",
+    "- Warning for the human at triage: <none, or one entry listing every warning of the round with its sums, bands "
+    "and bounds above>",
 )
 SPLIT_BOUNDS_EXAMPLE_RESULTS = (
     ("13 against 8 and 12", "stop"),
@@ -679,11 +720,46 @@ SPLIT_BOUNDS_EXAMPLE_RESULTS = (
     ("leaf sum 13 against 13 and 19.5", "stop before a third split"),
     ("leaf sum 8 against 8 and 12", "proceeds unchanged"),
     ("21 against 13 and 19.5", "stop: the message names the base 13 saturated"),
+    (
+        "9 (lower) and 15 (higher) against 8 and 12",
+        "proceeds; the split comment carries the warning naming the sums 9 (lower) and 15 (higher), the bands "
+        "warning (lower) and stop (higher)",
+    ),
+)
+# SKL-305 evidence rows: the lower-consensus band governs, and two failures of one round share one message.
+LOWER_CONSENSUS_ROW = (
+    "| Lower consensus governs: the lower sum warns while the higher sum would stop | 8 | 3 (5), 3 (5), 3 (5) | "
+    "9 (lower) and 15 (higher) against 8 and 12 | proceeds; the split comment carries the warning naming the sums "
+    "9 (lower) and 15 (higher), the bands warning (lower) and stop (higher), the bounds 8 and 12, and round 1 |"
+)
+TWO_FAILURES_ROW = (
+    "| Two failures in one round | 8 | 8, 5 | 13 against 8 and 12 | stop: one `needs input` message naming both "
+    "failures, the per-parent bound (parent 8, slice 8) and the band stop of the sum 13 |"
 )
 
 
 def split_bounds_record() -> str:
     return section(RECORD.read_text(), "Split bounds")
+
+
+def test_split_bounds_examples_show_the_lower_band_governing_and_one_message_for_two_failures() -> None:
+    lines = split_bounds_record().splitlines()
+    for row in (LOWER_CONSENSUS_ROW, TWO_FAILURES_ROW):
+        assert row in lines, row
+    body = spaced(split_bounds_record())
+    assert (
+        "In round 1 the only parent is the original story, so its per-parent sum and the whole-story sum share one "
+        "base and one band, recorded once on the whole-story sum line; a slice at or above that parent still stops "
+        "on its own." in body
+    )
+
+
+def test_pointing_template_shows_both_values_for_a_slice() -> None:
+    lines = pointing_template()
+    assert (
+        "- Slice consensus: <n/a for a story that is not a slice; for a slice, the lower value, which is recorded, "
+        "and the higher value, which Step 4 records for an unsplit story>" in lines
+    )
 
 
 def test_split_bounds_record_routes_a_stop_to_the_owner_not_the_tracker() -> None:
@@ -705,25 +781,35 @@ def test_split_bounds_worked_examples_compute_their_bands() -> None:
         for line in split_bounds_record().splitlines()
         if line.startswith("| ") and " against " in line and not line.startswith("| Case ")
     ]
-    assert len(rows) == 9, rows
+    assert len(rows) == 11, rows
     pairs = re.findall(r"(\d+(?:\.\d+)?) against (\d+(?:\.\d+)?) and (\d+(?:\.\d+)?)", "\n".join(rows))
     assert pairs
     for total, lower, upper in pairs:
         assert float(upper) == 1.5 * float(lower), (total, lower, upper)
     plain = 0
+    split_values = 0
     for row in rows:
         cells = [cell.strip() for cell in row.strip("|").split("|")]
         if re.fullmatch(r"\d+(, \d+)+", cells[2]):
             plain += 1
             stated = int(re.match(r"(?:leaf sum )?(\d+) against", cells[3]).group(1))
             assert sum(map(int, cells[2].split(", "))) == stated, row
-    assert plain == 6, plain
+        elif re.fullmatch(r"\d+ \(\d+\)(, \d+ \(\d+\))+", cells[2]):
+            split_values += 1
+            slices = re.findall(r"(\d+) \((\d+)\)", cells[2])
+            stated_lower, stated_higher = map(int, re.match(r"(\d+) \(lower\) and (\d+) \(higher\)", cells[3]).groups())
+            assert sum(int(low) for low, _ in slices) == stated_lower, row
+            assert sum(int(high) for _, high in slices) == stated_higher, row
+    assert plain == 7, plain
+    assert split_values == 1, split_values
     for pair_text, result in SPLIT_BOUNDS_EXAMPLE_RESULTS:
         matching = [row for row in rows if f"| {pair_text} |" in row]
         assert matching, pair_text
         for row in matching:
             assert f"| {pair_text} | {result}" in row, (pair_text, result)
-        total, lower, upper = map(float, re.search(r"(\d+) against (\d+) and (\d+(?:\.\d+)?)", pair_text).groups())
+        # The lower-consensus sum governs the band when a row states both sums.
+        governing = re.sub(r" \(lower\) and \d+ \(higher\)", "", pair_text)
+        total, lower, upper = map(float, re.search(r"(\d+) against (\d+) and (\d+(?:\.\d+)?)", governing).groups())
         band = "stop" if total > upper else "warning" if total > lower else "clear"
         if "parent" not in pair_text and "slice 8" not in result and "third split" not in result:
             assert (band == "stop") == result.startswith("stop"), (pair_text, band, result)
@@ -1362,7 +1448,8 @@ def test_pointing_template_notes_the_private_self_context_rule() -> None:
 
 def test_pointing_template_states_the_standing_consensus() -> None:
     assert (
-        "- Consensus: <the highest value in the intersection of the vote that stands, or n/a when the consensus check "
+        "- Consensus: <the highest value in the intersection of the vote that stands (the lowest for a slice), or n/a "
+        "when the consensus check "
         "or the residual variance rule recorded the estimate, or none when the round stopped unpointed>"
         in pointing_template()
     )
