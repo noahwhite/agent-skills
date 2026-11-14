@@ -544,17 +544,40 @@ def test_split_rule_keeps_the_split_mechanics() -> None:
         assert rule in body, rule
 
 
-# --- SKL-230: a slice above the point cap is split again until every slice fits, never escalated -------
+# --- SKL-304: a split is bounded by two rounds and the split bounds; SKL-230's never-escalate rule is superseded ---
 
 RESPLIT_BULLET = (
-    "- A slice that meets the split trigger is split again under these same bullets: it stays the core slice and "
-    "blocks its new siblings, every acceptance criterion of the slice is mapped to a sub-slice in a split comment, "
-    "and each sub-slice, the core slice included, gets its own three-voter blind estimate; the split repeats until "
-    "no slice meets the split trigger."
+    "- A slice that meets the split trigger is split again, within the two-round cap below, under these same "
+    "bullets, along the boundary order in "
+    "Estimation and slicing in [references/linear.md](references/linear.md): it stays the core slice and blocks its "
+    "new siblings, every acceptance criterion of the slice is mapped to a sub-slice in a split comment, and each "
+    "sub-slice, the core slice included, gets its own three-voter blind estimate."
 )
-NO_ESCALATION_EXIT = (
-    "There is no escalation exit for an oversize slice: a slice with no natural boundary left is split along the "
-    "boundary order in Estimation and slicing in [references/linear.md](references/linear.md)."
+ROUND_CAP = (
+    "- A split runs at most two split rounds: split round 1 splits the whole story and split round 2 splits the "
+    "round-1 slices that still meet it; a slice that still meets the split trigger after split round 2 stops the "
+    "ceremony with `needs input` naming the slices and their values, before a third split is made, and no "
+    "third-round split, estimate, record or tracker write happens."
+)
+SPLIT_BOUNDS = (
+    "- After each split round the facilitator applies the split bounds in Estimation and slicing in "
+    "[references/linear.md](references/linear.md): each slice's recorded value is strictly below the recorded value "
+    "of the story it is split from, the slices of each parent are compared to that parent as a sum, and the sum of "
+    "the current leaf slices' recorded values is compared to the original whole-story recorded estimate, each "
+    "comparison stopping with `needs input`, warning in the split comment or proceeding with no flag by the bands "
+    "stated there. "
+    "A stop holds every further split round, estimate, record and tracker write for the slices until the owner "
+    "answers. "
+    "A round with a leaf slice recorded as unpointed still applies the per-slice bound and the round cap to each "
+    "recorded value, records the whole-story sum and the sum of each parent with an unpointed slice as pending in "
+    "the split comment and runs them once the owner's answer gives every leaf slice a recorded value."
+)
+SUPERSESSION = "- The two-round cap and the split bounds supersede the never-escalate rule of SKL-230."
+# The SKL-230 sentences this story removes, split so a repository search for them finds no literal copy here.
+STALE_SPLIT_SENTENCES = (
+    "the split repeats until " + "no slice meets the split trigger",
+    "There is no escalation exit " + "for an oversize slice",
+    "as many rounds as it takes, " + "until no slice meets it; there is no escalation exit",
 )
 UNPOINTED_SLICE_STOP = (
     "A slice that takes the unpointed variance stop is recorded as unpointed in the split comment with its derived "
@@ -591,24 +614,116 @@ SPLIT_RULE_SECTION = " ".join(
         "records an estimate or takes the unpointed variance stop on the same terms.",
         UNPOINTED_SLICE_STOP,
         RESPLIT_BULLET,
-        NO_ESCALATION_EXIT,
+        ROUND_CAP,
+        SPLIT_BOUNDS,
+        SUPERSESSION,
         "Cite [references/linear.md](references/linear.md) for the split mechanics; do not restate them here.",
     )
 )
 SPLIT_TRIGGER_PATTERN = re.compile(r"is above (`profile\.refinement\.point_cap`) or is (\d+) or more")
 
 
-def test_split_rule_resplits_an_oversize_slice_until_none_meets_the_trigger() -> None:
+def test_split_rule_bounds_a_split_by_two_rounds_and_the_split_bounds() -> None:
     body = spaced(section(SKILL.read_text(), "Split rule"))
-    assert RESPLIT_BULLET in body
-    assert NO_ESCALATION_EXIT in body
+    for sentence in (RESPLIT_BULLET, ROUND_CAP, SPLIT_BOUNDS, SUPERSESSION):
+        assert sentence in body, sentence
 
 
-def test_split_rule_has_no_escalation_exit() -> None:
+def test_split_rule_drops_the_superseded_never_escalate_sentences() -> None:
     body = spaced(section(SKILL.read_text(), "Split rule"))
-    assert "or escalated" not in body, "the Split rule still offers escalation as an exit"
-    stray = re.findall(r"escalat\w*", re.sub(r"no escalation exit", "", body, flags=re.IGNORECASE), re.IGNORECASE)
-    assert not stray, f"an escalation mention other than 'no escalation exit' remains: {stray}"
+    for sentence in STALE_SPLIT_SENTENCES:
+        assert sentence not in body, f"the Split rule still carries the superseded sentence: {sentence}"
+    stray = re.findall(r"escalat\w*", body.replace("never-escalate rule of SKL-230", ""), re.IGNORECASE)
+    assert not stray, f"an escalation mention other than the SKL-230 supersession remains: {stray}"
+
+
+SPLIT_BOUNDS_ROUTE = (
+    "A round with no stop posts the block in the split comment.",
+    "A round with a leaf slice recorded as unpointed and no stop posts the block in the split comment with result "
+    "pending, naming the unpointed slices, and the sum checks run once the owner's answer gives every leaf slice a "
+    "recorded value.",
+    "With a leaf slice recorded as unpointed, the whole-story sum line and the per-parent sum line of each parent "
+    "with an unpointed slice read `sum pending: unpointed <slice keys>; band pending` in place of their sums and "
+    "band, a per-parent bound stop under such a parent records `band pending`, and every other line is computed.",
+    "The round's result then ranks stop, then pending, then warning, then clear, and a warning on a computed line "
+    "is still listed in the warning line.",
+    "A stop posts nothing to the tracker: it reports `needs input` to the owner in one message carrying the block, "
+    "and no further split round, slice record or tracker write for the slices happens until the owner answers.",
+)
+SPLIT_BOUNDS_FIELDS = (
+    "- Split bounds, round <1 | 2>: <clear | warning | stop | pending: unpointed <slice keys>>",
+    "- Whole-story sum: base <original whole-story recorded estimate>; 1.0 times = <value>, 1.5 times = <value>; "
+    "sum <sum with each leaf slice's lower consensus value> (lower), <sum with each leaf slice's higher consensus "
+    "value> (higher); band <clear | warning | stop>",
+    "- Saturated base: <n/a, or: the base <value> is the highest value of the step sequence for <scale>, so the base "
+    "is saturated and the 1.0 and 1.5 bounds computed from it are lower bounds on the true size>",
+    "- Per-parent sum, one line per parent split this round: parent <key> <recorded value>; 1.0 times = <value>, "
+    "1.5 times = <value>; sum of its slices <value> (lower), <value> (higher); band <clear | warning | stop>",
+    "- Per-parent bound:",
+    "- Round cap:",
+    "- Warning for the human at triage:",
+)
+SPLIT_BOUNDS_EXAMPLE_RESULTS = (
+    ("13 against 8 and 12", "stop"),
+    ("12 against 8 and 12", "proceeds; the split comment carries the warning"),
+    ("8 against 8 and 12", "proceeds with no flag"),
+    ("11 against 8 and 12", "stop: parent 8, slice 8"),
+    (
+        "parent 8: 13 against 8 and 12 (stop); whole story: leaves 5, 5, 3, 5 sum 18 against 13 and 19.5 (warning)",
+        "stop",
+    ),
+    ("leaf sum 13 against 13 and 19.5", "stop before a third split"),
+    ("leaf sum 8 against 8 and 12", "proceeds unchanged"),
+    ("21 against 13 and 19.5", "stop: the message names the base 13 saturated"),
+)
+
+
+def split_bounds_record() -> str:
+    return section(RECORD.read_text(), "Split bounds")
+
+
+def test_split_bounds_record_routes_a_stop_to_the_owner_not_the_tracker() -> None:
+    body = spaced(split_bounds_record())
+    for sentence in SPLIT_BOUNDS_ROUTE:
+        assert sentence in body, sentence
+
+
+def test_split_bounds_record_carries_both_round_two_verdicts() -> None:
+    body = template_block("Split bounds")[0]
+    for field in SPLIT_BOUNDS_FIELDS:
+        assert field in body, field
+
+
+def test_split_bounds_worked_examples_compute_their_bands() -> None:
+    """Every "S against L and U" pair has U = 1.5 L, and its row's result follows the bands."""
+    rows = [
+        line
+        for line in split_bounds_record().splitlines()
+        if line.startswith("| ") and " against " in line and not line.startswith("| Case ")
+    ]
+    assert len(rows) == 9, rows
+    pairs = re.findall(r"(\d+(?:\.\d+)?) against (\d+(?:\.\d+)?) and (\d+(?:\.\d+)?)", "\n".join(rows))
+    assert pairs
+    for total, lower, upper in pairs:
+        assert float(upper) == 1.5 * float(lower), (total, lower, upper)
+    plain = 0
+    for row in rows:
+        cells = [cell.strip() for cell in row.strip("|").split("|")]
+        if re.fullmatch(r"\d+(, \d+)+", cells[2]):
+            plain += 1
+            stated = int(re.match(r"(?:leaf sum )?(\d+) against", cells[3]).group(1))
+            assert sum(map(int, cells[2].split(", "))) == stated, row
+    assert plain == 6, plain
+    for pair_text, result in SPLIT_BOUNDS_EXAMPLE_RESULTS:
+        matching = [row for row in rows if f"| {pair_text} |" in row]
+        assert matching, pair_text
+        for row in matching:
+            assert f"| {pair_text} | {result}" in row, (pair_text, result)
+        total, lower, upper = map(float, re.search(r"(\d+) against (\d+) and (\d+(?:\.\d+)?)", pair_text).groups())
+        band = "stop" if total > upper else "warning" if total > lower else "clear"
+        if "parent" not in pair_text and "slice 8" not in result and "third split" not in result:
+            assert (band == "stop") == result.startswith("stop"), (pair_text, band, result)
+            assert (band == "warning") == ("warning" in result), (pair_text, band, result)
 
 
 def test_split_rule_section_is_exactly_the_rule() -> None:
