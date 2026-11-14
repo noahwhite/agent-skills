@@ -42,3 +42,46 @@ Details:
   - The Slice rationales row of the Slice brief worked example says each ledger unknown appears in exactly one slice rationale while the blocker-owned vendor API appears in none; the quantifier should be each slice-owned ledger unknown, as the normative rule in `shared/linear.md` states.
 
 Closing decision: Done, once this evidence merges.
+
+## QA round 2
+
+Date: 2026-11-14 UTC, independent QA round 2, after the product owner amended AC7 with items (a) and (b) on 2026-11-14 and reopened the story.
+Target: `main` at `a7aa8f600cea9851e457589ba3973569ed3d5134`, the squash merge of PR 258, whose reviewed head is `7ff3b5acd6bf77c98384e3408d239861acf139e7`.
+The target is `origin/main`, and `git merge-base --is-ancestor` exits 0.
+Path: `no-deployment`, selected by `select-path.py` over the repository profile (`environments: []`), so no environment or build SHA applies.
+Fixtures: none.
+Blockers SKL-304 (`a559d43`) and SKL-305 (`581de04`) are Done, and their merges and the first SKL-306 merge `d282a5d` are ancestors of the target.
+The raw output is attached to SKL-306 as `SKL-306-qa-round-2-tabletop-probe.txt` and `SKL-306-qa-round-2-dod.txt`; there is no visual surface, so no screenshot applies.
+
+| Item | Verdict | Evidence |
+|---|---|---|
+| AC5b: saturating base, slice brief | Verified | All five AC5b assertions pass at the target and fail at `37b585b`. |
+| AC7: priced shared-unknown ledger | Verified | All 28 core assertions pass at the target, including an independent recomputation of the worked example. |
+| AC7 amendment (a): owner reassignment line | Verified | The Split bounds block has a `Ledger owners reassigned` line, matching the `shared/linear.md` clause; it is pinned in `SPLIT_BOUNDS_FIELDS`. |
+| AC7 amendment (b): slice-owned wording | Verified | The Slice rationales row and its `LEDGER_EXAMPLE_RESULTS` pin say "each slice-owned ledger unknown". |
+| DoD: all acceptance criteria met | Verified | AC5b and AC7. |
+| DoD: tests written and passing | Verified | The test pins are updated; CI `checks` passed on the PR head (run 43650086810) and on `main` (run 43650607060, 2408 passed); QA ran no local pytest. |
+| DoD: independently reviewed | Verified | Details below. |
+| DoD: docs updated | Verified | `skills/story-refinement/references/refinement-record.md`; `scripts/vendor_shared.py --check` exits 0. |
+| DoD: verified in a deployed environment (if needed) | Correct by design | Not needed: the run is on the `no-deployment` path. |
+| DoD: no critical bugs or regressions | Verified | CI `checks` and `discovery` passed on `main` at the target, and the public `leak_scan.py` exits 0. |
+
+Details:
+
+- AC7 amendments:
+  - `refinement-record.md` line 172 adds `Ledger owners reassigned` to the Split bounds block, which a round with no stop posts in the split comment.
+  - That line gives the `shared/linear.md` clause, that a re-split slice's owner reassignment is recorded in the split comment of split round 2, a template slot.
+  - `refinement-record.md` line 129 says each slice-owned ledger unknown appears in exactly one slice rationale, and the test pin carries the same string.
+  - `git grep "ledger unknown"` finds no unscoped wording left in the skills or the tests.
+  - The five amendment assertions pass at the target and fail at the parent `81fced0`, so the probe is not vacuous.
+- AC5b and AC7:
+  - The same probe passes all 41 assertions at the target and 4 of 41 at `37b585b`, where the four passes are pure recomputation or text that predates the story.
+  - The worked example recomputes exactly: each whole-story rationale sums to 13, the ledger is auth 3, schema 2, vendor API 2 and migration 1, total 8 beside 13, and the blocker-owned vendor API is in no slice rationale.
+- DoD, independently reviewed:
+  - Review 5907620773 on PR 258 is `COMMENTED`, and its `commit_id` and first line name the merged head `7ff3b5acd6bf77c98384e3408d239861acf139e7`.
+  - It was submitted at 22:52:02Z, before the 22:55:34Z merge.
+  - Its reviewer is GPT-6.1 Sol (`gpt-6.1-sol`) and its adjudicator is DeepSeek V4.1 Flash (`deepseek/deepseek-flash`), the seats in `profile.review` at the target.
+  - It records no findings.
+- Incidental defects: none found this round.
+
+Closing decision: Done, once this evidence merges.
