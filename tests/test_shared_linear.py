@@ -211,6 +211,36 @@ SPLIT_BOUNDS_BULLET = " ".join(
     )
 )
 CLOSE_TIME = "- ⛔ Never split an issue at close time to carve off unfinished work; that is status laundering."
+# SKL-306: a shared unknown is priced once, in a ledger every whole-story pointing round records.
+LEDGER_BULLET = " ".join(
+    (
+        "- ⛔ Price a shared unknown once, in the priced shared-unknown ledger that every whole-story pointing round "
+        "records (story-refinement Steps 3 and 4).",
+        "Each voter lists, with its value, the unknowns behind that value with a point price each and the remainder, "
+        "its non-unknown complexity; the prices plus the remainder sum exactly to the voter's value, and a rationale "
+        "whose prices plus remainder differ from its value is off-basis.",
+        "After the consensus check the facilitator records one ledger in the pointing record from the rationales that "
+        "stand: it merges unknowns that voters named differently and records each merge, and prices each unknown at "
+        "the median of the prices of the voters who listed it, the lower of the two prices when two listed it, or the "
+        "sole price when one did.",
+        "Ledger prices are not rounded; the ledger total is recorded beside the whole-story value and is not "
+        "reconciled to slice values, and a slice value is a vote on the step sequence.",
+        "A ledger from a saturated whole-story value (the highest value of the step sequence, as the bullet above "
+        "states) carries the saturation note, that its prices are lower bounds on the true size, and is not adjusted.",
+        "Each unknown has exactly one owner slice, the slice whose work resolves it, else the core slice, assigned "
+        "when the split is drafted; an unsplit story records the ledger without owners, and a slice that is split "
+        "again reassigns its owned unknowns to its sub-slices by the same rule.",
+        "An unknown that a blocker story's work resolves is owned by that blocker story and is priced in no slice.",
+        "Every slice brief, the pointing prompt of a slice estimate, carries the ledger with its prices and owners, "
+        "and when the whole-story value is saturated it states that the ledger prices are lower bounds.",
+        "A slice voter never re-prices an unknown: its rationale states the ledger price of each unknown its slice "
+        "owns plus its own non-unknown complexity.",
+        "A rationale that re-prices an unknown or names one the ledger assigns elsewhere is off-basis: the "
+        "story-refinement Step 4 basis review re-runs that vote once on its existing terms, and a second miss is "
+        "recorded.",
+        "Worked examples are in the Slice brief section of the story-refinement skill's refinement record reference.",
+    )
+)
 # The SKL-230 sentences SKL-304 removes, split so a repository search for them finds no literal copy here.
 STALE_SPLIT_SENTENCES = (
     "the split repeats until " + "no slice meets the split trigger",
@@ -251,6 +281,13 @@ def test_superseded_never_escalate_sentences_are_gone(path: Path) -> None:
     flat = spaced(path.read_text())
     for sentence in STALE_SPLIT_SENTENCES:
         assert sentence not in flat, f"{path.relative_to(ROOT)} still carries the superseded sentence: {sentence}"
+
+
+@pytest.mark.parametrize("path", [SHARED_LINEAR, *VENDORED_LINEAR], ids=lambda p: str(p.relative_to(ROOT)))
+def test_ledger_bullet_follows_the_split_bounds(path: Path) -> None:
+    bullets = top_level_bullets(section(path.read_text(), "Estimation and slicing"))
+    assert LEDGER_BULLET in bullets, "Estimation and slicing has no top-level priced shared-unknown ledger bullet"
+    assert bullets.index(LEDGER_BULLET) == bullets.index(SPLIT_BOUNDS_BULLET) + 1
 
 
 def test_vendored_linear_copies_are_found() -> None:
