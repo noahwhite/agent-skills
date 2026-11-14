@@ -4584,6 +4584,23 @@ def test_step_three_rationale_carries_the_ledger_rule() -> None:
     assert LEDGER_RATIONALE in process_item(STEP_THREE, "Each voter submits one point value")
 
 
+LEDGER_SIZING_EXCEPTION = (
+    "Before the reveal it must not name any point value. "
+    "The ledger a slice brief carries is the one exception, as the Anchoring guardrail states."
+)
+LEDGER_FACTUAL_REFERENCE = (
+    "The priced shared-unknown ledger a slice brief carries is such a factual reference and the one point value the "
+    "facilitator gives a voter before the reveal: its prices, owners, total beside the whole-story value and "
+    "saturation note are recorded in the whole-story pointing record before any slice vote, and a slice voter weighs "
+    "them as information."
+)
+
+
+def test_slice_brief_ledger_is_a_factual_reference_not_an_anchor() -> None:
+    assert LEDGER_SIZING_EXCEPTION in process_item(STEP_THREE, "After all three values are recorded")
+    assert flat(LEDGER_FACTUAL_REFERENCE) in flat(section(SKILL.read_text(), GUARDRAIL))
+
+
 def test_step_four_basis_review_challenges_ledger_grounds_and_the_ledger_is_recorded_last() -> None:
     items = process_items(STEP_FOUR)
     assert items[1].startswith("Review every rationale recorded in Step 3 against the pointing basis")
