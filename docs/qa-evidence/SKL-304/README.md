@@ -46,4 +46,4 @@ Details:
   - It records rounds 1 to 4 with a verdict for every finding and a fix commit on the PR for each valid one, and round 5 at the head has no findings.
   - Rounds 1 to 4 were not posted as their own reviews at their heads; their findings and verdicts appear in the posted review of record.
 
-Closing decision: Done.
+Closing decision: Done, once this evidence merges.
