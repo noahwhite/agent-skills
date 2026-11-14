@@ -893,7 +893,7 @@ def test_skill_states_the_product_owner_is_not_a_voter() -> None:
 def test_step_two_stop_and_triage_defer_to_the_fallback() -> None:
     text = SKILL.read_text()
     assert "the po cannot write to the tracker and the owner has not authorized the denied tracker writes fallback" in squash(
-        step(text, "Step 2: Reconciliation and the accept round")
+        operative_step("Step 2: Reconciliation and the accept round")
     )
     assert "applies the po's writes only under the denied tracker writes fallback" in squash(section(text, "Triage"))
 
@@ -4086,15 +4086,19 @@ def result_strings(value) -> list[str]:
 
 
 def unscoped_output(function, arguments: tuple) -> list[str]:
-    """Each string the helper returns that is not part of a text `section()` returned during the call, compared
-    through `flat()` as `bullet()` returns it; a helper that never calls `section()` returns nothing scoped."""
+    """Each string the helper returns that is not part of a text `section()` returned during the call; a helper that
+    never calls `section()` returns nothing scoped.
+
+    Whitespace is collapsed on both sides and case is kept, so a helper cannot recase a line into one an exact-case
+    assertion wants. Only a string already in `flat()` form, as `bullet()` returns it, is compared lowercased.
+    """
     namespace = function.__globals__
     real = namespace["section"]
     returned: list[str] = []
 
     def recording(*args, **kwargs):
         result = real(*args, **kwargs)
-        returned.append(flat(result))
+        returned.append(result)
         return result
 
     namespace["section"] = recording
@@ -4104,29 +4108,64 @@ def unscoped_output(function, arguments: tuple) -> list[str]:
         namespace["section"] = real
     if not returned:
         return ["<no section() call>"]
-    return [text for text in result_strings(result) if not any(flat(text) in body for body in returned)]
+    def within(text: str, body: str) -> bool:
+        if text == flat(text):
+            return text in flat(body)
+        return " ".join(text.split()) in " ".join(body.split())
+
+    return [text for text in result_strings(result) if not any(within(text, body) for body in returned)]
 
 
-def helper_call_sites() -> dict[str, list[tuple]]:
-    """The argument tuples of every call to a scoping helper in this file whose arguments evaluate at module level."""
+def parametrized_bindings(function: ast.FunctionDef) -> list[dict]:
+    """Each set of parameter values a test's `pytest.mark.parametrize` decorators bind, or one empty set."""
+    bindings: list[dict] = [{}]
+    for decorator in function.decorator_list:
+        if not (isinstance(decorator, ast.Call) and ast.unparse(decorator.func) == "pytest.mark.parametrize"):
+            continue
+        declared = ast.literal_eval(decorator.args[0])
+        names = [name.strip() for name in (declared.split(",") if isinstance(declared, str) else declared)]
+        values = eval(compile(ast.Expression(decorator.args[1]), "<parametrize>", "eval"), globals())
+        rows = [dict(zip(names, value if len(names) > 1 else (value,))) for value in values]
+        bindings = [{**bound, **row} for bound in bindings for row in rows]
+    return bindings
+
+
+def helper_call_sites() -> tuple[dict[str, list[tuple]], list[str]]:
+    """The argument tuples of every call to a scoping helper in this file, resolved at module level and through the
+    calling test's parametrized values, and each call outside a scoping helper whose arguments do not resolve."""
     names = {helper.__name__ for helper in SCOPING_HELPERS}
     sites: dict[str, list[tuple]] = {name: [] for name in names}
-    for node in ast.walk(ast.parse(Path(__file__).read_text())):
-        if called_name(node) in names and not node.keywords:
-            try:
-                arguments = tuple(eval(compile(ast.Expression(argument), "<site>", "eval"), globals()) for argument in node.args)
-            except NameError:
+    unresolved: list[str] = []
+    tree = ast.parse(Path(__file__).read_text())
+    for function in tree.body:
+        if not isinstance(function, ast.FunctionDef):
+            continue
+        for node in ast.walk(function):
+            if called_name(node) not in names:
                 continue
-            if arguments not in sites[node.func.id]:
-                sites[node.func.id].append(arguments)
-    return sites
+            for bound in parametrized_bindings(function):
+                try:
+                    arguments = tuple(
+                        eval(compile(ast.Expression(argument), "<site>", "eval"), {**globals(), **bound})
+                        for argument in node.args
+                    )
+                except NameError:
+                    if function.name not in names:
+                        unresolved.append(f"line {node.lineno}: {ast.unparse(node)}")
+                    continue
+                if node.keywords:
+                    unresolved.append(f"line {node.lineno}: {ast.unparse(node)}")
+                elif arguments not in sites[node.func.id]:
+                    sites[node.func.id].append(arguments)
+    return sites, unresolved
 
 
 def test_every_scoping_helper_returns_only_section_text() -> None:
     """B8b: at every call site in this file, each string a helper behind a listed assertion returns is part of the
     text `section()` returned during that call, so no call, branch or literal can hand an assertion unscoped text."""
-    sites = helper_call_sites()
-    inner = {called_name(node) for helper in SCOPING_HELPERS for node in own_nodes(parsed(helper))}
+    sites, unresolved = helper_call_sites()
+    assert not unresolved, f"helper calls whose arguments the check cannot resolve: {unresolved}"
+    inner ={called_name(node) for helper in SCOPING_HELPERS for node in own_nodes(parsed(helper))}
     unchecked = sorted(name for name, found in sites.items() if not found and name not in inner)
     assert not unchecked, f"helpers with no call site to check, nor called by a checked helper: {unchecked}"
     found = {
@@ -4144,6 +4183,7 @@ def test_every_scoping_helper_returns_only_section_text() -> None:
         "    return section(text, heading, level=3).join(['whole document'])\n",
         "    return ''.join(dict.fromkeys(['whole document'], section(text, heading, level=3)))\n",
         "    body = section(text, heading, level=3)\n    return body.replace(body, text)\n",
+        "    return section(text, heading, level=3).replace('Process', 'PROCESS')\n",
         "    section(text, heading, level=3)\n    return text\n",
         "    return 'whole document'\n",
     ],
