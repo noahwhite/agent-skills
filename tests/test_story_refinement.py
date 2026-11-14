@@ -547,15 +547,17 @@ def test_split_rule_keeps_the_split_mechanics() -> None:
 # --- SKL-304: a split is bounded by two rounds and the split bounds; SKL-230's never-escalate rule is superseded ---
 
 RESPLIT_BULLET = (
-    "- A slice that meets the split trigger is split again under these same bullets, along the boundary order in "
+    "- A slice that meets the split trigger is split again, within the two-round cap below, under these same "
+    "bullets, along the boundary order in "
     "Estimation and slicing in [references/linear.md](references/linear.md): it stays the core slice and blocks its "
     "new siblings, every acceptance criterion of the slice is mapped to a sub-slice in a split comment, and each "
     "sub-slice, the core slice included, gets its own three-voter blind estimate."
 )
 ROUND_CAP = (
     "- A split runs at most two split rounds: split round 1 splits the whole story and split round 2 splits the "
-    "round-1 slices that still meet it; a slice that still meets the split trigger after split round 2 stops the ceremony with "
-    "`needs input` naming the slices and their values, before a third split is made."
+    "round-1 slices that still meet it; a slice that still meets the split trigger after split round 2 stops the "
+    "ceremony with `needs input` naming the slices and their values, before a third split is made, and no "
+    "third-round split, estimate, record or tracker write happens."
 )
 SPLIT_BOUNDS = (
     "- After each split round the facilitator applies the split bounds in Estimation and slicing in "
@@ -564,7 +566,8 @@ SPLIT_BOUNDS = (
     "the current leaf slices' recorded values is compared to the original whole-story recorded estimate, each "
     "comparison stopping with `needs input`, warning in the split comment or proceeding with no flag by the bands "
     "stated there. "
-    "A stop holds every further split round, record and tracker write for the slices until the owner answers."
+    "A stop holds every further split round, estimate, record and tracker write for the slices until the owner "
+    "answers."
 )
 SUPERSESSION = "- The two-round cap and the split bounds supersede the never-escalate rule of SKL-230."
 # The SKL-230 sentences this story removes, split so a repository search for them finds no literal copy here.
@@ -637,9 +640,14 @@ SPLIT_BOUNDS_ROUTE = (
     "and no further split round, slice record or tracker write for the slices happens until the owner answers.",
 )
 SPLIT_BOUNDS_FIELDS = (
-    "- Whole-story sum: base <original whole-story recorded estimate>;",
-    "- Saturated base:",
-    "- Per-parent sum, one line per parent split this round: parent <key> <recorded value>;",
+    "- Split bounds, round <1 | 2>: <clear | warning | stop>",
+    "- Whole-story sum: base <original whole-story recorded estimate>; 1.0 times = <value>, 1.5 times = <value>; "
+    "sum <sum with each leaf slice's lower consensus value> (lower), <sum with each leaf slice's higher consensus "
+    "value> (higher); band <clear | warning | stop>",
+    "- Saturated base: <n/a, or: the base <value> is the highest value of the step sequence for <scale>, so the base "
+    "is saturated and the 1.0 and 1.5 bounds computed from it are lower bounds on the true size>",
+    "- Per-parent sum, one line per parent split this round: parent <key> <recorded value>; 1.0 times = <value>, "
+    "1.5 times = <value>; sum of its slices <value> (lower), <value> (higher); band <clear | warning | stop>",
     "- Per-parent bound:",
     "- Round cap:",
     "- Warning for the human at triage:",
@@ -687,6 +695,14 @@ def test_split_bounds_worked_examples_compute_their_bands() -> None:
     assert pairs
     for total, lower, upper in pairs:
         assert float(upper) == 1.5 * float(lower), (total, lower, upper)
+    plain = 0
+    for row in rows:
+        cells = [cell.strip() for cell in row.strip("|").split("|")]
+        if re.fullmatch(r"\d+(, \d+)+", cells[2]):
+            plain += 1
+            stated = int(re.match(r"(?:leaf sum )?(\d+) against", cells[3]).group(1))
+            assert sum(map(int, cells[2].split(", "))) == stated, row
+    assert plain == 6, plain
     for pair_text, result in SPLIT_BOUNDS_EXAMPLE_RESULTS:
         matching = [row for row in rows if f"| {pair_text} |" in row]
         assert matching, pair_text

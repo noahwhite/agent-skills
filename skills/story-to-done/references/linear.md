@@ -95,7 +95,7 @@ The `linear` CLI (schpet/linear-cli) is the primary tool; the Linear MCP server 
   4. the smallest outcome that can be reviewed, merged and verified on its own, including enabling work such as interface or schema first and behaviour second.
 
   No rung discards scope, delegates an oversize slice or hands one to the owner as an estimate.
-- ⛔ Bound every split: after each split round, and before any further split round, slice record or tracker write for the slices, run these checks:
+- ⛔ Bound every split of an estimated story made under the two bullets above (the Bug and Investigation split below gives no slice a point value, so these checks never run on it): after each split round, and before any further split round, slice record or tracker write for the slices, run these checks:
   1. Per-parent bound: each slice's recorded value is strictly below the recorded value of the story it is split from, where a round-1 parent's value is the recorded whole-story estimate and a round-2 parent's value is its round-1 recorded value; the slices of one parent are compared to that parent as a set by the bands below on their sum, and a slice at or above its parent stops with `needs input` naming the parent, the slice, both values and the band.
   2. Whole-story sum: the sum of the recorded values of the current leaf slices (a slice that is split again is replaced by its sub-slices) is compared to the original whole-story recorded estimate by the bands below.
   3. Round cap: a slice that still meets the split trigger after split round 2 stops with `needs input` naming the slices and their values, before a third split is made, and no third-round split, estimate, record or tracker write happens.

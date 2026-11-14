@@ -140,8 +140,9 @@ RESPLIT_BULLET = " ".join(
 )
 SPLIT_BOUNDS_BULLET = " ".join(
     (
-        "- ⛔ Bound every split: after each split round, and before any further split round, slice record or tracker "
-        "write for the slices, run these checks:",
+        "- ⛔ Bound every split of an estimated story made under the two bullets above (the Bug and Investigation "
+        "split below gives no slice a point value, so these checks never run on it): after each split round, and "
+        "before any further split round, slice record or tracker write for the slices, run these checks:",
         "1. Per-parent bound: each slice's recorded value is strictly below the recorded value of the story it is "
         "split from, where a round-1 parent's value is the recorded whole-story estimate and a round-2 parent's value "
         "is its round-1 recorded value; the slices of one parent are compared to that parent as a set by the bands "
