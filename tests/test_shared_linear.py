@@ -239,7 +239,8 @@ LEDGER_BULLET = " ".join(
         "and when the whole-story value is saturated it states that the ledger prices are lower bounds.",
         "A slice voter never re-prices an unknown: its rationale states the ledger price of each unknown its slice "
         "owns plus its own non-unknown complexity.",
-        "A rationale that re-prices an unknown or names one the ledger assigns elsewhere is off-basis: the "
+        "A slice rationale that omits an unknown its slice owns, re-prices an unknown, prices one the ledger does not "
+        "carry, or names one the ledger assigns elsewhere is off-basis: the "
         "story-refinement Step 4 basis review re-runs that vote once on its existing terms, and a second miss is "
         "recorded.",
         "Worked examples are in the Slice brief section of the story-refinement skill's refinement record reference.",

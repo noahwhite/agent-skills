@@ -4530,15 +4530,17 @@ LEDGER_RATIONALE = (
     "Under the priced shared-unknown ledger in Estimation and slicing in [references/linear.md](references/linear.md), "
     "a whole-story rationale lists the unknowns behind its value with a point price each plus the remainder, summing "
     "exactly to the value (in a re-vote, the highest value of the voter's accepted set), and a slice rationale states "
-    "the ledger prices of the unknowns its slice owns plus its own non-unknown complexity. "
-    "These prices and that sum, kept in the voter's own file until the reveal, are the one exception to naming no "
+    "the ledger prices of the unknowns its slice owns plus its own non-unknown complexity as its remainder, summing in "
+    "the same way. "
+    "These prices, that remainder and that sum, kept in the voter's own file until the reveal, are the one exception to naming no "
     "point value before the reveal."
 )
 LEDGER_REVIEW = (
     "The review also challenges the ledger grounds that Estimation and slicing in "
-    "[references/linear.md](references/linear.md) makes off-basis: a whole-story rationale whose prices plus "
-    "remainder differ from its value, and a slice rationale that re-prices an unknown or names one the ledger assigns "
-    "elsewhere; that vote is re-run once on the terms of this item, and a second miss is recorded on the pointing "
+    "[references/linear.md](references/linear.md) makes off-basis: a rationale whose prices plus remainder differ "
+    "from its value (in a re-vote, the highest value of the voter's accepted set), and a slice rationale that omits "
+    "an unknown its slice owns, re-prices an unknown, prices one the ledger does not carry, or names one the ledger "
+    "assigns elsewhere; that vote is re-run once on the terms of this item, and a second miss is recorded on the pointing "
     "record's Challenges line."
 )
 LEDGER_RECORDED = (
