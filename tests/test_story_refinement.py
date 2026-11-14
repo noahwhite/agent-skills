@@ -755,6 +755,8 @@ SPLIT_BOUNDS_FIELDS = (
     "(lower, governs), <clear | warning | stop> (higher)>",
     "- Per-parent bound:",
     "- Round cap:",
+    "- Ledger owners reassigned: <n/a in split round 1; in split round 2, for each slice split again, parent <key>: "
+    "each unknown it owned with its ledger price and the sub-slice that now owns it>",
     "- Warning for the human at triage: <none, or one entry listing every warning of the round with its sums, bands "
     "and bounds above, posted in the split comment; a round that stops also carries it in its `needs input` message "
     "and posts it once the owner answers>",
@@ -4574,7 +4576,8 @@ LEDGER_EXAMPLE_RESULTS = (
     "saturation note, since 13 is the highest value of the sequence",
     "each brief carries the four unknowns with their prices and owners, the ledger total 8 beside 13, and the "
     "saturation note naming the ledger prices as lower bounds",
-    "each ledger unknown appears with its ledger price in exactly one slice rationale, and vendor API appears in none",
+    "each slice-owned ledger unknown appears with its ledger price in exactly one slice rationale, and vendor API "
+    "appears in none",
     "off-basis: the Step 4 basis review re-runs that vote once, and a second miss is recorded on the Challenges line",
     "off-basis: the prices plus the remainder are 7, not 8",
 )

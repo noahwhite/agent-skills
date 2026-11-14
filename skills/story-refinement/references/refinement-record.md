@@ -126,7 +126,7 @@ Worked example on `fibonacci` (1, 2, 3, 5, 8, 13), a whole story pointed at 13 a
 | Ledger in the pointing record | the three rationales above | login flow merged into auth (merge recorded); auth 3 (median of 3, 5, 2), schema 2 (lower of 2, 3), vendor API 2 (lower of 2, 3), migration 1 (sole price); ledger total 8 beside the whole-story value 13, not reconciled; saturation note, since 13 is the highest value of the sequence |
 | Owners, assigned when the split is drafted | slice B's work resolves auth, slice A's resolves schema, no slice resolves migration, blocker X resolves vendor API | auth owner B, schema owner A, migration owner A (core slice), vendor API owner X, priced in no slice |
 | Slice brief | slices A, B and C | each brief carries the four unknowns with their prices and owners, the ledger total 8 beside 13, and the saturation note naming the ledger prices as lower bounds |
-| Slice rationales | A: schema 2 + migration 1 + own complexity; B: auth 3 + own complexity; C: own complexity only | each ledger unknown appears with its ledger price in exactly one slice rationale, and vendor API appears in none |
+| Slice rationales | A: schema 2 + migration 1 + own complexity; B: auth 3 + own complexity; C: own complexity only | each slice-owned ledger unknown appears with its ledger price in exactly one slice rationale, and vendor API appears in none |
 | Re-pricing rationale | a slice B voter writes auth 5 | off-basis: the Step 4 basis review re-runs that vote once, and a second miss is recorded on the Challenges line |
 | Unknown assigned elsewhere | a slice C voter names schema | off-basis on the same terms |
 | Whole-story sum mismatch | a voter writes 8 = auth 3 + schema 2 + remainder 2 | off-basis: the prices plus the remainder are 7, not 8 |
@@ -169,6 +169,7 @@ A mapping-check stop also posts nothing to the tracker, and because it comes bef
   - Per-parent sum, one line per parent split this round: <n/a in round 1, whose only parent is the original story, so the whole-story sum line records its band once; otherwise parent <key> <recorded value>; 1.0 times = <value>, 1.5 times = <value>; sum of its slices <value> (lower), <value> (higher); band <clear | warning | stop> (lower, governs), <clear | warning | stop> (higher)>
   - Per-parent bound: <pass, or each slice at or above its parent: parent <key> <value>, slice <key> <value>, band <band of that parent's sum>>
   - Round cap: <n/a before split round 2; pass; or each slice still meeting the split trigger after split round 2, with its value>
+  - Ledger owners reassigned: <n/a in split round 1; in split round 2, for each slice split again, parent <key>: each unknown it owned with its ledger price and the sub-slice that now owns it>
   - Warning for the human at triage: <none, or one entry listing every warning of the round with its sums, bands and bounds above, posted in the split comment; a round that stops also carries it in its `needs input` message and posts it once the owner answers>
 ```
 
