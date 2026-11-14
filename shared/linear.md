@@ -82,9 +82,10 @@ The `linear` CLI (schpet/linear-cli) is the primary tool; the Linear MCP server 
 - ⛔ Split a story whose estimate is above `profile.refinement.point_cap` or is 8 or more, without asking, before it is assigned or work is delegated, and present the slices.
   This is one split rule for an estimate recorded at refinement and for one made outside a ceremony, at filing or triage.
   Keep the original issue for the core slice, create siblings for the rest, and wire blocked-by or related edges.
-- ⛔ Split every resulting slice that still meets that trigger again, as many rounds as it takes, until no slice meets it; there is no escalation exit.
+- ⛔ Split a resulting slice that still meets that trigger again, for at most two split rounds: split round 1 splits the whole story and split round 2 splits the round-1 slices that still meet it.
+  This bound supersedes the never-escalate rule of SKL-230.
   Each resulting slice gets its own estimate, made the way the story's was (at refinement, filing or triage), before it is tested against that trigger.
-  A slice that cannot be estimated is recorded as unpointed and reported as `needs input` to the owner, naming the story and the slice, and also the derived values when a refinement voter round produced them, as the unpointed variance stop in story-refinement's Split rule does; that report is not an exit for an oversize slice.
+  A slice that cannot be estimated is recorded as unpointed and reported as `needs input` to the owner, naming the story and the slice, and also the derived values when a refinement voter round produced them, as the unpointed variance stop in story-refinement's Split rule does.
   Split along the first boundary that applies, in this order:
   1. the planned PR or slice boundary;
   2. an acceptance criterion;
@@ -92,6 +93,16 @@ The `linear` CLI (schpet/linear-cli) is the primary tool; the Linear MCP server 
   4. the smallest outcome that can be reviewed, merged and verified on its own, including enabling work such as interface or schema first and behaviour second.
 
   No rung discards scope, delegates an oversize slice or hands one to the owner as an estimate.
+- ⛔ Bound every split: after each split round, and before any further split round, slice record or tracker write for the slices, run these checks:
+  1. Per-parent bound: each slice's recorded value is strictly below the recorded value of the story it is split from, where a round-1 parent's value is the recorded whole-story estimate and a round-2 parent's value is its round-1 recorded value; the slices of one parent are compared to that parent as a set by the bands below on their sum, and a slice at or above its parent stops with `needs input` naming the parent, the slice, both values and the band.
+  2. Whole-story sum: the sum of the recorded values of the current leaf slices (a slice that is split again is replaced by its sub-slices) is compared to the original whole-story recorded estimate by the bands below.
+  3. Round cap: a slice that still meets the split trigger after split round 2 stops with `needs input` naming the slices and their values, before a third split is made, and no third-round split, estimate, record or tracker write happens.
+
+  The bands compare a sum to its base (the parent's value in check 1, the original whole-story recorded estimate in check 2): above 1.5 times the base stops with `needs input`; above 1.0 times and up to and including 1.5 times proceeds with a warning in the split comment that a human reads at triage; at or below 1.0 times proceeds with no flag.
+  Every band stop or warning names the sum both ways (with each slice's lower and with its higher consensus value, the two values a within-one-step consensus spans, which are one value otherwise), both bounds (1.0 times and 1.5 times the base) and the round.
+  When the original whole-story recorded estimate is the highest value of the step sequence for `profile.tracker.estimate_scale` (story-refinement Step 4 item 1), every stop and warning whose base is that estimate states that the base is saturated and that the 1.0 and 1.5 bounds computed from it are lower bounds on the true size.
+  A stop holds every further split round, record and tracker write for the slices until the owner answers; a split that completes within two rounds with no stop proceeds unchanged.
+  Worked examples are in the Split bounds section of the story-refinement skill's refinement record reference.
 - ⛔ At refinement, without asking, split a Bug or an Investigation whose accepted refinement comment's `Scope signal:` line reads `more than one independently reviewable change`, with or without its `(<reason>)`: the original keeps the core slice and blocks each sibling, siblings come from its own filing template with its type label, no slice gets a point value or a slice estimate, and the split comment maps every acceptance criterion or findings-scope item to a slice; for these unestimated types that line, never an estimate, is the trigger.
 - ⛔ Never split an issue at close time to carve off unfinished work; that is status laundering.
 

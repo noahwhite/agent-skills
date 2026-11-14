@@ -544,17 +544,33 @@ def test_split_rule_keeps_the_split_mechanics() -> None:
         assert rule in body, rule
 
 
-# --- SKL-230: a slice above the point cap is split again until every slice fits, never escalated -------
+# --- SKL-304: a split is bounded by two rounds and the split bounds; SKL-230's never-escalate rule is superseded ---
 
 RESPLIT_BULLET = (
-    "- A slice that meets the split trigger is split again under these same bullets: it stays the core slice and "
-    "blocks its new siblings, every acceptance criterion of the slice is mapped to a sub-slice in a split comment, "
-    "and each sub-slice, the core slice included, gets its own three-voter blind estimate; the split repeats until "
-    "no slice meets the split trigger."
+    "- A slice that meets the split trigger is split again under these same bullets, along the boundary order in "
+    "Estimation and slicing in [references/linear.md](references/linear.md): it stays the core slice and blocks its "
+    "new siblings, every acceptance criterion of the slice is mapped to a sub-slice in a split comment, and each "
+    "sub-slice, the core slice included, gets its own three-voter blind estimate."
 )
-NO_ESCALATION_EXIT = (
-    "There is no escalation exit for an oversize slice: a slice with no natural boundary left is split along the "
-    "boundary order in Estimation and slicing in [references/linear.md](references/linear.md)."
+ROUND_CAP = (
+    "- A split runs at most two split rounds: split round 1 splits the whole story and split round 2 splits the "
+    "round-1 slices; a slice that still meets the split trigger after split round 2 stops the ceremony with "
+    "`needs input` naming the slices and their values, before a third split is made."
+)
+SPLIT_BOUNDS = (
+    "- After each split round the facilitator applies the split bounds in Estimation and slicing in "
+    "[references/linear.md](references/linear.md): each slice's recorded value is strictly below the recorded value "
+    "of the story it is split from, and the sum of the current leaf slices' recorded values is compared to the "
+    "original whole-story recorded estimate, stopping with `needs input` above 1.5 times it, warning in the split "
+    "comment above 1.0 times it, and proceeding with no flag at or below it. "
+    "A stop holds every further split round, record and tracker write for the slices until the owner answers."
+)
+SUPERSESSION = "- The two-round cap and the split bounds supersede the never-escalate rule of SKL-230."
+# The SKL-230 sentences this story removes, split so a repository search for them finds no literal copy here.
+STALE_SPLIT_SENTENCES = (
+    "the split repeats until " + "no slice meets the split trigger",
+    "There is no escalation exit " + "for an oversize slice",
+    "as many rounds as it takes, " + "until no slice meets it; there is no escalation exit",
 )
 UNPOINTED_SLICE_STOP = (
     "A slice that takes the unpointed variance stop is recorded as unpointed in the split comment with its derived "
@@ -591,24 +607,27 @@ SPLIT_RULE_SECTION = " ".join(
         "records an estimate or takes the unpointed variance stop on the same terms.",
         UNPOINTED_SLICE_STOP,
         RESPLIT_BULLET,
-        NO_ESCALATION_EXIT,
+        ROUND_CAP,
+        SPLIT_BOUNDS,
+        SUPERSESSION,
         "Cite [references/linear.md](references/linear.md) for the split mechanics; do not restate them here.",
     )
 )
 SPLIT_TRIGGER_PATTERN = re.compile(r"is above (`profile\.refinement\.point_cap`) or is (\d+) or more")
 
 
-def test_split_rule_resplits_an_oversize_slice_until_none_meets_the_trigger() -> None:
+def test_split_rule_bounds_a_split_by_two_rounds_and_the_split_bounds() -> None:
     body = spaced(section(SKILL.read_text(), "Split rule"))
-    assert RESPLIT_BULLET in body
-    assert NO_ESCALATION_EXIT in body
+    for sentence in (RESPLIT_BULLET, ROUND_CAP, SPLIT_BOUNDS, SUPERSESSION):
+        assert sentence in body, sentence
 
 
-def test_split_rule_has_no_escalation_exit() -> None:
+def test_split_rule_drops_the_superseded_never_escalate_sentences() -> None:
     body = spaced(section(SKILL.read_text(), "Split rule"))
-    assert "or escalated" not in body, "the Split rule still offers escalation as an exit"
-    stray = re.findall(r"escalat\w*", re.sub(r"no escalation exit", "", body, flags=re.IGNORECASE), re.IGNORECASE)
-    assert not stray, f"an escalation mention other than 'no escalation exit' remains: {stray}"
+    for sentence in STALE_SPLIT_SENTENCES:
+        assert sentence not in body, f"the Split rule still carries the superseded sentence: {sentence}"
+    stray = re.findall(r"escalat\w*", body.replace("never-escalate rule of SKL-230", ""), re.IGNORECASE)
+    assert not stray, f"an escalation mention other than the SKL-230 supersession remains: {stray}"
 
 
 def test_split_rule_section_is_exactly_the_rule() -> None:
