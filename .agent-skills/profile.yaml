@@ -53,9 +53,9 @@ git:
     feature: feature/
 review:
   reviewer:
-    name: Codex GPT-6 Sol
+    name: GPT-6.1 Sol
     runtime: codex
-    model: gpt-6-sol
+    model: gpt-6.1-sol
   adjudicator:
     name: DeepSeek V4.1 Flash
     runtime: opencode
