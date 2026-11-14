@@ -128,7 +128,7 @@ Under the denied tracker writes fallback in `SKILL.md`, replace the tracker-writ
 
 After each split round of a story split the facilitator runs the split bounds in Estimation and slicing in `references/linear.md` and fills in the block below.
 A round with no stop posts the block in the split comment.
-A round with a leaf slice recorded as unpointed has no sum: it posts the block in the split comment with result pending, naming the unpointed slices, and the checks run once the owner's answer gives every leaf slice a recorded value.
+A round with a leaf slice recorded as unpointed and no stop posts the block in the split comment with result pending, naming the unpointed slices, and the sum checks run once the owner's answer gives every leaf slice a recorded value.
 A stop posts nothing to the tracker: it reports `needs input` to the owner in one message carrying the block, and no further split round, slice record or tracker write for the slices happens until the owner answers.
 
 ```markdown
@@ -142,6 +142,7 @@ A stop posts nothing to the tracker: it reports `needs input` to the owner in on
 ```
 
 The round's result is the most severe of its lines: any stop makes the round a stop, else any warning makes it a warning, else it is clear.
+With a leaf slice recorded as unpointed, the whole-story and each affected per-parent sum line read `sum pending: unpointed <slice keys>; band pending` in place of their sums and band, and a round with no stop and a pending line is pending.
 
 Worked examples on `fibonacci` (1, 2, 3, 5, 8, 13) with `profile.refinement.point_cap` 5 unless stated.
 In round 1 the only parent is the original story, so its per-parent sum and the whole-story sum share one base and one band; a slice at or above that parent still stops on its own.
