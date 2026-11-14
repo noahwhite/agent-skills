@@ -124,7 +124,8 @@ NO_SCOPE_GROWTH = (
     "The split comment maps every slice criterion to exactly one criterion of the story it is split from, and so on "
     "back to the whole story; several slice criteria may map to one criterion of that story (rung 3).",
     "The mapping check runs in each split round before any slice is estimated: every slice criterion with no "
-    "counterpart is named in one `needs input` message, and the round stops before any slice estimate, so no check "
+    "counterpart, and every evidence pass, fixture, test obligation or behaviour a slice adds beyond the story it is "
+    "split from, is named in one `needs input` message, and the round stops before any slice estimate, so no check "
     "that needs a slice value runs.",
 )
 # SKL-304 replaced the re-split bullet: at most two split rounds, and SKL-230's never-escalate rule is superseded.
@@ -162,8 +163,9 @@ LOWER_CONSENSUS_SUMS = (
 # SKL-305: the checks run in a fixed order and a round reports all its failures, and all its warnings, together.
 CHECK_ORDER = (
     "The checks run in the order listed, the round cap after split round 2 only, and every applicable check runs "
-    "before any stop is enforced: all failures of the round are reported in one `needs input` message and all its "
-    "warnings in one split-comment entry.",
+    "before any stop is enforced: all failures of the round are reported in one `needs input` message, and all its "
+    "warnings in one entry, in the split comment when the round has no stop and in that `needs input` message when "
+    "it stops.",
     "A round-1 slice that still meets the split trigger goes to split round 2.",
     "In round 1 the only parent is the original story, so the per-parent band is the whole-story band and is "
     "recorded once.",
@@ -185,8 +187,8 @@ SPLIT_BOUNDS_BULLET = " ".join(
         "tracker write happens.",
         "The bands compare a sum to its base (the parent's value in check 1, the original whole-story recorded "
         "estimate in check 2): above 1.5 times the base stops with `needs input`; above 1.0 times and up to and "
-        "including 1.5 times proceeds with a warning in the split comment that a human reads at triage; at or below "
-        "1.0 times proceeds with no flag.",
+        "including 1.5 times proceeds with a warning in the split comment that a human reads at triage, or in the "
+        "round's `needs input` message when the round stops; at or below 1.0 times proceeds with no flag.",
         *LOWER_CONSENSUS_SUMS,
         *CHECK_ORDER,
         "When the original whole-story recorded estimate is the highest value of the step sequence for "

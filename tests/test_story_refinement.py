@@ -539,7 +539,8 @@ def test_split_rule_keeps_the_split_mechanics() -> None:
         "the original issue stays the core slice",
         "siblings are created from the `linear-user-story` template",
         "the original issue blocks each sibling",
-        "every acceptance criterion is mapped to a slice in the split comment",
+        "the split comment maps every slice criterion to exactly one acceptance criterion of the story it is split "
+        "from, and every acceptance criterion of that story to a slice",
     ):
         assert rule in body, rule
 
@@ -550,8 +551,9 @@ RESPLIT_BULLET = (
     "- A slice that meets the split trigger is split again, within the two-round cap below, under these same "
     "bullets, along the boundary order in "
     "Estimation and slicing in [references/linear.md](references/linear.md): it stays the core slice and blocks its "
-    "new siblings, every acceptance criterion of the slice is mapped to a sub-slice in a split comment, and each "
-    "sub-slice, the core slice included, gets its own three-voter blind estimate."
+    "new siblings, its split comment maps every sub-slice criterion to exactly one acceptance criterion of the slice "
+    "and every acceptance criterion of the slice to a sub-slice, and each sub-slice, the core slice included, gets "
+    "its own three-voter blind estimate."
 )
 ROUND_CAP = (
     "- A split runs at most two split rounds: split round 1 splits the whole story and split round 2 splits the "
@@ -564,8 +566,8 @@ SPLIT_BOUNDS = (
     "[references/linear.md](references/linear.md): each slice's recorded value is strictly below the recorded value "
     "of the story it is split from, the slices of each parent are compared to that parent as a sum, and the sum of "
     "the current leaf slices' recorded values is compared to the original whole-story recorded estimate, each "
-    "comparison stopping with `needs input`, warning in the split comment or proceeding with no flag by the bands "
-    "stated there. "
+    "comparison stopping with `needs input`, warning in the split comment (or in the `needs input` message of a round "
+    "that stops) or proceeding with no flag by the bands stated there. "
     "A stop holds every further split round, estimate, record and tracker write for the slices until the owner "
     "answers. "
     "A round with a leaf slice recorded as unpointed still applies the per-slice bound and the round cap to each "
@@ -592,7 +594,8 @@ MAPPING_CHECK = (
     "- Each split round runs the no-scope-growth mapping check in Estimation and slicing in "
     "[references/linear.md](references/linear.md) before any slice is pointed, then the slice pointing, then the "
     "split bounds in the order stated there; a mapping failure stops the round before any slice is pointed, with one "
-    "`needs input` message naming every slice criterion that has no counterpart in the story it is split from."
+    "`needs input` message naming every slice criterion that has no counterpart in the story it is split from, and "
+    "every evidence pass, fixture, test obligation or behaviour a slice adds beyond that story."
 )
 # SKL-305: a slice's within-one-step consensus is the lower value; an unsplit story keeps Step 4 verbatim.
 LOWER_CONSENSUS = (
@@ -630,7 +633,8 @@ SPLIT_RULE_SECTION = " ".join(
         "differing-team rule in Team resolution in [references/linear.md](references/linear.md).",
         "- Siblings are created from the `linear-user-story` template.",
         "- The original issue blocks each sibling.",
-        "- Every acceptance criterion is mapped to a slice in the split comment.",
+        "- The split comment maps every slice criterion to exactly one acceptance criterion of the story it is split "
+        "from, and every acceptance criterion of that story to a slice.",
         MAPPING_CHECK,
         "- Each slice gets its own three-voter estimate in the same blind round, with newly created voter contexts, "
         "and that round runs the same Step 4 consensus check, basis review and residual variance rule, so a slice "
@@ -665,6 +669,9 @@ def test_split_rule_points_a_slice_to_the_lower_consensus() -> None:
     assert LOWER_CONSENSUS in spaced(section(SKILL.read_text(), "Split rule"))
     item = process_items(STEP_FOUR)[8]
     assert STEP_FOUR_SLICE_POINTER in item
+    # The Outputs line names the slice exception wherever it names the highest derived value.
+    outputs = bullet(section(SKILL.read_text(), STEP_FOUR, level=3), "Outputs")
+    assert "or the highest derived value (the lowest for a slice) - or the unpointed variance stop" in outputs
     # The unsplit rule stays verbatim: the one-step branch still records the highest value.
     assert CONSENSUS_CHECK_BRANCHES in process_items(STEP_FOUR)[0]
 
@@ -690,7 +697,8 @@ SPLIT_BOUNDS_ROUTE = (
     "The round's result then ranks stop, then pending, then warning, then clear, and a warning on a computed line "
     "is still listed in the warning line.",
     "A stop posts nothing to the tracker: it reports `needs input` to the owner in one message carrying the block, "
-    "and no further split round, slice record or tracker write for the slices happens until the owner answers.",
+    "its warning line included, and no further split round, slice record or tracker write for the slices happens "
+    "until the owner answers.",
 )
 SPLIT_BOUNDS_FIELDS = (
     "- Split bounds, round <1 | 2>: <clear | warning | stop | pending: unpointed <slice keys>>",
@@ -706,7 +714,7 @@ SPLIT_BOUNDS_FIELDS = (
     "- Per-parent bound:",
     "- Round cap:",
     "- Warning for the human at triage: <none, or one entry listing every warning of the round with its sums, bands "
-    "and bounds above>",
+    "and bounds above, posted in the split comment, or carried in the `needs input` message when the round stops>",
 )
 SPLIT_BOUNDS_EXAMPLE_RESULTS = (
     ("13 against 8 and 12", "stop"),
@@ -758,7 +766,13 @@ def test_pointing_template_shows_both_values_for_a_slice() -> None:
     lines = pointing_template()
     assert (
         "- Slice consensus: <n/a for a story that is not a slice; for a slice, the lower value, which is recorded, "
-        "and the higher value, which Step 4 records for an unsplit story>" in lines
+        "and the higher value, which Step 4 records for an unsplit story; or, for a slice that took the unpointed "
+        "variance stop, unpointed with its lowest and highest derived values>" in lines
+    )
+    # The pointing record maps each slice criterion back to exactly one criterion of the story it is split from.
+    assert (
+        "- Split: <none, or the slice mapping, each slice criterion with the exactly one criterion of the story it is "
+        "split from and each criterion of that story with its slice, and sibling issue keys>" in lines
     )
 
 
@@ -3623,7 +3637,8 @@ SHARED_LINEAR_SPLIT = (
     "original keeps the core slice and "
     "blocks each sibling, siblings come from its own filing template with its type label, no slice gets a point "
     "value or a slice estimate, and the split comment maps every acceptance criterion or findings-scope item to a "
-    "slice; for these unestimated types that line, never an estimate, is the trigger."
+    "slice and every slice criterion or item to exactly one criterion or item of the issue it is split from; for "
+    "these unestimated types that line, never an estimate, is the trigger."
 )
 
 
@@ -3658,7 +3673,8 @@ def test_scope_signal_bullet_states_each_reading(sentence: str) -> None:
         "`profile.tracker.team_key`, and read back with that label;",
         "and no slice receives a point value or a slice estimate.",
         "The original stays the core slice, blocks each sibling, and every acceptance criterion (or, for an "
-        "Investigation, every findings-scope item) is mapped to a slice in the split comment.",
+        "Investigation, every findings-scope item) is mapped to a slice in the split comment, which also maps every "
+        "slice criterion or item to exactly one criterion or item of the issue it is split from.",
         "A sibling that still needs more than one change is split again under this rule and never escalated.",
     ],
 )
@@ -3792,7 +3808,8 @@ def test_records_names_the_scope_signal_and_the_split_comment() -> None:
     assert (
         "For a Bug, an Investigation or a Spike, the refinement comment also carries the `Scope signal:` line, and "
         "an oversize split of a Bug or an Investigation posts the split comment that maps every acceptance criterion "
-        "or findings-scope item to a slice." in spaced(section(SKILL.read_text(), "Records"))
+        "or findings-scope item to a slice and every slice criterion or item to exactly one criterion or item of the "
+        "issue it is split from." in spaced(section(SKILL.read_text(), "Records"))
     )
 
 
@@ -3922,7 +3939,8 @@ def test_split_comment_template_has_the_fields() -> None:
         "blocked by the original:",
         "  - <sibling key> - <its slice> - Scope signal: <reading>",
         "- Mapping: <each acceptance criterion, or for an Investigation each findings-scope item, and the slice it "
-        "maps to>",
+        "maps to; and each slice criterion or item and the exactly one criterion or item of the issue it is split "
+        "from>",
         "- Estimates: none; no slice receives a point value or a slice estimate",
         "- Tracker writes: product owner",
     ]

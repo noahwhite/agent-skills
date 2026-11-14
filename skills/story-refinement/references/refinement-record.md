@@ -86,9 +86,9 @@ A sizing comment that names a point value before the reveal, prescribes this sto
 - Consensus: <the highest value in the intersection of the vote that stands (the lowest for a slice), or n/a when the consensus check or the residual variance rule recorded the estimate, or none when the round stopped unpointed>
 - Residual variance: <each voter's derived value, the gap between the highest and the lowest in scale steps, the rule applied and the resulting value, or the unpointed variance stop; n/a only when all three voters recorded an accepted set and the intersection is not empty, or when the consensus check, or the re-run of it that supersedes that outcome, recorded the estimate>
 - Recorded estimate: <the value recorded, or unpointed with the gap between the highest and the lowest in scale steps when the round stopped there>
-- Slice consensus: <n/a for a story that is not a slice; for a slice, the lower value, which is recorded, and the higher value, which Step 4 records for an unsplit story>
+- Slice consensus: <n/a for a story that is not a slice; for a slice, the lower value, which is recorded, and the higher value, which Step 4 records for an unsplit story; or, for a slice that took the unpointed variance stop, unpointed with its lowest and highest derived values>
 - Effective maximum: <profile.refinement.point_cap; the 8-point rule still triggers at 8 or more>
-- Split: <none, or the slice mapping and sibling issue keys>
+- Split: <none, or the slice mapping, each slice criterion with the exactly one criterion of the story it is split from and each criterion of that story with its slice, and sibling issue keys>
 - Challenges: <none, or each ground challenged by kind, its author (a voter, or the SM/EM for a sizing comment), the restatement, withdrawal or retraction, and any replacement value it produced, or the void; elide a pre-reveal value or a prescription>
 - Owner decision: <n/a when the round did not stop unpointed, otherwise pending owner decision in a later run until the later run edits this line, then the value the owner decided and the basis, or unpointed with the owner's reason>
 - Superseded values after a void: <none, or the voided values, the voided estimate, the voided `Consensus check:` outcome, the voided consensus, the voided derived values and their outcome, and the blind vote that replaced them>
@@ -114,7 +114,7 @@ A re-split sibling gets its own split comment on that sibling.
 - Core slice: <original issue key> - <its slice> - Scope signal: <reading> - description trimmed to this slice
 - Siblings, each from the `<linear-bug|linear-investigation>` template with the `<type label>` label, blocked by the original:
   - <sibling key> - <its slice> - Scope signal: <reading>
-- Mapping: <each acceptance criterion, or for an Investigation each findings-scope item, and the slice it maps to>
+- Mapping: <each acceptance criterion, or for an Investigation each findings-scope item, and the slice it maps to; and each slice criterion or item and the exactly one criterion or item of the issue it is split from>
 - Estimates: none; no slice receives a point value or a slice estimate
 - Tracker writes: product owner
 ```
@@ -130,7 +130,7 @@ Under the denied tracker writes fallback in `SKILL.md`, replace the tracker-writ
 After each split round of a story split the facilitator runs the split bounds in Estimation and slicing in `references/linear.md` and fills in the block below.
 A round with no stop posts the block in the split comment.
 A round with a leaf slice recorded as unpointed and no stop posts the block in the split comment with result pending, naming the unpointed slices, and the pending checks run once the owner's answer gives every leaf slice a recorded value.
-A stop posts nothing to the tracker: it reports `needs input` to the owner in one message carrying the block, and no further split round, slice record or tracker write for the slices happens until the owner answers.
+A stop posts nothing to the tracker: it reports `needs input` to the owner in one message carrying the block, its warning line included, and no further split round, slice record or tracker write for the slices happens until the owner answers.
 
 ```markdown
 - Split bounds, round <1 | 2>: <clear | warning | stop | pending: unpointed <slice keys>>
@@ -139,7 +139,7 @@ A stop posts nothing to the tracker: it reports `needs input` to the owner in on
   - Per-parent sum, one line per parent split this round: <n/a in round 1, whose only parent is the original story, so the whole-story sum line records its band once; otherwise parent <key> <recorded value>; 1.0 times = <value>, 1.5 times = <value>; sum of its slices <value> (lower), <value> (higher); band <clear | warning | stop> (lower, governs), <clear | warning | stop> (higher)>
   - Per-parent bound: <pass, or each slice at or above its parent: parent <key> <value>, slice <key> <value>, band <band of that parent's sum>>
   - Round cap: <n/a before split round 2; pass; or each slice still meeting the split trigger after split round 2, with its value>
-  - Warning for the human at triage: <none, or one entry listing every warning of the round with its sums, bands and bounds above>
+  - Warning for the human at triage: <none, or one entry listing every warning of the round with its sums, bands and bounds above, posted in the split comment, or carried in the `needs input` message when the round stops>
 ```
 
 The round's result is the most severe of its lines: any stop makes the round a stop, else any warning makes it a warning, else it is clear.
