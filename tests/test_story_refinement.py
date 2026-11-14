@@ -4090,30 +4090,41 @@ def unscoped_output(function, arguments: tuple) -> list[str]:
     never calls `section()` returns nothing scoped.
 
     Whitespace is collapsed on both sides and case is kept, so a helper cannot recase a line into one an exact-case
-    assertion wants. Only a string already in `flat()` form, as `bullet()` returns it, is compared lowercased.
+    assertion wants. A lowercased string counts only when `flat()` itself produced it, during the call, from text that
+    is part of a returned section, as `bullet()` does.
     """
     namespace = function.__globals__
-    real = namespace["section"]
+    real_section, real_flat = namespace["section"], namespace["flat"]
     returned: list[str] = []
+    flattened: list[str] = []
 
-    def recording(*args, **kwargs):
-        result = real(*args, **kwargs)
+    def collapsed(text: str) -> str:
+        return " ".join(text.split())
+
+    def within(text: str) -> bool:
+        return any(collapsed(text) in collapsed(body) for body in returned) or any(
+            text in output for output in flattened
+        )
+
+    def recording_section(*args, **kwargs):
+        result = real_section(*args, **kwargs)
         returned.append(result)
         return result
 
-    namespace["section"] = recording
+    def recording_flat(text):
+        result = real_flat(text)
+        if any(collapsed(text) in collapsed(body) for body in returned):
+            flattened.append(result)
+        return result
+
+    namespace["section"], namespace["flat"] = recording_section, recording_flat
     try:
         result = function(*arguments)
     finally:
-        namespace["section"] = real
+        namespace["section"], namespace["flat"] = real_section, real_flat
     if not returned:
         return ["<no section() call>"]
-    def within(text: str, body: str) -> bool:
-        if text == flat(text):
-            return text in flat(body)
-        return " ".join(text.split()) in " ".join(body.split())
-
-    return [text for text in result_strings(result) if not any(within(text, body) for body in returned)]
+    return [text for text in result_strings(result) if not within(text)]
 
 
 def parametrized_bindings(function: ast.FunctionDef) -> list[dict]:
@@ -4184,6 +4195,8 @@ def test_every_scoping_helper_returns_only_section_text() -> None:
         "    return ''.join(dict.fromkeys(['whole document'], section(text, heading, level=3)))\n",
         "    body = section(text, heading, level=3)\n    return body.replace(body, text)\n",
         "    return section(text, heading, level=3).replace('Process', 'PROCESS')\n",
+        "    return spaced(section(text, heading, level=3)).lower()\n",
+        "    section(text, heading, level=3)\n    return flat(text)\n",
         "    section(text, heading, level=3)\n    return text\n",
         "    return 'whole document'\n",
     ],
@@ -4194,8 +4207,9 @@ def test_section_text_check_rejects_unscoped_output(body: str) -> None:
     exec(compile(f"def probe(text, heading):\n{body}", "<probe>", "exec"), namespace)
     arguments = (SKILL.read_text(), "Step 1: Independent refinement")
     assert unscoped_output(namespace["probe"], arguments), body
-    exec(compile("def probe(text, heading):\n    return section(text, heading, level=3)\n", "<probe>", "exec"), namespace)
-    assert not unscoped_output(namespace["probe"], arguments)
+    for control in ("section(text, heading, level=3)", "flat(section(text, heading, level=3))"):
+        exec(compile(f"def probe(text, heading):\n    return {control}\n", "<probe>", "exec"), namespace)
+        assert not unscoped_output(namespace["probe"], arguments), control
 
 
 def test_no_assertion_slices_a_file_on_a_heading_or_fence() -> None:
