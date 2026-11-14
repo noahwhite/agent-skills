@@ -3480,12 +3480,15 @@ def test_the_engineer_hand_back_instruction_carries_no_pending_item() -> None:
 # before the starting point, and the `path:` line goes in the todo list and every end-state report.
 STEP_1_PATH_LINES = [
     "- `profile.tracker.states.done`: report that there is nothing to do and stop.",
+    "- `profile.tracker.states.blocked`, `profile.tracker.states.canceled`, or "
+    "`profile.tracker.states.duplicate`: report the state and stop.",
     "Otherwise select the run's path before any role is spawned.",
-    "From inside the target repository, run `python3 <skill dir>/scripts/select-path.py --title=<story title>`, "
+    "From inside the target repository, run `python3 <skill dir>/scripts/select-path.py --title='<story title>'`, "
     "where `<skill dir>` is the absolute directory your runtime loaded this skill from.",
-    "Add `--label=<name>` for each label name the story carries as read from the tracker, under the "
+    "Add `--label='<name>'` for each label name the story carries as read from the tracker, under the "
     "differing-team rule in [references/linear.md](references/linear.md) \"Team resolution\"; the script "
     "compares names only.",
+    "Write each `'` inside the title or a label as `'\\''`, so the shell expands nothing in either.",
     "When the story is in `profile.tracker.states.in_deployment_review`, add `--recorded-path` with the value "
     "of the latest `engineering-workflow` step 12 note line whose whole text is exactly `path: spike`, "
     "`path: no-deployment` or `path: deployed`, when one exists, and add nothing otherwise.",
@@ -3498,6 +3501,9 @@ STEP_1_PATH_LINES = [
     "in the report of that end state.",
     "The selected path governs the whole run.",
     "Then pick the starting point:",
+    "- `profile.tracker.states.in_deployment_review`: implementation already reached deployment review; "
+    "go to step 3.",
+    "- Any other state: go to step 2.",
 ]
 PATH_ARGUMENT_LINE = (
     "- Write the `path: <value>` line step 1 selects in the same two places, as `path: unresolved` until "

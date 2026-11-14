@@ -47,7 +47,7 @@ The steps below are the workflow spine; the capability files hold the rules and 
 
 Run every script in `scripts/` by its installed absolute path (`<skill dir>/scripts/<name>`, where `<skill dir>` is the absolute directory your runtime loaded this skill from) with the current directory in the consumer repository; the consumer repository does not contain them.
 Each script except `select-path.py` targets the repository of the current directory, or the one `--repo <dir>` names, never its own location, and refuses to run in the skills repository itself unless `--repo` names it.
-`select-path.py` takes no `--repo`: it reads the profile of the repository holding the current directory, as "Select the path" below states.
+`select-path.py` takes no `--repo`: it reads the profile of the repository holding the current directory, so run it from inside the target repository, as "Select the path" below states.
 
 ## 1. Triage the story
 
@@ -69,8 +69,9 @@ If the tracker cannot be updated, stop and say the transition was not performed;
 
 A run follows exactly one path: `spike`, `no-deployment` or `deployed`.
 Select the path before any later step runs.
-From inside the target repository, run `python3 <skill dir>/scripts/select-path.py --title=<story title>`, where `<skill dir>` is the absolute directory your runtime loaded this skill from.
-Add `--label=<name>` for each label name the story carries as read from the tracker, under the differing-team rule in [references/linear.md](references/linear.md) "Team resolution"; the script compares names only.
+From inside the target repository, run `python3 <skill dir>/scripts/select-path.py --title='<story title>'`, where `<skill dir>` is the absolute directory your runtime loaded this skill from.
+Add `--label='<name>'` for each label name the story carries as read from the tracker, under the differing-team rule in [references/linear.md](references/linear.md) "Team resolution"; the script compares names only.
+Write each `'` inside the title or a label as `'\''`, so the shell expands nothing in either.
 When a brief holds a line whose whole text is exactly `path: spike`, `path: no-deployment` or `path: deployed`, add `--recorded-path` with that value, so the path is never reselected.
 The script prints one line, the path or an `ask:` line, and exits 0; any other exit status is no path: stop and report its stderr line.
 On an `ask:` line, when the user invoked this skill directly, ask the user and accept only `spike`, `no-deployment` or `deployed` as the answer, which is the path; when this skill runs as a story-to-done role, stop and quote the `ask:` line in the handback.
@@ -280,7 +281,7 @@ Promotion beyond the integration environment follows `profile.git.promotion` and
 Only after the deployment is verified:
 
 1. Move the story to `profile.tracker.states.in_deployment_review` (never on merge alone).
-2. Add a concise implementation and deployment note.
+2. Add a concise implementation and deployment note carrying the path as a line whose whole text is exactly `path: deployed`.
 3. Read the story back to confirm the state.
 
 Done comes later, after the acceptance criteria are verified in the deployed environment (see `references/linear.md`).

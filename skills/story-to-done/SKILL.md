@@ -6,7 +6,7 @@ description: >-
   Use when asked to implement a story and see it through QA to Done (for example "story to done ABC-123" or "implement ABC-123, QA it, and fix until done, QA on <model> at max").
   Not for implementing without QA (use engineering-workflow), verifying a story without fixing it (use qa-verification), or staff-level triage, planning, and shadow adjudication (use persona-staff-engineer).
 license: Apache-2.0
-compatibility: Requires a runtime that can spawn subagents and set each one's model and reasoning effort, plus the linear CLI (schpet/linear-cli) with jq, or the Linear MCP server; and python3 with PyYAML>=6.
+compatibility: Requires a runtime that can spawn subagents and set each one's model and reasoning effort, plus the linear CLI (schpet/linear-cli) with jq, or the Linear MCP server; and git and python3 with PyYAML>=6.
 ---
 
 # Story to Done: implement, QA, fix until Done
@@ -134,8 +134,9 @@ When the team of `STORY_ID` differs from `profile.tracker.team_key`, confirm eac
 - `profile.tracker.states.blocked`, `profile.tracker.states.canceled`, or `profile.tracker.states.duplicate`: report the state and stop.
 
 Otherwise select the run's path before any role is spawned.
-From inside the target repository, run `python3 <skill dir>/scripts/select-path.py --title=<story title>`, where `<skill dir>` is the absolute directory your runtime loaded this skill from.
-Add `--label=<name>` for each label name the story carries as read from the tracker, under the differing-team rule in [references/linear.md](references/linear.md) "Team resolution"; the script compares names only.
+From inside the target repository, run `python3 <skill dir>/scripts/select-path.py --title='<story title>'`, where `<skill dir>` is the absolute directory your runtime loaded this skill from.
+Add `--label='<name>'` for each label name the story carries as read from the tracker, under the differing-team rule in [references/linear.md](references/linear.md) "Team resolution"; the script compares names only.
+Write each `'` inside the title or a label as `'\''`, so the shell expands nothing in either.
 When the story is in `profile.tracker.states.in_deployment_review`, add `--recorded-path` with the value of the latest `engineering-workflow` step 12 note line whose whole text is exactly `path: spike`, `path: no-deployment` or `path: deployed`, when one exists, and add nothing otherwise.
 The script prints one line, the path or an `ask:` line, and exits 0; any other exit status is no path: stop and report its stderr line.
 On an `ask:` line, ask the user, accept only `spike`, `no-deployment` or `deployed` as the answer, which is the path, and spawn no role until answered.

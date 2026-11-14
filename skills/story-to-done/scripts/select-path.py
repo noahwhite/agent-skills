@@ -35,7 +35,7 @@ entry that is not a mapping never matches. When no profile file exists, a locati
 cannot be checked, git fails other than by reporting no work tree, the profile is not a regular
 file, cannot be read or is not valid YAML, it is not a mapping, or profile.environments is
 present but not a list, it prints a one-line reason to stderr, nothing to stdout, and exits 16.
-A malformed command line exits 2; pass a value that starts with "-" as --title=<value> or
+A malformed command line, including an empty --title, exits 2; pass a value that starts with "-" as --title=<value> or
 --label=<value>. It needs PyYAML>=6 and makes no network call.
 """
 
@@ -52,10 +52,29 @@ GIT_TIMEOUT = 30
 NAME = "select-path"
 PATHS = ("spike", "no-deployment", "deployed")
 SPIKE_PREFIX = "[Spike]"
+ESCAPES = {"\\": "\\\\", "\n": "\\n", "\r": "\\r", "\t": "\\t"}
 
 
 class Unresolved(Exception):
     """A fail-closed stop: one stderr line, nothing on stdout, exit 16."""
+
+
+def escape(value: str) -> str:
+    """One printable line, escaped as shared/resolve-model-role.py escapes: backslash, line feed,
+    carriage return and tab as \\\\, \\n, \\r and \\t, any other control character as \\xNN, and a
+    lone surrogate or a Unicode line or paragraph separator as \\uNNNN."""
+    out = []
+    for ch in value:
+        code = ord(ch)
+        if ch in ESCAPES:
+            out.append(ESCAPES[ch])
+        elif code < 0x20 or 0x7F <= code < 0xA0:
+            out.append(f"\\x{code:02x}")
+        elif 0xD800 <= code < 0xE000 or code in (0x2028, 0x2029):
+            out.append(f"\\u{code:04x}")
+        else:
+            out.append(ch)
+    return "".join(out)
 
 
 def work_tree() -> str | None:
@@ -213,11 +232,16 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--label", action="append", default=[], help="one of the story's label names; repeat for each")
     parser.add_argument("--recorded-path", help="a path already recorded for the run")
     args = parser.parse_args(argv)
+    if not args.title:
+        # An empty title would read as "not a spike" and select a path; a failed title read must not.
+        parser.error("argument --title: expected a non-empty story title")
     try:
         path = find_profile(args.profile)
         line = select(load(path), path, args.title, args.label, args.recorded_path)
     except Unresolved as exc:
-        print(f"{NAME}: {exc}".replace("\n", " "), file=sys.stderr)
+        sys.stderr.flush()
+        sys.stderr.buffer.write((escape(f"{NAME}: {exc}") + "\n").encode("utf-8"))
+        sys.stderr.buffer.flush()
         return EXIT_UNRESOLVED
     print(line)
     return 0

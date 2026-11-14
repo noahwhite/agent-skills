@@ -49,14 +49,16 @@ PINS = {
     "three-paths": "A run follows exactly one path: `spike`, `no-deployment` or `deployed`.",
     "select-before-later-steps": "Select the path before any later step runs.",
     "run-script": (
-        "From inside the target repository, run `python3 <skill dir>/scripts/select-path.py --title=<story title>`, "
+        "From inside the target repository, run `python3 <skill dir>/scripts/select-path.py --title='<story title>'`, "
         "where `<skill dir>` is the absolute directory your runtime loaded this skill from."
     ),
     "labels": (
-        "Add `--label=<name>` for each label name the story carries as read from the tracker, under the "
+        "Add `--label='<name>'` for each label name the story carries as read from the tracker, under the "
         'differing-team rule in [references/linear.md](references/linear.md) "Team resolution"; the script '
         "compares names only."
     ),
+    # The title and labels are tracker text, so the call single-quotes them and the shell expands none.
+    "quoting": "Write each `'` inside the title or a label as `'\\''`, so the shell expands nothing in either.",
     "brief-recorded-path": (
         "When a brief holds a line whose whole text is exactly `path: spike`, `path: no-deployment` or "
         "`path: deployed`, add `--recorded-path` with that value, so the path is never reselected."
@@ -101,6 +103,7 @@ SUBSECTION_ORDER = (
     "select-before-later-steps",
     "run-script",
     "labels",
+    "quoting",
     "brief-recorded-path",
     "script-output",
     "ask-handling",
@@ -314,6 +317,15 @@ def added_blocks() -> list[str]:
 # byte as it was, and the blocks themselves are kept whole and in order by the pins in
 # `HANDOFF_PINS` and `test_handoff_blocks_appear_once_in_order`.
 STEPS_TWO_TO_TWELVE_SHA256 = "a36c006733b7b3bc23d65530faee575a02b5e59c1b8c68d48d7657fcf639f2c3"
+# SKL-270 makes the `deployed` step 12 note carry the exact `path: deployed` line that story-to-done
+# and qa-verification pass to `scripts/select-path.py` as `--recorded-path`. The digest above is kept:
+# that one line is pinned here and swapped back to its pre-SKL-270 text before hashing, so every other
+# byte of steps 2 to 12 still has to match.
+DEPLOYED_NOTE = (
+    "2. Add a concise implementation and deployment note carrying the path as a line whose whole text is "
+    "exactly `path: deployed`."
+)
+DEPLOYED_NOTE_BEFORE_SKL_270 = "2. Add a concise implementation and deployment note."
 
 
 def steps_two_to_twelve() -> str:
@@ -336,6 +348,8 @@ def test_steps_two_to_twelve_outside_the_handoff_blocks_are_unchanged() -> None:
     text = steps_two_to_twelve()
     for block in added_blocks():
         text = text.replace(block, "", 1)
+    assert text.count(f"\n{DEPLOYED_NOTE}\n") == 1, "step 12 must carry the `path: deployed` note line once"
+    text = text.replace(f"\n{DEPLOYED_NOTE}\n", f"\n{DEPLOYED_NOTE_BEFORE_SKL_270}\n", 1)
     assert hashlib.sha256(text.encode()).hexdigest() == STEPS_TWO_TO_TWELVE_SHA256
 
 
@@ -412,6 +426,7 @@ QA_PATH_PINS = {
     "qa-select-before-verification": "Select the path before any verification runs.",
     "qa-run-script": PINS["run-script"],
     "qa-labels": PINS["labels"],
+    "qa-quoting": PINS["quoting"],
     "qa-brief-recorded-path": PINS["brief-recorded-path"],
     "qa-note-recorded-path": (
         "Without that brief line, add `--recorded-path` with the value of the latest `engineering-workflow` "
@@ -488,6 +503,7 @@ QA_PIN_KEYS = (
     "qa-select-before-verification",
     "qa-run-script",
     "qa-labels",
+    "qa-quoting",
     "qa-brief-recorded-path",
     "qa-note-recorded-path",
     "qa-script-output",
