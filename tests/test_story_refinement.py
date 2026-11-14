@@ -3862,10 +3862,14 @@ def scope_violations(definition: ast.FunctionDef, namespace: dict, text_position
     `definition` is the helper's syntax tree and `namespace` its module globals. `text_positions` maps each scoped
     function to the parameters that take the text it scopes. The helper passes when:
     it defines no nested function, lambda or class; every local name is bound (assigned, augmented or iterated) only
-    from expressions that hold a scoped call or another such local and no other local, so rebinding a name to
-    unscoped text unscopes it on every path; its own text parameters (those it passes into a text parameter of a
-    scoped call) and any multi-line module string appear only inside the arguments of scoped calls; and every return
-    holds a scoped call or a scoped local.
+    from expressions that carry scoped text and mention no other local, so rebinding a name to unscoped text unscopes
+    it on every path; its own text parameters (those that appear anywhere in a text argument of a scoped call) and any
+    multi-line module string appear only inside the arguments of scoped calls; and every return carries scoped text.
+
+    An expression carries scoped text when every value it can take does: a scoped call or scoped local, an index or
+    slice of one, both branches of a conditional, every operand of an operator or boolean, every item of a tuple, list
+    or set, the element of a comprehension, and a method of one. Another call is taken to transform its argument, so
+    it carries scoped text when one of its positional arguments does.
     """
     nodes = list(own_nodes(definition))
     violations = [
@@ -3922,11 +3926,31 @@ def scope_violations(definition: ast.FunctionDef, namespace: dict, text_position
     }
     local_names = set(bindings) | other | parameters
 
+    def carries(expression: ast.AST, scoped_locals: set[str]) -> bool:
+        """Whether every value the expression can evaluate to comes from a scoped call or a scoped local."""
+        if called_name(expression) in text_positions:
+            return True
+        match expression:
+            case ast.Name(id=name):
+                return name in scoped_locals
+            case ast.Subscript(value=value) | ast.Starred(value=value):
+                return carries(value, scoped_locals)
+            case ast.IfExp(body=body, orelse=orelse):
+                return carries(body, scoped_locals) and carries(orelse, scoped_locals)
+            case ast.BoolOp(values=values) | ast.Tuple(elts=values) | ast.List(elts=values) | ast.Set(elts=values):
+                return bool(values) and all(carries(value, scoped_locals) for value in values)
+            case ast.BinOp(left=left, right=right):
+                return carries(left, scoped_locals) and carries(right, scoped_locals)
+            case ast.ListComp(elt=element) | ast.SetComp(elt=element) | ast.GeneratorExp(elt=element):
+                return carries(element, scoped_locals)
+            case ast.Call(func=ast.Attribute(value=receiver)) if carries(receiver, scoped_locals):
+                return True
+            case ast.Call(args=arguments):
+                return any(carries(argument, scoped_locals) for argument in arguments)
+        return False
+
     def clean(expression: ast.AST, scoped_locals: set[str]) -> bool:
-        holds = any(
-            called_name(node) in text_positions or (isinstance(node, ast.Name) and node.id in scoped_locals)
-            for node in own_nodes(expression)
-        )
+        holds = carries(expression, scoped_locals)
         foreign = any(
             isinstance(node, ast.Name)
             and node.id in local_names - parameters - scoped_locals
@@ -3966,7 +3990,12 @@ def text_parameters(definition: ast.FunctionDef, namespace: dict, text_positions
             wanted = text_positions[call.func.id]
             arguments = [argument for index, argument in enumerate(call.args) if index < len(names) and names[index] in wanted]
             arguments += [keyword.value for keyword in call.keywords if keyword.arg in wanted]
-            found |= {argument.id for argument in arguments if isinstance(argument, ast.Name) and argument.id in parameters}
+            found |= {
+                node.id
+                for argument in arguments
+                for node in ast.walk(argument)
+                if isinstance(node, ast.Name) and node.id in parameters
+            }
     return found
 
 
@@ -4023,6 +4052,13 @@ def test_every_scoping_helper_goes_through_section() -> None:
         "    if heading:\n        return section(text, heading, level=3)\n    return text\n",
         "    section(text, heading, level=3)\n    return text\n",
         "    return (lambda: section(text, heading, level=3))() and text\n",
+        "    return section(text + '', heading, level=3) + text\n",
+        "    return section(text.strip(), heading, level=3) + text\n",
+        "    return section(text, heading, level=3) if False else 'whole document'\n",
+        "    return section(text, heading, level=3) if heading else 'whole document'\n",
+        "    body = section(text, heading, level=3)\n    return body or 'whole document'\n",
+        "    body = section(text, heading, level=3)\n    return body + 'whole document'\n",
+        "    return 'whole document'\n",
     ],
 )
 def test_scope_guard_rejects_unscoped_text(body: str) -> None:
