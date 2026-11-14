@@ -107,12 +107,14 @@ def fence_ids(lines: list[str], where: str = "") -> list[int]:
     return ids
 
 
-def section(text: str, heading: str, level: int = 2, until: int | None = None) -> str:
+def section(text: str, heading: str, level: int = 2, until: int | None = None, keep_fences: bool = False) -> str:
     """The operative text under a heading, up to the next heading of level `until` (default: the same) or higher.
 
     HTML comments are removed first, since commented-out text is not operative, and an unclosed one fails rather
     than leaving the text it opens operative; a heading-like line inside a fenced code block (a record template's own
     `## ...` title, for example) is neither the heading nor its end.
+    Fenced code blocks are dropped too, since an instruction inside one is an example, not a rule; only a reader of
+    a record or filing template passes `keep_fences=True` (see FENCE_READERS).
     """
     text = re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)
     assert "<!--" not in text, f"unclosed HTML comment (looking for {heading})"
@@ -120,7 +122,7 @@ def section(text: str, heading: str, level: int = 2, until: int | None = None) -
     ids = fence_ids(lines, f" (looking for {heading})")
     own = re.compile(rf"{'#' * level} {re.escape(heading)}\s*$")
     ends = re.compile(rf"#{{1,{until or level}}} ")
-    start = None
+    start, end = None, len(lines)
     for index, line in enumerate(lines):
         if ids[index] != -1:
             continue
@@ -128,9 +130,10 @@ def section(text: str, heading: str, level: int = 2, until: int | None = None) -
             if own.match(line):
                 start = index + 1
         elif ends.match(line):
-            return "".join(lines[start:index])
+            end = index
+            break
     assert start is not None, f"missing section: {heading}"
-    return "".join(lines[start:])
+    return "".join(line for line, block in zip(lines[start:end], ids[start:end]) if keep_fences or block == -1)
 
 
 def segments(body: str) -> list[tuple[str, str, str]]:
@@ -636,7 +639,8 @@ def test_skill_and_shared_linear_state_the_same_split_trigger() -> None:
 
 
 def pointing_template() -> list[str]:
-    fences = [text for kind, text, _ in segments(section(RECORD.read_text(), "Pointing record")) if kind == "fence"]
+    body = section(RECORD.read_text(), "Pointing record", keep_fences=True)
+    fences = [text for kind, text, _ in segments(body) if kind == "fence"]
     templates = [text for text in fences if text.startswith("## Pointing record\n")]
     assert len(templates) == 1, f"expected one pointing-record template, found {len(templates)}"
     return templates[0].splitlines()
@@ -926,7 +930,7 @@ WRITES_FACILITATOR_LINE = (
 
 def template_block(heading: str) -> tuple[str, list[tuple[str, str, str]]]:
     """The first `markdown` fenced block in the heading's `section()`, and the two `segments()` parts after it."""
-    parts = segments(section(RECORD.read_text(), heading))
+    parts = segments(section(RECORD.read_text(), heading, keep_fences=True))
     fenced = [index for index, (kind, _, info) in enumerate(parts) if kind == "fence" and info == "markdown"]
     assert fenced, f"no ```markdown template block under {heading}"
     first = fenced[0]
@@ -3067,7 +3071,7 @@ def test_unestimated_section_states_the_ready_gate(sentence: str) -> None:
 
 def filing_section(skill: str, start: str, end: str) -> str:
     """The text of one evidence section of a filing template, from its label up to the next label or rule."""
-    template = section((ROOT / "skills" / skill / "SKILL.md").read_text(), "Template (the description)")
+    template = section((ROOT / "skills" / skill / "SKILL.md").read_text(), "Template (the description)", keep_fences=True)
     body = template[template.index(start) + len(start):]
     return body[: body.index(end)]
 
@@ -3810,14 +3814,18 @@ def test_section_drops_comments_and_skips_every_fence_kind() -> None:
     assert "intro" in section(SECTION_FIXTURE, "Title", level=1, until=2)
     assert "here" not in section(SECTION_FIXTURE, "Title", level=1, until=2)
     body = section(SECTION_FIXTURE, "A")
-    assert "gone" not in body and "- here" in body and "- item" in body and "after" not in body
+    assert "- item" in body and "inline" in body and "after" not in body
+    assert "gone" not in body and "here" not in body and "Four" not in body and "Three" not in body
+    kept = section(SECTION_FIXTURE, "A", keep_fences=True)
+    assert "gone" not in kept and "- here" in kept and "## Indented" in kept
     for fenced in ("Hidden", "Kept", "Four", "Tilde", "Mixed", "Indented", "Three"):
         with pytest.raises(AssertionError, match="missing section"):
             section(SECTION_FIXTURE, fenced)
     assert "after" in section(SECTION_FIXTURE, "Not fenced")
     step_body = section(SECTION_FIXTURE, "Step", level=3)
     assert "step text" in step_body and "step tail" in step_body and "other" not in step_body
-    assert "Fenced step" not in prose(step_body)
+    assert "Fenced step" not in step_body
+    assert "Fenced step" in section(SECTION_FIXTURE, "Step", level=3, keep_fences=True)
     with pytest.raises(AssertionError, match="missing section"):
         section(SECTION_FIXTURE, "Commented step", level=3)
     assert "open tail" in section(SECTION_FIXTURE, "Open step", level=3)
@@ -3935,6 +3943,23 @@ def test_no_assertion_slices_a_file_on_a_heading_or_fence() -> None:
         and re.match(r"#|```|~~~", node.args[0].value)
     ]
     assert not found, found
+
+
+FENCE_READERS = {"template_block", "pointing_template", "filing_section", "test_section_drops_comments_and_skips_every_fence_kind"}
+
+
+def test_only_template_readers_keep_fenced_text() -> None:
+    """B8b: section() drops fenced blocks, so a rule moved into a code fence is not operative; only the readers of a
+    record or filing template, and the fixture test, ask for fenced text."""
+    tree = ast.parse(Path(__file__).read_text())
+    readers = {
+        function.name
+        for function in ast.walk(tree)
+        if isinstance(function, ast.FunctionDef)
+        for node in own_nodes(function)
+        if isinstance(node, ast.keyword) and node.arg == "keep_fences"
+    }
+    assert readers == FENCE_READERS, f"keep_fences used by {sorted(readers)}"
 
 
 def test_readme_row_names_the_split_and_the_refile() -> None:
