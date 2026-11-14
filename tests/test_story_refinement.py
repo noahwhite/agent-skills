@@ -2063,8 +2063,9 @@ def test_story_to_done_cites_the_differing_team_rule() -> None:
 
 
 def test_arguments_section_precedes_read_first() -> None:
-    text = SKILL.read_text()
-    assert text.index("\n## Arguments\n") < text.index("\n## Read first\n")
+    wanted = ("## Arguments", "## Read first")
+    order = [line for line in section(SKILL.read_text(), "Story refinement", level=1).splitlines() if line in wanted]
+    assert order == list(wanted), order
 
 
 @pytest.mark.parametrize(
@@ -3851,41 +3852,122 @@ def called_name(node: ast.AST) -> str | None:
     return node.func.id if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) else None
 
 
-def returns_scoped_text(function, scoped: set[str]) -> bool:
-    """Whether every value the helper returns is derived from a call to a `scoped` function.
+def parsed(function) -> ast.FunctionDef:
+    return ast.parse(textwrap.dedent(inspect.getsource(function))).body[0]
 
-    A name is tainted once it is assigned (or iterated) from an expression holding a scoped call or a tainted name;
-    a scoped call whose result is discarded, or one inside a nested function or lambda, taints nothing.
+
+def scope_violations(definition: ast.FunctionDef, namespace: dict, text_positions: dict[str, set[str]]) -> list[str]:
+    """Why the helper's result may hold text that no call to a scoped function produced; empty when there is none.
+
+    `definition` is the helper's syntax tree and `namespace` its module globals. `text_positions` maps each scoped
+    function to the parameters that take the text it scopes. The helper passes when:
+    it defines no nested function, lambda or class; every local name is bound (assigned, augmented or iterated) only
+    from expressions that hold a scoped call or another such local and no other local, so rebinding a name to
+    unscoped text unscopes it on every path; its own text parameters (those it passes into a text parameter of a
+    scoped call) and any multi-line module string appear only inside the arguments of scoped calls; and every return
+    holds a scoped call or a scoped local.
     """
-    definition = ast.parse(textwrap.dedent(inspect.getsource(function))).body[0]
-    tainted: set[str] = set()
+    nodes = list(own_nodes(definition))
+    violations = [
+        f"line {node.lineno}: nested {type(node).__name__}"
+        for node in ast.walk(definition)
+        if node is not definition and isinstance(node, NESTED_SCOPES)
+    ]
+    parameters = parameter_names(definition)
+    inside_scoped = {
+        id(inner)
+        for call in nodes
+        if called_name(call) in text_positions
+        for argument in [*call.args, *(keyword.value for keyword in call.keywords)]
+        for inner in ast.walk(argument)
+    }
+    text_names = text_parameters(definition, namespace, text_positions) | {
+        name for name, value in namespace.items() if isinstance(value, str) and "\n" in value
+    }
+    violations += [
+        f"line {node.lineno}: {node.id} used outside a scoped call"
+        for node in nodes
+        if isinstance(node, ast.Name) and node.id in text_names and id(node) not in inside_scoped
+    ]
 
-    def derived(expression: ast.AST) -> bool:
-        return any(
-            called_name(node) in scoped or (isinstance(node, ast.Name) and node.id in tainted)
+    bindings: dict[str, list[ast.AST]] = {}
+    bound_targets: set[int] = set()
+
+    def bind(target: ast.AST, source: ast.AST) -> None:
+        for node in ast.walk(target):
+            bound_targets.add(id(node))
+            if isinstance(node, ast.Name):
+                bindings.setdefault(node.id, []).append(source)
+
+    for node in nodes:
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                bind(target, node.value)
+        elif isinstance(node, ast.AnnAssign) and node.value is not None:
+            bind(node.target, node.value)
+        elif isinstance(node, ast.AugAssign):
+            current = ast.Name(id=node.target.id, ctx=ast.Load()) if isinstance(node.target, ast.Name) else node.target
+            bind(node.target, ast.BinOp(left=current, op=node.op, right=node.value))
+        elif isinstance(node, (ast.For, ast.comprehension)):
+            bind(node.target, node.iter)
+    other = {
+        node.id
+        for node in nodes
+        if isinstance(node, ast.Name) and not isinstance(node.ctx, ast.Load) and id(node) not in bound_targets
+    } | {node.name for node in nodes if isinstance(node, ast.ExceptHandler) and node.name} | {
+        (alias.asname or alias.name).split(".")[0]
+        for node in nodes
+        if isinstance(node, (ast.Import, ast.ImportFrom))
+        for alias in node.names
+    }
+    local_names = set(bindings) | other | parameters
+
+    def clean(expression: ast.AST, scoped_locals: set[str]) -> bool:
+        holds = any(
+            called_name(node) in text_positions or (isinstance(node, ast.Name) and node.id in scoped_locals)
             for node in own_nodes(expression)
         )
+        foreign = any(
+            isinstance(node, ast.Name)
+            and node.id in local_names - parameters - scoped_locals
+            and id(node) not in inside_scoped
+            for node in own_nodes(expression)
+        )
+        return holds and not foreign
 
-    def targets(target: ast.AST) -> set[str]:
-        return {node.id for node in ast.walk(target) if isinstance(node, ast.Name)}
+    scoped_locals = set(bindings) - other - parameters
+    while True:
+        unscoped = {name for name in scoped_locals if not all(clean(source, scoped_locals) for source in bindings[name])}
+        if not unscoped:
+            break
+        scoped_locals -= unscoped
+    violations += [f"{name} is bound from text no scoped call produced" for name in sorted(local_names - parameters - scoped_locals)]
+    returns = [node for node in nodes if isinstance(node, ast.Return)]
+    violations += [] if returns else ["no return"]
+    violations += [
+        f"line {node.lineno}: {ast.unparse(node)}"
+        for node in returns
+        if node.value is None or not clean(node.value, scoped_locals)
+    ]
+    return violations
 
-    changed = True
-    while changed:
-        changed = False
-        for node in own_nodes(definition):
-            if isinstance(node, ast.Assign):
-                names, source = set().union(*(targets(target) for target in node.targets)), node.value
-            elif isinstance(node, (ast.AnnAssign, ast.AugAssign)) and node.value is not None:
-                names, source = targets(node.target), node.value
-            elif isinstance(node, (ast.For, ast.comprehension)):
-                names, source = targets(node.target), node.iter
-            else:
-                continue
-            if derived(source) and not names <= tainted:
-                tainted |= names
-                changed = True
-    returns = [node for node in own_nodes(definition) if isinstance(node, ast.Return)]
-    return bool(returns) and all(node.value is not None and derived(node.value) for node in returns)
+
+def parameter_names(definition: ast.AST) -> set[str]:
+    return {argument.arg for argument in ast.walk(definition.args) if isinstance(argument, ast.arg)}
+
+
+def text_parameters(definition: ast.FunctionDef, namespace: dict, text_positions: dict[str, set[str]]) -> set[str]:
+    """The helper's parameters it passes into a text parameter of a scoped call, by position or by keyword."""
+    parameters = parameter_names(definition)
+    found: set[str] = set()
+    for call in own_nodes(definition):
+        if called_name(call) in text_positions:
+            names = list(inspect.signature(namespace[call.func.id]).parameters)
+            wanted = text_positions[call.func.id]
+            arguments = [argument for index, argument in enumerate(call.args) if index < len(names) and names[index] in wanted]
+            arguments += [keyword.value for keyword in call.keywords if keyword.arg in wanted]
+            found |= {argument.id for argument in arguments if isinstance(argument, ast.Name) and argument.id in parameters}
+    return found
 
 
 def unscoped_reads(function, scoped: set[str]) -> list[str]:
@@ -3916,16 +3998,40 @@ SCOPING_HELPERS = (
 def test_every_scoping_helper_goes_through_section() -> None:
     """B8b: every value each helper behind a listed assertion returns is derived from section(), directly or through
     another such helper, and the helper reads no file except straight into one of them."""
-    scoped = {"section"}
+    text_positions = {"section": {"text"}}
     pending = {helper.__name__: helper for helper in SCOPING_HELPERS}
     while pending:
-        reached = {name for name, helper in pending.items() if returns_scoped_text(helper, scoped)}
-        assert reached, f"helpers whose result is not derived from section(): {sorted(pending)}"
-        scoped |= reached
+        found = {name: scope_violations(parsed(helper), helper.__globals__, text_positions) for name, helper in pending.items()}
+        reached = [name for name, violations in found.items() if not violations]
+        assert reached, found
         for name in reached:
+            text_positions[name] = text_parameters(parsed(pending[name]), pending[name].__globals__, text_positions)
             del pending[name]
     for helper in SCOPING_HELPERS:
-        assert not unscoped_reads(helper, scoped), f"{helper.__name__} reads a file outside section(): {unscoped_reads(helper, scoped)}"
+        reads = unscoped_reads(helper, set(text_positions))
+        assert not reads, f"{helper.__name__} reads a file outside section(): {reads}"
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "    result = section(text, heading, level=3)\n    result = text\n    return result\n",
+        "    body = section(text, heading, level=3)\n    return body + text\n",
+        "    body = section(text, heading, level=3)\n    body = text[text.index(heading):]\n    return body\n",
+        "    body = section(text, heading, level=3)\n    body += text\n    return body\n",
+        "    parts = [section(text, heading, level=3)]\n    parts.append(text)\n    return ''.join(parts)\n",
+        "    if heading:\n        return section(text, heading, level=3)\n    return text\n",
+        "    section(text, heading, level=3)\n    return text\n",
+        "    return (lambda: section(text, heading, level=3))() and text\n",
+    ],
+)
+def test_scope_guard_rejects_unscoped_text(body: str) -> None:
+    """B8b: the helper guard fails a helper that scopes its text and then returns, mixes in or rebinds to the whole
+    text on any path."""
+    definition = ast.parse(f"def step(text: str, heading: str) -> str:\n{body}").body[0]
+    assert scope_violations(definition, globals(), {"section": {"text"}}), body
+    clean = ast.parse("def step(text: str, heading: str) -> str:\n    return section(text, heading, level=3)\n").body[0]
+    assert not scope_violations(clean, globals(), {"section": {"text"}})
 
 
 def test_no_assertion_slices_a_file_on_a_heading_or_fence() -> None:
@@ -3937,10 +4043,12 @@ def test_no_assertion_slices_a_file_on_a_heading_or_fence() -> None:
         if isinstance(node, ast.Call)
         and isinstance(node.func, ast.Attribute)
         and node.func.attr in {"split", "rsplit", "partition", "rpartition", "index", "find"}
-        and node.args
-        and isinstance(node.args[0], ast.Constant)
-        and isinstance(node.args[0].value, str)
-        and re.match(r"#|```|~~~", node.args[0].value)
+        and any(
+            isinstance(literal, ast.Constant)
+            and isinstance(literal.value, str)
+            and re.search(r"^\s*(?:#|```|~~~)", literal.value, re.MULTILINE)
+            for literal in [*node.args[:1], *(keyword.value for keyword in node.keywords if keyword.arg == "sep")]
+        )
     ]
     assert not found, found
 
