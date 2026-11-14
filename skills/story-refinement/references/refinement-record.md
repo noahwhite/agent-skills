@@ -13,6 +13,8 @@ Its comment id is the refined story identifier for both stages.
 For a Bug, an Investigation or a Spike, the comment carries the `Pointing skipped` line; for a User Story it omits that line.
 For a Bug, an Investigation or a Spike, the comment also carries the `Scope signal:` line with the reading `SKILL.md` (Unestimated issue types) defines; for a User Story it omits that line.
 Replace `<reading>` with one whole reading: for a Bug or an Investigation `single change` or `more than one independently reviewable change (<reason>)`, and for a Spike `single research thread` or `more than one independent research thread (<reason>)`, with `<reason>` replaced too; when the Step 2 reconciliation finds no category with two or more voters, replace it with `missing`, which `SKILL.md` treats as a missing line.
+Every comment carries the `Exemplars:` line, with one skip line per skipped or not-selected candidate and none when there is none; for a Bug, an Investigation or a Spike it also carries the `Anchors: not pointed` line, and for a User Story it omits that line, because its anchors are recorded in the pointing record.
+Both lines use the phrases in [Record vocabulary](#record-vocabulary).
 
 ```markdown
 ## Refinement record
@@ -24,6 +26,10 @@ Replace `<reading>` with one whole reading: for a Bug or an Investigation `singl
 - Refined story identifier: <this comment id>
 - Refined story snapshot: <the complete refined story and ACs where the filing template has them, or an immutable link/commit>
 - Refined story identifier after blocking amendments: <the new comment id, or none>
+- Exemplars: <outcome>
+- Exemplar skipped: <key> <reason>
+- Exemplar not selected: <key>
+- Anchors: not pointed
 - Voter inputs, each recorded in its own separate context:
   - Engineer one (<family or model>): <file base name>
   - Engineer two (<family or model>): <file base name>
@@ -68,6 +74,7 @@ Never post it for a Bug, an Investigation or a Spike, which is never pointed.
 The three values are recorded before any SM/EM sizing comment or discussion; a void before all three exist leaves the values block at the values recorded so far and carries no superseded values, and once the blind re-run finishes the values block carries the three standing values while the superseded line carries the voided ones.
 Outside the recorded numeric values and the superseded-values line, no line of the posted record carries a point value named before the reveal or a prescription of this story's value: the Challenges and Anchoring events lines record a ground by its kind, its author (a voter, or the SM/EM for a sizing comment) and its outcome or recovery, and every field that could quote a participant elides those two classes permanently, because the posted record stays on the story surface that later voters read; the verbatim quote lives in the session's raw record, cited by its base name.
 A sizing comment that names a point value before the reveal, prescribes this story's value, or states elapsed time, effort or run cost voids the round under the Anchoring guardrail recovery as soon as the facilitator sees it, as does any ground that is neither restated nor retracted, and the void records the voided consensus under Superseded values after a void, so the Consensus field carries the vote that stands, or n/a when the consensus check or the residual variance rule recorded the estimate.
+The `Anchors:` line and its `Anchor skipped:` lines use the phrases in [Record vocabulary](#record-vocabulary) and name anchor keys only, never an anchor's point value.
 
 ```markdown
 ## Pointing record
@@ -75,6 +82,8 @@ A sizing comment that names a point value before the reveal, prescribes this sto
 - Tracker-write preflight: comment <id>
 - Refined story identifier: <latest refinement comment id after any amendment>
 - Estimate scale: <profile.tracker.estimate_scale>
+- Anchors: <outcome>
+- Anchor skipped: <key> <reason>
 - Values, recorded before the discussion: <the three values recorded before the discussion; when a basis-challenge replacement made the consensus check re-run they are the three values that re-run read; before a void, the values recorded before it>
   - Engineer one: <value, or not recorded> - <short complexity rationale, or none when the value is not recorded>
   - Engineer two: <value, or not recorded> - <short complexity rationale, or none when the value is not recorded>
@@ -143,6 +152,26 @@ Under the denied tracker writes fallback in `SKILL.md`, replace the tracker-writ
 ```markdown
 - Tracker writes: facilitator on the product owner's behalf (owner's direct authorization: "<verbatim quote>", <date>)
 ```
+
+## Record vocabulary
+
+The exemplar and anchor lines of the refinement comment and the pointing record use only these phrases, and the closing message lines `exemplars: <outcome>` and `anchors: <outcome>` use the same outcomes.
+Each line names issue keys only, never an anchor's point value.
+
+- **Exemplars:** exactly one of `<key list>` (the selected exemplar's key), `none configured` (`profile.refinement.exemplar_label` is unset), `no exemplar for <type>` (the label is set and no eligible candidate has the story's type, with `<type>` one of User Story, Bug, Investigation or Spike) or `exemplar lookup failed` (the lookup errored).
+- **Anchors:** in the pointing record, exactly one of `<key list>` (the anchor table's keys in table order), `none configured` (`profile.refinement.anchor_label` is unset), `no anchors` (the label is set and no anchor is usable) or `anchor lookup failed` (the lookup errored); `not pointed` appears only on the refinement comment of a Bug, an Investigation or a Spike and in its closing message.
+- **Exemplar skipped:** one `Exemplar skipped: <key> <reason>` line per skipped candidate, where `<reason>` is exactly one of `not done`, `reopened`, `no Capstone comment`, `Capstone comment names a value` or `conflicting type labels`.
+- **Exemplar not selected:** one `Exemplar not selected: <key>` line per eligible candidate of the story's type that was not selected because another has a more recent `Capstone` comment.
+- **Anchor skipped:** one `Anchor skipped: <key> <reason>` line per skipped anchor, where `<reason>` is exactly one of `not done`, `no estimate`, `above point cap`, `no Calibration anchor comment` or `comment point value differs`.
+
+## Comment headings
+
+The skill reads two comment headings on the labelled issues of the team of `STORY_ID`.
+A comment carries a heading only when its first line is that heading, optionally followed by a space and a date in parentheses, for example `## Capstone (2026-01-31)`, matched case-sensitively; a heading on a later line does not count.
+When several comments on one issue carry the same heading, the most recent is used.
+
+- **Capstone:** the `## Capstone` comment of an exemplar; its body is structure and evidence text, the shape of acceptance criteria, Definition of Done and evidence, and names no point value or estimate.
+- **Calibration anchor:** the `## Calibration anchor` comment of an anchor; its body is the drivers text, and when it also carries a `Points: <integer>` line, that value must equal the issue's estimate.
 
 ## Permitted and forbidden phrasing
 

@@ -479,6 +479,16 @@
           "maximum": 8,
           "default": 5,
           "description": "Numeric point cap for one story; maximum 8. A story is split when the consensus is above this value or is 8 or more."
+        },
+        "exemplar_label": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Optional label that marks capstone exemplars: completed issues whose Capstone comment voters read as a model of structure. Unset, refinement runs without an exemplar."
+        },
+        "anchor_label": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Optional label that marks pointing anchors: completed, estimated issues whose Calibration anchor comment builds the voters' anchor table. Unset, pointing runs without anchors."
         }
       }
     },
