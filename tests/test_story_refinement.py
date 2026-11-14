@@ -4589,7 +4589,7 @@ LEDGER_SIZING_EXCEPTION = (
     "The ledger a slice brief carries is the one exception, as the Anchoring guardrail states."
 )
 LEDGER_FACTUAL_REFERENCE = (
-    "The priced shared-unknown ledger a slice brief carries is such a factual reference and the one point value the "
+    "The priced shared-unknown ledger a slice brief carries is such a factual reference and the only point values the "
     "facilitator gives a voter before the reveal: its prices, owners, total beside the whole-story value and "
     "saturation note are recorded in the whole-story pointing record before any slice vote, and a slice voter weighs "
     "them as information."
@@ -4598,7 +4598,12 @@ LEDGER_FACTUAL_REFERENCE = (
 
 def test_slice_brief_ledger_is_a_factual_reference_not_an_anchor() -> None:
     assert LEDGER_SIZING_EXCEPTION in process_item(STEP_THREE, "After all three values are recorded")
-    assert flat(LEDGER_FACTUAL_REFERENCE) in flat(section(SKILL.read_text(), GUARDRAIL))
+    guardrail = flat(section(SKILL.read_text(), GUARDRAIL))
+    assert flat(LEDGER_FACTUAL_REFERENCE) in guardrail
+    assert (
+        "or treating another voter's revealed value as the answer, where the priced shared-unknown ledger a slice "
+        "brief carries is not such a point value;" in guardrail
+    ), "the prohibited behaviour carves out the slice brief's ledger"
 
 
 def test_step_four_basis_review_challenges_ledger_grounds_and_the_ledger_is_recorded_last() -> None:

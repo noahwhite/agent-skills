@@ -310,7 +310,7 @@ The SM/EM's sizing comments are logged with the pointing record.
 
 The prohibited behaviours are:
 
-- for the SM/EM, naming a point value before the reveal, prescribing a value for this story - a value to score, a target, a preferred direction, or a claim that one vote is the realistic one - or treating another voter's revealed value as the answer;
+- for the SM/EM, naming a point value before the reveal, prescribing a value for this story - a value to score, a target, a preferred direction, or a claim that one vote is the realistic one - or treating another voter's revealed value as the answer, where the priced shared-unknown ledger a slice brief carries is not such a point value;
 - saying "I would go higher" or "I would go lower";
 - singling out the highest or lowest vote as the realistic one;
 - asking for a revote after stating a view;
@@ -319,7 +319,7 @@ The prohibited behaviours are:
 An anchoring trigger is an off-basis ground Step 4 challenges, so it becomes an anchoring event only when it is neither restated as a basis driver nor retracted: a ground that weighs verification strength, testability, coverage, the shape of the tests, or a duration, effort or run cost is such a trigger when a voter weighs it in a rationale or raises it in the discussion.
 Every prohibited behaviour above, a prescription of this story's value by any participant, and an SM/EM sizing comment that names a point value before the reveal or states elapsed time, effort or run cost, are anchoring events as soon as they are seen, with no challenge, restatement or retraction path.
 A factual reference is never such an event: naming an already-estimated item's recorded value, alone or together with a basis difference, is information the voters weigh, and the round continues.
-The priced shared-unknown ledger a slice brief carries is such a factual reference and the one point value the facilitator gives a voter before the reveal: its prices, owners, total beside the whole-story value and saturation note are recorded in the whole-story pointing record before any slice vote, and a slice voter weighs them as information.
+The priced shared-unknown ledger a slice brief carries is such a factual reference and the only point values the facilitator gives a voter before the reveal: its prices, owners, total beside the whole-story value and saturation note are recorded in the whole-story pointing record before any slice vote, and a slice voter weighs them as information.
 Any other challenged ground that is neither restated as a basis driver nor retracted, or a sizing comment the SM/EM neither withdraws nor restates, is an anchoring event, and the recovery below is the single void rule: it voids the recorded estimate, the `Consensus check:` outcome, the consensus, the residual variance derived values and their outcome, and every vote recorded after the anchor, and for a ground read in a recorded rationale the anchor precedes that rationale, so the vote it grounds and every later vote are void, and the independent vote from Step 3 is re-run in newly created voter contexts that exclude the tainted discussion and sizing comment.
 
 Fresh voter contexts exclude the tainted discussion and the sizing comment, but they cannot exclude a value recorded on the story surface that Step 1 hands every voter with the story, so the Step 3 rationale rule is what keeps such a value from becoming the rationale's answer.
