@@ -490,6 +490,7 @@ When the oversize split splits a Bug or an Investigation, the outcome names the 
 For a Bug, an Investigation or a Spike whose `Scope signal:` line is missing or carries neither of its type's readings, it also names that `needs input`, naming the story and the gap, as the Scope signal bullet in [Unestimated issue types](#unestimated-issue-types) states.
 It carries the `metrics: on` or `metrics: off` line.
 It carries the lines `exemplars: <outcome>` and `anchors: <outcome>`, each outcome from Step 1 item 4 in the phrases of Record vocabulary in [references/refinement-record.md](references/refinement-record.md), with `anchors: not pointed` for a Bug, an Investigation or a Spike.
+A stop before Step 1 item 4, the roster stop of item 2 or a type-check stop of item 3, ran neither lookup, so its closing message omits both lines rather than name an outcome outside that vocabulary.
 When `metrics` is on, it names the metrics summary comment the facilitator posted; when the post was denied or unavailable, it carries the summary and names the denied or unavailable write; when the read-back failed, it carries the summary and names the failed read-back; when no post was attempted, it carries the summary and names no comment.
 
 ## Runtime portability

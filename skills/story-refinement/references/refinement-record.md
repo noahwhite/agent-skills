@@ -29,7 +29,7 @@ Both lines use the phrases in [Record vocabulary](#record-vocabulary).
 - Exemplars: <outcome>
 - Exemplar skipped: <key> <reason>
 - Exemplar not selected: <key>
-- Anchors: not pointed
+- Anchors: not pointed <!-- Bug, Investigation or Spike only; omit for a User Story -->
 - Voter inputs, each recorded in its own separate context:
   - Engineer one (<family or model>): <file base name>
   - Engineer two (<family or model>): <file base name>

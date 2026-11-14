@@ -292,8 +292,13 @@ def test_example_sets_refinement_values() -> None:
 
 
 LABEL_KEYS = ("exemplar_label", "anchor_label")
-SCHEMA_REFINEMENT = {"$defs": SCHEMA["$defs"], **SCHEMA["properties"]["refinement"]}
-BASE_REFINEMENT = yaml.safe_load((ROOT / "profile" / "example.yaml").read_text())["refinement"]
+EXAMPLE_PROFILE = yaml.safe_load((ROOT / "profile" / "example.yaml").read_text())
+BASE_REFINEMENT = EXAMPLE_PROFILE["refinement"]
+
+
+def validate_refinement(refinement: dict) -> None:
+    """Validate the whole example profile, with `refinement` replaced, against the full schema."""
+    jsonschema.validate({**EXAMPLE_PROFILE, "refinement": refinement}, SCHEMA)
 
 
 def test_schema_label_keys_are_optional_nonblank_strings_with_no_default() -> None:
@@ -312,14 +317,14 @@ def test_schema_label_keys_are_optional_nonblank_strings_with_no_default() -> No
     ids=["both-unset", "exemplar-only", "anchor-only", "both-set"],
 )
 def test_schema_accepts_each_label_key_unset_or_set(labels: dict) -> None:
-    jsonschema.validate({**BASE_REFINEMENT, **labels}, SCHEMA_REFINEMENT)
+    validate_refinement({**BASE_REFINEMENT, **labels})
 
 
 @pytest.mark.parametrize("key", LABEL_KEYS)
 @pytest.mark.parametrize("value", ["", 3, None, ["label"]], ids=["blank", "integer", "null", "list"])
 def test_schema_rejects_a_blank_or_non_string_label(key: str, value: object) -> None:
     with pytest.raises(jsonschema.ValidationError):
-        jsonschema.validate({**BASE_REFINEMENT, key: value}, SCHEMA_REFINEMENT)
+        validate_refinement({**BASE_REFINEMENT, key: value})
 
 
 def test_example_shows_label_keys_commented_out() -> None:
@@ -4463,10 +4468,13 @@ def test_sizing_item_and_guardrail_each_gain_one_anchor_exception() -> None:
 
 def test_refinement_template_carries_the_exemplar_and_not_pointed_lines() -> None:
     """SKL-238 C5."""
-    lines = template("Refinement comment").splitlines()
+    lines = [line.rstrip() for line in template("Refinement comment").splitlines()]
     for line in ("- Exemplars: <outcome>", "- Exemplar skipped: <key> <reason>", "- Exemplar not selected: <key>",
                  "- Anchors: not pointed"):
         assert line in lines, line
+    # The template marks the conditional line where a literal copy sees it; section() strips HTML comments.
+    assert "- Anchors: not pointed <!-- Bug, Investigation or Spike only; omit for a User Story -->\n" in (
+        RECORD.read_text())
     intro = flat(prose(section(RECORD.read_text(), "Refinement comment")))
     assert "for a bug, an investigation or a spike it also carries the `anchors: not pointed` line" in intro
 
@@ -4489,6 +4497,92 @@ def test_records_and_closing_message_name_the_exemplar_and_anchor_lines() -> Non
     assert "with `anchors: not pointed` for a bug, an investigation or a spike" in closing
     assert "the closing message lines `exemplars: <outcome>` and `anchors: <outcome>` use the same outcomes" in flat(
         section(RECORD.read_text(), VOCABULARY))
+
+
+def test_a_stop_before_the_lookups_omits_both_closing_lines() -> None:
+    """SKL-238 C1, C5: a roster or type stop ran no lookup, so it names no outcome outside the vocabulary."""
+    assert (
+        "a stop before step 1 item 4, the roster stop of item 2 or a type-check stop of item 3, ran neither lookup, so "
+        "its closing message omits both lines rather than name an outcome outside that vocabulary"
+    ) in flat(section(SKILL.read_text(), "Closing message"))
+
+
+def topic_sentences(text: str, *words: str) -> list[str]:
+    """Every sentence of `text` that names all of `words` (case-insensitive, whole words)."""
+    found = []
+    for line in text.splitlines():
+        line = re.sub(r"^\s*(?:[-*]|\d+\.)\s+", "", line).strip()
+        for sentence in re.split(r"(?<=[.;])\s+(?=[A-Z`])", line):
+            if sentence and all(re.search(rf"\b{re.escape(word)}\b", sentence, re.IGNORECASE) for word in words):
+                found.append(sentence.strip())
+    return found
+
+
+# SKL-238 C2, C4, C5, C9: each rule is the only statement on its topic, so a contradicting instruction added
+# anywhere in the file (a cross-team read, an anchor lookup for an unpointed type, a skip at the cap, a prompt
+# without the table, an SM/EM comment on the table, an instruction taken from a Capstone comment, an anchor's
+# point value in a record line) adds a sentence on that topic and fails here.
+TOPIC_RULES = [
+    ("cross-team", SKILL, ("other teams",), [
+        "The facilitator runs both lookups in Step 1 item 4, reading only issues in the team of `STORY_ID`: issues in "
+        "other teams are never read, and `STORY_ID` itself is never selected.",
+    ]),
+    ("anchor-lookup", SKILL, ("anchor lookup",), [
+        "**Anchor table:** For a Bug, an Investigation or a Spike no anchor lookup runs and the outcome is `not "
+        "pointed`; with `profile.refinement.anchor_label` unset the outcome is `none configured`.",
+        "No usable anchor is `no anchors`, a lookup error is `anchor lookup failed`, and on either, or `none "
+        "configured`, no brief carries a table.",
+    ]),
+    ("anchor-cap", SKILL, ("anchor", "point_cap"), [
+        "Each other anchor gets one `Anchor skipped:` line with the first reason that applies: `not done`, `no "
+        "estimate`, `above point cap` (above `profile.refinement.point_cap`), `no Calibration anchor comment` or "
+        "`comment point value differs` (its `Points:` line differs from the estimate).",
+    ]),
+    ("table-omitted", SKILL, ("table", "omits"), [
+        "Each prompt carries the anchor table under Anchor carry in [Exemplars and anchors](#exemplars-and-anchors) "
+        "when Step 1 item 4 built one, and omits it otherwise.",
+    ]),
+    ("table-smem", SKILL, ("table", "SM/EM"), [
+        "The SM/EM authors none of the table's content and does not comment on it before the reveal.",
+        ANCHOR_EXCEPTION,
+        ANCHOR_EXCEPTION,
+    ]),
+    ("capstone", SKILL, ("Capstone",), [
+        "A candidate is eligible only when it is in `profile.tracker.states.done`, has not been reopened after its "
+        "latest completion, and has a `Capstone` comment that names no point value or estimate; each other candidate "
+        "gets one `Exemplar skipped:` line with the first reason that applies: `not done`, `reopened`, `no Capstone "
+        "comment` or `Capstone comment names a value`.",
+        "The selected exemplar is the eligible candidate whose type matches the type written on the todo list; when "
+        "several match, the one with the most recent `Capstone` comment is selected and each other gets one `Exemplar "
+        "not selected: <key>` line.",
+        "The selected exemplar sits beside, and never replaces, that content: each brief carries the same exemplar key "
+        "and the body of its `Capstone` comment, byte-identical across the three voters and never edited, as a "
+        "reference for the shape of acceptance criteria, Definition of Done and evidence, with the statement that the "
+        "exemplar is a model of structure and not a statement about this story's scope or size; with no selected "
+        "exemplar the brief omits the exemplar.",
+    ]),
+    ("anchor-value", RECORD, ("anchor", "point value"), [
+        "The `Anchors:` line and its `Anchor skipped:` lines use the phrases in [Record vocabulary](#record-vocabulary) "
+        "and name anchor keys only, never an anchor's point value.",
+        "Each line names issue keys only, never an anchor's point value.",
+        "**Anchor skipped:** one `Anchor skipped: <key> <reason>` line per skipped anchor, where `<reason>` is exactly "
+        "one of `not done`, `no estimate`, `above point cap`, `no Calibration anchor comment` or `comment point value "
+        "differs`.",
+    ]),
+]
+
+
+@pytest.mark.parametrize("name, path, words, expected", TOPIC_RULES, ids=[row[0] for row in TOPIC_RULES])
+def test_each_negative_rule_is_the_only_statement_on_its_topic(
+    name: str, path: Path, words: tuple, expected: list
+) -> None:
+    assert topic_sentences(path.read_text(), *words) == expected, name
+
+
+def test_topic_scan_catches_an_added_contradiction() -> None:
+    added = "Also read labelled issues in other teams.\n- Run the anchor lookup for a Bug too."
+    assert topic_sentences(added, "other teams") == ["Also read labelled issues in other teams."]
+    assert topic_sentences(added, "anchor lookup") == ["Run the anchor lookup for a Bug too."]
 
 
 @pytest.mark.parametrize("label, heading", [("Capstone", "## Capstone"), ("Calibration anchor", "## Calibration anchor")])
