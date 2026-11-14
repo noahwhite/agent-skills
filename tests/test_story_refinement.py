@@ -569,8 +569,8 @@ SPLIT_BOUNDS = (
     "A stop holds every further split round, estimate, record and tracker write for the slices until the owner "
     "answers. "
     "A round with a leaf slice recorded as unpointed still applies the per-slice bound and the round cap to each "
-    "recorded value, records the sum comparisons as pending in the split comment and runs them once the owner's "
-    "answer gives every leaf slice a recorded value."
+    "recorded value, records the whole-story sum and the sum of each parent with an unpointed slice as pending in "
+    "the split comment and runs them once the owner's answer gives every leaf slice a recorded value."
 )
 SUPERSESSION = "- The two-round cap and the split bounds supersede the never-escalate rule of SKL-230."
 # The SKL-230 sentences this story removes, split so a repository search for them finds no literal copy here.
@@ -642,9 +642,11 @@ SPLIT_BOUNDS_ROUTE = (
     "A round with a leaf slice recorded as unpointed and no stop posts the block in the split comment with result "
     "pending, naming the unpointed slices, and the sum checks run once the owner's answer gives every leaf slice a "
     "recorded value.",
-    "With a leaf slice recorded as unpointed, the whole-story and each affected per-parent sum line read "
-    "`sum pending: unpointed <slice keys>; band pending` in place of their sums and band, and a round with no stop "
-    "and a pending line is pending.",
+    "With a leaf slice recorded as unpointed, the whole-story sum line and the per-parent sum line of each parent "
+    "with an unpointed slice read `sum pending: unpointed <slice keys>; band pending` in place of their sums and "
+    "band, a per-parent bound stop under such a parent records `band pending`, and every other line is computed.",
+    "The round's result then ranks stop, then pending, then warning, then clear, and a warning on a computed line "
+    "is still listed in the warning line.",
     "A stop posts nothing to the tracker: it reports `needs input` to the owner in one message carrying the block, "
     "and no further split round, slice record or tracker write for the slices happens until the owner answers.",
 )

@@ -142,7 +142,8 @@ A stop posts nothing to the tracker: it reports `needs input` to the owner in on
 ```
 
 The round's result is the most severe of its lines: any stop makes the round a stop, else any warning makes it a warning, else it is clear.
-With a leaf slice recorded as unpointed, the whole-story and each affected per-parent sum line read `sum pending: unpointed <slice keys>; band pending` in place of their sums and band, and a round with no stop and a pending line is pending.
+With a leaf slice recorded as unpointed, the whole-story sum line and the per-parent sum line of each parent with an unpointed slice read `sum pending: unpointed <slice keys>; band pending` in place of their sums and band, a per-parent bound stop under such a parent records `band pending`, and every other line is computed.
+The round's result then ranks stop, then pending, then warning, then clear, and a warning on a computed line is still listed in the warning line.
 
 Worked examples on `fibonacci` (1, 2, 3, 5, 8, 13) with `profile.refinement.point_cap` 5 unless stated.
 In round 1 the only parent is the original story, so its per-parent sum and the whole-story sum share one base and one band; a slice at or above that parent still stops on its own.
