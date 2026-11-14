@@ -27,7 +27,7 @@ Details:
   - A read-only probe asserted each AC5b and AC7 clause in the committed text at the target, and every assertion passed.
   - The same probe at the parent `37b585b` failed every one of those assertions, so the probe is not vacuous.
   - It recomputed the Slice brief worked example independently: each whole-story rationale sums to 13, and the ledger is auth 3 (median of 3, 5, 2), schema 2 (lower of 2, 3), vendor API 2 (lower of 2, 3) and migration 1 (sole price), total 8 beside 13.
-  - Each ledger unknown appears with its ledger price in exactly one slice rationale, and the blocker-owned vendor API appears in none.
+  - Each slice-owned ledger unknown appears with its ledger price in exactly one slice rationale, and the blocker-owned vendor API appears in none.
   - The re-pricing row, the assigned-elsewhere row and the whole-story mismatch row (7, not 8) are each off-basis.
   - `scripts/vendor_shared.py --check` exits 0, and `SKILL.md` is 489 lines.
 - DoD, independently reviewed:
@@ -39,5 +39,6 @@ Details:
   - `shared/linear.md` says a re-split slice's owner reassignment is recorded in the split comment of split round 2, and the Slice brief template takes owners from it.
   - The Split bounds block that a story split's split comment carries has no line for that reassignment.
   - The normative rule is present; only the template slot is missing.
+  - The Slice rationales row of the Slice brief worked example says each ledger unknown appears in exactly one slice rationale while the blocker-owned vendor API appears in none; the quantifier should be each slice-owned ledger unknown, as the normative rule in `shared/linear.md` states.
 
 Closing decision: Done, once this evidence merges.
