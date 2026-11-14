@@ -49,11 +49,11 @@ PINS = {
     "three-paths": "A run follows exactly one path: `spike`, `no-deployment` or `deployed`.",
     "select-before-later-steps": "Select the path before any later step runs.",
     "run-script": (
-        "From inside the target repository, run `python3 <skill dir>/scripts/select-path.py --title <story title>`, "
+        "From inside the target repository, run `python3 <skill dir>/scripts/select-path.py --title=<story title>`, "
         "where `<skill dir>` is the absolute directory your runtime loaded this skill from."
     ),
     "labels": (
-        "Add `--label <name>` for each label name the story carries as read from the tracker, under the "
+        "Add `--label=<name>` for each label name the story carries as read from the tracker, under the "
         'differing-team rule in [references/linear.md](references/linear.md) "Team resolution"; the script '
         "compares names only."
     ),

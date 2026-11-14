@@ -134,8 +134,8 @@ When the team of `STORY_ID` differs from `profile.tracker.team_key`, confirm eac
 - `profile.tracker.states.blocked`, `profile.tracker.states.canceled`, or `profile.tracker.states.duplicate`: report the state and stop.
 
 Otherwise select the run's path before any role is spawned.
-From inside the target repository, run `python3 <skill dir>/scripts/select-path.py --title <story title>`, where `<skill dir>` is the absolute directory your runtime loaded this skill from.
-Add `--label <name>` for each label name the story carries as read from the tracker, under the differing-team rule in [references/linear.md](references/linear.md) "Team resolution"; the script compares names only.
+From inside the target repository, run `python3 <skill dir>/scripts/select-path.py --title=<story title>`, where `<skill dir>` is the absolute directory your runtime loaded this skill from.
+Add `--label=<name>` for each label name the story carries as read from the tracker, under the differing-team rule in [references/linear.md](references/linear.md) "Team resolution"; the script compares names only.
 When the story is in `profile.tracker.states.in_deployment_review`, add `--recorded-path` with the value of the latest `engineering-workflow` step 12 note line whose whole text is exactly `path: spike`, `path: no-deployment` or `path: deployed`, when one exists, and add nothing otherwise.
 The script prints one line, the path or an `ask:` line, and exits 0; any other exit status is no path: stop and report its stderr line.
 On an `ask:` line, ask the user, accept only `spike`, `no-deployment` or `deployed` as the answer, which is the path, and spawn no role until answered.
@@ -268,7 +268,7 @@ After each round, tell the user its number, the failed items, and the outcome.
 ## 5. Close out
 
 Read the story back and confirm it is in `profile.tracker.states.done` with the completion record step 4 checks, then finish your todo list.
-Report the story identifier, its final state, the four resolved model and effort values and the `metrics: on|off` line, the `qa-round-cap: <n>` line, each PR, the number of QA rounds with the items fixed in each, where QA recorded its evidence, and any incidental defects left open.
+Report the story identifier, its final state, the four resolved model and effort values and the `metrics: on|off` line, the `qa-round-cap: <n>` line, the `path: <value>` line, each PR, the number of QA rounds with the items fixed in each, where QA recorded its evidence, and any incidental defects left open.
 
 ## Boundaries
 

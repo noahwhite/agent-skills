@@ -4,7 +4,7 @@ This directory is the single source for the capability files that skills compose
 A skill links a capability through its vendored `references/<name>.md` copy.
 `scripts/vendor_shared.py` writes those copies from the files below, using the capability list in `skills.json` plus every capability a vendored file cites as `references/<name>.md`.
 A capability listed here may wait for a later slice to compose it.
-The directory's three non-Markdown files are `resolve-model-role.py`, the model-role resolver (`profile.md`, Resolve a model role), `select-path.py`, the run-path selector (`engineering-workflow` step 1, Select the path), and `todo-enforce.py`, the Claude Code todo enforcer hook (the repository README, Todo enforcer hook); each is vendored into a skill's `scripts/` when `skills.json` lists it under `executables`.
+Three of the directory's non-Markdown files are `resolve-model-role.py`, the model-role resolver (`profile.md`, Resolve a model role), `select-path.py`, the run-path selector (`engineering-workflow` step 1, Select the path), and `todo-enforce.py`, the Claude Code todo enforcer hook (the repository README, Todo enforcer hook); each is vendored into a skill's `scripts/` when `skills.json` lists it under `executables`.
 
 ## Files
 

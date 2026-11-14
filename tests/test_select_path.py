@@ -20,12 +20,29 @@ SKILLS = ("engineering-workflow", "qa-verification", "story-to-done")
 ABSENT = object()
 
 
-def run(tmp_path, *args, profile=None, env_profile=True, cwd=None):
+def fake_git(tmp_path, body):
+    """A directory holding only a `git` shell script with ``body``, for use as PATH."""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir(exist_ok=True)
+    git = bin_dir / "git"
+    git.write_text(f"#!/bin/sh\n{body}\n")
+    git.chmod(0o755)
+    return str(bin_dir)
+
+
+# Reports no work tree whatever the real temporary directory sits in, so the absence tests hold
+# even when pytest's TMPDIR is inside a repository holding .agent-skills/profile.yaml.
+NO_WORK_TREE = "echo 'fatal: not a git repository (or any of the parent directories): .git' >&2; exit 128"
+
+
+def run(tmp_path, *args, profile=None, env_profile=True, cwd=None, path=None):
     """Run the script; ``profile`` is a mapping written as YAML, or raw text."""
     home = tmp_path / "home"
     home.mkdir(exist_ok=True)
     env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_") and k != "AGENT_SKILLS_PROFILE"}
     env["HOME"] = str(home)
+    if path is not None:
+        env["PATH"] = path
     if env_profile:
         path = tmp_path / "profile.yaml"
         if profile is not None:
@@ -56,6 +73,7 @@ def selected(tmp_path, profile, *args):
     res = run(tmp_path, *args, profile=profile)
     assert res.returncode == 0, res.stderr
     assert res.stdout.count("\n") == 1 and res.stdout.endswith("\n"), repr(res.stdout)
+    assert res.stderr == ""
     return res.stdout[:-1]
 
 
@@ -66,6 +84,11 @@ def test_1_a_valid_recorded_path_is_printed_over_every_ask_case(tmp_path, value)
     profile = make_profile(environments=ABSENT)
     out = selected(tmp_path, profile, "--title", "[Spike] x", "--recorded-path", value)
     assert out == value
+
+
+def test_1_a_valid_recorded_path_is_printed_over_no_integration_branch(tmp_path):
+    profile = make_profile(environments=OTHER_ENVS)
+    assert selected(tmp_path, profile, "--title", "t", "--recorded-path", "deployed") == "deployed"
 
 
 def test_2_an_invalid_recorded_path_asks_over_environments_absent(tmp_path):
@@ -98,6 +121,12 @@ def test_4_an_unset_integration_branch_matches_no_entry(tmp_path):
 
 def test_4_an_entry_without_a_branch_does_not_match(tmp_path):
     profile = make_profile(environments=[{"name": "dev"}, {"name": "stage", "branch": "main"}])
+    assert selected(tmp_path, profile, "--title", "t") == "deployed"
+
+
+def test_4_an_entry_that_is_not_a_mapping_never_matches(tmp_path):
+    assert selected(tmp_path, make_profile(environments=["dev"]), "--title", "t") == "ask: no-integration-branch"
+    profile = make_profile(environments=["dev", {"name": "dev", "branch": "main"}])
     assert selected(tmp_path, profile, "--title", "t") == "deployed"
 
 
@@ -136,6 +165,7 @@ def test_9_an_integration_branch_entry_selects_deployed(tmp_path):
 def test_wrong_case_spike_prefix_is_not_a_spike_title(tmp_path):
     profile = make_profile(environments=[])
     assert selected(tmp_path, profile, "--title", "[spike] x") == "no-deployment"
+    assert selected(tmp_path, profile, "--title", "[spike] x", "--label", "Spike") == "ask: spike-label-without-title"
 
 
 def test_wrong_case_spike_label_is_not_the_spike_label(tmp_path):
@@ -172,8 +202,21 @@ def test_without_a_repository_profile_the_home_profile_is_read(tmp_path):
     (config / "profile.yaml").write_text(yaml.safe_dump(make_profile(environments=DEPLOYED_ENVS)))
     outside = tmp_path / "outside"
     outside.mkdir()
-    res = run(tmp_path, "--title", "t", env_profile=False, cwd=outside)
+    res = run(tmp_path, "--title", "t", env_profile=False, cwd=outside, path=fake_git(tmp_path, NO_WORK_TREE))
     assert (res.returncode, res.stdout) == (0, "deployed\n")
+
+
+def test_git_does_not_run_when_the_environment_variable_names_a_profile(tmp_path):
+    marker = tmp_path / "git-ran"
+    path = fake_git(tmp_path, f": > '{marker}'; exit 1")
+    res = run(tmp_path, "--title", "t", profile=make_profile(environments=[]), path=path)
+    assert (res.returncode, res.stdout) == (0, "no-deployment\n")
+    assert not marker.exists()
+
+
+def test_a_dash_leading_value_passes_in_the_equals_form(tmp_path):
+    profile = make_profile(environments=[], spike_label="--Spike")
+    assert selected(tmp_path, profile, "--title=[Spike] x", "--label=--Spike") == "spike"
 
 
 def assert_exit_16(res):
@@ -189,7 +232,58 @@ def test_exit_16_when_no_profile_file_exists(tmp_path):
 def test_exit_16_when_no_profile_exists_anywhere(tmp_path):
     outside = tmp_path / "outside"
     outside.mkdir()
-    assert_exit_16(run(tmp_path, "--title", "t", env_profile=False, cwd=outside))
+    assert_exit_16(run(tmp_path, "--title", "t", env_profile=False, cwd=outside, path=fake_git(tmp_path, NO_WORK_TREE)))
+
+
+@pytest.mark.parametrize(
+    "body", [None, "echo 'fatal: unsafe repository' >&2; exit 128"], ids=["git-missing", "git-fails"],
+)
+def test_exit_16_when_git_fails_without_reporting_no_work_tree(tmp_path, body):
+    # The home profile exists, so a git failure that read as "no work tree" would select from it.
+    config = tmp_path / "home" / ".config" / "agent-skills"
+    config.mkdir(parents=True)
+    (config / "profile.yaml").write_text(yaml.safe_dump(make_profile(environments=DEPLOYED_ENVS)))
+    if body is None:
+        path = str(tmp_path / "empty-bin")
+        os.mkdir(path)
+    else:
+        path = fake_git(tmp_path, body)
+    assert_exit_16(run(tmp_path, "--title", "t", env_profile=False, path=path))
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root reads through mode 000")
+def test_exit_16_when_a_profile_location_cannot_be_checked(tmp_path):
+    config = tmp_path / "home" / ".config" / "agent-skills"
+    config.mkdir(parents=True)
+    (config / "profile.yaml").write_text(yaml.safe_dump(make_profile(environments=DEPLOYED_ENVS)))
+    repo = tmp_path / "repo"
+    (repo / ".agent-skills").mkdir(parents=True)
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    (repo / ".agent-skills").chmod(0)
+    try:
+        assert_exit_16(run(tmp_path, "--title", "t", env_profile=False, cwd=repo))
+    finally:
+        (repo / ".agent-skills").chmod(0o755)
+
+
+def test_exit_16_when_the_profile_is_a_fifo(tmp_path):
+    os.mkfifo(tmp_path / "profile.yaml")
+    assert_exit_16(run(tmp_path, "--title", "t"))
+
+
+def test_exit_16_when_the_working_directory_is_gone(tmp_path):
+    gone = tmp_path / "gone"
+    gone.mkdir()
+    code = (
+        "import os, runpy, sys; os.chdir(sys.argv[1]); os.rmdir(sys.argv[1]); "
+        "sys.argv = [sys.argv[2], '--title', 't']; runpy.run_path(sys.argv[0], run_name='__main__')"
+    )
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_") and k != "AGENT_SKILLS_PROFILE"}
+    env.update(HOME=str(tmp_path / "home"), AGENT_SKILLS_PROFILE="relative-profile.yaml")
+    res = subprocess.run(
+        [sys.executable, "-c", code, str(gone), str(SOURCE)], env=env, cwd=tmp_path, capture_output=True, text=True, timeout=30,
+    )
+    assert_exit_16(res)
 
 
 def test_exit_16_when_the_profile_is_not_valid_yaml(tmp_path):
@@ -199,10 +293,6 @@ def test_exit_16_when_the_profile_is_not_valid_yaml(tmp_path):
 @pytest.mark.parametrize("environments", [{}, "dev", 3], ids=["mapping", "string", "number"])
 def test_exit_16_when_environments_is_present_but_not_a_list(tmp_path, environments):
     assert_exit_16(run(tmp_path, "--title", "t", profile=make_profile(environments=environments)))
-
-
-def test_exit_16_when_an_environment_entry_is_not_a_mapping(tmp_path):
-    assert_exit_16(run(tmp_path, "--title", "t", profile=make_profile(environments=["dev"])))
 
 
 def test_exit_16_when_the_profile_is_not_a_mapping(tmp_path):
@@ -215,8 +305,8 @@ def test_exit_16_holds_even_with_a_valid_recorded_path(tmp_path):
 
 @pytest.mark.parametrize(
     "args",
-    [[], ["--label", "Spike"], ["--title", "t", "--bogus"], ["--title"]],
-    ids=["no-title", "label-only", "unknown-flag", "title-without-value"],
+    [[], ["--label", "Spike"], ["--title", "t", "--bogus"], ["--title"], ["--title", "t", "--rec", "deployed"]],
+    ids=["no-title", "label-only", "unknown-flag", "title-without-value", "abbreviated-flag"],
 )
 def test_a_malformed_command_line_exits_2(tmp_path, args):
     res = run(tmp_path, *args, profile=make_profile(environments=[]))

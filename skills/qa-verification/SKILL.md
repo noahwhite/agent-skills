@@ -36,8 +36,8 @@ When a finding needs a code fix, hand it to `engineering-workflow` (and its [ref
 
 A run follows exactly one path: `spike`, `no-deployment` or `deployed`.
 Select the path before any verification runs.
-From inside the target repository, run `python3 <skill dir>/scripts/select-path.py --title <story title>`, where `<skill dir>` is the absolute directory your runtime loaded this skill from.
-Add `--label <name>` for each label name the story carries as read from the tracker, under the differing-team rule in [references/linear.md](references/linear.md) "Team resolution"; the script compares names only.
+From inside the target repository, run `python3 <skill dir>/scripts/select-path.py --title=<story title>`, where `<skill dir>` is the absolute directory your runtime loaded this skill from.
+Add `--label=<name>` for each label name the story carries as read from the tracker, under the differing-team rule in [references/linear.md](references/linear.md) "Team resolution"; the script compares names only.
 When a brief holds a line whose whole text is exactly `path: spike`, `path: no-deployment` or `path: deployed`, add `--recorded-path` with that value, so the path is never reselected.
 Without that brief line, add `--recorded-path` with the value of the latest `engineering-workflow` step 12 note line whose whole text is exactly `path: spike`, `path: no-deployment` or `path: deployed`, when one exists, and add nothing otherwise.
 The script prints one line, the path or an `ask:` line, and exits 0; any other exit status is no path: stop and report its stderr line.

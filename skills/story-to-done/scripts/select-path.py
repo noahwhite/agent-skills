@@ -30,21 +30,25 @@ On success it exits 0 and prints exactly one line, the first of these that appli
   8. no-deployment, when profile.environments is []
   9. deployed
 
-The [Spike] prefix and the label name are matched exactly and case-sensitively. When no profile
-file exists, the profile cannot be read or is not valid YAML, it is not a mapping, or
-profile.environments is present but not a list of mappings, it prints a one-line reason to
-stderr, nothing to stdout, and exits 16. A malformed command line exits 2. It needs PyYAML>=6
-and makes no network call.
+The [Spike] prefix and the label name are matched exactly and case-sensitively; an environments
+entry that is not a mapping never matches. When no profile file exists, a location's existence
+cannot be checked, git fails other than by reporting no work tree, the profile is not a regular
+file, cannot be read or is not valid YAML, it is not a mapping, or profile.environments is
+present but not a list, it prints a one-line reason to stderr, nothing to stdout, and exits 16.
+A malformed command line exits 2; pass a value that starts with "-" as --title=<value> or
+--label=<value>. It needs PyYAML>=6 and makes no network call.
 """
 
 from __future__ import annotations
 
 import argparse
 import os
+import stat
 import subprocess
 import sys
 
 EXIT_UNRESOLVED = 16
+GIT_TIMEOUT = 30
 NAME = "select-path"
 PATHS = ("spike", "no-deployment", "deployed")
 SPIKE_PREFIX = "[Spike]"
@@ -55,37 +59,69 @@ class Unresolved(Exception):
 
 
 def work_tree() -> str | None:
-    """The top of the git work tree holding the working directory, or None outside one."""
+    """The top of the git work tree holding the working directory, or None when git reports no
+    work tree. Any other git failure stops the run rather than skipping the repository profile."""
+    try:
+        cwd = os.getcwd()
+    except OSError as exc:
+        raise Unresolved(f"cannot read the working directory to find the repository root: {exc}") from exc
     env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
     env.update(LC_ALL="C", LANG="C")
     try:
         res = subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"],
-            env=env, stdin=subprocess.DEVNULL, capture_output=True, check=False,
+            ["git", "-C", cwd, "rev-parse", "--show-toplevel"],
+            env=env, stdin=subprocess.DEVNULL, capture_output=True, check=False, timeout=GIT_TIMEOUT,
         )
-    except OSError:
+    except subprocess.TimeoutExpired as exc:
+        raise Unresolved(f"git did not find the repository root within {GIT_TIMEOUT}s") from exc
+    except OSError as exc:
+        raise Unresolved(f"cannot run git to find the repository root: {exc}") from exc
+    top = os.fsdecode(res.stdout[:-1] if res.stdout.endswith(b"\n") else res.stdout)
+    err = res.stderr.decode("utf-8", "replace")
+    if res.returncode == 0 and top:
+        return top
+    # The two benign misses: outside any repository, and inside a git directory with no work tree.
+    if "not a git repository" in err or "must be run in a work tree" in err:
         return None
-    top = os.fsdecode(res.stdout.rstrip(b"\n"))
-    return top if res.returncode == 0 and top else None
+    raise Unresolved(f"git could not find the repository root: {err.strip()}")
+
+
+def present(path: str) -> bool:
+    """Whether a location exists; one that cannot be checked stops the run rather than reading as absent."""
+    try:
+        os.lstat(path)
+    except (FileNotFoundError, NotADirectoryError):
+        return False
+    except OSError as exc:
+        raise Unresolved(f"cannot check whether {path} exists: {exc.strerror or exc}") from exc
+    return True
 
 
 def find_profile(explicit: str | None) -> str:
-    if explicit is not None:
-        candidates = [explicit]
-    else:
-        env_path = os.environ.get("AGENT_SKILLS_PROFILE") or None
+    # Each candidate is computed only when every earlier one is absent, so git runs only when
+    # neither --profile nor $AGENT_SKILLS_PROFILE names a profile.
+    def repo_candidate() -> str | None:
         root = work_tree()
+        return os.path.join(root, ".agent-skills", "profile.yaml") if root else None
+
+    if explicit is not None:
+        candidates = [lambda: explicit]
+    else:
         candidates = [
-            env_path,
-            os.path.join(root, ".agent-skills", "profile.yaml") if root else None,
-            os.path.expanduser("~/.config/agent-skills/profile.yaml"),
+            lambda: os.environ.get("AGENT_SKILLS_PROFILE") or None,
+            repo_candidate,
+            lambda: os.path.expanduser("~/.config/agent-skills/profile.yaml"),
         ]
     searched = []
-    for path in candidates:
+    for candidate in candidates:
+        path = candidate()
         if path is None:
             continue
-        path = os.path.abspath(path)
-        if os.path.lexists(path):
+        try:
+            path = os.path.abspath(path)
+        except OSError as exc:
+            raise Unresolved(f"cannot read the working directory to resolve {path}: {exc}") from exc
+        if present(path):
             return path
         searched.append(path)
     raise Unresolved(f"no profile found; searched: {', '.join(searched) or 'nothing'}")
@@ -99,10 +135,28 @@ def load(path: str):
     major = str(getattr(yaml, "__version__", "0")).split(".")[0]
     if not major.isdigit() or int(major) < 6:
         raise Unresolved(f"PyYAML {getattr(yaml, '__version__', 'unknown')} is too old; PyYAML>=6 is required")
+    # A FIFO or device would block or never end; only a regular file is read. The type is checked
+    # on the file opened without blocking, so a path swapped to a FIFO after discovery is refused too.
     try:
-        with open(path, encoding="utf-8") as handle:
-            text = handle.read()
-    except (OSError, UnicodeDecodeError) as exc:
+        fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
+    except OSError as exc:
+        raise Unresolved(f"the profile {path} is unreadable: {exc}") from exc
+    try:
+        mode = os.fstat(fd).st_mode
+        if stat.S_ISDIR(mode):
+            raise Unresolved(f"the profile {path} is unreadable: it is a directory")
+        if not stat.S_ISREG(mode):
+            raise Unresolved(f"the profile {path} is not a regular file")
+        chunks = []
+        while chunk := os.read(fd, 65536):
+            chunks.append(chunk)
+    except OSError as exc:
+        raise Unresolved(f"the profile {path} is unreadable: {exc}") from exc
+    finally:
+        os.close(fd)
+    try:
+        text = b"".join(chunks).decode("utf-8")
+    except UnicodeDecodeError as exc:
         raise Unresolved(f"the profile {path} is unreadable: {exc}") from exc
     try:
         doc = yaml.safe_load(text)
@@ -127,18 +181,15 @@ def get(doc: dict, *keys: str):
 
 def select(doc: dict, path: str, title: str, labels: list[str], recorded: str | None) -> str:
     environments = doc.get("environments")
-    if environments is not None:
-        if not isinstance(environments, list):
-            raise Unresolved(f"profile.environments in {path} is present but not a list")
-        if not all(isinstance(entry, dict) for entry in environments):
-            raise Unresolved(f"profile.environments in {path} holds an entry that is not a mapping")
+    if environments is not None and not isinstance(environments, list):
+        raise Unresolved(f"profile.environments in {path} is present but not a list")
     if recorded is not None:
         return recorded if recorded in PATHS else "ask: invalid-recorded-path"
     if environments is None:
         return "ask: environments-absent"
     integration = get(doc, "git", "integration_branch")
     if environments and not (
-        isinstance(integration, str) and integration and any(e.get("branch") == integration for e in environments)
+        isinstance(integration, str) and integration and any(isinstance(e, dict) and e.get("branch") == integration for e in environments)
     ):
         return "ask: no-integration-branch"
     spike_label = get(doc, "tracker", "labels", "spike")
@@ -156,7 +207,7 @@ def select(doc: dict, path: str, title: str, labels: list[str], recorded: str | 
 
 
 def main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog=NAME, description="Select a run's path: spike, no-deployment or deployed.")
+    parser = argparse.ArgumentParser(prog=NAME, description="Select a run's path: spike, no-deployment or deployed.", allow_abbrev=False)
     parser.add_argument("--profile", help="the profile file (default: the first of $AGENT_SKILLS_PROFILE, the repository profile, the home profile)")
     parser.add_argument("--title", required=True, help="the story title")
     parser.add_argument("--label", action="append", default=[], help="one of the story's label names; repeat for each")
