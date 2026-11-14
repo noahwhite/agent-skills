@@ -3869,7 +3869,8 @@ def scope_violations(definition: ast.FunctionDef, namespace: dict, text_position
     An expression carries scoped text when every value it can take does: a scoped call or scoped local, an index or
     slice of one, both branches of a conditional, every operand of an operator or boolean, every item of a tuple, list
     or set, the element of a comprehension, and a method of one. Another call is taken to transform its argument, so
-    it carries scoped text when one of its positional arguments does.
+    it carries scoped text when one of its positional arguments does; what a call really returns is checked at run
+    time by `test_every_scoping_helper_returns_only_section_text`.
     """
     nodes = list(own_nodes(definition))
     violations = [
@@ -4068,6 +4069,93 @@ def test_scope_guard_rejects_unscoped_text(body: str) -> None:
     assert scope_violations(definition, globals(), {"section": {"text"}}), body
     clean = ast.parse("def step(text: str, heading: str) -> str:\n    return section(text, heading, level=3)\n").body[0]
     assert not scope_violations(clean, globals(), {"section": {"text"}})
+
+
+SEGMENT_KINDS = ("prose", "fence")
+
+
+def result_strings(value) -> list[str]:
+    """Every string in a helper's result, through tuples and lists; a `segments()` part's kind label is not text."""
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, tuple) and len(value) == 3 and value[0] in SEGMENT_KINDS:
+        value = value[1:]
+    if isinstance(value, (tuple, list)):
+        return [text for item in value for text in result_strings(item)]
+    raise AssertionError(f"unexpected {type(value).__name__} in a helper result")
+
+
+def unscoped_output(function, arguments: tuple) -> list[str]:
+    """Each string the helper returns that is not part of a text `section()` returned during the call, compared
+    through `flat()` as `bullet()` returns it; a helper that never calls `section()` returns nothing scoped."""
+    namespace = function.__globals__
+    real = namespace["section"]
+    returned: list[str] = []
+
+    def recording(*args, **kwargs):
+        result = real(*args, **kwargs)
+        returned.append(flat(result))
+        return result
+
+    namespace["section"] = recording
+    try:
+        result = function(*arguments)
+    finally:
+        namespace["section"] = real
+    if not returned:
+        return ["<no section() call>"]
+    return [text for text in result_strings(result) if not any(flat(text) in body for body in returned)]
+
+
+def helper_call_sites() -> dict[str, list[tuple]]:
+    """The argument tuples of every call to a scoping helper in this file whose arguments evaluate at module level."""
+    names = {helper.__name__ for helper in SCOPING_HELPERS}
+    sites: dict[str, list[tuple]] = {name: [] for name in names}
+    for node in ast.walk(ast.parse(Path(__file__).read_text())):
+        if called_name(node) in names and not node.keywords:
+            try:
+                arguments = tuple(eval(compile(ast.Expression(argument), "<site>", "eval"), globals()) for argument in node.args)
+            except NameError:
+                continue
+            if arguments not in sites[node.func.id]:
+                sites[node.func.id].append(arguments)
+    return sites
+
+
+def test_every_scoping_helper_returns_only_section_text() -> None:
+    """B8b: at every call site in this file, each string a helper behind a listed assertion returns is part of the
+    text `section()` returned during that call, so no call, branch or literal can hand an assertion unscoped text."""
+    sites = helper_call_sites()
+    inner = {called_name(node) for helper in SCOPING_HELPERS for node in own_nodes(parsed(helper))}
+    unchecked = sorted(name for name, found in sites.items() if not found and name not in inner)
+    assert not unchecked, f"helpers with no call site to check, nor called by a checked helper: {unchecked}"
+    found = {
+        f"{helper.__name__}{arguments!r}"[:120]: unscoped
+        for helper in SCOPING_HELPERS
+        for arguments in sites[helper.__name__]
+        if (unscoped := unscoped_output(helper, arguments))
+    }
+    assert not found, found
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "    return section(text, heading, level=3).join(['whole document'])\n",
+        "    return ''.join(dict.fromkeys(['whole document'], section(text, heading, level=3)))\n",
+        "    body = section(text, heading, level=3)\n    return body.replace(body, text)\n",
+        "    section(text, heading, level=3)\n    return text\n",
+        "    return 'whole document'\n",
+    ],
+)
+def test_section_text_check_rejects_unscoped_output(body: str) -> None:
+    """B8b: the run-time check fails a helper whose result is not text `section()` returned, whatever call made it."""
+    namespace = dict(globals())
+    exec(compile(f"def probe(text, heading):\n{body}", "<probe>", "exec"), namespace)
+    arguments = (SKILL.read_text(), "Step 1: Independent refinement")
+    assert unscoped_output(namespace["probe"], arguments), body
+    exec(compile("def probe(text, heading):\n    return section(text, heading, level=3)\n", "<probe>", "exec"), namespace)
+    assert not unscoped_output(namespace["probe"], arguments)
 
 
 def test_no_assertion_slices_a_file_on_a_heading_or_fence() -> None:
