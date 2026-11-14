@@ -5,7 +5,7 @@
 Date: 2026-11-14 UTC, independent QA round 1.
 Target: `main` at `581de0468ad8c48aae1cdd675744130433d7d09f`, the squash merge of PR 252, whose reviewed head is `48f1309d54443f16f357c78a2d5807c974883185`.
 `git merge-base --is-ancestor` confirmed the merged commit on `origin/main`.
-Environment: none; the profile sets `environments: []`, so no build SHA applies and the lanes are the repository, GitHub and the tracker.
+Path: `no-deployment`; the profile sets `environments: []`, so the target is the merged commit above, no environment or build SHA applies, and the lanes are the repository, GitHub and the tracker.
 Fixtures: none.
 Dependency SKL-304 is Done, and its merge `a559d43` is an ancestor of the target.
 The raw output is attached to SKL-305 as `SKL-305-qa-round-1-tabletop-probe.txt` and `SKL-305-qa-round-1-dod.txt`; there is no visual surface, so no screenshot applies.
@@ -19,7 +19,7 @@ The raw output is attached to SKL-305 as `SKL-305-qa-round-1-tabletop-probe.txt`
 | DoD: tests written and passing | Verified | `tests/test_story_refinement.py` and `tests/test_shared_linear.py`; full suite 2364 passed at the target. |
 | DoD: independently reviewed | Verified | Details below. |
 | DoD: docs updated | Verified | `SKILL.md` Step 4 and Split rule, `shared/linear.md` and its vendored copies, and `references/refinement-record.md`. |
-| DoD: verified in a deployed environment (if needed) | Correct by design | Not needed: the profile has no deployable environment. |
+| DoD: verified in a deployed environment (if needed) | Correct by design | Not needed: the run is on the `no-deployment` path. |
 | DoD: no critical bugs or regressions | Verified | CI runs 43614960397 (reviewed head) and 43615527546 (`main`) passed `checks` and `discovery`. |
 
 Details:
@@ -35,6 +35,8 @@ Details:
   - Its reviewer is Codex GPT-6 Sol (`gpt-6-sol`) and its adjudicator is DeepSeek V4.1 Flash (`deepseek/deepseek-flash`), the seats in `profile.review` at that head.
   - It records round 1 and a delta round with a verdict for every finding and a fix commit for the one valid finding, and no valid blocking finding is open at the head.
 - Incidental, low:
-  - In `references/refinement-record.md` the rows "Two failures in one round" and "Per-parent bound: a child equal to its parent" abbreviate the band in their result cell instead of naming both sums and both bands as the normative rule and the "Hard stop" row do.
+  - In the Split bounds table of `references/refinement-record.md`, the result cells of five band stop or warning rows omit elements the normative rule in `shared/linear.md` requires every band stop or warning to name (each sum both ways, the band of each sum, both bounds and the round): "Two failures in one round", "Warning band", "Per-parent bound: a child equal to its parent", "Per-parent bound: siblings above 1.5 times their round-2 parent" and "Saturated base".
+  - Only the "Hard stop" and "Lower consensus governs" rows name every element.
+  - The normative rule is correct; only these worked examples are abbreviated.
 
 Closing decision: Done, once this evidence merges.
