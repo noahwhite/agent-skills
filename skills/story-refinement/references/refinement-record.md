@@ -126,21 +126,24 @@ Under the denied tracker writes fallback in `SKILL.md`, replace the tracker-writ
 
 ## Split bounds
 
-After each split round of a story split the facilitator runs the split bounds in Estimation and slicing in `references/linear.md` and reports the result in the split comment.
-A stop reports `needs input` to the owner in one message, and no further split round, slice record or tracker write for the slices happens until the owner answers.
+After each split round of a story split the facilitator runs the split bounds in Estimation and slicing in `references/linear.md` and fills in the block below.
+A round with no stop posts the block in the split comment.
+A stop posts nothing to the tracker: it reports `needs input` to the owner in one message carrying the block, and no further split round, slice record or tracker write for the slices happens until the owner answers.
 
 ```markdown
 - Split bounds, round <1 | 2>: <clear | warning | stop>
-  - Base: <original whole-story recorded estimate, or the parent key and its recorded value>; 1.0 times = <value>, 1.5 times = <value>
-  - Sum: <sum with each slice's lower consensus value> (lower), <sum with each slice's higher consensus value> (higher)
+  - Whole-story sum: base <original whole-story recorded estimate>; 1.0 times = <value>, 1.5 times = <value>; sum <sum with each leaf slice's lower consensus value> (lower), <sum with each leaf slice's higher consensus value> (higher); band <clear | warning | stop>
   - Saturated base: <n/a, or: the base <value> is the highest value of the step sequence for <scale>, so the base is saturated and the 1.0 and 1.5 bounds computed from it are lower bounds on the true size>
-  - Per-parent bound: <pass, or each failure: parent <key> <value>, slice <key> <value>, band <band>>
+  - Per-parent sum, one line per parent split this round: parent <key> <recorded value>; 1.0 times = <value>, 1.5 times = <value>; sum of its slices <value> (lower), <value> (higher); band <clear | warning | stop>
+  - Per-parent bound: <pass, or each slice at or above its parent: parent <key> <value>, slice <key> <value>, band <band of that parent's sum>>
   - Round cap: <n/a before split round 2; pass; or each slice still meeting the split trigger after split round 2, with its value>
-  - Warning for the human at triage: <none, or the warning band, the sums and the bounds above>
+  - Warning for the human at triage: <none, or each warning band with its sums and bounds above>
 ```
 
+The round's result is the most severe of its lines: any stop makes the round a stop, else any warning makes it a warning, else it is clear.
+
 Worked examples on `fibonacci` (1, 2, 3, 5, 8, 13) with `profile.refinement.point_cap` 5 unless stated.
-In round 1 the parent is the original story, so its per-parent band and the whole-story sum band are the same result.
+In round 1 the only parent is the original story, so its per-parent sum and the whole-story sum share one base and one band; a slice at or above that parent still stops on its own.
 
 | Case | Original | Slices | Sum against 1.0 and 1.5 times | Result |
 |---|---|---|---|---|
@@ -148,7 +151,7 @@ In round 1 the parent is the original story, so its per-parent band and the whol
 | Warning band: the highest sum at or below 1.5 times an original of 8 | 8 | 5, 5, 2 | 12 against 8 and 12 | proceeds; the split comment carries the warning |
 | Clear band: the highest sum at or below 1.0 times an original of 8 | 8 | 5, 3 | 8 against 8 and 12 | proceeds with no flag |
 | Per-parent bound: a child equal to its parent | 8 | 8, 3 | 11 against 8 and 12 | stop: parent 8, slice 8, both values, band warning |
-| Per-parent bound: siblings above 1.5 times their round-2 parent | 13; round 1 8, 5 | the 8 split into 5, 5, 3 | 13 against the parent's 8 and 12 | stop: parent 8, siblings 5, 5, 3, band stop |
+| Per-parent bound: siblings above 1.5 times their round-2 parent | 13; round 1 8, 5 | the 8 split into 5, 5, 3 | parent 8: 13 against 8 and 12 (stop); whole story: leaves 5, 5, 3, 5 sum 18 against 13 and 19.5 (warning) | stop: parent 8, siblings 5, 5, 3, band stop; the whole-story line records its warning |
 | Per-parent bound: every child below its parent | 8 | 5, 3 | 8 against 8 and 12 | proceeds with no flag |
 | Round cap, `point_cap` 3: a slice still meets the trigger after split round 2 | 13; round 1 8, 5 | round 2: 8 into 5, 3; 5 into 3, 2 | leaf sum 13 against 13 and 19.5 | stop before a third split: `needs input` naming the slice at 5 |
 | Round cap, `point_cap` 3: a split that completes within two rounds | 8; round 1 5, 3 | round 2: 5 into 3, 2 | leaf sum 8 against 8 and 12 | proceeds unchanged |

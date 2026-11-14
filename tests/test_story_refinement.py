@@ -554,15 +554,16 @@ RESPLIT_BULLET = (
 )
 ROUND_CAP = (
     "- A split runs at most two split rounds: split round 1 splits the whole story and split round 2 splits the "
-    "round-1 slices; a slice that still meets the split trigger after split round 2 stops the ceremony with "
+    "round-1 slices that still meet it; a slice that still meets the split trigger after split round 2 stops the ceremony with "
     "`needs input` naming the slices and their values, before a third split is made."
 )
 SPLIT_BOUNDS = (
     "- After each split round the facilitator applies the split bounds in Estimation and slicing in "
     "[references/linear.md](references/linear.md): each slice's recorded value is strictly below the recorded value "
-    "of the story it is split from, and the sum of the current leaf slices' recorded values is compared to the "
-    "original whole-story recorded estimate, stopping with `needs input` above 1.5 times it, warning in the split "
-    "comment above 1.0 times it, and proceeding with no flag at or below it. "
+    "of the story it is split from, the slices of each parent are compared to that parent as a sum, and the sum of "
+    "the current leaf slices' recorded values is compared to the original whole-story recorded estimate, each "
+    "comparison stopping with `needs input`, warning in the split comment or proceeding with no flag by the bands "
+    "stated there. "
     "A stop holds every further split round, record and tracker write for the slices until the owner answers."
 )
 SUPERSESSION = "- The two-round cap and the split bounds supersede the never-escalate rule of SKL-230."
@@ -628,6 +629,74 @@ def test_split_rule_drops_the_superseded_never_escalate_sentences() -> None:
         assert sentence not in body, f"the Split rule still carries the superseded sentence: {sentence}"
     stray = re.findall(r"escalat\w*", body.replace("never-escalate rule of SKL-230", ""), re.IGNORECASE)
     assert not stray, f"an escalation mention other than the SKL-230 supersession remains: {stray}"
+
+
+SPLIT_BOUNDS_ROUTE = (
+    "A round with no stop posts the block in the split comment.",
+    "A stop posts nothing to the tracker: it reports `needs input` to the owner in one message carrying the block, "
+    "and no further split round, slice record or tracker write for the slices happens until the owner answers.",
+)
+SPLIT_BOUNDS_FIELDS = (
+    "- Whole-story sum: base <original whole-story recorded estimate>;",
+    "- Saturated base:",
+    "- Per-parent sum, one line per parent split this round: parent <key> <recorded value>;",
+    "- Per-parent bound:",
+    "- Round cap:",
+    "- Warning for the human at triage:",
+)
+SPLIT_BOUNDS_EXAMPLE_RESULTS = (
+    ("13 against 8 and 12", "stop"),
+    ("12 against 8 and 12", "proceeds; the split comment carries the warning"),
+    ("8 against 8 and 12", "proceeds with no flag"),
+    ("11 against 8 and 12", "stop: parent 8, slice 8"),
+    (
+        "parent 8: 13 against 8 and 12 (stop); whole story: leaves 5, 5, 3, 5 sum 18 against 13 and 19.5 (warning)",
+        "stop",
+    ),
+    ("leaf sum 13 against 13 and 19.5", "stop before a third split"),
+    ("leaf sum 8 against 8 and 12", "proceeds unchanged"),
+    ("21 against 13 and 19.5", "stop: the message names the base 13 saturated"),
+)
+
+
+def split_bounds_record() -> str:
+    return section(RECORD.read_text(), "Split bounds")
+
+
+def test_split_bounds_record_routes_a_stop_to_the_owner_not_the_tracker() -> None:
+    body = spaced(split_bounds_record())
+    for sentence in SPLIT_BOUNDS_ROUTE:
+        assert sentence in body, sentence
+
+
+def test_split_bounds_record_carries_both_round_two_verdicts() -> None:
+    body = template_block("Split bounds")[0]
+    for field in SPLIT_BOUNDS_FIELDS:
+        assert field in body, field
+
+
+def test_split_bounds_worked_examples_compute_their_bands() -> None:
+    """Every "S against L and U" pair has U = 1.5 L, and its row's result follows the bands."""
+    rows = [
+        line
+        for line in split_bounds_record().splitlines()
+        if line.startswith("| ") and " against " in line and not line.startswith("| Case ")
+    ]
+    assert len(rows) == 9, rows
+    pairs = re.findall(r"(\d+(?:\.\d+)?) against (\d+(?:\.\d+)?) and (\d+(?:\.\d+)?)", "\n".join(rows))
+    assert pairs
+    for total, lower, upper in pairs:
+        assert float(upper) == 1.5 * float(lower), (total, lower, upper)
+    for pair_text, result in SPLIT_BOUNDS_EXAMPLE_RESULTS:
+        matching = [row for row in rows if f"| {pair_text} |" in row]
+        assert matching, pair_text
+        for row in matching:
+            assert f"| {pair_text} | {result}" in row, (pair_text, result)
+        total, lower, upper = map(float, re.search(r"(\d+) against (\d+) and (\d+(?:\.\d+)?)", pair_text).groups())
+        band = "stop" if total > upper else "warning" if total > lower else "clear"
+        if "parent" not in pair_text and "slice 8" not in result and "third split" not in result:
+            assert (band == "stop") == result.startswith("stop"), (pair_text, band, result)
+            assert (band == "warning") == ("warning" in result), (pair_text, band, result)
 
 
 def test_split_rule_section_is_exactly_the_rule() -> None:
