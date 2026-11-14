@@ -2047,7 +2047,8 @@ def test_pointing_template_records_each_challenge_and_outcome() -> None:
     )
     body = spaced(prose(section(RECORD.read_text(), "Pointing record")))
     assert (
-        "Outside the recorded numeric values and the superseded-values line, no line of the posted record carries "
+        "Outside the recorded numeric values, the Ledger line's prices and the superseded-values line, no line of the "
+        "posted record carries "
         "a point value named before the reveal or a prescription of this story's value: the Challenges and Anchoring events "
         "lines record a ground by its kind, its author (a voter, or "
         "the SM/EM for a sizing comment) and its outcome or recovery, and every field that could quote a "
@@ -4528,8 +4529,10 @@ def test_readme_row_names_the_split_and_the_refile() -> None:
 LEDGER_RATIONALE = (
     "Under the priced shared-unknown ledger in Estimation and slicing in [references/linear.md](references/linear.md), "
     "a whole-story rationale lists the unknowns behind its value with a point price each plus the remainder, summing "
-    "exactly to the value, and a slice rationale states the ledger prices of the unknowns its slice owns plus its own "
-    "non-unknown complexity."
+    "exactly to the value (in a re-vote, the highest value of the voter's accepted set), and a slice rationale states "
+    "the ledger prices of the unknowns its slice owns plus its own non-unknown complexity. "
+    "These prices and that sum, kept in the voter's own file until the reveal, are the one exception to naming no "
+    "point value before the reveal."
 )
 LEDGER_REVIEW = (
     "The review also challenges the ledger grounds that Estimation and slicing in "
@@ -4539,13 +4542,15 @@ LEDGER_REVIEW = (
     "record's Challenges line."
 )
 LEDGER_RECORDED = (
-    "After this review the facilitator records the priced shared-unknown ledger in the pointing record from the "
-    "whole-story rationales that stand."
+    "In a whole-story round, once the estimate or the unpointed variance stop is recorded, the facilitator records the "
+    "priced shared-unknown ledger in the pointing record from the whole-story rationales that stand then, each "
+    "replacement recorded in a voter's Step 3 file included."
 )
 LEDGER_LINE = (
     "- Ledger: <for a whole-story round, each unknown with its unrounded price and, once the split is drafted, its "
     "owner slice or blocker story (no owner for an unsplit story), each merge of differently named unknowns, the "
-    "ledger total beside the whole-story value and not reconciled to slice values, and the saturation note when the "
+    "ledger total beside the whole-story value (or beside the unpointed outcome, with no saturation note) and not "
+    "reconciled to slice values, and the saturation note when the "
     "whole-story value is the highest value of the step sequence; n/a for a slice round, whose slice brief carries the "
     "ledger>"
 )
@@ -4553,7 +4558,8 @@ SLICE_BRIEF_TEMPLATE = [
     "## Slice brief",
     "",
     "- Slice: <slice key> - <its slice>, split from <parent key> in split round <1 | 2>",
-    "- Ledger, from the whole-story pointing record:",
+    "- Ledger, from the whole-story pointing record, with owners as the split comment of split round 2 reassigns them "
+    "for a sub-slice:",
     "  - <unknown> - <ledger price> - owner <slice key, or blocker story key, priced in no slice>",
     "- Ledger total: <value>, beside the whole-story value <value>, not reconciled to slice values",
     "- Saturation note: <n/a, or: the whole-story value <value> is the highest value of the step sequence for "
@@ -4576,11 +4582,13 @@ def test_step_three_rationale_carries_the_ledger_rule() -> None:
     assert LEDGER_RATIONALE in process_item(STEP_THREE, "Each voter submits one point value")
 
 
-def test_step_four_basis_review_challenges_ledger_grounds_and_then_records_the_ledger() -> None:
-    item = process_items(STEP_FOUR)[1]
-    assert item.startswith("Review every rationale recorded in Step 3 against the pointing basis")
-    assert LEDGER_REVIEW in item
-    assert item.endswith(LEDGER_RECORDED), "the ledger is recorded after the basis review"
+def test_step_four_basis_review_challenges_ledger_grounds_and_the_ledger_is_recorded_last() -> None:
+    items = process_items(STEP_FOUR)
+    assert items[1].startswith("Review every rationale recorded in Step 3 against the pointing basis")
+    assert LEDGER_REVIEW in items[1]
+    assert items[7].startswith("The facilitator records the estimate or the consensus; it does not declare it.")
+    assert LEDGER_RECORDED in items[7], "the ledger is recorded once the estimate or the stop is recorded"
+    assert all(LEDGER_RECORDED not in item for index, item in enumerate(items) if index != 7)
 
 
 def test_records_name_the_ledger_and_the_slice_brief() -> None:

@@ -217,10 +217,13 @@ LEDGER_BULLET = " ".join(
         "- ⛔ Price a shared unknown once, in the priced shared-unknown ledger that every whole-story pointing round "
         "records (story-refinement Steps 3 and 4).",
         "Each voter lists, with its value, the unknowns behind that value with a point price each and the remainder, "
-        "its non-unknown complexity; the prices plus the remainder sum exactly to the voter's value, and a rationale "
-        "whose prices plus remainder differ from its value is off-basis.",
-        "After the consensus check the facilitator records one ledger in the pointing record from the rationales that "
-        "stand: it merges unknowns that voters named differently and records each merge, and prices each unknown at "
+        "its non-unknown complexity; the prices plus the remainder sum exactly to the voter's value (in a re-vote, the "
+        "highest value of its accepted set), and a rationale whose prices plus remainder differ from its value is "
+        "off-basis.",
+        "After the consensus check, once story-refinement Step 4 has recorded the estimate or the unpointed variance "
+        "stop, the facilitator records one ledger in the pointing record from the rationales that stand: it merges "
+        "unknowns that voters named differently and records each merge, takes one price per voter for each merged "
+        "unknown (the voter's lowest, when it listed that unknown more than once), and prices each unknown at "
         "the median of the prices of the voters who listed it, the lower of the two prices when two listed it, or the "
         "sole price when one did.",
         "Ledger prices are not rounded; the ledger total is recorded beside the whole-story value and is not "
@@ -229,7 +232,8 @@ LEDGER_BULLET = " ".join(
         "states) carries the saturation note, that its prices are lower bounds on the true size, and is not adjusted.",
         "Each unknown has exactly one owner slice, the slice whose work resolves it, else the core slice, assigned "
         "when the split is drafted; an unsplit story records the ledger without owners, and a slice that is split "
-        "again reassigns its owned unknowns to its sub-slices by the same rule.",
+        "again reassigns its owned unknowns to its sub-slices by the same rule, recorded in the split comment of split "
+        "round 2, from which each sub-slice brief takes its owners.",
         "An unknown that a blocker story's work resolves is owned by that blocker story and is priced in no slice.",
         "Every slice brief, the pointing prompt of a slice estimate, carries the ledger with its prices and owners, "
         "and when the whole-story value is saturated it states that the ledger prices are lower bounds.",
