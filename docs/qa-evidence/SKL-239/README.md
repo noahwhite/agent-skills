@@ -92,3 +92,50 @@ B8b details:
 - A probe on a scratch copy of the target wrapped the whole Refinement comment template in an HTML comment, and both B7b record-line tests still passed (2 passed).
 
 Closing decision: SKL-239 returns to In Progress for the B8b fix.
+
+## QA round 3
+
+Date: 2026-11-14 UTC, independent QA round 3, after the B8b rework in PR 245.
+Path: `no-deployment`, since the profile sets `environments: []`.
+Target: `origin/main` at `a799b06919aac12ba32c7724432ace57fb1809a9`, the squash merge of PR 245 (reviewed head `59ee2e2bf140daca37d9839e91dc751c7334cd37`), with PR 234's merge `784b609abb4efd41cba14c8e03936ad9c1f58583` as an ancestor.
+`tests/test_story_refinement.py` is byte-identical between PR 245's reviewed head and the merge.
+Fixtures: SKL-298 (Bug), SKL-299 (Spike) and SKL-301 (split sibling), read back from the tracker.
+The raw output is attached to SKL-239 as `SKL-239-qa-round-3-assertions.txt`; there is no visual surface, so no screenshot applies.
+
+| Item | Verdict | Evidence |
+|---|---|---|
+| B5: oversize split | Verified | The Scope signal and Oversize split bullets, Step 2 item 8, and the `shared/linear.md` line in Estimation and slicing, in the shared file and all 18 vendored copies. |
+| B6: Spikes | Verified | The Refinement only, Scope signal, Spike re-file, Ready gate and Content per type bullets, and the Step 1 type check naming Bug, Investigation and Spike. |
+| B7b: scope signal line | Verified | `- Scope signal: <reading>` in the Refinement comment template, limited to the three types; the Closing outcome and Closing message name the split and the slice count. |
+| B8b: tests and proof | Verified | Every listed assertion reads through `section()`, `bullet()` on the labelled bullets; 17 mutants killed and 2 controls pass; PR 234 hyperlinks the run; details below. |
+| B9: regeneration and gate | Verified | `refinement-record.md` is hand-written, `vendor_shared.py --check` exits 0, `pytest` passes on the target (2301 passed), and CI passed on both reviewed heads and on the merge. |
+| DoD: all acceptance criteria met | Verified | B5, B6, B7b, B8b and B9. |
+| DoD: tests written and passing | Verified | B8b and B9. |
+| DoD: independently reviewed | Verified | The latest review of record on PR 234 names `fdcb179f74a452d19056fc075313fc3f5100e396` and on PR 245 names `59ee2e2bf140daca37d9839e91dc751c7334cd37`, each in its first line and as its `commit_id`. |
+| DoD: docs updated | Verified | The skill text and the README row for `story-refinement`. |
+| DoD: verified in a deployed environment | Correct by design | Not needed on the `no-deployment` path. |
+| DoD: no critical bugs or regressions | Verified | CI run 43506149781 (PR 234 head), 43539510168 (PR 245 head) and 43540097843 (`main` at the merge) passed `checks` and `discovery`. |
+
+B8b details:
+
+- `section()` removes HTML comments, fails on an unclosed one, skips fenced heading-like lines and drops fenced blocks unless a template reader keeps them.
+- Every helper the B8b tests use reads through `section()`: `unestimated_bullet()`, `process_items()`, `process_item()`, `operative_step()`, `step()`, `type_item()`, `skill_section()`, `template()`, `template_block()` and `fallback_alternative()`.
+- The `shared/linear.md` line is asserted in `section(..., "Estimation and slicing")` of the shared file and of each vendored copy.
+- The labelled-bullet targets (Scope signal, Oversize split, Spike re-file, Ready gate, Content per type, Closing outcome, Reviewer output contract) are read with `bullet()`.
+- A mutation probe on a scratch copy of the target ran the named tests per mutant:
+  - Killed: the Refinement comment template wrapped in an HTML comment (both B7b record-line tests fail).
+  - Killed: the Split comment template wrapped in an HTML comment, and its no-estimate line removed.
+  - Killed: the trigger line commented out in the `linear-bug` vendored copy, and moved out of Estimation and slicing in `shared/linear.md`.
+  - Killed: the Step 2 item 8 Spike re-file sentence commented out, and the whole item commented out.
+  - Killed: the Spike scope signal sentence commented out, and the Scope signal bullet moved into a code fence.
+  - Killed: the Oversize split bullet commented out, and its sibling-label clause commented out.
+  - Killed: the Spike re-file bullet moved into a code fence.
+  - Killed: the voter brief, reviewer output contract and reconciliation scope signal sentences commented out.
+  - Killed: the Closing message split sentence fenced, and the Closing outcome split sentence commented out.
+  - Controls pass: a plain example fence before the Refinement comment template, and a harmless HTML comment in the Unestimated issue types section.
+- The rendered PR 234 body hyperlinks SKL-298, its refinement comment `d7d1467a`, its split comment `449d8c02`, SKL-301, SKL-299 and its Triage record `2ce31050`.
+- SKL-298's refinement comment reads "Scope signal: more than one independently reviewable change (...)", and SKL-301 carries the labels Bug and RTB and is blocked by SKL-298.
+- SKL-299's Triage record reads "- State: backlog: re-file as separate Spikes (owner)".
+- SKL-298, SKL-299 and SKL-301 are Canceled with estimate null.
+
+Closing decision: SKL-239 moves to Done once this evidence merges.
