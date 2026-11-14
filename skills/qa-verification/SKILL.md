@@ -6,7 +6,7 @@ description: >-
   Also verifies a spike, or a story whose profile has no deployed environment, against its merged commit or its deliverables.
   Not for building, fixing, or reviewing code (use engineering-workflow), deploying or operating infrastructure (use persona-platform-sre), or backlog and scope decisions (use persona-product-owner).
 license: Apache-2.0
-compatibility: Requires git, gh, and the linear CLI (schpet/linear-cli); browser automation (for example Playwright) for UI lanes.
+compatibility: Requires git, gh, the linear CLI (schpet/linear-cli), and python3 with PyYAML>=6; browser automation (for example Playwright) for UI lanes.
 ---
 
 # QA verification
@@ -35,26 +35,14 @@ When a finding needs a code fix, hand it to `engineering-workflow` (and its [ref
 ## The run's path
 
 A run follows exactly one path: `spike`, `no-deployment` or `deployed`.
-When a brief states the path, that path governs: no ask case applies and you never reselect it.
-When no brief states a path, select exactly one path before any verification runs.
-
-Ask the user for the path, and test nothing until answered, in exactly these cases:
-
-- `profile.environments` is absent (an absent key is never read as `[]`);
-- `profile.environments` is non-empty and no entry's `branch` equals `profile.git.integration_branch`;
-- the story title starts with `[Spike]` and the story lacks the spike label (including when `profile.tracker.labels.spike` is unset);
-- the story carries the spike label and its title does not start with `[Spike]`.
-
-An ask case takes precedence over the selection conditions below.
-The answer is one of `spike`, `no-deployment` or `deployed`, and it is the path: it replaces the selection below.
-Never infer a path from prose, and ask nothing else about the path.
-
-Otherwise select:
-
-- `spike` when the story carries the label named by `profile.tracker.labels.spike`, looked up on the story's team under the differing-team rule in [references/linear.md](references/linear.md) "Team resolution";
-- otherwise `no-deployment` when `profile.environments` is present and is `[]`;
-- otherwise `deployed` when `profile.environments` has an entry whose `branch` equals `profile.git.integration_branch`.
-
+Select the path before any verification runs.
+From inside the target repository, run `python3 <skill dir>/scripts/select-path.py --title <story title>`, where `<skill dir>` is the absolute directory your runtime loaded this skill from.
+Add `--label <name>` for each label name the story carries as read from the tracker, under the differing-team rule in [references/linear.md](references/linear.md) "Team resolution"; the script compares names only.
+When a brief holds a line whose whole text is exactly `path: spike`, `path: no-deployment` or `path: deployed`, add `--recorded-path` with that value, so the path is never reselected.
+Without that brief line, add `--recorded-path` with the value of the latest `engineering-workflow` step 12 note line whose whole text is exactly `path: spike`, `path: no-deployment` or `path: deployed`, when one exists, and add nothing otherwise.
+The script prints one line, the path or an `ask:` line, and exits 0; any other exit status is no path: stop and report its stderr line.
+On an `ask:` line, when the user invoked this skill directly, ask the user and accept only `spike`, `no-deployment` or `deployed` as the answer, which is the path; when this skill runs as a story-to-done role, stop and quote the `ask:` line in the handback.
+Never infer a path from prose, and read one only from an exact `path:` line as above.
 The selected path governs the whole run.
 
 ## The environment under test

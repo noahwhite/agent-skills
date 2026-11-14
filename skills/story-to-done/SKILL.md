@@ -6,7 +6,7 @@ description: >-
   Use when asked to implement a story and see it through QA to Done (for example "story to done ABC-123" or "implement ABC-123, QA it, and fix until done, QA on <model> at max").
   Not for implementing without QA (use engineering-workflow), verifying a story without fixing it (use qa-verification), or staff-level triage, planning, and shadow adjudication (use persona-staff-engineer).
 license: Apache-2.0
-compatibility: Requires a runtime that can spawn subagents and set each one's model and reasoning effort, plus the linear CLI (schpet/linear-cli) with jq, or the Linear MCP server.
+compatibility: Requires a runtime that can spawn subagents and set each one's model and reasoning effort, plus the linear CLI (schpet/linear-cli) with jq, or the Linear MCP server; and python3 with PyYAML>=6.
 ---
 
 # Story to Done: implement, QA, fix until Done
@@ -42,6 +42,7 @@ Six arguments are optional, given as `key=value` or in plain words ("QA on <mode
 - Ask the user about an invalid value and about any other phrasing about the cap; never guess.
 - Resolve `qa-round-cap` before step 0 creates the todo list; it sets no model or effort.
 - Write the four resolved model and effort values, the `metrics: on|off` line, and the `qa-round-cap: <n>` line at the top of your todo list and in the closing report of every end state (the step 5 report, or the report made at any stop, including one before step 0).
+- Write the `path: <value>` line step 1 selects in the same two places, as `path: unresolved` until step 1 selects it, including in the end-state report of a run that stops before then.
 
 ### Seat resolution
 
@@ -129,9 +130,22 @@ If your todo tool is unavailable, use the primary-session checklist fallback in 
 Read the story and its state with the `linear` CLI, or the Linear MCP server if it fails.
 When the team of `STORY_ID` differs from `profile.tracker.team_key`, confirm each state name below on that team before comparing against it, under the differing-team rule in Team resolution in [references/linear.md](references/linear.md).
 
-- `profile.tracker.states.in_deployment_review`: implementation already reached deployment review; go to step 3.
 - `profile.tracker.states.done`: report that there is nothing to do and stop.
 - `profile.tracker.states.blocked`, `profile.tracker.states.canceled`, or `profile.tracker.states.duplicate`: report the state and stop.
+
+Otherwise select the run's path before any role is spawned.
+From inside the target repository, run `python3 <skill dir>/scripts/select-path.py --title <story title>`, where `<skill dir>` is the absolute directory your runtime loaded this skill from.
+Add `--label <name>` for each label name the story carries as read from the tracker, under the differing-team rule in [references/linear.md](references/linear.md) "Team resolution"; the script compares names only.
+When the story is in `profile.tracker.states.in_deployment_review`, add `--recorded-path` with the value of the latest `engineering-workflow` step 12 note line whose whole text is exactly `path: spike`, `path: no-deployment` or `path: deployed`, when one exists, and add nothing otherwise.
+The script prints one line, the path or an `ask:` line, and exits 0; any other exit status is no path: stop and report its stderr line.
+On an `ask:` line, ask the user, accept only `spike`, `no-deployment` or `deployed` as the answer, which is the path, and spawn no role until answered.
+Never infer a path from prose, and read one only from an exact `path:` line as above.
+When a spawned role's handback reports an `ask:` line, stop, and quote that line with `path: unresolved` in the report of that end state.
+The selected path governs the whole run.
+
+Then pick the starting point:
+
+- `profile.tracker.states.in_deployment_review`: implementation already reached deployment review; go to step 3.
 - Any other state: go to step 2.
 
 Do not triage the story yourself; `engineering-workflow` does, including the Definition of Ready.

@@ -2,7 +2,8 @@
 
 SKL-162 selects exactly one path in engineering-workflow step 1; SKL-282 hands the no-deployment and
 spike paths off to deployment review in steps 11 and 12 without a deploy; SKL-269 has qa-verification
-apply the same path conditions and verify those two paths without a deployed environment.
+apply the same path conditions and verify those two paths without a deployed environment. SKL-270
+replaces both skills' prose selection with a call to `scripts/select-path.py`.
 """
 
 import hashlib
@@ -29,48 +30,47 @@ def step_one_lines() -> list[str]:
 
 # Each normative sentence of the step 1 path selection, pinned whole on its own line, so a
 # deleted or reworded sentence fails exactly one test id.
+#
+# SKL-270 replaced SKL-162's prose selection (the "brief-governs" and "select-before-later-steps"
+# sentences, the four ask-case bullets with their "ask-intro", "ask-precedence" and
+# "ask-answer-is-path" sentences, and the three selection bullets under "select-intro") with a call
+# to `scripts/select-path.py`, so the path is chosen by unit-tested code and the three skills that
+# select it cannot disagree. The ask cases, the selection conditions and their precedence moved into
+# the script; `tests/test_select_path.py` asserts each output and its precedence over the next, so the
+# removed `test_ask_cases_are_exactly_the_four_named_cases`,
+# `test_selection_conditions_are_ordered_spike_then_no_deployment_then_deployed` and
+# `test_ask_cases_come_before_the_selection_they_take_precedence_over` keep their coverage there.
+# The script call, the label and recorded-path arguments, the exit-status rule and the `ask:` handling
+# are pinned below in their place, and the subsection stays closed to unpinned lines.
 PINS = {
     "triage-item": '6. Select the run\'s path as "Select the path" below states, before any later step runs.',
     "move-after-path": "7. Move it to `profile.tracker.states.in_progress` and read it back to confirm.",
     "subsection": "### Select the path",
     "three-paths": "A run follows exactly one path: `spike`, `no-deployment` or `deployed`.",
-    "brief-governs": (
-        "When a brief states the path, that path governs: no ask case applies and you never reselect it."
+    "select-before-later-steps": "Select the path before any later step runs.",
+    "run-script": (
+        "From inside the target repository, run `python3 <skill dir>/scripts/select-path.py --title <story title>`, "
+        "where `<skill dir>` is the absolute directory your runtime loaded this skill from."
     ),
-    "select-before-later-steps": (
-        "When no brief states a path, select exactly one path before any later step runs."
+    "labels": (
+        "Add `--label <name>` for each label name the story carries as read from the tracker, under the "
+        'differing-team rule in [references/linear.md](references/linear.md) "Team resolution"; the script '
+        "compares names only."
     ),
-    "ask-intro": "Ask the user for the path, and run no later step until answered, in exactly these cases:",
-    "ask-environments-absent": "- `profile.environments` is absent (an absent key is never read as `[]`);",
-    "ask-no-integration-entry": (
-        "- `profile.environments` is non-empty and no entry's `branch` equals `profile.git.integration_branch`;"
+    "brief-recorded-path": (
+        "When a brief holds a line whose whole text is exactly `path: spike`, `path: no-deployment` or "
+        "`path: deployed`, add `--recorded-path` with that value, so the path is never reselected."
     ),
-    "ask-spike-title-no-label": (
-        "- the story title starts with `[Spike]` and the story lacks the spike label "
-        "(including when `profile.tracker.labels.spike` is unset);"
+    "script-output": (
+        "The script prints one line, the path or an `ask:` line, and exits 0; any other exit status is no "
+        "path: stop and report its stderr line."
     ),
-    "ask-spike-label-no-title": (
-        "- the story carries the spike label and its title does not start with `[Spike]`."
+    "ask-handling": (
+        "On an `ask:` line, when the user invoked this skill directly, ask the user and accept only `spike`, "
+        "`no-deployment` or `deployed` as the answer, which is the path; when this skill runs as a "
+        "story-to-done role, stop and quote the `ask:` line in the handback."
     ),
-    "ask-precedence": "An ask case takes precedence over the selection conditions below.",
-    "ask-answer-is-path": (
-        "The answer is one of `spike`, `no-deployment` or `deployed`, and it is the path: "
-        "it replaces the selection below."
-    ),
-    "no-inference": "Never infer a path from prose, and ask nothing else about the path.",
-    "select-intro": "Otherwise select:",
-    "select-spike": (
-        "- `spike` when the story carries the label named by `profile.tracker.labels.spike`, looked up on the "
-        "story's team under the differing-team rule in [references/linear.md](references/linear.md) "
-        '"Team resolution";'
-    ),
-    "select-no-deployment": (
-        "- otherwise `no-deployment` when `profile.environments` is present and is `[]`;"
-    ),
-    "select-deployed": (
-        "- otherwise `deployed` when `profile.environments` has an entry whose `branch` equals "
-        "`profile.git.integration_branch`."
-    ),
+    "no-inference": "Never infer a path from prose, and read one only from an exact `path:` line as above.",
     "path-governs-run": "The selected path governs the whole run.",
 }
 
@@ -78,10 +78,6 @@ PINS = {
 @pytest.mark.parametrize("pin", list(PINS.values()), ids=list(PINS))
 def test_step_one_pins_path_selection_sentence(pin: str) -> None:
     assert pin in step_one_lines(), f"step 1 must read the pinned sentence exactly: {pin}"
-
-
-ASK_CASES = ("ask-environments-absent", "ask-no-integration-entry", "ask-spike-title-no-label", "ask-spike-label-no-title")
-SELECTIONS = ("select-spike", "select-no-deployment", "select-deployed")
 
 
 def block_after(lines: list[str], intro: str) -> list[str]:
@@ -98,34 +94,17 @@ def block_after(lines: list[str], intro: str) -> list[str]:
     return block
 
 
-def test_ask_cases_are_exactly_the_four_named_cases() -> None:
-    lines = step_one_lines()
-    assert block_after(lines, PINS["ask-intro"]) == [PINS[key] for key in ASK_CASES]
-
-
-def test_selection_conditions_are_ordered_spike_then_no_deployment_then_deployed() -> None:
-    lines = step_one_lines()
-    assert block_after(lines, PINS["select-intro"]) == [PINS[key] for key in SELECTIONS]
-
-
-def test_ask_cases_come_before_the_selection_they_take_precedence_over() -> None:
-    lines = step_one_lines()
-    assert lines.index(PINS["ask-intro"]) < lines.index(PINS["ask-precedence"]) < lines.index(PINS["select-intro"])
-
-
 TRACKER_FALLBACK = "If the tracker cannot be updated, stop and say the transition was not performed; never claim it was."
 SUBSECTION_ORDER = (
     "subsection",
     "three-paths",
-    "brief-governs",
     "select-before-later-steps",
-    "ask-intro",
-    *ASK_CASES,
-    "ask-precedence",
-    "ask-answer-is-path",
+    "run-script",
+    "labels",
+    "brief-recorded-path",
+    "script-output",
+    "ask-handling",
     "no-inference",
-    "select-intro",
-    *SELECTIONS,
     "path-governs-run",
 )
 
@@ -252,7 +231,13 @@ STEP_TWELVE_PINS = {
         "this step still show no tracked-file change and each deliverable is linked on the story as a comment "
         "or an attachment."
     ),
-    "handoff-note": "1. Add a concise implementation and handoff note naming the path and the merged commit.",
+    # SKL-270 replaced SKL-282's "naming the path and the merged commit" with the exact `path: <value>`
+    # line, which story-to-done and qa-verification pass to `scripts/select-path.py` as
+    # `--recorded-path`; this pin keeps the merged commit and now also pins that line's format.
+    "handoff-note": (
+        "1. Add a concise implementation and handoff note naming the merged commit and carrying the path as a "
+        "line whose whole text is exactly `path: <value>` (`path: no-deployment` or `path: spike`)."
+    ),
     "handoff-note-no-change": (
         "   For a spike with no tracked-file change, the note names the path, states there is no merged commit, "
         "and says the spike had no tracked-file change and that steps 4 to 10 were skipped."
@@ -412,24 +397,30 @@ QA_INTRO_PINS = {
         "paths it names that path's target in place of the environment."
     ),
 }
-# The path conditions use the wording of engineering-workflow step 1 (`PINS`), except the two
-# sentences that name what waits on the path: QA runs no verification and tests nothing until then.
-# The shared values are taken from `PINS` on purpose, since AC1 asks for the same wording: a change
-# to one of those engineering-workflow sentences must be made in qa-verification in the same change.
+# The path selection uses the wording of engineering-workflow step 1 (`PINS`), except the sentence
+# that names what waits on the path (QA runs no verification until then) and the sentence that
+# falls back to the step 12 note's `path:` line when no brief states a path.
+# The shared values are taken from `PINS` on purpose, since the two skills select the path the same
+# way: a change to one of those engineering-workflow sentences must be made in qa-verification in the
+# same change.
+# SKL-270 replaced SKL-269's prose ask cases and selection conditions here with the same script call
+# as engineering-workflow (see the comment above `PINS`); `tests/test_select_path.py` covers the
+# cases, so `test_qa_ask_cases_and_selection_use_the_engineering_workflow_wording` was removed.
 QA_PATH_PINS = {
     "qa-path-section": "## The run's path",
     "qa-three-paths": PINS["three-paths"],
-    "qa-brief-governs": PINS["brief-governs"],
-    "qa-select-before-verification": (
-        "When no brief states a path, select exactly one path before any verification runs."
+    "qa-select-before-verification": "Select the path before any verification runs.",
+    "qa-run-script": PINS["run-script"],
+    "qa-labels": PINS["labels"],
+    "qa-brief-recorded-path": PINS["brief-recorded-path"],
+    "qa-note-recorded-path": (
+        "Without that brief line, add `--recorded-path` with the value of the latest `engineering-workflow` "
+        "step 12 note line whose whole text is exactly `path: spike`, `path: no-deployment` or "
+        "`path: deployed`, when one exists, and add nothing otherwise."
     ),
-    "qa-ask-intro": "Ask the user for the path, and test nothing until answered, in exactly these cases:",
-    **{f"qa-{key}": PINS[key] for key in ASK_CASES},
-    "qa-ask-precedence": PINS["ask-precedence"],
-    "qa-ask-answer-is-path": PINS["ask-answer-is-path"],
+    "qa-script-output": PINS["script-output"],
+    "qa-ask-handling": PINS["ask-handling"],
     "qa-no-inference": PINS["no-inference"],
-    "qa-select-intro": PINS["select-intro"],
-    **{f"qa-{key}": PINS[key] for key in SELECTIONS},
     "qa-path-governs-run": PINS["path-governs-run"],
 }
 QA_ENV_PINS = {
@@ -494,20 +485,14 @@ QA_PIN_KEYS = (
     "qa-intro-brief",
     "qa-path-section",
     "qa-three-paths",
-    "qa-brief-governs",
     "qa-select-before-verification",
-    "qa-ask-intro",
-    "qa-ask-environments-absent",
-    "qa-ask-no-integration-entry",
-    "qa-ask-spike-title-no-label",
-    "qa-ask-spike-label-no-title",
-    "qa-ask-precedence",
-    "qa-ask-answer-is-path",
+    "qa-run-script",
+    "qa-labels",
+    "qa-brief-recorded-path",
+    "qa-note-recorded-path",
+    "qa-script-output",
+    "qa-ask-handling",
     "qa-no-inference",
-    "qa-select-intro",
-    "qa-select-spike",
-    "qa-select-no-deployment",
-    "qa-select-deployed",
     "qa-path-governs-run",
     "qa-env-other-paths",
     "qa-env-target-no-deployment",
@@ -564,12 +549,6 @@ def test_qa_pins_sentence_in_its_section(key: str) -> None:
     assert QA_PINS[key] in QA_SECTION_LINES[key](), f"qa-verification must read the pinned sentence: {key}"
 
 
-def test_qa_ask_cases_and_selection_use_the_engineering_workflow_wording() -> None:
-    lines = qa_path_lines()
-    assert block_after(lines, QA_PATH_PINS["qa-ask-intro"]) == [PINS[key] for key in ASK_CASES]
-    assert block_after(lines, QA_PATH_PINS["qa-select-intro"]) == [PINS[key] for key in SELECTIONS]
-
-
 # The path section is closed on purpose: a sentence added to it must be added to `QA_PATH_PINS` too,
 # so every rule that decides the path is pinned.
 def test_qa_path_section_holds_only_the_pinned_sentences_in_order() -> None:
@@ -595,14 +574,7 @@ def qa_added_blocks() -> list[str]:
     description = f"{QA_DESCRIPTION_PINS['qa-description']}\n"
     intro = "".join(f"{line}\n" for line in QA_INTRO_PINS.values())
     p = QA_PATH_PINS
-    asks = "".join(f"{p[f'qa-{key}']}\n" for key in ASK_CASES)
-    selections = "".join(f"{p[f'qa-{key}']}\n" for key in SELECTIONS)
-    path = (
-        f"{p['qa-path-section']}\n\n{p['qa-three-paths']}\n{p['qa-brief-governs']}\n"
-        f"{p['qa-select-before-verification']}\n\n{p['qa-ask-intro']}\n\n{asks}\n"
-        f"{p['qa-ask-precedence']}\n{p['qa-ask-answer-is-path']}\n{p['qa-no-inference']}\n\n"
-        f"{p['qa-select-intro']}\n\n{selections}\n{p['qa-path-governs-run']}\n\n"
-    )
+    path = f"{p['qa-path-section']}\n\n" + "".join(f"{p[key]}\n" for key in list(p)[1:]) + "\n"
     e = QA_ENV_PINS
     env = (
         f"\n{e['qa-env-other-paths']}\n\n{e['qa-env-target-no-deployment']}\n{e['qa-env-target-spike']}\n\n"
@@ -625,7 +597,10 @@ def test_qa_added_blocks_appear_once_in_order() -> None:
 # SKILL.md is byte for byte the file at the base commit f9b6659.
 # A later story that changes qa-verification's SKILL.md outside these blocks re-baselines this hash
 # to the sha256 of the file at its own base with these blocks cut out, and says so in its PR.
-QA_BASE_SHA256 = "4cbac447bd45659c82eef922306bda26824f657591b1c5cddceea8e14c10427d"
+# SKL-270 re-baselined it for its one change outside the blocks: the `compatibility:` line now names
+# python3 and PyYAML>=6, which `scripts/select-path.py` needs (the path block is rebuilt from the new
+# pins and cut out as before).
+QA_BASE_SHA256 = "6796f77669a29db3e3ef3b6765bdc268aadc0e3eaeee58e577fc1c25140d394d"
 
 
 def test_qa_text_outside_the_added_blocks_is_unchanged() -> None:

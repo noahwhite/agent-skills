@@ -9,7 +9,7 @@ description: >-
   merge or deploy a story. Backlog-only triage or refinement without code belongs to a product-owner
   skill.
 license: Apache-2.0
-compatibility: Requires git, gh and the linear CLI.
+compatibility: Requires git, gh, the linear CLI, and python3 with PyYAML>=6.
 ---
 
 # Engineering workflow
@@ -67,26 +67,13 @@ If the tracker cannot be updated, stop and say the transition was not performed;
 ### Select the path
 
 A run follows exactly one path: `spike`, `no-deployment` or `deployed`.
-When a brief states the path, that path governs: no ask case applies and you never reselect it.
-When no brief states a path, select exactly one path before any later step runs.
-
-Ask the user for the path, and run no later step until answered, in exactly these cases:
-
-- `profile.environments` is absent (an absent key is never read as `[]`);
-- `profile.environments` is non-empty and no entry's `branch` equals `profile.git.integration_branch`;
-- the story title starts with `[Spike]` and the story lacks the spike label (including when `profile.tracker.labels.spike` is unset);
-- the story carries the spike label and its title does not start with `[Spike]`.
-
-An ask case takes precedence over the selection conditions below.
-The answer is one of `spike`, `no-deployment` or `deployed`, and it is the path: it replaces the selection below.
-Never infer a path from prose, and ask nothing else about the path.
-
-Otherwise select:
-
-- `spike` when the story carries the label named by `profile.tracker.labels.spike`, looked up on the story's team under the differing-team rule in [references/linear.md](references/linear.md) "Team resolution";
-- otherwise `no-deployment` when `profile.environments` is present and is `[]`;
-- otherwise `deployed` when `profile.environments` has an entry whose `branch` equals `profile.git.integration_branch`.
-
+Select the path before any later step runs.
+From inside the target repository, run `python3 <skill dir>/scripts/select-path.py --title <story title>`, where `<skill dir>` is the absolute directory your runtime loaded this skill from.
+Add `--label <name>` for each label name the story carries as read from the tracker, under the differing-team rule in [references/linear.md](references/linear.md) "Team resolution"; the script compares names only.
+When a brief holds a line whose whole text is exactly `path: spike`, `path: no-deployment` or `path: deployed`, add `--recorded-path` with that value, so the path is never reselected.
+The script prints one line, the path or an `ask:` line, and exits 0; any other exit status is no path: stop and report its stderr line.
+On an `ask:` line, when the user invoked this skill directly, ask the user and accept only `spike`, `no-deployment` or `deployed` as the answer, which is the path; when this skill runs as a story-to-done role, stop and quote the `ask:` line in the handback.
+Never infer a path from prose, and read one only from an exact `path:` line as above.
 The selected path governs the whole run.
 
 ## 2. Plan slices
@@ -305,7 +292,7 @@ The merged commit is the commit that merging this story's PR in step 10 put on t
 Run this step once a fetch of `origin` shows the merged commit on `origin/<profile.git.integration_branch>` (`git merge-base --is-ancestor <merged commit> origin/<profile.git.integration_branch>` exits 0).
 For a spike with no tracked-file change, run it instead once the checks repeated immediately before this step still show no tracked-file change and each deliverable is linked on the story as a comment or an attachment.
 
-1. Add a concise implementation and handoff note naming the path and the merged commit.
+1. Add a concise implementation and handoff note naming the merged commit and carrying the path as a line whose whole text is exactly `path: <value>` (`path: no-deployment` or `path: spike`).
    For a spike with no tracked-file change, the note names the path, states there is no merged commit, and says the spike had no tracked-file change and that steps 4 to 10 were skipped.
    On `spike`, the note also names, for each deliverable the spike's Deliverables section lists, its link and, when the deliverable is a tracked artifact, its commit on `origin/<profile.git.integration_branch>`.
 2. Move the story to `profile.tracker.states.in_deployment_review`.
