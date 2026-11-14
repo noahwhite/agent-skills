@@ -165,6 +165,13 @@ Each slice is listed by its recorded lower-consensus value, with its higher valu
 | Round cap, `point_cap` 3: a split that completes within two rounds | 8; round 1 5, 3 | round 2: 5 into 3, 2 | leaf sum 8 against 8 and 12 | proceeds unchanged |
 | Saturated base: a top-of-scale whole story | 13 | 8, 8, 5 | 21 against 13 and 19.5 | stop: the message names the base 13 saturated and the bounds 13 and 19.5 as lower bounds on the true size |
 
+Mapping check worked examples, in split round 1 of a story with criteria AC1 to AC3.
+
+| Case | Story criteria | Slice criteria mapped | Result |
+|---|---|---|---|
+| Mapping check stop: a slice criterion with no counterpart | AC1, AC2, AC3 | slice A: A1 -> AC1, A2 -> AC2; slice B: B1 -> AC3, B2 -> none | stop before any slice is pointed: one `needs input` message with `Mapping check, round 1: stop` naming B2; no slice is pointed and no split bound runs |
+| Mapping check clear: every slice criterion maps to exactly one criterion of the story | AC1, AC2, AC3 | slice A: A1 -> AC1, A2 -> AC1, A3 -> AC2; slice B: B1 -> AC3 | proceeds unchanged: the slices are pointed and the split bounds run |
+
 ## Triage record
 
 Post this as a tracker comment authored by the product owner as a triage write, on every refinement outcome and on each split sibling, and posted by the product owner or, under the denied tracker writes fallback, by the facilitator verbatim.

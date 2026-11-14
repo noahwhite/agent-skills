@@ -665,6 +665,36 @@ def test_split_rule_runs_the_mapping_check_before_any_slice_is_pointed() -> None
     )
 
 
+# SKL-305 AC6 evidence: an unmapped slice criterion stops before pointing; a fully mapped split proceeds unchanged.
+MAPPING_EXAMPLE_ROWS = (
+    "| Mapping check stop: a slice criterion with no counterpart | AC1, AC2, AC3 | slice A: A1 -> AC1, A2 -> AC2; "
+    "slice B: B1 -> AC3, B2 -> none | stop before any slice is pointed: one `needs input` message with "
+    "`Mapping check, round 1: stop` naming B2; no slice is pointed and no split bound runs |",
+    "| Mapping check clear: every slice criterion maps to exactly one criterion of the story | AC1, AC2, AC3 | "
+    "slice A: A1 -> AC1, A2 -> AC1, A3 -> AC2; slice B: B1 -> AC3 | proceeds unchanged: the slices are pointed and "
+    "the split bounds run |",
+)
+
+
+def test_mapping_check_examples_stop_an_unmapped_criterion_and_pass_a_mapped_split() -> None:
+    lines = split_bounds_record().splitlines()
+    for row in MAPPING_EXAMPLE_ROWS:
+        assert row in lines, row
+    for row in MAPPING_EXAMPLE_ROWS:
+        cells = [cell.strip() for cell in row.strip("|").split("|")]
+        originals = set(cells[1].split(", "))
+        pairs = re.findall(r"(\w+) -> (\w+)", cells[2])
+        unmapped = [criterion for criterion, target in pairs if target == "none"]
+        assert all(target in originals for _, target in pairs if target != "none"), row
+        if unmapped:
+            assert cells[3].startswith("stop before any slice is pointed"), row
+            for criterion in unmapped:
+                assert f"naming {criterion}" in cells[3], (row, criterion)
+        else:
+            assert {target for _, target in pairs} == originals, row
+            assert cells[3].startswith("proceeds unchanged"), row
+
+
 def test_split_rule_points_a_slice_to_the_lower_consensus() -> None:
     assert LOWER_CONSENSUS in spaced(section(SKILL.read_text(), "Split rule"))
     item = process_items(STEP_FOUR)[8]
