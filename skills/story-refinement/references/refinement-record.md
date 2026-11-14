@@ -131,6 +131,7 @@ After each split round of a story split the facilitator runs the split bounds in
 A round with no stop posts the block in the split comment.
 A round with a leaf slice recorded as unpointed and no stop posts the block in the split comment with result pending, naming the unpointed slices, and the pending checks run once the owner's answer gives every leaf slice a recorded value.
 A stop posts nothing to the tracker: it reports `needs input` to the owner in one message carrying the block, its warning line included, and no further split round, slice record or tracker write for the slices happens until the owner answers.
+A mapping-check stop also posts nothing to the tracker, and because it comes before any slice is pointed it fills no block: its one `needs input` message carries a `Mapping check, round <1 | 2>: stop` line naming each slice criterion with no counterpart and each evidence pass, fixture, test obligation or behaviour a slice adds beyond the story it is split from.
 
 ```markdown
 - Split bounds, round <1 | 2>: <clear | warning | stop | pending: unpointed <slice keys>>
@@ -139,7 +140,7 @@ A stop posts nothing to the tracker: it reports `needs input` to the owner in on
   - Per-parent sum, one line per parent split this round: <n/a in round 1, whose only parent is the original story, so the whole-story sum line records its band once; otherwise parent <key> <recorded value>; 1.0 times = <value>, 1.5 times = <value>; sum of its slices <value> (lower), <value> (higher); band <clear | warning | stop> (lower, governs), <clear | warning | stop> (higher)>
   - Per-parent bound: <pass, or each slice at or above its parent: parent <key> <value>, slice <key> <value>, band <band of that parent's sum>>
   - Round cap: <n/a before split round 2; pass; or each slice still meeting the split trigger after split round 2, with its value>
-  - Warning for the human at triage: <none, or one entry listing every warning of the round with its sums, bands and bounds above, posted in the split comment, or carried in the `needs input` message when the round stops>
+  - Warning for the human at triage: <none, or one entry listing every warning of the round with its sums, bands and bounds above, posted in the split comment; a round that stops also carries it in its `needs input` message and posts it once the owner answers>
 ```
 
 The round's result is the most severe of its lines: any stop makes the round a stop, else any warning makes it a warning, else it is clear.

@@ -566,8 +566,8 @@ SPLIT_BOUNDS = (
     "[references/linear.md](references/linear.md): each slice's recorded value is strictly below the recorded value "
     "of the story it is split from, the slices of each parent are compared to that parent as a sum, and the sum of "
     "the current leaf slices' recorded values is compared to the original whole-story recorded estimate, each "
-    "comparison stopping with `needs input`, warning in the split comment (or in the `needs input` message of a round "
-    "that stops) or proceeding with no flag by the bands stated there. "
+    "comparison stopping with `needs input`, warning in the split comment or proceeding with no flag by the bands "
+    "stated there. "
     "A stop holds every further split round, estimate, record and tracker write for the slices until the owner "
     "answers. "
     "A round with a leaf slice recorded as unpointed still applies the per-slice bound and the round cap to each "
@@ -699,6 +699,10 @@ SPLIT_BOUNDS_ROUTE = (
     "A stop posts nothing to the tracker: it reports `needs input` to the owner in one message carrying the block, "
     "its warning line included, and no further split round, slice record or tracker write for the slices happens "
     "until the owner answers.",
+    "A mapping-check stop also posts nothing to the tracker, and because it comes before any slice is pointed it "
+    "fills no block: its one `needs input` message carries a `Mapping check, round <1 | 2>: stop` line naming each "
+    "slice criterion with no counterpart and each evidence pass, fixture, test obligation or behaviour a slice adds "
+    "beyond the story it is split from.",
 )
 SPLIT_BOUNDS_FIELDS = (
     "- Split bounds, round <1 | 2>: <clear | warning | stop | pending: unpointed <slice keys>>",
@@ -714,7 +718,8 @@ SPLIT_BOUNDS_FIELDS = (
     "- Per-parent bound:",
     "- Round cap:",
     "- Warning for the human at triage: <none, or one entry listing every warning of the round with its sums, bands "
-    "and bounds above, posted in the split comment, or carried in the `needs input` message when the round stops>",
+    "and bounds above, posted in the split comment; a round that stops also carries it in its `needs input` message "
+    "and posts it once the owner answers>",
 )
 SPLIT_BOUNDS_EXAMPLE_RESULTS = (
     ("13 against 8 and 12", "stop"),
