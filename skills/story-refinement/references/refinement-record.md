@@ -66,7 +66,7 @@ Never edit the refinement comment to add the result; its id keeps identifying on
 Post this once Step 4 has recorded the estimate, or record it as an unpointed result; the basis review in Step 4 item 2 always runs before it is posted.
 Never post it for a Bug, an Investigation or a Spike, which is never pointed.
 The three values are recorded before any SM/EM sizing comment or discussion; a void before all three exist leaves the values block at the values recorded so far and carries no superseded values, and once the blind re-run finishes the values block carries the three standing values while the superseded line carries the voided ones.
-Outside the recorded numeric values and the superseded-values line, no line of the posted record carries a point value named before the reveal or a prescription of this story's value: the Challenges and Anchoring events lines record a ground by its kind, its author (a voter, or the SM/EM for a sizing comment) and its outcome or recovery, and every field that could quote a participant elides those two classes permanently, because the posted record stays on the story surface that later voters read; the verbatim quote lives in the session's raw record, cited by its base name.
+Outside the recorded numeric values, the Ledger line's prices and the superseded-values line, no line of the posted record carries a point value named before the reveal or a prescription of this story's value: the Challenges and Anchoring events lines record a ground by its kind, its author (a voter, or the SM/EM for a sizing comment) and its outcome or recovery, and every field that could quote a participant elides those two classes permanently, because the posted record stays on the story surface that later voters read; the verbatim quote lives in the session's raw record, cited by its base name.
 A sizing comment that names a point value before the reveal, prescribes this story's value, or states elapsed time, effort or run cost voids the round under the Anchoring guardrail recovery as soon as the facilitator sees it, as does any ground that is neither restated nor retracted, and the void records the voided consensus under Superseded values after a void, so the Consensus field carries the vote that stands, or n/a when the consensus check or the residual variance rule recorded the estimate.
 
 ```markdown
@@ -80,6 +80,7 @@ A sizing comment that names a point value before the reveal, prescribes this sto
   - Engineer two: <value, or not recorded> - <short complexity rationale, or none when the value is not recorded>
   - Engineer three: <value, or not recorded> - <short complexity rationale, or none when the value is not recorded>
 - Consensus check: <identical | one step | more than one step>
+- Ledger: <for a whole-story round, each unknown with its unrounded price and, once the split is drafted, its owner slice or blocker story (no owner for an unsplit story), each merge of differently named unknowns, the ledger total beside the whole-story value (or beside the unpointed outcome, with no saturation note) and not reconciled to slice values, and the saturation note when the whole-story value is the highest value of the step sequence; n/a for a slice round, whose slice brief carries the ledger>
 - SM/EM sizing context, after all three values: <file base name> or verbatim, eliding a pre-reveal value or a prescription, or none
 - Discussion: <high <value>, low <value>; or none when the discussion ran and recorded nothing; or skipped, when the consensus check recorded the estimate; the shared content names only the high and the low, while a voter's own recorded value and rationale are carried privately in that voter's prompt>
 - Re-vote: <accepted set per voter, with complexity rationale; or no consensus, with its complexity rationale, for a voter that records none; or none when it ran and recorded nothing; or skipped, when the consensus check recorded the estimate>
@@ -101,6 +102,34 @@ Under the denied tracker writes fallback in `SKILL.md`, replace the tracker-writ
 ```markdown
 - Tracker writes: facilitator on the product owner's behalf (owner's direct authorization: "<verbatim quote>", <date>)
 ```
+
+## Slice brief
+
+Every slice estimate's pointing prompt is its slice brief: it carries the pointing basis and the rationale rule as Step 3 requires, and this block, filled in from the whole-story pointing record under the priced shared-unknown ledger in Estimation and slicing in `references/linear.md`.
+
+```markdown
+## Slice brief
+
+- Slice: <slice key> - <its slice>, split from <parent key> in split round <1 | 2>
+- Ledger, from the whole-story pointing record, with owners as the split comment of split round 2 reassigns them for a sub-slice:
+  - <unknown> - <ledger price> - owner <slice key, or blocker story key, priced in no slice>
+- Ledger total: <value>, beside the whole-story value <value>, not reconciled to slice values
+- Saturation note: <n/a, or: the whole-story value <value> is the highest value of the step sequence for <scale>, so the ledger prices are lower bounds on the true size>
+- Unknowns this slice owns: <each by name with its ledger price, or none>
+```
+
+Worked example on `fibonacci` (1, 2, 3, 5, 8, 13), a whole story pointed at 13 and split into core slice A and siblings B and C, with blocker story X.
+
+| Case | Input | Result |
+|---|---|---|
+| Whole-story rationales | voter 1: 13 = auth 3 + schema 2 + migration 1 + remainder 7; voter 2: 13 = login flow 5 + schema 3 + vendor API 2 + remainder 3; voter 3: 13 = auth 2 + vendor API 3 + remainder 8 | each sums exactly to its value, so all three are on basis |
+| Ledger in the pointing record | the three rationales above | login flow merged into auth (merge recorded); auth 3 (median of 3, 5, 2), schema 2 (lower of 2, 3), vendor API 2 (lower of 2, 3), migration 1 (sole price); ledger total 8 beside the whole-story value 13, not reconciled; saturation note, since 13 is the highest value of the sequence |
+| Owners, assigned when the split is drafted | slice B's work resolves auth, slice A's resolves schema, no slice resolves migration, blocker X resolves vendor API | auth owner B, schema owner A, migration owner A (core slice), vendor API owner X, priced in no slice |
+| Slice brief | slices A, B and C | each brief carries the four unknowns with their prices and owners, the ledger total 8 beside 13, and the saturation note naming the ledger prices as lower bounds |
+| Slice rationales | A: schema 2 + migration 1 + own complexity; B: auth 3 + own complexity; C: own complexity only | each ledger unknown appears with its ledger price in exactly one slice rationale, and vendor API appears in none |
+| Re-pricing rationale | a slice B voter writes auth 5 | off-basis: the Step 4 basis review re-runs that vote once, and a second miss is recorded on the Challenges line |
+| Unknown assigned elsewhere | a slice C voter names schema | off-basis on the same terms |
+| Whole-story sum mismatch | a voter writes 8 = auth 3 + schema 2 + remainder 2 | off-basis: the prices plus the remainder are 7, not 8 |
 
 ## Split comment
 

@@ -589,6 +589,13 @@ UNPOINTED_SLICE_STOP = (
     "partially pointed split always ends in that report rather than in an estimate, and its recorded outcome is the "
     "slice count with `needs input` for each unpointed slice."
 )
+# SKL-306: every slice brief carries the priced shared-unknown ledger, and names its prices lower bounds at the top
+# of the scale.
+SLICE_BRIEF = (
+    "Each slice voter's prompt is its slice brief, which carries the priced shared-unknown ledger with its prices and "
+    "owners and, when the whole-story value is the highest value of the step sequence, states that the ledger prices "
+    "are lower bounds."
+)
 # SKL-305: the mapping check runs before pointing, and a mapping failure is one `needs input` message.
 MAPPING_CHECK = (
     "- Each split round runs the no-scope-growth mapping check in Estimation and slicing in "
@@ -640,6 +647,7 @@ SPLIT_RULE_SECTION = " ".join(
         "and that round runs the same Step 4 consensus check, basis review and residual variance rule, so a slice "
         "records an estimate or takes the unpointed variance stop on the same terms.",
         UNPOINTED_SLICE_STOP,
+        SLICE_BRIEF,
         LOWER_CONSENSUS,
         RESPLIT_BULLET,
         ROUND_CAP,
@@ -2039,7 +2047,8 @@ def test_pointing_template_records_each_challenge_and_outcome() -> None:
     )
     body = spaced(prose(section(RECORD.read_text(), "Pointing record")))
     assert (
-        "Outside the recorded numeric values and the superseded-values line, no line of the posted record carries "
+        "Outside the recorded numeric values, the Ledger line's prices and the superseded-values line, no line of the "
+        "posted record carries "
         "a point value named before the reveal or a prescription of this story's value: the Challenges and Anchoring events "
         "lines record a ground by its kind, its author (a voter, or "
         "the SM/EM for a sizing comment) and its outcome or recovery, and every field that could quote a "
@@ -4513,3 +4522,118 @@ def test_readme_row_names_the_split_and_the_refile() -> None:
         "an oversized Bug or Investigation is split without an estimate, and a multi-thread Spike is flagged for "
         "re-filing" in row
     )
+
+
+# --- SKL-306: the priced shared-unknown ledger -----------------------------------------------------------------
+
+LEDGER_RATIONALE = (
+    "Under the priced shared-unknown ledger in Estimation and slicing in [references/linear.md](references/linear.md), "
+    "a whole-story rationale lists the unknowns behind its value with a point price each plus the remainder, summing "
+    "exactly to the value (in a re-vote, the highest value of the voter's accepted set), and a slice rationale states "
+    "the ledger prices of the unknowns its slice owns plus its own non-unknown complexity as its remainder, summing in "
+    "the same way. "
+    "These prices, that remainder and that sum, kept in the voter's own file until the reveal, are the one exception to naming no "
+    "point value before the reveal."
+)
+LEDGER_REVIEW = (
+    "The review also challenges the ledger grounds that Estimation and slicing in "
+    "[references/linear.md](references/linear.md) makes off-basis: a rationale whose prices plus remainder differ "
+    "from its value (in a re-vote, the highest value of the voter's accepted set), and a slice rationale that omits "
+    "an unknown its slice owns, re-prices an unknown, prices one the ledger does not carry, or names one the ledger "
+    "assigns elsewhere; that vote is re-run once on the terms of this item, and a second miss is recorded on the pointing "
+    "record's Challenges line."
+)
+LEDGER_RECORDED = (
+    "In a whole-story round, once the estimate or the unpointed variance stop is recorded, the facilitator records the "
+    "priced shared-unknown ledger in the pointing record from the whole-story rationales that stand then, each "
+    "replacement recorded in a voter's Step 3 file included."
+)
+LEDGER_LINE = (
+    "- Ledger: <for a whole-story round, each unknown with its unrounded price and, once the split is drafted, its "
+    "owner slice or blocker story (no owner for an unsplit story), each merge of differently named unknowns, the "
+    "ledger total beside the whole-story value (or beside the unpointed outcome, with no saturation note) and not "
+    "reconciled to slice values, and the saturation note when the "
+    "whole-story value is the highest value of the step sequence; n/a for a slice round, whose slice brief carries the "
+    "ledger>"
+)
+SLICE_BRIEF_TEMPLATE = [
+    "## Slice brief",
+    "",
+    "- Slice: <slice key> - <its slice>, split from <parent key> in split round <1 | 2>",
+    "- Ledger, from the whole-story pointing record, with owners as the split comment of split round 2 reassigns them "
+    "for a sub-slice:",
+    "  - <unknown> - <ledger price> - owner <slice key, or blocker story key, priced in no slice>",
+    "- Ledger total: <value>, beside the whole-story value <value>, not reconciled to slice values",
+    "- Saturation note: <n/a, or: the whole-story value <value> is the highest value of the step sequence for "
+    "<scale>, so the ledger prices are lower bounds on the true size>",
+    "- Unknowns this slice owns: <each by name with its ledger price, or none>",
+]
+LEDGER_EXAMPLE_RESULTS = (
+    "login flow merged into auth (merge recorded); auth 3 (median of 3, 5, 2), schema 2 (lower of 2, 3), vendor API 2 "
+    "(lower of 2, 3), migration 1 (sole price); ledger total 8 beside the whole-story value 13, not reconciled; "
+    "saturation note, since 13 is the highest value of the sequence",
+    "each brief carries the four unknowns with their prices and owners, the ledger total 8 beside 13, and the "
+    "saturation note naming the ledger prices as lower bounds",
+    "each ledger unknown appears with its ledger price in exactly one slice rationale, and vendor API appears in none",
+    "off-basis: the Step 4 basis review re-runs that vote once, and a second miss is recorded on the Challenges line",
+    "off-basis: the prices plus the remainder are 7, not 8",
+)
+
+
+def test_step_three_rationale_carries_the_ledger_rule() -> None:
+    assert LEDGER_RATIONALE in process_item(STEP_THREE, "Each voter submits one point value")
+
+
+LEDGER_SIZING_EXCEPTION = (
+    "Before the reveal it must not name any point value. "
+    "The ledger a slice brief carries is the one exception, as the Anchoring guardrail states."
+)
+LEDGER_FACTUAL_REFERENCE = (
+    "The priced shared-unknown ledger a slice brief carries is such a factual reference and the only point values the "
+    "facilitator gives a voter before the reveal: its prices, owners, total beside the whole-story value and "
+    "saturation note are recorded in the whole-story pointing record before any slice vote, and a slice voter weighs "
+    "them as information."
+)
+
+
+def test_slice_brief_ledger_is_a_factual_reference_not_an_anchor() -> None:
+    assert LEDGER_SIZING_EXCEPTION in process_item(STEP_THREE, "After all three values are recorded")
+    guardrail = flat(section(SKILL.read_text(), GUARDRAIL))
+    assert flat(LEDGER_FACTUAL_REFERENCE) in guardrail
+    assert (
+        "or treating another voter's revealed value as the answer, where the priced shared-unknown ledger a slice "
+        "brief carries is not such a point value;" in guardrail
+    ), "the prohibited behaviour carves out the slice brief's ledger"
+
+
+def test_step_four_basis_review_challenges_ledger_grounds_and_the_ledger_is_recorded_last() -> None:
+    items = process_items(STEP_FOUR)
+    assert items[1].startswith("Review every rationale recorded in Step 3 against the pointing basis")
+    assert LEDGER_REVIEW in items[1]
+    assert items[7].startswith("The facilitator records the estimate or the consensus; it does not declare it.")
+    assert LEDGER_RECORDED in items[7], "the ledger is recorded once the estimate or the stop is recorded"
+    assert all(LEDGER_RECORDED not in item for index, item in enumerate(items) if index != 7)
+
+
+def test_records_name_the_ledger_and_the_slice_brief() -> None:
+    assert (
+        "Record the priced shared-unknown ledger of a whole-story round in the pointing record, and carry it into every "
+        "slice brief, as the Slice brief section of [references/refinement-record.md](references/refinement-record.md) "
+        "shows." in spaced(section(SKILL.read_text(), "Records"))
+    )
+
+
+def test_pointing_template_records_the_ledger_after_the_consensus_check() -> None:
+    lines = pointing_template()
+    check = next(index for index, line in enumerate(lines) if line.startswith("- Consensus check:"))
+    assert lines[check + 1] == LEDGER_LINE
+
+
+def test_slice_brief_template_carries_the_ledger_and_the_saturation_note() -> None:
+    assert template("Slice brief").splitlines() == SLICE_BRIEF_TEMPLATE
+
+
+def test_slice_brief_worked_example_covers_the_ledger_evidence() -> None:
+    body = spaced(section(RECORD.read_text(), "Slice brief"))
+    for result in LEDGER_EXAMPLE_RESULTS:
+        assert result in body, result
