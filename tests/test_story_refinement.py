@@ -599,8 +599,9 @@ SLICE_BRIEF = (
 # SKL-307: the slice brief carries the prior rounds, and the facilitator records it verbatim.
 SLICE_BRIEF_CONTEXT = (
     "The slice brief also carries the prior-round context in Estimation and slicing in "
-    "[references/linear.md](references/linear.md), and the facilitator records it verbatim in the slice's pointing "
-    "record."
+    "[references/linear.md](references/linear.md), the facilitator records it verbatim in the slice's pointing "
+    "record, and the values of the same round, the sibling slices' and the round's other voters', stay hidden until "
+    "every vote of the round is recorded."
 )
 SLICE_FRESH_CONTEXTS = (
     "- Each slice gets its own three-voter estimate in the same blind round, with newly created voter contexts that "
@@ -1853,10 +1854,10 @@ def test_anchoring_guardrail_makes_a_point_value_sizing_note_an_event_on_challen
     assert (
         "a factual reference is never such an event: naming an already-estimated item's recorded value, alone or "
         "together with a basis difference, is information the voters weigh, and the round continues; in every "
-        "pointing round after a story's first, the prior-round context a slice brief carries, the parent's recorded "
-        "value and the three voter values of its round, the priced shared-unknown ledger and the recorded rationales "
-        "of the whole-story round and of the slice's ancestor rounds, is such a factual reference to already-recorded "
-        "items." in body
+        "pointing round after a story's first, the prior-round context in the text of a slice brief, the parent's "
+        "recorded value and the three voter values of the parent's round, the priced shared-unknown ledger and the "
+        "recorded rationales of the whole-story round and of the slice's ancestor rounds, is such a factual reference "
+        "to already-recorded items." in body
     )
     assert (
         "any other challenged ground that is neither restated as a basis driver nor retracted, or a sizing comment "
@@ -2073,8 +2074,9 @@ def test_pointing_template_records_each_challenge_and_outcome() -> None:
     )
     body = spaced(prose(section(RECORD.read_text(), "Pointing record")))
     assert (
-        "Outside the recorded numeric values, the Ledger line's prices and the superseded-values line, no line of the "
-        "posted record carries "
+        "Outside the recorded numeric values, the Ledger line's prices, the Slice brief line's prior-round context of "
+        "standing values recorded in earlier rounds and the superseded-values line, no line of the posted record "
+        "carries "
         "a point value named before the reveal or a prescription of this story's value: the Challenges and Anchoring events "
         "lines record a ground by its kind, its author (a voter, or "
         "the SM/EM for a sizing comment) and its outcome or recovery, and every field that could quote a "
@@ -4586,10 +4588,10 @@ SLICE_BRIEF_TEMPLATE = [
     "## Slice brief",
     "",
     "- Slice: <slice key> - <its slice>, split from <parent key> in split round <1 | 2>",
-    "- Parent: <parent key>, recorded value <value>, with the three standing voter values of its round <value>, "
-    "<value>, <value>",
-    "- Per-parent bound: this slice's recorded value must be strictly below its parent's recorded value <value>; the "
-    "split bounds apply it after the round, and it is not a value to score",
+    "- Parent: <parent key>, recorded value <value>, with the three standing voter values of the parent's round "
+    "<value>, <value>, <value>",
+    "- Per-parent bound: the per-parent bound requires this slice's recorded value to be strictly below its parent's "
+    "recorded value <value>; the split bounds apply it after the round, and it is not a value to score",
     "- Ledger, from the whole-story pointing record, with owners as the split comment of split round 2 reassigns them "
     "for a sub-slice:",
     "  - <unknown> - <ledger price> - owner <slice key, or blocker story key, priced in no slice>",
@@ -4604,6 +4606,22 @@ SLICE_BRIEF_TEMPLATE = [
 # SKL-307: the pointing record keeps each slice brief verbatim.
 SLICE_BRIEF_LINE = (
     "- Slice brief: <n/a for a whole-story round; for a slice round, the slice brief its voters received, verbatim>"
+)
+PRIOR_ROUND_EXAMPLE_CASES = (
+    "Prior-round context, split round 1",
+    "Prior-round context, split round 2",
+    "Voided or challenged ancestor rationale",
+    "Parent value in the brief",
+    "SM/EM target for a slice",
+    "Rationale derived from the parent",
+)
+PRIOR_ROUND_EXAMPLE_INPUTS = (
+    "the slice B brief",
+    "slice B recorded 8 from voter values 8, 8, 8 and is split into core slice B and sibling B2; the B2 brief",
+    "a whole-story rationale voided by an anchoring recovery, or a ground the Step 4 basis review challenged",
+    "the bound sentence naming 13 in the slice B brief",
+    "before the reveal the SM/EM tells the slice B voters to aim for 5",
+    'a slice B voter writes "one step below the parent\'s 13, so 8"',
 )
 PRIOR_ROUND_EXAMPLE_RESULTS = (
     "parent 13 with voter values 13, 13, 13, the four-unknown ledger, the three whole-story rationales and the bound "
@@ -4635,8 +4653,8 @@ def test_step_three_rationale_carries_the_ledger_rule() -> None:
 
 LEDGER_SIZING_EXCEPTION = (
     "Before the reveal it must not name any point value. "
-    "The prior-round context a slice brief carries, the parent's recorded value, the three voter values of its round "
-    "and the ledger, is the one exception, as the Anchoring guardrail states."
+    "The prior-round context in the text of a slice brief, the parent's recorded value, the three voter values of the "
+    "parent's round and the ledger, is the one exception, as the Anchoring guardrail states."
 )
 LEDGER_FACTUAL_REFERENCE = (
     "The priced shared-unknown ledger a slice brief carries is such a factual reference: its prices, owners, total "
@@ -4645,14 +4663,15 @@ LEDGER_FACTUAL_REFERENCE = (
 )
 # SKL-307: the prior-round context, not the ledger alone, holds the only pre-reveal point values.
 PRIOR_ROUND_POINT_VALUES = (
-    "The prior-round context holds the only point values the facilitator gives a voter before the reveal."
+    "The prior-round context holds the only point values the facilitator adds to a voter's prompt before the reveal."
 )
 PARENT_VALUE_BOUND = (
     "The parent's recorded value is a bound under the per-parent bound in the split bounds and never a value to score "
-    "for the slice: it reaches the voters only through the fixed bound sentence of the Slice brief template in "
-    "[references/refinement-record.md](references/refinement-record.md), an SM/EM free-text number for the slice is an "
-    "anchoring event, and a slice rationale that derives its value from the parent's value, one step below it or half "
-    "of it, is off basis under the Step 3 rationale rule."
+    "for the slice: it reaches the voters only through the Slice brief template in "
+    "[references/refinement-record.md](references/refinement-record.md), as a recorded value on its Parent line and as "
+    "a bound only in its fixed bound sentence, an SM/EM free-text number for the slice, the parent's value restated "
+    "outside the brief included, is an anchoring event, and a slice rationale that derives its value from the "
+    "parent's value, one step below it or half of it, is off basis under the Step 3 rationale rule."
 )
 SLICE_PROHIBITIONS_UNCHANGED = (
     "For a slice the prohibited behaviours stay unchanged: the SM/EM naming a point value for the slice or for any "
@@ -4660,7 +4679,8 @@ SLICE_PROHIBITIONS_UNCHANGED = (
     "anchoring event."
 )
 GUARDRAIL_PRECEDENCE = (
-    "This section takes precedence over every other section, the Split rule and the prior-round context included."
+    "This section takes precedence over every other section, the Split rule, the Records section and the prior-round "
+    "context included."
 )
 
 
@@ -4670,8 +4690,8 @@ def test_slice_brief_ledger_is_a_factual_reference_not_an_anchor() -> None:
     assert flat(LEDGER_FACTUAL_REFERENCE) in guardrail
     assert "and the only point values the facilitator gives a voter" not in guardrail
     assert (
-        "or treating another voter's revealed value as the answer, where the prior-round context a slice brief "
-        "carries is not such a point value;" in guardrail
+        "or treating another voter's revealed value as the answer, where the prior-round context in the text of a "
+        "slice brief is not such a point value;" in guardrail
     ), "the prohibited behaviour carves out the slice brief's prior-round context"
 
 
@@ -4723,6 +4743,11 @@ def test_slice_brief_worked_example_covers_the_ledger_evidence() -> None:
 
 
 def test_slice_brief_worked_example_covers_the_prior_round_context_evidence() -> None:
-    body = spaced(section(RECORD.read_text(), "Slice brief"))
-    for result in PRIOR_ROUND_EXAMPLE_RESULTS:
-        assert result in body, result
+    rows = {}
+    for line in section(RECORD.read_text(), "Slice brief").splitlines():
+        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        if line.startswith("| ") and len(cells) == 3:
+            rows[cells[0]] = (cells[1], cells[2])
+    expected = zip(PRIOR_ROUND_EXAMPLE_CASES, PRIOR_ROUND_EXAMPLE_INPUTS, PRIOR_ROUND_EXAMPLE_RESULTS, strict=True)
+    for case, given, result in expected:
+        assert rows.get(case) == (given, result), case

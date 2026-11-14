@@ -215,11 +215,12 @@ CLOSE_TIME = "- ⛔ Never split an issue at close time to carve off unfinished w
 PRIOR_ROUND_CONTEXT = (
     "Every pointing round after a story's first, a slice estimate in either split round, gives each voter in its "
     "slice brief, as text, the prior-round context: the parent's recorded value and the three voter values of the "
-    "parent's round, the ledger, and the recorded rationales of the whole-story round and of the slice's ancestor "
-    "rounds only, never a voided vote or rationale, a ground the story-refinement Step 4 basis review challenged, or a "
+    "parent's round, the ledger, and the recorded rationales of the slice's ancestor rounds only, the whole-story "
+    "round and, in split round 2, the parent slice's round, never a voided vote or rationale, a ground the story-refinement Step 4 basis review challenged, or a "
     "sibling slice's value or rationale.",
     "The brief states the per-parent bound only in the Slice brief template's fixed sentence, as a bound and never as "
-    "a value to score.",
+    "a value to score, and the parent's recorded value with its round's voter values only on the template's Parent "
+    "line.",
     "Slice voters still run in newly created contexts, so the prior rounds reach them by the brief and never by "
     "session reuse, and the values of the same round, the sibling slices' and the round's other voters', stay hidden "
     "until every vote of the round is recorded.",
