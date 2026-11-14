@@ -166,6 +166,10 @@ SPLIT_BOUNDS_BULLET = " ".join(
         "bounds on the true size.",
         "A stop holds every further split round, record and tracker write for the slices until the owner answers; a "
         "split that completes within two rounds with no stop proceeds unchanged.",
+        "A round with a leaf slice recorded as unpointed has no sum to compare: its checks are pending, the split "
+        "comment records them as pending beside that slice's `needs input`, and they run once the owner's answer "
+        "gives every leaf slice a recorded value, before any further split round, record or tracker write for the "
+        "slices.",
         "Worked examples are in the Split bounds section of the story-refinement skill's refinement record reference.",
     )
 )

@@ -567,7 +567,9 @@ SPLIT_BOUNDS = (
     "comparison stopping with `needs input`, warning in the split comment or proceeding with no flag by the bands "
     "stated there. "
     "A stop holds every further split round, estimate, record and tracker write for the slices until the owner "
-    "answers."
+    "answers. "
+    "A round with a leaf slice recorded as unpointed records the split bounds as pending in the split comment and "
+    "runs them once the owner's answer gives every leaf slice a recorded value."
 )
 SUPERSESSION = "- The two-round cap and the split bounds supersede the never-escalate rule of SKL-230."
 # The SKL-230 sentences this story removes, split so a repository search for them finds no literal copy here.
@@ -636,11 +638,14 @@ def test_split_rule_drops_the_superseded_never_escalate_sentences() -> None:
 
 SPLIT_BOUNDS_ROUTE = (
     "A round with no stop posts the block in the split comment.",
+    "A round with a leaf slice recorded as unpointed has no sum: it posts the block in the split comment with "
+    "result pending, naming the unpointed slices, and the checks run once the owner's answer gives every leaf "
+    "slice a recorded value.",
     "A stop posts nothing to the tracker: it reports `needs input` to the owner in one message carrying the block, "
     "and no further split round, slice record or tracker write for the slices happens until the owner answers.",
 )
 SPLIT_BOUNDS_FIELDS = (
-    "- Split bounds, round <1 | 2>: <clear | warning | stop>",
+    "- Split bounds, round <1 | 2>: <clear | warning | stop | pending: unpointed <slice keys>>",
     "- Whole-story sum: base <original whole-story recorded estimate>; 1.0 times = <value>, 1.5 times = <value>; "
     "sum <sum with each leaf slice's lower consensus value> (lower), <sum with each leaf slice's higher consensus "
     "value> (higher); band <clear | warning | stop>",

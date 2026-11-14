@@ -340,6 +340,7 @@ If the split trigger is met, split the story.
 - A split runs at most two split rounds: split round 1 splits the whole story and split round 2 splits the round-1 slices that still meet it; a slice that still meets the split trigger after split round 2 stops the ceremony with `needs input` naming the slices and their values, before a third split is made, and no third-round split, estimate, record or tracker write happens.
 - After each split round the facilitator applies the split bounds in Estimation and slicing in [references/linear.md](references/linear.md): each slice's recorded value is strictly below the recorded value of the story it is split from, the slices of each parent are compared to that parent as a sum, and the sum of the current leaf slices' recorded values is compared to the original whole-story recorded estimate, each comparison stopping with `needs input`, warning in the split comment or proceeding with no flag by the bands stated there.
   A stop holds every further split round, estimate, record and tracker write for the slices until the owner answers.
+  A round with a leaf slice recorded as unpointed records the split bounds as pending in the split comment and runs them once the owner's answer gives every leaf slice a recorded value.
 - The two-round cap and the split bounds supersede the never-escalate rule of SKL-230.
 
 Cite [references/linear.md](references/linear.md) for the split mechanics; do not restate them here.

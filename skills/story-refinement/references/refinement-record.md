@@ -128,10 +128,11 @@ Under the denied tracker writes fallback in `SKILL.md`, replace the tracker-writ
 
 After each split round of a story split the facilitator runs the split bounds in Estimation and slicing in `references/linear.md` and fills in the block below.
 A round with no stop posts the block in the split comment.
+A round with a leaf slice recorded as unpointed has no sum: it posts the block in the split comment with result pending, naming the unpointed slices, and the checks run once the owner's answer gives every leaf slice a recorded value.
 A stop posts nothing to the tracker: it reports `needs input` to the owner in one message carrying the block, and no further split round, slice record or tracker write for the slices happens until the owner answers.
 
 ```markdown
-- Split bounds, round <1 | 2>: <clear | warning | stop>
+- Split bounds, round <1 | 2>: <clear | warning | stop | pending: unpointed <slice keys>>
   - Whole-story sum: base <original whole-story recorded estimate>; 1.0 times = <value>, 1.5 times = <value>; sum <sum with each leaf slice's lower consensus value> (lower), <sum with each leaf slice's higher consensus value> (higher); band <clear | warning | stop>
   - Saturated base: <n/a, or: the base <value> is the highest value of the step sequence for <scale>, so the base is saturated and the 1.0 and 1.5 bounds computed from it are lower bounds on the true size>
   - Per-parent sum, one line per parent split this round: parent <key> <recorded value>; 1.0 times = <value>, 1.5 times = <value>; sum of its slices <value> (lower), <value> (higher); band <clear | warning | stop>
