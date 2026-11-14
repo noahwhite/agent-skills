@@ -128,7 +128,7 @@ Under the denied tracker writes fallback in `SKILL.md`, replace the tracker-writ
 
 After each split round of a story split the facilitator runs the split bounds in Estimation and slicing in `references/linear.md` and fills in the block below.
 A round with no stop posts the block in the split comment.
-A round with a leaf slice recorded as unpointed and no stop posts the block in the split comment with result pending, naming the unpointed slices, and the sum checks run once the owner's answer gives every leaf slice a recorded value.
+A round with a leaf slice recorded as unpointed and no stop posts the block in the split comment with result pending, naming the unpointed slices, and the pending checks run once the owner's answer gives every leaf slice a recorded value.
 A stop posts nothing to the tracker: it reports `needs input` to the owner in one message carrying the block, and no further split round, slice record or tracker write for the slices happens until the owner answers.
 
 ```markdown
@@ -142,7 +142,7 @@ A stop posts nothing to the tracker: it reports `needs input` to the owner in on
 ```
 
 The round's result is the most severe of its lines: any stop makes the round a stop, else any warning makes it a warning, else it is clear.
-With a leaf slice recorded as unpointed, the whole-story sum line and the per-parent sum line of each parent with an unpointed slice read `sum pending: unpointed <slice keys>; band pending` in place of their sums and band, a per-parent bound stop under such a parent records `band pending`, and every other line is computed.
+With a leaf slice recorded as unpointed, the whole-story sum line and the per-parent sum line of each parent with an unpointed slice read `sum at least <recorded lower values summed> (lower), at least <recorded higher values summed> (higher); unpointed <slice keys>; band <stop | pending>` in place of their sums and band, with band stop when the lower bound is above 1.5 times the base and band pending otherwise; a per-parent bound stop under such a parent records that parent's band, and every other line is computed.
 The round's result then ranks stop, then pending, then warning, then clear, and a warning on a computed line is still listed in the warning line.
 
 Worked examples on `fibonacci` (1, 2, 3, 5, 8, 13) with `profile.refinement.point_cap` 5 unless stated.

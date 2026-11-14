@@ -166,12 +166,16 @@ SPLIT_BOUNDS_BULLET = " ".join(
         "bounds on the true size.",
         "A stop holds every further split round, record and tracker write for the slices until the owner answers; a "
         "split that completes within two rounds with no stop proceeds unchanged.",
-        "A round with a leaf slice recorded as unpointed still runs the per-parent bound on each recorded slice value "
-        "and the round cap, which stop as above, and every per-parent sum whose slices all have recorded values; "
-        "the whole-story sum and the sum of each parent with an unpointed slice have no value to compare, so they "
-        "are pending, the split comment records them as pending beside that slice's `needs input`, and "
-        "they run once the owner's answer gives every leaf slice a recorded value, before any further split round, "
-        "record or tracker write for the slices.",
+        "A round with a leaf slice recorded as unpointed still runs the per-parent bound and the round cap on each "
+        "recorded slice value, which stop as above, and every per-parent sum whose slices all have recorded values.",
+        "For the whole-story sum and the sum of each parent with an unpointed slice, the sum of the recorded values "
+        "is a lower bound on the true sum: a lower bound above 1.5 times the base stops as above with band stop, and "
+        "otherwise that comparison is pending, because a warning or no flag can still change once the slice is "
+        "valued.",
+        "A stop in such a round routes as any stop, and its message names each unpointed slice; with no stop, the "
+        "split comment records the pending comparisons beside that slice's `needs input`, and they run, with the "
+        "per-parent bound and the round cap of each unpointed slice, once the owner's answer gives every leaf slice "
+        "a recorded value, before any further split round, record or tracker write for the slices.",
         "Worked examples are in the Split bounds section of the story-refinement skill's refinement record reference.",
     )
 )
