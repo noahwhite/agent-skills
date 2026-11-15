@@ -855,6 +855,8 @@ OVERRIDE_PROHIBITION = (
 )
 # The SKL-206 restatement of the same override inside the briefs and rules of the skills.
 OVERRIDE_RESTATEMENT = "never pass `-c user.signingkey`, `-c gpg.*` or `-c commit.gpgsign`"
+# The same sentence as recorded runs often quote it, without the backticks.
+PLAIN_RESTATEMENT = OVERRIDE_RESTATEMENT.replace("`", "")
 # The only skill files that carry the restatement, with how many lines each carries.
 RESTATEMENT_LINES = {
     "skills/engineering-workflow/SKILL.md": 1,
@@ -916,20 +918,20 @@ def signingkey_mention_kind(rel: str, line: str) -> str | None:
         return "b: the override prohibition"
     if script and line == CHECK_SCRIPT_COMMENT:
         return "c: the resolution-forms comment"
-    mentions = line.count("user.signingkey")
     if EVAL_TRANSCRIPT.fullmatch(rel):
         # A recorded run can quote the brief several times on one line, with or without the
         # backticks: it passes only when every mention sits inside a restated override sentence.
-        plain = OVERRIDE_RESTATEMENT.replace("`", "")
-        inside = line.replace("`", "").count(plain) * plain.count("user.signingkey")
+        # Both counts read the same backtick-free line, so a split token cannot hide a mention.
+        stripped = line.replace("`", "")
+        mentions = stripped.count("user.signingkey")
+        inside = stripped.count(PLAIN_RESTATEMENT) * PLAIN_RESTATEMENT.count("user.signingkey")
         return "d: the restated override" if 0 < mentions == inside else None
-    if mentions == 1 and OVERRIDE_RESTATEMENT in line and rel in RESTATEMENT_LINES:
+    if line.count("user.signingkey") == 1 and OVERRIDE_RESTATEMENT in line and rel in RESTATEMENT_LINES:
         return "d: the restated override"
     return None
 
 
 TRANSCRIPT = "skills/story-to-done/evals/a-case/results/a-label-a-scenario-1.json"
-PLAIN_RESTATEMENT = OVERRIDE_RESTATEMENT.replace("`", "")
 
 
 @pytest.mark.parametrize(
@@ -950,11 +952,23 @@ def test_a_transcript_line_passes_when_every_mention_is_inside_a_restated_senten
         f"{PLAIN_RESTATEMENT}. {PLAIN_RESTATEMENT}. git config user.signingkey",
         f"{OVERRIDE_RESTATEMENT} and set user.signingkey",
         "git config user.signingkey key::ssh-ed25519",
-        "no mention on this line",
+        "never pass `-c user.signing`key`, `-c gpg.*` or `-c commit.gpgsign`; git config user.signingkey key::ssh-ed25519",
     ],
 )
 def test_a_transcript_line_with_a_mention_beyond_the_sentence_count_fails(line):
     assert signingkey_mention_kind(TRANSCRIPT, line) is None
+
+
+@pytest.mark.parametrize(
+    "rel",
+    [
+        "skills/story-to-done/evals/a-case/results/nested/a-run.json",
+        "skills/story-to-done/evals/a-case/grader-fixtures/a-run.json",
+        "skills/story-to-done/evals/a-case/results",
+    ],
+)
+def test_paths_outside_a_case_results_directory_get_no_transcript_exemption(rel):
+    assert signingkey_mention_kind(rel, f"{OVERRIDE_RESTATEMENT}; {OVERRIDE_RESTATEMENT}") is None
 
 
 @pytest.mark.parametrize("rel", ["skills/story-to-done/SKILL.md", "skills/story-to-done/evals/README.md"])
