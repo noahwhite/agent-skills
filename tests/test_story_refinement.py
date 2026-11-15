@@ -601,7 +601,8 @@ SLICE_BRIEF_CONTEXT = (
     "The slice brief also carries the prior-round context in Estimation and slicing in "
     "[references/linear.md](references/linear.md), the facilitator records it verbatim in the slice's pointing "
     "record, and the values of the same round, the sibling slices' and the round's other voters', stay hidden until "
-    "every vote of the round is recorded."
+    "every vote of the round is recorded, so each slice's Step 3 reveal, the SM/EM's sizing comments and its Step 4 "
+    "discussion wait until every slice of the round has its three values recorded."
 )
 SLICE_FRESH_CONTEXTS = (
     "- Each slice gets its own three-voter estimate in the same blind round, with newly created voter contexts that "
