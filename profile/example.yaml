@@ -153,7 +153,8 @@ refinement:
       model: example/family-c
       family: family-c
   point_cap: 5
-  # Optional labels: completed issues carrying them serve as capstone exemplars and pointing anchors.
+  # Optional, independent labels: completed issues carrying exemplar_label serve as capstone
+  # exemplars, and those carrying anchor_label as pointing anchors; with both unset nothing changes.
   # exemplar_label: example-exemplar
   # anchor_label: example-anchor
 # The seats story-to-done falls back to when an invocation leaves a seat argument out. An explicit

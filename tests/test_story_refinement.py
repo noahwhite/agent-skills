@@ -4646,7 +4646,8 @@ LOOKUP_SCENARIOS = [
      "matches a user story", "Exemplars",
      "`<key list>` (the selected exemplar's key, a list of one because one exemplar is selected)"),
     ("exemplar several matches", "Exemplar selection", "when several match, the one with the most recent "
-     "`capstone` comment by creation time, then the lowest key, is selected and each other gets one `exemplar not "
+     "`capstone` comment by creation time, then the lowest key when creation times are equal, is selected and each "
+     "other gets one `exemplar not "
      "selected: <key>` line",
      "Exemplar not selected", "one `exemplar not selected: <key>` line per eligible candidate of the story's type"),
     ("exemplar lookup failed", "Exemplar selection", "a lookup error is `exemplar lookup failed`", "Exemplars",
@@ -4742,6 +4743,11 @@ def test_lookup_listing_reopened_value_and_tie_break_are_defined() -> None:
         "--all-states --limit 0 --json`"
     ) in rules
     assert "a listing that cannot be read in full is a lookup error" in rules
+    assert "`--limit 0` lists every matching issue, with no page cap" in rules
+    assert (
+        "`<label>` and `<key>` come from profile and tracker data, so each is passed to the command as one "
+        "single-quoted argument, never interpolated unquoted into a shell line"
+    ) in rules
     lookup = exemplar_bullet("Exemplar lookup")
     assert (
         "a candidate is reopened when its state history, read with `linear api` from the issue's `completedat` and "
@@ -4749,8 +4755,10 @@ def test_lookup_listing_reopened_value_and_tie_break_are_defined() -> None:
     ) in lookup
     assert (
         "a `capstone` comment names a value when any of its lines starts with `points:` or `estimate:`, or carries a "
-        "number or number word directly followed by `point`, `points` or `pts`"
+        "number or number word in the same line as any of the words `point`, `points`, `pts`, `estimate`, "
+        "`estimated`, `size` or `sized`, matched case-insensitively, so \"estimated at 3.\" names a value"
     ) in lookup
+    assert "then the lowest key when creation times are equal" in exemplar_bullet("Exemplar selection")
 
 
 def test_anchor_table_rules_name_the_cap_boundary_and_the_single_build() -> None:
@@ -4860,6 +4868,9 @@ def test_refinement_template_carries_the_exemplar_and_not_pointed_lines() -> Non
     assert not [line for line in lines if "not looked up" in line]
     intro = flat(prose(section(RECORD.read_text(), "Refinement comment")))
     assert "for a bug, an investigation or a spike it also carries the `anchors: not pointed` line" in intro
+    assert "for a user story it omits that line, because its anchors are recorded in the pointing record" in intro
+    assert "with one skip line per skipped or not-selected candidate and none when there is none" in intro
+    assert not [line for line in lines + pointing_template() if "skipped: none" in line.lower()]
 
 
 def test_pointing_template_carries_the_anchor_lines_and_never_not_pointed() -> None:
@@ -4972,12 +4983,14 @@ TOPIC_RULES = [
         "A candidate is eligible only when it is in `profile.tracker.states.done`, has not been reopened after its "
         "latest completion, and has a `Capstone` comment that names no point value or estimate.",
         "A `Capstone` comment names a value when any of its lines starts with `Points:` or `Estimate:`, or carries a "
-        "number or number word directly followed by `point`, `points` or `pts`.",
+        "number or number word in the same line as any of the words `point`, `points`, `pts`, `estimate`, "
+        "`estimated`, `size` or `sized`, matched case-insensitively, so \"Estimated at 3.\" names a value.",
         "Each other candidate gets one `Exemplar skipped:` line with the first reason that applies, in this order: "
         "`not done`, `reopened`, `no Capstone comment` or `Capstone comment names a value`.",
         "The selected exemplar is the eligible candidate whose type matches this story's type, read the same way from "
         "the type written on the todo list, so `type: estimated` matches a User Story; when several match, the one "
-        "with the most recent `Capstone` comment by creation time, then the lowest key, is selected and each other "
+        "with the most recent `Capstone` comment by creation time, then the lowest key when creation times are equal, "
+        "is selected and each other "
         "gets one `Exemplar not selected: <key>` line.",
     ]),
     ("anchor-value", (RECORD,), ("anchor", "point value"), [
