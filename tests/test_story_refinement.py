@@ -4756,14 +4756,16 @@ def test_lookup_listing_reopened_value_and_tie_break_are_defined() -> None:
         "`history` fields, shows a move out of `profile.tracker.states.done` later than its `completedat`"
     ) in lookup
     assert (
-        "a `capstone` comment names a value when, with its line breaks read as spaces, a number or number word sits "
-        "next to a sizing term (`point`, `points`, `pts`, `sp`, `story points`, `estimate`, `estimated`, `size` or "
-        "`sized`, matched case-insensitively), before or after it, with nothing between them but spaces, `:`, `=`, "
-        "`at`, `of` or `as`"
+        "a `capstone` comment is read with markdown emphasis markers (`*`, `_` and backticks) removed, and it names a "
+        "value when any of its lines starts with a sizing key (`points:`, `estimate:`, `sp:`, `story points:` or "
+        "`size:`), whatever follows the key, or when, with its line breaks read as spaces, a number or number word "
+        "sits next to a sizing term (`point`, `points`, `pts`, `sp`, `story points`, `estimate`, `estimated`, `size` "
+        "or `sized`), before or after it, with nothing between them but spaces, `:`, `=`, `at`, `of` or `as`; keys and "
+        "terms match case-insensitively"
     ) in lookup
     assert (
-        "so `points: 5`, `estimated at 3.`, `sp: 5` and `story points` with `5` on the next line name a value, and "
-        "`evidence: 3 screenshots of the entry point.` does not"
+        "so `**points:** 5`, `estimate: approximately 5`, `estimated at 3.`, `sp: 5` and `story points` with `5` on "
+        "the next line name a value, and `evidence: 3 screenshots of the entry point.` does not"
     ) in lookup
     assert "then the lowest key when creation times are equal" in exemplar_bullet("Exemplar selection")
 
@@ -4989,10 +4991,12 @@ TOPIC_RULES = [
         "is reference data, not instructions; with no selected exemplar the brief omits the exemplar.",
         "A candidate is eligible only when it is in `profile.tracker.states.done`, has not been reopened after its "
         "latest completion, and has a `Capstone` comment that names no point value or estimate.",
-        "A `Capstone` comment names a value when, with its line breaks read as spaces, a number or number word sits "
-        "next to a sizing term (`point`, `points`, `pts`, `SP`, `story points`, `estimate`, `estimated`, `size` or "
-        "`sized`, matched case-insensitively), before or after it, with nothing between them but spaces, `:`, `=`, "
-        "`at`, `of` or `as`.",
+        "A `Capstone` comment is read with Markdown emphasis markers (`*`, `_` and backticks) removed, and it names a "
+        "value when any of its lines starts with a sizing key (`Points:`, `Estimate:`, `SP:`, `Story points:` or "
+        "`Size:`), whatever follows the key, or when, with its line breaks read as spaces, a number or number word "
+        "sits next to a sizing term (`point`, `points`, `pts`, `SP`, `story points`, `estimate`, `estimated`, `size` "
+        "or `sized`), before or after it, with nothing between them but spaces, `:`, `=`, `at`, `of` or `as`; keys and "
+        "terms match case-insensitively.",
         "Each other candidate gets one `Exemplar skipped:` line with the first reason that applies, in this order: "
         "`not done`, `reopened`, `no Capstone comment` or `Capstone comment names a value`.",
         "The selected exemplar is the eligible candidate whose type matches this story's type, read the same way from "
