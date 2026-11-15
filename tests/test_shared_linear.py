@@ -219,8 +219,8 @@ PRIOR_ROUND_CONTEXT = (
     "round and, in split round 2, the parent slice's round, never a voided vote or rationale, a ground the story-refinement Step 4 basis review challenged, or a "
     "sibling slice's value or rationale.",
     "The brief states the per-parent bound only in the Slice brief template's fixed sentence, as a bound and never as "
-    "a value to score, and the parent's recorded value with its round's voter values only on the template's Parent "
-    "line.",
+    "a value to score, and the parent's recorded value as a recorded value, with its round's voter values, only on "
+    "the template's Parent line and as a bound only in that fixed sentence.",
     "Slice voters still run in newly created contexts, so the prior rounds reach them by the brief and never by "
     "session reuse, and the values of the same round, the sibling slices' and the round's other voters', stay hidden "
     "until every vote of the round is recorded.",
