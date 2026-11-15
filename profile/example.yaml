@@ -153,6 +153,10 @@ refinement:
       model: example/family-c
       family: family-c
   point_cap: 5
+  # Optional, independent labels: completed issues carrying exemplar_label serve as capstone
+  # exemplars, and those carrying anchor_label as pointing anchors; with both unset nothing changes.
+  # exemplar_label: example-exemplar
+  # anchor_label: example-anchor
 # The seats story-to-done falls back to when an invocation leaves a seat argument out. An explicit
 # argument overrides a field; effort defaults to high; a seat with no model stops the skill to ask.
 # A command seat runs from any orchestrator with a shell: the skill fills {model} and {effort}.
