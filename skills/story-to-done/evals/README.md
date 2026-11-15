@@ -136,6 +136,13 @@ A tabletop case answered in text is not accepted.
 
 The stories that add into this layout are SKL-274 (regression-pin cases), SKL-275 (discriminating cases), SKL-162 (`spike-no-deployment`) and SKL-188 (further `qa-unfinished-own-steps` scenarios).
 
+### Where `pending-ruling-not-sent-to-engineer` differs from the `qa-unfinished-own-steps` layout
+
+- Fixtures for several QA rounds: each scenario holds a `rounds.json` that lists the QA records (`qa-round-<n>.md`) and senior-engineer handbacks (`engineer-handback-<n>.md`) the stub serves in turn, with the tracker state each one leaves, instead of one `qa-round-1.json` launch record.
+- The user message channel in the stub runtime: `runtime/story-runtime` sends a message to the user as well as to a new senior-engineer or QA session, records each send in `actions.jsonl` with the QA round it follows, and keeps each message's text in `messages.json`, which the grader reads beside the call record.
+- The `control` field on control scenarios: `plain-failure` carries it in `case.yaml`, so the suite reports it as a control.
+- Grader fixtures: `grader-fixtures/<scenario>/` holds a keeping fixture and one or more breaking fixtures, outside `results/`, which `tests/test_pending_ruling_case.py` grades.
+
 ## Cases
 
 | Case | Kind | Recorded runs meet the definition |

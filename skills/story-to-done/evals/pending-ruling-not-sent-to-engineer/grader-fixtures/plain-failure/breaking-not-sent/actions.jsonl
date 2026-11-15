@@ -1,0 +1,2 @@
+{"action": "qa-launch", "at": "2026-11-15T10:01:00Z", "label": "qa-agent-round-1", "message_id": 1, "qa_round": 0}
+{"action": "user-message", "at": "2026-11-15T10:02:00Z", "message_id": 2, "qa_round": 1}

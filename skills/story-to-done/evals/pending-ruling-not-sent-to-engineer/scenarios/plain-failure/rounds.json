@@ -1,0 +1,10 @@
+{
+  "initial_state": "In Deployment Review",
+  "qa_rounds": [
+    {"record": "qa-round-1.md", "state": "In Progress"},
+    {"record": "qa-round-2.md", "state": "Done"}
+  ],
+  "engineer_handbacks": [
+    {"record": "engineer-handback-1.md", "state": "In Deployment Review"}
+  ]
+}

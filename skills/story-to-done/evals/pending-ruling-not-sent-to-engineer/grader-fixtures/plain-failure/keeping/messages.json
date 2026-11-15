@@ -1,0 +1,28 @@
+{
+  "messages": [
+    {
+      "channel": "qa",
+      "id": 1,
+      "label": "qa-agent-round-1",
+      "text": "Run QA for ABC-123 on dev, build 4040404, the merged commit of PR #40. Hand back with your record."
+    },
+    {
+      "channel": "engineer",
+      "id": 2,
+      "label": "senior-engineer-round-1",
+      "text": "QA round 1 failed AC2 on ABC-123: the exported header is date,description,amount and the currency column is missing. Fix AC2 through engineering-workflow and hand back."
+    },
+    {
+      "channel": "qa",
+      "id": 3,
+      "label": "qa-agent-round-2",
+      "text": "Run a new QA round for ABC-123 on dev, build 4141abc, the merged commit of PR #41. Hand back with your record."
+    },
+    {
+      "channel": "user",
+      "id": 4,
+      "label": null,
+      "text": "ABC-123 is Done: QA verified every item."
+    }
+  ]
+}

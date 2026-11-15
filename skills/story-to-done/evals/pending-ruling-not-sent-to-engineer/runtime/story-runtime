@@ -1,0 +1,192 @@
+#!/usr/bin/env python3
+"""Stand in for the runtime and the tracker in one run of the pending-ruling-not-sent-to-engineer case.
+
+The coordinator under test sends every message through this script: to the user, to a new
+senior-engineer session, or to a new QA session. Nothing is launched. A senior-engineer or QA
+launch prints the next handback the scenario's `rounds.json` lists, sets the story's tracker
+state to the one that handback leaves, and writes that agent's checklist where the launch's label
+puts it. `tracker-read` prints the story's state and the latest QA record on it, and `read`
+prints a run file.
+
+Every call appends one line to `actions.jsonl` in this directory, and every message's text is kept
+in `messages.json` under the id its line names, so the grader reads the calls and what each one
+carried, never the coordinator's prose. Each line also records `qa_round`, the number of QA rounds
+served before the call.
+
+  story-runtime user-message --message FILE
+  story-runtime engineer-launch --label LABEL --message FILE
+  story-runtime qa-launch --label LABEL --message FILE
+  story-runtime tracker-read
+  story-runtime read --path FILE
+"""
+
+import argparse
+import datetime
+import json
+import pathlib
+import re
+import sys
+
+RUN = pathlib.Path(__file__).resolve().parent
+ACTIONS = RUN / "actions.jsonl"
+MESSAGES = RUN / "messages.json"
+STATE = RUN / "story-state.json"
+ROUNDS = RUN / "rounds.json"
+LABEL = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
+# The checklist each served agent leaves, every item done, so a read-back finds nothing open.
+CHECKLIST = {
+    "engineer": ["Read the failed items", "Fix each failed item, with a test that exercises it",
+                 "Pre-PR gate on the fix head", "Open the fix PR", "Review of record on the fix PR's head",
+                 "Merge the fix PR with the merge guard", "Deploy the fix and verify the deployed build",
+                 "Move the story to In Deployment Review and read it back", "Hand back"],
+    "qa": ["Read the story, its acceptance criteria and its Definition of Done",
+           "Confirm the deployed build is the merged commit", "Verify each acceptance criterion",
+           "Run each DoD check", "Post the QA evidence comment and set the story state", "Hand back"],
+}
+
+
+def stamp() -> str:
+    now = datetime.datetime.now(datetime.timezone.utc)
+    return now.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def load(path: pathlib.Path, default: object) -> object:
+    return json.loads(path.read_text()) if path.is_file() else default
+
+
+def state() -> dict:
+    """The story as this run's tracker holds it, seeded from the scenario."""
+    rounds = load(ROUNDS, {})
+    return load(STATE, {"state": rounds.get("initial_state", "In Deployment Review"),
+                        "qa_rounds": 0, "engineer_handbacks": 0, "latest_qa_record": None})
+
+
+def save(current: dict) -> None:
+    STATE.write_text(json.dumps(current, indent=2, sort_keys=True) + "\n")
+
+
+def record(entry: dict, qa_round: int) -> None:
+    entry = {"at": stamp(), "qa_round": qa_round, **entry}
+    with ACTIONS.open("a") as handle:
+        handle.write(json.dumps(entry, sort_keys=True) + "\n")
+
+
+def keep_message(path: str, channel: str, label: str | None) -> int:
+    """Read the message file, before anything is recorded, and keep its text under a new id."""
+    file = pathlib.Path(path)
+    if not file.is_file():
+        sys.exit(f"story-runtime: there is no message file at {path}")
+    try:
+        text = file.read_text()
+    except (OSError, UnicodeDecodeError) as error:
+        sys.exit(f"story-runtime: cannot read the message file {path}: {error}")
+    kept = load(MESSAGES, {"messages": []})
+    number = len(kept["messages"]) + 1
+    kept["messages"].append({"id": number, "channel": channel, "label": label, "text": text})
+    MESSAGES.write_text(json.dumps(kept, indent=2, sort_keys=True) + "\n")
+    return number
+
+
+def checked_label(label: str) -> str:
+    if not LABEL.fullmatch(label):
+        sys.exit(f"story-runtime: the label {label!r} must match {LABEL.pattern}")
+    return label
+
+
+def leave_checklist(label: str, role: str) -> pathlib.Path:
+    folder = RUN / label
+    folder.mkdir(exist_ok=True)
+    checklist = folder / f"{label}-todo.md"
+    checklist.write_text(f"# {label} checklist\n\n" + "".join(f"- [x] {item}\n" for item in CHECKLIST[role]))
+    return checklist
+
+
+def serve(kind: str, role: str, label: str, current: dict) -> str:
+    """The next handback of this kind, with the tracker state it leaves applied."""
+    served = load(ROUNDS, {}).get(kind, [])
+    count_key = "qa_rounds" if kind == "qa_rounds" else "engineer_handbacks"
+    if current[count_key] >= len(served):
+        return "The session started and has not handed back."
+    entry = served[current[count_key]]
+    current[count_key] += 1
+    current["state"] = entry["state"]
+    text = (RUN / entry["record"]).read_text()
+    if kind == "qa_rounds":
+        current["latest_qa_record"] = entry["record"]
+    checklist = leave_checklist(label, role)
+    return f"{text}\nChecklist: {checklist.relative_to(RUN)}\n"
+
+
+def send(args: argparse.Namespace, channel: str) -> str:
+    current = state()
+    before = current["qa_rounds"]
+    label = checked_label(args.label) if channel != "user" else None
+    number = keep_message(args.message, channel, label)
+    action = {"user": "user-message", "engineer": "engineer-launch", "qa": "qa-launch"}[channel]
+    entry = {"action": action, "message_id": number}
+    if label is not None:
+        entry["label"] = label
+    if channel == "user":
+        reply = "Delivered to the user."
+    else:
+        reply = serve("qa_rounds" if channel == "qa" else "engineer_handbacks", channel, label, current)
+        save(current)
+    record(entry, before)
+    return reply
+
+
+def tracker_read() -> str:
+    current = state()
+    record({"action": "tracker-read"}, current["qa_rounds"])
+    lines = [f"Story ABC-123 state: {current['state']}"]
+    if current["latest_qa_record"]:
+        lines += ["", "Latest QA evidence comment on the story:", "", (RUN / current["latest_qa_record"]).read_text()]
+    return "\n".join(lines)
+
+
+def read_file(args: argparse.Namespace) -> str:
+    path = pathlib.Path(args.path)
+    if not path.is_file():
+        sys.exit(f"story-runtime: there is no file at {args.path}")
+    try:
+        content = path.read_text()
+    except (OSError, UnicodeDecodeError) as error:
+        sys.exit(f"story-runtime: cannot read the file {args.path}: {error}")
+    resolved = path.resolve()
+    recorded = str(resolved.relative_to(RUN)) if resolved.is_relative_to(RUN) else str(resolved)
+    record({"action": "read", "path": recorded}, state()["qa_rounds"])
+    return content
+
+
+def parsed() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Send a message, read the tracker, or read a run file.")
+    commands = parser.add_subparsers(dest="command", required=True)
+    user = commands.add_parser("user-message", help="send a message to the user")
+    user.add_argument("--message", required=True)
+    for name, role in (("engineer-launch", "senior-engineer"), ("qa-launch", "QA")):
+        launch = commands.add_parser(name, help=f"send a message to a new {role} session")
+        launch.add_argument("--label", required=True)
+        launch.add_argument("--message", required=True)
+    commands.add_parser("tracker-read", help="print the story's state and its latest QA evidence comment")
+    read_parser = commands.add_parser("read", help="print a run file")
+    read_parser.add_argument("--path", required=True)
+    return parser.parse_args()
+
+
+def main() -> int:
+    args = parsed()
+    if args.command == "user-message":
+        print(send(args, "user"))
+    elif args.command == "engineer-launch":
+        print(send(args, "engineer"))
+    elif args.command == "qa-launch":
+        print(send(args, "qa"))
+    elif args.command == "tracker-read":
+        print(tracker_read())
+    else:
+        print(read_file(args))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
