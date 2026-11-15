@@ -916,10 +916,54 @@ def signingkey_mention_kind(rel: str, line: str) -> str | None:
         return "b: the override prohibition"
     if script and line == CHECK_SCRIPT_COMMENT:
         return "c: the resolution-forms comment"
-    restating = line.count("user.signingkey") == 1 and OVERRIDE_RESTATEMENT in line
-    if restating and (rel in RESTATEMENT_LINES or EVAL_TRANSCRIPT.fullmatch(rel)):
+    mentions = line.count("user.signingkey")
+    if EVAL_TRANSCRIPT.fullmatch(rel):
+        # A recorded run can quote the brief several times on one line, with or without the
+        # backticks: it passes only when every mention sits inside a restated override sentence.
+        plain = OVERRIDE_RESTATEMENT.replace("`", "")
+        inside = line.replace("`", "").count(plain) * plain.count("user.signingkey")
+        return "d: the restated override" if 0 < mentions == inside else None
+    if mentions == 1 and OVERRIDE_RESTATEMENT in line and rel in RESTATEMENT_LINES:
         return "d: the restated override"
     return None
+
+
+TRANSCRIPT = "skills/story-to-done/evals/a-case/results/a-label-a-scenario-1.json"
+PLAIN_RESTATEMENT = OVERRIDE_RESTATEMENT.replace("`", "")
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        f"brief: {OVERRIDE_RESTATEMENT}.",
+        f"round 1: {PLAIN_RESTATEMENT}.\\n\\nround 2: {PLAIN_RESTATEMENT}.",
+        f"{OVERRIDE_RESTATEMENT}; {PLAIN_RESTATEMENT}; {PLAIN_RESTATEMENT}",
+    ],
+)
+def test_a_transcript_line_passes_when_every_mention_is_inside_a_restated_sentence(line):
+    assert signingkey_mention_kind(TRANSCRIPT, line) == "d: the restated override"
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        f"{PLAIN_RESTATEMENT}. {PLAIN_RESTATEMENT}. git config user.signingkey",
+        f"{OVERRIDE_RESTATEMENT} and set user.signingkey",
+        "git config user.signingkey key::ssh-ed25519",
+        "no mention on this line",
+    ],
+)
+def test_a_transcript_line_with_a_mention_beyond_the_sentence_count_fails(line):
+    assert signingkey_mention_kind(TRANSCRIPT, line) is None
+
+
+@pytest.mark.parametrize("rel", ["skills/story-to-done/SKILL.md", "skills/story-to-done/evals/README.md"])
+def test_the_single_mention_rule_is_unchanged_outside_transcripts(rel):
+    twice = f"{OVERRIDE_RESTATEMENT}; {OVERRIDE_RESTATEMENT}"
+    assert signingkey_mention_kind(rel, twice) is None
+    assert signingkey_mention_kind(rel, PLAIN_RESTATEMENT) is None
+    expected = "d: the restated override" if rel in RESTATEMENT_LINES else None
+    assert signingkey_mention_kind(rel, OVERRIDE_RESTATEMENT) == expected
 
 
 def test_signingkey_mentions_are_allowlisted():
