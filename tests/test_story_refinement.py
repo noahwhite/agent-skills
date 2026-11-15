@@ -1427,8 +1427,10 @@ STEP_THREE_ITEM_PREFIXES = [
     "The sentence above is the pointing basis.",
     "Each voter submits one point value",
     "No voter sees another voter's point value before its own value is recorded.",
-    "The facilitator records all three values before the SM/EM comments on sizing or the discussion opens.",
-    "After all three values are recorded, the SM/EM may provide factual, reference-only sizing context:",
+    "The facilitator records all three values, and in a slice round the three values of every slice of the round, "
+    "before the SM/EM comments on sizing or the discussion opens.",
+    "After all three values are recorded, and in a slice round only after every slice of the round has its three "
+    "values recorded, the SM/EM may provide factual, reference-only sizing context:",
 ]
 
 
@@ -1494,10 +1496,14 @@ def test_step_four_records_a_value_outside_the_sequence_as_wider_than_one_step()
 
 def test_step_three_defines_the_reveal() -> None:
     items = process_items(STEP_THREE)
-    assert (
-        "The reveal is the moment the facilitator has recorded all three values, after which the SM/EM may "
-        "comment on sizing and the discussion opens."
-    ) in items[4]
+    # SKL-307: exact text, so no contradicting sentence can join item 5; in a slice round the reveal waits for every
+    # slice of the round, as the Split rule defers it.
+    assert items[4] == (
+        "No voter sees another voter's point value before its own value is recorded. "
+        "The reveal is the moment the facilitator has recorded all three values, or, in a slice round, every slice "
+        "of the round has its three values recorded, after which the SM/EM may comment on sizing and the "
+        "discussion opens."
+    )
 
 
 def test_step_four_re_vote_prompt_carries_the_rationale_rule() -> None:
@@ -1546,7 +1552,10 @@ def test_step_four_re_vote_requires_a_complexity_rationale() -> None:
     ) in item
 
 
-SIZING_ITEM = "After all three values are recorded, the SM/EM may provide"
+SIZING_ITEM = (
+    "After all three values are recorded, and in a slice round only after every slice of the round has its three "
+    "values recorded, the SM/EM may provide"
+)
 
 
 def test_step_three_sizing_context_is_in_complexity_terms() -> None:

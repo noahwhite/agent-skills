@@ -234,10 +234,10 @@ A Bug, an Investigation or a Spike skips this stage, as [Unestimated issue types
      These prices, that remainder and that sum, kept in the voter's own file until the reveal, are the one exception to naming no point value before the reveal.
      The value is written only to that voter's own file in the session's scratch directory.
   5. No voter sees another voter's point value before its own value is recorded.
-     The reveal is the moment the facilitator has recorded all three values, after which the SM/EM may comment on sizing and the discussion opens.
-  6. The facilitator records all three values before the SM/EM comments on sizing or the discussion opens.
+     The reveal is the moment the facilitator has recorded all three values, or, in a slice round, every slice of the round has its three values recorded, after which the SM/EM may comment on sizing and the discussion opens.
+  6. The facilitator records all three values, and in a slice round the three values of every slice of the round, before the SM/EM comments on sizing or the discussion opens.
      The SM/EM submits no point value.
-  7. After all three values are recorded, the SM/EM may provide factual, reference-only sizing context: comparable stories in complexity terms, their recorded values, comparable unknowns and constraints, and relevant scope differences.
+  7. After all three values are recorded, and in a slice round only after every slice of the round has its three values recorded, the SM/EM may provide factual, reference-only sizing context: comparable stories in complexity terms, their recorded values, comparable unknowns and constraints, and relevant scope differences.
      A factual reference is not a prescription: naming an already-estimated item's recorded value, alone or together with a basis difference, is permitted, and such a reference is information the voters weigh and never stops the round.
      It must not prescribe this story's value - no value to score, no target, no preferred direction - and must not reveal or compare individual votes before the discussion.
      Before the reveal it must not name any point value.
@@ -306,7 +306,7 @@ A Bug, an Investigation or a Spike skips this stage, as [Unestimated issue types
 
 ## Anchoring guardrail
 
-The three point values are recorded before the SM/EM comments on sizing or the discussion opens.
+The three point values, and in a slice round the three values of every slice of the round, are recorded before the SM/EM comments on sizing or the discussion opens.
 The SM/EM's sizing comments are logged with the pointing record.
 
 The prohibited behaviours are:
