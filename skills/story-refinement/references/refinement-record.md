@@ -65,7 +65,7 @@ Never edit the refinement comment to add the result; its id keeps identifying on
 
 Post this once Step 4 has recorded the estimate, or record it as an unpointed result; the basis review in Step 4 item 2 always runs before it is posted.
 Never post it for a Bug, an Investigation or a Spike, which is never pointed.
-The three values are recorded before any SM/EM sizing comment or discussion; a void before all three exist leaves the values block at the values recorded so far and carries no superseded values, and once the blind re-run finishes the values block carries the three standing values while the superseded line carries the voided ones.
+The three values, and in a slice round the three values of every slice of the round, are recorded before any SM/EM sizing comment or discussion; a void before all three exist leaves the values block at the values recorded so far and carries no superseded values, and once the blind re-run finishes the values block carries the three standing values while the superseded line carries the voided ones.
 Outside the recorded numeric values, the Ledger line's prices, the Slice brief line's prior-round context of standing values recorded in earlier rounds and the superseded-values line, no line of the posted record carries a point value named before the reveal or a prescription of this story's value: the Challenges and Anchoring events lines record a ground by its kind, its author (a voter, or the SM/EM for a sizing comment) and its outcome or recovery, and every field that could quote a participant elides those two classes permanently, because the posted record stays on the story surface that later voters read; the verbatim quote lives in the session's raw record, cited by its base name.
 A sizing comment that names a point value before the reveal, prescribes this story's value, or states elapsed time, effort or run cost voids the round under the Anchoring guardrail recovery as soon as the facilitator sees it, as does any ground that is neither restated nor retracted, and the void records the voided consensus under Superseded values after a void, so the Consensus field carries the vote that stands, or n/a when the consensus check or the residual variance rule recorded the estimate.
 
@@ -82,7 +82,7 @@ A sizing comment that names a point value before the reveal, prescribes this sto
 - Consensus check: <identical | one step | more than one step>
 - Ledger: <for a whole-story round, each unknown with its unrounded price and, once the split is drafted, its owner slice or blocker story (no owner for an unsplit story), each merge of differently named unknowns, the ledger total beside the whole-story value (or beside the unpointed outcome, with no saturation note) and not reconciled to slice values, and the saturation note when the whole-story value is the highest value of the step sequence; n/a for a slice round, whose slice brief carries the ledger>
 - Slice brief: <n/a for a whole-story round; for a slice round, the slice brief its voters received, verbatim>
-- SM/EM sizing context, after all three values: <file base name> or verbatim, eliding a pre-reveal value or a prescription, or none
+- SM/EM sizing context, after all three values (in a slice round, after every slice of the round has its three values): <file base name> or verbatim, eliding a pre-reveal value or a prescription, or none
 - Discussion: <high <value>, low <value>; or none when the discussion ran and recorded nothing; or skipped, when the consensus check recorded the estimate; the shared content names only the high and the low, while a voter's own recorded value and rationale are carried privately in that voter's prompt>
 - Re-vote: <accepted set per voter, with complexity rationale; or no consensus, with its complexity rationale, for a voter that records none; or none when it ran and recorded nothing; or skipped, when the consensus check recorded the estimate>
 - Consensus: <the highest value in the intersection of the vote that stands (the lowest for a slice), or n/a when the consensus check or the residual variance rule recorded the estimate, or none when the round stopped unpointed>
@@ -235,10 +235,10 @@ Under the denied tracker writes fallback in `SKILL.md`, replace the tracker-writ
 
 ## Permitted and forbidden phrasing
 
-The SM/EM may give factual, reference-only sizing context after all three values are recorded.
+The SM/EM may give factual, reference-only sizing context after all three values are recorded, and in a slice round only after every slice of the round has its three values recorded.
 Everything in the forbidden column breaks independence or anchors the discussion.
 A factual reference is permitted and a prescription is not: naming an already-estimated item's recorded value, alone or together with a basis difference, is a reference the voters weigh, while a value to score, a target or a preferred direction for the story under estimate is a prescription that anchors the round.
-A permitted comparison names at most one comparable story and at most one basis difference; it never prescribes a value for the story under estimate, names a range, an average, elapsed time or effort, and it names another story's point value only after all three values are recorded.
+A permitted comparison names at most one comparable story and at most one basis difference; it never prescribes a value for the story under estimate, names a range, an average, elapsed time or effort, and it names another story's point value only after all three values are recorded, and in a slice round only after every slice of the round has its three values recorded.
 
 | Permitted (factual, reference-only) | Forbidden (leading or anchoring) |
 |---|---|

@@ -234,10 +234,10 @@ A Bug, an Investigation or a Spike skips this stage, as [Unestimated issue types
      These prices, that remainder and that sum, kept in the voter's own file until the reveal, are the one exception to naming no point value before the reveal.
      The value is written only to that voter's own file in the session's scratch directory.
   5. No voter sees another voter's point value before its own value is recorded.
-     The reveal is the moment the facilitator has recorded all three values, after which the SM/EM may comment on sizing and the discussion opens.
-  6. The facilitator records all three values before the SM/EM comments on sizing or the discussion opens.
+     The reveal is the moment the facilitator has recorded all three values, or, in a slice round, every slice of the round has its three values recorded, after which the SM/EM may comment on sizing and the discussion opens.
+  6. The facilitator records all three values, and in a slice round the three values of every slice of the round, before the SM/EM comments on sizing or the discussion opens.
      The SM/EM submits no point value.
-  7. After all three values are recorded, the SM/EM may provide factual, reference-only sizing context: comparable stories in complexity terms, their recorded values, comparable unknowns and constraints, and relevant scope differences.
+  7. After all three values are recorded, and in a slice round only after every slice of the round has its three values recorded, the SM/EM may provide factual, reference-only sizing context: comparable stories in complexity terms, their recorded values, comparable unknowns and constraints, and relevant scope differences.
      A factual reference is not a prescription: naming an already-estimated item's recorded value, alone or together with a basis difference, is permitted, and such a reference is information the voters weigh and never stops the round.
      It must not prescribe this story's value - no value to score, no target, no preferred direction - and must not reveal or compare individual votes before the discussion.
      Before the reveal it must not name any point value.
@@ -245,7 +245,7 @@ A Bug, an Investigation or a Spike skips this stage, as [Unestimated issue types
      A prescription of this story's value, from the SM/EM or from a voter, is an anchoring event under the Anchoring guardrail.
      A statement of elapsed time or effort is an anchoring event under the Anchoring guardrail.
 - **Outputs:** three point value files and, when provided, a separate SM/EM sizing context file.
-- **Stop:** any voter value is missing; a voter's second off-sequence value is a missing-valid-value stop, which the owner resolves by authorizing a re-run of that voter's record in a new invocation whose `Outcome` reads `missing valid value`; an SM/EM sizing comment appears before all three values are recorded (see the anchoring guardrail).
+- **Stop:** any voter value is missing; a voter's second off-sequence value is a missing-valid-value stop, which the owner resolves by authorizing a re-run of that voter's record in a new invocation whose `Outcome` reads `missing valid value`; an SM/EM sizing comment appears before all three values are recorded, or, in a slice round, before every slice of the round has its three values recorded (see the anchoring guardrail and the Split rule).
 
 ### Step 4: High/low discussion and consensus
 
@@ -306,7 +306,7 @@ A Bug, an Investigation or a Spike skips this stage, as [Unestimated issue types
 
 ## Anchoring guardrail
 
-The three point values are recorded before the SM/EM comments on sizing or the discussion opens.
+The three point values, and in a slice round the three values of every slice of the round, are recorded before the SM/EM comments on sizing or the discussion opens.
 The SM/EM's sizing comments are logged with the pointing record.
 
 The prohibited behaviours are:
@@ -351,7 +351,7 @@ If the split trigger is met, split the story.
 - Each slice gets its own three-voter estimate in the same blind round, with newly created voter contexts that receive the prior rounds by the slice brief, never by session reuse, and that round runs the same Step 4 consensus check, basis review and residual variance rule, so a slice records an estimate or takes the unpointed variance stop on the same terms.
   A slice that takes the unpointed variance stop is recorded as unpointed in the split comment with its derived values, and the ceremony reports `needs input` to the owner naming the story, the slice and those values, so a partially pointed split always ends in that report rather than in an estimate, and its recorded outcome is the slice count with `needs input` for each unpointed slice.
   Each slice voter's prompt is its slice brief, which carries the priced shared-unknown ledger with its prices and owners and, when the whole-story value is the highest value of the step sequence, states that the ledger prices are lower bounds.
-  The slice brief also carries the prior-round context in Estimation and slicing in [references/linear.md](references/linear.md), the facilitator records it verbatim in the slice's pointing record, and the values of the same round, the sibling slices' and the round's other voters', stay hidden until every vote of the round is recorded, so each slice's Step 3 reveal, the SM/EM's sizing comments and its Step 4 discussion wait until every slice of the round has its three values recorded.
+  The slice brief also carries the prior-round context in Estimation and slicing in [references/linear.md](references/linear.md), the facilitator records it verbatim in the slice's pointing record, and the values of the same round, the sibling slices' and the round's other voters', stay hidden until every vote of the round is recorded, so each slice's Step 3 reveal, the SM/EM's sizing comments on that slice and that slice's Step 4 discussion wait until every slice of the round has its three values recorded.
 - A story produced by a split is a slice, the core slice included, and its within-one-step consensus is the lower value: for a slice, the Step 4 item 1 tolerance value, the item 5 consensus, each item 6 derived value and the item 6 tolerance value are the lowest value where an unsplit story records the highest, and a spread of two or more steps still runs the discussion and the re-vote.
   The split trigger, the per-parent bound, the split-bound sums and the tracker estimate use that lower value, the pointing record shows both values per slice, and an unsplit story keeps Step 4 unchanged.
 - A slice that meets the split trigger is split again, within the two-round cap below, under these same bullets, along the boundary order in Estimation and slicing in [references/linear.md](references/linear.md): it stays the core slice and blocks its new siblings, its split comment maps every sub-slice criterion to exactly one acceptance criterion of the slice and every acceptance criterion of the slice to a sub-slice, and each sub-slice, the core slice included, gets its own three-voter blind estimate.
