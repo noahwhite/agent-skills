@@ -211,6 +211,21 @@ SPLIT_BOUNDS_BULLET = " ".join(
     )
 )
 CLOSE_TIME = "- ⛔ Never split an issue at close time to carve off unfinished work; that is status laundering."
+# SKL-307: every pointing round after the first gives each slice voter the prior rounds by its brief.
+PRIOR_ROUND_CONTEXT = (
+    "Every pointing round after a story's first, a slice estimate in either split round, gives each voter in its "
+    "slice brief, as text, the prior-round context: the parent's recorded value and the three voter values of the "
+    "parent's round, the ledger, and the recorded rationales of the slice's ancestor rounds only, the whole-story "
+    "round and, in split round 2, the parent slice's round, never a voided vote or rationale, a ground the story-refinement Step 4 basis review challenged, or a "
+    "sibling slice's value or rationale.",
+    "The brief states the per-parent bound only in the Slice brief template's fixed sentence, as a bound and never as "
+    "a value to score, and the parent's recorded value with its round's voter values only on the template's Parent "
+    "line.",
+    "Slice voters still run in newly created contexts, so the prior rounds reach them by the brief and never by "
+    "session reuse, and the values of the same round, the sibling slices' and the round's other voters', stay hidden "
+    "until every vote of the round is recorded.",
+    "The facilitator records each slice brief verbatim in the slice's pointing record.",
+)
 # SKL-306: a shared unknown is priced once, in a ledger every whole-story pointing round records.
 LEDGER_BULLET = " ".join(
     (
@@ -237,6 +252,7 @@ LEDGER_BULLET = " ".join(
         "An unknown that a blocker story's work resolves is owned by that blocker story and is priced in no slice.",
         "Every slice brief, the pointing prompt of a slice estimate, carries the ledger with its prices and owners, "
         "and when the whole-story value is saturated it states that the ledger prices are lower bounds.",
+        *PRIOR_ROUND_CONTEXT,
         "A slice voter never re-prices an unknown: its rationale states the ledger price of each unknown its slice "
         "owns plus its own non-unknown complexity.",
         "A slice rationale that omits an unknown its slice owns, re-prices an unknown, prices one the ledger does not "

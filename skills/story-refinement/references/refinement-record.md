@@ -66,7 +66,7 @@ Never edit the refinement comment to add the result; its id keeps identifying on
 Post this once Step 4 has recorded the estimate, or record it as an unpointed result; the basis review in Step 4 item 2 always runs before it is posted.
 Never post it for a Bug, an Investigation or a Spike, which is never pointed.
 The three values are recorded before any SM/EM sizing comment or discussion; a void before all three exist leaves the values block at the values recorded so far and carries no superseded values, and once the blind re-run finishes the values block carries the three standing values while the superseded line carries the voided ones.
-Outside the recorded numeric values, the Ledger line's prices and the superseded-values line, no line of the posted record carries a point value named before the reveal or a prescription of this story's value: the Challenges and Anchoring events lines record a ground by its kind, its author (a voter, or the SM/EM for a sizing comment) and its outcome or recovery, and every field that could quote a participant elides those two classes permanently, because the posted record stays on the story surface that later voters read; the verbatim quote lives in the session's raw record, cited by its base name.
+Outside the recorded numeric values, the Ledger line's prices, the Slice brief line's prior-round context of standing values recorded in earlier rounds and the superseded-values line, no line of the posted record carries a point value named before the reveal or a prescription of this story's value: the Challenges and Anchoring events lines record a ground by its kind, its author (a voter, or the SM/EM for a sizing comment) and its outcome or recovery, and every field that could quote a participant elides those two classes permanently, because the posted record stays on the story surface that later voters read; the verbatim quote lives in the session's raw record, cited by its base name.
 A sizing comment that names a point value before the reveal, prescribes this story's value, or states elapsed time, effort or run cost voids the round under the Anchoring guardrail recovery as soon as the facilitator sees it, as does any ground that is neither restated nor retracted, and the void records the voided consensus under Superseded values after a void, so the Consensus field carries the vote that stands, or n/a when the consensus check or the residual variance rule recorded the estimate.
 
 ```markdown
@@ -81,6 +81,7 @@ A sizing comment that names a point value before the reveal, prescribes this sto
   - Engineer three: <value, or not recorded> - <short complexity rationale, or none when the value is not recorded>
 - Consensus check: <identical | one step | more than one step>
 - Ledger: <for a whole-story round, each unknown with its unrounded price and, once the split is drafted, its owner slice or blocker story (no owner for an unsplit story), each merge of differently named unknowns, the ledger total beside the whole-story value (or beside the unpointed outcome, with no saturation note) and not reconciled to slice values, and the saturation note when the whole-story value is the highest value of the step sequence; n/a for a slice round, whose slice brief carries the ledger>
+- Slice brief: <n/a for a whole-story round; for a slice round, the slice brief its voters received, verbatim>
 - SM/EM sizing context, after all three values: <file base name> or verbatim, eliding a pre-reveal value or a prescription, or none
 - Discussion: <high <value>, low <value>; or none when the discussion ran and recorded nothing; or skipped, when the consensus check recorded the estimate; the shared content names only the high and the low, while a voter's own recorded value and rationale are carried privately in that voter's prompt>
 - Re-vote: <accepted set per voter, with complexity rationale; or no consensus, with its complexity rationale, for a voter that records none; or none when it ran and recorded nothing; or skipped, when the consensus check recorded the estimate>
@@ -105,17 +106,21 @@ Under the denied tracker writes fallback in `SKILL.md`, replace the tracker-writ
 
 ## Slice brief
 
-Every slice estimate's pointing prompt is its slice brief: it carries the pointing basis and the rationale rule as Step 3 requires, and this block, filled in from the whole-story pointing record under the priced shared-unknown ledger in Estimation and slicing in `references/linear.md`.
+Every slice estimate's pointing prompt is its slice brief: it carries the pointing basis and the rationale rule as Step 3 requires, and this block, filled in from the whole-story pointing record and, in split round 2, the parent slice's pointing record, under the priced shared-unknown ledger and the prior-round context in Estimation and slicing in `references/linear.md`.
+The facilitator records each slice brief verbatim on the `Slice brief:` line of the slice's pointing record.
 
 ```markdown
 ## Slice brief
 
 - Slice: <slice key> - <its slice>, split from <parent key> in split round <1 | 2>
+- Parent: <parent key>, recorded value <value>, with the three standing voter values of the parent's round <value>, <value>, <value>
+- Per-parent bound: the per-parent bound requires this slice's recorded value to be strictly below its parent's recorded value <value>; the split bounds apply it after the round, and it is not a value to score
 - Ledger, from the whole-story pointing record, with owners as the split comment of split round 2 reassigns them for a sub-slice:
   - <unknown> - <ledger price> - owner <slice key, or blocker story key, priced in no slice>
 - Ledger total: <value>, beside the whole-story value <value>, not reconciled to slice values
 - Saturation note: <n/a, or: the whole-story value <value> is the highest value of the step sequence for <scale>, so the ledger prices are lower bounds on the true size>
 - Unknowns this slice owns: <each by name with its ledger price, or none>
+- Ancestor rationales: <each standing rationale of the whole-story round and, in split round 2, of the parent slice's round, by voter; never a voided vote or rationale, a ground the Step 4 basis review challenged, or a sibling slice's value or rationale>
 ```
 
 Worked example on `fibonacci` (1, 2, 3, 5, 8, 13), a whole story pointed at 13 and split into core slice A and siblings B and C, with blocker story X.
@@ -130,6 +135,12 @@ Worked example on `fibonacci` (1, 2, 3, 5, 8, 13), a whole story pointed at 13 a
 | Re-pricing rationale | a slice B voter writes auth 5 | off-basis: the Step 4 basis review re-runs that vote once, and a second miss is recorded on the Challenges line |
 | Unknown assigned elsewhere | a slice C voter names schema | off-basis on the same terms |
 | Whole-story sum mismatch | a voter writes 8 = auth 3 + schema 2 + remainder 2 | off-basis: the prices plus the remainder are 7, not 8 |
+| Prior-round context, split round 1 | the slice B brief | parent 13 with voter values 13, 13, 13, the four-unknown ledger, the three whole-story rationales and the bound sentence naming 13; no value or rationale of A or C and no other slice B vote |
+| Prior-round context, split round 2 | slice B recorded 8 from voter values 8, 8, 8 and is split into core slice B and sibling B2; the B2 brief | parent B 8 with voter values 8, 8, 8, the ledger with owners as split round 2 reassigns them, the whole-story rationales and slice B's round-1 rationales, and the bound sentence naming 8; no value or rationale of B2's sibling, of A or of C |
+| Voided or challenged ancestor rationale | a whole-story rationale voided by an anchoring recovery, or a ground the Step 4 basis review challenged | left out of every brief; only the rationale that stands, without the challenged ground, is carried |
+| Parent value in the brief | the bound sentence naming 13 in the slice B brief | a factual reference to an already-recorded item: no anchoring event, and the round continues |
+| SM/EM target for a slice | before the reveal the SM/EM tells the slice B voters to aim for 5 | anchoring event: the round is voided and the independent vote re-runs in newly created voter contexts |
+| Rationale derived from the parent | a slice B voter writes "one step below the parent's 13, so 8" | off-basis under the Step 3 rationale rule: the Step 4 basis review challenges it |
 
 ## Split comment
 
