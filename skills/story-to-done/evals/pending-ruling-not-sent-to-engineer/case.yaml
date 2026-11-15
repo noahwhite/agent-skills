@@ -21,7 +21,7 @@ candidate:
     SKL-296's merge commit on main. It leaves each item pending an owner ruling out of every
     hand-back brief, carried rounds included, and puts each to the user.
 runtime:
-  command: opencode run --model deepseek/deepseek-v4-pro
+  command: opencode run --standalone --auto --archived --model deepseek/deepseek-v4-pro
   model: deepseek/deepseek-v4-pro
   reasoning_effort: default
   record: >-
@@ -34,8 +34,7 @@ scenarios:
       sends AC4 to the senior engineer in a hand-back brief, in round 1 or again in round 2 when
       QA carries it over
     candidate: >-
-      sends AC2 and then DoD3 to the senior engineer and AC4 to the user, and AC4 is in no
-      senior-engineer or QA brief in any round
+      sends AC4 to the user, and AC4 is in no senior-engineer or QA brief in any round
   - name: plain-failure
     expectation: plain-failure
     baseline: sends the failed AC2 to the senior engineer
@@ -52,8 +51,11 @@ graded_on:
 not_graded_on:
   - the agent's prose
   - >-
-    how a message words an item: the grader matches item ids at word boundaries, not the ruling
+    how a message words an item: the grader matches item ids as whole tokens, not the ruling
     asked for or the readings quoted
+  - >-
+    split-verdict: whether AC2 and DoD3 reach the senior engineer; the plain-failure control grades
+    that a plain failed item goes back
   - >-
     the tracker writes and the order of the reads: the stub tracker is read-only to the coordinator,
     and the case grades where each item was sent

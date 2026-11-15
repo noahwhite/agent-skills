@@ -7,7 +7,8 @@ line per check and ends with PASS or FAIL.
 
   grader.py --run-dir DIR --expectation split-verdict|plain-failure
 
-Exit codes: 0 PASS, 1 FAIL, 2 the run has no call record, so there is nothing to grade.
+Exit codes: 0 PASS, 1 FAIL, 2 the run has no readable call record (no `actions.jsonl`, or a
+record or message store the runtime could not have written), so there is nothing to grade.
 """
 
 import argparse
@@ -24,21 +25,51 @@ CARRIED_FROM_ROUND = 2
 SENDS = {"user-message": "user", "engineer-launch": "engineer", "qa-launch": "qa"}
 
 
+class Unreadable(Exception):
+    """The record is not one the runtime writes, so the run cannot be graded."""
+
+
 def names(item: str, text: str) -> bool:
-    """Whether the text names the item as an id of its own, so AC4 is not read inside AC40."""
-    return re.search(rf"(?<![A-Za-z0-9]){re.escape(item)}(?![0-9])", text) is not None
+    """Whether the text names the item as a whole token, so neither AC40 nor AC4x is AC4."""
+    return re.search(rf"(?<![A-Za-z0-9_]){re.escape(item)}(?![A-Za-z0-9_])", text) is not None
+
+
+def message_texts(run_dir: pathlib.Path) -> dict[int, str]:
+    path = run_dir / "messages.json"
+    if not path.is_file():
+        raise Unreadable("there is no messages.json beside the call record")
+    try:
+        kept = json.loads(path.read_text())
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise Unreadable(f"messages.json is not readable JSON: {error}") from error
+    if not isinstance(kept, dict) or not isinstance(kept.get("messages"), list):
+        raise Unreadable("messages.json holds no messages list")
+    texts = {}
+    for message in kept["messages"]:
+        if not isinstance(message, dict) or not isinstance(message.get("text"), str) or "id" not in message:
+            raise Unreadable(f"messages.json holds a message without an id and a text: {message!r}")
+        if message["id"] in texts:
+            raise Unreadable(f"messages.json holds message id {message['id']!r} twice")
+        texts[message["id"]] = message["text"]
+    return texts
 
 
 def sends(run_dir: pathlib.Path) -> list[dict]:
     """Every recorded send, each with the text its message id names."""
-    calls = [json.loads(line) for line in (run_dir / "actions.jsonl").read_text().splitlines() if line.strip()]
-    kept = json.loads((run_dir / "messages.json").read_text()) if (run_dir / "messages.json").is_file() else {}
-    texts = {message["id"]: message["text"] for message in kept.get("messages", [])}
+    try:
+        lines = (run_dir / "actions.jsonl").read_text().splitlines()
+        calls = [json.loads(line) for line in lines if line.strip()]
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise Unreadable(f"actions.jsonl is not readable JSON lines: {error}") from error
+    texts = message_texts(run_dir) if any(isinstance(c, dict) and c.get("action") in SENDS for c in calls) else {}
     found = []
     for call in calls:
+        if not isinstance(call, dict) or not isinstance(call.get("qa_round"), int):
+            raise Unreadable(f"actions.jsonl holds a call without a qa_round: {call!r}")
         if call.get("action") in SENDS:
             if call.get("message_id") not in texts:
-                raise ValueError(f"the {call['action']} call names message {call.get('message_id')!r}, which messages.json lacks")
+                raise Unreadable(f"the {call['action']} call names message {call.get('message_id')!r}, "
+                                 "which messages.json lacks")
             found.append({**call, "to": SENDS[call["action"]], "text": texts[call["message_id"]]})
     return found
 
@@ -48,6 +79,8 @@ def checks(expectation: str, recorded: list[dict]) -> list[tuple[bool, str]]:
     if expectation == "plain-failure":
         return [(any(names(CONTROL_ITEM, send["text"]) for send in to["engineer"]),
                  f"a senior-engineer launch brief names {CONTROL_ITEM}")]
+    if expectation != "split-verdict":
+        raise ValueError(f"no checks for the expectation {expectation!r}")
     carrying = [send for send in to["engineer"] + to["qa"] if names(PENDING_ITEM, send["text"])]
     carried = [send for send in to["engineer"]
                if send["qa_round"] >= CARRIED_FROM_ROUND and names(PENDING_ITEM, send["text"])]
@@ -70,8 +103,9 @@ def main() -> int:
         return 2
     try:
         results = checks(args.expectation, sends(args.run_dir))
-    except (OSError, ValueError, KeyError, TypeError) as error:
-        results = [(False, f"the call record or messages.json is unreadable: {error}")]
+    except Unreadable as error:
+        print(f"VOID {error}; nothing was graded", file=sys.stderr)
+        return 2
     for passed, check in results:
         print(f"{'PASS' if passed else 'FAIL'} {check}")
     verdict = all(passed for passed, _ in results)

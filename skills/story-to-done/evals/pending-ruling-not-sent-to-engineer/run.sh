@@ -6,8 +6,9 @@
 # CHECKOUT is the repository checkout holding the skill to test, SCENARIO one of split-verdict
 # or plain-failure, and RUN_DIR the empty directory this run writes to, which must sit outside
 # CHECKOUT. EVAL_AGENT_CMD overrides the agent command and is split on whitespace, so it carries
-# no quoted argument; the prompt is attached to it as a file and never put in argv. EVAL_TIMEOUT
-# bounds the agent command in seconds.
+# no quoted argument; run.sh appends `--file RUN_DIR/prompt.md` to it, so the prompt is attached as
+# a file and never put in argv, and the command must accept that argument. EVAL_TIMEOUT bounds the
+# agent command in seconds.
 #
 # Exit codes: 0 the run was graded and passed, 1 the run was graded and failed, 2 the run itself
 # is void (bad arguments, a run directory already in use, an agent command that failed or timed
@@ -15,9 +16,13 @@
 set -euo pipefail
 
 case_dir="$(cd "$(dirname "$0")" && pwd)"
-checkout="${1:?usage: run.sh CHECKOUT SCENARIO RUN_DIR}"
-scenario="${2:?usage: run.sh CHECKOUT SCENARIO RUN_DIR}"
-run="${3:?usage: run.sh CHECKOUT SCENARIO RUN_DIR}"
+if [ "$#" -ne 3 ]; then
+  echo "usage: run.sh CHECKOUT SCENARIO RUN_DIR" >&2
+  exit 2
+fi
+checkout="$1"
+scenario="$2"
+run="$3"
 
 test -d "$checkout" || { echo "run.sh: no checkout at $checkout" >&2; exit 2; }
 case "$scenario" in
@@ -40,9 +45,10 @@ if [ -d "$run" ] && [ -n "$(ls -A "$run")" ]; then
   exit 2
 fi
 
-# The checkout's whole state, content included: status alone repeats for a file that was
-# already modified and is modified again, and it says nothing about an untracked file's
-# contents, so the fingerprint carries the diff against HEAD and a hash per untracked file.
+# The checkout's state outside its ignored paths, content included: status alone repeats for a
+# file that was already modified and is modified again, and it says nothing about an untracked
+# file's contents, so the fingerprint carries the diff against HEAD and a hash per untracked file.
+# A file under a gitignored path, such as a build cache, is not part of it.
 state() {
   git -C "$1" rev-parse HEAD
   git -C "$1" diff HEAD
@@ -64,7 +70,9 @@ state_before="$(state "$checkout_real")"
 
 mkdir -p "$run"
 # The scenario, the rounds the stub serves, and every QA record and engineer handback it names.
-find "$fixtures" -maxdepth 1 -type f -exec cp {} "$run/" \;
+# These sit flat in the scenario directory; its only subdirectory is checklists/, copied below.
+find "$fixtures" -maxdepth 1 -type f -exec cp {} "$run/" \; ||
+  { echo "run.sh: cannot copy the scenario files" >&2; exit 2; }
 cp "$case_dir/runtime/story-runtime" "$case_dir/runtime/story-runtime.md" "$run/"
 chmod +x "$run/story-runtime"
 # The checklist files the scenario's subagents left, each at the path its handback gives it.
@@ -75,7 +83,7 @@ sed -e "s|{skill_dir}|$(escape "$checkout_real/skills/story-to-done")|g" \
     -e "s|{run_dir}|$(escape "$(realpath -m "$run")")|g" \
     "$case_dir/prompt.md" > "$run/prompt.md"
 
-agent=(opencode run --model deepseek/deepseek-v4-pro "Follow the instructions in the attached file exactly.")
+agent=(opencode run --standalone --auto --archived --model deepseek/deepseek-v4-pro "Follow the instructions in the attached file exactly.")
 if [ -n "${EVAL_AGENT_CMD:-}" ]; then
   read -r -a agent <<< "$EVAL_AGENT_CMD"
 fi
