@@ -649,8 +649,8 @@ SLICE_BRIEF_CONTEXT = (
     "The slice brief also carries the prior-round context in Estimation and slicing in "
     "[references/linear.md](references/linear.md), the facilitator records it verbatim in the slice's pointing "
     "record, and the values of the same round, the sibling slices' and the round's other voters', stay hidden until "
-    "every vote of the round is recorded, so each slice's Step 3 reveal, the SM/EM's sizing comments and its Step 4 "
-    "discussion wait until every slice of the round has its three values recorded."
+    "every vote of the round is recorded, so each slice's Step 3 reveal, the SM/EM's sizing comments on that slice and "
+    "that slice's Step 4 discussion wait until every slice of the round has its three values recorded."
 )
 # SKL-238 C4, C5: the slice prompt carries the anchor table outside the verbatim-recorded slice brief.
 SLICE_ANCHOR_TABLE = (
@@ -1486,8 +1486,10 @@ STEP_THREE_ITEM_PREFIXES = [
     "The sentence above is the pointing basis.",
     "Each voter submits one point value",
     "No voter sees another voter's point value before its own value is recorded.",
-    "The facilitator records all three values before the SM/EM comments on sizing or the discussion opens.",
-    "After all three values are recorded, the SM/EM may provide factual, reference-only sizing context:",
+    "The facilitator records all three values, and in a slice round the three values of every slice of the round, "
+    "before the SM/EM comments on sizing or the discussion opens.",
+    "After all three values are recorded, and in a slice round only after every slice of the round has its three "
+    "values recorded, the SM/EM may provide factual, reference-only sizing context:",
 ]
 
 
@@ -1523,6 +1525,26 @@ def test_step_three_re_records_an_off_sequence_value_before_the_reveal() -> None
     assert "a voter's second off-sequence value is a missing-valid-value stop" in stop
 
 
+def test_step_three_stop_defers_the_sizing_comment_stop_in_a_slice_round() -> None:
+    # SKL-307: exact text, so no sentence can narrow the stop; in a slice round the early-sizing-comment stop waits
+    # for every slice of the round, as the Split rule defers sizing comments.
+    assert bullet(operative_step(STEP_THREE), "Stop") == (
+        "any voter value is missing; a voter's second off-sequence value is a missing-valid-value stop, which the "
+        "owner resolves by authorizing a re-run of that voter's record in a new invocation whose `outcome` reads "
+        "`missing valid value`; an sm/em sizing comment appears before all three values are recorded, or, in a "
+        "slice round, before every slice of the round has its three values recorded (see the anchoring guardrail "
+        "and the split rule)."
+    )
+
+
+def test_step_three_item_six_defers_sizing_and_discussion_in_a_slice_round() -> None:
+    # SKL-307: exact text, so no per-slice exception can join item 6.
+    assert process_items(STEP_THREE)[5] == (
+        "The facilitator records all three values, and in a slice round the three values of every slice of the "
+        "round, before the SM/EM comments on sizing or the discussion opens. The SM/EM submits no point value."
+    )
+
+
 def test_step_four_re_vote_recovers_an_off_sequence_accepted_value() -> None:
     item = process_items(STEP_FOUR)[3]
     assert (
@@ -1547,10 +1569,14 @@ def test_step_four_records_a_value_outside_the_sequence_as_wider_than_one_step()
 
 def test_step_three_defines_the_reveal() -> None:
     items = process_items(STEP_THREE)
-    assert (
-        "The reveal is the moment the facilitator has recorded all three values, after which the SM/EM may "
-        "comment on sizing and the discussion opens."
-    ) in items[4]
+    # SKL-307: exact text, so no contradicting sentence can join item 5; in a slice round the reveal waits for every
+    # slice of the round, as the Split rule defers it.
+    assert items[4] == (
+        "No voter sees another voter's point value before its own value is recorded. "
+        "The reveal is the moment the facilitator has recorded all three values, or, in a slice round, every slice "
+        "of the round has its three values recorded, after which the SM/EM may comment on sizing and the "
+        "discussion opens."
+    )
 
 
 def test_step_four_re_vote_prompt_carries_the_rationale_rule() -> None:
@@ -1599,7 +1625,10 @@ def test_step_four_re_vote_requires_a_complexity_rationale() -> None:
     ) in item
 
 
-SIZING_ITEM = "After all three values are recorded, the SM/EM may provide"
+SIZING_ITEM = (
+    "After all three values are recorded, and in a slice round only after every slice of the round has its three "
+    "values recorded, the SM/EM may provide"
+)
 
 
 def test_step_three_sizing_context_is_in_complexity_terms() -> None:
@@ -1984,6 +2013,15 @@ def test_anchoring_guardrail_places_the_anchor_and_the_single_void_rule() -> Non
     )
 
 
+def test_anchoring_guardrail_opens_with_the_slice_round_timing_rule() -> None:
+    # SKL-307: exact text of the opening line, so the slice-round deferral cannot be dropped.
+    lines = [line for line in section(SKILL.read_text(), GUARDRAIL).splitlines() if line.strip()]
+    assert lines[0] == (
+        "The three point values, and in a slice round the three values of every slice of the round, are recorded "
+        "before the SM/EM comments on sizing or the discussion opens."
+    )
+
+
 def test_anchoring_guardrail_recovery_mechanics_are_unchanged() -> None:
     body = spaced(section(SKILL.read_text(), GUARDRAIL))
     assert (
@@ -2017,14 +2055,16 @@ def phrasing_rows() -> list[tuple[str, str]]:
 
 
 PHRASING_INTRO = [
-    "The SM/EM may give factual, reference-only sizing context after all three values are recorded.",
+    "The SM/EM may give factual, reference-only sizing context after all three values are recorded, and in a slice "
+    "round only after every slice of the round has its three values recorded.",
     "Everything in the forbidden column breaks independence or anchors the discussion.",
     "A factual reference is permitted and a prescription is not: naming an already-estimated item's recorded "
     "value, alone or together with a basis difference, is a reference the voters weigh, while a value to score, "
     "a target or a preferred direction for the story under estimate is a prescription that anchors the round.",
     "A permitted comparison names at most one comparable story and at most one basis difference; "
     "it never prescribes a value for the story under estimate, names a range, an average, elapsed time or "
-    "effort, and it names another story's point value only after all three values are recorded.",
+    "effort, and it names another story's point value only after all three values are recorded, and in a slice "
+    "round only after every slice of the round has its three values recorded.",
 ]
 PHRASING_TRAILER = (
     "Record every SM/EM sizing comment with the pointing record, even when it stays inside the permitted column."
@@ -2132,6 +2172,18 @@ def test_pointing_template_records_each_challenge_and_outcome() -> None:
         "blind vote that replaced them>"
         in pointing_template()
     )
+    # SKL-307: exact text of the timing line, so the slice-round deferral cannot be dropped.
+    timing = [
+        line
+        for line in section(RECORD.read_text(), "Pointing record").splitlines()
+        if line.startswith("The three values")
+    ]
+    assert timing == [
+        "The three values, and in a slice round the three values of every slice of the round, are recorded before "
+        "any SM/EM sizing comment or discussion; a void before all three exist leaves the values block at the values "
+        "recorded so far and carries no superseded values, and once the blind re-run finishes the values block "
+        "carries the three standing values while the superseded line carries the voided ones."
+    ]
     body = spaced(prose(section(RECORD.read_text(), "Pointing record")))
     assert (
         "Outside the recorded numeric values, the Ledger line's prices, the Slice brief line's prior-round context of "
@@ -2294,7 +2346,11 @@ def test_record_intro_excludes_local_paths_and_includes_needed_content() -> None
         ("Refinement comment", "- Engineer two (<family or model>): <file base name>"),
         ("Refinement comment", "- Engineer three (<family or model>): <file base name>"),
         ("Refinement comment", "- SM/EM contribution (not a vote): <file base name>"),
-        ("Pointing record", "- SM/EM sizing context, after all three values: <file base name> or verbatim, eliding a pre-reveal value or a prescription, or none"),
+        (
+            "Pointing record",
+            "- SM/EM sizing context, after all three values (in a slice round, after every slice of the round has its "
+            "three values): <file base name> or verbatim, eliding a pre-reveal value or a prescription, or none",
+        ),
     ],
 )
 def test_record_templates_cite_file_base_names(heading: str, line: str) -> None:
