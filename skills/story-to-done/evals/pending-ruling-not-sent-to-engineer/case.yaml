@@ -13,8 +13,10 @@ split: >-
 baseline:
   commit: 9bd3e1666c5ba17aa560424e0d402710aa765c75
   note: >-
-    The skill on main before SKL-296, the parent of the candidate. Its hand-back rule sends every
-    item of QA's record that is not verified back to the senior engineer.
+    The skill on main before SKL-296, the parent of the candidate. Its hand-back rule sends each
+    failed item of QA's record back to the senior engineer and sets no pending item apart; the
+    baseline expectation assumes an agent reads an item QA did not verify as a failed item, and
+    SKL-310's recorded runs measure what the baseline does.
 candidate:
   commit: 6838b357652260562f481f747cf5e653d0f4e7c8
   note: >-
@@ -45,9 +47,12 @@ graded_on:
     tool-call evidence: the action and QA round of every story-runtime call in actions.jsonl, and
     the text each send carried, kept in messages.json under the id its call names
   - >-
+    served rounds: a run served fewer QA rounds than its scenario needs (3 for split-verdict, 1
+    for plain-failure) is void, never graded
+  - >-
     split-verdict: some message to the user names AC4; no senior-engineer or QA brief names AC4;
     and, graded as its own check, no senior-engineer brief sent after QA round 2 names AC4
-  - plain-failure: some senior-engineer brief names AC2
+  - plain-failure: some senior-engineer brief sent after QA round 1 names AC2
 not_graded_on:
   - the agent's prose
   - >-

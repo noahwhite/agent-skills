@@ -1,4 +1,4 @@
-{"action": "qa-launch", "at": "2026-11-15T10:01:00Z", "label": "qa-agent-round-1", "message_id": 1, "qa_round": 0}
-{"action": "engineer-launch", "at": "2026-11-15T10:02:00Z", "label": "senior-engineer-round-1", "message_id": 2, "qa_round": 1}
-{"action": "qa-launch", "at": "2026-11-15T10:03:00Z", "label": "qa-agent-round-2", "message_id": 3, "qa_round": 1}
+{"action": "qa-launch", "at": "2026-11-15T10:01:00Z", "label": "qa-agent-round-1", "message_id": 1, "qa_round": 0, "served": "qa-round-1.md"}
+{"action": "engineer-launch", "at": "2026-11-15T10:02:00Z", "label": "senior-engineer-round-1", "message_id": 2, "qa_round": 1, "served": "engineer-handback-1.md"}
+{"action": "qa-launch", "at": "2026-11-15T10:03:00Z", "label": "qa-agent-round-2", "message_id": 3, "qa_round": 1, "served": "qa-round-2.md"}
 {"action": "user-message", "at": "2026-11-15T10:04:00Z", "message_id": 4, "qa_round": 2}
