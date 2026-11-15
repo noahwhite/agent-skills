@@ -1,5 +1,6 @@
 """The pending-ruling-not-sent-to-engineer eval case: its grader, its runtime and the files its agent reads."""
 
+import importlib.util
 import json
 import re
 import shutil
@@ -339,6 +340,18 @@ def test_every_record_rounds_json_names_is_in_the_scenario(scenario: str) -> Non
     assert records
     for record in records:
         assert (CASE / "scenarios" / scenario / record).is_file(), record
+
+
+@pytest.mark.parametrize("scenario", SCENARIOS)
+def test_grader_serves_match_the_scenario_rounds(scenario: str) -> None:
+    spec = importlib.util.spec_from_file_location("pending_ruling_grader", CASE / "grader.py")
+    grader = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(grader)
+    rounds = json.loads((CASE / "scenarios" / scenario / "rounds.json").read_text())
+    assert grader.SERVES[scenario] == {
+        "qa-launch": [entry["record"] for entry in rounds["qa_rounds"]],
+        "engineer-launch": [entry["record"] for entry in rounds["engineer_handbacks"]],
+    }
 
 
 @pytest.mark.parametrize("record", ["qa-round-1.md", "qa-round-2.md", "qa-round-3.md"])
