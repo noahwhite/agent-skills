@@ -26,6 +26,13 @@ CARRIED_FROM_ROUND = 2
 # The QA rounds a run must have been served before it is graded: every round split-verdict lists,
 # and the control's first round, the one that fails its item.
 QA_ROUNDS_NEEDED = {"split-verdict": 3, "plain-failure": 1}
+# The records each scenario's rounds.json serves, in the order the runtime serves them.
+SERVES = {
+    "split-verdict": {"qa-launch": ["qa-round-1.md", "qa-round-2.md", "qa-round-3.md"],
+                      "engineer-launch": ["engineer-handback-1.md", "engineer-handback-2.md"]},
+    "plain-failure": {"qa-launch": ["qa-round-1.md", "qa-round-2.md"],
+                      "engineer-launch": ["engineer-handback-1.md"]},
+}
 SENDS = {"user-message": "user", "engineer-launch": "engineer", "qa-launch": "qa"}
 ACTIONS = {*SENDS, "tracker-read", "read"}
 FIELDS = {"action", "at", "qa_round", "message_id", "label", "path", "served"}
@@ -74,10 +81,38 @@ def calls(run_dir: pathlib.Path) -> list[dict]:
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
         raise Unreadable(f"actions.jsonl is not readable JSON lines: {error}") from error
     for call in recorded:
-        if (not isinstance(call, dict) or not set(call) <= FIELDS or call.get("action") not in ACTIONS
-                or not whole_number(call.get("qa_round"))):
+        if (not isinstance(call, dict) or not set(call) <= FIELDS or not isinstance(call.get("action"), str)
+                or call["action"] not in ACTIONS or not whole_number(call.get("qa_round"))):
             raise Unreadable(f"actions.jsonl holds a call the runtime does not write: {call!r}")
     return recorded
+
+
+def check_sequence(expectation: str, recorded: list[dict]) -> int:
+    """The QA rounds served, after checking the calls are a sequence the runtime writes one at a
+    time: each launch serves the next record its scenario lists, each call's qa_round counts the
+    QA rounds served before it, and no two sends name the same message."""
+    served = {action: [] for action in SERVES[expectation]}
+    message_ids = set()
+    for call in recorded:
+        if call["qa_round"] != len(served["qa-launch"]):
+            raise Unreadable(f"a {call['action']} call records QA round {call['qa_round']} after "
+                             f"{len(served['qa-launch'])} QA rounds were served")
+        if call["action"] in SENDS:
+            if not whole_number(call.get("message_id")):
+                raise Unreadable(f"the {call['action']} call names message {call.get('message_id')!r}, "
+                                 "which is not a message id")
+            if call["message_id"] in message_ids:
+                raise Unreadable(f"two calls name message {call.get('message_id')!r}")
+            message_ids.add(call.get("message_id"))
+        if "served" not in call:
+            continue
+        expected = SERVES[expectation].get(call["action"], [])
+        done = served.get(call["action"], [])
+        if len(done) >= len(expected) or call["served"] != expected[len(done)]:
+            raise Unreadable(f"a {call['action']} call serves {call['served']!r}, which is not the next "
+                             f"record the {expectation} scenario serves")
+        done.append(call["served"])
+    return len(served["qa-launch"])
 
 
 def sends(run_dir: pathlib.Path) -> tuple[list[dict], list[dict]]:
@@ -101,7 +136,7 @@ def sends(run_dir: pathlib.Path) -> tuple[list[dict], list[dict]]:
 
 
 def checks(expectation: str, recorded: list[dict], sent: list[dict]) -> list[tuple[bool, str]]:
-    served = sum(1 for call in recorded if call["action"] == "qa-launch" and isinstance(call.get("served"), str))
+    served = check_sequence(expectation, recorded)
     if served < QA_ROUNDS_NEEDED[expectation]:
         raise Unreadable(f"the run was served {served} of the {QA_ROUNDS_NEEDED[expectation]} QA rounds "
                          f"{expectation} needs before its routing is graded")

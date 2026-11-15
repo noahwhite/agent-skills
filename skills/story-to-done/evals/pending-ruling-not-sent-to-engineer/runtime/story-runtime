@@ -18,7 +18,8 @@ call appends one line to `actions.jsonl` in the run directory, the parent of thi
 message's text is kept in `messages.json` there under the id its line names, so the grader reads
 the calls and what each one carried, never the coordinator's prose. Each line also records
 `qa_round`, the number of QA rounds served before the call, and a launch that is handed back names
-the record it served as `served`. A rejected call records nothing.
+the record it served as `served`. A rejected call records nothing. Calls run one at a time
+under a lock in the run directory, so concurrent calls never share a state or a message id.
 
   story-runtime user-message --message FILE
   story-runtime engineer-launch --label LABEL --message FILE
@@ -29,6 +30,7 @@ the record it served as `served`. A rejected call records nothing.
 
 import argparse
 import datetime
+import fcntl
 import json
 import pathlib
 import re
@@ -40,6 +42,7 @@ ACTIONS = RECORD / "actions.jsonl"
 MESSAGES = RECORD / "messages.json"
 STATE = RECORD / "story-state.json"
 SCENARIO_PATH = RECORD / "scenario-path"
+LOCK = RECORD / "story-runtime.lock"
 LABEL = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 # The tracker state a session of each kind hands back from.
 HANDS_BACK_FROM = {"qa_rounds": "In Deployment Review", "engineer_handbacks": "In Progress"}
@@ -218,6 +221,15 @@ def parsed() -> argparse.Namespace:
 
 def main() -> int:
     args = parsed()
+    # One call at a time: concurrent calls would read the same state and message store and
+    # overwrite each other's ids, records and served rounds.
+    with LOCK.open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        dispatch(args)
+    return 0
+
+
+def dispatch(args: argparse.Namespace) -> None:
     if args.command == "user-message":
         print(send(args, "user"))
     elif args.command == "engineer-launch":
@@ -228,7 +240,6 @@ def main() -> int:
         print(tracker_read())
     else:
         print(read_file(args))
-    return 0
 
 
 if __name__ == "__main__":

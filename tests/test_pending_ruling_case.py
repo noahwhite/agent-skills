@@ -121,20 +121,35 @@ def edited_fixture(tmp_path: Path, edit) -> Path:
 
 
 def test_a_run_served_too_few_qa_rounds_is_void(tmp_path: Path) -> None:
-    def unserve_last_round(calls: list[dict]) -> list[dict]:
+    def stop_before_last_round(calls: list[dict]) -> list[dict]:
         last = max(index for index, call in enumerate(calls) if call["action"] == "qa-launch")
-        del calls[last]["served"]
-        return calls
-    result = grade(edited_fixture(tmp_path, unserve_last_round), "split-verdict")
+        return calls[:last]
+    result = grade(edited_fixture(tmp_path, stop_before_last_round), "split-verdict")
     assert result.returncode == 2, result.stdout + result.stderr
     assert "served 2 of the 3" in result.stderr
 
 
-@pytest.mark.parametrize("damage", ["bool-round", "negative-round", "list-id", "extra-key", "channel"])
+@pytest.mark.parametrize("damage", ["bool-round", "negative-round", "list-id", "extra-key", "channel",
+                                    "list-action", "repeated-round", "skipped-round", "wrong-qa-round",
+                                    "reused-message", "served-user-message"])
 def test_a_call_the_runtime_does_not_write_voids_the_run(tmp_path: Path, damage: str) -> None:
     def damaged(calls: list[dict]) -> list[dict]:
         engineer = next(call for call in calls if call["action"] == "engineer-launch")
-        if damage == "bool-round":
+        launches = [call for call in calls if call["action"] == "qa-launch"]
+        if damage == "list-action":
+            engineer["action"] = []
+        elif damage == "repeated-round":
+            for launch in launches[1:]:
+                launch["served"] = launches[0]["served"]
+        elif damage == "skipped-round":
+            launches[1]["served"] = "qa-round-3.md"
+        elif damage == "wrong-qa-round":
+            engineer["qa_round"] += 1
+        elif damage == "reused-message":
+            launches[1]["message_id"] = launches[0]["message_id"]
+        elif damage == "served-user-message":
+            next(call for call in calls if call["action"] == "user-message")["served"] = "qa-round-1.md"
+        elif damage == "bool-round":
             engineer["qa_round"] = True
         elif damage == "negative-round":
             engineer["qa_round"] = -1
@@ -227,6 +242,22 @@ def test_the_runtime_serves_each_handback_only_from_its_state(tmp_path: Path) ->
     calls = recorded(work)
     assert [(call["action"], call.get("served")) for call in calls] == [
         ("engineer-launch", None), ("qa-launch", "qa-round-1.md")]
+
+
+def test_concurrent_runtime_calls_keep_every_message_and_serve_each_round_once(tmp_path: Path) -> None:
+    work = runtime_run(tmp_path, "split-verdict")
+    for number in range(12):
+        (work / f"m{number}.md").write_text(f"message {number}")
+    calls = [[sys.executable, str(work / "story-runtime"), "user-message", "--message", f"m{number}.md"]
+             for number in range(8)]
+    calls += [[sys.executable, str(work / "story-runtime"), "qa-launch", "--label", f"qa-{number}",
+               "--message", f"m{number}.md"] for number in range(8, 12)]
+    running = [subprocess.Popen(call, cwd=work, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE) for call in calls]
+    assert [process.wait() for process in running] == [0] * len(calls)
+    kept = json.loads((work.parent / "messages.json").read_text())["messages"]
+    assert sorted(message["id"] for message in kept) == list(range(1, 13))
+    served = [call["served"] for call in recorded(work) if "served" in call]
+    assert served == ["qa-round-1.md"], served
 
 
 def test_the_runtime_leaves_the_scenario_checklist_as_it_is(tmp_path: Path) -> None:
