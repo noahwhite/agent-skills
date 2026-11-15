@@ -63,7 +63,7 @@ After reading `references/todo-tracking.md`, expand the list to the story-refine
 - [references/refinement-record.md](references/refinement-record.md) - the hand-written refinement-comment and pointing-record templates, the record vocabulary, the comment headings, and the permitted and forbidden phrasing table.
 - [references/exemplars-and-anchors.md](references/exemplars-and-anchors.md) - the hand-written exemplar lookup and anchor table rules of Step 1 item 4.
 
-Where this file and a capability file disagree, the capability file is authoritative, except the non-voting facilitator rule, the independence rules, and the anchoring guardrail here, which always override.
+Where this file and a capability file disagree, the capability file is authoritative, except the non-voting facilitator rule, the independence rules, the anchoring guardrail here, and the lookup outcomes of Step 1 item 4, which never stop the ceremony, and these always override.
 
 ## Roles
 
