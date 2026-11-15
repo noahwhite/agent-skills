@@ -1,0 +1,16 @@
+{
+  "messages": [
+    {
+      "channel": "qa",
+      "id": 1,
+      "label": "qa-agent-round-1",
+      "text": "Run QA for ABC-123 on dev, build 4040404, the merged commit of PR #40. Hand back with your record."
+    },
+    {
+      "channel": "user",
+      "id": 2,
+      "label": null,
+      "text": "ABC-123: QA round 1 failed AC2; the currency column is missing."
+    }
+  ]
+}

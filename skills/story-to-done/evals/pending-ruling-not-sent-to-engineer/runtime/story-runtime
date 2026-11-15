@@ -1,0 +1,246 @@
+#!/usr/bin/env python3
+"""Stand in for the runtime and the tracker in one run of the pending-ruling-not-sent-to-engineer case.
+
+The coordinator under test sends every message through this script: to the user, to a new
+senior-engineer session, or to a new QA session. Nothing is launched. A senior-engineer or QA
+launch prints the next handback the scenario's `rounds.json` lists, sets the story's tracker
+state to the one that handback leaves, and writes that agent's checklist where the launch's label
+puts it. A QA session hands back only while the story is In Deployment Review, and a
+senior-engineer session only while it is In Progress; any other launch is recorded and starts a
+session that has not handed back. `tracker-read` prints the story's state and the latest QA
+record on it, and `read` prints a file in this directory. Every FILE is a file in this directory,
+and a relative one is read from it.
+
+This script sits in the agent's directory, the run directory's `workspace/`. The scenario's
+rounds and the records they serve stay in the case's scenario directory, which run.sh names in the
+run directory's `scenario-path`, so no later round is in the agent's directory before it is served. Every accepted
+call appends one line to `actions.jsonl` in the run directory, the parent of this one, and every
+message's text is kept in `messages.json` there under the id its line names, so the grader reads
+the calls and what each one carried, never the coordinator's prose. Each line also records
+`qa_round`, the number of QA rounds served before the call, and a launch that is handed back names
+the record it served as `served`. A rejected call records nothing. Calls run one at a time
+under a lock in the run directory, so concurrent calls never share a state or a message id.
+
+  story-runtime user-message --message FILE
+  story-runtime engineer-launch --label LABEL --message FILE
+  story-runtime qa-launch --label LABEL --message FILE
+  story-runtime tracker-read
+  story-runtime read --path FILE
+"""
+
+import argparse
+import datetime
+import fcntl
+import json
+import pathlib
+import re
+import sys
+
+WORK = pathlib.Path(__file__).resolve().parent
+RECORD = WORK.parent
+ACTIONS = RECORD / "actions.jsonl"
+MESSAGES = RECORD / "messages.json"
+STATE = RECORD / "story-state.json"
+SCENARIO_PATH = RECORD / "scenario-path"
+LOCK = RECORD / "story-runtime.lock"
+LABEL = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
+# The tracker state a session of each kind hands back from.
+HANDS_BACK_FROM = {"qa_rounds": "In Deployment Review", "engineer_handbacks": "In Progress"}
+# The checklist each served agent leaves, every item done, so a read-back finds nothing open.
+CHECKLIST = {
+    "engineer": ["Read the failed items", "Fix each failed item, with a test that exercises it",
+                 "Pre-PR gate on the fix head", "Open the fix PR", "Review of record on the fix PR's head",
+                 "Merge the fix PR with the merge guard", "Deploy the fix and verify the deployed build",
+                 "Move the story to In Deployment Review and read it back", "Hand back"],
+    "qa": ["Read the story, its acceptance criteria and its Definition of Done",
+           "Confirm the deployed build is the merged commit", "Verify each acceptance criterion",
+           "Run each DoD check", "Post the QA evidence comment and set the story state", "Hand back"],
+}
+
+
+def harness_error(problem: str) -> None:
+    sys.exit(f"story-runtime: harness error, {problem}; nothing was recorded")
+
+
+def stamp() -> str:
+    now = datetime.datetime.now(datetime.timezone.utc)
+    return now.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def load(path: pathlib.Path, default: object) -> object:
+    return json.loads(path.read_text()) if path.is_file() else default
+
+
+def scenario_dir() -> pathlib.Path:
+    """The case's scenario directory, which run.sh names in the run directory's `scenario-path`."""
+    if not SCENARIO_PATH.is_file():
+        harness_error(f"there is no {SCENARIO_PATH}")
+    return pathlib.Path(SCENARIO_PATH.read_text().rstrip("\n"))
+
+
+SCENARIO = scenario_dir()
+ROUNDS = SCENARIO / "rounds.json"
+
+
+def rounds() -> dict:
+    if not ROUNDS.is_file():
+        harness_error(f"the scenario's rounds.json is not at {ROUNDS}")
+    return json.loads(ROUNDS.read_text())
+
+
+def state() -> dict:
+    """The story as this run's tracker holds it, seeded from the scenario."""
+    return load(STATE, {"state": rounds()["initial_state"], "qa_rounds": 0, "engineer_handbacks": 0,
+                        "latest_qa_record": None})
+
+
+def save(current: dict) -> None:
+    STATE.write_text(json.dumps(current, indent=2, sort_keys=True) + "\n")
+
+
+def record(entry: dict, qa_round: int) -> None:
+    entry = {**entry, "at": stamp(), "qa_round": qa_round}
+    with ACTIONS.open("a") as handle:
+        handle.write(json.dumps(entry, sort_keys=True) + "\n")
+
+
+def work_file(path: str) -> pathlib.Path:
+    """The file a FILE argument names, which must be in this directory; a relative one is read from it."""
+    file = pathlib.Path(path)
+    resolved = (file if file.is_absolute() else WORK / file).resolve()
+    if not resolved.is_relative_to(WORK):
+        sys.exit(f"story-runtime: {path} is not in {WORK}")
+    if not resolved.is_file():
+        sys.exit(f"story-runtime: there is no file at {path}")
+    return resolved
+
+
+def file_text(path: str) -> tuple[pathlib.Path, str]:
+    file = work_file(path)
+    try:
+        return file, file.read_text()
+    except (OSError, UnicodeDecodeError) as error:
+        sys.exit(f"story-runtime: cannot read the file {path}: {error}")
+
+
+def keep_message(text: str, channel: str, label: str | None) -> int:
+    """Keep the message text under a new id, one above every id already kept."""
+    kept = load(MESSAGES, {"messages": []})
+    number = max((message["id"] for message in kept["messages"]), default=0) + 1
+    kept["messages"].append({"id": number, "channel": channel, "label": label, "text": text})
+    MESSAGES.write_text(json.dumps(kept, indent=2, sort_keys=True) + "\n")
+    return number
+
+
+def checked_label(label: str) -> str:
+    if not LABEL.fullmatch(label):
+        sys.exit(f"story-runtime: the label {label!r} must match {LABEL.pattern}")
+    if (WORK / label).exists() and not (WORK / label).is_dir():
+        sys.exit(f"story-runtime: the label {label!r} names a file in {WORK}, not a session directory")
+    return label
+
+
+def leave_checklist(label: str, role: str) -> pathlib.Path:
+    """The label's checklist; one already in the run, such as the scenario's own, is left as it is."""
+    folder = WORK / label
+    folder.mkdir(exist_ok=True)
+    checklist = folder / f"{label}-todo.md"
+    if not checklist.exists():
+        checklist.write_text(f"# {label} checklist\n\n" + "".join(f"- [x] {item}\n" for item in CHECKLIST[role]))
+    return checklist
+
+
+def next_handback(kind: str, current: dict) -> dict | None:
+    """The handback a launch of this kind is served now, or None when the session does not hand back."""
+    served = rounds().get(kind, [])
+    if current[kind] >= len(served) or current["state"] != HANDS_BACK_FROM[kind]:
+        return None
+    entry = served[current[kind]]
+    if not (SCENARIO / entry["record"]).is_file():
+        harness_error(f"the scenario's rounds.json names {entry['record']}, which {SCENARIO} does not hold")
+    return entry
+
+
+def send(args: argparse.Namespace, channel: str) -> str:
+    current = state()
+    label = checked_label(args.label) if channel != "user" else None
+    _, text = file_text(args.message)
+    kind = {"qa": "qa_rounds", "engineer": "engineer_handbacks"}.get(channel)
+    handback = next_handback(kind, current) if kind else None
+    number = keep_message(text, channel, label)
+    entry = {"action": {"user": "user-message", "engineer": "engineer-launch", "qa": "qa-launch"}[channel],
+             "message_id": number}
+    if label is not None:
+        entry["label"] = label
+    if handback is not None:
+        entry["served"] = handback["record"]
+    record(entry, current["qa_rounds"])
+    if channel == "user":
+        return "Delivered to the user."
+    if handback is None:
+        return "The session started and has not handed back."
+    current[kind] += 1
+    current["state"] = handback["state"]
+    if kind == "qa_rounds":
+        current["latest_qa_record"] = handback["record"]
+    save(current)
+    checklist = leave_checklist(label, channel)
+    return f"{(SCENARIO / handback['record']).read_text()}\nChecklist: {checklist.relative_to(WORK)}\n"
+
+
+def tracker_read() -> str:
+    current = state()
+    record({"action": "tracker-read"}, current["qa_rounds"])
+    lines = [f"Story ABC-123 state: {current['state']}"]
+    if current["latest_qa_record"]:
+        lines += ["", "Latest QA evidence comment on the story:", "", (SCENARIO / current["latest_qa_record"]).read_text()]
+    return "\n".join(lines)
+
+
+def read_file(args: argparse.Namespace) -> str:
+    current = state()
+    file, content = file_text(args.path)
+    record({"action": "read", "path": str(file.relative_to(WORK))}, current["qa_rounds"])
+    return content
+
+
+def parsed() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Send a message, read the tracker, or read a file in this directory.")
+    commands = parser.add_subparsers(dest="command", required=True)
+    user = commands.add_parser("user-message", help="send a message to the user")
+    user.add_argument("--message", required=True)
+    for name, role in (("engineer-launch", "senior-engineer"), ("qa-launch", "QA")):
+        launch = commands.add_parser(name, help=f"send a message to a new {role} session")
+        launch.add_argument("--label", required=True)
+        launch.add_argument("--message", required=True)
+    commands.add_parser("tracker-read", help="print the story's state and its latest QA evidence comment")
+    read_parser = commands.add_parser("read", help="print a file in this directory")
+    read_parser.add_argument("--path", required=True)
+    return parser.parse_args()
+
+
+def main() -> int:
+    args = parsed()
+    # One call at a time: concurrent calls would read the same state and message store and
+    # overwrite each other's ids, records and served rounds.
+    with LOCK.open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        dispatch(args)
+    return 0
+
+
+def dispatch(args: argparse.Namespace) -> None:
+    if args.command == "user-message":
+        print(send(args, "user"))
+    elif args.command == "engineer-launch":
+        print(send(args, "engineer"))
+    elif args.command == "qa-launch":
+        print(send(args, "qa"))
+    elif args.command == "tracker-read":
+        print(tracker_read())
+    else:
+        print(read_file(args))
+
+
+if __name__ == "__main__":
+    sys.exit(main())
