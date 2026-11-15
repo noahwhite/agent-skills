@@ -8,7 +8,7 @@ Target: `main` at `31ee7ba2a85b2688f31caf0b2823b0b6c27fce13`, the squash merge o
 Path: `no-deployment`, selected by `select-path.py` over the repository profile (`environments: []`), so no environment or build SHA applies.
 Fixtures: none.
 Blockers SKL-304 (`a559d43`), SKL-305 (`581de04`) and SKL-306 (`d282a5d`, `a7aa8f6`) are Done, and their merges are ancestors of the target.
-The raw output is attached to SKL-307 as `SKL-307-qa-round-1-probe-target.txt`, `SKL-307-qa-round-1-probe-parent.txt` and `SKL-307-qa-round-1-dod.txt`; there is no visual surface, so no screenshot applies.
+The raw output is attached to SKL-307 as "SKL-307 QA round 1 probe at target 31ee7ba", "SKL-307 QA round 1 probe at parent 3eb4c5a" and "SKL-307 QA round 1 path, target and DoD output"; there is no visual surface, so no screenshot applies.
 
 | Item | Verdict | Evidence |
 |---|---|---|
