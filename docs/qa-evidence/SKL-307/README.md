@@ -48,3 +48,36 @@ Details:
   - The Anchoring guardrail's precedence covers both, so neither affects an acceptance criterion.
 
 Closing decision: Done, once this evidence merges.
+
+## QA round 1 after the reopen
+
+Date: 2026-11-15 UTC, independent QA round 1 after the story was reopened for four incidental defects.
+Target: `main` at `42bd765df408a6fa2dbb159ab8cd381ec3967d60`, the squash merge of PR 263, whose reviewed head is `3d9721308661efdea36e0685cafb5dbce8db85c3`.
+`git merge-base --is-ancestor` confirmed the target on `origin/main` and the original merge `31ee7ba` as its ancestor.
+Path: `no-deployment`, selected by `select-path.py` with the recorded `path: no-deployment` line, so no environment or build SHA applies.
+Fixtures: none.
+Blockers SKL-304, SKL-305 and SKL-306 are Done, and their merges are ancestors of the target.
+The raw output is attached to SKL-307 as "SKL-307 QA reopen round 1 probe at target 42bd765", "SKL-307 QA reopen round 1 probe at pre-fix 31ee7ba" and "SKL-307 QA reopen round 1 path, target and DoD output"; there is no visual surface, so no screenshot applies.
+
+| Item | Verdict | Evidence |
+|---|---|---|
+| Reopen defect 1: Parent-line sentence in `shared/linear.md` | Resolved | The sentence now says the parent's recorded value paired with its round's voter values appears only on the Parent line, and the parent's value appears as a bound only in the fixed sentence, matching the template's `Parent:` and `Per-parent bound:` lines; the 18 vendored copies match. |
+| Reopen defect 2: Step 3 Stop timing | Resolved | The Step 3 `Stop:` now also stops a sizing comment made in a slice round before every slice of the round has its three values, as the Split rule defers; items 5 to 7 and the guardrail's opening line carry the same clause. |
+| Reopen defect 3: "after all three values" in `refinement-record.md` | Resolved | The probe finds no line saying "after all three values" without the slice-round deferral, against three such lines at `31ee7ba`. |
+| Reopen defect 4: "its Step 4 discussion" antecedent | Resolved | The Split rule now reads "the SM/EM's sizing comments on that slice and that slice's Step 4 discussion". |
+| AC9b: named sentence changes | Verified | The PR 260 body's "AC9b sentences" section is unchanged, and each named sentence is still present at the target; PR 263 names every sentence it changed. |
+| AC11: prior-round context carry-forward | Verified | Every clause is present at the target, and the tabletop slice B brief built on the template shows parent 13 with voter values 13, 13, 13, the four-unknown ledger with total 8, the three whole-story rationales and no same-round value. |
+| AC12: Anchoring guardrail amendment | Verified | Every clause is present at the target; the bound sentence naming 13 is a factual reference with no anchoring event, and an SM/EM "aim for 5" before the reveal is a target prescription that voids the round. |
+| DoD: all acceptance criteria met | Verified | AC9b, AC11 and AC12. |
+| DoD: tests written and passing | Verified | PR 263 updates the pins in `tests/test_shared_linear.py` and `tests/test_story_refinement.py`; CI `ci` passed on the reviewed head (run 43701924837) and on `main` at the target (run 43702487990, 2413 passed); a local full run at the target passed 2395 with none failed. |
+| DoD: independently reviewed | Verified | Review 5910179495 on PR 263 is `COMMENTED` at `3d9721308661efdea36e0685cafb5dbce8db85c3`, names GPT-6.1 Sol as reviewer and DeepSeek V4.1 Flash as adjudicator, and was submitted at 10:06:38Z, before the 10:06:53Z merge. |
+| DoD: docs updated | Verified | `scripts/vendor_shared.py --check` exits 0, and `SKILL.md` is 496 lines. |
+| DoD: verified in a deployed environment (if needed) | Correct by design | Not needed: the run is on the `no-deployment` path. |
+| DoD: no critical bugs or regressions | Verified | CI `checks` and `discovery` passed on `main` at the target, and every AC assertion of the probe passes at both `31ee7ba` and the target. |
+
+Details:
+
+- Probe: a read-only probe passed 37 of 37 assertions at the target and 27 of 37 at `31ee7ba`; the ten that fail at `31ee7ba` are exactly the defect assertions, so they are not vacuous.
+- Incidental, low: Step 3 item 5 in `SKILL.md` defines the reveal as the moment all three values are recorded "or, in a slice round," every slice of the round has its three values, which read as a plain disjunction would allow a per-slice reveal; items 6 and 7 and the guardrail's opening line say "and", the Split rule defers each slice's reveal explicitly, and the guardrail's precedence settles it, so no acceptance criterion is affected.
+
+Closing decision: Done, once this evidence merges.
