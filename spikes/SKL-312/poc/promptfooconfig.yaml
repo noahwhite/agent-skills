@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# SKL-312 replay proof of concept: run through `bash spikes/SKL-312/poc/run.sh`, which sets the
+# working directory to this one, passes the test list with --tests and scrubs the environment.
+description: SKL-312 recorded-run replay of qa-unfinished-own-steps
+
+# The prompt is a run id, never prompt text: the provider replays a recorded run by its id.
+prompts:
+  - "{{run_id}}"
+
+# The only provider is a local script. No model provider is configured, and no assertion below
+# is model-graded, so an eval of this file makes no model API call.
+providers:
+  - id: "exec: python3 provider.py"
+    label: recorded-run-replay
+
+defaultTest:
+  assert:
+    - type: python
+      value: file://grade.py
+
+sharing: false
