@@ -114,7 +114,8 @@
       "check-signing-key.sh"
     ],
     "engineering-workflow": [
-      "check-signing-key.sh"
+      "check-signing-key.sh",
+      "select-path.py"
     ],
     "linear-bug": [
       "check-signing-key.sh"
@@ -141,13 +142,15 @@
       "check-signing-key.sh"
     ],
     "qa-verification": [
-      "check-signing-key.sh"
+      "check-signing-key.sh",
+      "select-path.py"
     ],
     "story-refinement": [
       "todo-enforce.py"
     ],
     "story-to-done": [
       "check-signing-key.sh",
+      "select-path.py",
       "todo-enforce.py"
     ]
   }

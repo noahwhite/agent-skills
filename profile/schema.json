@@ -483,11 +483,13 @@
         "exemplar_label": {
           "type": "string",
           "minLength": 1,
+          "pattern": "\\S",
           "description": "Optional label that marks capstone exemplars: completed issues whose Capstone comment voters read as a model of structure. Unset, refinement runs without an exemplar."
         },
         "anchor_label": {
           "type": "string",
           "minLength": 1,
+          "pattern": "\\S",
           "description": "Optional label that marks pointing anchors: completed, estimated issues whose Calibration anchor comment builds the voters' anchor table. Unset, pointing runs without anchors."
         }
       }

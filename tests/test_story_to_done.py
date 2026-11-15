@@ -1168,8 +1168,9 @@ METRICS_LINES = [
     # SKL-159: the step 4 continuation branch states the round-count and launch-row rule.
     "  The continuation does not increment the QA round count, reuses that round's scratch subdirectory and "
     "checklist, and with `metrics` on is recorded as its own launch row within that same round.",
+    # SKL-270: the step 5 report carries the `path:` line the Arguments section requires.
     "Report the story identifier, its final state, the four resolved model and effort values and the "
-    "`metrics: on|off` line, the `qa-round-cap: <n>` line, each PR, the number of QA rounds with the items "
+    "`metrics: on|off` line, the `qa-round-cap: <n>` line, the `path: <value>` line, each PR, the number of QA rounds with the items "
     "fixed in each, where QA recorded its evidence, and any incidental defects left open.",
     BOUNDARIES_ONLY_WRITE,
     # SKL-159: the Boundaries sentence that leaves the permitted tracker write unchanged.
@@ -3473,3 +3474,51 @@ def test_the_engineer_hand_back_instruction_carries_no_pending_item() -> None:
     assert digest(lines) == IN_PROGRESS_SHA256, (
         "the `in_progress` bullet changed; no line of it may carry a pending item into a hand-back"
     )
+
+
+# SKL-270: step 1 selects the run's path with select-path.py after the terminal-state stops and
+# before the starting point, and the `path:` line goes in the todo list and every end-state report.
+STEP_1_PATH_LINES = [
+    "- `profile.tracker.states.done`: report that there is nothing to do and stop.",
+    "- `profile.tracker.states.blocked`, `profile.tracker.states.canceled`, or "
+    "`profile.tracker.states.duplicate`: report the state and stop.",
+    "Otherwise select the run's path before any role is spawned.",
+    "From inside the target repository, run `python3 <skill dir>/scripts/select-path.py --title='<story title>'`, "
+    "where `<skill dir>` is the absolute directory your runtime loaded this skill from.",
+    "Add `--label='<name>'` for each label name the story carries as read from the tracker, under the "
+    "differing-team rule in [references/linear.md](references/linear.md) \"Team resolution\"; the script "
+    "compares names only.",
+    "Write each `'` inside the title or a label as `'\\''`, so the shell expands nothing in either.",
+    "When the story is in `profile.tracker.states.in_deployment_review`, add `--recorded-path` with the value "
+    "of the latest `engineering-workflow` step 12 note line whose whole text is exactly `path: spike`, "
+    "`path: no-deployment` or `path: deployed`, when one exists, and add nothing otherwise.",
+    "The script prints one line, the path or an `ask:` line, and exits 0; any other exit status is no path: "
+    "stop and report its stderr line.",
+    "On an `ask:` line, ask the user, accept only `spike`, `no-deployment` or `deployed` as the answer, which "
+    "is the path, and spawn no role until answered.",
+    "Never infer a path from prose, and read one only from an exact `path:` line as above.",
+    "When a spawned role's handback reports an `ask:` line, stop, and quote that line with `path: unresolved` "
+    "in the report of that end state.",
+    "The selected path governs the whole run.",
+    "Then pick the starting point:",
+    "- `profile.tracker.states.in_deployment_review`: implementation already reached deployment review; "
+    "go to step 3.",
+    "- Any other state: go to step 2.",
+]
+PATH_ARGUMENT_LINE = (
+    "- Write the `path: <value>` line step 1 selects in the same two places, as `path: unresolved` until "
+    "step 1 selects it, including in the end-state report of a run that stops before then."
+)
+
+
+def test_step_1_selects_the_path_with_the_script_in_order() -> None:
+    lines = section(SKILL.read_text(), "1. Read the story and pick the starting point").splitlines()
+    positions = []
+    for line in STEP_1_PATH_LINES:
+        assert line in lines, f"the pinned step 1 line moved or changed: {line}"
+        positions.append(lines.index(line))
+    assert positions == sorted(positions), "step 1's path lines are out of order"
+
+
+def test_the_path_line_goes_in_the_todo_list_and_every_end_state_report() -> None:
+    assert PATH_ARGUMENT_LINE in section(SKILL.read_text(), "Arguments").splitlines()
