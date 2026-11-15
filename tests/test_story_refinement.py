@@ -2,6 +2,7 @@
 
 import ast
 import copy
+import hashlib
 import inspect
 import json
 import re
@@ -5092,13 +5093,17 @@ def test_skill_and_profile_name_no_consumer_issue_key_or_name() -> None:
                 continue
             offenders += [f"{path.relative_to(ROOT)}: {match.group(0)}" for match in ISSUE_KEY.finditer(text)
                           if match.group(1) != "SKL" and match.group(0) != "ABC-123"]
-            offenders += [f"{path.relative_to(ROOT)}: Officina" for _ in re.finditer("officina", text, re.IGNORECASE)]
+            offenders += [f"{path.relative_to(ROOT)}: consumer name" for match in re.finditer(r"[A-Za-z]+", text)
+                          if hashlib.sha256(match.group(0).lower().encode()).hexdigest() == CONSUMER_NAME_SHA256]
             offenders += [f"{path.relative_to(ROOT)}: {match.group(0)}" for match in LABEL_VALUE.finditer(text)
                           if not match.group(2).startswith("example-")]
     assert not offenders, "\n".join(offenders)
 
 
 LABEL_VALUE = re.compile(r"\b(exemplar_label|anchor_label):\s*([^\s`\"']+)")
+# The consumer name is compared by its lowercase SHA-256 digest, so this public file never carries the name itself
+# and the repository leak scan stays clean.
+CONSUMER_NAME_SHA256 = "c0fe54eba40d465d8751ae11c3ba84c16703c51ccb82916e94e8e9e6d16f6c78"
 
 
 def test_label_value_scan_catches_a_consumer_label() -> None:
@@ -5107,7 +5112,7 @@ def test_label_value_scan_catches_a_consumer_label() -> None:
 
 
 def test_issue_key_scan_catches_a_consumer_key() -> None:
-    assert [m.group(0) for m in ISSUE_KEY.finditer("SKL-1 ABC-123 OFF-42 [A-Z0-9]")] == ["SKL-1", "ABC-123", "OFF-42"]
+    assert [m.group(0) for m in ISSUE_KEY.finditer("SKL-1 ABC-123 XYZ-42 [A-Z0-9]")] == ["SKL-1", "ABC-123", "XYZ-42"]
 
 
 # --- SKL-306: the priced shared-unknown ledger -----------------------------------------------------------------
