@@ -270,14 +270,18 @@ def test_a_resumed_run_arms_again_in_its_own_scratch_and_starts_a_new_count(h: H
     assert state["rounds"] == []
 
 
-def test_arm_again_in_the_same_scratch_is_refused_and_keeps_the_count(h: Harness) -> None:
+def test_a_resumed_run_arms_again_in_the_same_scratch_and_starts_a_new_count(h: Harness) -> None:
     ok(h.arm())
     h.serve(IN_PROGRESS, ["qa-1"])
-    ok(h.record())
-    before = h.state_file.read_bytes()
-    failed(h.arm(), 1)
-    assert h.state_file.read_bytes() == before
     assert ok(h.record()) == "round=1 cap=2 reached=no"
+    first = json.loads(h.state_file.read_text())["count_id"]
+    assert ok(h.arm("3")) == "round=0 cap=3 reached=no"
+    state = json.loads(h.state_file.read_text())
+    assert state["count_id"] != first
+    assert state["rounds"] == []
+    assert ok(h.record()) == "round=0 cap=3 reached=no", "a comment on the story at arm is never a round"
+    h.serve(IN_PROGRESS, ["qa-1", "qa-2"])
+    assert ok(h.record()) == "round=1 cap=3 reached=no"
 
 
 def test_arm_only_reads_the_tracker(h: Harness) -> None:
@@ -357,13 +361,21 @@ def test_only_a_comment_whose_first_line_is_exactly_the_marker_counts(h: Harness
     assert ok(h.record()) == "round=0 cap=2 reached=no"
 
 
-def test_every_new_qa_evidence_comment_counts_in_creation_order(h: Harness) -> None:
+def test_the_newest_qa_evidence_comment_since_the_last_round_is_the_one_round(h: Harness) -> None:
     ok(h.arm("3"))
     h.serve(IN_PROGRESS, ["qa-1-later", "qa-1"])
-    assert ok(h.record()) == "round=2 cap=3 reached=no"
+    assert ok(h.record()) == "round=1 cap=3 reached=no"
     rounds = json.loads(h.state_file.read_text())["rounds"]
-    assert [(r["round"], r["comment_id"]) for r in rounds] == [(1, "comment-qa-1"), (2, "comment-qa-1-later")]
-    assert ok(h.record()) == "round=2 cap=3 reached=no"
+    assert [(r["round"], r["comment_id"]) for r in rounds] == [(1, "comment-qa-1-later")]
+    assert ok(h.record()) == "round=1 cap=3 reached=no", "a comment already on the story at a counted round never counts"
+
+
+def test_a_comment_on_the_story_at_arm_edited_to_carry_the_marker_is_not_a_round(h: Harness) -> None:
+    h.serve(IN_PROGRESS, ["stamp"])
+    ok(h.arm())
+    edited = {**COMMENTS["stamp"], "body": "## QA evidence\n\n- AC1 | failed | edited"}
+    h.serve_nodes(IN_PROGRESS, [edited])
+    assert ok(h.record()) == "round=0 cap=2 reached=no"
 
 
 def test_a_comment_with_the_same_time_as_the_last_round_still_counts(h: Harness) -> None:

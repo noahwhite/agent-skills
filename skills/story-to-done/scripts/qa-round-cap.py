@@ -37,8 +37,7 @@ QUERY = (
 
 EXIT_CODES = """exit codes:
   0  success
-  1  any other failure: no count armed, a count already armed in this state dir,
-     unreadable state, failed tracker read, unexpected tracker payload or malformed
+  1  any other failure: no count armed, unreadable state, failed tracker read, unexpected tracker payload or malformed
      QA evidence comment, unexpected error
   2  invalid argument or unknown subcommand
   3  the story's state is not the in_progress state given to arm
@@ -235,6 +234,10 @@ def is_qa_evidence(comment: object) -> bool:
     return line == MARKER
 
 
+def comment_ids(comments: list) -> list[str]:
+    return sorted({c["id"] for c in comments if isinstance(c, dict) and isinstance(c.get("id"), str)})
+
+
 def qa_evidence(key: str, comments: list) -> list[tuple[datetime, str, str]]:
     """Every QA evidence comment as (created, id, createdAt), oldest first; a malformed one exits 1."""
     found = []
@@ -270,16 +273,15 @@ def cmd_arm(args: argparse.Namespace) -> None:
         raise Refusal(2, "invalid --in-progress: expected the in_progress state name")
     state_dir = checked_state_dir(args.state_dir)
     with locked(state_dir):
-        if state_path(state_dir, key).exists():
-            raise Refusal(1, f"a QA round count is already armed for {key} in this state dir")
         _, comments = read_story(key)
+        qa_evidence(key, comments)
         state = {
             "story": key,
             "count_id": secrets.token_hex(8),
             "cap": cap,
             "in_progress": in_progress,
             "armed_at": datetime.now(timezone.utc).isoformat(),
-            "baseline": sorted({comment_id for _, comment_id, _ in qa_evidence(key, comments)}),
+            "baseline": comment_ids(comments),
             "rounds": [],
         }
         publish(summary(state), state_dir, key, state)
@@ -293,13 +295,16 @@ def cmd_record(args: argparse.Namespace) -> None:
         name, comments = read_story(key)
         if name != state["in_progress"]:
             raise Refusal(3, f"state={name}")
-        excluded = set(state["baseline"]) | {r["comment_id"] for r in state["rounds"]}
-        new = [(cid, created_at) for _, cid, created_at in qa_evidence(key, comments) if cid not in excluded]
+        # The baseline holds every comment on the story at arm or at the last counted round, so a comment
+        # outside it was created after that point; the newest such QA evidence comment is the one round.
+        seen = set(state["baseline"])
+        new = [(cid, created_at) for _, cid, created_at in qa_evidence(key, comments) if cid not in seen]
         if not new:
             publish(summary(state), state_dir, key, None)
             return
-        for comment_id, created_at in new:
-            state["rounds"].append({"round": len(state["rounds"]) + 1, "comment_id": comment_id, "created_at": created_at})
+        comment_id, created_at = new[-1]
+        state["rounds"].append({"round": len(state["rounds"]) + 1, "comment_id": comment_id, "created_at": created_at})
+        state["baseline"] = sorted(seen | set(comment_ids(comments)))
         publish(summary(state), state_dir, key, state)
 
 
@@ -330,7 +335,7 @@ def build_parser() -> Parser:
     validate.set_defaults(run=cmd_validate)
 
     arm = sub.add_parser(
-        "arm", help="start a new count, refused if one exists in the state dir; prints round=0 cap=<n> reached=no"
+        "arm", help="start a new count, replacing any count in the state dir; prints round=0 cap=<n> reached=no"
     )
     arm.add_argument("--story", required=True)
     arm.add_argument("--cap", required=True)
@@ -342,7 +347,7 @@ def build_parser() -> Parser:
     arm.add_argument("--state-dir", required=True)
     arm.set_defaults(run=cmd_arm)
 
-    record = sub.add_parser("record", help="count every new QA evidence comment; prints round=<n> cap=<c> reached=yes|no")
+    record = sub.add_parser("record", help="count the newest QA evidence comment since the last round; prints round=<n> cap=<c> reached=yes|no")
     record.add_argument("--story", required=True)
     record.add_argument("--state-dir", required=True)
     record.set_defaults(run=cmd_record)
