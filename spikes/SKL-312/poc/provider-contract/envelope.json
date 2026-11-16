@@ -1,0 +1,80 @@
+{
+  "provider_id": "exec: python3 provider.py",
+  "working_directory": "spikes/SKL-312/poc",
+  "argv": [
+    {
+      "index": 0,
+      "role": "script path, as the provider id names it",
+      "value": "provider.py"
+    },
+    {
+      "index": 1,
+      "role": "rendered prompt (here the run id)",
+      "value": "deepseek-v4-pro-baseline-7a6cb17-new-round-7a6cb17-harness-e46615c-1"
+    },
+    {
+      "index": 2,
+      "role": "provider options, one JSON document",
+      "json_shape": {
+        "config": {
+          "basePath": "string"
+        },
+        "env": {},
+        "id": "string"
+      }
+    },
+    {
+      "index": 3,
+      "role": "call context, one JSON document",
+      "json_shape": {
+        "bustCache": "boolean",
+        "evaluationId": "string",
+        "prompt": {
+          "config": {},
+          "label": "string",
+          "raw": "string",
+          "template": "string"
+        },
+        "repeatIndex": "number",
+        "test": {
+          "assert": [
+            {
+              "type": "string",
+              "value": "string"
+            }
+          ],
+          "description": "string",
+          "metadata": {},
+          "options": {},
+          "vars": {
+            "run_id": "string"
+          }
+        },
+        "testIdx": "number",
+        "vars": {
+          "__evalId": "string",
+          "__evalStepId": "string",
+          "__repeatIndex": "number",
+          "run_id": "string"
+        }
+      }
+    }
+  ],
+  "stdin": "closed by promptfoo before the script reads it",
+  "stdout": "the whole of stdout, trimmed, is the provider output",
+  "exit_status": "non-zero is a provider error; stderr with empty stdout is one too",
+  "environment_variable_names": [
+    "HOME",
+    "LANG",
+    "PATH",
+    "PROMPTFOO_CACHE_ENABLED",
+    "PROMPTFOO_CONFIG_DIR",
+    "PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION",
+    "PROMPTFOO_DISABLE_REMOTE_GENERATION",
+    "PROMPTFOO_DISABLE_SHARING",
+    "PROMPTFOO_DISABLE_TELEMETRY",
+    "PROMPTFOO_DISABLE_UPDATE",
+    "SKL312_WORK",
+    "TMPDIR"
+  ]
+}
