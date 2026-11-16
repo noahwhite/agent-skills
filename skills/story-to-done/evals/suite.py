@@ -48,10 +48,10 @@ UUID = re.compile(r"(?i)\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-
 # that ends in a word character (\n \t \r \b \f \uXXXX) therefore still starts a path. The pattern
 # cannot tell an escape from a message that quotes one (printf("\t/srv/x"), serialised as a doubled
 # backslash before t), so that path is redacted too: the accepted cost is over-redaction, never less.
-AFTER_ESCAPE = r"(?<=\\[ntrbf])|(?<=\\u[0-9A-Fa-f]{4})"
-# An absolute path of two or more segments that no known root above accounted for. The
+AFTER_ESCAPE = r"(?:(?<=\\[ntrbf])|(?<=\\u[0-9A-Fa-f]{4}))"
+# An absolute path of one or more segments that no known root above accounted for. The
 # lookbehind keeps URLs (scheme://host/path) and relative paths (a/b/c) as they are.
-ABSOLUTE_PATH = re.compile(r"(?:(?<![\w.:/{}~-])|" + AFTER_ESCAPE + r")/(?:[\w.@+-]+/)+[\w.@+-]*")
+ABSOLUTE_PATH = re.compile(r"(?:(?<![\w.:/{}~-])|" + AFTER_ESCAPE + r")/[\w.@+-]+(?:/[\w.@+-]+)*/?")
 VOID_LINE = re.compile(r"^(HARNESS|run\.sh):")
 # The record fields --resume compares with this run, each against its run context key.
 RECORD_FIELDS = {"label": "label", "checkout_commit": "checkout_commit", "harness_commit": "harness_commit",
