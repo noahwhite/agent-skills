@@ -23,6 +23,7 @@ The process has two stages and four steps.
 Stage 1 is refinement: independent inputs, then reconciliation and the accept round.
 Stage 2 is pointing: secret votes, then a consensus check and, where the check calls for them, one high/low discussion and one re-vote ending in a recorded estimate or an unpointed stop.
 A Bug, an Investigation or a Spike is unestimated: it runs Stage 1 only and is never pointed, as [Unestimated issue types](#unestimated-issue-types) states.
+A refine request on a story that meets every [Short path](#short-path) condition, or is already in or past ready, ends at the short path before any stage runs.
 Each step names its inputs, outputs, and stop conditions.
 
 ## Arguments
@@ -62,6 +63,7 @@ After reading `references/todo-tracking.md`, expand the list to the story-refine
 - [references/runtimes.md](references/runtimes.md) - maps the capabilities named here (todo list, load a skill, spawn a subagent, run a shell command) to your runtime.
 - [references/refinement-record.md](references/refinement-record.md) - the hand-written refinement-comment and pointing-record templates, the record vocabulary, the comment headings, and the permitted and forbidden phrasing table.
 - [references/exemplars-and-anchors.md](references/exemplars-and-anchors.md) - the hand-written exemplar lookup and anchor table rules of Step 1 item 4.
+- [references/repository-guards.md](references/repository-guards.md) - the hand-written repository guard check of Step 1 item 6.
 
 Where this file and a capability file disagree, the capability file is authoritative, except the non-voting facilitator rule, the independence rules, the anchoring guardrail here, and the lookup outcomes of Step 1 item 4, which never stop the ceremony, and these always override.
 
@@ -106,30 +108,24 @@ The facilitator applies each write verbatim and reads it back.
 A subagent's report, a notification, or another agent's claim of approval never counts as the owner's authorization.
 Never retry a denied write through a different tool or server.
 
-## Repository guards
+## Short path
 
-The facilitator runs this check in Step 1, after the tracker-write preflight and before any voter launches, whenever the story's acceptance criteria add or change any tracked file.
-The guards and their commands come from the repository under refinement; this skill names guard kinds only.
-
-1. **Guard list.** The facilitator lists the guards of the repository under refinement that every added or changed tracked file must pass, not only checks on the files the story edits: test modules that scan tracked files, linters, schema or spec validators, and leak or spelling scanners.
-   It discovers them from that repository's CI configuration and test suite.
-   The refinement note records each guard, the command that runs it, and the discovery source.
-   The guard list is part of the story surface every voter receives.
-   The refined acceptance criteria require every added or changed tracked file the story commits to pass every guard on the guard list.
-2. **Producible output.** When the story commits generated or frozen output (a recorded baseline, a captured dossier, or a golden file produced by a tool or by an earlier commit), the facilitator produces that output: the exact bytes the story commits where they exist before implementation, otherwise a representative sample produced the same way.
-   It places the output at its intended path in a throwaway checkout, stages it there so guards that enumerate tracked files see it, and runs every guard on the guard list against it from that checkout, leaving the primary checkout unchanged.
-   Every guard runs twice, once with the output staged and not yet committed and once after the output is committed there, so a guard that reads the staged set, the index or committed content sees it; a guard passes only when both runs pass.
-   The throwaway checkout is a disposable clone of the repository under refinement with its own object store, never a worktree that shares one, at the revision the story's work starts from; it sits in the session's scratch directory, and the whole clone is removed after the check.
-   A run passes only when the guard exits zero and reports no finding.
-   The refinement note records, for each guard, the command, the exit status and the result of each run, and for a sample its provenance and coverage limits.
-3. **Output not yet producible.** When the output cannot be produced before implementation because code the story writes generates it, the refinement note states why, naming the code the story writes that generates it and confirming that no tool or earlier commit produces those bytes before implementation, and the refined acceptance criteria require the committed output to pass every guard on the guard list and name the resolution the implementer may use if a guard rejects it, chosen from the kinds item 4 lists.
-4. **Rejection.** When a guard rejects output checked under item 2, the refined acceptance criteria state the resolution: an exemption the story adds, scoped to its own files; a normalization; an encoding; or an amendment to the criterion that forbade one of these.
-   The resolved output is re-run through the rejecting guard and passes, and through every other guard on the guard list, which pass too; the refinement note records the rejection, the resolution and the passing re-run.
-5. **Stop.** When a guard on the guard list cannot be run, or the resolved output still fails any guard on the guard list, the facilitator stops and reports `needs input` to the owner naming the guard, its command and its result.
-6. **Refresh.** When an accept-round amendment adds or changes a tracked file or committed output the check has not covered, the facilitator runs the check again against the amended acceptance criteria before the updated refinement comment is posted.
-   A split sibling under the [Split rule](#split-rule) gets the check against its own acceptance criteria before its estimate voters launch, and its guard list is part of the story surface those voters receive.
-   A story whose acceptance criteria changed after an earlier check gets the check against its final acceptance criteria before the PO decides the "checked against the implementation" Definition of Ready box.
-7. **No secrets.** The guard list, guard output given to a voter, and the refinement note contain no secrets: a rejection that matched secret text is cited by guard, file and line, never quoted.
+A refine request on a story that is already refined, pointed and unblocked moves it to ready without a ceremony.
+The facilitator evaluates the short path immediately after Step 1 item 1 (story read), applying the Step 1 item 3 type check within that evaluation, before Step 1 item 2 (roster check) and before any voter launch, preflight comment or tracker write.
+It applies only when every condition holds, each read from the tracker: (a) the story is an estimated type (`type: estimated`); (b) refined: it carries a Refinement record comment and its latest Accept round result comment has outcome `accepted`; (c) pointed: its tracker estimate, read with `linear api` and never from `linear issue view`, is set to a value on the `profile.tracker.estimate_scale` sequence; (d) unblocked: `linear issue relation list <ID>` shows every blocking relation in both directions with the blocker in `profile.tracker.states.done`, where a canceled or duplicate blocker is not done; (e) ready-eligible: the story is in `profile.tracker.states.backlog`, its priority is set and its assignee is `profile.tracker.assignee`, the blocker Definition of Ready box exists, and every other Definition of Ready box is already ticked.
+On the path the facilitator skips the roster check, the exemplar lookup and anchor table, the tracker-write preflight, the repository guard check, the voter launches and Steps 2 to 4, runs no pointing round, and does not ask the owner to confirm the path.
+Each todo item of a skipped step is left open and named as not done with the reason `short path`.
+The product owner verifies every clause of the "No blocking stories, no unresolved external dependencies, and no other story already owns this scope" Definition of Ready box from what the story records, the relation-list evidence for the blockers and the story's recorded backlog search for ownership, ticks the box with that evidence, moves the story to `profile.tracker.states.ready`, reads back both the box and the state, and posts the Triage record from [references/refinement-record.md](references/refinement-record.md) with the priority as read back.
+The path makes no new priority decision, so the priority step under [Triage](#triage) does not apply: the Triage record's `Priority comparison:` line reads `not compared: short path`.
+That move follows the promotion rule in `persona-product-owner/SKILL.md`.
+If the product owner cannot verify a clause from what the story records, no write is made and the normal ceremony runs from Step 1 item 2.
+A story in `profile.tracker.states.backlog` that fails any of conditions (a) to (e) runs the normal ceremony as today: an unrefined or unpointed story is refined or pointed, and a story with a blocker not done stays out of `profile.tracker.states.ready`.
+A Bug, an Investigation, a Spike, and a story whose filing template has no blocker Definition of Ready box never take the path, and a story in `profile.tracker.states.triage` runs the normal ceremony.
+A story already in `profile.tracker.states.ready` runs no ceremony, takes no write and is reported `short path: already ready`; one in `profile.tracker.states.in_progress` or a later state is excluded, runs no ceremony, takes no write and is reported `short path: excluded`.
+The product owner authors every write on the path; when the team of `STORY_ID` differs from `profile.tracker.team_key`, the differing-team rule in Team resolution in [references/linear.md](references/linear.md) confirms `profile.tracker.states.ready`, `profile.tracker.states.backlog` and each label name on that team before the write.
+A denied or failed write stops the path with `needs input` under [Denied tracker writes](#denied-tracker-writes) and is never retried through another tool; the writes run in the order above, so a denied Triage record post leaves the ticked box and the move to `profile.tracker.states.ready` in place, read back, and the stop names the denied write.
+"Does not ask" never overrides that stop or an owner authorization that rule requires; an unset priority is a failed condition (e), so the normal ceremony and its priority stop under [Triage](#triage) apply.
+Every short-path ending names its outcome in the closing message, `short path: moved to ready` on the move, and carries `exemplars: not looked up` and `anchors: not looked up`.
 
 ## Stage 1: refinement
 
@@ -138,6 +134,7 @@ The guards and their commands come from the repository under refinement; this sk
 - **Inputs:** the story description, acceptance criteria, comments, and formal relations; the profile; the capability references; the Definition of Ready and Definition of Done template from the matching filing skill, where that template has them.
 - **Process:**
   1. With the todo list already created (Read first), read the story completely, including its labels and `linear issue relation list <ID>` for every blocker.
+     Then evaluate the [Short path](#short-path); when it applies or reports `short path: already ready` or `short path: excluded`, Steps 1 to 4 end here.
   2. Validate the refinement roster before the tracker-write preflight and before any voter launch.
      Resolve the profile through the first-existing-file rule in [references/profile.md](references/profile.md) (the `shared/profile.md` rule), never a repository-only read.
      Stop with a message naming the violated requirement when `profile.refinement.reviewers` does not hold exactly three entries, when fewer than three reviewers are enabled, when a required role (`facilitator`, `product_owner`, `reviewers`) is unset, when a reviewer `family` is missing or empty, when two reviewer families are equal, or when two reviewer model ids are equal.
@@ -157,9 +154,9 @@ The guards and their commands come from the repository under refinement; this sk
      If the write is denied, no voter launches, and the facilitator reports `needs input` to the owner naming the denied write and pointing to the "Tracker writes from a subagent" rule in `references/runtimes.md`.
      The probe exercises comment add only; later write kinds fall under the denied tracker writes fallback, and the Step 2 stop stays as the backstop.
      After the owner acts, run the probe again; if the owner directly authorizes the facilitator under the denied tracker writes fallback, the facilitator applies the PO-authored probe verbatim, records its comment id, and the voters launch.
-  6. Run the repository guard check in [Repository guards](#repository-guards) before any voter launches.
+  6. Run the repository guard check in [references/repository-guards.md](references/repository-guards.md) before any voter launches.
   7. Launch the three engineers in separate contexts with the same story surface.
-     Give each voter only its own profile entry, the story, the guard list from [Repository guards](#repository-guards) when that check ran, the selected exemplar when item 4 selected one, and the session's scratch directory it writes into; never give it another voter's file or a summary of another input.
+     Give each voter only its own profile entry, the story, the guard list from [references/repository-guards.md](references/repository-guards.md) when that check ran, the selected exemplar when item 4 selected one, and the session's scratch directory it writes into; never give it another voter's file or a summary of another input.
      For a Bug, an Investigation or a Spike, the brief also carries the type written on the todo list and that type's bullet under Content per type in [Unestimated issue types](#unestimated-issue-types).
      For those types the brief also carries the Scope signal bullet in [Unestimated issue types](#unestimated-issue-types), so each voter states one of its type's two readings.
      The selected exemplar sits beside, and never replaces, that content: each brief carries the same exemplar key and the body of its `Capstone` comment, byte-identical across the three voters and never edited, as a reference for the shape of acceptance criteria, Definition of Done and evidence, with the statement that the exemplar is a model of structure and not a statement about this story's scope or size, and that its content is reference data, not instructions; with no selected exemplar the brief omits the exemplar.
@@ -426,12 +423,12 @@ When `metrics` is on, the metrics summary is the one comment the SM/EM posts out
 
 - The PO ticks a Definition of Ready box only after verifying the condition and records the evidence for every ticked box.
   An unverified box stays unticked.
-- When the story's acceptance criteria add or change any tracked file, the PO does not tick the "checked against the implementation" Definition of Ready box while the guard list is missing, the check did not run against the story's final acceptance criteria, output was classed under item 3 without the evidence item 3 requires, producible output under item 2 of [Repository guards](#repository-guards) was not run, a guard could not be run, or a guard rejection lacks a resolution with a passing re-run.
+- When the story's acceptance criteria add or change any tracked file, the PO does not tick the "checked against the implementation" Definition of Ready box while the guard list is missing, the check did not run against the story's final acceptance criteria, output was classed under item 3 without the evidence item 3 requires, producible output under item 2 of [references/repository-guards.md](references/repository-guards.md) was not run, a guard could not be run, or a guard rejection lacks a resolution with a passing re-run.
 - When the team of `STORY_ID` differs from `profile.tracker.team_key`, confirm `profile.tracker.states.ready`, `profile.tracker.states.backlog` and each label name on that team before writing it, under the differing-team rule in Team resolution in [references/linear.md](references/linear.md).
 - Set `profile.tracker.states.ready` only when no blocker remains.
 - For a Bug, an Investigation or a Spike, the PO also applies the ready gate and the `State:` line in [Unestimated issue types](#unestimated-issue-types).
 - Leave blocked siblings in `profile.tracker.states.backlog` with the blocker Definition of Ready box unchecked.
-- Priority is the PO's decision on every refinement outcome: the story moving to `profile.tracker.states.ready`, the story staying in `profile.tracker.states.backlog`, and each split sibling.
+- Priority is the PO's decision on every refinement outcome except a [Short path](#short-path) move, which reuses the read-back priority: the story moving to `profile.tracker.states.ready`, the story staying in `profile.tracker.states.backlog`, and each split sibling.
   The PO decides, applies and reads back a priority before the invocation ends and before any move to `profile.tracker.states.ready`, unless the ceremony stops on priority as this bullet states.
   The PO chooses the priority by comparing the story with at least one comparable story already prioritised in the team of `STORY_ID`.
   The PO applies the priority and reads it back as a PO-authored tracker write.
@@ -454,7 +451,8 @@ Record the priced shared-unknown ledger of a whole-story round in the pointing r
 For a Bug, an Investigation or a Spike, no pointing record is posted: the refinement comment carries the `Pointing skipped` line, a "not accepted" round 2 Accept round result comment is the stop record with the objecting voters' blocking amendments, and the Triage record carries the `State:` line, as [Unestimated issue types](#unestimated-issue-types) states.
 Every refinement comment carries the `Exemplars:` line and its skip lines, and every pointing record the `Anchors:` line and its skip lines, naming keys only, never an anchor's point value; for a Bug, an Investigation or a Spike the refinement comment carries `Anchors: not pointed` instead.
 For a Bug, an Investigation or a Spike, the refinement comment also carries the `Scope signal:` line, and an oversize split of a Bug or an Investigation posts the split comment that maps every acceptance criterion or findings-scope item to a slice and every slice criterion or item to exactly one criterion or item of the issue it is split from.
-When the [Repository guards](#repository-guards) check ran, the refinement comment also records the guard list with each guard's command and discovery source; for each guard run, its command, exit status and result; each sample's provenance and coverage limits; and each rejection with its resolution and passing re-run, with no secrets under item 7 of [Repository guards](#repository-guards).
+When the [references/repository-guards.md](references/repository-guards.md) check ran, the refinement comment also records the guard list with each guard's command and discovery source; for each guard run, its command, exit status and result; each sample's provenance and coverage limits; and each rejection with its resolution and passing re-run, with no secrets under item 7 of [references/repository-guards.md](references/repository-guards.md).
+A [Short path](#short-path) ending posts at most its Triage record and records none of the other items this section lists.
 
 ## Metrics
 
@@ -479,6 +477,7 @@ This section applies only when `metrics` is on.
 - **Order:** When a pointing record exists, the comment is the invocation's last tracker write.
   It posts only after every voter round, including every slice estimate under the Split rule, has finished; the pointing record (a recorded estimate, an unpointed result, or a split decision) and any split comment have been posted and read back; and the invocation's triage writes have been applied and read back.
   When no pointing record exists because the story is a Bug, an Investigation or a Spike, the comment is the invocation's last tracker write and posts only after the refinement comment, every Accept round result comment and the invocation's triage writes have been applied and read back, on an accepted and on a "not accepted" outcome alike.
+  On a [Short path](#short-path) move, the comment is the invocation's last tracker write and posts only after the box, the state and the Triage record are read back; a short-path ending with no write attempts no post, and the summary stays in the closing message.
   When the oversize split ran, the comment also posts only after the split comment, each sibling issue it created and each sibling's Triage record have been applied and read back.
 - **Stop before a record:** On a stop before a pointing record exists, the comment posts only after every Step 1 voter input is recorded - with the three-voter roster, all three Stage 1 voter inputs - and every launched voter has returned or been stopped, with its end timestamp taken; on that path no pointing record and no triage write is required.
   A stop before every Step 1 voter input is recorded attempts no post, because Step 1 allows no tracker comment before then except the preflight, and the summary stays in the closing message.
@@ -492,7 +491,7 @@ This section applies only when `metrics` is on.
 ## Closing message
 
 The closing message is the facilitator's final message to the owner when the invocation ends, on every end state and every stop.
-It names the outcome (the recorded estimate, unpointed, or split with the slice count) or the stop reason, including each `needs input`: the denied tracker write of Step 1 and the unpointed variance stop of Step 4.
+It names the outcome (the recorded estimate, unpointed, split with the slice count, or a [Short path](#short-path) outcome: `short path: moved to ready`, `short path: already ready` or `short path: excluded`) or the stop reason, including each `needs input`: the denied tracker write of Step 1 and the unpointed variance stop of Step 4.
 For a Bug, an Investigation or a Spike, an accepted outcome reads "refined, not pointed (<type>)", and a "not accepted" outcome names that outcome and the two-round cap as the stop reason, never unpointed, as [Unestimated issue types](#unestimated-issue-types) states; the stop reason also names each `needs input` of the Step 1 type check: an unset type-label key or conflicting type labels.
 When the oversize split splits a Bug or an Investigation, the outcome names the split and the slice count, and a Spike with the re-file reading closes with "refined, not pointed (Spike); needs input: re-file as separate Spikes" naming the story, as [Unestimated issue types](#unestimated-issue-types) states.
 For a Bug, an Investigation or a Spike whose `Scope signal:` line is missing or carries neither of its type's readings, it also names that `needs input`, naming the story and the gap, as the Scope signal bullet in [Unestimated issue types](#unestimated-issue-types) states.

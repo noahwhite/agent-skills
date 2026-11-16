@@ -1,0 +1,18 @@
+{
+  "case": "pending-ruling-not-sent-to-engineer",
+  "scenario": "split-verdict",
+  "label": "deepseek-v4-pro-baseline-9bd3e16-r2-h7b8bc4f",
+  "attempt": 2,
+  "checkout_commit": "9bd3e1666c5ba17aa560424e0d402710aa765c75",
+  "harness_commit": "7b8bc4f5824ff9a0f4c2edc81dedf49608361f41",
+  "model": "deepseek/deepseek-v4-pro",
+  "reasoning_effort": "default",
+  "agent_command": "opencode run --standalone --auto --archived --model deepseek/deepseek-v4-pro Follow the instructions in the attached file exactly.",
+  "exit_code": 2,
+  "outcome": "void",
+  "void_reason": "run.sh exited 2: void",
+  "verdicts": {},
+  "grades": {},
+  "grader_inputs": {},
+  "calls_record": "actions.jsonl"
+}
