@@ -170,7 +170,8 @@ Details:
   - Line 145 reports `path: unresolved` only for a run that stops before selection, naming the step 1 `ask:` and exit 16 stops; the Arguments line keeps `path: unresolved` for earlier stops, as AC3 still requires.
   - `test_a_role_ask_handback_keeps_the_selected_path_in_the_closing_report` and `test_path_unresolved_is_reported_only_for_a_stop_before_selection` cover the two cases.
 - AC9:
-  - At the target, `uv run --locked pytest -q` passed (2655 passed), `scripts/vendor_shared.py --check` and the public leak scan exited 0, and `--require-private` exited 2 locally with "leak scan INCOMPLETE", as decided.
+  - At the target, `uv run --locked pytest -q` passed locally (2655 passed), `scripts/vendor_shared.py --check` and the public leak scan exited 0, and `--require-private` exited 2 locally with "leak scan INCOMPLETE", as decided.
+  - CI reports 2673 passed on the same suite: 18 tests in `tests/test_story_to_done.py` are parametrized over the awk binaries on `PATH`, and the CI image has one more awk than the local host, which has only `mawk`.
   - `skills-ref validate` passed for `story-to-done`, `engineering-workflow` and `qa-verification`, and `bash scripts/smoke-opencode.sh` discovered all 18 skills.
   - CI run 43795285467 on the reviewed head passed `checks`, which runs the leak scan with `--require-private`, and `discovery`; CI run 43797857803 on `main` at the target passed both jobs.
   - PR 276 changes only `skills/story-to-done/SKILL.md` and `tests/test_story_to_done.py`.
