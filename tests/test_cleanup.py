@@ -640,6 +640,11 @@ DECLARED_CHECK_ITEM = (
     "refusal only; a name on the fixed list keeps its own content check even if a profile also declares it, and a "
     "failed fixed-list check refuses the worktree and never falls back to the profile."
 )
+PLAIN_STRING = "A declared name is compared as a plain string, with no glob or shell expansion, and a duplicate entry has no effect."
+EITHER_SOURCE = (
+    "\"Regenerable entry\" in steps 2, 3 and 6 means an entry that either source, the fixed list or the profile, "
+    "qualifies, and every other rule in this step for a regenerable entry applies to a declared one unchanged."
+)
 NEVER_REGENERABLE = "An untracked entry (`??`), a symlink, or a file named like a declared entry is never regenerable."
 STEP2_SOURCE = "Each regenerable entry line, `remove` or `keep`, ends with `(source: fixed list)` or `(source: profile)`."
 STEP3_REPORT_SOURCE = "Each regenerable entry line carries its source as step 2 marks it; an untracked entry line carries none."
@@ -653,11 +658,36 @@ def test_a_declared_directory_is_regenerable_right_after_the_fixed_list() -> Non
     assert DECLARED_SENTENCE in lines, DECLARED_SENTENCE
     list_index = next(i for i, line in enumerate(lines) if LIST_LEAD in line)
     assert lines[list_index + 1] == DECLARED_SENTENCE
+    # Whole and in place, so "regenerable entry" in steps 2, 3 and 6 keeps covering both sources.
+    assert lines[list_index + 2] == PLAIN_STRING, PLAIN_STRING
+    assert lines[list_index + 3] == EITHER_SOURCE, EITHER_SOURCE
     assert NEVER_REGENERABLE in lines, NEVER_REGENERABLE
     assert DECLARATION_ALONE in lines, DECLARATION_ALONE
     recreate = "A package manager or test runner recreates these directories, so deleting them loses nothing."
     assert lines[lines.index(recreate) + 1] == DECLARATION_ALONE
     assert body.count("profile.cleanup.regenerable_dirs") >= 1
+
+
+def test_no_line_outside_the_pinned_ones_names_the_fixed_list() -> None:
+    # A presence pin cannot see an added sentence that narrows regenerable handling back to the fixed
+    # list, so every line naming the fixed list must be one of the lines the source rules already pin.
+    allowed = {
+        STEP2_SOURCE,
+        "A name that is both on the fixed list and declared is labelled `fixed list`; `profile` is used only for a name not on the fixed list.",
+        EITHER_SOURCE,
+        DECLARED_CHECK_ITEM,
+        "- deleted: <regenerable entry path> (source: <fixed list | profile>)",
+        "- refused: <regenerable entry path> (source: <fixed list | profile>): <failed deletion>",
+    }
+    found = [line.strip() for line in text().splitlines() if re.search(r"fixed[ -]list", line, re.IGNORECASE)]
+    unexpected = [
+        line
+        for line in found
+        if line not in allowed
+        and "neither the fixed list nor `profile.cleanup.regenerable_dirs` qualifies" not in line
+        and not line.startswith("Only when the worktree passes every other check in this step")
+    ]
+    assert unexpected == [], unexpected
 
 
 def test_a_declared_name_has_no_content_check_and_a_fixed_name_keeps_its_own() -> None:
