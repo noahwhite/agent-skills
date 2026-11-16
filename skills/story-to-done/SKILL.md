@@ -141,8 +141,8 @@ In every state this step routes to a role (step 2 or step 3), add `--recorded-pa
 The script prints one line, the path or an `ask:` line, and exits 0; any other exit status is no path: stop and report its stderr line.
 On an `ask:` line, ask the user, accept only `spike`, `no-deployment` or `deployed` as the answer, which is the path, and spawn no role until answered.
 Never infer a path from prose, and read one only from an exact `path:` line as above.
-When a spawned role's handback reports an `ask:` line, stop, and quote that line in the report of that end state with the `path: <value>` line this step selected.
-Report `path: unresolved` only for a run that stops before this step selects a path, on an unanswered `ask:` line or on any other exit status.
+When a spawned role's handback reports an `ask:` line, stop, and quote that line in the step 5 report with the `path: <value>` line, `<value>` being the path this step selected.
+Report `path: unresolved` only for a run that stops in this step before it selects a path: on an `ask:` line the user does not answer with one of the three values, or on exit 16 or any other nonzero exit status.
 The selected path governs the whole run.
 
 Then pick the starting point:
