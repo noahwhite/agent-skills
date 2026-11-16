@@ -60,14 +60,14 @@ The PR 300 body records each guard with its job, conclusion and link.
 
 ### R5 detail
 
-Both searches below ran from the target checkout over `skills/story-to-done/evals/pending-ruling-not-sent-to-engineer/results` and `skills/story-to-done/evals/results`, and both printed nothing and exited 1.
+Both searches below ran from the root of a checkout of the target, and both printed nothing and exited 1.
 
 ```
-grep -rn -a -E '/home/|/tmp/|session\.|/root/|/Users/|\\/home|\\u002f' <both directories>
-grep -rn -a -P '(?<!\{run_dir\})/workspace' <both directories>
+grep -rn -a -E '/home/|/tmp/|session\.|/root/|/Users/|\\/home|\\u002f' skills/story-to-done/evals/pending-ruling-not-sent-to-engineer/results skills/story-to-done/evals/results
+grep -rn -a -P '(?<!\{run_dir\})/workspace' skills/story-to-done/evals/pending-ruling-not-sent-to-engineer/results skills/story-to-done/evals/results
 ```
 
-The last two alternatives of the first pattern match the JSON-escaped text `\/home` and `/`.
+The last two alternatives of the first pattern match JSON-escaped slashes: a backslash followed by `/home`, and a backslash followed by `u002f`.
 `/workspace` occurs only as the `{run_dir}/workspace` placeholder, 171 times.
 The PR 300 body records its own anchored command and its empty result.
 
