@@ -1,5 +1,5 @@
 {
-  "_comment": "Synthetic `linear issue view <KEY> --json` payloads for tests/test_qa_round_cap.py. Comments dated 2001 predate any arm; comments dated 2099 follow it.",
+  "_comment": "Synthetic comment nodes the stub `linear api` serves for tests/test_qa_round_cap.py. Comments dated 2001 are on the story when arm runs, except qa-skewed, whose tracker time trails the local clock; comments dated 2099 follow arm.",
   "comments": {
     "old-qa": {
       "id": "comment-old-qa",
@@ -48,6 +48,18 @@
       "body": "## QA evidence\n\nRound three. AC2 failed again.",
       "createdAt": "2099-01-03T00:00:00.000Z",
       "url": "https://tracker.example/ABC-123#comment-qa-3"
+    },
+    "marker-trailing-space": {
+      "id": "comment-marker-trailing-space",
+      "body": "## QA evidence   \nthe first line carries trailing spaces",
+      "createdAt": "2099-01-01T08:00:00.000Z",
+      "url": "https://tracker.example/ABC-123#comment-marker-trailing-space"
+    },
+    "qa-skewed": {
+      "id": "comment-qa-skewed",
+      "body": "## QA evidence\n\nPosted after arm; the tracker clock reads earlier than the local clock.",
+      "createdAt": "2001-06-01T00:00:00.000Z",
+      "url": "https://tracker.example/ABC-123#comment-qa-skewed"
     }
   }
 }
