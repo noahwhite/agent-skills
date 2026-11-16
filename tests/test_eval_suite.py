@@ -98,7 +98,8 @@ sys.exit(0 if ok else 1)
 # bad-bytes records a byte that is not UTF-8; dirty-once changes CHECKOUT on its first attempt
 # and is void, as a real run.sh voids an agent that changed it. It writes its run directory into
 # the call, so the record shows whether the runner normalised the path, and the CANARY or EVAL_CANARY variable
-# into evidence.json, so the record shows what environment it got. EVAL_AGENT_CMD passes
+# into evidence.json, so the record shows what environment it got. evidence.json holds its run directory
+# after an escaped newline, as messages.json holds a path that starts a line. EVAL_AGENT_CMD passes
 # --model MODEL first, as a real agent command names its model.
 STUB_AGENT = r"""#!/usr/bin/env bash
 set -euo pipefail
@@ -120,7 +121,7 @@ case "$scenario" in
 esac
 printf '{"action": "%s", "run_dir": "%s", "id": "%s"}\n' "$action" "$run" "$STUB_UUID" > "$run/actions.jsonl"
 if [ "$scenario" = bad-bytes ]; then printf '\xff\n' >> "$run/actions.jsonl"; fi
-printf '{"seen_in": "%s", "canary": "%s"}\n' "$run" "${CANARY-${EVAL_CANARY-unset}}" > "$run/evidence.json"
+printf '{"seen_in": "\\n%s", "canary": "%s"}\n' "$run" "${CANARY-${EVAL_CANARY-unset}}" > "$run/evidence.json"
 mkdir -p "$run/nested"
 echo kept > "$run/nested/kept.md"
 """
@@ -285,7 +286,7 @@ def test_every_attempt_writes_a_run_record_and_a_call_record_named_for_it(suite)
     assert graded["verdicts"] == {"void-once": "pass"}
     assert graded["model"] == "stub/agent-model" and graded["reasoning_effort"] == "high"
     assert graded["agent_command"] == "{tmpdir}/agent --model stub/agent-model#high"
-    assert json.loads(graded["grader_inputs"]["evidence.json"]) == {"seen_in": "{run_dir}", "canary": "unset"}, \
+    assert json.loads(graded["grader_inputs"]["evidence.json"]) == {"seen_in": "\n{run_dir}", "canary": "unset"}, \
         "a run-directory file the grader names is kept with the record"
     assert graded["grader_inputs"]["nested/kept.md"] == "kept\n", "a relative path the grader names is kept too"
     calls = (results / f"lab-1-pass-{sha}-harness-{harness_sha}-1-calls.jsonl").read_text()
@@ -365,9 +366,9 @@ def test_the_normaliser_rewrites_a_path_after_each_boundary_in_a_serialised_mess
     normalise = SUITE.Normaliser(SUITE.leak_patterns(), run_dir=Path(RUN_ROOT), home=Path(HOME_ROOT))
     if serialise:
         text, wanted = (json.dumps([{"role": "assistant", "content": value}]) for value in (message, expected))
-        assert not any(ord(char) < 0x20 for char in text), "the escape is characters, not a control character"
     else:
         text, wanted = message, expected
+    assert not any(ord(char) < 0x20 for char in text), "the escape is characters, not a control character"
     assert normalise(text) == wanted
     assert normalise(wanted) == wanted, "a normalised record is left as it is"
 
