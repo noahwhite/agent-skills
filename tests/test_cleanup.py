@@ -737,6 +737,12 @@ def test_the_regenerable_dirs_default_is_an_empty_list() -> None:
     assert schema()["properties"]["cleanup"]["properties"]["regenerable_dirs"]["default"] == []
 
 
+def test_each_regenerable_dirs_item_is_declared_a_string() -> None:
+    # A `pattern` is vacuously true for a non-string, so the `not` predicate alone already rejects `[1]`;
+    # pin the declared item type directly so dropping it cannot go unnoticed.
+    assert schema()["properties"]["cleanup"]["properties"]["regenerable_dirs"]["items"]["type"] == "string"
+
+
 def recorded_instruction_block() -> str:
     """The step 3 "Recorded instruction" block, up to the removal order that follows it."""
     body = section(text(), "3. Delete only with merge evidence")
