@@ -59,7 +59,7 @@ Names only; no value belongs in this repository.
 | Variable | Needed | What it is |
 |---|---|---|
 | `DEEPSEEK_API_KEY` | live run, when `opencode` is not already signed in | The model provider's credential. It reaches the agent only when `EVAL_PASS_ENV` names it. |
-| `EVAL_PASS_ENV` | optional | Names of variables to pass to the agent, separated by spaces, as `run-suite.sh` reads it. |
+| `EVAL_PASS_ENV` | optional | Names of variables to pass to the agent, separated by spaces, as `run-suite.sh` reads it. It names no variable that begins with `SKL317_` or `PROMPTFOO_`, and not `EVAL_AGENT_CMD`. |
 | `EVAL_TIMEOUT` | optional | Seconds the agent may run, as the case's `run.sh` reads it; default 900. |
 | `EVAL_GRADING_MARGIN` | optional | Seconds an attempt may run past `EVAL_TIMEOUT` before it is killed, as `suite.py` reads it; default `GRADING_MARGIN` of `suite.py` at the commit under test. |
 | `SKL317_MODE` | optional | `live` (default) or `stub`, the dry run. |
@@ -71,6 +71,8 @@ Names only; no value belongs in this repository.
 promptfoo and the provider keep only the variables `suite.py` gives an attempt (`PATH`, `HOME`, `USER`, `LOGNAME`, `SHELL`, `LANG`, `TERM`, `TZ`, `TMPDIR`, `EVAL_TIMEOUT`, and the `LC_` and `XDG_` families), `EVAL_GRADING_MARGIN`, the ones `EVAL_PASS_ENV` names, and the settings `run.sh` gives the provider.
 `run.sh` unsets every other variable in a subshell, so no value is put on a command line.
 The agent gets the variables `suite.py` gives an attempt and the ones `EVAL_PASS_ENV` names, with a `TMPDIR` of its own: none of the provider's settings, so nothing names the ledger or the provider's state to it.
+`run.sh` refuses to start when `EVAL_PASS_ENV` names a variable that begins with `SKL317_` or `PROMPTFOO_`, or names `EVAL_AGENT_CMD`.
+The provider leaves those two families out of the agent's environment whatever the list holds.
 `npm` starts under `env -i` with an empty home directory, so it sees no credential and no npm setting of the caller.
 
 ## How N graded runs map onto promptfoo
@@ -104,7 +106,12 @@ Only the case's `run.sh` grades, by running the case's `grader.py` from the comm
 It grades an attempt only when the agent command exited 0 and left the checkout unchanged, so a void attempt is never graded.
 `grade.py`, the promptfoo assertion, relays that grade and grades nothing again.
 
-The commit under test is `HEAD`: `run.sh` clones it into the temporary directory, and the case, the grader and the skill the agent reads all come from that clone.
+The commit under test is `HEAD`, and `run.sh` clones it twice, as `suite.py` keeps its own checkout apart from the one it tests.
+The harness clone sits in the harness's temporary directory: the case's `run.sh`, its `grader.py`, its scenarios and its runtime run from there, and nothing given to the agent names it.
+The agent's checkout sits in the second temporary directory: it is the agent's working directory and holds the skill the agent reads.
+Before and after each attempt the provider compares both clones with the commit: every file the commit holds, with its content and mode, and no other file, ignored ones included.
+It reads the commit's files from the repository `run.sh` was started in and reads each clone's files from disk, so a file that git in a clone was told to overlook still counts.
+A clone that differs stops the run with `checkout changed`, and `compare.py` makes the same comparison after the eval.
 
 ## Token counts and cost
 
@@ -117,26 +124,42 @@ When the export names another model than the one priced, it stops with `another 
 Each of these stops the run at that attempt, before another one is admitted against the ceiling, and `compare.md` records the blocker and claims no result.
 
 The cost of an attempt is its token counts times the prices `provider.py` names, with their source and the date they were read.
+promptfoo holds a cost of 0 and a token count of 0 for every result of a script provider, so the spend is known only from the session record `opencode` keeps.
 
 ## Spend ceiling
 
-The ceiling for the whole spike is 1 USD.
+The ceiling for the whole spike is 5 USD, and the spend already in the ledger counts toward it.
 Every attempt, dry runs included, is written to the spend ledger, the file `SKL317_SPEND_LEDGER` names: one line when it starts, with what is reserved for it, and one when it ends, with its cost.
 `run.sh` refuses to start when the variable is unset, when the file does not exist or when it is in the repository, so a mistyped path cannot start a second, empty ledger.
-Before each attempt the provider adds the ledger up and stops with `ceiling reached` when the total plus the next-attempt estimate is over 1 USD.
+Before each attempt that calls the model the provider adds the ledger up and stops with `ceiling reached` when the total plus the next-attempt estimate is over 5 USD.
 The estimate is 0.08 USD, the figure SKL-312 gave for one agent run, or the highest cost of a single attempt so far when that is more.
+The estimate is not a bound: an attempt can cost more than every attempt before it, and the total can then pass the ceiling by what that attempt cost over its estimate.
+An attempt that calls no model, a dry-run attempt or the injected void, reserves and costs nothing and is not held to the ceiling.
 An attempt that started and never reported counts as what was reserved for it, and an attempt that ended without a known cost stops every later run with `cumulative spend unknown` until the ledger is corrected by hand.
-A dry-run attempt reserves and costs nothing.
 
 The agent under test is not trusted with the ledger.
-`run.sh` makes two temporary directories: one for the harness (the install, promptfoo's state, the provider's state and a copy of the ledger) and one for the attempts (the clone, the run directories and the agent's temporary directory).
+`run.sh` makes two temporary directories: one for the harness (the install, promptfoo's state, the provider's state, the harness clone and a copy of the ledger) and one for the attempts (the agent's checkout, the run directories and the agent's temporary directory).
 The agent's environment and arguments name only the second.
-The provider writes every row to the ledger and to its copy, compares the two byte for byte before and after each attempt, and stops with `spend ledger changed` when they differ; the copy then holds the true record to restore the ledger from.
-`compare.py` requires the same of the finished run: the ledger is the copy, the copy begins with the ledger as it was before the run, and the rows added are a start and an end for each attempt with its cost.
-
-Two limits remain.
-The agent runs as the same user as the harness, so an agent that searched the machine for both files and rewrote them alike would not be caught: only another user account or a sandbox around the agent closes that.
+Before the eval `run.sh` measures the ledger, its length and its SHA-256, keeps the two in its own shell and hands them to the provider and to `compare.py`.
+The provider writes every row to the ledger and to its copy.
+Before and after each attempt it requires that the two are the same byte for byte and that they still begin with the bytes `run.sh` measured, and it stops with `spend ledger changed` when either fails.
+`compare.py` requires the same of the finished run, and that the rows added are a start and an end for each attempt with its cost.
 Two runs at once on one ledger stop each other with `spend ledger changed`, which is the safe side; run one at a time.
+
+## What the checks do not cover
+
+The agent runs as the same operating-system user as the harness, and `run.sh` puts no sandbox around it.
+So each check above finds a change that is still there when the harness looks, and none of them is an access control.
+
+- A process the agent starts can change a file in either clone and put it back before the provider compares the clone again, so a grader rewritten only while an attempt is graded is not caught.
+- It can rewrite the harness's own files: the scripts in this directory, the repository `run.sh` was started in, the promptfoo install, and the provider's state and records.
+- It can rewrite the session record `opencode` keeps, which the token counts and so the costs are read from.
+- It can write the record the grade is read from: `qa-runtime` appends to `actions.jsonl` in the run directory from inside the agent's own process, so nothing but the agent's behaviour separates a role call it made from a line it wrote.
+  That is the case as committed, and the unmodified `grader.py` reads the record it is given.
+- It cannot rewrite what `run.sh` holds only in its shell, the measure of the ledger before the eval, so rows dropped from the ledger and its copy alike are caught while the scripts themselves are as committed.
+
+`suite.py` runs its agent as the same user as itself and shares this limit.
+Only another user account, a container or a sandbox around the agent closes it, and a harness whose result has to hold against the agent it tests needs one.
 
 ## Dry runs
 
@@ -162,16 +185,16 @@ Without a plan a dry run has the shape of the live run: three passes and the inj
 `compare.py` is the check of the run as well as its report, and each check that fails is a blocker in `compare.md` and an exit status of 1.
 
 - The provider's record is one run under the rules of `suite.py`: attempts numbered in order and no more than 2N of them, each outcome the one `suite.py` gives its exit status, the `injected` label on the injected attempt only, each call a row of void attempts and then one hand-back.
-- promptfoo's export reports that record: one result per repeat, each carrying the attempt its call handed back with the `success`, `score`, `failureReason` and `error` that attempt maps to, the runtime options `repeat` N, `maxConcurrency` 1 and `cache` false, the pinned version, and totals that count the same hand-backs.
-- The spend follows: each cost is its token counts times the prices, only the priced model ran and no subagent, and the ledger gained exactly this run's rows.
-- The run is of one commit: the clone is the commit named, as committed, and the repository did not change under the run.
+- promptfoo's export reports that record: one result per repeat, each carrying the attempt its call handed back with the `success`, `score`, `failureReason` and `error` that attempt maps to, the runtime options `repeat` N, `maxConcurrency` 1 and `cache` false, the pinned version, totals that count the same hand-backs, a cost and a token count of 0 in every result, the pass rate of the repeat group, and the exit status of the eval that those hand-backs give.
+- The spend follows: each cost is its token counts times the prices, only the priced model ran and no subagent, and the ledger still begins with what `run.sh` measured before the eval and gained exactly this run's rows.
+- The run is of one commit: both clones hold the files of the commit named and no other, and the repository did not change under the run.
 
 ## What stays out of the repository
 
 `run.sh` installs promptfoo with `npm install --prefix` into the harness's temporary directory and points `PROMPTFOO_CONFIG_DIR` and `TMPDIR` at the same directory, with `PROMPTFOO_CACHE_ENABLED=false`.
-The `node_modules` tree, the npm cache, promptfoo's database, its logs, its result file and the provider's state, log and copy of the ledger all live there; the clone and the run directories live in the second temporary directory; and Python is told to write no bytecode beside the scripts.
+The `node_modules` tree, the npm cache, promptfoo's database, its logs, its result file, the harness clone and the provider's state, log and copy of the ledger all live there; the agent's checkout and the run directories live in the second temporary directory; and Python is told to write no bytecode beside the scripts.
 Both directories are removed when the command exits 0.
-When it does not, the install and the clone are removed and promptfoo's output and the provider's state, log and copy of the ledger are kept, with the path printed.
+When it does not, the install and both clones are removed and promptfoo's output and the provider's state, log and copy of the ledger are kept, with the path printed.
 `compare.md` holds fields only: no path, session id, prompt text, agent output or promptfoo error text.
 
 ## What no job runs

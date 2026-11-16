@@ -17,23 +17,39 @@ back a graded attempt prints `SKL317: call <c>: <reason>` on stderr and exits 1,
 every later call of a stopped run, because a provider cannot stop promptfoo from calling it.
 
 Only the case's run.sh grades, by running the case's grader.py, and it grades no void attempt.
-The outcome table and the grading margin are read from suite.py at the commit under test.
+The outcome table and the grading margin are read from suite.py at the commit under test, in
+the repository run.sh was started in, and no attempt runs unless that suite.py holds the rule
+text this provider reproduces.
+
+Two clones of the commit under test are used, as suite.py tells a harness checkout from a skill
+checkout. The case's run.sh and grader.py run from the harness clone under SKL317_WORK. The
+agent works in the other one, the checkout under SKL317_ARENA. Before and after each attempt
+both are compared, file by file and by content, with the commit's tree, and a difference stops
+the run with `checkout changed`, as a changed checkout stops suite.py.
 
 Every call is a new process, so the attempts, the calls and a stop are kept as files under
 SKL317_WORK, and the spend of every attempt of this spike in a ledger outside the repository.
-Before each attempt the provider adds up that ledger and stops with `ceiling reached` when the
-next attempt could take the total past the ceiling.
+Before each attempt that calls the model the provider adds up that ledger and stops with
+`ceiling reached` when the attempt could take the total past the ceiling. The estimate is not a
+bound on what one attempt costs: an attempt that costs more than the estimate can end past it.
 
 The agent under test is not trusted with that state. Its environment and arguments name only
 SKL317_ARENA (the checkout, the run directories and its temporary directory), never SKL317_WORK
-or the ledger. The provider keeps its own copy of the ledger under SKL317_WORK, writes every
-row to both, and stops with `spend ledger changed` when the two differ.
+or the ledger, whatever EVAL_PASS_ENV lists. The provider keeps its own copy of the ledger
+under SKL317_WORK, writes every row to both, and stops with `spend ledger changed` when the two
+differ or when the ledger no longer begins with the bytes run.sh read before the eval started
+(SKL317_LEDGER_ANCHOR, their length and SHA-256, which run.sh holds in its own memory).
+
+These checks find a change that is still there when they look. The agent runs as the same
+operating-system user as this provider, so a process it starts can change a file and put it
+back between two checks, or rewrite the provider's own files. README.md states that limit.
 
 No prompt text, agent output, session id or path reaches promptfoo or the state files.
 """
 
 import ast
 import datetime
+import hashlib
 import json
 import os
 import pathlib
@@ -57,12 +73,23 @@ PRICES = {"input": Decimal("0.66"), "cache_read": Decimal("0.022"), "cache_write
 COUNTS = tuple(PRICES)
 # The spend ceiling of the whole spike in US dollars, and what an attempt is taken to cost
 # before any attempt has reported: after that, the highest cost a single attempt has reported.
-CEILING = Decimal("1.00")
+CEILING = Decimal("5.00")
 FIRST_ESTIMATE = Decimal("0.08")
 # suite.py's rule for the environment of an attempt: these names, these prefixes, and the names
-# EVAL_PASS_ENV lists. EVAL_AGENT_CMD and TMPDIR are set here, per attempt.
+# EVAL_PASS_ENV lists. EVAL_AGENT_CMD and TMPDIR are set here, per attempt. The harness's own
+# names are never passed, whatever EVAL_PASS_ENV lists: they name the ledger and SKL317_WORK.
 BASE_ENV = {"PATH", "HOME", "USER", "LOGNAME", "SHELL", "LANG", "TERM", "TZ", "TMPDIR", "EVAL_TIMEOUT"}
 BASE_ENV_PREFIXES = ("LC_", "XDG_")
+HARNESS_ENV_PREFIXES = ("SKL317_", "PROMPTFOO_")
+# The rule text of suite.py this provider reproduces and compare.md quotes. Each is looked up
+# at the commit under test before the first attempt, spacing aside.
+Q_OUTCOMES = 'OUTCOMES = {0: "pass", 1: "fail", 2: "void", None: "void"}'
+Q_LOOP = 'while tally["n"] < runs and attempt < 2 * runs:'
+Q_VOID = 'if record["outcome"] == "void":'
+Q_COUNT = 'tally["n"] += 1'
+Q_ERROR = 'outcome = OUTCOMES.get(code, "error")'
+Q_BROKEN = 'raise Broken(f"{case_dir.name} {name} attempt {attempt}: {reason}; the case or the machine is broken")'
+QUOTES = (Q_OUTCOMES, Q_LOOP, Q_VOID, Q_COUNT, Q_ERROR, Q_BROKEN)
 # What a stub plan may ask of an attempt. No behaviour calls a model.
 STUB_BEHAVIOURS = ("pass", "fail", "void", "broken")
 # Why a call handed promptfoo an error. A stopped run stays stopped.
@@ -72,14 +99,15 @@ CEILING_REACHED = "ceiling reached"
 NO_TOKEN_COUNTS = "no token counts"
 SPEND_UNKNOWN = "cumulative spend unknown"
 LEDGER_CHANGED = "spend ledger changed"
+CHECKOUT_CHANGED = "checkout changed"
 WRONG_MODEL = "another model ran"
 SUBAGENT_CALLS = "subagent tokens uncounted"
 SUITE_UNREADABLE = "suite rules unreadable"
 STOPPED_EARLIER = "run stopped earlier"
 BEYOND_N = "call beyond N"
 BAD_INPUT = "unusable provider input"
-REASONS = (CAP, BROKEN, CEILING_REACHED, NO_TOKEN_COUNTS, SPEND_UNKNOWN, LEDGER_CHANGED, WRONG_MODEL, SUBAGENT_CALLS,
-           SUITE_UNREADABLE, STOPPED_EARLIER, BEYOND_N, BAD_INPUT)
+REASONS = (CAP, BROKEN, CEILING_REACHED, NO_TOKEN_COUNTS, SPEND_UNKNOWN, LEDGER_CHANGED, CHECKOUT_CHANGED, WRONG_MODEL,
+           SUBAGENT_CALLS, SUITE_UNREADABLE, STOPPED_EARLIER, BEYOND_N, BAD_INPUT)
 NO_AGENT = "none (no agent ran)"
 STUB_AGENT = "none (stub agent, no model call)"
 
@@ -96,11 +124,13 @@ def now() -> str:
     return datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
+def rows_of(data: bytes) -> list[dict]:
+    return [json.loads(line) for line in data.decode().splitlines() if line.strip()]
+
+
 def entries(path: pathlib.Path) -> list[dict]:
     """The JSON lines of a state file, or none when it is not there yet."""
-    if not path.is_file():
-        return []
-    return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    return rows_of(path.read_bytes()) if path.is_file() else []
 
 
 def append(path: pathlib.Path, entry: dict) -> None:
@@ -114,8 +144,10 @@ def settings() -> dict:
         work = pathlib.Path(env["SKL317_WORK"])
         cfg = {
             "work": work, "state": work / "state", "arena": pathlib.Path(env["SKL317_ARENA"]),
-            "checkout": pathlib.Path(env["SKL317_CHECKOUT"]),
+            "checkout": pathlib.Path(env["SKL317_CHECKOUT"]), "harness": pathlib.Path(env["SKL317_HARNESS"]),
+            "source": pathlib.Path(env["SKL317_SOURCE"]), "commit": env["SKL317_COMMIT"],
             "ledger": pathlib.Path(env["SKL317_SPEND_LEDGER"]), "mirror": work / "ledger-mirror.jsonl",
+            "anchor": env["SKL317_LEDGER_ANCHOR"],
             "run": env["SKL317_RUN_ID"], "mode": env["SKL317_MODE"], "runs": int(env["SKL317_RUNS"]),
             "inject": int(env["SKL317_INJECT_VOID_ATTEMPT"] or 0),
             "plan": [token for token in env.get("SKL317_STUB_PLAN", "").split(",") if token],
@@ -165,25 +197,87 @@ def rules_in(text: str) -> tuple[dict, int]:
     return outcomes, margin
 
 
-def suite_rules(checkout: pathlib.Path) -> tuple[dict, int]:
-    """suite.py's OUTCOMES table and GRADING_MARGIN, read from the commit under test."""
+def holds(text: str, quote: str) -> bool:
+    """True when TEXT holds QUOTE, spacing and line breaks aside."""
+    return "".join(quote.split()) in "".join(text.split())
+
+
+def suite_text(source: pathlib.Path, commit: str) -> str:
+    """suite.py at COMMIT, read from SOURCE, the repository run.sh was started in."""
     try:
-        text = subprocess.run(["git", "-C", str(checkout), "show", f"HEAD:{SUITE}"], stdin=subprocess.DEVNULL,
+        return subprocess.run(["git", "-C", str(source), "show", f"{commit}:{SUITE}"], stdin=subprocess.DEVNULL,
                               capture_output=True, text=True, check=True, timeout=60).stdout
     except (OSError, subprocess.SubprocessError):
         raise Stop(SUITE_UNREADABLE) from None
+
+
+def suite_rules(source: pathlib.Path, commit: str) -> tuple[dict, int]:
+    """suite.py's OUTCOMES table and GRADING_MARGIN at the commit under test.
+
+    A suite.py that does not hold the rule text this provider reproduces is not the suite it
+    reproduces, so it stops the run here, before an attempt has spent anything.
+    """
+    text = suite_text(source, commit)
+    if not all(holds(text, quote) for quote in QUOTES):
+        raise Stop(SUITE_UNREADABLE)
     return rules_in(text)
 
 
-def spend_of(ledger: pathlib.Path) -> tuple[Decimal, Decimal]:
-    """The cumulative spend a ledger file holds and the highest cost of a single attempt.
+def as_committed(source: pathlib.Path, commit: str, clone: pathlib.Path) -> bool:
+    """True when CLONE holds the files of COMMIT byte for byte, and no other file.
+
+    Each file is compared by content and mode with the commit's tree, read from SOURCE by the
+    commit's full id. Nothing is asked of the clone's own index or HEAD, which whoever works in
+    the clone can rewrite: `git status` and `git diff` skip a changed file that
+    `git update-index --assume-unchanged` names, and neither lists a file .gitignore covers.
+    """
+    try:
+        listing = subprocess.run(["git", "-C", str(source), "ls-tree", "-r", "-z", commit], stdin=subprocess.DEVNULL,
+                                 capture_output=True, check=True, timeout=60).stdout
+        wanted = {}
+        for entry in filter(None, listing.split(b"\0")):
+            described, _, path = entry.partition(b"\t")
+            mode, kind, blob = described.decode().split()
+            if kind == "blob":
+                wanted[os.fsdecode(path)] = (mode, blob)
+        algorithm = "sha256" if any(len(blob) == 64 for _, blob in wanted.values()) else "sha1"
+
+        def blob_id(data: bytes) -> str:
+            return hashlib.new(algorithm, b"blob %d\0" % len(data) + data).hexdigest()
+
+        found = {}
+        for directory, names, files in os.walk(clone):
+            here = pathlib.Path(directory)
+            if here == clone:
+                names.remove(".git")
+            for name in files + [name for name in names if (here / name).is_symlink()]:
+                path = here / name
+                if path.is_symlink():
+                    entry = ("120000", blob_id(os.fsencode(os.readlink(path))))
+                elif path.is_file():
+                    entry = ("100755" if path.stat().st_mode & 0o100 else "100644", blob_id(path.read_bytes()))
+                else:
+                    return False
+                found[path.relative_to(clone).as_posix()] = entry
+        return found == wanted
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return False
+
+
+def clones_as_committed(cfg: dict) -> bool:
+    """True when the harness clone and the agent's checkout are both the commit under test."""
+    return all(as_committed(cfg["source"], cfg["commit"], cfg[clone]) for clone in ("harness", "checkout"))
+
+
+def spend_of(rows: list[dict]) -> tuple[Decimal, Decimal]:
+    """The cumulative spend the rows of a ledger hold and the highest cost of a single attempt.
 
     An attempt that started and never reported counts as what was reserved for it. An attempt
     that ended without a known cost leaves the total unknown, which stops the run.
     """
     try:
         started, ended = {}, {}
-        for entry in entries(ledger):
+        for entry in rows:
             key = (entry["run"], entry["attempt"])
             if entry["event"] == "start":
                 started[key] = Decimal(entry["reserved"])
@@ -198,15 +292,26 @@ def spend_of(ledger: pathlib.Path) -> tuple[Decimal, Decimal]:
             else:
                 total += Decimal(ended[key])
                 highest = max(highest, Decimal(ended[key]))
-    except (OSError, ValueError, KeyError, TypeError, ArithmeticError):
+    except (ValueError, KeyError, TypeError, ArithmeticError):
         raise Stop(SPEND_UNKNOWN) from None
     return total, highest
 
 
+def anchored(data: bytes, anchor: str) -> bool:
+    """True when DATA begins with the ledger as run.sh read it before the eval started.
+
+    ANCHOR is that ledger's length in bytes and its SHA-256, as `<length>:<hex digest>`.
+    """
+    length, _, digest = anchor.partition(":")
+    return length.isdigit() and hashlib.sha256(data[:int(length)]).hexdigest() == digest
+
+
 def ledger_intact(cfg: dict) -> bool:
-    """True when the ledger file is byte for byte the provider's own copy of it."""
+    """True when the ledger file is byte for byte the provider's own copy of it, and both
+    still begin with the ledger as it was before the eval started."""
     try:
-        return cfg["ledger"].read_bytes() == cfg["mirror"].read_bytes()
+        ledger = cfg["ledger"].read_bytes()
+        return ledger == cfg["mirror"].read_bytes() and anchored(ledger, cfg["anchor"])
     except OSError:
         return False
 
@@ -215,7 +320,10 @@ def spend(cfg: dict) -> tuple[Decimal, Decimal]:
     """The cumulative spend of this spike, from a ledger nothing but the provider wrote."""
     if not ledger_intact(cfg):
         raise Stop(LEDGER_CHANGED)
-    return spend_of(cfg["mirror"])
+    try:
+        return spend_of(entries(cfg["mirror"]))
+    except (OSError, ValueError):
+        raise Stop(SPEND_UNKNOWN) from None
 
 
 def ledger_write(cfg: dict, entry: dict) -> bool:
@@ -236,7 +344,7 @@ def cost_of(counts: dict) -> Decimal:
 
 
 def attempt_env(cfg: dict, agent_command: str) -> dict:
-    passed = set(os.environ.get("EVAL_PASS_ENV", "").split())
+    passed = {name for name in os.environ.get("EVAL_PASS_ENV", "").split() if not name.startswith(HARNESS_ENV_PREFIXES)}
     env = {name: value for name, value in os.environ.items()
            if name in BASE_ENV or name in passed or name.startswith(BASE_ENV_PREFIXES)}
     env["EVAL_AGENT_CMD"] = agent_command
@@ -296,9 +404,15 @@ def kill_group(process: subprocess.Popen) -> None:
         pass
 
 
-def run_attempt(cfg: dict, call: int, number: int, estimate: Decimal) -> tuple[dict, bool]:
+def calls_model(cfg: dict, number: int) -> bool:
+    """True when attempt NUMBER calls the model: a live attempt other than the injected void."""
+    return cfg["mode"] == "live" and number != cfg["inject"]
+
+
+def run_attempt(cfg: dict, call: int, number: int, reserved: Decimal) -> tuple[dict, bool]:
     """Run attempt NUMBER, record its spend in the ledger, and return its record and whether
-    the ledger was still the provider's own when the attempt ended."""
+    the ledger was still the provider's own when the attempt ended. RESERVED is what the
+    ledger holds for the attempt until it reports its cost."""
     injected = number == cfg["inject"]
     behaviour = "live"
     if cfg["mode"] == "stub":
@@ -310,14 +424,13 @@ def run_attempt(cfg: dict, call: int, number: int, estimate: Decimal) -> tuple[d
         agent = f"python3 {POC / 'stub_agent.py'} {behaviour}"
     else:
         agent = f"opencode run --auto --title {title} --model {MODEL} Follow the instructions in the attached file exactly."
-    model_runs = cfg["mode"] == "live" and agent != "false"
     run_dir = cfg["arena"] / "runs" / f"attempt-{number}"
-    command = ["bash", str(cfg["checkout"] / CASE / "run.sh"), str(cfg["checkout"]), SCENARIO, str(run_dir)]
+    command = ["bash", str(cfg["harness"] / CASE / "run.sh"), str(cfg["checkout"]), SCENARIO, str(run_dir)]
     if behaviour == "broken" and not injected:
         command = ["bash", "-c", "exit 3"]  # a runner whose status the case contract does not define
 
     if not ledger_write(cfg, {"at": now(), "run": cfg["run"], "attempt": number, "mode": cfg["mode"], "event": "start",
-                              "reserved": format(estimate if model_runs else Decimal(0), "f")}):
+                              "reserved": format(reserved, "f")}):
         raise Stop(LEDGER_CHANGED)  # checked a moment ago by spend(); nothing ran
     process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
                                start_new_session=True, env=attempt_env(cfg, agent))
@@ -337,7 +450,7 @@ def run_attempt(cfg: dict, call: int, number: int, estimate: Decimal) -> tuple[d
 
     usage = {"counts": dict.fromkeys(COUNTS, 0), "model": STUB_AGENT if cfg["mode"] == "stub" else NO_AGENT,
              "subagent_calls": 0, "agent_cost": None}
-    if model_runs:
+    if calls_model(cfg, number):
         usage = session_usage(cfg, title)
     cost = None if usage is None else format(cost_of(usage["counts"]), "f")
     intact = ledger_write(cfg, {"at": now(), "run": cfg["run"], "attempt": number, "mode": cfg["mode"],
@@ -355,21 +468,28 @@ def one_call(cfg: dict, call: int, ran: list[int]) -> dict:
     attempts = entries(cfg["state"] / "attempts.jsonl")
     if sum(attempt["outcome"] in ("pass", "fail") for attempt in attempts) >= cfg["runs"]:
         raise Stop(BEYOND_N)
-    cfg["outcomes"], margin = suite_rules(cfg["checkout"])
+    cfg["outcomes"], margin = suite_rules(cfg["source"], cfg["commit"])
     cfg["deadline"] = deadline(margin)
     while True:
         if len(attempts) >= 2 * cfg["runs"]:
             raise Stop(CAP)
+        number = len(attempts) + 1
         spent, highest = spend(cfg)
-        estimate = max(FIRST_ESTIMATE, highest)
-        if spent + estimate > CEILING:
+        # Only an attempt that calls the model can spend, so only that one is held to the ceiling.
+        estimate = max(FIRST_ESTIMATE, highest) if calls_model(cfg, number) else Decimal(0)
+        if estimate and spent + estimate > CEILING:
             raise Stop(CEILING_REACHED, spent=format(spent, "f"), estimate=format(estimate, "f"))
-        record, intact = run_attempt(cfg, call, len(attempts) + 1, estimate)
+        if not clones_as_committed(cfg):
+            raise Stop(CHECKOUT_CHANGED)
+        record, intact = run_attempt(cfg, call, number, estimate)
         attempts.append(record)
         ran.append(record["attempt"])
         append(cfg["state"] / "attempts.jsonl", record)
         if not intact:
             raise Stop(LEDGER_CHANGED)
+        # The grade of an attempt that left either clone changed is not the committed grader's.
+        if not clones_as_committed(cfg):
+            raise Stop(CHECKOUT_CHANGED)
         if record["cost"] is None:
             raise Stop(NO_TOKEN_COUNTS)
         # An attempt whose spend is not what the cost above measures stops the run here, before

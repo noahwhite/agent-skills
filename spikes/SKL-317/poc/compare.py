@@ -2,8 +2,8 @@
 """Write compare.md for one run of the SKL-317 proof of concept; run.sh calls it last.
 
 It reads what the provider recorded (attempts, calls, a stop), promptfoo's JSON export, the
-spend ledger before and after the run with the provider's own copy of it, and suite.py at the
-commit under test, and writes one Markdown file of tables. It copies fields only: an exit
+spend ledger with the provider's own copy of it, and suite.py at the commit under test, and
+writes one Markdown file of tables. It copies fields only: an exit
 status, an outcome, a count, a model id, a fixed reason. No path, session id, prompt text,
 agent output or error text of promptfoo reaches the file.
 
@@ -14,9 +14,13 @@ It is also the check of the run, and each check that fails is a blocker the file
   row of void attempts and then one hand-back;
 - promptfoo's export reports that record: one result per repeat, each carrying the attempt its
   call handed back with the success, score, failure reason and error that attempt maps to, the
-  runtime options run.sh asked for, and totals that count the same hand-backs;
+  runtime options run.sh asked for, totals that count the same hand-backs, an exit status
+  those hand-backs give, and no cost or token count, since the provider reports none to it;
 - the spend follows: each cost is its token counts times the prices, the ledger is the
-  provider's own copy of it, and what it gained is a start and an end row per attempt.
+  provider's own copy of it and begins with the ledger run.sh read before the eval started,
+  and what it gained is a start and an end row per attempt;
+- the harness clone and the agent's checkout hold the files of the commit under test, byte
+  for byte, and no other file.
 
 Its exit status is run.sh's: 0 when promptfoo received N graded runs and no check failed, 1
 when the file lists a blocker.
@@ -35,14 +39,8 @@ import provider  # noqa: E402
 
 SUITE = provider.SUITE
 GRADER = f"{provider.CASE}/grader.py"
-# The rule text of suite.py this file quotes; each line is looked up at the commit under test.
-Q_OUTCOMES = 'OUTCOMES = {0: "pass", 1: "fail", 2: "void", None: "void"}'
-Q_LOOP = 'while tally["n"] < runs and attempt < 2 * runs:'
-Q_VOID = 'if record["outcome"] == "void":'
-Q_COUNT = 'tally["n"] += 1'
-Q_ERROR = 'outcome = OUTCOMES.get(code, "error")'
-Q_BROKEN = 'raise Broken(f"{case_dir.name} {name} attempt {attempt}: {reason}; the case or the machine is broken")'
-QUOTES = (Q_OUTCOMES, Q_LOOP, Q_VOID, Q_COUNT, Q_ERROR, Q_BROKEN)
+# The rule text of suite.py this file quotes; the provider looks each up before the first attempt.
+Q_OUTCOMES, Q_LOOP, Q_VOID, Q_COUNT, Q_ERROR, Q_BROKEN = QUOTES = provider.QUOTES
 PROVIDER_ERROR = re.compile(r"SKL317: call (\d+): ([a-zA-Z ]+)")
 # The reason grade.py gives promptfoo, which copies it into a failed result's `error`.
 ASSERTION_REASON = re.compile(r"attempt \d+: run\.sh exited \d+, a graded (?:pass|fail)")
@@ -71,8 +69,9 @@ def table(head: list[str], rows: list[list[str]]) -> list[str]:
     return lines
 
 
-def git(checkout: pathlib.Path, *arguments: str) -> subprocess.CompletedProcess:
-    return subprocess.run(["git", "-C", str(checkout), *arguments], capture_output=True, text=True)
+def zero(holder: object, *keys: str) -> bool:
+    """True when an export holds the number 0 under KEYS."""
+    return field(holder, *keys) in ("0", "0.0")
 
 
 def field(holder: object, *keys: str | int) -> str:
@@ -224,7 +223,7 @@ def agrees(call: dict, last: dict | None, result: dict | None) -> bool:
 
 
 def export_problems(export: dict, by_call: dict, calls: list[dict], attempts: list[dict], runs: int,
-                    version: str) -> list[str]:
+                    version: str, eval_status: int) -> list[str]:
     """What keeps promptfoo's export from reporting the provider's record of this run."""
     problems = []
     by_number = {attempt["attempt"]: attempt for attempt in attempts}
@@ -247,24 +246,54 @@ def export_problems(export: dict, by_call: dict, calls: list[dict], attempts: li
     if len(groups) != 1 or (groups[0].get("repetitions"), groups[0].get("passed"), groups[0].get("failed"),
                             groups[0].get("errors")) != (runs, handed["pass"], handed["fail"], handed["error"]):
         problems.append("the repeat group in the export does not count the passes, fails and errors the provider handed promptfoo")
+    else:
+        # promptfoo gives a group with no graded run no pass rate.
+        rate, graded = groups[0].get("passRate"), handed["pass"] + handed["fail"]
+        if (type(rate) not in (int, float) or abs(rate - handed["pass"] / graded) > 1e-9) if graded else rate is not None:
+            problems.append("the `passRate` of the repeat group in the export is not its passes over its graded runs")
+    # The provider reports no usage to promptfoo, so a number there is not of this run.
+    if not zero(stats, "tokenUsage", "total") or not all(
+            zero(result, "cost") and zero(result, "tokenUsage", "total") for result in by_call.values()):
+        problems.append("the export holds a cost or a token count, and the provider reports neither to promptfoo")
+    # promptfoo exits 0 when every result passed and 100 when one failed or was an error.
+    wanted = 0 if calls and handed["pass"] == len(calls) else 100
+    if eval_status != wanted:
+        problems.append(f"the promptfoo eval exited {eval_status}, and the results the provider handed it give {wanted}")
     return problems
 
 
-def ledger_rows(work: pathlib.Path, ledger: pathlib.Path, run_id: str, mode: str, attempts: list[dict]) -> list[str]:
-    """What keeps the ledger from being the ledger before the run plus this run's rows."""
+def ledger_total(data: bytes) -> tuple[Decimal, int] | None:
+    """What the bytes of a ledger add up to and their attempts, or None when they cannot be added up."""
     try:
-        before = (work / "ledger-before.jsonl").read_bytes()
+        rows = provider.rows_of(data)
+        return provider.spend_of(rows)[0], sum(row["event"] == "start" for row in rows)
+    except (provider.Stop, *UNREADABLE):
+        return None
+
+
+def ledger_check(work: pathlib.Path, ledger: pathlib.Path, anchor: str, run_id: str, mode: str,
+                 attempts: list[dict]) -> tuple[list[str], tuple[Decimal, int] | None, tuple[Decimal, int] | None]:
+    """What keeps the ledger from being the ledger before the run plus this run's rows, then
+    what the ledger added up to before the run and what it adds up to now.
+
+    ANCHOR is the length and the SHA-256 of the ledger as run.sh read it before the eval
+    started. run.sh held it in its own memory, so the ledger before the run is the part of the
+    ledger that still matches it and not a file that sat on disk while the agent ran.
+    """
+    try:
         mirror = (work / "ledger-mirror.jsonl").read_bytes()
         current = ledger.read_bytes()
     except OSError:
-        return ["the spend ledger, or the provider's copy of it, cannot be read"]
+        return ["the spend ledger, or the provider's copy of it, cannot be read"], None, None
     problems = []
     if current != mirror:
         problems.append(f"the spend ledger is not the provider's own copy of it: `{provider.LEDGER_CHANGED}`")
-    if not mirror.startswith(before):
-        return problems + ["the provider's copy of the ledger does not begin with the ledger as it was before the run"]
+    if not provider.anchored(mirror, anchor):
+        problems.append("the provider's copy of the ledger does not begin with the ledger as it was before the run")
+        return problems, None, None
+    length = int(anchor.partition(":")[0])
     try:
-        added = [json.loads(line) for line in mirror[len(before):].decode().splitlines() if line.strip()]
+        added = provider.rows_of(mirror[length:])
         found = [(row["run"], row["attempt"], row["mode"], row["event"],
                   row["cost"] if row["event"] == "end" else Decimal(row["reserved"]) >= 0) for row in added]
         if any("at" not in row for row in added):
@@ -275,7 +304,7 @@ def ledger_rows(work: pathlib.Path, ledger: pathlib.Path, run_id: str, mode: str
                                                        (run_id, attempt["attempt"], mode, "end", attempt["cost"]))]
     if found != wanted:
         problems.append("the rows this run added to the ledger are not a start and an end for each attempt, with its cost")
-    return problems
+    return problems, ledger_total(mirror[:length]), ledger_total(current)
 
 
 def reported(result: dict | None) -> str:
@@ -285,7 +314,7 @@ def reported(result: dict | None) -> str:
     error, text = "none", error_text(result)
     if text and result.get("failureReason") == 1:
         named = ASSERTION_REASON.fullmatch(text)
-        error = f"the assertion's reason, {named.group(0)}" if named else "an assertion reason grade.py did not write"
+        error = f"the assertion's reason, {named.group(0)}" if named else "an assertion reason that names no graded attempt"
     elif text:
         named = PROVIDER_ERROR.search(text)
         error = f"provider error, {named.group(2).strip()}" if named and named.group(2).strip() in provider.REASONS \
@@ -298,15 +327,6 @@ def reported(result: dict | None) -> str:
 def outcome_text(attempt: dict) -> str:
     text = OUTCOME_TEXT[attempt["outcome"]]
     return f"{text}, `injected`" if attempt["injected"] else text
-
-
-def ledger_total(path: pathlib.Path) -> tuple[Decimal | None, int]:
-    """What a ledger file adds up to, or None when it cannot be added up, and its attempts."""
-    try:
-        attempts = sum(entry["event"] == "start" for entry in provider.entries(path))
-        return provider.spend_of(path)[0], attempts
-    except (provider.Stop, *UNREADABLE):
-        return None, 0
 
 
 def rules(attempts: list[dict], calls: list[dict], stop: dict | None, graded_by_promptfoo: int, runs: int,
@@ -374,21 +394,21 @@ def rules(attempts: list[dict], calls: list[dict], stop: dict | None, graded_by_
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Write compare.md for one run of the SKL-317 proof of concept.")
-    for name in ("work", "checkout", "ledger", "run-id", "mode", "runs", "inject", "commit", "version", "eval-status",
-                 "dirty", "changed", "out"):
+    for name in ("work", "source", "harness", "checkout", "ledger", "ledger-anchor", "run-id", "mode", "runs", "inject",
+                 "commit", "version", "eval-status", "dirty", "changed", "out"):
         parser.add_argument(f"--{name}", required=True)
     args = parser.parse_args()
     work, runs, eval_status = pathlib.Path(args.work), int(args.runs), int(args.eval_status)
-    checkout = pathlib.Path(args.checkout)
+    source = pathlib.Path(args.source)
     problems: list[str] = []
 
     # suite.py's rules at the commit under test: the outcome table and the quoted rule text.
-    suite_text = git(checkout, "show", f"HEAD:{SUITE}").stdout
-    present = {text: text in suite_text for text in QUOTES}
     try:
-        outcomes = provider.suite_rules(checkout)[0]
+        suite_text = provider.suite_text(source, args.commit)
+        outcomes = provider.rules_in(suite_text)[0]
     except provider.Stop:
-        outcomes = None
+        suite_text, outcomes = "", None
+    present = {text: provider.holds(suite_text, text) for text in QUOTES}
 
     # The provider's record. One that cannot be read as written is a blocker, and nothing of it is reported.
     stop_file = work / "state" / "stop.json"
@@ -405,8 +425,6 @@ def main() -> int:
     graded_by_promptfoo = sum(result.get("failureReason") in (0, 1) for result in by_call.values())
 
     # Blockers: anything that keeps this run from being N graded runs promptfoo reported as such.
-    if eval_status not in (0, 100):
-        problems.append(f"the promptfoo eval exited {eval_status}")
     if stop:
         detail = ""
         if stop["reason"] == provider.CEILING_REACHED:
@@ -420,7 +438,7 @@ def main() -> int:
         problems.append(f"the eval made {len(calls)} provider calls for {runs} repeats")
     if export:
         try:
-            problems += export_problems(export, by_call, calls, attempts, runs, args.version)
+            problems += export_problems(export, by_call, calls, attempts, runs, args.version, eval_status)
         except UNREADABLE:
             problems.append("the export promptfoo wrote cannot be read")
     if any(attempt["usage"] is None for attempt in attempts):
@@ -434,24 +452,26 @@ def main() -> int:
         problems.append(f"the commit under test does not hold, in `{SUITE}`, a rule text this file quotes")
     if outcomes is None:
         problems.append(f"the commit under test holds, in `{SUITE}`, no outcome table this run can read")
-    # The clone the attempts ran in is the commit named, as committed: the case's run.sh, the
-    # grader and the skill the agent read.
-    grader_blob = git(checkout, "rev-parse", f"HEAD:{GRADER}").stdout.strip()
-    clone_status = git(checkout, "status", "--porcelain", "--untracked-files=all")
-    clone_same = (git(checkout, "rev-parse", "HEAD").stdout.strip() == args.commit
-                  and clone_status.returncode == 0 and not clone_status.stdout.strip())
-    if not grader_blob or not clone_same:
-        problems.append("the clone the attempts ran in is not the commit under test as committed, so neither is its grader.py")
+    # The harness clone, which holds the case's run.sh and the grader, and the checkout the
+    # agent worked in are the commit named, file for file and by content.
+    grader_blob = subprocess.run(["git", "-C", str(source), "rev-parse", f"{args.commit}:{GRADER}"],
+                                 capture_output=True, text=True).stdout.strip()
+    clones_same = all(provider.as_committed(source, args.commit, pathlib.Path(clone))
+                      for clone in (args.harness, args.checkout))
+    if not grader_blob or not clones_same:
+        problems.append("the harness clone or the agent's checkout does not hold the files of the commit under test, "
+                        "byte for byte and no other, so the grade is not known to be the committed grader.py's")
     if args.changed:
         problems.append("the repository's commit or working tree changed while the run was under way")
-    problems += ledger_rows(work, pathlib.Path(args.ledger), args.run_id, args.mode, attempts)
-    before, before_attempts = ledger_total(work / "ledger-before.jsonl")
-    after, _ = ledger_total(pathlib.Path(args.ledger))
+    ledger_problems, before, after = ledger_check(work, pathlib.Path(args.ledger), args.ledger_anchor, args.run_id,
+                                                  args.mode, attempts)
+    problems += ledger_problems
     run_cost = sum((Decimal(attempt["cost"]) for attempt in attempts if attempt["cost"] is not None), Decimal(0))
     if before is None or after is None:
         problems.append(f"the spend ledger cannot be added up: `{provider.SPEND_UNKNOWN}`")
-    elif after - before != run_cost:
-        problems.append(f"the ledger gained {usd(after - before)} USD in this run, and its attempts cost {usd(run_cost)} USD")
+    elif after[0] - before[0] != run_cost:
+        problems.append(f"the ledger gained {usd(after[0] - before[0])} USD in this run, and its attempts cost "
+                        f"{usd(run_cost)} USD")
     status = 1 if problems else 0
 
     # The attempts, one row each.
@@ -501,8 +521,12 @@ def main() -> int:
         f"- Mode: {args.mode}.",
         f"- Graded runs wanted, N: {runs}; attempt cap, 2N: {2 * runs}; attempts run: {len(attempts)}; "
         f"graded: {len(graded)}.",
-        f"- Grader: `{GRADER}`, blob `{grader_blob}` at the commit under test, "
-        f"{'unmodified' if clone_same else 'NOT as committed'}; only the case's `run.sh` ran it, and it graded no void attempt.",
+        f"- Grader: `{GRADER}`, blob `{grader_blob}` at the commit under test; only the case's `run.sh` ran it, "
+        "and it graded no void attempt.",
+        "- Clones: the case's `run.sh` and the grader ran from a harness clone of the commit under test, and the agent "
+        "worked in a second clone. The provider compares every file of both with the commit's tree, by content, before "
+        f"and after each attempt, and stops with `{provider.CHECKOUT_CHANGED}` on a difference. When this file was "
+        f"written both {'held the files of that commit and no other' if clones_same else 'did NOT hold the files of that commit'}.",
         "",
         "## Provider calls",
         "",
@@ -543,19 +567,23 @@ def main() -> int:
         "## Spend",
         "",
         f"- Ceiling for the whole spike: {usd(provider.CEILING)} USD.",
-        f"- Before each attempt the provider adds up the ledger and stops with `{provider.CEILING_REACHED}` when the total "
-        f"plus the next-attempt estimate is over the ceiling; the estimate is {usd(provider.FIRST_ESTIMATE)} USD, or the "
-        "highest cost of a single attempt so far when that is more.",
+        f"- Before each attempt that calls the model the provider adds up the ledger and stops with "
+        f"`{provider.CEILING_REACHED}` when the total plus the next-attempt estimate is over the ceiling; the estimate is "
+        f"{usd(provider.FIRST_ESTIMATE)} USD, or the highest cost of a single attempt so far when that is more. "
+        "It is an estimate, not a bound on what one attempt costs.",
         f"- The provider writes each ledger row to a copy of its own as well, in a directory the agent under test is "
-        f"not told of, and stops with `{provider.LEDGER_CHANGED}` when the ledger is not that copy before or after an attempt.",
+        f"not told of, and stops with `{provider.LEDGER_CHANGED}` when, before or after an attempt, the ledger is not that "
+        "copy or does not begin with the ledger `run.sh` read before the eval started.",
+        "- promptfoo reports a `cost` and a `tokenUsage.total` of 0 for every result of a script provider, so the spend "
+        "below comes from the agent's own session record and the prices above, never from promptfoo.",
     ]
     if before is not None and after is not None:
         sums = " + ".join(usd(Decimal(attempt["cost"])) for attempt in attempts if attempt["cost"] is not None)
         lines += [
-            f"- Ledger before this run, development and dry runs included: {usd(before)} USD over {before_attempts} attempts.",
+            f"- Ledger before this run, development and dry runs included: {usd(before[0])} USD over {before[1]} attempts.",
             f"- This run: {sums} = {usd(run_cost)} USD." if sums else f"- This run: no attempt ran, {usd(run_cost)} USD.",
-            f"- Ledger after this run: {usd(before)} + {usd(after - before)} = {usd(after)} USD, "
-            f"which leaves {usd(provider.CEILING - after)} USD under the ceiling.",
+            f"- Ledger after this run: {usd(before[0])} + {usd(after[0] - before[0])} = {usd(after[0])} USD, "
+            f"which leaves {usd(provider.CEILING - after[0])} USD under the ceiling.",
         ]
     lines += ["", "## Blockers", ""]
     if problems:
