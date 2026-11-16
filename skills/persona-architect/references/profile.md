@@ -31,7 +31,7 @@ Skills cite values as `profile.<path>`, for example `profile.git.integration_bra
 ## Resolve a model role
 
 `shared/resolve-model-role.py` in the agent-skills repository is the one resolver that maps a model-launching role to its profile agent entry.
-A skill whose scripts call it carries a vendored copy at `scripts/resolve-model-role.py`; callers and tests run it as a subprocess through `python3`, never import it, and no script parses the profile itself.
+A skill whose scripts call it carries a vendored copy at `scripts/resolve-model-role.py`; callers and tests run it as a subprocess through `python3`, never import it, and no other script parses the profile to resolve a model role.
 The copy is not executable, because its generated header sits above the shebang.
 A model-launching script either calls it or takes the launch command or model as a required argument its caller resolved with it.
 

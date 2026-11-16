@@ -53,9 +53,9 @@ git:
     feature: feature/
 review:
   reviewer:
-    name: Codex GPT-6 Sol
+    name: GPT-6.1 Sol
     runtime: codex
-    model: gpt-6-sol
+    model: gpt-6.1-sol
   adjudicator:
     name: DeepSeek V4.1 Flash
     runtime: opencode
@@ -68,9 +68,9 @@ review:
       runtime: opencode
       model: deepseek/deepseek-flash
     hunter:
-      name: Codex GPT-6 Sol
+      name: GPT-6.1 Sol
       runtime: codex
-      model: gpt-6-sol
+      model: gpt-6.1-sol
     # Owner decision 2026-11-11: the arbiter is Mistral Large 4 through OpenRouter (mistral lab),
     # verified answering in this container. It replaces GLM-5.3-Flash on
     # opencode/glm-5.3-flash-free, whose free tier failed with "Free usage limit reached" (429).

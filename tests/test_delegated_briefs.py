@@ -99,8 +99,9 @@ READ_BACK_FIRST = {
         "When it hands back, do the step 0 checklist read-back first, then read the story's state yourself.",
 }
 QA_EXCEPTIONS = (
-    "Continuation of the current round under step 4 and the step 0 checklist read-back resume of the current "
-    "round's QA agent are the only exceptions to that sentence, and neither increments the round count."
+    "Continuation of the current round under step 4, and the step 0 checklist read-back resume or the "
+    "interim-handback deadline resume of the current round's QA agent, are the only exceptions to that "
+    "sentence, and none increments the round count."
 )
 
 
@@ -241,7 +242,7 @@ def test_story_to_done_handbacks_run_the_checklist_read_back_before_the_state_re
 
 
 def test_story_to_done_step_3_names_the_read_back_resume_as_a_round_exception() -> None:
-    text = STORY_TO_DONE.read_text()
+    text = re.sub(r"<!--.*?(?:-->|\Z)", "", STORY_TO_DONE.read_text(), flags=re.DOTALL)
     assert text.count(QA_EXCEPTIONS) == 1
     assert QA_EXCEPTIONS in section(text, "3. QA agent: verify the deployed story")
     assert "is the sole exception" not in text

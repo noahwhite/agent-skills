@@ -1,0 +1,66 @@
+case: pending-ruling-not-sent-to-engineer
+skill: story-to-done
+kind: discriminating
+purpose: >-
+  Show that an item QA records as pending an owner ruling, because two readings of its quoted
+  text give different verdicts on the same evidence, goes to the user and never to the senior
+  engineer or to QA, across every QA round it stays pending in, while a plain failed item still
+  goes back to the senior engineer.
+split: >-
+  SKL-275 owns this case's content: its prompt, case.yaml, grader, scenarios, stub runtime and
+  rerun instructions. SKL-310 owns this case's row in the case list of ../README.md and its
+  recorded runs; the suite harness (../run-suite.sh, ../suite.py) stays SKL-164's.
+baseline:
+  commit: 9bd3e1666c5ba17aa560424e0d402710aa765c75
+  note: >-
+    The skill on main before SKL-296, the parent of the candidate. Its hand-back rule sends each
+    failed item of QA's record back to the senior engineer and sets no pending item apart; the
+    baseline expectation assumes an agent reads an item QA did not verify as a failed item, and
+    SKL-310's recorded runs measure what the baseline does.
+candidate:
+  commit: 6838b357652260562f481f747cf5e653d0f4e7c8
+  note: >-
+    SKL-296's merge commit on main. It leaves each item pending an owner ruling out of every
+    hand-back brief, carried rounds included, and puts each to the user.
+runtime:
+  command: opencode run --standalone --auto --archived --model deepseek/deepseek-v4-pro
+  model: deepseek/deepseek-v4-pro
+  reasoning_effort: default
+  record: >-
+    No run is recorded with this case; SKL-310 records them. A run with a different model records
+    its own result file and names the model it used.
+scenarios:
+  - name: split-verdict
+    expectation: split-verdict
+    baseline: >-
+      sends AC4 to the senior engineer in a hand-back brief, in round 1 or again in round 2 when
+      QA carries it over
+    candidate: >-
+      sends AC4 to the user, and AC4 is in no senior-engineer or QA brief in any round
+  - name: plain-failure
+    expectation: plain-failure
+    baseline: sends the failed AC2 to the senior engineer
+    candidate: sends the failed AC2 to the senior engineer
+    control: a plain failed item with no split verdict still goes back to the senior engineer
+graded_on:
+  - >-
+    tool-call evidence: the action and QA round of every story-runtime call in actions.jsonl, and
+    the text each send carried, kept in messages.json under the id its call names
+  - >-
+    served rounds: a run served fewer QA rounds than its scenario needs (3 for split-verdict, 1
+    for plain-failure) is void, never graded
+  - >-
+    split-verdict: some message to the user names AC4; no senior-engineer or QA brief names AC4;
+    and, graded as its own check, no senior-engineer brief sent after QA round 2 names AC4
+  - plain-failure: some senior-engineer brief sent after QA round 1 names AC2
+not_graded_on:
+  - the agent's prose
+  - >-
+    how a message words an item: the grader matches item ids as whole tokens, not the ruling
+    asked for or the readings quoted
+  - >-
+    split-verdict: whether AC2 and DoD3 reach the senior engineer; the plain-failure control grades
+    that a plain failed item goes back
+  - >-
+    the tracker writes and the order of the reads: the stub tracker is read-only to the coordinator,
+    and the case grades where each item was sent

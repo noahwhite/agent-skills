@@ -6,7 +6,7 @@ description: >-
   Use when asked to implement a story and see it through QA to Done (for example "story to done ABC-123" or "implement ABC-123, QA it, and fix until done, QA on <model> at max").
   Not for implementing without QA (use engineering-workflow), verifying a story without fixing it (use qa-verification), or staff-level triage, planning, and shadow adjudication (use persona-staff-engineer).
 license: Apache-2.0
-compatibility: Requires a runtime that can spawn subagents and set each one's model and reasoning effort, plus the linear CLI (schpet/linear-cli) with jq, or the Linear MCP server.
+compatibility: Requires a runtime that can spawn subagents and set each one's model and reasoning effort, plus the linear CLI (schpet/linear-cli) with jq, or the Linear MCP server; and git and python3 with PyYAML>=6.
 ---
 
 # Story to Done: implement, QA, fix until Done
@@ -42,6 +42,7 @@ Six arguments are optional, given as `key=value` or in plain words ("QA on <mode
 - Ask the user about an invalid value and about any other phrasing about the cap; never guess.
 - Resolve `qa-round-cap` before step 0 creates the todo list; it sets no model or effort.
 - Write the four resolved model and effort values, the `metrics: on|off` line, and the `qa-round-cap: <n>` line at the top of your todo list and in the closing report of every end state (the step 5 report, or the report made at any stop, including one before step 0).
+- Write the `path: <value>` line step 1 selects in the same two places, as `path: unresolved` until step 1 selects it, including in the end-state report of a run that stops before then.
 
 ### Seat resolution
 
@@ -111,7 +112,7 @@ After reading `references/todo-tracking.md`, expand the list to the seed items b
 Seed it with at least: read the story state, spawn the senior engineer, each check on its checklist until it hands back, the checklist read-back at each handback with each subagent's read-back resume count, read back the deployment-review state, each QA round, each read-back of QA's state, each failed item handed back, each fix round, and the final state read-back.
 With `metrics` on, seed two more items: collect the metrics figures; then post the metrics summary on the story and read it back before giving the summary in the closing report.
 Add an item for each new round as it starts; mark each done once its outcome is observed.
-An interim handback from the senior engineer is classified first, before the checklist read-back below, under [references/interim-handbacks.md](references/interim-handbacks.md).
+An interim handback from the senior engineer or a QA agent is classified first, before the checklist read-back below, under [references/interim-handbacks.md](references/interim-handbacks.md).
 Every subagent brief requires a checklist file in that subagent's own subdirectory of the scratch directory; read it from there and mirror it into your list whenever you check on the subagent.
 When a senior engineer or QA agent hands back, read that subagent's checklist file before acting on the result; a missing or unreadable checklist counts as open items.
 If items remain open with no stated blocker, resume that subagent with "Your checklist still has open items. Continue with them; if one is blocked, say what blocks it", at most twice per subagent, and then record the remaining items in your report and continue with this skill's existing step logic.
@@ -129,9 +130,24 @@ If your todo tool is unavailable, use the primary-session checklist fallback in 
 Read the story and its state with the `linear` CLI, or the Linear MCP server if it fails.
 When the team of `STORY_ID` differs from `profile.tracker.team_key`, confirm each state name below on that team before comparing against it, under the differing-team rule in Team resolution in [references/linear.md](references/linear.md).
 
-- `profile.tracker.states.in_deployment_review`: implementation already reached deployment review; go to step 3.
 - `profile.tracker.states.done`: report that there is nothing to do and stop.
 - `profile.tracker.states.blocked`, `profile.tracker.states.canceled`, or `profile.tracker.states.duplicate`: report the state and stop.
+
+Otherwise select the run's path before any role is spawned.
+From inside the target repository, run `python3 <skill dir>/scripts/select-path.py --title='<story title>'`, where `<skill dir>` is the absolute directory your runtime loaded this skill from.
+Add `--label='<name>'` for each label name the story carries as read from the tracker, under the differing-team rule in [references/linear.md](references/linear.md) "Team resolution"; the script compares names only.
+Write each `'` inside the title or a label as `'\''`, so the shell expands nothing in either.
+In every state that routes to step 2 or step 3 below, add `--recorded-path` with the value of the latest `engineering-workflow` step 12 note line whose whole text is exactly `path: spike`, `path: no-deployment` or `path: deployed`, whenever such a step 12 note exists, and add nothing otherwise, so a reopened story, spike included, keeps its path.
+The script prints one line, the path or an `ask:` line, and exits 0; any other exit status is no path: stop and report its stderr line.
+On an `ask:` line, ask the user, accept only `spike`, `no-deployment` or `deployed` as the answer, which is the path, and spawn no role until answered.
+Never infer a path from prose, and read one only from an exact `path:` line as above.
+When a spawned role's handback reports an `ask:` line, stop, and quote that line in the report of that end state with the `path: <value>` line, `<value>` being the path this step selected.
+Report `path: unresolved` only for a run that stops before this step selects a path, in this step or an earlier one; in this step that is an `ask:` line the user does not answer with one of the three values, or exit 16 or any other nonzero exit status.
+The selected path governs the whole run.
+
+Then pick the starting point:
+
+- `profile.tracker.states.in_deployment_review`: implementation already reached deployment review; go to step 3.
 - Any other state: go to step 2.
 
 Do not triage the story yourself; `engineering-workflow` does, including the Definition of Ready.
@@ -178,7 +194,7 @@ For a waived PR, compare the merged PR's `headRefOid` with the SHA recorded when
 ## 3. QA agent: verify the deployed story
 
 Spawn a new clean, neutral subagent on qa-model at qa-effort for every new QA round; never resume an agent from an earlier round, since it carries that round's conclusions.
-Continuation of the current round under step 4 and the step 0 checklist read-back resume of the current round's QA agent are the only exceptions to that sentence, and neither increments the round count.
+Continuation of the current round under step 4, and the step 0 checklist read-back resume or the interim-handback deadline resume of the current round's QA agent, are the only exceptions to that sentence, and none increments the round count.
 A stop for an owner action ends the round: once the owner clears it, that round's work starts over as a new round under this step with a new QA agent, and a fix/deploy cycle or an amended acceptance basis likewise starts a new round.
 Brief it as a QA agent, with only:
 
@@ -196,6 +212,7 @@ Brief it as a QA agent, with only:
 
 Never give it the senior engineer's handback beyond the environment, the PR's rationale, the fixes made, an earlier round's verdicts, or the verdict you expect.
 
+A QA agent's interim handback goes to [references/interim-handbacks.md](references/interim-handbacks.md) first; any other handback continues here.
 When it hands back, do the step 0 checklist read-back first, then read the story's state yourself.
 For every PR it merged, such as the evidence PR, read the PR yourself with `gh pr view <n> --json headRefOid,mergeCommit` and `gh api --paginate repos/<owner>/<repo>/pulls/<n>/reviews`.
 Select the review of record as the merge guard in `references/code-review.md` does (the `COMMENTED` review whose body begins with `Review of record` and has the greatest `submitted_at`).
@@ -254,7 +271,7 @@ After each round, tell the user its number, the failed items, and the outcome.
 ## 5. Close out
 
 Read the story back and confirm it is in `profile.tracker.states.done` with the completion record step 4 checks, then finish your todo list.
-Report the story identifier, its final state, the four resolved model and effort values and the `metrics: on|off` line, the `qa-round-cap: <n>` line, each PR, the number of QA rounds with the items fixed in each, where QA recorded its evidence, and any incidental defects left open.
+Report the story identifier, its final state, the four resolved model and effort values and the `metrics: on|off` line, the `qa-round-cap: <n>` line, the `path: <value>` line, each PR, the number of QA rounds with the items fixed in each, where QA recorded its evidence, and any incidental defects left open.
 
 ## Boundaries
 

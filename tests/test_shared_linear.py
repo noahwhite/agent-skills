@@ -116,16 +116,29 @@ SPLIT_BULLET = " ".join(
         "edges.",
     )
 )
+# SKL-305: a slice adds no scope, and its criteria map back to the story it is split from before any estimate.
+NO_SCOPE_GROWTH = (
+    "No slice grows scope: a slice carries only the acceptance criteria, scope and evidence of the story it is split "
+    "from, and adds no criterion, evidence pass, fixture, test obligation or behaviour that story does not already "
+    "contain.",
+    "The split comment maps every slice criterion to exactly one criterion of the story it is split from, and so on "
+    "back to the whole story; several slice criteria may map to one criterion of that story (rung 3).",
+    "The mapping check runs in each split round before any slice is pointed: each slice criterion with no "
+    "counterpart and each evidence pass, fixture, test obligation or behaviour a slice adds beyond the story it is "
+    "split from are all named in one `needs input` message, and the round stops before any slice is pointed, so no "
+    "check that needs a slice value runs.",
+)
+# SKL-304 replaced the re-split bullet: at most two split rounds, and SKL-230's never-escalate rule is superseded.
 RESPLIT_BULLET = " ".join(
     (
-        "- ⛔ Split every resulting slice that still meets that trigger again, as many rounds as it takes, "
-        "until no slice meets it; there is no escalation exit.",
+        "- ⛔ Split a resulting slice that still meets that trigger again, for at most two split rounds: split round 1 "
+        "splits the whole story and split round 2 splits the round-1 slices that still meet it.",
+        "This bound supersedes the never-escalate rule of SKL-230.",
         "Each resulting slice gets its own estimate, made the way the story's was (at refinement, filing or triage), "
         "before it is tested against that trigger.",
         "A slice that cannot be estimated is recorded as unpointed and reported as `needs input` to the owner, "
         "naming the story and the slice, and also the derived values when a refinement voter round produced them, "
-        "as the unpointed variance stop in story-refinement's Split rule does; that report is not an exit for an "
-        "oversize slice.",
+        "as the unpointed variance stop in story-refinement's Split rule does.",
         "Split along the first boundary that applies, in this order:",
         "1. the planned PR or slice boundary;",
         "2. an acceptance criterion;",
@@ -135,9 +148,126 @@ RESPLIT_BULLET = " ".join(
         "4. the smallest outcome that can be reviewed, merged and verified on its own, including enabling work "
         "such as interface or schema first and behaviour second.",
         "No rung discards scope, delegates an oversize slice or hands one to the owner as an estimate.",
+        *NO_SCOPE_GROWTH,
+    )
+)
+# SKL-305: a slice's recorded value is its lower consensus value, and the lower-consensus band governs.
+LOWER_CONSENSUS_SUMS = (
+    "A slice's recorded value is the lower value of a within-one-step consensus (story-refinement Split rule), so "
+    "each sum is formed from the lower-consensus values, and when the lower and the higher sums fall in different "
+    "bands the lower-consensus band governs.",
+    "Every band stop or warning names the sum both ways (with each slice's lower and with its higher consensus "
+    "value, the two values a within-one-step consensus spans, which are one value otherwise), the band of each sum, "
+    "both bounds (1.0 times and 1.5 times the base) and the round.",
+)
+# SKL-305: the checks run in a fixed order and a round reports all its failures, and all its warnings, together.
+CHECK_ORDER = (
+    "The checks run in the order listed, the round cap after split round 2 only, and every applicable check runs "
+    "before any stop is enforced: all failures of the round are reported in one `needs input` message and all its "
+    "warnings in one split-comment entry, which a round that stops also carries in that message and posts with the "
+    "split comment once the owner answers.",
+    "A round-1 slice that still meets the split trigger goes to split round 2.",
+    "In round 1 the only parent is the original story, so the per-parent band is the whole-story band and is "
+    "recorded once.",
+)
+SPLIT_BOUNDS_BULLET = " ".join(
+    (
+        "- ⛔ Bound every split of an estimated story made under the two bullets above (the Bug and Investigation "
+        "split below gives no slice a point value, so these checks never run on it): after each split round, and "
+        "before any further split round, slice record or tracker write for the slices, run these checks:",
+        "1. Per-parent bound: each slice's recorded value is strictly below the recorded value of the story it is "
+        "split from, where a round-1 parent's value is the recorded whole-story estimate and a round-2 parent's value "
+        "is its round-1 recorded value; the slices of one parent are compared to that parent as a set by the bands "
+        "below on their sum, and a slice at or above its parent stops with `needs input` naming the parent, the "
+        "slice, both values and the band.",
+        "2. Whole-story sum: the sum of the recorded values of the current leaf slices (a slice that is split again "
+        "is replaced by its sub-slices) is compared to the original whole-story recorded estimate by the bands below.",
+        "3. Round cap: a slice that still meets the split trigger after split round 2 stops with `needs input` naming "
+        "the slices and their values, before a third split is made, and no third-round split, estimate, record or "
+        "tracker write happens.",
+        "The bands compare a sum to its base (the parent's value in check 1, the original whole-story recorded "
+        "estimate in check 2): above 1.5 times the base stops with `needs input`; above 1.0 times and up to and "
+        "including 1.5 times proceeds with a warning in the split comment that a human reads at triage; at or below "
+        "1.0 times proceeds with no flag.",
+        *LOWER_CONSENSUS_SUMS,
+        *CHECK_ORDER,
+        "When the original whole-story recorded estimate is the highest value of the step sequence for "
+        "`profile.tracker.estimate_scale` (story-refinement Step 4 item 1), every stop and warning whose base is that "
+        "estimate states that the base is saturated and that the 1.0 and 1.5 bounds computed from it are lower "
+        "bounds on the true size.",
+        "A stop holds every further split round, record and tracker write for the slices until the owner answers; a "
+        "split that completes within two rounds with no stop proceeds unchanged.",
+        "A round with a leaf slice recorded as unpointed still runs the per-parent bound and the round cap on each "
+        "recorded slice value, which stop as above, and every per-parent sum whose slices all have recorded values.",
+        "For the whole-story sum and the sum of each parent with an unpointed slice, the sum of the recorded values "
+        "is a lower bound on the true sum: a lower bound above 1.5 times the base stops as above with band stop, and "
+        "otherwise that comparison is pending, because a warning or no flag can still change once the slice is "
+        "valued.",
+        "A stop in such a round routes as any stop, and its message names each unpointed slice; with no stop, the "
+        "split comment records the pending comparisons beside that slice's `needs input`, and they run, with the "
+        "per-parent bound and the round cap of each unpointed slice, once the owner's answer gives every leaf slice "
+        "a recorded value, before any further split round, record or tracker write for the slices.",
+        "Worked examples are in the Split bounds section of the story-refinement skill's refinement record reference.",
     )
 )
 CLOSE_TIME = "- ⛔ Never split an issue at close time to carve off unfinished work; that is status laundering."
+# SKL-307: every pointing round after the first gives each slice voter the prior rounds by its brief.
+PRIOR_ROUND_CONTEXT = (
+    "Every pointing round after a story's first, a slice estimate in either split round, gives each voter in its "
+    "slice brief, as text, the prior-round context: the parent's recorded value and the three voter values of the "
+    "parent's round, the ledger, and the recorded rationales of the slice's ancestor rounds only, the whole-story "
+    "round and, in split round 2, the parent slice's round, never a voided vote or rationale, a ground the story-refinement Step 4 basis review challenged, or a "
+    "sibling slice's value or rationale.",
+    "The brief states the per-parent bound only in the Slice brief template's fixed sentence, as a bound and never as "
+    "a value to score; the parent's recorded value paired with its round's voter values appears only on the "
+    "template's Parent line, and the parent's value appears as a bound only in that fixed sentence.",
+    "Slice voters still run in newly created contexts, so the prior rounds reach them by the brief and never by "
+    "session reuse, and the values of the same round, the sibling slices' and the round's other voters', stay hidden "
+    "until every vote of the round is recorded.",
+    "The facilitator records each slice brief verbatim in the slice's pointing record.",
+)
+# SKL-306: a shared unknown is priced once, in a ledger every whole-story pointing round records.
+LEDGER_BULLET = " ".join(
+    (
+        "- ⛔ Price a shared unknown once, in the priced shared-unknown ledger that every whole-story pointing round "
+        "records (story-refinement Steps 3 and 4).",
+        "Each voter lists, with its value, the unknowns behind that value with a point price each and the remainder, "
+        "its non-unknown complexity; the prices plus the remainder sum exactly to the voter's value (in a re-vote, the "
+        "highest value of its accepted set), and a rationale whose prices plus remainder differ from its value is "
+        "off-basis.",
+        "After the consensus check, once story-refinement Step 4 has recorded the estimate or the unpointed variance "
+        "stop, the facilitator records one ledger in the pointing record from the rationales that stand: it merges "
+        "unknowns that voters named differently and records each merge, takes one price per voter for each merged "
+        "unknown (the voter's lowest, when it listed that unknown more than once), and prices each unknown at "
+        "the median of the prices of the voters who listed it, the lower of the two prices when two listed it, or the "
+        "sole price when one did.",
+        "Ledger prices are not rounded; the ledger total is recorded beside the whole-story value and is not "
+        "reconciled to slice values, and a slice value is a vote on the step sequence.",
+        "A ledger from a saturated whole-story value (the highest value of the step sequence, as the bullet above "
+        "states) carries the saturation note, that its prices are lower bounds on the true size, and is not adjusted.",
+        "Each unknown has exactly one owner slice, the slice whose work resolves it, else the core slice, assigned "
+        "when the split is drafted; an unsplit story records the ledger without owners, and a slice that is split "
+        "again reassigns its owned unknowns to its sub-slices by the same rule, recorded in the split comment of split "
+        "round 2, from which each sub-slice brief takes its owners.",
+        "An unknown that a blocker story's work resolves is owned by that blocker story and is priced in no slice.",
+        "Every slice brief, the pointing prompt of a slice estimate, carries the ledger with its prices and owners, "
+        "and when the whole-story value is saturated it states that the ledger prices are lower bounds.",
+        *PRIOR_ROUND_CONTEXT,
+        "A slice voter never re-prices an unknown: its rationale states the ledger price of each unknown its slice "
+        "owns plus its own non-unknown complexity.",
+        "A slice rationale that omits an unknown its slice owns, re-prices an unknown, prices one the ledger does not "
+        "carry, or names one the ledger assigns elsewhere is off-basis: the "
+        "story-refinement Step 4 basis review re-runs that vote once on its existing terms, and a second miss is "
+        "recorded.",
+        "Worked examples are in the Slice brief section of the story-refinement skill's refinement record reference.",
+    )
+)
+# The SKL-230 sentences SKL-304 removes, split so a repository search for them finds no literal copy here.
+STALE_SPLIT_SENTENCES = (
+    "the split repeats until " + "no slice meets the split trigger",
+    "There is no escalation exit " + "for an oversize slice",
+    "as many rounds as it takes, " + "until no slice meets it; there is no escalation exit",
+)
 
 
 def top_level_bullets(section_text: str) -> list[str]:
@@ -159,13 +289,26 @@ def top_level_bullets(section_text: str) -> list[str]:
 
 
 @pytest.mark.parametrize("path", [SHARED_LINEAR, *VENDORED_LINEAR], ids=lambda p: str(p.relative_to(ROOT)))
-def test_one_split_rule_resplits_in_boundary_order_with_no_escalation_exit(path: Path) -> None:
+def test_one_split_rule_resplits_in_boundary_order_within_the_split_bounds(path: Path) -> None:
     bullets = top_level_bullets(section(path.read_text(), "Estimation and slicing"))
-    for bullet in (SPLIT_BULLET, RESPLIT_BULLET, CLOSE_TIME):
+    for bullet in (SPLIT_BULLET, RESPLIT_BULLET, SPLIT_BOUNDS_BULLET, CLOSE_TIME):
         assert bullet in bullets, f"Estimation and slicing has no top-level bullet equal to: {bullet[:60]}"
-    assert bullets.index(SPLIT_BULLET) < bullets.index(RESPLIT_BULLET) < bullets.index(CLOSE_TIME), (
-        "the split, re-split and close-time bullets are out of order"
-    )
+    order = [bullets.index(b) for b in (SPLIT_BULLET, RESPLIT_BULLET, SPLIT_BOUNDS_BULLET, CLOSE_TIME)]
+    assert order == sorted(order), "the split, re-split, split-bounds and close-time bullets are out of order"
+
+
+@pytest.mark.parametrize("path", [SHARED_LINEAR, *VENDORED_LINEAR], ids=lambda p: str(p.relative_to(ROOT)))
+def test_superseded_never_escalate_sentences_are_gone(path: Path) -> None:
+    flat = spaced(path.read_text())
+    for sentence in STALE_SPLIT_SENTENCES:
+        assert sentence not in flat, f"{path.relative_to(ROOT)} still carries the superseded sentence: {sentence}"
+
+
+@pytest.mark.parametrize("path", [SHARED_LINEAR, *VENDORED_LINEAR], ids=lambda p: str(p.relative_to(ROOT)))
+def test_ledger_bullet_follows_the_split_bounds(path: Path) -> None:
+    bullets = top_level_bullets(section(path.read_text(), "Estimation and slicing"))
+    assert LEDGER_BULLET in bullets, "Estimation and slicing has no top-level priced shared-unknown ledger bullet"
+    assert bullets.index(LEDGER_BULLET) == bullets.index(SPLIT_BOUNDS_BULLET) + 1
 
 
 def test_vendored_linear_copies_are_found() -> None:

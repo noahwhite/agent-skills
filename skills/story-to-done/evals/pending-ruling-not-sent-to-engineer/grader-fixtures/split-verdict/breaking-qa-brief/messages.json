@@ -1,0 +1,46 @@
+{
+  "messages": [
+    {
+      "channel": "qa",
+      "id": 1,
+      "label": "qa-agent-round-1",
+      "text": "Run QA for ABC-123 on dev, build 4040404, the merged commit of PR #40. Hand back with your record."
+    },
+    {
+      "channel": "user",
+      "id": 2,
+      "label": null,
+      "text": "ABC-123 AC4 needs your ruling. Quoted text: \"AC4. The export finishes within 30 seconds for an account with 10,000 transactions.\" Reading 1, click to completed download: 41 seconds, failed. Reading 2, export job duration: 22 seconds, verified. Which reading holds?"
+    },
+    {
+      "channel": "engineer",
+      "id": 3,
+      "label": "senior-engineer-round-1",
+      "text": "QA round 1 failed AC2 on ABC-123: the exported header is date,description,amount and the currency column is missing. Fix AC2 through engineering-workflow and hand back."
+    },
+    {
+      "channel": "qa",
+      "id": 4,
+      "label": "qa-agent-round-2",
+      "text": "Run a new QA round for ABC-123 on dev, build 4141abc, the merged commit of PR #41. Hand back with your record. Re-time AC4 by reading 1."
+    },
+    {
+      "channel": "engineer",
+      "id": 5,
+      "label": "senior-engineer-round-2",
+      "text": "QA round 2 failed DoD3 on ABC-123: the user docs page still lists three columns and omits currency. Fix DoD3 through engineering-workflow and hand back."
+    },
+    {
+      "channel": "qa",
+      "id": 6,
+      "label": "qa-agent-round-3",
+      "text": "Run a new QA round for ABC-123 on dev, build 4242abc, the merged commit of PR #42. Hand back with your record."
+    },
+    {
+      "channel": "user",
+      "id": 7,
+      "label": null,
+      "text": "ABC-123 is held in In Deployment Review: AC4 still waits on your ruling between the two readings."
+    }
+  ]
+}

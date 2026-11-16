@@ -13,6 +13,8 @@ Its comment id is the refined story identifier for both stages.
 For a Bug, an Investigation or a Spike, the comment carries the `Pointing skipped` line; for a User Story it omits that line.
 For a Bug, an Investigation or a Spike, the comment also carries the `Scope signal:` line with the reading `SKILL.md` (Unestimated issue types) defines; for a User Story it omits that line.
 Replace `<reading>` with one whole reading: for a Bug or an Investigation `single change` or `more than one independently reviewable change (<reason>)`, and for a Spike `single research thread` or `more than one independent research thread (<reason>)`, with `<reason>` replaced too; when the Step 2 reconciliation finds no category with two or more voters, replace it with `missing`, which `SKILL.md` treats as a missing line.
+Every refinement comment carries the `Exemplars:` line, with one skip line per skipped or not-selected candidate and none when there is none; for a Bug, an Investigation or a Spike it also carries the `Anchors: not pointed` line, and for a User Story it omits that line, because its anchors are recorded in the pointing record.
+Both lines use the phrases in [Record vocabulary](#record-vocabulary).
 
 ```markdown
 ## Refinement record
@@ -24,6 +26,10 @@ Replace `<reading>` with one whole reading: for a Bug or an Investigation `singl
 - Refined story identifier: <this comment id>
 - Refined story snapshot: <the complete refined story and ACs where the filing template has them, or an immutable link/commit>
 - Refined story identifier after blocking amendments: <the new comment id, or none>
+- Exemplars: <outcome>
+- Exemplar skipped: <key> <reason>
+- Exemplar not selected: <key>
+- Anchors: not pointed
 - Voter inputs, each recorded in its own separate context:
   - Engineer one (<family or model>): <file base name>
   - Engineer two (<family or model>): <file base name>
@@ -65,9 +71,10 @@ Never edit the refinement comment to add the result; its id keeps identifying on
 
 Post this once Step 4 has recorded the estimate, or record it as an unpointed result; the basis review in Step 4 item 2 always runs before it is posted.
 Never post it for a Bug, an Investigation or a Spike, which is never pointed.
-The three values are recorded before any SM/EM sizing comment or discussion; a void before all three exist leaves the values block at the values recorded so far and carries no superseded values, and once the blind re-run finishes the values block carries the three standing values while the superseded line carries the voided ones.
-Outside the recorded numeric values and the superseded-values line, no line of the posted record carries a point value named before the reveal or a prescription of this story's value: the Challenges and Anchoring events lines record a ground by its kind, its author (a voter, or the SM/EM for a sizing comment) and its outcome or recovery, and every field that could quote a participant elides those two classes permanently, because the posted record stays on the story surface that later voters read; the verbatim quote lives in the session's raw record, cited by its base name.
+The three values, and in a slice round the three values of every slice of the round, are recorded before any SM/EM sizing comment or discussion; a void before all three exist leaves the values block at the values recorded so far and carries no superseded values, and once the blind re-run finishes the values block carries the three standing values while the superseded line carries the voided ones.
+Outside the recorded numeric values, the Ledger line's prices, the Slice brief line's prior-round context of standing values recorded in earlier rounds and the superseded-values line, no line of the posted record carries a point value named before the reveal or a prescription of this story's value: the Challenges and Anchoring events lines record a ground by its kind, its author (a voter, or the SM/EM for a sizing comment) and its outcome or recovery, and every field that could quote a participant elides those two classes permanently, because the posted record stays on the story surface that later voters read; the verbatim quote lives in the session's raw record, cited by its base name.
 A sizing comment that names a point value before the reveal, prescribes this story's value, or states elapsed time, effort or run cost voids the round under the Anchoring guardrail recovery as soon as the facilitator sees it, as does any ground that is neither restated nor retracted, and the void records the voided consensus under Superseded values after a void, so the Consensus field carries the vote that stands, or n/a when the consensus check or the residual variance rule recorded the estimate.
+The `Anchors:` line and its `Anchor skipped:` lines use the phrases in [Record vocabulary](#record-vocabulary) and name anchor keys only, never an anchor's point value.
 
 ```markdown
 ## Pointing record
@@ -75,19 +82,24 @@ A sizing comment that names a point value before the reveal, prescribes this sto
 - Tracker-write preflight: comment <id>
 - Refined story identifier: <latest refinement comment id after any amendment>
 - Estimate scale: <profile.tracker.estimate_scale>
+- Anchors: <outcome>
+- Anchor skipped: <key> <reason>
 - Values, recorded before the discussion: <the three values recorded before the discussion; when a basis-challenge replacement made the consensus check re-run they are the three values that re-run read; before a void, the values recorded before it>
   - Engineer one: <value, or not recorded> - <short complexity rationale, or none when the value is not recorded>
   - Engineer two: <value, or not recorded> - <short complexity rationale, or none when the value is not recorded>
   - Engineer three: <value, or not recorded> - <short complexity rationale, or none when the value is not recorded>
 - Consensus check: <identical | one step | more than one step>
-- SM/EM sizing context, after all three values: <file base name> or verbatim, eliding a pre-reveal value or a prescription, or none
+- Ledger: <for a whole-story round, each unknown with its unrounded price and, once the split is drafted, its owner slice or blocker story (no owner for an unsplit story), each merge of differently named unknowns, the ledger total beside the whole-story value (or beside the unpointed outcome, with no saturation note) and not reconciled to slice values, and the saturation note when the whole-story value is the highest value of the step sequence; n/a for a slice round, whose slice brief carries the ledger>
+- Slice brief: <n/a for a whole-story round; for a slice round, the slice brief its voters received, verbatim>
+- SM/EM sizing context, after all three values (in a slice round, after every slice of the round has its three values): <file base name> or verbatim, eliding a pre-reveal value or a prescription, or none
 - Discussion: <high <value>, low <value>; or none when the discussion ran and recorded nothing; or skipped, when the consensus check recorded the estimate; the shared content names only the high and the low, while a voter's own recorded value and rationale are carried privately in that voter's prompt>
 - Re-vote: <accepted set per voter, with complexity rationale; or no consensus, with its complexity rationale, for a voter that records none; or none when it ran and recorded nothing; or skipped, when the consensus check recorded the estimate>
-- Consensus: <the highest value in the intersection of the vote that stands, or n/a when the consensus check or the residual variance rule recorded the estimate, or none when the round stopped unpointed>
+- Consensus: <the highest value in the intersection of the vote that stands (the lowest for a slice), or n/a when the consensus check or the residual variance rule recorded the estimate, or none when the round stopped unpointed>
 - Residual variance: <each voter's derived value, the gap between the highest and the lowest in scale steps, the rule applied and the resulting value, or the unpointed variance stop; n/a only when all three voters recorded an accepted set and the intersection is not empty, or when the consensus check, or the re-run of it that supersedes that outcome, recorded the estimate>
 - Recorded estimate: <the value recorded, or unpointed with the gap between the highest and the lowest in scale steps when the round stopped there>
+- Slice consensus: <n/a for a story that is not a slice; for a slice, the lower value, which is recorded, and the higher value, which Step 4 records for an unsplit story; or, for a slice that took the unpointed variance stop, unpointed with its lowest and highest derived values>
 - Effective maximum: <profile.refinement.point_cap; the 8-point rule still triggers at 8 or more>
-- Split: <none, or the slice mapping and sibling issue keys>
+- Split: <none, or the slice mapping, each slice criterion with the exactly one criterion of the story it is split from and each criterion of that story with its slice, and sibling issue keys>
 - Challenges: <none, or each ground challenged by kind, its author (a voter, or the SM/EM for a sizing comment), the restatement, withdrawal or retraction, and any replacement value it produced, or the void; elide a pre-reveal value or a prescription>
 - Owner decision: <n/a when the round did not stop unpointed, otherwise pending owner decision in a later run until the later run edits this line, then the value the owner decided and the basis, or unpointed with the owner's reason>
 - Superseded values after a void: <none, or the voided values, the voided estimate, the voided `Consensus check:` outcome, the voided consensus, the voided derived values and their outcome, and the blind vote that replaced them>
@@ -101,6 +113,44 @@ Under the denied tracker writes fallback in `SKILL.md`, replace the tracker-writ
 - Tracker writes: facilitator on the product owner's behalf (owner's direct authorization: "<verbatim quote>", <date>)
 ```
 
+## Slice brief
+
+Every slice estimate's pointing prompt is its slice brief: it carries the pointing basis and the rationale rule as Step 3 requires, and this block, filled in from the whole-story pointing record and, in split round 2, the parent slice's pointing record, under the priced shared-unknown ledger and the prior-round context in Estimation and slicing in `references/linear.md`.
+The facilitator records each slice brief verbatim on the `Slice brief:` line of the slice's pointing record.
+
+```markdown
+## Slice brief
+
+- Slice: <slice key> - <its slice>, split from <parent key> in split round <1 | 2>
+- Parent: <parent key>, recorded value <value>, with the three standing voter values of the parent's round <value>, <value>, <value>
+- Per-parent bound: the per-parent bound requires this slice's recorded value to be strictly below its parent's recorded value <value>; the split bounds apply it after the round, and it is not a value to score
+- Ledger, from the whole-story pointing record, with owners as the split comment of split round 2 reassigns them for a sub-slice:
+  - <unknown> - <ledger price> - owner <slice key, or blocker story key, priced in no slice>
+- Ledger total: <value>, beside the whole-story value <value>, not reconciled to slice values
+- Saturation note: <n/a, or: the whole-story value <value> is the highest value of the step sequence for <scale>, so the ledger prices are lower bounds on the true size>
+- Unknowns this slice owns: <each by name with its ledger price, or none>
+- Ancestor rationales: <each standing rationale of the whole-story round and, in split round 2, of the parent slice's round, by voter; never a voided vote or rationale, a ground the Step 4 basis review challenged, or a sibling slice's value or rationale>
+```
+
+Worked example on `fibonacci` (1, 2, 3, 5, 8, 13), a whole story pointed at 13 and split into core slice A and siblings B and C, with blocker story X.
+
+| Case | Input | Result |
+|---|---|---|
+| Whole-story rationales | voter 1: 13 = auth 3 + schema 2 + migration 1 + remainder 7; voter 2: 13 = login flow 5 + schema 3 + vendor API 2 + remainder 3; voter 3: 13 = auth 2 + vendor API 3 + remainder 8 | each sums exactly to its value, so all three are on basis |
+| Ledger in the pointing record | the three rationales above | login flow merged into auth (merge recorded); auth 3 (median of 3, 5, 2), schema 2 (lower of 2, 3), vendor API 2 (lower of 2, 3), migration 1 (sole price); ledger total 8 beside the whole-story value 13, not reconciled; saturation note, since 13 is the highest value of the sequence |
+| Owners, assigned when the split is drafted | slice B's work resolves auth, slice A's resolves schema, no slice resolves migration, blocker X resolves vendor API | auth owner B, schema owner A, migration owner A (core slice), vendor API owner X, priced in no slice |
+| Slice brief | slices A, B and C | each brief carries the four unknowns with their prices and owners, the ledger total 8 beside 13, and the saturation note naming the ledger prices as lower bounds |
+| Slice rationales | A: schema 2 + migration 1 + own complexity; B: auth 3 + own complexity; C: own complexity only | each slice-owned ledger unknown appears with its ledger price in exactly one slice rationale, and vendor API appears in none |
+| Re-pricing rationale | a slice B voter writes auth 5 | off-basis: the Step 4 basis review re-runs that vote once, and a second miss is recorded on the Challenges line |
+| Unknown assigned elsewhere | a slice C voter names schema | off-basis on the same terms |
+| Whole-story sum mismatch | a voter writes 8 = auth 3 + schema 2 + remainder 2 | off-basis: the prices plus the remainder are 7, not 8 |
+| Prior-round context, split round 1 | the slice B brief | parent 13 with voter values 13, 13, 13, the four-unknown ledger, the three whole-story rationales and the bound sentence naming 13; no value or rationale of A or C and no other slice B vote |
+| Prior-round context, split round 2 | slice B recorded 8 from voter values 8, 8, 8 and is split into core slice B and sibling B2; the B2 brief | parent B 8 with voter values 8, 8, 8, the ledger with owners as split round 2 reassigns them, the whole-story rationales and slice B's round-1 rationales, and the bound sentence naming 8; no value or rationale of B2's sibling, of A or of C |
+| Voided or challenged ancestor rationale | a whole-story rationale voided by an anchoring recovery, or a ground the Step 4 basis review challenged | left out of every brief; only the rationale that stands, without the challenged ground, is carried |
+| Parent value in the brief | the bound sentence naming 13 in the slice B brief | a factual reference to an already-recorded item: no anchoring event, and the round continues |
+| SM/EM target for a slice | before the reveal the SM/EM tells the slice B voters to aim for 5 | anchoring event: the round is voided and the independent vote re-runs in newly created voter contexts |
+| Rationale derived from the parent | a slice B voter writes "one step below the parent's 13, so 8" | off-basis under the Step 3 rationale rule: the Step 4 basis review challenges it |
+
 ## Split comment
 
 Post this on the original issue when the oversize split in `SKILL.md` (Unestimated issue types) splits a Bug or an Investigation, authored by the product owner and posted by the product owner or, under the denied tracker writes fallback, by the facilitator verbatim.
@@ -113,7 +163,7 @@ A re-split sibling gets its own split comment on that sibling.
 - Core slice: <original issue key> - <its slice> - Scope signal: <reading> - description trimmed to this slice
 - Siblings, each from the `<linear-bug|linear-investigation>` template with the `<type label>` label, blocked by the original:
   - <sibling key> - <its slice> - Scope signal: <reading>
-- Mapping: <each acceptance criterion, or for an Investigation each findings-scope item, and the slice it maps to>
+- Mapping: <each acceptance criterion, or for an Investigation each findings-scope item, and the slice it maps to; and each slice criterion or item and the exactly one criterion or item of the issue it is split from>
 - Estimates: none; no slice receives a point value or a slice estimate
 - Tracker writes: product owner
 ```
@@ -123,6 +173,54 @@ Under the denied tracker writes fallback in `SKILL.md`, replace the tracker-writ
 ```markdown
 - Tracker writes: facilitator on the product owner's behalf (owner's direct authorization: "<verbatim quote>", <date>)
 ```
+
+## Split bounds
+
+After each split round of a story split the facilitator runs the split bounds in Estimation and slicing in `references/linear.md` and fills in the block below.
+A round with no stop posts the block in the split comment.
+A round with a leaf slice recorded as unpointed and no stop posts the block in the split comment with result pending, naming the unpointed slices, and the pending checks run once the owner's answer gives every leaf slice a recorded value.
+A stop posts nothing to the tracker: it reports `needs input` to the owner in one message carrying the block, its warning line included, and no further split round, slice record or tracker write for the slices happens until the owner answers.
+A mapping-check stop also posts nothing to the tracker, and because it comes before any slice is pointed it fills no block: its one `needs input` message carries a `Mapping check, round <1 | 2>: stop` line naming each slice criterion with no counterpart and each evidence pass, fixture, test obligation or behaviour a slice adds beyond the story it is split from.
+
+```markdown
+- Split bounds, round <1 | 2>: <clear | warning | stop | pending: unpointed <slice keys>>
+  - Whole-story sum: base <original whole-story recorded estimate>; 1.0 times = <value>, 1.5 times = <value>; sum <sum with each leaf slice's lower consensus value> (lower), <sum with each leaf slice's higher consensus value> (higher); band <clear | warning | stop> (lower, governs), <clear | warning | stop> (higher)
+  - Saturated base: <n/a, or: the base <value> is the highest value of the step sequence for <scale>, so the base is saturated and the 1.0 and 1.5 bounds computed from it are lower bounds on the true size>
+  - Per-parent sum, one line per parent split this round: <n/a in round 1, whose only parent is the original story, so the whole-story sum line records its band once; otherwise parent <key> <recorded value>; 1.0 times = <value>, 1.5 times = <value>; sum of its slices <value> (lower), <value> (higher); band <clear | warning | stop> (lower, governs), <clear | warning | stop> (higher)>
+  - Per-parent bound: <pass, or each slice at or above its parent: parent <key> <value>, slice <key> <value>, band <band of that parent's sum>>
+  - Round cap: <n/a before split round 2; pass; or each slice still meeting the split trigger after split round 2, with its value>
+  - Ledger owners reassigned: <n/a in split round 1; in split round 2, for each slice split again, parent <key>: each unknown it owned with its ledger price and the sub-slice that now owns it>
+  - Warning for the human at triage: <none, or one entry listing every warning of the round with its sums, bands and bounds above, posted in the split comment; a round that stops also carries it in its `needs input` message and posts it once the owner answers>
+```
+
+The round's result is the most severe of its lines: any stop makes the round a stop, else any warning makes it a warning, else it is clear.
+With a leaf slice recorded as unpointed, the whole-story sum line and the per-parent sum line of each parent with an unpointed slice read `sum at least <recorded lower values summed> (lower), at least <recorded higher values summed> (higher); unpointed <slice keys>; band <stop | pending>` in place of their sums and band, with band stop when the lower bound is above 1.5 times the base and band pending otherwise; a per-parent bound stop under such a parent records that parent's band, and every other line is computed.
+The round's result then ranks stop, then pending, then warning, then clear, and a warning on a computed line is still listed in the warning line.
+
+Worked examples on `fibonacci` (1, 2, 3, 5, 8, 13) with `profile.refinement.point_cap` 5 unless stated.
+In round 1 the only parent is the original story, so its per-parent sum and the whole-story sum share one base and one band, recorded once on the whole-story sum line; a slice at or above that parent still stops on its own.
+Each slice is listed by its recorded lower-consensus value, with its higher value in brackets where the two differ.
+
+| Case | Original | Slices | Sum against 1.0 and 1.5 times | Result |
+|---|---|---|---|---|
+| Hard stop: the lowest sum above 1.5 times an original of 8 with every slice below 8 | 8 | 5, 5, 3 | 13 against 8 and 12 | stop: `needs input` naming the sums 13 (lower) and 13 (higher), the bands stop (lower) and stop (higher), the bounds 8 and 12, and round 1 |
+| Lower consensus governs: the lower sum warns while the higher sum would stop | 8 | 3 (5), 3 (5), 3 (5) | 9 (lower) and 15 (higher) against 8 and 12 | proceeds; the split comment carries the warning naming the sums 9 (lower) and 15 (higher), the bands warning (lower) and stop (higher), the bounds 8 and 12, and round 1 |
+| Two failures in one round | 8 | 8, 5 | 13 against 8 and 12 | stop: one `needs input` message naming both failures, the per-parent bound (parent 8, slice 8) and the band stop of the sum 13 |
+| Warning band: the highest sum at or below 1.5 times an original of 8 | 8 | 5, 5, 2 | 12 against 8 and 12 | proceeds; the split comment carries the warning |
+| Clear band: the highest sum at or below 1.0 times an original of 8 | 8 | 5, 3 | 8 against 8 and 12 | proceeds with no flag |
+| Per-parent bound: a child equal to its parent | 8 | 8, 3 | 11 against 8 and 12 | stop: parent 8, slice 8, both values, band warning |
+| Per-parent bound: siblings above 1.5 times their round-2 parent | 13; round 1 8, 5 | the 8 split into 5, 5, 3 | parent 8: 13 against 8 and 12 (stop); whole story: leaves 5, 5, 3, 5 sum 18 against 13 and 19.5 (warning) | stop: parent 8, siblings 5, 5, 3, band stop; the whole-story line records its warning |
+| Per-parent bound: every child below its parent | 8 | 5, 3 | 8 against 8 and 12 | proceeds with no flag |
+| Round cap, `point_cap` 3: a slice still meets the trigger after split round 2 | 13; round 1 8, 5 | round 2: 8 into 5, 3; 5 into 3, 2 | leaf sum 13 against 13 and 19.5 | stop before a third split: `needs input` naming the slice at 5 |
+| Round cap, `point_cap` 3: a split that completes within two rounds | 8; round 1 5, 3 | round 2: 5 into 3, 2 | leaf sum 8 against 8 and 12 | proceeds unchanged |
+| Saturated base: a top-of-scale whole story | 13 | 8, 8, 5 | 21 against 13 and 19.5 | stop: the message names the base 13 saturated and the bounds 13 and 19.5 as lower bounds on the true size |
+
+Mapping check worked examples, in split round 1 of a story with criteria AC1 to AC3.
+
+| Case | Story criteria | Slice criteria mapped | Result |
+|---|---|---|---|
+| Mapping check stop: a slice criterion with no counterpart | AC1, AC2, AC3 | slice A: A1 -> AC1, A2 -> AC2; slice B: B1 -> AC3, B2 -> none | stop before any slice is pointed: one `needs input` message with `Mapping check, round 1: stop` naming B2; no slice is pointed and no split bound runs |
+| Mapping check clear: every slice criterion maps to exactly one criterion of the story | AC1, AC2, AC3 | slice A: A1 -> AC1, A2 -> AC1, A3 -> AC2; slice B: B1 -> AC3 | proceeds unchanged: the slices are pointed and the split bounds run |
 
 ## Triage record
 
@@ -144,12 +242,33 @@ Under the denied tracker writes fallback in `SKILL.md`, replace the tracker-writ
 - Tracker writes: facilitator on the product owner's behalf (owner's direct authorization: "<verbatim quote>", <date>)
 ```
 
+## Record vocabulary
+
+The exemplar and anchor lines of the refinement comment and the pointing record use only these phrases, and the closing message lines `exemplars: <outcome>` and `anchors: <outcome>` use the same outcomes plus `not looked up`.
+Each line names issue keys only, never an anchor's point value.
+
+- **Exemplars:** exactly one of `<key list>` (the selected exemplar's key, a list of one because one exemplar is selected), `none configured` (`profile.refinement.exemplar_label` is unset), `no exemplar for <type>` (the label is set and no eligible candidate has the story's type, with `<type>` one of User Story, Bug, Investigation or Spike) or `exemplar lookup failed` (the lookup errored).
+- **Anchors:** in the pointing record, exactly one of `<key list>` (the anchor table's keys in table order), `none configured` (`profile.refinement.anchor_label` is unset), `no anchors` (the label is set and no anchor is usable) or `anchor lookup failed` (the lookup errored); `not pointed` appears only on the refinement comment of a Bug, an Investigation or a Spike and in its closing message.
+- **Exemplar skipped:** one `Exemplar skipped: <key> <reason>` line per skipped candidate, where `<reason>` is exactly one of `not done`, `reopened`, `no Capstone comment`, `Capstone comment names a value` or `conflicting type labels`.
+- **Exemplar not selected:** one `Exemplar not selected: <key>` line per eligible candidate of the story's type that was not selected because another has a more recent `Capstone` comment.
+- **Anchor skipped:** one `Anchor skipped: <key> <reason>` line per skipped anchor, where `<reason>` is exactly one of `not done`, `no estimate`, `above point cap`, `no Calibration anchor comment` or `comment point value differs`.
+- **Not looked up:** a closing-message outcome only, written on both the `exemplars:` and the `anchors:` line when a roster stop (Step 1 item 2) or a type-check stop (item 3) ends the ceremony before the lookups run and before any record is posted; it takes precedence over `none configured` and `not pointed` and never appears on a record line.
+
+## Comment headings
+
+The skill reads two comment headings on the labelled issues of the team of `STORY_ID`.
+A comment carries a heading only when its first line is that heading, optionally followed by a space and a date in parentheses, for example `## Capstone (2026-01-31)`, matched case-sensitively after trailing whitespace is removed; any date form in the parentheses counts, and a heading on a later line does not count.
+When several comments on one issue carry the same heading, the most recent is used.
+
+- **Capstone:** the `## Capstone` comment of an exemplar; its body is structure and evidence text, the shape of acceptance criteria, Definition of Done and evidence, and names no point value or estimate.
+- **Calibration anchor:** the `## Calibration anchor` comment of an anchor; its body is the drivers text, and when it also carries a `Points: <integer>` line, that value must equal the issue's estimate.
+
 ## Permitted and forbidden phrasing
 
-The SM/EM may give factual, reference-only sizing context after all three values are recorded.
+The SM/EM may give factual, reference-only sizing context after all three values are recorded, and in a slice round only after every slice of the round has its three values recorded.
 Everything in the forbidden column breaks independence or anchors the discussion.
 A factual reference is permitted and a prescription is not: naming an already-estimated item's recorded value, alone or together with a basis difference, is a reference the voters weigh, while a value to score, a target or a preferred direction for the story under estimate is a prescription that anchors the round.
-A permitted comparison names at most one comparable story and at most one basis difference; it never prescribes a value for the story under estimate, names a range, an average, elapsed time or effort, and it names another story's point value only after all three values are recorded.
+A permitted comparison names at most one comparable story and at most one basis difference; it never prescribes a value for the story under estimate, names a range, an average, elapsed time or effort, and it names another story's point value only after all three values are recorded, and in a slice round only after every slice of the round has its three values recorded.
 
 | Permitted (factual, reference-only) | Forbidden (leading or anchoring) |
 |---|---|
