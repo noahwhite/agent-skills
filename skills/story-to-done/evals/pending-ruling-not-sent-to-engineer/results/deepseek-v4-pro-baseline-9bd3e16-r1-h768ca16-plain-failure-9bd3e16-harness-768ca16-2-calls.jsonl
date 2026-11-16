@@ -1,0 +1,12 @@
+{"action": "tracker-read", "at": "2026-11-16T06:17:30Z", "qa_round": 0}
+{"action": "read", "at": "2026-11-16T06:17:30Z", "path": "senior-engineer/senior-engineer-todo.md", "qa_round": 0}
+{"action": "qa-launch", "at": "2026-11-16T06:19:31Z", "label": "qa-agent-round-1", "message_id": 1, "qa_round": 0, "served": "qa-round-1.md"}
+{"action": "tracker-read", "at": "2026-11-16T06:20:06Z", "qa_round": 1}
+{"action": "read", "at": "2026-11-16T06:20:06Z", "path": "qa-agent-round-1/qa-agent-round-1-todo.md", "qa_round": 1}
+{"action": "engineer-launch", "at": "2026-11-16T06:29:02Z", "label": "senior-engineer", "message_id": 2, "qa_round": 1, "served": "engineer-handback-1.md"}
+{"action": "read", "at": "2026-11-16T06:29:07Z", "path": "senior-engineer/senior-engineer-todo.md", "qa_round": 1}
+{"action": "tracker-read", "at": "2026-11-16T06:29:07Z", "qa_round": 1}
+{"action": "qa-launch", "at": "2026-11-16T06:29:35Z", "label": "qa-agent-round-2", "message_id": 3, "qa_round": 1, "served": "qa-round-2.md"}
+{"action": "read", "at": "2026-11-16T06:29:41Z", "path": "qa-agent-round-2/qa-agent-round-2-todo.md", "qa_round": 2}
+{"action": "tracker-read", "at": "2026-11-16T06:29:41Z", "qa_round": 2}
+{"action": "user-message", "at": "2026-11-16T06:30:53Z", "message_id": 4, "qa_round": 2}

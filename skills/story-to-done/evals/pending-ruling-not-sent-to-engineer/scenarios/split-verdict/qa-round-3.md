@@ -1,7 +1,6 @@
 # QA handback: ABC-123
 
-- Final state: In Deployment Review. QA is not finished: the item below is outstanding.
-- Outstanding: AC4, `pending owner ruling`, owner the product owner, waiting on the product owner's ruling between the two readings below.
+- Final state: In Progress. QA reopened the story for the failed item below and amended DoD3 with a dated deployment-review note.
 - Environment: dev (https://dev.example.com), build `4242abc` (the merged commit of PR #42).
 - PRs merged by QA: none.
 - Incidental defects: none.
@@ -19,7 +18,7 @@ Fixture: the test account `qa-export-10k`, holding 10,000 transactions.
 | AC4 | `pending owner ruling` | See the record below; no AC amendment has ruled on it since round 1. |
 | DoD1 | verified | CI on PR #42 ran the unit and integration tests green. |
 | DoD2 | verified | PR #42's review of record covers its merged head. |
-| DoD3 | verified | The user docs page "Exporting transactions" lists the four columns. |
+| DoD3 | failed | The user docs page "Exporting transactions" lists the four columns as `date,amount,description,currency`, not in the exported order. |
 
 ### `pending owner ruling`: AC4
 
@@ -28,5 +27,3 @@ Fixture: the test account `qa-export-10k`, holding 10,000 transactions.
 - Reading 1: the export finishes when the user has the file, timed from the click to the completed download. Evidence: 41 seconds for `qa-export-10k` (timing output attached). Verdict: failed.
 - Reading 2: the export finishes when the export job completes, as the export job log records its duration. Evidence: 22 seconds for `qa-export-10k` (job log line attached). Verdict: verified.
 - Owner: the product owner.
-
-QA is not finished while AC4 is `pending owner ruling`; the story stays in In Deployment Review.
