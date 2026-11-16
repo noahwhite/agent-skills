@@ -12,13 +12,13 @@ Input tokens leave out the cached ones, and the source lists no cache write pric
 
 | Attempt | Provider call | Exit status of the case's `run.sh` | Outcome | What promptfoo reported | Input tokens | Cached input tokens | Cache write tokens | Output tokens | Reasoning tokens | Model id | Cost in USD (https://models.dev/api.json, 2026-11-16) |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | 1 | 0 | graded pass | `success` true, `score` 1, `failureReason` 0, `error` none, `tokenUsage.total` 0, `cost` 0 | 18863 | 166016 | 0 | 1073 | 3147 | deepseek/deepseek-v4-pro | 0.024458 |
+| 1 | 1 | 0 | graded pass | `success` true, `score` 1, `failureReason` 0, `error` none, `tokenUsage.total` 0, `cost` 0 | 67925 | 1411456 | 0 | 2610 | 25785 | deepseek/deepseek-v4-pro | 0.132104632 |
 | 2 | 2 | 2 | void, `injected` | not reported (absorbed by the provider) | 0 | 0 | 0 | 0 | 0 | none (no agent ran) | 0.000000 |
-| 3 | 2 | 0 | graded pass | `success` true, `score` 1, `failureReason` 0, `error` none, `tokenUsage.total` 0, `cost` 0 | 49562 | 713984 | 0 | 1553 | 19333 | deepseek/deepseek-v4-pro | 0.089773 |
-| 4 | 3 | 0 | graded pass | `success` true, `score` 1, `failureReason` 0, `error` none, `tokenUsage.total` 0, `cost` 0 | 52479 | 412928 | 0 | 1544 | 28867 | deepseek/deepseek-v4-pro | 0.103934 |
+| 3 | 2 | 0 | graded pass | `success` true, `score` 1, `failureReason` 0, `error` none, `tokenUsage.total` 0, `cost` 0 | 57845 | 843648 | 0 | 2313 | 19481 | deepseek/deepseek-v4-pro | 0.099890076 |
+| 4 | 3 | 0 | graded pass | `success` true, `score` 1, `failureReason` 0, `error` none, `tokenUsage.total` 0, `cost` 0 | 36842 | 469120 | 0 | 1605 | 32326 | deepseek/deepseek-v4-pro | 0.10181974 |
 
 - Overall exit status of `spikes/SKL-317/poc/run.sh`: 0.
-- agent-skills commit under test: `50893a214a8dfab55995737895d26bd30a292fc3`.
+- agent-skills commit under test: `327ac853822bacbf5e775f59f1a43af18364c15e`.
 - promptfoo version: `0.125.1`.
 - Model id: `deepseek/deepseek-v4-pro`.
 - Mode: live.
@@ -46,7 +46,7 @@ One row per call promptfoo made to the script provider.
 
 Each quoted line was looked up in the file at the commit under test.
 
-| Rule | `skills/story-to-done/evals/suite.py` at `50893a214a8dfab55995737895d26bd30a292fc3` | Provider, observed in this run | Status |
+| Rule | `skills/story-to-done/evals/suite.py` at `327ac853822bacbf5e775f59f1a43af18364c15e` | Provider, observed in this run | Status |
 |---|---|---|---|
 | (i) void attempts do not count toward N | `OUTCOMES = {0: "pass", 1: "fail", 2: "void", None: "void"}`; an attempt past its deadline is the `None` entry; in `tally_record`, `if record["outcome"] == "void":` returns before `tally["n"] += 1` | Void: attempt 2 (exit status 2, `injected`). The provider counted none of them: it handed promptfoo 3 graded results from 3 graded attempts of 4 attempts, and promptfoo holds 3 graded results and none for a void attempt. | `reproduced` (`injected` void only, not a natural observation) |
 | (ii) the run stops at 2N attempts | `while tally["n"] < runs and attempt < 2 * runs:` | The run ended after 4 attempts with 3 graded, so the cap of 6 attempts never stopped it. | `not exercised in this run` |
@@ -56,9 +56,10 @@ Each quoted line was looked up in the file at the commit under test.
 
 - Ceiling for the whole spike: 1.000000 USD.
 - Before each attempt the provider adds up the ledger and stops with `ceiling reached` when the total plus the next-attempt estimate is over the ceiling; the estimate is 0.080000 USD, or the highest cost of a single attempt so far when that is more.
-- Ledger before this run, development and dry runs included: 0.000000 USD over 32 attempts.
-- This run: 0.024458 + 0.000000 + 0.089773 + 0.103934 = 0.218165 USD.
-- Ledger after this run: 0.000000 + 0.218165 = 0.218165 USD, which leaves 0.781835 USD under the ceiling.
+- The provider writes each ledger row to a copy of its own as well, in a directory the agent under test is not told of, and stops with `spend ledger changed` when the ledger is not that copy before or after an attempt.
+- Ledger before this run, development and dry runs included: 0.218164716 USD over 48 attempts.
+- This run: 0.132104632 + 0.000000 + 0.099890076 + 0.10181974 = 0.333814448 USD.
+- Ledger after this run: 0.218164716 + 0.333814448 = 0.551979164 USD, which leaves 0.448020836 USD under the ceiling.
 
 ## Blockers
 
