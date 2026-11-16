@@ -12,18 +12,19 @@ Input tokens leave out the cached ones, and the source lists no cache write pric
 
 | Attempt | Provider call | Exit status of the case's `run.sh` | Outcome | What promptfoo reported | Input tokens | Cached input tokens | Cache write tokens | Output tokens | Reasoning tokens | Model id | Cost in USD (https://models.dev/api.json, 2026-11-16) |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | 1 | 0 | graded pass | `success` true, `score` 1, `failureReason` 0, `error` none, `tokenUsage.total` 0, `cost` 0 | 67925 | 1411456 | 0 | 2610 | 25785 | deepseek/deepseek-v4-pro | 0.132104632 |
+| 1 | 1 | 0 | graded pass | `success` true, `score` 1, `failureReason` 0, `error` none, `tokenUsage.total` 0, `cost` 0 | 30368 | 309248 | 0 | 1229 | 16977 | deepseek/deepseek-v4-pro | 0.062894216 |
 | 2 | 2 | 2 | void, `injected` | not reported (absorbed by the provider) | 0 | 0 | 0 | 0 | 0 | none (no agent ran) | 0.000000 |
-| 3 | 2 | 0 | graded pass | `success` true, `score` 1, `failureReason` 0, `error` none, `tokenUsage.total` 0, `cost` 0 | 57845 | 843648 | 0 | 2313 | 19481 | deepseek/deepseek-v4-pro | 0.099890076 |
-| 4 | 3 | 0 | graded pass | `success` true, `score` 1, `failureReason` 0, `error` none, `tokenUsage.total` 0, `cost` 0 | 36842 | 469120 | 0 | 1605 | 32326 | deepseek/deepseek-v4-pro | 0.10181974 |
+| 3 | 2 | 0 | graded pass | `success` true, `score` 1, `failureReason` 0, `error` none, `tokenUsage.total` 0, `cost` 0 | 45530 | 400128 | 0 | 1683 | 25725 | deepseek/deepseek-v4-pro | 0.093120456 |
+| 4 | 3 | 0 | graded pass | `success` true, `score` 1, `failureReason` 0, `error` none, `tokenUsage.total` 0, `cost` 0 | 45453 | 467840 | 0 | 1649 | 16449 | deepseek/deepseek-v4-pro | 0.0761255 |
 
 - Overall exit status of `spikes/SKL-317/poc/run.sh`: 0.
-- agent-skills commit under test: `327ac853822bacbf5e775f59f1a43af18364c15e`.
+- agent-skills commit under test: `c8574c3c3eb5e005b3fa38e0d0e26c93744cb42d`.
 - promptfoo version: `0.125.1`.
 - Model id: `deepseek/deepseek-v4-pro`.
 - Mode: live.
 - Graded runs wanted, N: 3; attempt cap, 2N: 6; attempts run: 4; graded: 3.
-- Grader: `skills/story-to-done/evals/qa-unfinished-own-steps/grader.py`, blob `3a0a9947a2b05b661c316d67cfa400f726b151b7` at the commit under test, unmodified; only the case's `run.sh` ran it, and it graded no void attempt.
+- Grader: `skills/story-to-done/evals/qa-unfinished-own-steps/grader.py`, blob `3a0a9947a2b05b661c316d67cfa400f726b151b7` at the commit under test; only the case's `run.sh` ran it, and it graded no void attempt.
+- Clones: the case's `run.sh` and the grader ran from a harness clone of the commit under test, and the agent worked in a second clone. The provider compares every file of both with the commit's tree, by content, before and after each attempt, and stops with `checkout changed` on a difference. When this file was written both held the files of that commit and no other.
 
 ## Provider calls
 
@@ -46,7 +47,7 @@ One row per call promptfoo made to the script provider.
 
 Each quoted line was looked up in the file at the commit under test.
 
-| Rule | `skills/story-to-done/evals/suite.py` at `327ac853822bacbf5e775f59f1a43af18364c15e` | Provider, observed in this run | Status |
+| Rule | `skills/story-to-done/evals/suite.py` at `c8574c3c3eb5e005b3fa38e0d0e26c93744cb42d` | Provider, observed in this run | Status |
 |---|---|---|---|
 | (i) void attempts do not count toward N | `OUTCOMES = {0: "pass", 1: "fail", 2: "void", None: "void"}`; an attempt past its deadline is the `None` entry; in `tally_record`, `if record["outcome"] == "void":` returns before `tally["n"] += 1` | Void: attempt 2 (exit status 2, `injected`). The provider counted none of them: it handed promptfoo 3 graded results from 3 graded attempts of 4 attempts, and promptfoo holds 3 graded results and none for a void attempt. | `reproduced` (`injected` void only, not a natural observation) |
 | (ii) the run stops at 2N attempts | `while tally["n"] < runs and attempt < 2 * runs:` | The run ended after 4 attempts with 3 graded, so the cap of 6 attempts never stopped it. | `not exercised in this run` |
@@ -54,12 +55,13 @@ Each quoted line was looked up in the file at the commit under test.
 
 ## Spend
 
-- Ceiling for the whole spike: 1.000000 USD.
-- Before each attempt the provider adds up the ledger and stops with `ceiling reached` when the total plus the next-attempt estimate is over the ceiling; the estimate is 0.080000 USD, or the highest cost of a single attempt so far when that is more.
-- The provider writes each ledger row to a copy of its own as well, in a directory the agent under test is not told of, and stops with `spend ledger changed` when the ledger is not that copy before or after an attempt.
-- Ledger before this run, development and dry runs included: 0.218164716 USD over 48 attempts.
-- This run: 0.132104632 + 0.000000 + 0.099890076 + 0.10181974 = 0.333814448 USD.
-- Ledger after this run: 0.218164716 + 0.333814448 = 0.551979164 USD, which leaves 0.448020836 USD under the ceiling.
+- Ceiling for the whole spike: 5.000000 USD.
+- Before each attempt that calls the model the provider adds up the ledger and stops with `ceiling reached` when the total plus the next-attempt estimate is over the ceiling; the estimate is 0.080000 USD, or the highest cost of a single attempt so far when that is more. It is an estimate, not a bound on what one attempt costs.
+- The provider writes each ledger row to a copy of its own as well, in a directory the agent under test is not told of, and stops with `spend ledger changed` when, before or after an attempt, the ledger is not that copy or does not begin with the ledger `run.sh` read before the eval started.
+- promptfoo reports a `cost` and a `tokenUsage.total` of 0 for every result of a script provider, so the spend below comes from the agent's own session record and the prices above, never from promptfoo.
+- Ledger before this run, development and dry runs included: 0.551979164 USD over 52 attempts.
+- This run: 0.062894216 + 0.000000 + 0.093120456 + 0.0761255 = 0.232140172 USD.
+- Ledger after this run: 0.551979164 + 0.232140172 = 0.784119336 USD, which leaves 4.215880664 USD under the ceiling.
 
 ## Blockers
 
