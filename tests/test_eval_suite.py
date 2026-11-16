@@ -321,16 +321,16 @@ def test_the_normaliser_rewrites_paths_and_leak_shapes_and_keeps_the_rest() -> N
 # A message as the record holds it: messages.json serialises a newline as the two characters
 # backslash and n, so a path that starts a line follows a word character. Each case is the
 # message before and after normalising, with real control characters that json.dumps escapes.
-RUN_ROOT, HOME_ROOT, OTHER, ONE_SEGMENT = "/scratch/run-1", "/scratch/home-1", "/srv/home/user", "/srv"
+RUN_ROOT, HOME_ROOT, OTHER = "/scratch/run-1", "/scratch/home-1", "/srv/home/user"
 BOUNDARIES = {"newline": "\n", "tab": "\t", "return": "\r", "backspace": "\b", "formfeed": "\f",
-              "u-escape-digit": "\x01", "u-escape-letter": "\x7f\xff", "space": "see ",
+              "u-escape-digit": "\x01", "u-escape-letter": "\x7f\xff", "u-escape-e-acute": "\xe9", "space": "see ",
               # Nothing before the path: it follows the raw quote that opens the serialised string.
               "string-quote": "", "escaped-quote": 'see "', "word-then-newline": "x\n", "return-newline": "\r\n",
               "newline-newline": "\n\n", "tab-newline": "\t\n",
               # Over-redaction by design: a message that quotes an escape is redacted like the escape.
               "quoted-escape": "\\n"}
 KEPT = {"url": "https://host", "relative": "a/b/c", "word": "prefix", "bare-n": "n", "newline-then-word": "\nx",
-        "newline-then-url": "\nhttps://host"}
+        "newline-then-url": "\nhttps://host", "short-hex": "\\u12"}
 NORMALISED_MESSAGES = (
     [pytest.param(f"{before}{RUN_ROOT}/a.json", f"{before}{{run_dir}}/a.json", True, id=f"run-root-{name}")
      for name, before in BOUNDARIES.items()]
@@ -338,13 +338,14 @@ NORMALISED_MESSAGES = (
        for name, before in BOUNDARIES.items()]
     + [pytest.param(f"{before}{HOME_ROOT}/x", f"{before}{{home}}/x", True, id=f"home-root-{name}")
        for name, before in BOUNDARIES.items()]
-    + [pytest.param(f"{before}{ONE_SEGMENT}", f"{before}{{path}}", True, id=f"one-segment-{name}")
-       for name, before in BOUNDARIES.items()]
     + [pytest.param(f"{RUN_ROOT}/a.json", "{run_dir}/a.json", False, id="run-root-start-of-string"),
        pytest.param(f"{OTHER}/notes.txt", "{path}", False, id="other-start-of-string"),
        pytest.param(f"\n{RUN_ROOT}", "\n{run_dir}", True, id="run-root-bare-after-newline"),
+       # A root is replaced only whole, so a longer name falls through to the absolute-path rewrite.
+       pytest.param(f"\n{RUN_ROOT}.json", "\n{path}", True, id="run-root-extended-name"),
+       pytest.param(f"\n{RUN_ROOT}/a.json\n{OTHER} {OTHER}/b", "\n{run_dir}/a.json\n{path} {path}", True,
+                    id="two-paths-after-newline"),
        pytest.param(OTHER, "{path}", True, id="other-standalone"),
-       pytest.param(ONE_SEGMENT, "{path}", True, id="one-segment-standalone"),
        # json.dumps writes lowercase hex, so another writer's uppercase \uXXXX is given as serialised text.
        pytest.param(f'["\\u00FF{RUN_ROOT}/a.json"]', '["\\u00FF{run_dir}/a.json"]', False,
                     id="run-root-u-escape-upper-hex"),
@@ -368,6 +369,7 @@ def test_the_normaliser_rewrites_a_path_after_each_boundary_in_a_serialised_mess
     else:
         text, wanted = message, expected
     assert normalise(text) == wanted
+    assert normalise(wanted) == wanted, "a normalised record is left as it is"
 
 
 def test_a_record_with_bytes_that_are_not_utf8_is_still_written(suite) -> None:
