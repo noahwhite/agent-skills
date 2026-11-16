@@ -3225,7 +3225,9 @@ def test_step_3_points_to_the_interim_handbacks_reference_and_restates_none_of_i
     assert INTERIM_STEP_3_POINTER in step_3
     assert step_3.index(INTERIM_STEP_3_POINTER) < step_3.index(STEP_3_READ_BACK_FIRST)
     rest = step_3.replace(INTERIM_STEP_3_POINTER, "").lower()
-    for token in INTERIM_VOCABULARY + ("50%", "before step 4", "before the step 0", "before step 0"):
+    for token in INTERIM_VOCABULARY + (
+        "50%", "before step 4", "before the step 0", "before step 0", "round count", "increment",
+    ):
         assert token not in rest, f"step 3 restates the interim rule ({token!r}) instead of pointing to it"
 
 
