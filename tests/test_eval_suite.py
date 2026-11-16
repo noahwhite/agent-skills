@@ -126,6 +126,7 @@ escaped=""
 if [ "$scenario" = pass ]; then escaped=", \"escaped\": \"${run//\//\\/}\""; fi
 printf '{"seen_in": "\\n%s"%s, "canary": "%s"}\n' "$run" "$escaped" "${CANARY-${EVAL_CANARY-unset}}" \
   > "$run/evidence.json"
+cp "$run/evidence.json" "$STUB_STATE/evidence-$scenario.json"
 mkdir -p "$run/nested"
 echo kept > "$run/nested/kept.md"
 """
@@ -298,22 +299,31 @@ def test_every_attempt_writes_a_run_record_and_a_call_record_named_for_it(suite)
 
 
 def decoded_strings(text: str):
-    """Yield text and, wherever it is JSON or JSON Lines, every string it holds, decoded recursively."""
-    yield text
-    documents = []
-    for chunk in [text, *text.splitlines()]:
-        try:
-            documents.append(json.loads(chunk))
-        except ValueError:
+    """Yield text and, wherever it is JSON or JSON Lines, every key and string it holds, decoded
+    recursively, each distinct string once."""
+    seen, pending = set(), [text]
+    while pending:
+        string = pending.pop()
+        if string in seen:
             continue
-    while documents:
-        value = documents.pop()
-        if isinstance(value, dict):
-            documents.extend(value.values())
-        elif isinstance(value, list):
-            documents.extend(value)
-        elif isinstance(value, str):
-            yield from decoded_strings(value)
+        seen.add(string)
+        yield string
+        lines = string.splitlines()
+        documents = []
+        for chunk in [string] + (lines if len(lines) > 1 else []):
+            try:
+                documents.append(json.loads(chunk))
+            except ValueError:
+                continue
+        while documents:
+            value = documents.pop()
+            if isinstance(value, dict):
+                pending.extend(value.keys())
+                documents.extend(value.values())
+            elif isinstance(value, list):
+                documents.extend(value)
+            elif isinstance(value, str):
+                pending.append(value)
 
 
 def test_run_directories_sit_outside_both_checkouts_and_never_reach_a_record(suite) -> None:
@@ -336,7 +346,12 @@ def test_run_directories_sit_outside_both_checkouts_and_never_reach_a_record(sui
                 assert run_dir not in string, f"{record.name}: {string!r}"
     calls = next((suite["evals"] / "stub" / "results").glob("*-pass-*-calls.jsonl")).read_text()
     assert json.loads(calls)["run_dir"] == "{run_dir}"
-    record = json.loads(next((suite["evals"] / "stub" / "results").glob("*-pass-*-1.json")).read_text())
+    # The agent wrote its run directory behind \/ escapes, which only the decoded pass redacts.
+    written = (suite["state"] / "evidence-pass.json").read_text()
+    assert f'"escaped": "{run_dirs[0]}"'.replace("/", "\\/") in written, written
+    records = list((suite["evals"] / "stub" / "results").glob("*-pass-*-1.json"))
+    assert len(records) == 1, "the pass scenario wrote one run record"
+    record = json.loads(records[0].read_text())
     assert json.loads(record["grader_inputs"]["evidence.json"])["escaped"] == "{run_dir}"
 
 
@@ -465,6 +480,16 @@ DECODED_LITERALS = (
         pytest.param("ascii", in_message('"é\\u00e9/scratch/run-1/a \\/scratch\\/home-1\\/b"'),
                      in_message('"éé{run_dir}/a {home}/b"'),
                      id="must-fail-root-after-an-escaped-letter-in-a-raw-utf8-literal"),
+        # A root in an object key is redacted like one in a value.
+        pytest.param("ascii", '{"\\/scratch\\/run-1\\/a": 1}', '{"{run_dir}/a": 1}', id="must-fail-root-in-an-object-key"),
+        # One slash spelled \/ and the rest plain: the written-form pass alone would leave \{run_dir}.
+        pytest.param("ascii", '{"k": "\\/scratch/run-1/a"}', '{"k": "{run_dir}/a"}', id="must-fail-mixed-slash-spellings"),
+        # A root extended into a longer name is not the root, so it becomes {path} as when plain.
+        pytest.param("ascii", '{"k": "\\/scratch\\/run-1.json", "h": "\\/scratch\\/home-1-x\\/b"}',
+                     '{"k": "{path}", "h": "{path}"}', id="must-fail-root-extended-into-a-longer-name"),
+        # An unclosed quote opens no literal, and a closed literal after its line still redacts.
+        pytest.param("ascii", 'x "\\"\\"\\/scratch\\/run-1\nnext "\\/scratch\\/run-1\\/a"',
+                     'x "\\"\\"\\/scratch\\/run-1\nnext "{run_dir}/a"', id="must-fail-unclosed-quote-then-a-literal"),
         # A name that only starts like a root, and a quote no literal closes, keep every byte.
         pytest.param("ascii", 'he wrote " then "\\/scratch\\/run-10\\/a" and "\\/scratch\\/run-1x"',
                      'he wrote " then "\\/scratch\\/run-10\\/a" and "\\/scratch\\/run-1x"',

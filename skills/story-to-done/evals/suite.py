@@ -45,17 +45,24 @@ REDACTED = "{redacted}"
 UUID = re.compile(r"(?i)\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b")
 # Known roots (the run directory, home, scratch) are redacted in two passes. The decoded-literal
 # pass finds each JSON string literal in the text, whether the text is JSON, JSON Lines or prose,
-# and never parses the whole text as one document. It first applies the text pass's root patterns
-# to the literal as written (a root after a \uXXXX escape of a letter is found only there), then
-# decodes the literal and replaces the roots in the decoded value, so no JSON spelling of a root
-# (\/, \uXXXX, raw UTF-8) survives. Only a literal whose decoded value changed is re-encoded: with
-# \uXXXX escapes when the literal was all ASCII or its value holds a lone surrogate (which UTF-8
-# cannot encode), else as raw UTF-8, so a \/ in it becomes a plain /. Everything outside a
-# re-encoded literal keeps its bytes. Two limits: a literal is found by pairing quotes, so in prose an unmatched quote
-# before a literal hides it, and only one level is decoded, so JSON nested inside a string keeps
-# its own escapes. A literal that does not decode or is not found, and a root outside any literal,
-# are left to the text pass below, the second line of defence.
-STRING_LITERAL = re.compile(r'"(?:[^"\\\n]|\\.)*"')
+# and never parses the whole text as one document.
+# 1. It applies the text pass's root patterns to the literal as written, since a root after a
+#    \uXXXX escape of a letter is found only there. If that is all that changes, the literal is
+#    returned in that form, with its other escapes kept.
+# 2. It decodes the literal and replaces the roots in the decoded value, so no JSON spelling of a
+#    root (\/, \uXXXX, raw UTF-8) survives. A root still in the value afterwards is part of a longer
+#    name, such as /root.json, so the value's absolute paths become {path}, as the text pass does.
+# 3. Only a literal whose decoded value changed in step 2 is re-encoded: with \uXXXX escapes when
+#    the literal was all ASCII or its value holds a lone surrogate (which UTF-8 cannot encode),
+#    else as raw UTF-8, so a \/ in it becomes a plain /.
+# Everything outside a changed literal keeps its bytes. A literal is found by pairing quotes, so in
+# prose an unmatched quote before a literal hides it; a quote with no closing quote on its line
+# opens no literal. Only one level is decoded, so JSON nested inside a string keeps its own escapes.
+# A literal that does not decode or is not found, and a root outside any literal, are left to the
+# text pass below, the second line of defence.
+# The scan is linear: its repetition never backtracks, and an unclosed literal is matched to the
+# end of its line, where no later quote on that line could close one either, and then left as it is.
+STRING_LITERAL = re.compile(r'"(?:[^"\\\n]++|\\.)*+(?:(?P<end>")|\\?(?=\n|\Z))')
 LONE_SURROGATE = re.compile("[\ud800-\udfff]")
 # A record holds files such as messages.json as JSON text, where a newline is the two characters
 # backslash and n, so a path that starts a line follows a word character. A complete JSON escape
@@ -182,6 +189,7 @@ class Normaliser:
         # A root is only replaced whole: /home/user never rewrites /home/user2 or /srv/home/user.
         # A decoded value holds no escape, so its patterns have no AFTER_ESCAPE alternative.
         ordered = sorted(pairs.items(), key=lambda pair: -len(pair[0]))
+        self.paths = [path for path, _ in ordered]
         self.text_pairs = [(re.compile(r"(?:(?<![\w.-])|" + AFTER_ESCAPE + ")" + re.escape(path) + r"(?![\w.-])"),
                             placeholder) for path, placeholder in ordered]
         self.decoded_pairs = [(re.compile(r"(?<![\w.-])" + re.escape(path) + r"(?![\w.-])"), placeholder)
@@ -197,6 +205,8 @@ class Normaliser:
 
     def literal(self, match: re.Match) -> str:
         literal = match.group()
+        if match.group("end") is None:
+            return literal
         written = self.roots(self.text_pairs, literal)
         try:
             value = json.loads(written)
@@ -206,6 +216,8 @@ class Normaliser:
             except ValueError:
                 return literal
         redacted = self.roots(self.decoded_pairs, value)
+        if any(path in redacted for path in self.paths):
+            redacted = ABSOLUTE_PATH.sub("{path}", redacted)
         if redacted == value:
             return written
         return json.dumps(redacted, ensure_ascii=literal.isascii() or bool(LONE_SURROGATE.search(redacted)))
