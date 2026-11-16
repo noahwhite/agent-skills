@@ -320,3 +320,65 @@ Every finding ruled valid in either PR's reviews now has a fix commit on `main`.
 `docs/qa-evidence/SKL-94/README.md` (rounds 4 to 6) records the same question, which the product owner ruled on SKL-94 in favour of reading A; that ruling is on another story and is not a dated amendment on SKL-257.
 
 Closing decision: no item failed, and record 2 is pending owner ruling, so SKL-257 stays in In Deployment Review.
+
+## QA round 3
+
+Date: 2026-11-16 UTC, independent QA round 3, after the product owner's dated amendment (2026-11-16) of the DoD item "Independently reviewed".
+Path: no-deployment; the lanes are the repository (a detached worktree of the target), GitHub and the tracker.
+Target: `main` at `2bbf8cac364d79ac177a58ea891ac4040eccced8`, the squash merge of PR 286, confirmed an ancestor of `origin/main`.
+Dependencies: SKL-254, SKL-255 and SKL-256 are Done.
+Fixtures: none beyond SKL-314, the `[Tabletop fixture]` issue the AC5 run used.
+The raw output is attached to SKL-257 as `SKL-257-qa-round-3-assertions.txt`; there is no visual surface, so no screenshot applies.
+Line numbers below are at the target.
+
+| Item | Verdict |
+|---|---|
+| AC1: QA scope | Verified |
+| AC2: QA resume content | Verified |
+| AC3: QA limits | Verified |
+| AC4: text contracts | Verified |
+| AC5: fixture run | Verified |
+| AC6: size cap | Verified |
+| DoD: all acceptance criteria met | Verified |
+| DoD: tests written and passing | Verified |
+| DoD: independently reviewed | Verified (amended text) |
+| DoD: docs updated | Verified |
+| DoD: verified in a deployed environment | Correct by design |
+| DoD: no critical bugs or regressions | Verified |
+
+### Evidence per item
+
+AC1: `references/interim-handbacks.md` line 7 extends the definition to a QA agent's own background work, and line 11 classifies a QA interim handback before step 0's read-back of that agent and before step 4's classification.
+`SKILL.md` line 215 is the step 3 pointer, and step 3's line 197 names the deadline resume only by pointer, with no round-count clause.
+
+AC2: `interim-handbacks.md` line 41 states the resume content limit in the AC's terms.
+
+AC3: line 42 states the round-count, read-back cap and continuation-allowance independence, and line 44 makes each QA deadline resume its own launch row within the round.
+Line 48 leaves step 4's rules unchanged, and neither PR 281 nor PR 286 has a hunk in step 4.
+
+AC4: on a detached worktree of the target, deleting each of the five phrases AC4 names once failed its named test, and the test passed again once the phrase was restored; each phrase occurs exactly once.
+The PR 281 description has one line per guarded phrase naming the failing test.
+At the target, `vendor_shared.py --check` exited 0; CI run 43804301339 on the PR 281 head and run 43812728936 on the PR 286 head concluded `success`.
+
+AC5: SKL-314 reads Canceled; its last move to Canceled is at 02:48:10Z, after the recorded run.
+CI run 43769704269 was `completed`/`success` at 2026-11-15T22:37:01Z, before the interim handback.
+The sections above quote the parent brief, the resume message and the coordinator transcript with the deadline and the read timestamp, name Claude Code 2.1.325 and state `metrics: off`.
+
+AC6: re-measured from `git ls-tree` byte sums.
+PR 281 (merge base `186df21`, head `cbee155`): `skills/story-to-done/` 100.39%, its `SKILL.md` 100.50%.
+PR 286 (merge base `4103039`, head `520e858`): `skills/story-to-done/` 100.00%, its `SKILL.md` 99.97%.
+Each matches its PR's table.
+
+DoD, tests: AC4, and the full suite passed at the target (2665 passed).
+
+DoD, independently reviewed: the amended text reads the item as the story's last PR having a clean review of record at its merged head, and every finding ruled valid across the story's PRs fixed on `main`.
+PR 286's review of record (review 5915594365, `COMMENTED`) names `520e858cb9212676d37caa22235a114b61550b35`, the PR's head at merge, as its `commit_id` and on its first line, and has no findings.
+PR 281's findings ruled valid are fixed on `main`: the concluded-item bound at `interim-handbacks.md` line 43 and the unclosed-comment handling in both test files (both in `cbee155`), and the step 3 round-count clause, removed by PR 286.
+
+DoD, docs: `references/interim-handbacks.md` and `references/metrics-protocol.md` carry the change.
+
+DoD, deployed environment: the no-deployment path, since the profile defines no environment.
+
+DoD, regressions: the full suite and push CI run 43813327566 passed at the target, and every push CI run on `main` since then passed.
+
+Closing decision: every item is verified, so SKL-257 moves to Done once this evidence merges.
