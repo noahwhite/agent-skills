@@ -70,6 +70,12 @@ LONE_SURROGATE = re.compile("[\ud800-\udfff]")
 # cannot tell an escape from a message that quotes one (printf("\t/srv/x"), serialised as a doubled
 # backslash before t), so that path is redacted too: the accepted cost is over-redaction, never less.
 AFTER_ESCAPE = r"(?:(?<=\\[ntrbf])|(?<=\\u[0-9A-Fa-f]{4}))"
+# The left boundary of a known root, in both passes, is ASCII: only an ASCII letter, digit, _, .
+# or - directly before a root, in the raw spelling, keeps it whole (prefix/root is left as it is), so a root behind any
+# non-ASCII character, a letter such as é included, or behind a control character is replaced.
+# The right boundary stays (?![\w.-]), only the text pass also accepts a root after AFTER_ESCAPE,
+# and the absolute-path rewrite below keeps its own boundary.
+ROOT_LEFT = r"(?<![A-Za-z0-9_.-])"
 # An absolute path of two or more segments that no known root above accounted for. The
 # lookbehind keeps URLs (scheme://host/path) and relative paths (a/b/c) as they are.
 ABSOLUTE_PATH = re.compile(r"(?:(?<![\w.:/{}~-])|" + AFTER_ESCAPE + r")/(?:[\w.@+-]+/)+[\w.@+-]*")
@@ -190,9 +196,9 @@ class Normaliser:
         # A decoded value holds no escape, so its patterns have no AFTER_ESCAPE alternative.
         ordered = sorted(pairs.items(), key=lambda pair: -len(pair[0]))
         self.paths = [path for path, _ in ordered]
-        self.text_pairs = [(re.compile(r"(?:(?<![\w.-])|" + AFTER_ESCAPE + ")" + re.escape(path) + r"(?![\w.-])"),
+        self.text_pairs = [(re.compile(r"(?:" + ROOT_LEFT + "|" + AFTER_ESCAPE + ")" + re.escape(path) + r"(?![\w.-])"),
                             placeholder) for path, placeholder in ordered]
-        self.decoded_pairs = [(re.compile(r"(?<![\w.-])" + re.escape(path) + r"(?![\w.-])"), placeholder)
+        self.decoded_pairs = [(re.compile(ROOT_LEFT + re.escape(path) + r"(?![\w.-])"), placeholder)
                               for path, placeholder in ordered]
         self.secrets = sorted({value for value in secrets if len(value) >= MIN_REDACTED}, key=len, reverse=True)
         self.leaks = leaks

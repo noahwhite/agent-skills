@@ -38,7 +38,7 @@ Six arguments are optional, given as `key=value` or in plain words ("QA on <mode
 - `metrics` is given as `metrics=on` or `metrics=off`, or in plain words: "with metrics" and "metrics on" mean on, "without metrics" and "metrics off" mean off; ask the user about any other phrasing about metrics; never guess.
 - Resolve `metrics` before step 0 creates the todo list; it sets no model or effort.
 - With `metrics` off or omitted, read no metrics reference, collect no figure, create no metrics file, post no metrics comment, and add no metrics content to any brief, report, todo list, or tracker write, other than the `metrics: off` line.
-- `qa-round-cap` is given as `qa-round-cap=<n>` or in plain words about capping QA rounds ("cap QA at <n> rounds" and "stop after <n> failed QA rounds" mean <n>); a positive integer (1 or more) is valid, and zero, a negative number, or a non-integer is invalid.
+- `qa-round-cap` is given as `qa-round-cap=<n>` or in plain words about capping QA rounds ("cap QA at <n> rounds" and "stop after <n> failed QA rounds" mean <n>); `python3 <skill dir>/scripts/qa-round-cap.py validate qa-round-cap=<n>` exits 2 unless <n> is a positive integer; run step 4's `arm` once, before the first step 3.
 - Ask the user about an invalid value and about any other phrasing about the cap; never guess.
 - Resolve `qa-round-cap` before step 0 creates the todo list; it sets no model or effort.
 - Write the four resolved model and effort values, the `metrics: on|off` line, and the `qa-round-cap: <n>` line at the top of your todo list and in the closing report of every end state (the step 5 report, or the report made at any stop, including one before step 0).
@@ -242,15 +242,15 @@ For a waived PR, compare the merged PR's `headRefOid` with the SHA recorded when
 - **`profile.tracker.states.in_progress`:** QA ruled at least one AC or DoD item not met and reopened the story.
   Those failed items are the issues to fix.
   Items QA listed apart as `pending owner ruling` are not failed items: put each to the user as the `profile.tracker.states.in_deployment_review` bullet below does, while the hand-back below goes on with the failed items alone.
-  QA rounds are counted within this invocation: the first QA round this coordinator runs is round 1, a run resumed at step 3 starts a new count that the report states, and only a round whose read-back is `profile.tracker.states.in_progress` counts.
-  When the `qa-round-cap`-th counted round ends here, stop before the hand-back below and launch nothing further.
+  Arguments orders `python3 <skill dir>/scripts/qa-round-cap.py arm --story <STORY_ID> --cap <n> --in-progress '<profile.tracker.states.in_progress>' --state-dir <scratch>`; when a round ends here, run `python3 <skill dir>/scripts/qa-round-cap.py record --story <STORY_ID> --state-dir <scratch>`, relaying its stdout line, never a tracker payload.
+  When `record` prints `reached=yes`, stop before the hand-back below and launch nothing further.
   The stop report gives, per round, every failed item as QA recorded it in the tracker, re-read from the tracker rather than taken from a handback (the item, its verdict, and the evidence it cites).
   It lists apart, per round, each item QA recorded as `pending owner ruling`, with the AC or DoD text QA quoted and each reading with its verdict, as QA recorded them in the tracker, never among the failed items.
   It also gives, per PR, the link and head SHA, re-read from the tracker and the forge rather than taken from a handback, reusing the merge reads steps 2 and 3 already make.
   The stop report asks the user how many further rounds to run or whether to stop, and waits for the reply; a reply that does not say how many rounds or that it is a stop, or that gives an invalid value, is asked about again, never guessed.
-  On "N additional rounds", re-arm the same cap at N further counted rounds and resume the pending hand-back below with every item failed so far; the next QA round runs with a new QA agent.
-  The reply never overrides the tracker state: before resuming, read the story's state again; if it is `profile.tracker.states.done`, apply the `profile.tracker.states.done` bullet above, and if it is any other state but `profile.tracker.states.in_progress`, report that state and stop.
-  Round numbers run on across re-arms, and each later stop report gives every counted round so far.
+  On "N additional rounds", run `python3 <skill dir>/scripts/qa-round-cap.py rearm --story <STORY_ID> --additional-rounds <N> --state-dir <scratch>`; on exit 0, relay its stdout line and resume the pending hand-back below with every item failed so far; the next QA round runs with a new QA agent.
+  The reply never overrides the tracker state: on a `record` or `rearm` `state=` `profile.tracker.states.done`, apply the `profile.tracker.states.done` bullet above; on any other non-zero exit of the script, report its stderr line and stop.
+  Each later stop report gives every round `record` counted so far, across re-arms.
   On "stop", end the invocation with the story left in the state QA left it: `profile.tracker.states.in_progress`, failed items outstanding, the owner deciding next.
   In either case the coordinator writes nothing to the tracker beyond what the Boundaries permit, rules on no item, and relays no verdict of its own.
   Hand them back to the senior engineer: resume the same subagent if the runtime can, else spawn a new clean, neutral one on the same seat with the step 2 brief.

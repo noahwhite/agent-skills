@@ -127,6 +127,7 @@ On both paths, rule the DoD line "Verified in a deployed environment (if needed)
    Upload the key screenshots and the sanitized raw assertion output for each item with no visual surface (as a text file) as tracker attachments.
    Also attach the evidence page as a local file when item 4 built one and it is self-contained (screenshots inlined); otherwise skip it, since the attached screenshots and assertion output are the record.
    Post a concise QA evidence comment on the story: build SHA, environment, fixtures used, per-item verdict, each pending owner ruling record (item 2), and any gaps.
+   Its first line is exactly `## QA evidence`, and every later edit keeps it, because `story-to-done` counts QA rounds by that line.
    The comment cites the attachment behind each verdict.
    When `profile.qa.evidence_dir` is set, edit the comment to cite the in-repo evidence path once the evidence PR merges (section 5), never before; otherwise the comment says the tracker attachments are the record.
    Never put a hosted-page link in the tracker: a hosted page can be private to its owner or deleted, which leaves a dead link on the story.

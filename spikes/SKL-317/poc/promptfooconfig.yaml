@@ -1,0 +1,26 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# SKL-317 live behaviour proof of concept: run through `bash spikes/SKL-317/poc/run.sh`, which
+# sets the working directory to this one, the repeat count and concurrency, and the environment.
+description: SKL-317 live run of qa-unfinished-own-steps with the void retry in the provider
+
+# The prompt is the scenario name, never prompt text: the provider runs the case's own run.sh,
+# which builds the prompt file and hands it to the agent.
+prompts:
+  - "{{scenario}}"
+
+# The only provider is a local script, which starts the agent itself. promptfoo is given no
+# model provider and no model-graded assertion, so promptfoo itself makes no model API call.
+providers:
+  - id: "exec: python3 provider.py"
+    label: void-retry-provider
+
+# One test. run.sh repeats it N times with --repeat, one call at a time, so each provider call
+# is one graded run.
+tests:
+  - vars:
+      scenario: own-steps
+    assert:
+      - type: python
+        value: file://grade.py
+
+sharing: false
