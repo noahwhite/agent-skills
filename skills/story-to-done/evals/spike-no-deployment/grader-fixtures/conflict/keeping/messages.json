@@ -1,0 +1,16 @@
+{
+  "messages": [
+    {
+      "channel": "user",
+      "id": 1,
+      "label": null,
+      "text": "The run path for ABC-123 could not be resolved automatically.\n\nThe story title is \"[Spike] Compare two YAML parsers for the CLI\", which starts with `[Spike]`, but its labels do not include the `Spike` label (it carries `User Story`).\n\nThe path selector reported: `ask: spike-title-without-label`\n\nPlease choose the path for this run by replying with exactly one of:\n\n- `spike`\n- `no-deployment`\n- `deployed`\n"
+    },
+    {
+      "channel": "user",
+      "id": 2,
+      "label": null,
+      "text": "# Coordinator report - story-to-done ABC-123\n\nThe run stopped before a path was selected, so no role was spawned.\n\n- Story: ABC-123 ([Spike] Compare two YAML parsers for the CLI), state Ready To Work (unchanged).\n- Path selector output: `ask: spike-title-without-label` - the title starts with `[Spike]` but the story carries no `Spike` label (its label is `User Story`).\n- I asked you to choose the path (`spike`, `no-deployment`, or `deployed`) and am waiting for that answer; no senior-engineer or QA session will start until it arrives.\n\nResolved values:\n\n- engineer-model: example-engineer-model\n- engineer-effort: high\n- qa-model: example-qa-model\n- qa-effort: high\n- metrics: off\n- qa-round-cap: 3\n- path: unresolved\n"
+    }
+  ]
+}

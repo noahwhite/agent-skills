@@ -74,8 +74,8 @@ scenarios:
     expectation: conflict
     baseline: spawns the senior engineer
     candidate: >-
-      asks the user, spawns no role, and writes `path: unresolved` in its checklist, since the
-      `[Spike]` title has no spike label
+      asks the user, naming the three paths, spawns no role, and writes `path: unresolved` in its
+      checklist, since the `[Spike]` title has no spike label
   - name: direct-entry
     expectation: direct-entry
     baseline: spawns QA with no `path:` line in its brief
@@ -89,24 +89,34 @@ graded_on:
     senior-engineer launch was served, and the text each send carried, kept in messages.json under
     the id its call names
   - >-
+    the path selector's runs, recorded in selector.jsonl by the hook run.sh puts on the agent's
+    PYTHONPATH: on every grade but the deployed control, select-path.py printed the story's line
+    (spike, no-deployment, deployed, or `ask: spike-title-without-label` on conflict) no later than
+    the first message
+  - a tracker-read before the first message, on every grade
+  - >-
     the coordinator checklist's `path:` line, read from workspace/coordinator-todo.md, lenient
     about list markers, check boxes and emphasis; a missing checklist fails the check
   - >-
-    each senior-engineer and QA brief's path statement: exactly one line whose whole trimmed text
-    is `path: <value>`, on every path including deployed (the deployed-path grade)
+    each senior-engineer and QA brief's path statement: exactly one line, outside code blocks and
+    quotations, whose whole trimmed text is `path: <value>`, on every path including deployed (the
+    deployed-path grade)
   - >-
-    whether a role was spawned: conflict starts no session and sends the user a message;
-    direct-entry starts QA only; the other scenarios start the senior engineer, then QA only after
-    its handback
+    which roles were spawned and how often: conflict starts no session and its first user message
+    names the three paths; direct-entry starts one QA session and no senior engineer; the other
+    scenarios start one senior engineer, then one QA session only after its handback, and send the
+    user nothing
+  - each brief names the story and the skill its role loads
   - >-
-    the QA brief's target where the scenario fixes one: the environment dev on deployed, and the
-    merged commit, in full or by a prefix of at least 7 characters, on direct-entry
+    the QA brief's target: on deployed, a line naming the environment dev that denies nothing; on
+    spike, the deliverable link the step 12 note names; on no-deployment and direct-entry, the
+    merged commit, in full or by a prefix of at least 7 characters
 not_graded_on:
   - the agent's prose
   - session identity and the continuation message, which qa-unfinished-own-steps grades
   - >-
-    the rest of each brief's wording, beyond the path line and the target named above, and how the
-    user message words the question in conflict
+    the rest of each brief's wording, beyond the lines named above, and how the user message
+    words the question in conflict beyond naming the three paths
   - >-
-    the tracker writes and the order of the reads: the stub tracker is read-only to the
-    coordinator, and the case grades the path and the spawns
+    the tracker writes: the stub tracker is read-only to the coordinator, and the case grades the
+    path and the spawns

@@ -17,7 +17,10 @@
 # fixture and never a profile of the checkout or the home directory. The call record, the message
 # store and the tracker state the runtime keeps sit in RUN_DIR itself, and the story and the
 # handback it serves stay in the case's scenario directory, so no handback is in the agent's
-# directory before it is served.
+# directory before it is served. The agent is not sandboxed: it can read the case's files, so a
+# run that changes the case or the files it was given is void, and the grade reads only the record.
+# Each run of the path selector, select-path.py, is recorded in RUN_DIR/selector.jsonl by the
+# sitecustomize hook run.sh puts first on the agent's PYTHONPATH.
 #
 # The deployed scenario is graded twice: grader-output.txt is its control grade, and
 # grader-path-output.txt the path grade. Either FAIL fails the run.
@@ -74,7 +77,7 @@ state() {
   git -C "$1" diff HEAD
   git -C "$1" ls-files --others --exclude-standard -z |
     while IFS= read -r -d '' file; do
-      printf '%s\0' "$file"
+      printf 'file %q\n' "$file"
       entry="$1/$file"
       if [ -L "$entry" ]; then
         printf 'link %s\n' "$(readlink "$entry")"
@@ -89,12 +92,23 @@ state() {
 state_before="$(state "$checkout_real")"
 
 workspace="$run/workspace"
-mkdir -p "$workspace"
+hook="$run/selector-hook"
+mkdir -p "$workspace" "$hook"
 {
-  # The runtime serves the story and its handback from the case, never from the agent's directory.
-  printf '%s\n' "$fixtures" > "$run/scenario-path" &&
-  cp "$fixtures/scenario.md" "$case_dir/runtime/story-runtime" "$case_dir/runtime/story-runtime.md" "$workspace/" &&
+  # The runtime serves the story and its handback from the case, never from the agent's directory:
+  # the copy the agent runs carries the scenario directory, written in here.
+  python3 - "$case_dir/runtime/story-runtime" "$workspace/story-runtime" "$fixtures" <<'PY' &&
+import sys
+source, target, fixtures = sys.argv[1:]
+text = open(source, encoding="utf-8").read()
+marker = "\nSCENARIO_DIR = None\n"
+if text.count(marker) != 1:
+    sys.exit("run.sh: the story-runtime source has no single SCENARIO_DIR line")
+open(target, "w", encoding="utf-8").write(text.replace(marker, f"\nSCENARIO_DIR = {fixtures!r}\n"))
+PY
+  cp "$fixtures/scenario.md" "$case_dir/runtime/story-runtime.md" "$workspace/" &&
   cp "$case_dir/profiles/$profile" "$workspace/profile.yaml" &&
+  cp "$case_dir/runtime/sitecustomize.py" "$hook/sitecustomize.py" &&
   chmod +x "$workspace/story-runtime"
 } || { echo "run.sh: cannot set up the run directory $run" >&2; exit 2; }
 # The paths go into the prompt through sed, so escape what sed reads specially.
@@ -103,12 +117,24 @@ sed -e "s|{skill_dir}|$(escape "$checkout_real/skills/story-to-done")|g" \
     -e "s|{run_dir}|$(escape "$workspace")|g" \
     "$case_dir/prompt.md" > "$workspace/prompt.md"
 
+# What the grade depends on besides the record: the case (its grader, fixtures and runtime source)
+# and the copies the agent's directory holds. The agent can write to all of them, so a run that
+# changed any of them is void.
+harness_state() {
+  find "$case_dir" \( -path "$case_dir/results" -o -name __pycache__ \) -prune -o -type f -print0 |
+    sort -z | xargs -0 sha256sum
+  sha256sum "$workspace/story-runtime" "$workspace/story-runtime.md" "$workspace/scenario.md" \
+    "$workspace/profile.yaml" "$workspace/prompt.md" "$hook/sitecustomize.py"
+}
+harness_before="$(harness_state)"
+
 agent=(opencode run --standalone --auto --archived --model deepseek/deepseek-v4-pro "Follow the instructions in the attached file exactly.")
 if [ -n "${EVAL_AGENT_CMD:-}" ]; then
   read -r -a agent <<< "$EVAL_AGENT_CMD"
 fi
 status=0
 (cd "$checkout_real" && AGENT_SKILLS_PROFILE="$workspace/profile.yaml" \
+  PYTHONPATH="$hook${PYTHONPATH:+:$PYTHONPATH}" EVAL_SELECTOR_LOG="$run/selector.jsonl" \
   timeout --kill-after=30 "$timeout_seconds" "${agent[@]}" --file "$workspace/prompt.md" > "$run/agent-output.txt" 2>&1) || status=$?
 if [ "$status" -ne 0 ]; then
   echo "HARNESS: the agent command exited $status (124 or 137 means it hit EVAL_TIMEOUT); nothing was graded." >&2
@@ -121,6 +147,25 @@ if [ "$(state "$checkout_real")" != "$state_before" ]; then
   git -C "$checkout_real" status --porcelain --untracked-files=all >&2
   exit 2
 fi
+if [ "$(harness_state 2>&1)" != "$harness_before" ]; then
+  echo "HARNESS: the agent changed the case or the runtime, profile, prompt or selector hook it was given; that run is void and nothing was graded." >&2
+  exit 2
+fi
+
+# Normalization before grading, so the kept grader inputs pass the repository's guards: the
+# signing-key guard allows the git signing-key setting's name only inside one exact sentence,
+# and a coordinator words its brief in its own way.
+python3 - "$run/messages.json" "$workspace/coordinator-todo.md" <<'PY' ||
+import pathlib
+import sys
+for name in sys.argv[1:]:
+    path = pathlib.Path(name)
+    if path.is_file():
+        text = path.read_text(encoding="utf-8", errors="surrogateescape")
+        path.write_text(text.replace("user." + "signingkey", "user.{signingkey}"),
+                        encoding="utf-8", errors="surrogateescape")
+PY
+  { echo "HARNESS: cannot normalize the grader inputs" >&2; exit 2; }
 
 # Each grader exit code is the run's: the file is written first, so a failed write is a harness
 # error, never a graded failure. A void grade voids the run; otherwise any FAIL fails it.

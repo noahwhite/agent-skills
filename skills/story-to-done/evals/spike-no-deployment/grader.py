@@ -2,9 +2,9 @@
 """Grade one run of the spike-no-deployment case from its tool-call record.
 
 Reads only the run's `actions.jsonl`, the story-runtime call record, `messages.json`, the text
-each recorded send carried under the id its call names, and the coordinator's checklist file,
-`workspace/coordinator-todo.md`; never the agent's prose. Prints one line per check and ends with
-PASS or FAIL.
+each recorded send carried under the id its call names, `selector.jsonl`, the record of each run
+of the path selector, and the coordinator's checklist file, `workspace/coordinator-todo.md`; never
+the agent's prose. Prints one line per check and ends with PASS or FAIL.
 
   grader.py --run-dir DIR --expectation EXPECTATION
 
@@ -26,15 +26,27 @@ SERVES = {"spike": "engineer-handback.md", "no-deployment": "engineer-handback.m
 # The path each expectation is graded on, in the briefs and in the coordinator's checklist.
 PATHS = {"spike": "spike", "no-deployment": "no-deployment", "deployed-path": "deployed",
          "direct-entry": "no-deployment", "conflict": "unresolved"}
+# The line the path selector prints for each graded expectation's story and profile.
+SELECTED = {"spike": "spike", "no-deployment": "no-deployment", "deployed-path": "deployed",
+            "direct-entry": "no-deployment", "conflict": "ask: spike-title-without-label"}
 EXPECTATIONS = ["conflict", "deployed", "deployed-path", "direct-entry", "no-deployment", "spike"]
-# The environment the deployed scenario's handback names, and the commit direct-entry's step 12 note names.
+STORY = "ABC-123"
+# The environment the deployed scenario's profile and handback name, the commit the no-deployment
+# and direct-entry step 12 notes name, and the deliverable the spike's step 12 note links.
 ENVIRONMENT = "dev"
 MERGED_COMMIT = "4e1c2a9b7d3f5e6a8c0b1d2e3f4a5b6c7d8e9f01"
+DELIVERABLE = "https://docs.example.com/abc-123/yaml-parser-comparison"
+# The skill each role's brief tells it to load, at both commits.
+ROLE_SKILL = {"engineer": "engineering-workflow", "qa": "qa-verification"}
 CHECKLIST = "workspace/coordinator-todo.md"
+SELECTOR_LOG = "selector.jsonl"
 SENDS = {"user-message": "user", "engineer-launch": "engineer", "qa-launch": "qa"}
 ACTIONS = {*SENDS, "tracker-read", "read"}
 FIELDS = {"action", "at", "message_id", "label", "path", "served"}
 PATH_LINE = re.compile(r"path:\s*(\S+)")
+FENCE = re.compile(r"(`{3,}|~{3,})")
+NEGATION = re.compile(r"\b(?:no|not|none|without|never)\b|n't\b", re.IGNORECASE)
+STAMP = re.compile(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ")
 
 
 class Unreadable(Exception):
@@ -47,6 +59,11 @@ def whole_number(value: object) -> bool:
 
 def scenario_of(expectation: str) -> str:
     return "deployed" if expectation == "deployed-path" else expectation
+
+
+def word(name: str, text: str) -> bool:
+    """Whether the text names the name as a whole word, not inside a longer token."""
+    return re.search(rf"(?<![A-Za-z0-9_-]){re.escape(name)}(?![A-Za-z0-9_-])", text) is not None
 
 
 def message_store(run_dir: pathlib.Path) -> dict[int, dict]:
@@ -69,6 +86,8 @@ def message_store(run_dir: pathlib.Path) -> dict[int, dict]:
         if message["id"] in store:
             raise Unreadable(f"messages.json holds message id {message['id']} twice")
         store[message["id"]] = message
+    if sorted(store) != list(range(1, len(store) + 1)):
+        raise Unreadable(f"messages.json holds the ids {sorted(store)}, not 1 to {len(store)} as the runtime assigns them")
     return store
 
 
@@ -80,18 +99,38 @@ def calls(run_dir: pathlib.Path) -> list[dict]:
         raise Unreadable(f"actions.jsonl is not readable JSON lines: {error}") from error
     for call in recorded:
         if (not isinstance(call, dict) or not set(call) <= FIELDS or not isinstance(call.get("action"), str)
-                or call["action"] not in ACTIONS):
+                or call["action"] not in ACTIONS or not isinstance(call.get("at"), str)
+                or not STAMP.fullmatch(call["at"])):
             raise Unreadable(f"actions.jsonl holds a call the runtime does not write: {call!r}")
     return recorded
 
 
-def sends(run_dir: pathlib.Path, scenario: str) -> list[dict]:
-    """Every recorded send, in order, with the text its message id names, after checking the calls
-    are a sequence the runtime writes: no two sends name one message, and only the first
-    senior-engineer launch of a scenario with a handback is served it."""
+def selector_runs(run_dir: pathlib.Path) -> list[dict]:
+    """Every recorded run of the path selector, in order; none when the run never ran it."""
+    path = run_dir / SELECTOR_LOG
+    if not path.exists():
+        return []
+    try:
+        runs = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise Unreadable(f"{SELECTOR_LOG} is not readable JSON lines: {error}") from error
+    for run in runs:
+        if (not isinstance(run, dict) or set(run) != {"at", "argv", "stdout"} or not isinstance(run["at"], str)
+                or not STAMP.fullmatch(run["at"]) or not isinstance(run["stdout"], str)
+                or not isinstance(run["argv"], list) or not all(isinstance(arg, str) for arg in run["argv"])):
+            raise Unreadable(f"{SELECTOR_LOG} holds a line the selector hook does not write: {run!r}")
+    return runs
+
+
+def sends(run_dir: pathlib.Path, scenario: str) -> tuple[list[dict], list[dict]]:
+    """Every recorded call, and every recorded send in order with the text its message id names,
+    after checking the calls are a sequence the runtime writes: each send names its own message,
+    every kept message is named by one send, and only the first senior-engineer launch of a
+    scenario with a handback is served it."""
     store = message_store(run_dir)
+    recorded = calls(run_dir)
     found, served = [], 0
-    for call in calls(run_dir):
+    for call in recorded:
         if "served" in call:
             if call["action"] != "engineer-launch" or served or call["served"] != SERVES[scenario]:
                 raise Unreadable(f"a {call['action']} call serves {call['served']!r}, which the {scenario} "
@@ -110,12 +149,32 @@ def sends(run_dir: pathlib.Path, scenario: str) -> list[dict]:
             raise Unreadable(f"the {call['action']} call names message {message_id}, kept for the "
                              f"{message['channel']} channel")
         found.append({**call, "to": SENDS[call["action"]], "text": message["text"], "after_handback": served > 0})
-    return found
+    if store:
+        raise Unreadable(f"messages.json keeps the messages {sorted(store)}, which no recorded call sent")
+    return recorded, found
+
+
+def outside_fences(text: str) -> list[str]:
+    """The text's lines outside fenced code blocks and quotations."""
+    kept, fence = [], None
+    for line in text.splitlines():
+        stripped = line.strip()
+        if fence is not None:
+            if stripped.startswith(fence) and not stripped[len(fence):].strip(fence[0]).strip():
+                fence = None
+            continue
+        if match := FENCE.match(stripped):
+            fence = match.group(1)
+            continue
+        if not stripped.startswith(">"):
+            kept.append(stripped)
+    return kept
 
 
 def brief_paths(text: str) -> list[str]:
-    """The values of the brief's path lines: a line whose whole text, trimmed, is `path: <value>`."""
-    return [match.group(1) for line in text.splitlines() if (match := PATH_LINE.fullmatch(line.strip()))]
+    """The values of the brief's path lines: a line outside code blocks and quotations whose whole
+    text, trimmed, is `path: <value>`."""
+    return [match.group(1) for line in outside_fences(text) if (match := PATH_LINE.fullmatch(line))]
 
 
 def checklist_paths(run_dir: pathlib.Path) -> list[str] | None:
@@ -140,6 +199,11 @@ def names_merged_commit(text: str) -> bool:
                for token in re.findall(r"(?<![0-9A-Za-z])[0-9a-fA-F]{7,40}(?![0-9A-Za-z])", text))
 
 
+def names_environment(text: str) -> bool:
+    """Whether a line of the text names the environment and denies nothing."""
+    return any(word(ENVIRONMENT, line) and not NEGATION.search(line) for line in text.splitlines())
+
+
 def path_checks(run_dir: pathlib.Path, path: str, briefs: list[dict]) -> list[tuple[bool, str]]:
     results = []
     for brief in briefs:
@@ -153,26 +217,70 @@ def path_checks(run_dir: pathlib.Path, path: str, briefs: list[dict]) -> list[tu
     return results
 
 
-def checks(expectation: str, run_dir: pathlib.Path, sent: list[dict]) -> list[tuple[bool, str]]:
-    to = {party: [send for send in sent if send["to"] == party] for party in SENDS.values()}
-    engineer, qa = to["engineer"], to["qa"]
-    if expectation == "conflict":
-        return [(bool(to["user"]), "a message went to the user"),
-                (not engineer and not qa, "no senior-engineer or QA session was started"
-                 + (f" ({len(engineer)} senior-engineer, {len(qa)} QA)" if engineer or qa else "")),
-                *path_checks(run_dir, PATHS[expectation], [])]
-    if expectation == "direct-entry":
-        return [(not engineer, "no senior-engineer session was started"),
-                (bool(qa), "a QA session was started"),
-                *[(names_merged_commit(brief["text"]), f"the QA brief, message {brief['message_id']}, names the merged "
-                                                        f"commit {MERGED_COMMIT[:7]}") for brief in qa],
-                *path_checks(run_dir, PATHS[expectation], qa)]
-    after = [brief for brief in qa if brief["after_handback"]]
-    results = [(bool(engineer), "a senior-engineer session was started"),
-               (bool(after) and len(after) == len(qa), "a QA session was started, and only after the senior engineer handed back")]
+def order_checks(recorded: list[dict], sent: list[dict]) -> list[tuple[bool, str]]:
+    """The story was read on the tracker before anything was sent."""
+    first = next((index for index, call in enumerate(recorded) if call["action"] in SENDS), len(recorded))
+    read = any(call["action"] == "tracker-read" for call in recorded[:first])
+    return [(read, "the story was read on the tracker before the first message" if sent
+             else "the story was read on the tracker")]
+
+
+def selector_checks(expectation: str, runs: list[dict], sent: list[dict]) -> list[tuple[bool, str]]:
+    """The path selector ran and printed this story's line before anything was sent."""
+    first = sent[0]["at"] if sent else None
+    line = SELECTED[expectation]
+    selected = [run for run in runs if run["stdout"].strip() == line and (first is None or run["at"] <= first)]
+    return [(bool(selected), f"select-path.py printed `{line}` before the first message"
+             + ("" if selected else f" (it ran {len(runs)} time(s), printing {[run['stdout'].strip() for run in runs]})"))]
+
+
+def brief_checks(briefs: list[dict]) -> list[tuple[bool, str]]:
+    """Each role brief names the story and the skill its role loads."""
+    return [(word(STORY, brief["text"]) and ROLE_SKILL[brief["to"]] in brief["text"],
+             f"the {brief['to']} brief, message {brief['message_id']}, names {STORY} and {ROLE_SKILL[brief['to']]}")
+            for brief in briefs]
+
+
+def launch_checks(engineer: list[dict], qa: list[dict], engineers: int) -> list[tuple[bool, str]]:
+    return [(len(engineer) == engineers, f"{engineers} senior-engineer session(s) were started ({len(engineer)} were)"),
+            (len(qa) == 1, f"one QA session was started ({len(qa)} were)")]
+
+
+def target_checks(expectation: str, qa: list[dict]) -> list[tuple[bool, str]]:
+    """The QA brief names what QA verifies on the scenario's path."""
     if expectation in ("deployed", "deployed-path"):
-        results += [(re.search(rf"(?<![A-Za-z0-9_-]){ENVIRONMENT}(?![A-Za-z0-9_-])", brief["text"]) is not None,
-                     f"the QA brief, message {brief['message_id']}, names the environment {ENVIRONMENT}") for brief in qa]
+        check, target = names_environment, f"the environment {ENVIRONMENT}, on a line that denies nothing"
+    elif expectation == "spike":
+        check, target = (lambda text: DELIVERABLE in text), f"the deliverable {DELIVERABLE}"
+    else:
+        check, target = names_merged_commit, f"the merged commit {MERGED_COMMIT[:7]}"
+    return [(check(brief["text"]), f"the QA brief, message {brief['message_id']}, names {target}") for brief in qa]
+
+
+def checks(expectation: str, run_dir: pathlib.Path, recorded: list[dict], sent: list[dict]) -> list[tuple[bool, str]]:
+    to = {party: [send for send in sent if send["to"] == party] for party in SENDS.values()}
+    engineer, qa, user = to["engineer"], to["qa"], to["user"]
+    results = order_checks(recorded, sent)
+    if expectation != "deployed":
+        results += selector_checks(expectation, selector_runs(run_dir), sent)
+    if expectation == "conflict":
+        first = user[0]["text"] if user else ""
+        named = [path for path in ("spike", "no-deployment", "deployed") if word(path, first)]
+        return results + [
+            (bool(user), "a message went to the user"),
+            (len(named) == 3, "the first message to the user names the three paths, spike, no-deployment and deployed"
+             + ("" if len(named) == 3 else f" (it names {named})")),
+            (not engineer and not qa, "no senior-engineer or QA session was started"
+             + (f" ({len(engineer)} senior-engineer, {len(qa)} QA)" if engineer or qa else "")),
+            *path_checks(run_dir, PATHS[expectation], [])]
+    results.append((not user, "no message went to the user" + (f" ({len(user)} did)" if user else "")))
+    if expectation == "direct-entry":
+        return (results + launch_checks(engineer, qa, 0) + brief_checks(qa) + target_checks(expectation, qa)
+                + path_checks(run_dir, PATHS[expectation], qa))
+    after = [brief for brief in qa if brief["after_handback"]]
+    results += launch_checks(engineer, qa, 1)
+    results.append((bool(after) and len(after) == len(qa), "the QA session was started only after the senior engineer handed back"))
+    results += brief_checks(engineer + qa) + target_checks(expectation, qa)
     if expectation == "deployed":
         return results
     return results + path_checks(run_dir, PATHS[expectation], engineer + qa)
@@ -187,7 +295,8 @@ def main() -> int:
         print("VOID the run has no actions.jsonl, so there is nothing to grade", file=sys.stderr)
         return 2
     try:
-        results = checks(args.expectation, args.run_dir, sends(args.run_dir, scenario_of(args.expectation)))
+        recorded, sent = sends(args.run_dir, scenario_of(args.expectation))
+        results = checks(args.expectation, args.run_dir, recorded, sent)
     except Unreadable as error:
         print(f"VOID {error}; nothing was graded", file=sys.stderr)
         return 2

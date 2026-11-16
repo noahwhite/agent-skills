@@ -4,7 +4,7 @@
 The coordinator under test reads the story and sends every message through this script: to the
 user, to a new senior-engineer session, or to a new QA session. Nothing is launched. The story,
 its comments and the senior engineer's handback come from the scenario's `story.json`, in the
-case's scenario directory, which run.sh names in the run directory's `scenario-path`.
+case's scenario directory, which run.sh writes into this copy of the script.
 
 The first senior-engineer launch while the story is in neither `In Deployment Review` nor a later
 state prints the handback `story.json` names, when it names one, sets the story to the state that
@@ -41,7 +41,9 @@ RECORD = WORK.parent
 ACTIONS = RECORD / "actions.jsonl"
 MESSAGES = RECORD / "messages.json"
 STATE = RECORD / "story-state.json"
-SCENARIO_PATH = RECORD / "scenario-path"
+# run.sh writes the case's scenario directory here in the copy it gives the agent, and checks after
+# the run that the copy is unchanged, so the agent cannot point the runtime at another story.
+SCENARIO_DIR = None
 LOCK = RECORD / "story-runtime.lock"
 LABEL = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 # The states from which a senior-engineer launch is no longer handed back.
@@ -67,10 +69,10 @@ def load(path: pathlib.Path, default: object) -> object:
 
 
 def scenario_dir() -> pathlib.Path:
-    """The case's scenario directory, which run.sh names in the run directory's `scenario-path`."""
-    if not SCENARIO_PATH.is_file():
-        harness_error(f"there is no {SCENARIO_PATH}")
-    return pathlib.Path(SCENARIO_PATH.read_text().rstrip("\n"))
+    """The case's scenario directory, which run.sh writes into this copy as SCENARIO_DIR."""
+    if not isinstance(SCENARIO_DIR, str):
+        harness_error("SCENARIO_DIR names no scenario directory; run.sh writes it into the copy it runs")
+    return pathlib.Path(SCENARIO_DIR)
 
 
 SCENARIO = scenario_dir()

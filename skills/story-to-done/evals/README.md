@@ -134,7 +134,7 @@ A tabletop case answered in text is not accepted.
 3. Run the suite once at each commit with 3 graded runs per scenario, and commit the records and both summaries.
 4. Add the case to the list below with whether its runs meet its definition.
 
-The stories that add into this layout are SKL-274 (regression-pin cases), SKL-275 (discriminating cases), SKL-162 (`spike-no-deployment`) and SKL-188 (further `qa-unfinished-own-steps` scenarios).
+The stories that add into this layout are SKL-274 (regression-pin cases), SKL-275 (discriminating cases), SKL-273 (`spike-no-deployment`) and SKL-188 (further `qa-unfinished-own-steps` scenarios).
 
 ### Where `pending-ruling-not-sent-to-engineer` differs from the `qa-unfinished-own-steps` layout
 
