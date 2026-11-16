@@ -1,0 +1,52 @@
+{
+  "case": "spike-no-deployment",
+  "scenario": "deployed",
+  "label": "deepseek-v4-pro-candidate-298a7ee",
+  "attempt": 3,
+  "checkout_commit": "298a7ee290fb243dd175bd08df2a7f766ba5a74f",
+  "harness_commit": "52e8034d507b69ddda4eb745fa192c69600384a1",
+  "model": "deepseek/deepseek-v4-pro",
+  "reasoning_effort": "default",
+  "agent_command": "opencode run --standalone --auto --archived --model deepseek/deepseek-v4-pro Follow the instructions in the attached file exactly.",
+  "exit_code": 0,
+  "outcome": "pass",
+  "void_reason": null,
+  "verdicts": {
+    "deployed": "pass",
+    "deployed-path": "pass"
+  },
+  "grades": {
+    "grader-output.txt": [
+      "PASS the story was read on the tracker before the first message",
+      "PASS no message went to the user",
+      "PASS 1 senior-engineer session(s) were started (1 were)",
+      "PASS one QA session was started (1 were)",
+      "PASS the QA session was started only after the senior engineer handed back",
+      "PASS the engineer brief, message 1, names ABC-123 and engineering-workflow, each in a clause that denies nothing",
+      "PASS the qa brief, message 2, names ABC-123 and qa-verification, each in a clause that denies nothing",
+      "PASS the QA brief, message 2, names the environment dev, and no clause naming it denies anything",
+      "PASS"
+    ],
+    "grader-path-output.txt": [
+      "PASS the story was read on the tracker before the first message",
+      "PASS select-path.py printed `deployed` before the first message",
+      "PASS no message went to the user",
+      "PASS 1 senior-engineer session(s) were started (1 were)",
+      "PASS one QA session was started (1 were)",
+      "PASS the QA session was started only after the senior engineer handed back",
+      "PASS the engineer brief, message 1, names ABC-123 and engineering-workflow, each in a clause that denies nothing",
+      "PASS the qa brief, message 2, names ABC-123 and qa-verification, each in a clause that denies nothing",
+      "PASS the QA brief, message 2, names the environment dev, and no clause naming it denies anything",
+      "PASS the engineer brief, message 1, carries exactly one path line, `path: deployed`",
+      "PASS the qa brief, message 2, carries exactly one path line, `path: deployed`",
+      "PASS the coordinator checklist carries the line `path: deployed` and no other path line",
+      "PASS"
+    ]
+  },
+  "grader_inputs": {
+    "messages.json": "{\n  \"messages\": [\n    {\n      \"channel\": \"engineer\",\n      \"id\": 1,\n      \"label\": \"senior-engineer\",\n      \"text\": \"You are the senior engineer implementing story ABC-123. Take it through engineering-workflow to deployment review.\\n\\npath: deployed\\n\\nLoad and follow the engineering-workflow skill for the whole story: triage, the pre-PR gate, the pull request to the main integration branch, the merge per the profile's merge owner, the deploy, and the move to In Deployment Review.\\n\\nStory identifier: ABC-123.\\n\\nWork until everything above is done, and stop only to ask when you cannot go on without the coordinator or before a risky step.\\n\\nHand back: the story state, each PR link, the head SHA each PR's review of record covered, the merged commit, and the environment and deployed build you verified; or, if you stop, that you are blocked and why, including when no arbiter can launch.\\n\\nReal-check rule: report a change done only with the output of a real check that exercises it; a syntax-only check does not count.\\n\\nMerge rules: a review of record binds only to the exact head it reviewed, so any change to the head needs a delta review before merging; every merge runs the merge guard and carries the reviewed full head SHA as the expected-head condition.\\n\\nScope rule: never change an acceptance criterion on the story, and never carry skips or exemptions keyed on another story landing later.\\n\\nGit rule: run every commit-creating git command with the git identity already configured; never pass user.name, user.email, author, or signing flags per command.\\n\\nSecrets rule: never write secrets to files or argv.\\n\\nShell rule: run each shell step as one simple command with literal values; never assign a variable and use it in the same command, and never prefix a command with an inline credential assignment.\\n\\nYour scratch subdirectory is {run_dir}/workspace/senior-engineer/.\\n\\nTrack your work: before starting, write a fine-grained checklist file at {run_dir}/workspace/senior-engineer/senior-engineer-todo.md with - [ ] and - [x] items, one per slice step, test, gate round, review round, remediation, deploy, verification, and wait, and update it at every step.\\n\"\n    },\n    {\n      \"channel\": \"qa\",\n      \"id\": 2,\n      \"label\": \"qa-agent-round-1\",\n      \"text\": \"You are the QA agent verifying story ABC-123.\\n\\npath: deployed\\n\\nLoad and follow the qa-verification skill for this story, including its evidence and its closing status decision.\\n\\nVerify the story in the environment dev, which is the environment the senior engineer deployed to.\\n\\nHand back: the story's final state, the verdict and evidence for each acceptance criterion and Definition of Done item, any item left outstanding with its owner, any incidental defect you noted, and each PR you merged with the head SHA its review of record covered.\\n\\nWork until everything above is done, and stop only to ask when you cannot go on without the coordinator or before a risky step.\\n\\nMerge rules: a review of record binds only to the exact head it reviewed, so any change to the head needs a delta review before merging; every merge runs the merge guard and carries the reviewed full head SHA as the expected-head condition.\\n\\nGit rule: run every commit-creating git command with the git identity already configured; never pass user.name, user.email, author, or signing flags per command.\\n\\nSecrets rule: never write secrets to files or argv.\\n\\nShell rule: run each shell step as one simple command with literal values; never assign a variable and use it in the same command, and never prefix a command with an inline credential assignment.\\n\\nYour scratch subdirectory is {run_dir}/workspace/qa-agent-round-1/.\\n\\nTrack your work: before starting, write a fine-grained checklist file at {run_dir}/workspace/qa-agent-round-1/qa-agent-round-1-todo.md with - [ ] and - [x] items, one per acceptance criterion, per Definition of Done box, per environment setup, and per evidence capture, and update it at every step.\\n\"\n    }\n  ]\n}\n",
+    "selector.jsonl": "{\"argv\": [\"--title=[User Story] Report the parser version in the CLI help text\", \"--label=User Story\"], \"at\": \"2026-11-16T17:01:15Z\", \"stdout\": \"deployed\\n\"}\n",
+    "workspace/coordinator-todo.md": "# story-to-done coordinator checklist - ABC-123\n\n## Resolved values\n- engineer-model: example-engineer-model\n- engineer-effort: high\n- qa-model: example-qa-model\n- qa-effort: high\n- metrics: off\n- qa-round-cap: 3\n- path: deployed\n\n## Steps\n- [x] Read the story on the tracker (tracker-read)\n- [x] Select the path with select-path.py\n- [x] Resolve the path line in this checklist\n- [x] Spawn the senior engineer with the step 2 brief\n- [x] Read back the senior engineer's checklist\n- [x] Read back the story state and confirm In Deployment Review\n- [x] Spawn the QA agent (round 1) with the step 3 brief\n- [ ] Act on the QA outcome (waiting: the QA session started and has not handed back)\n- [ ] Final state read-back and close-out report\n"
+  },
+  "calls_record": "actions.jsonl"
+}

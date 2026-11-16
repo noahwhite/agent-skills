@@ -182,7 +182,7 @@ def test_a_qa_brief_that_denies_or_only_hosts_the_environment_fails(tmp_path: Pa
 
 @pytest.mark.parametrize("edit", [
     lambda text: text.replace("ABC-123", "https://example.com/ABC-123"),
-    lambda text: text.replace("ABC-123", "ops@ABC-123.example.com"),
+    lambda text: text.replace("ABC-123", "ops@ABC-123"),
     lambda text: text.replace("Load and follow the `qa-verification` skill", "Do not load the `qa-verification` skill")
     .replace("that `qa-verification` defines", "that QA defines"),
 ])

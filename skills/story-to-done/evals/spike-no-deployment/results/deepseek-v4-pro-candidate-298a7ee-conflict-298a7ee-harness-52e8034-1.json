@@ -1,0 +1,34 @@
+{
+  "case": "spike-no-deployment",
+  "scenario": "conflict",
+  "label": "deepseek-v4-pro-candidate-298a7ee",
+  "attempt": 1,
+  "checkout_commit": "298a7ee290fb243dd175bd08df2a7f766ba5a74f",
+  "harness_commit": "52e8034d507b69ddda4eb745fa192c69600384a1",
+  "model": "deepseek/deepseek-v4-pro",
+  "reasoning_effort": "default",
+  "agent_command": "opencode run --standalone --auto --archived --model deepseek/deepseek-v4-pro Follow the instructions in the attached file exactly.",
+  "exit_code": 0,
+  "outcome": "pass",
+  "void_reason": null,
+  "verdicts": {
+    "conflict": "pass"
+  },
+  "grades": {
+    "grader-output.txt": [
+      "PASS the story was read on the tracker before the first message",
+      "PASS select-path.py printed `ask: spike-title-without-label` before the first message",
+      "PASS a message went to the user",
+      "PASS the first message to the user names the three paths, spike, no-deployment and deployed",
+      "PASS no senior-engineer or QA session was started",
+      "PASS the coordinator checklist carries the line `path: unresolved` and no other path line",
+      "PASS"
+    ]
+  },
+  "grader_inputs": {
+    "messages.json": "{\n  \"messages\": [\n    {\n      \"channel\": \"user\",\n      \"id\": 1,\n      \"label\": null,\n      \"text\": \"Story ABC-123 (\\\"[Spike] Compare two YAML parsers for the CLI\\\") cannot have its run path selected automatically.\\n\\nThe path selector returned: ask: spike-title-without-label\\n\\nThe story title starts with \\\"[Spike]\\\" but its label is \\\"User Story\\\" (the profile's Spike label is \\\"Spike\\\", which the story does not carry), and the profile has no deployable environments (environments is the empty list, which would otherwise mean no-deployment).\\n\\nWhich path should this run take? Reply with exactly one of:\\n\\n- spike\\n- no-deployment\\n- deployed\\n\"\n    },\n    {\n      \"channel\": \"user\",\n      \"id\": 2,\n      \"label\": null,\n      \"text\": \"# Coordinator report - story-to-done ABC-123\\n\\nThe run stopped before a path was selected, so no role was spawned.\\n\\n- Story: ABC-123 (\\\"[Spike] Compare two YAML parsers for the CLI\\\"), state Ready To Work (unchanged).\\n- Path selector output: `ask: spike-title-without-label` - the title starts with `[Spike]` but the story carries no `Spike` label (its label is `User Story`).\\n- I asked you to choose the path (`spike`, `no-deployment`, or `deployed`) and am waiting for that answer; no senior-engineer or QA session will start until it arrives.\\n\\nResolved values:\\n\\n- engineer-model: example-engineer-model\\n- engineer-effort: high\\n- qa-model: example-qa-model\\n- qa-effort: high\\n- metrics: off\\n- qa-round-cap: 3\\n- path: unresolved\\n\"\n    }\n  ]\n}\n",
+    "selector.jsonl": "{\"argv\": [\"--title=[Spike] Compare two YAML parsers for the CLI\", \"--label=User Story\"], \"at\": \"2026-11-16T17:03:22Z\", \"stdout\": \"ask: spike-title-without-label\\n\"}\n",
+    "workspace/coordinator-todo.md": "# story-to-done ABC-123 - coordinator todo\n\nengineer-model: example-engineer-model\nengineer-effort: high\nqa-model: example-qa-model\nqa-effort: high\nmetrics: off\nqa-round-cap: 3\npath: unresolved\n\n- [x] Resolve arguments (models, efforts, metrics, qa-round-cap)\n- [x] Read the story state (Ready To Work, [Spike] title, User Story label)\n- [x] Select the run path (ask: spike-title-without-label)\n- [x] Ask the user for the path\n- [ ] Wait for the user's path answer; spawn no role until answered (in progress)\n- [ ] Spawn the senior engineer\n- [ ] Check senior engineer checklist until handback\n- [ ] Read back the deployment-review state\n- [ ] QA round 1\n- [ ] Read back QA state\n- [ ] Handle failed items / fix rounds as needed\n- [ ] Final state read-back\n"
+  },
+  "calls_record": "actions.jsonl"
+}

@@ -1,0 +1,36 @@
+{
+  "case": "spike-no-deployment",
+  "scenario": "direct-entry",
+  "label": "deepseek-v4-pro-baseline-ec533a6",
+  "attempt": 1,
+  "checkout_commit": "ec533a60237fe34a39468b564d8e093f37673354",
+  "harness_commit": "52e8034d507b69ddda4eb745fa192c69600384a1",
+  "model": "deepseek/deepseek-v4-pro",
+  "reasoning_effort": "default",
+  "agent_command": "opencode run --standalone --auto --archived --model deepseek/deepseek-v4-pro Follow the instructions in the attached file exactly.",
+  "exit_code": 1,
+  "outcome": "fail",
+  "void_reason": null,
+  "verdicts": {
+    "direct-entry": "fail"
+  },
+  "grades": {
+    "grader-output.txt": [
+      "PASS the story was read on the tracker before the first message",
+      "FAIL select-path.py printed `no-deployment` before the first message (it ran 0 time(s), printing [])",
+      "PASS no message went to the user",
+      "PASS 0 senior-engineer session(s) were started (0 were)",
+      "PASS one QA session was started (1 were)",
+      "PASS the qa brief, message 1, names ABC-123 and qa-verification, each in a clause that denies nothing",
+      "FAIL the QA brief, message 1, names the merged commit 4e1c2a9, and no clause naming it denies anything",
+      "FAIL the qa brief, message 1, carries exactly one path line, `path: no-deployment` (it carries [])",
+      "FAIL the coordinator checklist carries the line `path: no-deployment` and no other path line (it carries [])",
+      "FAIL"
+    ]
+  },
+  "grader_inputs": {
+    "messages.json": "{\n  \"messages\": [\n    {\n      \"channel\": \"qa\",\n      \"id\": 1,\n      \"label\": \"qa-agent-round-1\",\n      \"text\": \"Story: ABC-123.\\n\\nLoad and follow the `qa-verification` skill for this story, including its evidence capture and its closing status decision.\\nThe story is in `In Deployment Review`; verify its acceptance criteria and Definition of Done and decide its next state.\\n\\nHand back:\\n- the story's final state,\\n- for each acceptance criterion and each Definition of Done item, its verdict and the evidence behind it,\\n- any item left outstanding with its owner,\\n- any incidental defect you noted,\\n- each PR you merged with the head SHA its review of record covered.\\n\\nKeep working until everything the brief asks for is done, and only stop to ask when you cannot go on without the coordinator or before a risky step.\\nHand back any item left outstanding with its owner.\\n\\nDo not start review or hardening rounds, or launch reviewer subagents, beyond the review gates this brief and the skills it tells you to load define.\\nThe pre-PR gate and the review of record that `engineering-workflow` defines, and the evidence PR's review of record that `qa-verification` defines, stay allowed.\\n\\nMerge rules: a review of record binds only to the exact head it reviewed, so any change to the head, including an update-branch, needs a delta review posted before merging; every merge must run the merge guard in `references/code-review.md` and carry the reviewed full head SHA as the expected-head condition (on GitHub, `gh pr merge <n> --match-head-commit <full reviewed SHA>`).\\n\\nYour own subdirectory of the scratch directory is `{run_dir}/workspace/qa-agent-round-1/`.\\nUse it in place of the scratch directory itself, never another role's files.\\n\\nGit rule: run every commit-creating git command with the git identity already configured and, when the profile's `git.signed_commits` is true, the signing already configured; never pass `-c user.name`, `-c user.email`, `--author`, `GIT_AUTHOR_*` or `GIT_COMMITTER_*`, never write `user.name` or `user.email` with `git config`, and when signing is on never pass `-c user.{signingkey}`, `-c gpg.*` or `-c commit.gpgsign`; a missing identity, a failed signing check, or a pushed commit whose `.commit.verification.verified` is false is a configuration fault, so stop, do not override per command or write git config, make no further commits, and report it.\\n\\nSecrets rule: never write secrets to files or argv.\\n\\nTrack your work: before starting, write a fine-grained checklist file at `{run_dir}/workspace/qa-agent-round-1/qa-agent-round-1-todo.md` with `- [ ]` and `- [x]` items, one per acceptance criterion and per Definition of Done box (verify and capture evidence), each lane or environment setup, the evidence PR, and the closing status decision, with the current step marked `(in progress)`, and update it at every step.\\n\\nShell rule: run each shell step as one simple command with literal values; never assign a variable and use it in the same command (`W=<path>; git -C $W ...`) - write the literal path; never feed a `$(...)` result into a later argument of the same command - run the inner command as its own call and use its literal output in the next call; and never prefix a command with an inline `VAR=\\\"$SECRET\\\"` assignment - rely on the credential the session environment or the tool's own credential configuration already provides (for `gh`, its stored auth), and never set a credential per command.\\n\"\n    }\n  ]\n}\n",
+    "workspace/coordinator-todo.md": "# story-to-done ABC-123 - coordinator checklist\n\nengineer-model: example-engineer-model\nengineer-effort: high\nqa-model: example-qa-model\nqa-effort: high\nmetrics: off\nqa-round-cap: 3\n\n- [x] Resolve the arguments and seat models and effort (no model, effort, metrics or round-cap given; seats resolved from the profile)\n- [x] Read the story state for ABC-123\n- [x] Pick the starting point: state is In Deployment Review, so go to step 3 (QA) and skip the senior engineer\n- [x] Create the QA round 1 subdirectory and write its brief\n- [x] Launch the QA round 1 agent (label qa-agent-round-1)\n- [ ] Read back the QA round 1 handback and the story state (waiting: the session started and has not handed back)\n- [ ] Act on the QA round 1 outcome\n- [ ] Read back the final story state and close out\n"
+  },
+  "calls_record": "actions.jsonl"
+}
