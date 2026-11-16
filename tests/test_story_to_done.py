@@ -325,9 +325,9 @@ QA_ROUND_SENTENCE = (
     "agent from an earlier round, since it carries that round's conclusions."
 )
 QA_ROUND_EXCEPTION = (
-    "Continuation of the current round under step 4, and the step 0 checklist read-back resume or the "
-    "interim-handback deadline resume of the current round's QA agent, are the only exceptions to that sentence, "
-    "and none increments the round count."
+    "Continuation of the current round under step 4, and the step 0 checklist read-back resume or the resume "
+    "under the handback reference this step points to of the current round's QA agent, are the only exceptions "
+    "to that sentence."
 )
 OLD_QA_ROUND_CLAUSE = "never resume an earlier QA agent, since it carries that round's conclusions"
 
@@ -3224,8 +3224,10 @@ def test_step_3_points_to_the_interim_handbacks_reference_and_restates_none_of_i
     step_3 = " ".join(section(visible(SKILL.read_text()), "3. QA agent: verify the deployed story").split())
     assert INTERIM_STEP_3_POINTER in step_3
     assert step_3.index(INTERIM_STEP_3_POINTER) < step_3.index(STEP_3_READ_BACK_FIRST)
-    rest = step_3.replace(INTERIM_STEP_3_POINTER, "").replace(QA_ROUND_EXCEPTION, "").lower()
-    for token in INTERIM_VOCABULARY + ("50%", "before step 4", "before the step 0", "before step 0"):
+    rest = step_3.replace(INTERIM_STEP_3_POINTER, "").lower()
+    for token in INTERIM_VOCABULARY + (
+        "50%", "before step 4", "before the step 0", "before step 0", "round count", "increment",
+    ):
         assert token not in rest, f"step 3 restates the interim rule ({token!r}) instead of pointing to it"
 
 
@@ -3538,7 +3540,7 @@ def test_the_record_shape_pattern_matches_the_record_and_not_the_bare_word_readi
 # digest only together with a reviewed change to the text it covers.
 STEP_3_HEADING = "3. QA agent: verify the deployed story"
 # SKL-278 re-baselined this digest for the step 3 `path:` brief line and the path's verification target.
-STEP_3_SHA256 = "38110a8906199eea039927fc831c3aea8756811158dffcd9325cedf9bf02d927"
+STEP_3_SHA256 = "591d06fa9099fdf6f4958f7888bc4d3260de1d86838126145e008a44215173c0"
 IN_PROGRESS_SHA256 = "fd4768e7d39be8e29341cd0f5d186bfaf96a8bf7bfc8eebb8b1e39b101eb95e7"
 IN_DEPLOYMENT_REVIEW_SHA256 = "36da368bed892519776e5be61064d2fad186151ca58ae90aff897e9a1ffaa968"
 # The only lines of a state bullet that may state the pending owner ruling record.
