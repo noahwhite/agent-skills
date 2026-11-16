@@ -231,7 +231,7 @@ The priority is the value read back after the PO applied it; when the PO could n
 ## Triage record
 
 - Priority: <the decided value, read back; or unset when the PO could not decide>
-- Priority comparison: <each comparable story's identifier and priority; or `needs input` with the open question when the PO could not decide>
+- Priority comparison: <each comparable story's identifier and priority; or `needs input` with the open question when the PO could not decide; or `not compared: short path` on a short-path move>
 - State: <for a Bug, an Investigation or a Spike: ready: all conditions met, or backlog with each unmet condition, or for an issue already in progress or later its retained state with all conditions met or with each unmet condition; for a Spike with more than one independent research thread the unmet condition reads re-file as separate Spikes (owner); when the `Scope signal:` line is missing or carries neither of its type's readings the unmet condition reads scope signal missing; omitted for a User Story>
 - Tracker writes: product owner
 ```
@@ -252,7 +252,7 @@ Each line names issue keys only, never an anchor's point value.
 - **Exemplar skipped:** one `Exemplar skipped: <key> <reason>` line per skipped candidate, where `<reason>` is exactly one of `not done`, `reopened`, `no Capstone comment`, `Capstone comment names a value` or `conflicting type labels`.
 - **Exemplar not selected:** one `Exemplar not selected: <key>` line per eligible candidate of the story's type that was not selected because another has a more recent `Capstone` comment.
 - **Anchor skipped:** one `Anchor skipped: <key> <reason>` line per skipped anchor, where `<reason>` is exactly one of `not done`, `no estimate`, `above point cap`, `no Calibration anchor comment` or `comment point value differs`.
-- **Not looked up:** a closing-message outcome only, written on both the `exemplars:` and the `anchors:` line when a roster stop (Step 1 item 2) or a type-check stop (item 3) ends the ceremony before the lookups run and before any record is posted; it takes precedence over `none configured` and `not pointed` and never appears on a record line.
+- **Not looked up:** a closing-message outcome only, written on both the `exemplars:` and the `anchors:` line when a roster stop (Step 1 item 2) or a type-check stop (item 3) ends the ceremony before the lookups run and before any record is posted, or on every short-path ending, which skips the lookups and posts at most its Triage record; it takes precedence over `none configured` and `not pointed` and never appears on a record line.
 
 ## Comment headings
 
