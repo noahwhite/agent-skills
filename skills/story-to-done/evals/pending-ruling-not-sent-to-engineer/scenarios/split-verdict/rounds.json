@@ -3,7 +3,7 @@
   "qa_rounds": [
     {"record": "qa-round-1.md", "state": "In Progress"},
     {"record": "qa-round-2.md", "state": "In Progress"},
-    {"record": "qa-round-3.md", "state": "In Deployment Review"}
+    {"record": "qa-round-3.md", "state": "In Progress"}
   ],
   "engineer_handbacks": [
     {"record": "engineer-handback-1.md", "state": "In Deployment Review"},
