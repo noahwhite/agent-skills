@@ -144,7 +144,7 @@ def stub_case(case_dir: Path, scenarios=STUB_SCENARIOS) -> None:
     for name in scenarios:
         (case_dir / "scenarios" / name).mkdir(parents=True, exist_ok=True)
         (case_dir / "scenarios" / name / "scenario.md").write_text(f"{name}\n")
-    reference = yaml.safe_load((REFERENCE_CASE / "case.yaml").read_text())
+    reference = yaml.safe_load((REFERENCE_CASE / "case.yaml").read_text(encoding="utf-8"))
     case = {key: reference[key] for key in reference}
     case.update(case=case_dir.name, kind="discriminating",
                 runtime={"command": "stub", "model": "stub/model-1", "reasoning_effort": "low"},
@@ -185,7 +185,7 @@ def suite(tmp_path: Path):
     checkout_sha = commit_all(checkout)
 
     agent = tmp_path / "agent"
-    agent.write_text(STUB_AGENT)
+    agent.write_text(STUB_AGENT, encoding="utf-8")
     agent.chmod(0o755)
     state = tmp_path / "state"
     state.mkdir()
@@ -226,7 +226,7 @@ def test_the_runner_counts_pass_fail_void_and_exhausted_void_retries(suite) -> N
     result = suite["run"]("--runs", "2", str(suite["checkout"]), "lab-1")
     assert result.returncode == 1, "a scenario short of N graded runs fails the suite\n" + result.stderr
 
-    summary = (suite["evals"] / "results" / "suite-lab-1.md").read_text()
+    summary = (suite["evals"] / "results" / "suite-lab-1.md").read_text(encoding="utf-8")
     assert "k/n × (1 - k/n)" in summary, "the summary states the variance formula"
     assert "Scenarios short of N graded runs: stub void-always." in summary
     rows, at = summary_rows(summary), columns(summary)
@@ -259,7 +259,7 @@ def test_the_runner_counts_pass_fail_void_and_exhausted_void_retries(suite) -> N
     assert cell("pass", "Void reasons") == "none"
 
     # Retries stop at 2×N attempts, and a void-once scenario needs exactly one retry.
-    attempts = {name: int((suite["state"] / name).read_text()) for name in STUB_SCENARIOS}
+    attempts = {name: int((suite["state"] / name).read_text(encoding="utf-8")) for name in STUB_SCENARIOS}
     assert attempts == {"pass": 2, "fail": 2, "void-once": 3, "void-always": 4}
     assert "checkout-only" not in summary, "cases are listed from the harness checkout, never CHECKOUT"
     assert not (suite["state"] / "checkout-only").exists()
@@ -269,9 +269,9 @@ def test_a_graded_run_on_the_last_allowed_attempt_counts(suite) -> None:
     suite["recommit"]("void-thrice")
     result = suite["run"]("--runs", "2", str(suite["checkout"]), "lab-1")
     assert result.returncode == 1, result.stderr
-    rows = summary_rows((suite["evals"] / "results" / "suite-lab-1.md").read_text())
+    rows = summary_rows((suite["evals"] / "results" / "suite-lab-1.md").read_text(encoding="utf-8"))
     assert rows["void-thrice"][6:8] == ["1", "1"], "attempt 4 of 2×2 is graded and counted"
-    assert int((suite["state"] / "void-thrice").read_text()) == 4
+    assert int((suite["state"] / "void-thrice").read_text(encoding="utf-8")) == 4
 
 
 def test_every_attempt_writes_a_run_record_and_a_call_record_named_for_it(suite) -> None:
@@ -283,10 +283,10 @@ def test_every_attempt_writes_a_run_record_and_a_call_record_named_for_it(suite)
                 for attempt in range(1, count + 1) for suffix in (".json", "-calls.jsonl")}
     assert {path.name for path in results.iterdir()} - {".keep"} == expected
 
-    void = json.loads((results / f"lab-1-void-once-{sha}-harness-{harness_sha}-1.json").read_text())
+    void = json.loads((results / f"lab-1-void-once-{sha}-harness-{harness_sha}-1.json").read_text(encoding="utf-8"))
     assert void["outcome"] == "void" and void["void_reason"] == "run.sh exited 2: void"
     assert void["calls_record"] == "absent", "a void attempt that recorded no calls says so"
-    graded = json.loads((results / f"lab-1-void-once-{sha}-harness-{harness_sha}-2.json").read_text())
+    graded = json.loads((results / f"lab-1-void-once-{sha}-harness-{harness_sha}-2.json").read_text(encoding="utf-8"))
     assert graded["outcome"] == "pass" and graded["void_reason"] is None
     assert graded["grades"]["grader-output.txt"][-1] == "PASS"
     assert graded["verdicts"] == {"void-once": "pass"}
@@ -295,7 +295,7 @@ def test_every_attempt_writes_a_run_record_and_a_call_record_named_for_it(suite)
     assert json.loads(graded["grader_inputs"]["evidence.json"]) == {"seen_in": "\n{run_dir}", "canary": "unset"}, \
         "a run-directory file the grader names is kept with the record"
     assert graded["grader_inputs"]["nested/kept.md"] == "kept\n", "a relative path the grader names is kept too"
-    calls = (results / f"lab-1-pass-{sha}-harness-{harness_sha}-1-calls.jsonl").read_text()
+    calls = (results / f"lab-1-pass-{sha}-harness-{harness_sha}-1-calls.jsonl").read_text(encoding="utf-8")
     assert json.loads(calls)["action"] == "pass"
 
 
@@ -329,14 +329,14 @@ def decoded_strings(text: str):
 
 def test_run_directories_sit_outside_both_checkouts_and_never_reach_a_record(suite) -> None:
     suite["run"]("--runs", "1", str(suite["checkout"]), "lab-1", "stub")
-    run_dirs = (suite["state"] / "run-dirs").read_text().split()
+    run_dirs = (suite["state"] / "run-dirs").read_text(encoding="utf-8").split()
     assert run_dirs
     for run_dir in run_dirs:
         real = Path(run_dir).resolve()
         for checkout in (suite["harness"], suite["checkout"]):
             assert checkout.resolve() not in real.parents, run_dir
     for record in (suite["evals"] / "stub" / "results").iterdir():
-        text = record.read_text()
+        text = record.read_text(encoding="utf-8")
         for run_dir in run_dirs:
             assert run_dir not in text, record.name
         assert STUB_UUID not in text, "a UUID shape is normalised"
@@ -344,23 +344,23 @@ def test_run_directories_sit_outside_both_checkouts_and_never_reach_a_record(sui
         # itself (a grader input such as evidence.json), holds no run directory.
         for string in decoded_strings(text):
             for run_dir in run_dirs:
-                assert run_dir not in string, f"{record.name}: {string!r}"
-    calls = next((suite["evals"] / "stub" / "results").glob("*-pass-*-calls.jsonl")).read_text()
+                assert run_dir not in string, f"{record.name} holds a run directory"
+    calls = next((suite["evals"] / "stub" / "results").glob("*-pass-*-calls.jsonl")).read_text(encoding="utf-8")
     assert json.loads(calls)["run_dir"] == "{run_dir}"
     # The agent wrote its run directory behind \/ escapes, which only the decoded pass redacts, and
     # behind a raw é, which only the ASCII left boundary lets either pass redact.
-    written = (suite["state"] / "evidence-pass.json").read_text()
+    written = (suite["state"] / "evidence-pass.json").read_text(encoding="utf-8")
     assert f'"escaped": "{run_dirs[0]}"'.replace("/", "\\/") in written, written
     assert f'"accented": "é{run_dirs[0]}"' in written, written
     # No grader input of any run record holds a run directory once its JSON content is decoded.
     for path in (suite["evals"] / "stub" / "results").glob("*[0-9].json"):
-        for name, content in json.loads(path.read_text(errors="replace"))["grader_inputs"].items():
+        for name, content in json.loads(path.read_text(encoding="utf-8", errors="replace"))["grader_inputs"].items():
             for string in decoded_strings(content):
                 for run_dir in run_dirs:
-                    assert run_dir not in string, f"{path.name} {name}: {string!r}"
+                    assert run_dir not in string, f"{path.name} {name} holds a run directory"
     records = list((suite["evals"] / "stub" / "results").glob("*-pass-*-1.json"))
     assert len(records) == 1, "the pass scenario wrote one run record"
-    record = json.loads(records[0].read_text())
+    record = json.loads(records[0].read_text(encoding="utf-8"))
     evidence = json.loads(record["grader_inputs"]["evidence.json"])
     assert evidence["escaped"] == "{run_dir}"
     assert evidence["accented"] == "é{run_dir}"
@@ -549,6 +549,9 @@ WORD_BEFORE_ROOT = {"decoded": "must-fail", "raw-utf8": "must-fail", "u-escape":
 LEFT_BOUNDARY = [
     *left_boundary_forms("e-acute-run-root", f"é{RUN_ROOT}/a.json", "é{run_dir}/a.json", WORD_BEFORE_ROOT),
     *left_boundary_forms("cjk-home-root", f"中{HOME_ROOT}/x", "中{home}/x", WORD_BEFORE_ROOT),
+    *[case for key in ("tmp", "tmpdir") for before, letter in {"é": "e-acute", "中": "cjk"}.items()
+      for case in left_boundary_forms(f"{letter}-{key}-root", f"{before}{ASCII_ROOTS[key]}/x",
+                                      f"{before}{{{key}}}/x", WORD_BEFORE_ROOT)],
     *left_boundary_forms("arrow-run-root", f"→{RUN_ROOT}/a.json", "→{run_dir}/a.json", ALL_GUARD),
     *[case for control, before in {"newline": "\n", "tab": "\t", "return": "\r", "backspace": "\b",
                                    "formfeed": "\f"}.items()
@@ -571,7 +574,7 @@ LEFT_BOUNDARY = [
 
 @pytest.mark.parametrize("text, expected", LEFT_BOUNDARY)
 def test_only_an_ascii_word_character_before_a_known_root_keeps_it(text: str, expected: str) -> None:
-    normalise = SUITE.Normaliser(SUITE.leak_patterns(), run_dir=Path(RUN_ROOT), home=Path(HOME_ROOT))
+    normalise = SUITE.Normaliser(SUITE.leak_patterns(), **{key: Path(root) for key, root in ASCII_ROOTS.items()})
     result = normalise(text)
     assert result == expected
     assert normalise(result) == result, "a normalised record is left as it is"
@@ -581,7 +584,7 @@ def test_a_record_with_bytes_that_are_not_utf8_is_still_written(suite) -> None:
     suite["recommit"]("bad-bytes")
     result = suite["run"]("--runs", "1", str(suite["checkout"]), "lab-1")
     assert result.returncode == 0, result.stderr
-    calls = next((suite["evals"] / "stub" / "results").glob("*-bad-bytes-*-calls.jsonl")).read_text()
+    calls = next((suite["evals"] / "stub" / "results").glob("*-bad-bytes-*-calls.jsonl")).read_text(encoding="utf-8")
     assert "�" in calls
 
 
@@ -589,7 +592,7 @@ def test_a_scenario_graded_twice_reports_each_grade(suite) -> None:
     suite["recommit"]("two-grades")
     result = suite["run"]("--runs", "2", str(suite["checkout"]), "lab-1")
     assert result.returncode == 0, result.stderr
-    summary = (suite["evals"] / "results" / "suite-lab-1.md").read_text()
+    summary = (suite["evals"] / "results" / "suite-lab-1.md").read_text(encoding="utf-8")
     rows, at = summary_rows(summary), columns(summary)
     assert rows["two-grades"][at["k"]] == "2", "the scenario's own grade counts its own verdict"
     assert rows["two-grades-extra"][at["k"]] == "0" and rows["two-grades-extra"][at["n"]] == "2"
@@ -600,7 +603,7 @@ def test_a_further_grade_without_the_scenarios_own_grade_stops_the_suite(suite) 
     suite["recommit"]("further-only")
     result = suite["run"]("--runs", "1", str(suite["checkout"]), "lab-1")
     assert result.returncode == 1 and "no own verdict" in result.stderr, result.stderr
-    record = json.loads(next((suite["evals"] / "stub" / "results").glob("*-further-only-*.json")).read_text())
+    record = json.loads(next((suite["evals"] / "stub" / "results").glob("*-further-only-*.json")).read_text(encoding="utf-8"))
     assert record["outcome"] == "error" and record["verdicts"] == {}
 
 
@@ -608,10 +611,10 @@ def test_a_single_grade_follows_the_exit_status(suite) -> None:
     suite["recommit"]("late-fail")
     result = suite["run"]("--runs", "1", str(suite["checkout"]), "lab-1")
     assert result.returncode == 0, result.stderr
-    summary = (suite["evals"] / "results" / "suite-lab-1.md").read_text()
+    summary = (suite["evals"] / "results" / "suite-lab-1.md").read_text(encoding="utf-8")
     rows, at = summary_rows(summary), columns(summary)
     assert rows["late-fail"][at["n"]] == "1" and rows["late-fail"][at["k"]] == "0"
-    record = json.loads(next((suite["evals"] / "stub" / "results").glob("*-late-fail-*.json")).read_text())
+    record = json.loads(next((suite["evals"] / "stub" / "results").glob("*-late-fail-*.json")).read_text(encoding="utf-8"))
     assert record["outcome"] == "fail" and record["verdicts"] == {"late-fail": "fail"}
 
 
@@ -619,7 +622,7 @@ def test_grades_that_contradict_the_exit_status_stop_the_suite(suite) -> None:
     suite["recommit"]("both-pass")
     result = suite["run"]("--runs", "1", str(suite["checkout"]), "lab-1")
     assert result.returncode == 1 and "contradict" in result.stderr, result.stderr
-    record = json.loads(next((suite["evals"] / "stub" / "results").glob("*-both-pass-*.json")).read_text())
+    record = json.loads(next((suite["evals"] / "stub" / "results").glob("*-both-pass-*.json")).read_text(encoding="utf-8"))
     assert record["outcome"] == "error" and record["verdicts"] == {}
 
 
@@ -628,7 +631,7 @@ def test_a_verdict_line_that_redaction_rewrites_keeps_its_verdict(suite) -> None
     env = {"CANARY": "the recorded call\nPASS", "EVAL_PASS_ENV": "STUB_STATE STUB_UUID CANARY"}
     result = suite["run"]("--runs", "1", str(suite["checkout"]), "lab-1", **env)
     assert result.returncode == 0, result.stderr
-    record = json.loads(next((suite["evals"] / "stub" / "results").glob("*-two-pass-*.json")).read_text())
+    record = json.loads(next((suite["evals"] / "stub" / "results").glob("*-two-pass-*.json")).read_text(encoding="utf-8"))
     assert record["outcome"] == "pass" and record["grades"]["grader-output.txt"][-1] == "ok   {redacted}"
     assert record["verdicts"] == {"two-pass": "pass", "two-pass-extra": "pass"}
     (suite["evals"] / "results" / "suite-lab-1.md").unlink()
@@ -640,7 +643,7 @@ def test_a_grade_set_that_changes_between_attempts_stops_the_suite(suite) -> Non
     suite["recommit"]("extra-once")
     result = suite["run"]("--runs", "2", str(suite["checkout"]), "lab-1")
     assert result.returncode == 1 and "every graded attempt must write the same grades" in result.stderr, result.stderr
-    record = json.loads(next((suite["evals"] / "stub" / "results").glob("*-extra-once-*-2.json")).read_text())
+    record = json.loads(next((suite["evals"] / "stub" / "results").glob("*-extra-once-*-2.json")).read_text(encoding="utf-8"))
     assert record["outcome"] == "error"
     assert not (suite["evals"] / "results" / "suite-lab-1.md").exists()
 
@@ -649,7 +652,7 @@ def test_an_attempt_that_changes_a_checkout_stops_the_suite(suite) -> None:
     suite["recommit"]("dirty-once")
     result = suite["run"]("--runs", "1", str(suite["checkout"]), "lab-1")
     assert result.returncode == 1 and "after an attempt of this run changed it" in result.stderr, result.stderr
-    assert int((suite["state"] / "dirty-once").read_text()) == 1, "no attempt runs against the changed checkout"
+    assert int((suite["state"] / "dirty-once").read_text(encoding="utf-8")) == 1, "no attempt runs against the changed checkout"
     assert not (suite["evals"] / "results" / "suite-lab-1.md").exists()
 
 
@@ -664,9 +667,9 @@ def test_the_agent_gets_only_the_base_environment_and_the_variables_passed(suite
     assert passed.returncode == 0, passed.stderr
     results = suite["evals"] / "stub" / "results"
     for label, seen in (("lab-1", "unset"), ("lab-2", "{redacted}")):
-        record = json.loads(next(results.glob(f"{label}-pass-*.json")).read_text())
+        record = json.loads(next(results.glob(f"{label}-pass-*.json")).read_text(encoding="utf-8"))
         assert json.loads(record["grader_inputs"]["evidence.json"])["canary"] == seen, label
-    assert all(canary not in path.read_text() for path in results.iterdir())
+    assert all(canary not in path.read_text(encoding="utf-8") for path in results.iterdir())
 
 
 def test_a_passed_value_too_short_to_redact_is_refused(suite) -> None:
@@ -684,16 +687,16 @@ def test_the_recorded_model_is_normalised(suite) -> None:
     result = suite["run"]("--runs", "1", str(suite["checkout"]), "lab-1",
                           EVAL_AGENT_CMD=f"{agent} --model {STUB_ADDRESS}/m#high")
     assert result.returncode == 0, result.stderr
-    record = json.loads(next((suite["evals"] / "stub" / "results").glob("lab-1-pass-*.json")).read_text())
+    record = json.loads(next((suite["evals"] / "stub" / "results").glob("lab-1-pass-*.json")).read_text(encoding="utf-8"))
     assert STUB_ADDRESS not in record["model"] and "{redacted}" in record["model"]
-    assert STUB_ADDRESS not in (suite["evals"] / "results" / "suite-lab-1.md").read_text()
+    assert STUB_ADDRESS not in (suite["evals"] / "results" / "suite-lab-1.md").read_text(encoding="utf-8")
 
 
 def test_an_attempt_past_its_deadline_is_void(suite) -> None:
     suite["recommit"]("hang")
     result = suite["run"]("--runs", "1", str(suite["checkout"]), "lab-1", EVAL_TIMEOUT="1", EVAL_GRADING_MARGIN="1")
     assert result.returncode == 1, result.stderr
-    rows = summary_rows((suite["evals"] / "results" / "suite-lab-1.md").read_text())
+    rows = summary_rows((suite["evals"] / "results" / "suite-lab-1.md").read_text(encoding="utf-8"))
     assert rows["hang"][6] == "0" and rows["hang"][10] == "2"
     assert "did not finish within 2 seconds" in rows["hang"][11]
 
@@ -704,7 +707,7 @@ def test_an_undefined_exit_status_stops_the_suite(suite) -> None:
     assert result.returncode == 1 and "a status the case contract does not define" in result.stderr, result.stderr
     records = list((suite["evals"] / "stub" / "results").glob("*-broken-*.json"))
     assert len(records) == 1, "the broken attempt is recorded once and never retried"
-    assert json.loads(records[0].read_text())["outcome"] == "error"
+    assert json.loads(records[0].read_text(encoding="utf-8"))["outcome"] == "error"
     assert not (suite["state"] / "pass").exists(), "nothing runs after a broken attempt"
     assert not (suite["evals"] / "results" / "suite-lab-1.md").exists()
 
@@ -712,11 +715,11 @@ def test_an_undefined_exit_status_stops_the_suite(suite) -> None:
 def test_the_runner_refuses_to_overwrite_and_exits_2(suite) -> None:
     first = suite["run"]("--runs", "1", str(suite["checkout"]), "lab-1", "stub")
     summary = suite["evals"] / "results" / "suite-lab-1.md"
-    before = summary.read_text()
+    before = summary.read_text(encoding="utf-8")
     again = suite["run"]("--runs", "1", str(suite["checkout"]), "lab-1", "stub")
     assert first.returncode == 1 and again.returncode == 2, again.stderr
-    assert summary.read_text() == before
-    assert (suite["state"] / "pass").read_text().strip() == "1", "nothing ran before the refusal"
+    assert summary.read_text(encoding="utf-8") == before
+    assert (suite["state"] / "pass").read_text(encoding="utf-8").strip() == "1", "nothing ran before the refusal"
 
     summary.unlink()
     record_clash = suite["run"]("--runs", "1", str(suite["checkout"]), "lab-1", "stub")
@@ -727,14 +730,14 @@ def test_the_runner_refuses_to_overwrite_and_exits_2(suite) -> None:
 def test_resume_continues_an_interrupted_run_from_its_records(suite) -> None:
     first = suite["run"]("--runs", "2", str(suite["checkout"]), "lab-1", "stub")
     summary = suite["evals"] / "results" / "suite-lab-1.md"
-    before = summary.read_text()
+    before = summary.read_text(encoding="utf-8")
     summary.unlink()  # as if the run had stopped before its summary
     records = sorted(path.name for path in (suite["evals"] / "stub" / "results").iterdir())
     resumed = suite["run"]("--runs", "2", "--resume", str(suite["checkout"]), "lab-1", "stub")
     assert (first.returncode, resumed.returncode) == (1, 1), resumed.stderr
-    assert summary.read_text() == before, "the resumed summary counts the existing records"
+    assert summary.read_text(encoding="utf-8") == before, "the resumed summary counts the existing records"
     assert sorted(path.name for path in (suite["evals"] / "stub" / "results").iterdir()) == records
-    assert int((suite["state"] / "pass").read_text()) == 2, "no attempt with a record runs again"
+    assert int((suite["state"] / "pass").read_text(encoding="utf-8")) == 2, "no attempt with a record runs again"
 
 
 @pytest.mark.parametrize("change", ["model", "broken", "outcome", "verdicts", "exit-code-type", "grade-line-type",
@@ -746,7 +749,7 @@ def test_resume_refuses_records_it_cannot_count(suite, change: str) -> None:
     summary.unlink()
     extra, runs = {}, "2"
     record_path = next((suite["evals"] / "stub" / "results").glob("lab-1-pass-*-1.json"))
-    record = json.loads(record_path.read_text())
+    record = json.loads(record_path.read_text(encoding="utf-8"))
     if change == "model":
         extra["EVAL_AGENT_CMD"] = suite["env"]["EVAL_AGENT_CMD"].replace("agent-model", "other-model")
     elif change == "broken":
@@ -763,7 +766,7 @@ def test_resume_refuses_records_it_cannot_count(suite, change: str) -> None:
         runs = "1"
     resumed = suite["run"]("--runs", runs, "--resume", str(suite["checkout"]), "lab-1", **extra)
     assert resumed.returncode == 2, resumed.stderr
-    assert int((suite["state"] / "pass").read_text()) == 2, "nothing ran"
+    assert int((suite["state"] / "pass").read_text(encoding="utf-8")) == 2, "nothing ran"
     assert not summary.exists()
 
 
@@ -847,7 +850,7 @@ def test_a_run_directory_inside_a_checkout_is_refused(suite) -> None:
 @pytest.mark.parametrize("scenarios", [None, []])
 def test_a_case_without_scenarios_is_refused(suite, scenarios) -> None:
     case_file = suite["evals"] / "stub" / "case.yaml"
-    case = yaml.safe_load(case_file.read_text())
+    case = yaml.safe_load(case_file.read_text(encoding="utf-8"))
     if scenarios is None:
         del case["scenarios"]
     else:
@@ -866,7 +869,7 @@ def test_a_run_with_every_scenario_graded_exits_0(suite) -> None:
 
 # --- AC3: the case contract -------------------------------------------------------------------
 
-REQUIRED_FIELDS = set(yaml.safe_load((REFERENCE_CASE / "case.yaml").read_text())) | {"kind"}
+REQUIRED_FIELDS = set(yaml.safe_load((REFERENCE_CASE / "case.yaml").read_text(encoding="utf-8"))) | {"kind"}
 # File names that hold the agent's prose rather than its tool calls: named for agent output, a
 # transcript, a stream or a response, or a plain-text or log file, which no call record is.
 PROSE = re.compile(r"(?i)agent[-_]?output|transcript|stdout|stderr|response|\.(?:txt|log)$")
@@ -878,7 +881,7 @@ def contract_errors(case_dir: Path, tracked_mode) -> list[str]:
     """Every way a case directory breaks the contract SKL-164 AC3 states."""
     errors = []
     try:
-        case = yaml.safe_load((case_dir / "case.yaml").read_text())
+        case = yaml.safe_load((case_dir / "case.yaml").read_text(encoding="utf-8"))
     except (OSError, yaml.YAMLError) as error:
         return [f"case.yaml unreadable: {error}"]
     if not isinstance(case, dict):
@@ -907,7 +910,7 @@ def contract_errors(case_dir: Path, tracked_mode) -> list[str]:
         errors.append("the grader does not read the tool-call record actions.jsonl")
     # Only strings shaped as file names count, so a grader's own messages may say "transcript".
     files = {name for name in names if SUITE.RELATIVE_FILE.fullmatch(name)}
-    written = set(REDIRECT.findall((case_dir / "run.sh").read_text())) if (case_dir / "run.sh").is_file() else set()
+    written = set(REDIRECT.findall((case_dir / "run.sh").read_text(encoding="utf-8"))) if (case_dir / "run.sh").is_file() else set()
     prose = sorted(name for name in files if PROSE.search(name) or name in written)
     if prose:
         errors.append(f"the grader reads the agent's prose: {prose}")
@@ -944,7 +947,7 @@ def test_the_contract_check_catches_each_breakage(tmp_path: Path, breakage: str)
     case_dir = tmp_path / "case"
     stub_case(case_dir)
     assert contract_errors(case_dir, file_mode) == [], "the stub case keeps the contract"
-    case = yaml.safe_load((case_dir / "case.yaml").read_text())
+    case = yaml.safe_load((case_dir / "case.yaml").read_text(encoding="utf-8"))
     if breakage == "no-kind":
         del case["kind"]
     elif breakage == "bad-kind":
@@ -993,7 +996,7 @@ def test_a_grader_message_that_says_transcript_keeps_the_contract(tmp_path: Path
 
 
 def test_the_folded_case_is_discriminating_on_skl_159s_merge_commit() -> None:
-    case = yaml.safe_load((REFERENCE_CASE / "case.yaml").read_text())
+    case = yaml.safe_load((REFERENCE_CASE / "case.yaml").read_text(encoding="utf-8"))
     assert case["kind"] == "discriminating"
     assert case["baseline"]["commit"] == "7a6cb17"
     assert case["candidate"]["commit"] == "4f0eb79"

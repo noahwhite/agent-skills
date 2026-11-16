@@ -71,7 +71,7 @@ LONE_SURROGATE = re.compile("[\ud800-\udfff]")
 # backslash before t), so that path is redacted too: the accepted cost is over-redaction, never less.
 AFTER_ESCAPE = r"(?:(?<=\\[ntrbf])|(?<=\\u[0-9A-Fa-f]{4}))"
 # The left boundary of a known root, in both passes, is ASCII: only an ASCII letter, digit, _, .
-# or - directly before a root keeps it whole (prefix/root is left as it is), so a root behind any
+# or - directly before a root, in the raw spelling, keeps it whole (prefix/root is left as it is), so a root behind any
 # non-ASCII character, a letter such as é included, or behind a control character is replaced.
 # The right boundary stays (?![\w.-]), only the text pass also accepts a root after AFTER_ESCAPE,
 # and the absolute-path rewrite below keeps its own boundary.
