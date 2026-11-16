@@ -5,20 +5,21 @@
 #   bash spikes/SKL-317/poc/run.sh
 #
 # It installs the pinned promptfoo into a temporary directory outside the repository, clones
-# the commit under test into the same directory, and runs one promptfoo eval that repeats the
-# single test N times, one call at a time. Each call of the script provider (provider.py) runs
+# the commit under test into a second one, and runs one promptfoo eval that repeats the single
+# test N times, one call at a time. Each call of the script provider (provider.py) runs
 # attempts of the case's own run.sh until one is graded, so promptfoo receives N graded runs or
 # an error. compare.py then writes compare.md beside this script.
 #
-# Settings, all optional:
+# Settings:
+#   SKL317_SPEND_LEDGER     needed: the file that holds what every attempt of this spike spent.
+#                           It exists before the first run and sits outside the repository.
 #   SKL317_MODE=stub        a dry run: a stub agent stands in for the model, nothing is spent and
 #                           compare.md goes to stdout, never to the repository. Default: live.
 #   SKL317_STUB_PLAN        stub only: what each attempt does, in order and comma-separated, of
 #                           pass, fail, void and broken. It replaces the injected void.
 #   SKL317_NPM_PREFIX       stub only: a directory that already holds the pinned promptfoo
 #                           install, to skip installing it again.
-#   SKL317_SPEND_LEDGER     the file that holds what every attempt of this spike spent.
-#   EVAL_TIMEOUT, EVAL_PASS_ENV   as run-suite.sh reads them.
+#   EVAL_TIMEOUT, EVAL_GRADING_MARGIN, EVAL_PASS_ENV   as run-suite.sh and suite.py read them.
 #
 # Exit status: 0 when promptfoo received N graded runs and its report matches the provider's
 # record of them; 1 when it did not, when a blocker stopped the run, or when a step failed;
@@ -56,9 +57,17 @@ newer_or_same() {
   done
   return 0
 }
-# dotted TEXT: the X.Y.Z of a version line such as "v24.1.0", less any suffix, or nothing.
+# dotted TEXT: the X.Y.Z of a release version line such as "v24.1.0", or nothing. A version with
+# a suffix, such as the pre-release "v22.22.0-rc.1", is no release and gives nothing.
 dotted() {
-  [[ "$1" =~ ^[[:space:]]*v?([0-9]+\.[0-9]+\.[0-9]+)([-+][0-9A-Za-z.+-]+)?[[:space:]]*$ ]] && echo "${BASH_REMATCH[1]}"
+  [[ "$1" =~ ^[[:space:]]*v?([0-9]+\.[0-9]+\.[0-9]+)[[:space:]]*$ ]] && echo "${BASH_REMATCH[1]}"
+}
+# whole_seconds NAME: true when the variable NAME is unset, empty, or a whole number of seconds
+# of at least 1, which is how suite.py reads a duration setting.
+whole_seconds() {
+  local value="${!1:-}"
+  [ -z "$value" ] && return 0
+  [[ "$value" =~ ^[0-9]+$ ]] && [ "$((10#$value))" -ge 1 ]
 }
 # exact TEXT: a version line less the space around it and a leading "v", suffix included.
 exact() {
@@ -82,9 +91,13 @@ tools=(git python3 node npm df awk realpath mktemp timeout)
 for tool in "${tools[@]}"; do
   command -v "$tool" >/dev/null || refuse "$tool is needed and is not on PATH (see README.md, Prerequisites)"
 done
-node_version="$(dotted "$(node --version)")" || refuse "node --version did not print a version: $(node --version)"
+node_version="$(dotted "$(node --version)")" ||
+  refuse "node --version did not print a release version X.Y.Z: $(node --version)"
 newer_or_same "$node_version" "$node_floor" || refuse "Node.js $node_floor or later is needed, and node is $node_version"
 python3 -c 'import sys; sys.exit(sys.version_info < (3, 12))' || refuse "python3 3.12 or later is needed"
+for name in EVAL_TIMEOUT EVAL_GRADING_MARGIN; do
+  whole_seconds "$name" || refuse "$name must be a whole number of seconds, at least 1"
+done
 
 poc="$(cd "$(dirname "$0")" && pwd)"
 root="$(git -C "$poc" rev-parse --show-toplevel)" || refuse "$poc is not in a git checkout"
@@ -105,31 +118,40 @@ base="$(realpath -e "${TMPDIR:-/tmp}" 2>/dev/null)" || refuse "the temporary dir
 case "$base/" in
   "$(realpath "$root")"/*) refuse "the temporary directory $base is inside the repository; set TMPDIR outside it" ;;
 esac
-# The spend ledger outlives a run, so it is not under the temporary directory, and it must not
-# be in the repository either.
-ledger="$(realpath -m "${SKL317_SPEND_LEDGER:-${XDG_STATE_HOME:-$HOME/.local/state}/agent-skills-skl317/spend.jsonl}")"
+# The spend ledger outlives a run, so the caller names it: no default path is built from a
+# variable the agent's environment carries. It must exist, so a mistyped path cannot start a
+# second, empty ledger, and it must not be in the repository.
+[ -n "${SKL317_SPEND_LEDGER:-}" ] ||
+  refuse "SKL317_SPEND_LEDGER is needed: the spend ledger file of this spike, outside the repository (see README.md)"
+ledger="$(realpath -m "$SKL317_SPEND_LEDGER")"
 case "$ledger" in
   "$(realpath "$root")"/*) refuse "the spend ledger $ledger is inside the repository; set SKL317_SPEND_LEDGER outside it" ;;
 esac
+[ -f "$ledger" ] || refuse "the spend ledger $ledger does not exist; create it empty before the first run"
 if [ -z "${SKL317_NPM_PREFIX:-}" ]; then
   free_mb="$(df -Pm "$base" | awk 'NR == 2 { print $4 }')"
   [ "$free_mb" -ge "$space_mb" ] || refuse "$base has $free_mb MB free and the install needs $space_mb MB"
 fi
 
+# Two temporary directories. $work is the harness's own: the install, promptfoo's state and
+# export, the provider's state and its copy of the ledger. $arena is all the agent under test
+# is told of: the clone, the run directories and its temporary directory.
 work="$(mktemp -d "$base/skl317-poc.XXXXXX")"
+arena="$(mktemp -d "$base/skl317-attempts.XXXXXX")"
 # Names this run in the spend ledger and in the title of each agent session it starts.
 run_id="$(date -u +%Y%m%dT%H%M%SZ)-${work##*.}"
 # A run that did not exit 0 keeps what explains it (promptfoo's export and log, the provider's
-# state and log) and drops the install, its download cache and the clone.
+# state, log and copy of the ledger) and drops the install, its download cache and the clone.
 trap 'status=$?
+rm -rf "$arena"
 if [ "$status" -eq 0 ]; then
   rm -rf "$work"
 else
-  rm -rf "$work/npm" "$work/npm-cache" "$work/tmp" "$work/checkout" "$work/runs" "$work/usage"
+  rm -rf "$work/npm" "$work/npm-cache" "$work/npm-home" "$work/tmp" "$work/usage"
   rmdir "$work" 2>/dev/null ||
-    echo "run.sh: kept $work (promptfoo output and the provider state and log; remove it when read)" >&2
+    echo "run.sh: kept $work (promptfoo output, the provider state and log, the ledger copy; remove it when read)" >&2
 fi' EXIT
-mkdir -p "$work/tmp"
+mkdir -p "$work/tmp" "$arena/tmp"
 
 # npm gets a scrubbed environment: no credential or registry setting of the caller, an empty
 # home, and its download cache and temporary files under $work. It installs without running any
@@ -150,20 +172,24 @@ if [ -z "${SKL317_NPM_PREFIX:-}" ]; then
 fi
 
 # The commit under test, as a clone of its own: the case's run.sh, the grader and the skill the
-# agent reads all come from it, and an attempt that changes it is void.
-git clone --quiet --no-checkout "$root" "$work/checkout" || refuse "cannot clone $root"
-git -C "$work/checkout" checkout --quiet --detach "$commit" || refuse "the clone does not hold commit $commit"
+# agent reads all come from it, and an attempt that changes it is void. The clone keeps no
+# remote, so it does not name the repository it came from.
+git clone --quiet --no-checkout "$root" "$arena/checkout" || refuse "cannot clone $root"
+git -C "$arena/checkout" checkout --quiet --detach "$commit" || refuse "the clone does not hold commit $commit"
+git -C "$arena/checkout" remote remove origin || refuse "cannot remove the remote of the clone"
 
 # promptfoo, and through it the provider and the agent, keep the variables suite.py gives an
 # attempt and the ones EVAL_PASS_ENV names, and nothing else of the caller. Every other
-# variable is unset in a subshell, so no value is ever put on a command line. The home
-# directory stays the caller's, because the agent reads its configuration there; promptfoo's
-# own state is pointed at $work, telemetry, update checks, sharing and remote generation are
-# switched off, and Python writes no bytecode beside the scripts.
+# variable is unset in a subshell, so no value is ever put on a command line. The provider
+# reads EVAL_GRADING_MARGIN as suite.py does and does not pass it on. The home directory stays
+# the caller's, because the agent reads its configuration there; promptfoo's own state is
+# pointed at $work, telemetry, update checks, sharing and remote generation are switched off,
+# and Python writes no bytecode beside the scripts.
 kept() {
   local name
   case "$1" in
-    PATH | HOME | USER | LOGNAME | SHELL | LANG | TERM | TZ | EVAL_TIMEOUT | EVAL_PASS_ENV | LC_* | XDG_*) return 0 ;;
+    PATH | HOME | USER | LOGNAME | SHELL | LANG | TERM | TZ | LC_* | XDG_*) return 0 ;;
+    EVAL_TIMEOUT | EVAL_GRADING_MARGIN | EVAL_PASS_ENV) return 0 ;;
   esac
   for name in ${EVAL_PASS_ENV:-}; do
     [ "$name" = "$1" ] && return 0
@@ -175,7 +201,7 @@ promptfoo() {
     for name in $(compgen -e); do
       kept "$name" || unset "$name" 2>/dev/null || true
     done
-    export TMPDIR="$work/tmp" SKL317_WORK="$work" SKL317_CHECKOUT="$work/checkout" SKL317_MODE="$mode" \
+    export TMPDIR="$work/tmp" SKL317_WORK="$work" SKL317_ARENA="$arena" SKL317_CHECKOUT="$arena/checkout" SKL317_MODE="$mode" \
       SKL317_RUNS="$runs" SKL317_INJECT_VOID_ATTEMPT="$inject_void_attempt" SKL317_STUB_PLAN="$plan" \
       SKL317_SPEND_LEDGER="$ledger" SKL317_RUN_ID="$run_id" PYTHONDONTWRITEBYTECODE=1 \
       PROMPTFOO_CONFIG_DIR="$work/promptfoo" PROMPTFOO_CACHE_ENABLED=false \
@@ -189,8 +215,11 @@ reported="$(promptfoo --version)" || refuse "promptfoo --version failed"
 installed="$(exact "$reported")" || refuse "promptfoo --version printed no version: $reported"
 [ "$installed" = "$version" ] || refuse "expected promptfoo $version, and the install reports $installed"
 
-# What the ledger held before this run, for the spend arithmetic in compare.md.
-if [ -f "$ledger" ]; then cp "$ledger" "$work/ledger-before.jsonl"; else : > "$work/ledger-before.jsonl"; fi
+# What the ledger held before this run, for the spend arithmetic in compare.md, and the
+# provider's own copy of the ledger, which it checks the ledger against before and after each
+# attempt.
+cp "$ledger" "$work/ledger-before.jsonl"
+cp "$work/ledger-before.jsonl" "$work/ledger-mirror.jsonl"
 
 # One eval: the single test repeated N times, one provider call at a time, no cache, and no
 # --retry-errors, which is the only retry promptfoo $version has. promptfoo exits 100 when a
@@ -200,10 +229,18 @@ eval_status=0
 promptfoo eval --config promptfooconfig.yaml --repeat "$runs" --max-concurrency 1 --no-cache --no-share \
   --no-progress-bar --no-table --output "$work/results.json" >&2 || eval_status=$?
 
+# The run is of the commit and the working tree it started from: a change to either while the
+# agent ran is a blocker.
+changed=""
+[ "$(git -C "$root" rev-parse HEAD)" = "$commit" ] || changed=yes
+[ "$(git -C "$root" status --porcelain --untracked-files=all -- . ':(exclude)spikes/SKL-317/poc/compare.md')" = "$dirty" ] ||
+  changed=yes
+
 out="$poc/compare.md"
 [ "$mode" = live ] || out="$work/compare.md"
 status=0
-python3 compare.py --work "$work" --ledger "$ledger" --mode "$mode" --runs "$runs" --commit "$commit" \
-  --version "$version" --eval-status "$eval_status" --dirty "${dirty:+yes}" --out "$out" || status=$?
+python3 compare.py --work "$work" --checkout "$arena/checkout" --ledger "$ledger" --run-id "$run_id" --mode "$mode" \
+  --runs "$runs" --inject "$inject_void_attempt" --commit "$commit" --version "$version" \
+  --eval-status "$eval_status" --dirty "${dirty:+yes}" --changed "$changed" --out "$out" || status=$?
 if [ "$mode" = stub ] && [ -f "$out" ]; then cat "$out"; fi
 exit "$status"
