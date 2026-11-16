@@ -4,8 +4,14 @@
 
 Date: 2026-11-16 UTC, independent QA round 1.
 Path: `spike`, selected with `select-path.py` from the step 12 note's `path: spike` line.
-Target: the findings comment `588e08ea` on SKL-285, the filed stories SKL-320 to SKL-324, and the refinement proposal comments `535ff876` on SKL-284, `64802f50` on SKL-160 and `1081123c` on SKL-290.
-None of these deliverables has a commit; the spike changed no tracked file, and no SKL-285 branch or PR exists.
+Target: the deliverables below, each a tracker item named by story key and, for a comment, the first eight characters of its id.
+
+- The findings comment `588e08ea` on SKL-285.
+- The filed stories SKL-320, SKL-321, SKL-322, SKL-323 and SKL-324.
+- The refinement proposal comments `535ff876` on SKL-284, `64802f50` on SKL-160 and `1081123c` on SKL-290.
+
+Each deliverable's full link is in the QA evidence comment `7189cd7b` on SKL-285; this public record leaves tracker URLs out, because they carry the private workspace name.
+None of these deliverables has a commit: the spike changed no tracked file and opened no branch or PR of its own, and this evidence PR is the only SKL-285 PR.
 Baseline read for the recount: `main` at `4103039823b376c5dacbeb32eb2c024234b9f8fd`, the SHA the findings record, in a detached worktree.
 No environment and no deployed build apply on the `spike` path, and no fixture was needed.
 There is no visual surface, so no screenshot applies.
