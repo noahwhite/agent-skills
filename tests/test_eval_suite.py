@@ -100,7 +100,8 @@ sys.exit(0 if ok else 1)
 # the call, so the record shows whether the runner normalised the path, and the CANARY or EVAL_CANARY variable
 # into evidence.json, so the record shows what environment it got. evidence.json holds its run directory
 # after an escaped newline, as messages.json holds a path that starts a line, and for pass also behind
-# \/ escapes, a JSON spelling that only a decoded string literal shows as the path. EVAL_AGENT_CMD passes
+# \/ escapes, a JSON spelling that only a decoded string literal shows as the path, and behind a raw é,
+# a non-ASCII letter that must not hide a root. EVAL_AGENT_CMD passes
 # --model MODEL first, as a real agent command names its model.
 STUB_AGENT = r"""#!/usr/bin/env bash
 set -euo pipefail
@@ -123,7 +124,7 @@ esac
 printf '{"action": "%s", "run_dir": "%s", "id": "%s"}\n' "$action" "$run" "$STUB_UUID" > "$run/actions.jsonl"
 if [ "$scenario" = bad-bytes ]; then printf '\xff\n' >> "$run/actions.jsonl"; fi
 escaped=""
-if [ "$scenario" = pass ]; then escaped=", \"escaped\": \"${run//\//\\/}\""; fi
+if [ "$scenario" = pass ]; then escaped=", \"escaped\": \"${run//\//\\/}\", \"accented\": \"é$run\""; fi
 printf '{"seen_in": "\\n%s"%s, "canary": "%s"}\n' "$run" "$escaped" "${CANARY-${EVAL_CANARY-unset}}" \
   > "$run/evidence.json"
 cp "$run/evidence.json" "$STUB_STATE/evidence-$scenario.json"
@@ -346,13 +347,23 @@ def test_run_directories_sit_outside_both_checkouts_and_never_reach_a_record(sui
                 assert run_dir not in string, f"{record.name}: {string!r}"
     calls = next((suite["evals"] / "stub" / "results").glob("*-pass-*-calls.jsonl")).read_text()
     assert json.loads(calls)["run_dir"] == "{run_dir}"
-    # The agent wrote its run directory behind \/ escapes, which only the decoded pass redacts.
+    # The agent wrote its run directory behind \/ escapes, which only the decoded pass redacts, and
+    # behind a raw é, which only the ASCII left boundary lets either pass redact.
     written = (suite["state"] / "evidence-pass.json").read_text()
     assert f'"escaped": "{run_dirs[0]}"'.replace("/", "\\/") in written, written
+    assert f'"accented": "é{run_dirs[0]}"' in written, written
+    # No grader input of any run record holds a run directory once its JSON content is decoded.
+    for path in (suite["evals"] / "stub" / "results").glob("*[0-9].json"):
+        for name, content in json.loads(path.read_text())["grader_inputs"].items():
+            for string in decoded_strings(content):
+                for run_dir in run_dirs:
+                    assert run_dir not in string, f"{path.name} {name}: {string!r}"
     records = list((suite["evals"] / "stub" / "results").glob("*-pass-*-1.json"))
     assert len(records) == 1, "the pass scenario wrote one run record"
     record = json.loads(records[0].read_text())
-    assert json.loads(record["grader_inputs"]["evidence.json"])["escaped"] == "{run_dir}"
+    evidence = json.loads(record["grader_inputs"]["evidence.json"])
+    assert evidence["escaped"] == "{run_dir}"
+    assert evidence["accented"] == "é{run_dir}"
 
 
 def test_the_normaliser_rewrites_paths_and_leak_shapes_and_keeps_the_rest() -> None:
@@ -513,6 +524,53 @@ def test_the_normaliser_decodes_each_string_literal_before_redacting_known_roots
     assert result == expected
     assert normalise(result) == result, "a normalised record is left as it is"
     result.encode("utf-8")  # a record is written as UTF-8
+
+
+# SKL-319: only an ASCII letter, digit, _, . or - directly before a known root keeps it whole. Each
+# case is a message and its normalised form, spelled as decoded text, as a raw UTF-8 JSON literal
+# and as a JSON literal with \uXXXX escapes; a label per form says whether it redacts at 57807ed
+# already (guard) or not (must-fail). A form with no label is not part of the case.
+def left_boundary_forms(name: str, message: str, expected, labels: dict):
+    spelled = {"decoded": lambda text: text,
+               "raw-utf8": lambda text: in_message(json.dumps(text, ensure_ascii=False)),
+               "u-escape": lambda text: in_message(json.dumps(text))}
+    for form, label in labels.items():
+        wanted = expected[form] if isinstance(expected, dict) else spelled[form](expected)
+        yield pytest.param(spelled[form](message), wanted, id=f"{label}-{name}-{form}")
+
+
+ALL_GUARD = {"decoded": "guard", "raw-utf8": "guard", "u-escape": "guard"}
+# A raw non-ASCII character ahead of a root blocked it at 57807ed only where it is a word character.
+WORD_BEFORE_ROOT = {"decoded": "must-fail", "raw-utf8": "must-fail", "u-escape": "guard"}
+LEFT_BOUNDARY = [
+    *left_boundary_forms("e-acute-run-root", f"é{RUN_ROOT}/a.json", "é{run_dir}/a.json", WORD_BEFORE_ROOT),
+    *left_boundary_forms("cjk-home-root", f"中{HOME_ROOT}/x", "中{home}/x", WORD_BEFORE_ROOT),
+    *left_boundary_forms("arrow-run-root", f"→{RUN_ROOT}/a.json", "→{run_dir}/a.json", ALL_GUARD),
+    *[case for control, before in {"newline": "\n", "tab": "\t", "return": "\r", "backspace": "\b",
+                                   "formfeed": "\f"}.items()
+      for case in left_boundary_forms(f"{control}-run-root", f"{before}{RUN_ROOT}/a.json",
+                                      f"{before}{{run_dir}}/a.json", {"decoded": "guard"})],
+    *[case for name, before in {"letter": "x", "digit": "7", "underscore": "_", "dot": ".", "hyphen": "-"}.items()
+      for case in left_boundary_forms(f"ascii-{name}-keeps-run-root", f"{before}{RUN_ROOT}/a.json",
+                                      f"{before}{RUN_ROOT}/a.json", ALL_GUARD)],
+    *left_boundary_forms("cafe-then-home-root", f"/café{HOME_ROOT}", "/café{home}", WORD_BEFORE_ROOT),
+    *left_boundary_forms("e-acute-run-root-spaced-tail", f"é{RUN_ROOT}/My Notes/a b.txt",
+                         "é{run_dir}/My Notes/a b.txt", WORD_BEFORE_ROOT),
+    *left_boundary_forms("cafe-generic-path", "/café/srv/x",
+                         {"decoded": "{path}", "raw-utf8": in_message('"{path}"'),
+                          "u-escape": in_message('"/caf\\u00e9{path}"')}, ALL_GUARD),
+    *left_boundary_forms("e-acute-generic-path", "é/srv/x",
+                         {"decoded": "é/srv/x", "raw-utf8": in_message('"é/srv/x"'),
+                          "u-escape": in_message('"\\u00e9{path}"')}, ALL_GUARD),
+]
+
+
+@pytest.mark.parametrize("text, expected", LEFT_BOUNDARY)
+def test_only_an_ascii_word_character_before_a_known_root_keeps_it(text: str, expected: str) -> None:
+    normalise = SUITE.Normaliser(SUITE.leak_patterns(), run_dir=Path(RUN_ROOT), home=Path(HOME_ROOT))
+    result = normalise(text)
+    assert result == expected
+    assert normalise(result) == result, "a normalised record is left as it is"
 
 
 def test_a_record_with_bytes_that_are_not_utf8_is_still_written(suite) -> None:
