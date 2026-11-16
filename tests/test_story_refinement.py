@@ -2480,7 +2480,7 @@ def test_arguments_section_precedes_read_first() -> None:
     "sentence",
     [
         "The closing message is the facilitator's final message to the owner when the invocation ends, on every end state and every stop.",
-        "It names the outcome (the recorded estimate, unpointed, or split with the slice count) or the stop reason, including each `needs input`: the denied tracker write of Step 1 and the unpointed variance stop of Step 4.",
+        "It names the outcome (the recorded estimate, unpointed, split with the slice count, or a [Short path](#short-path) outcome) or the stop reason, including each `needs input`: the denied tracker write of Step 1 and the unpointed variance stop of Step 4.",
         "It carries the `metrics: on` or `metrics: off` line.",
     ],
 )
@@ -2953,13 +2953,16 @@ THIS_REPOSITORY_GUARD_PATTERNS = {
 }
 
 
+GUARDS_REFERENCE = ROOT / "skills" / "story-refinement" / "references" / "repository-guards.md"
+
+
 def guards_section() -> str:
-    return flat(section(SKILL.read_text(), GUARDS))
+    return flat(section(GUARDS_REFERENCE.read_text(), GUARDS, level=1))
 
 
 def guard_items() -> list[str]:
     """The numbered items of the Repository guards section, index 0 being the text before item 1, each flattened."""
-    return [flat(part) for part in re.split(r"^\d+\. ", section(SKILL.read_text(), GUARDS), flags=re.MULTILINE)]
+    return [flat(part) for part in re.split(r"^\d+\. ", section(GUARDS_REFERENCE.read_text(), GUARDS, level=1), flags=re.MULTILINE)]
 
 
 def dor_guard_bullet() -> str:
@@ -3096,7 +3099,7 @@ def test_guards_section_stops_on_an_unrunnable_guard_or_a_surviving_rejection() 
         "when an accept-round amendment adds or changes a tracked file or committed output the check has not "
         "covered, the facilitator runs the check again against the amended acceptance criteria before the updated "
         "refinement comment is posted",
-        "a split sibling under the [split rule](#split-rule) gets the check against its own acceptance criteria before "
+        "a split sibling under the [split rule](../skill.md#split-rule) gets the check against its own acceptance criteria before "
         "its estimate voters launch, and its guard list is part of the story surface those voters receive",
         "a story whose acceptance criteria changed after an earlier check gets the check against its final acceptance "
         "criteria before the po decides",
@@ -3166,6 +3169,7 @@ def test_skill_names_none_of_this_repository_guards() -> None:
     """AC6: the skill names none of this repository's guard commands, scripts, tests or paths, in any spelling."""
     text = SKILL.read_text().lower()
     assert "## repository guards" in text, "the added section is present"
+    text += GUARDS_REFERENCE.read_text().lower()
     for name, pattern in THIS_REPOSITORY_GUARD_PATTERNS.items():
         assert not re.search(pattern, text), name
 
@@ -5071,6 +5075,8 @@ TOPIC_RULES = [
         "differs`.",
     ]),
     ("not-looked-up", ALL_THREE, ("not looked up",), [
+        "Every short-path ending names its outcome in the closing message, `short path: moved to ready` on the move, "
+        "and carries `exemplars: not looked up` and `anchors: not looked up`.",
         "A roster stop at Step 1 item 2 or a type-check stop at item 3 ends the ceremony before the item 4 lookups "
         "run, so both lines read `not looked up`, which takes precedence over `none configured` and `not pointed`.",
         "The exemplar and anchor lines of the refinement comment and the pointing record use only these phrases, and "
@@ -5371,3 +5377,207 @@ def test_slice_brief_worked_example_covers_the_prior_round_context_evidence() ->
     expected = zip(PRIOR_ROUND_EXAMPLE_CASES, PRIOR_ROUND_EXAMPLE_INPUTS, PRIOR_ROUND_EXAMPLE_RESULTS, strict=True)
     for case, given, result in expected:
         assert rows.get(case) == (given, result), case
+
+
+# --- SKL-226: short path for a refine request on an already-refined, pointed, unblocked story ------------
+
+SHORT_PATH = "Short path"
+SHORT_PATH_CONDITIONS = {
+    "a": "(a) the story is an estimated type (`type: estimated`);",
+    "b": (
+        "(b) refined: it carries a Refinement record comment and its latest Accept round result comment has outcome "
+        "`accepted`;"
+    ),
+    "c": (
+        "(c) pointed: its tracker estimate, read with `linear api` and never from `linear issue view`, is set to a "
+        "value on the `profile.tracker.estimate_scale` sequence;"
+    ),
+    "d": (
+        "(d) unblocked: `linear issue relation list <ID>` shows every blocking relation in both directions with the "
+        "blocker in `profile.tracker.states.done`, where a canceled or duplicate blocker is not done;"
+    ),
+    "e": (
+        "(e) ready-eligible: the story is in `profile.tracker.states.backlog`, its priority and assignee are set, the "
+        "blocker Definition of Ready box exists, and every other Definition of Ready box is already ticked."
+    ),
+}
+SHORT_PATH_EVALUATION = (
+    "The facilitator evaluates the short path immediately after Step 1 item 1 (story read), applying the Step 1 "
+    "item 3 type check within that evaluation, before Step 1 item 2 (roster check) and before any voter launch, "
+    "preflight comment or tracker write."
+)
+SHORT_PATH_EVERY_CONDITION = "It applies only when every condition holds, each read from the tracker:"
+SHORT_PATH_SKIPS = (
+    "On the path the facilitator skips the roster check, the exemplar lookup and anchor table, the tracker-write "
+    "preflight, the repository guard check, the voter launches and Steps 2 to 4, runs no pointing round, and does "
+    "not ask the owner to confirm the path."
+)
+SHORT_PATH_PO_WRITES = (
+    'The product owner verifies every clause of the "No blocking stories, no unresolved external dependencies, and '
+    'no other story already owns this scope" Definition of Ready box from what the story records, the relation-list '
+    "evidence for the blockers and the story's recorded backlog search for ownership, ticks the box with that "
+    "evidence, moves the story to `profile.tracker.states.ready`, reads back both the box and the state, and posts "
+    "the Triage record from [references/refinement-record.md](references/refinement-record.md) with the priority as "
+    "read back."
+)
+SHORT_PATH_PROMOTION = "That move follows the promotion rule in `persona-product-owner/SKILL.md`."
+SHORT_PATH_UNVERIFIED = (
+    "If the product owner cannot verify a clause from what the story records, no write is made and the normal "
+    "ceremony runs from Step 1 item 2."
+)
+SHORT_PATH_FAILED = (
+    "A story in `profile.tracker.states.backlog` that fails any of conditions (a) to (e) runs the normal ceremony as "
+    "today: an unrefined or unpointed story is refined or pointed, and a story with a blocker not done stays out of "
+    "`profile.tracker.states.ready`."
+)
+SHORT_PATH_NEVER = (
+    "A Bug, an Investigation, a Spike, and a story whose filing template has no blocker Definition of Ready box never "
+    "take the path."
+)
+SHORT_PATH_ALREADY_READY = (
+    "A story of type `estimated` already in `profile.tracker.states.ready` runs no ceremony, takes no write and is "
+    "reported `short path: already ready`;"
+)
+SHORT_PATH_EXCLUDED = (
+    "one in `profile.tracker.states.in_progress` or a later state is excluded, runs no ceremony, takes no write and "
+    "is reported `short path: excluded`."
+)
+SHORT_PATH_PO_AUTHORS = (
+    "The product owner authors every write on the path; when the team of `STORY_ID` differs from "
+    "`profile.tracker.team_key`, the differing-team rule in Team resolution in [references/linear.md]"
+    "(references/linear.md) confirms `profile.tracker.states.ready`, `profile.tracker.states.backlog` and each label "
+    "name on that team before the write."
+)
+SHORT_PATH_DENIED = (
+    "A denied or failed write stops the path with `needs input` under [Denied tracker writes](#denied-tracker-writes) "
+    "and is never retried through another tool."
+)
+SHORT_PATH_CARVE_OUT = (
+    '"Does not ask" never overrides that stop or an owner authorization that rule requires; an unset priority is a '
+    "failed condition (e), so the normal ceremony and its priority stop under [Triage](#triage) apply."
+)
+SHORT_PATH_CLOSING = (
+    "Every short-path ending names its outcome in the closing message, `short path: moved to ready` on the move, and "
+    "carries `exemplars: not looked up` and `anchors: not looked up`."
+)
+SHORT_PATH_RULES = (
+    SHORT_PATH_EVALUATION,
+    SHORT_PATH_EVERY_CONDITION,
+    SHORT_PATH_SKIPS,
+    SHORT_PATH_PO_WRITES,
+    SHORT_PATH_PROMOTION,
+    SHORT_PATH_UNVERIFIED,
+    SHORT_PATH_FAILED,
+    SHORT_PATH_NEVER,
+    SHORT_PATH_ALREADY_READY,
+    SHORT_PATH_EXCLUDED,
+    SHORT_PATH_PO_AUTHORS,
+    SHORT_PATH_DENIED,
+    SHORT_PATH_CARVE_OUT,
+    SHORT_PATH_CLOSING,
+)
+MOVED_TO_READY = "short path: moved to ready"
+ALREADY_READY = "short path: already ready"
+NORMAL_CEREMONY = "normal ceremony"
+
+
+def short_path_body(text: str) -> str:
+    return spaced(section(text, SHORT_PATH))
+
+
+def check_short_path_names(text: str) -> None:
+    """The short-path section names conditions (a) to (e), the skipped steps, the PO writes and read-backs, and the
+    stop carve-out; raises AssertionError naming the first missing piece."""
+    body = short_path_body(text)
+    for key, phrase in SHORT_PATH_CONDITIONS.items():
+        assert phrase in body, f"condition ({key})"
+    for phrase in SHORT_PATH_RULES:
+        assert phrase in body, phrase
+
+
+def stated_outcome(text: str, story: dict) -> str:
+    """The outcome the short-path text states for a story's tracker facts.
+
+    A condition gates the path only while its phrase is in the text, so a text that drops a condition lets a story
+    failing it through; each outcome counts only while the sentence stating it is in the text.
+    """
+    body = short_path_body(text)
+    stated = [key for key, phrase in SHORT_PATH_CONDITIONS.items() if phrase in body]
+    if "a" in stated and not story["a"]:
+        return NORMAL_CEREMONY if SHORT_PATH_NEVER in body else "unstated"
+    if story["state"] == "ready" and SHORT_PATH_ALREADY_READY in body:
+        return ALREADY_READY
+    if all(story[key] for key in stated) and SHORT_PATH_PO_WRITES in body and SHORT_PATH_CLOSING in body:
+        return MOVED_TO_READY
+    if SHORT_PATH_FAILED in body:
+        return NORMAL_CEREMONY
+    return "unstated"
+
+
+ELIGIBLE_STORY = {"a": True, "b": True, "c": True, "d": True, "e": True, "state": "backlog"}
+# One story that takes the path and one case per failed condition the AC names, each with the condition it fails.
+SHORT_PATH_CASES = {
+    "takes the path": ({}, None, MOVED_TO_READY),
+    "unrefined": ({"b": False}, "b", NORMAL_CEREMONY),
+    "unpointed": ({"c": False}, "c", NORMAL_CEREMONY),
+    "blocker not done": ({"d": False}, "d", NORMAL_CEREMONY),
+    "already ready": ({"e": False, "state": "ready"}, "e", ALREADY_READY),
+}
+
+
+def check_short_path_case(text: str, case: str) -> None:
+    changes, _, expected = SHORT_PATH_CASES[case]
+    story = {**ELIGIBLE_STORY, **changes}
+    assert stated_outcome(text, story) == expected, case
+
+
+def test_short_path_section_names_conditions_skips_writes_and_carve_out() -> None:
+    """AC5: the section names conditions (a) to (e), the skipped steps, the PO writes and read-backs, and the AC4
+    stop carve-out."""
+    check_short_path_names(SKILL.read_text())
+
+
+@pytest.mark.parametrize("case", SHORT_PATH_CASES)
+def test_short_path_states_the_outcome_of_each_case(case: str) -> None:
+    """AC5: the path, unrefined, unpointed, a blocker not done and already ready each get their stated outcome."""
+    check_short_path_case(SKILL.read_text(), case)
+
+
+def test_short_path_cases_cover_each_named_condition() -> None:
+    assert [failed for _, failed, _ in SHORT_PATH_CASES.values()] == [None, "b", "c", "d", "e"]
+
+
+@pytest.mark.parametrize("key", sorted(SHORT_PATH_CONDITIONS))
+def test_short_path_condition_is_mutation_proven(key: str) -> None:
+    """AC5: removing a condition's phrase from a copy of the text fails at least one test, and for (b), (c) and (d)
+    the table case for that condition."""
+    text = SKILL.read_text()
+    phrase = SHORT_PATH_CONDITIONS[key]
+    assert text.count(phrase) == 1, f"condition ({key}) sits on one line of SKILL.md"
+    mutant = text.replace(phrase, "")
+    with pytest.raises(AssertionError):
+        check_short_path_names(mutant)
+    if key in ("b", "c", "d"):
+        case = next(name for name, (_, failed, _) in SHORT_PATH_CASES.items() if failed == key)
+        with pytest.raises(AssertionError):
+            check_short_path_case(mutant, case)
+
+
+def test_short_path_precedes_the_roster_check_in_step_one() -> None:
+    """AC1: Step 1 evaluates the short path right after the story read, before the roster check."""
+    items = re.split(r"^  \d+\. ", section(SKILL.read_text(), "Step 1: Independent refinement", level=3),
+                     flags=re.MULTILINE)
+    assert "[Short path](#short-path)" in items[1], "item 1 evaluates the short path"
+    assert "roster" in items[2] and "[Short path](#short-path)" not in "".join(items[2:])
+
+
+def test_short_path_cites_and_does_not_restate_the_promotion_rule() -> None:
+    """AC2: the path cites the promotion rule in persona-product-owner and does not restate it."""
+    rule = "A triaged, unblocked story goes to `profile.tracker.states.ready`, not back to the backlog."
+    assert rule in (ROOT / "skills" / "persona-product-owner" / "SKILL.md").read_text()
+    assert rule not in SKILL.read_text()
+    assert "persona-product-owner/SKILL.md" in short_path_body(SKILL.read_text())
+
+
+def test_closing_message_names_the_short_path_outcome() -> None:
+    assert "or a [Short path](#short-path) outcome" in skill_section(CLOSING)
