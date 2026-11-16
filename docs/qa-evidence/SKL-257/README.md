@@ -249,7 +249,7 @@ Path: no-deployment; the lanes are the repository (a detached worktree of the ta
 Target: `main` at `2bbf8cac364d79ac177a58ea891ac4040eccced8`, the squash merge of PR 286, confirmed an ancestor of `origin/main`; the PR 281 merge `1e0cad8` is an ancestor of the target.
 PR 286 reviewed head: `520e858cb9212676d37caa22235a114b61550b35`; merge base with `main`: `4103039823b376c5dacbeb32eb2c024234b9f8fd`.
 Dependencies: SKL-254, SKL-255 and SKL-256 are Done, and their merges are ancestors of the target.
-Fixtures: none beyond the fixture issue SKL-314 that AC5 names.
+Fixtures: none beyond SKL-314, the `[Tabletop fixture]` issue the AC5 run used.
 The raw output, including the phrase-deletion checks, is attached to SKL-257 as `SKL-257-qa-round-2-assertions.txt`; there is no visual surface, so no screenshot applies.
 Line numbers below are at the target.
 
