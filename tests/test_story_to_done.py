@@ -3755,7 +3755,6 @@ def test_a_role_ask_handback_keeps_the_selected_path_in_the_closing_report() -> 
     assert CLOSING_REPORT_PHRASE in section(SKILL.read_text(), "Arguments")
 
 
-STEP_2_HEADING = "2. Senior engineer: implement to deployment review"
 # SKL-278 AC2: a final engineer handback with no merged PR never passes the merged-PR read-back by
 # running it zero times, and no path weakens a PR gate.
 NO_MERGED_PR_STOP = (
@@ -3767,16 +3766,19 @@ NO_PATH_WAIVER = "No path adds a waiver, an admin override, or a change to the e
 
 
 def test_a_final_handback_with_no_merged_pr_stops_except_a_spike_with_no_tracked_file_change() -> None:
-    lines = section(SKILL.read_text(), STEP_2_HEADING).splitlines()
+    lines = step_2_lines()
     assert NO_MERGED_PR_STOP in lines, "step 2 must state the no-merged-PR stop exactly"
+    assert lines.index(NO_MERGED_PR_STOP) in prose_lines(lines), "the stop must be operative prose"
     assert SKILL.read_text().count(NO_MERGED_PR_STOP) == 1, "the no-merged-PR stop is stated once"
-    waived = next(line for line in lines if line.startswith("For a waived PR, compare"))
+    waived = next((line for line in lines if line.startswith("For a waived PR, compare")), None)
+    assert waived is not None, "step 2 must keep the waived-PR read-back the stop follows"
     assert lines.index(waived) < lines.index(NO_MERGED_PR_STOP), "the stop follows the merged-PR read-back"
 
 
 def test_no_path_weakens_a_pr_gate() -> None:
-    lines = section(SKILL.read_text(), STEP_2_HEADING).splitlines()
+    lines = step_2_lines()
     assert NO_PATH_WAIVER in lines, "step 2 must state that no path adds a waiver"
+    assert lines.index(NO_PATH_WAIVER) in prose_lines(lines), "the no-waiver rule must be operative prose"
     assert SKILL.read_text().count(NO_PATH_WAIVER) == 1, "the no-waiver rule is stated once"
 
 
