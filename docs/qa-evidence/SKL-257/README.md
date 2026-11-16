@@ -155,34 +155,91 @@ Fixtures: none beyond the fixture issue SKL-314 that AC5 names.
 The raw output, including the phrase-deletion checks, is attached to SKL-257 as `SKL-257-qa-round-1-assertions.txt`; there is no visual surface, so no screenshot applies.
 Line numbers below are at the target.
 
-| Item | Verdict | Evidence |
-|---|---|---|
-| AC1: QA scope | Pending owner ruling | `references/interim-handbacks.md` line 7 extends the definition to a QA agent's own background work, and line 11 classifies a QA interim handback before step 0's read-back of that agent and before step 4. `SKILL.md` line 215 is the step 3 pointer. Step 3's line 197 also states that the interim-handback deadline resume does not increment the round count, the rule `interim-handbacks.md` line 42 states; whether that is a restatement AC1 forbids is the ruling below. |
-| AC2: QA resume content | Verified | `interim-handbacks.md` line 41 states the resume content limit in the AC's terms. |
-| AC3: QA limits | Verified | Line 42 states the round-count, read-back cap and continuation-allowance independence, line 44 the metrics launch row, and line 48 leaves step 4's continuation content limits, mixed-owner stop, owner-action stop and new-round rules unchanged. The PR has no hunk in step 4, and `references/metrics-protocol.md` lists the QA deadline resume as a launch row within its round. |
-| AC4: text contracts | Verified | Each of the five phrases AC4 names has its own named test, and all pass. On a throwaway worktree of the reviewed head, deleting each phrase once failed its named test, and the test passed again once the phrase was restored. The PR description has one line per guarded phrase naming the failing test. On the reviewed head, `vendor_shared.py --check` exited 0 and CI run 43804301339 ran `uv run --locked pytest -q` with `success`. |
-| AC5: fixture run | Verified | SKL-314 is a `[Tabletop fixture]` issue in SKL, Canceled at 02:48:10Z, after the recorded run (02:33:11 to 02:45:51); two earlier runs on the same issue were re-runs after skill text changes. CI run 43769704269 was `completed`/`success` at 22:37:01Z the day before. The sections above quote the parent brief, the resume message and the coordinator transcript with the deadline (02:45:06Z) and the read (02:45:18Z), show no user message between the handback and the resume and one QA round throughout, name Claude Code 2.1.325, and state `metrics: off`. The skill text the run used (`6a567c8`) differs from the reviewed head by only the line 43 sentence. |
-| AC6: size cap | Verified | Between the merge base and the reviewed head, `skills/story-to-done/` grows from 552698 to 554880 bytes (100.39%) and its `SKILL.md` from 40175 to 40375 bytes (100.50%), matching the table in the PR description. `skills/story-to-done/` is the only skill directory changed. |
-| DoD: all acceptance criteria met | Pending owner ruling | AC2 to AC6 are verified; AC1 waits on the ruling below. |
-| DoD: tests written and passing | Verified | AC4; the full suite passed on `main` at the target (2665 passed). |
-| DoD: independently reviewed | Pending owner ruling | Review 5915065265 is `COMMENTED`, names `cbee1552bfbf09d93e685c307118a7fde356c8a0` in its first line and as its `commit_id`, the merged head, by the profile's reviewer (GPT-6.1 Sol) and adjudicator (DeepSeek V4.1 Flash). Its one finding, the `SKILL.md` line 196 round-count clause (line 197 at the target), is ruled VALID, Low, not blocking, and is left unfixed by a stated owner decision; whether that leaves the review clean is the ruling below. |
-| DoD: docs updated | Verified | `references/interim-handbacks.md` and `references/metrics-protocol.md` carry the change. |
-| DoD: verified in a deployed environment | Correct by design | The no-deployment path: the profile defines no environment, so the target is the merged commit on `main`. |
-| DoD: no critical bugs or regressions | Verified | CI `checks` and `discovery` passed on the reviewed head, push CI run 43804894693 passed on `main` at the target, and the full suite passed at the target. |
+| Item | Verdict |
+|---|---|
+| AC1: QA scope | Pending owner ruling (record 1) |
+| AC2: QA resume content | Verified |
+| AC3: QA limits | Verified |
+| AC4: text contracts | Verified |
+| AC5: fixture run | Verified |
+| AC6: size cap | Verified |
+| DoD: all acceptance criteria met | Pending owner ruling (record 1) |
+| DoD: tests written and passing | Verified |
+| DoD: independently reviewed | Pending owner ruling (record 2) |
+| DoD: docs updated | Verified |
+| DoD: verified in a deployed environment | Correct by design |
+| DoD: no critical bugs or regressions | Verified |
 
-### Pending owner ruling: the step 3 round-count clause
+### Evidence per item
+
+AC1: `references/interim-handbacks.md` line 7 extends the definition to a QA agent's own background work.
+Line 11 classifies a QA interim handback before step 0's read-back of that agent and before step 4's classification.
+`SKILL.md` line 215 is the step 3 pointer.
+Step 3's line 197 also states that the interim-handback deadline resume does not increment the round count; record 1 below covers it.
+
+AC2: `interim-handbacks.md` line 41 states the resume content limit in the AC's terms.
+
+AC3: line 42 states the round-count, read-back cap and continuation-allowance independence.
+Line 44 makes each QA deadline resume its own launch row within the round, and `references/metrics-protocol.md` lists it among the timed launches.
+Line 48 leaves step 4's continuation content limits, mixed-owner stop, owner-action stop and new-round rules unchanged, and the PR has no hunk in step 4.
+
+AC4: each of the five phrases AC4 names has its own named test, and all pass.
+On a throwaway worktree of the reviewed head, deleting each phrase once failed its named test, and the test passed again once the phrase was restored.
+The PR description has one line per guarded phrase naming the failing test.
+On the reviewed head, `vendor_shared.py --check` exited 0, and CI run 43804301339 ran `uv run --locked pytest -q` with `success`.
+
+AC5: SKL-314 is a `[Tabletop fixture]` issue in SKL, Canceled at 02:48:10Z, after the recorded run (02:33:11 to 02:45:51).
+Two earlier runs on the same issue were re-runs after skill text changes, as the run header above states.
+CI run 43769704269 was `completed`/`success` at 2026-11-15T22:37:01Z, before the interim handback.
+The sections above quote the parent brief, the resume message and the coordinator transcript with the deadline (02:45:06Z) and the read (02:45:18Z).
+They show no user message between the handback and the resume and one QA round throughout, name Claude Code 2.1.325, and state `metrics: off`.
+The skill text the run used (`6a567c8`) differs from the reviewed head by only the line 43 sentence.
+
+AC6: between the merge base and the reviewed head, `skills/story-to-done/` grows from 552698 to 554880 bytes (100.39%).
+Its `SKILL.md` grows from 40175 to 40375 bytes (100.50%).
+Both match the table in the PR description, and `skills/story-to-done/` is the only skill directory the PR changes.
+
+DoD, tests: AC4, and the full suite passed on `main` at the target (2665 passed).
+
+DoD, independently reviewed: review 5915065265 is `COMMENTED` and names `cbee1552bfbf09d93e685c307118a7fde356c8a0`, the merged head, in its first line and as its `commit_id`.
+Its reviewer (GPT-6.1 Sol) and adjudicator (DeepSeek V4.1 Flash) match the profile at the target.
+Its one finding, the `SKILL.md` line 196 round-count clause (line 197 at the target), is ruled VALID, Low, not blocking merge, and is left unfixed by a stated owner decision; record 2 below covers it.
+
+DoD, docs: `references/interim-handbacks.md` and `references/metrics-protocol.md` carry the change.
+
+DoD, deployed environment: the no-deployment path, since the profile defines no environment, so the target is the merged commit on `main`.
+
+DoD, regressions: CI `checks` and `discovery` passed on the reviewed head, push CI run 43804894693 passed on `main` at the target, and the full suite passed at the target.
+
+### Pending owner ruling, record 1: AC1 and the step 3 round-count clause
 
 Owner: the product owner.
-AC1 text: "step 3 points to the rule and does not restate it."
+Quoted text (AC1): "step 3 points to the rule and does not restate it."
 Evidence: `SKILL.md` line 197 reads "Continuation of the current round under step 4, and the step 0 checklist read-back resume or the interim-handback deadline resume of the current round's QA agent, are the only exceptions to that sentence, and none increments the round count."
-At the merge base the sentence named only the continuation and the read-back resume ("neither increments the round count"); `interim-handbacks.md` line 42 states that a QA deadline resume does not increment the QA round count.
+At the merge base the sentence named only the continuation and the read-back resume ("neither increments the round count").
+`interim-handbacks.md` line 42 states that a QA deadline resume does not increment the QA round count.
 
-- Reading A, "the rule" is the interim-handback definition and its classification, and AC1 constrains the step 3 pointer: line 215 points and restates nothing, and line 197 only keeps step 3's list of exceptions complete. Verdict: verified.
-- Reading B, "the rule" is the whole interim-handback deadline rule the story extends, including its round-count clause: line 197 restates that clause in step 3. Verdict: failed.
+- Reading A: "the rule" is the interim-handback definition and its classification, and the clause constrains the step 3 pointer, which restates nothing; line 197 only keeps step 3's list of exceptions complete.
+  Verdict: verified.
+- Reading B: "the rule" is the whole deadline rule the story extends, including its round-count clause, which line 197 restates in step 3.
+  Verdict: failed.
 
-The same evidence decides the DoD review item: under reading A the round 2 finding is resolved with a stated reason and the review is clean; under reading B a VALID finding the AC forbids stays unfixed.
-The PR description and the round 2 review record an owner decision to keep the clause, but no dated amendment of AC1 is on the story.
+The DoD item "All acceptance criteria met" follows this record.
+
+### Pending owner ruling, record 2: the review of record
+
+Owner: the product owner.
+Quoted text (Review Policy): "the review of record in references/code-review.md - an independent reviewer, then a separate clean, neutral adjudicator - is clean on the PR head, every finding is adjudicated".
+Evidence: the round 2 review at the merged head rules one finding VALID, Low, not blocking merge, with no fix commit, and states the owner decided to keep the clause.
+
+- Reading A: "clean" means every finding is fixed or resolved with a stated reason, as `shared/code-review.md` line 125 states ("Fix or resolve every finding with a stated reason"); the finding is resolved by the owner's stated reason and the adjudicator ruled it not blocking merge.
+  Verdict: verified.
+- Reading B: "clean" means every finding ruled valid is fixed in the PR, as `shared/code-review.md` lines 45 and 128 state ("Fix every finding ruled valid in the same PR"); the finding is unfixed.
+  Verdict: failed.
+
+This record does not depend on record 1: an AC1 amendment does not change the adjudicator's ruling on the finding.
+The PR description and the round 2 review record an owner decision to keep the clause, but no dated amendment is on the story for either record.
 
 The concluded-item refinement proposal on SKL-257 is not an acceptance criterion; `interim-handbacks.md` line 43 now carries a bound for it.
 
-Closing decision: SKL-257 stays in In Deployment Review until the product owner rules on the item above with a dated AC amendment; a new QA round then verifies it.
+Closing decision: no item failed, so SKL-257 stays in In Deployment Review until the product owner rules on both records with dated amendments; a new QA round then verifies the amended items.
