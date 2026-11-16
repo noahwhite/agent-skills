@@ -8,7 +8,8 @@
 - Reviewed head of PR 284: `3cc108fc37318370fe932570c3488a765d555080`.
 - git 2.43.0.
 - Fixtures: the selection under test is the SKL-257 squash commit `2bbf8cac364d79ac177a58ea891ac4040eccced8`, already on `main`.
-- Each negative case is a local branch in the clone, cut from `origin/main` with one commit: a revert of `2bbf8ca`, an edit of the story's changed line (`skills/story-to-done/SKILL.md` line 197), an edit two lines below it (line 199), the story's line kept only as a substring of a longer line, a rename of `tests/test_delegated_briefs.py`, and an edit far from the story's lines (line 12).
+- Each negative case is a local branch in the clone, cut from `origin/main` with one commit: a revert of `2bbf8ca`, an edit of the story's changed line (`skills/story-to-done/SKILL.md` line 197), an edit two lines below it (line 199), the story's line kept only as a substring of a longer line, and a rename of `tests/test_delegated_briefs.py`.
+- The positive control is a branch cut the same way with one edit far from the story's lines (`skills/story-to-done/SKILL.md` line 12).
 - The raw output of every command below is attached to SKL-297 as `SKL-297-qa-round-1-assertions.txt`; there is no visual surface, so no screenshot applies.
 - The four prescribed commands were run verbatim from the promotion sentence, with only `<worktree>`, `<patch>`, `<commit>` and the integration ref filled in.
 
@@ -33,7 +34,7 @@ The prescribed commands run without a usage error in every case below: `git work
 PR 284's description records one run with each command's exit status: exit 129 for the old command, exit 0 with no output against `origin/main`, and exit 1 against a ref without the story.
 
 AC2, present: with the selection on `origin/main`, the check exits 0 and prints 0 bytes.
-The same holds for the SKL-297 squash commit `fa679ad` itself (14 files).
+The same holds for the SKL-297 squash commit `fa679ad` itself (15 files).
 
 AC2, not confirmed present: each case below exits 1 and prints `error:` lines naming the file.
 
@@ -57,7 +58,7 @@ In a throwaway worktree of `fa679ad`, deleting line 133 of `shared/github.md` ga
 After restoring the file, the module gave `23 passed`.
 PR 284's description shows the same mutation with the same counts.
 
-AC5: `git diff 2bbf8ca fa679ad` changes one line in `shared/github.md` (hunk `@@ -133 +133 @@`) and one line in each vendored copy.
+AC5: `git diff 2bbf8ca fa679ad` changes one line in `shared/github.md`, line 133 (`git diff -U0` hunk `@@ -133 +133 @@`), and one line in each vendored copy.
 In `tests/test_shared_github.py` the only removed lines are the two old pins of that sentence; every other change is an addition.
 Every other pin in the module passes at the target.
 
