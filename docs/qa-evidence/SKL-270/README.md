@@ -97,3 +97,37 @@ Details, DoD independently reviewed:
 - The merge rested on review 5902513980, which review 5902782984 itself calls "not a valid review of record", so no valid review of record existed when PR 248 merged, and the item failed.
 
 Closing decision: SKL-270 returns to In Progress for the independently reviewed item, with the fix owned by `engineering-workflow`.
+
+## QA round 3
+
+Date: 2026-11-16 UTC, independent QA round 3, after the owner's dated amendment of 2026-11-16 to the DoD item "Independently reviewed".
+Path: `no-deployment`, selected by the `qa-verification` copy of `select-path.py` on `main`, which printed `no-deployment` with `--recorded-path` from the latest step 12 note and without it.
+Target: `main` at `c8ca6d0881dc5644a3dcee4f510d2764bab72d9c`, the squash merge of PR 248 (reviewed head `a93708fc3eff87a5f4224f59af10268cc3aa18d2`), confirmed on `origin/main` at `186df218014aeb4ecee41cb2801ab72e4c794063` with `git merge-base --is-ancestor`.
+Environment: none; the profile sets `environments: []`, so no build SHA applies.
+Fixtures: none.
+The raw output is attached to SKL-270 as `SKL-270-qa-round-3-assertions.txt`; there is no visual surface, so no screenshot applies.
+
+| Item | Verdict | Evidence |
+|---|---|---|
+| AC1: script | Verified | 164 of 164 black-box cases pass across `shared/` and the three vendored copies, including profile discovery; the copies are mode `100644` with one blob and the generated header above the shebang. |
+| AC2: unit tests | Verified | `tests/test_select_path.py` passes (55 passed) and covers every AC2 clause. |
+| AC3: story-to-done | Verified | Arguments, step 1 and the step 5 report read at the merged commit. |
+| AC4: other skills | Verified | "Select the path", "The run's path" and the step 12 `path:` note lines read at the merged commit; the replaced prose is gone. |
+| AC5: repository guards | Verified | Locally pytest (2337 passed), the public leak scan, `vendor_shared.py --check`, `skills-ref validate` on the three changed skills and the smoke test passed, and `--require-private` exited 2 with "leak scan INCOMPLETE", as AC5 decides; CI runs 43569240182 and 43569783775 passed `checks` and `discovery`. |
+| AC6: docs and compatibility | Verified | `shared/README.md` keeps the pinned substring and names `select-path.py`; the three `compatibility:` lines name python3 and PyYAML>=6. |
+| DoD: all acceptance criteria met | Verified | AC1 to AC6. |
+| DoD: tests written and passing | Verified | AC2 and AC5. |
+| DoD: independently reviewed | Verified | Met under the owner's amendment of 2026-11-16; details below. |
+| DoD: docs updated | Verified | AC3, AC4 and AC6. |
+| DoD: verified in a deployed environment (if needed) | Correct by design | Not needed: the path is `no-deployment`. |
+| DoD: no critical bugs or regressions | Verified | Full suite and both CI runs passed. |
+
+Details, DoD independently reviewed:
+
+- The item's amended text rules it satisfied by review 5902782984 on PR 248, as a one-off for SKL-270.
+- Review 5902782984 is `COMMENTED`, and its `commit_id` and first line name the merged head `a93708fc3eff87a5f4224f59af10268cc3aa18d2`.
+- Its reviewer is Codex GPT-6 Sol (`gpt-6-sol`) and its adjudicator is DeepSeek V4.1 Flash (`deepseek/deepseek-flash`), the seats in `profile.review` at that head.
+- It rules its one finding, R-1, invalid, so it is clean with every finding adjudicated.
+- PR 248's head did not change: the merge commit `c8ca6d0881dc5644a3dcee4f510d2764bab72d9c` squashes `a93708fc3eff87a5f4224f59af10268cc3aa18d2`, merged at 07:09:55Z.
+
+Closing decision: every item is met; SKL-270 moves to Done once this evidence is merged.
