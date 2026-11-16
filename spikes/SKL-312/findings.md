@@ -13,7 +13,7 @@ Labels used throughout:
 | Criterion | Status | Evidence |
 |---|---|---|
 | `## Decision` states Go, Partial-Go or No-Go with decider, date, version, commit, observations and reversal conditions | met | `## Decision` |
-| `bash spikes/SKL-312/poc/run.sh` replays the recorded runs with zero model API calls and writes `compare.md` and `envelope.json` | met | `poc/compare.md` (24 of 24 records match), `poc/provider-contract/envelope.json` |
+| `bash spikes/SKL-312/poc/run.sh` replays the recorded runs with zero model API calls and writes `compare.md` and `envelope.json` | met, with a recorded exclusion | `poc/compare.md`: 24 of 24 suite run records replay and match; the 86 runs in records that predate the runner are listed, not replayed, and no parity is claimed for them (`## Research questions`, 2). `poc/provider-contract/envelope.json` |
 | `## Scope` names first skills, behaviours in scope and an out-of-scope list | met | `## Scope` |
 | `## Test types` has one row per type with grading method, mechanism and cost per run | met | `## Test types` |
 | `## Corpus` proposes sources, format, labels, size target, versioning and private-material exclusion | met | `## Corpus` |
@@ -36,14 +36,15 @@ Observations that drove it:
 
 1. Grading parity holds.
    All 24 suite run records of `qa-unfinished-own-steps` replay through a promptfoo script provider and the unchanged `grader.py` to the recorded verdict, grade by grade and line by line (`poc/compare.md`, no mismatch).
+   Ten of the 24 carry a `{run_dir}` placeholder the suite wrote into a grader input or the call record; the replay grades that text as committed, and their verdicts match too.
    So no mismatch prevents adoption; the items below do.
-2. Two harness tokens have no promptfoo outcome (`poc/compare.md`, "Unmapped tokens").
-   A void run and a broken attempt both become ERROR, and the eval goes on where the suite stops.
-   promptfoo has no rule that runs a void attempt again until N graded runs with a cap of 2N attempts; `--retry-errors` is one more pass per invocation.
+2. One harness behaviour has no promptfoo outcome, and one token maps with a loss (`poc/compare.md`, "Unmapped tokens" and "Tokens mapped with a loss").
+   Unmapped: promptfoo has no rule that runs a void attempt again until N graded runs with a cap of 2N attempts; `--retry-errors` is one more pass per invocation.
+   Mapped with a loss: a broken attempt (`error`) becomes ERROR, the outcome a void run has, and the eval goes on where the suite stops.
    Adopting it for agent runs therefore needs a wrapper that re-implements what `suite.py` already does, and the run records and summary the suite writes would have to be rebuilt from promptfoo's export.
 3. For a run driven through the script provider, promptfoo sees one opaque call.
    Its matrix, repeat, cache and report features work around that call (observed), and its tool-call assertions do not reach inside it: `trajectory:*` reads trace spans and `skill-used` reads provider metadata, neither of which a script provider returns.
-4. The cost of entry is a Node toolchain in a Python repository: 617 packages and 747 MB for one pinned top-level version, with every dependency below it resolved again on each install because no lockfile is committed.
+4. The cost of entry is a Node toolchain in a Python repository: 617 packages and 747 MB for one pinned top-level version, with the packages below it pinned by a resolution date only, because no lockfile is committed.
 5. No model-graded assertion and no live agent provider was run here.
    Both are documented only, so their verdict stability and cost per run are unmeasured.
 
@@ -84,15 +85,18 @@ Alternatives while the decision is No-Go:
 | Agentic multi-step runs with tool use | documented, partly supported | Tools are off until `working_dir` is set, then read-only until write and shell tools are enabled (both provider pages above) | Supported for the agent providers; through the script provider promptfoo sees one call |
 | Tool-call grading | observed and documented, partly supported | A `python` assertion over the committed `actions.jsonl` (observed, the replay); `trajectory:tool-used`, `trajectory:tool-sequence` and `skill-used` are in the build and documented at https://www.promptfoo.dev/docs/guides/evaluate-coding-agents/ | The built-in types need trace spans or `metadata.skillCalls`, which only the agent providers supply |
 | Worktree or sandbox isolation | documented, partly supported | `copy_working_dir` gives each step a fresh copy or git clone, and the guide states that a workspace is not a sandbox; `copy_working_dir` is in the build | For a script provider it is lacking: the script runs in the config directory with promptfoo's own environment (observed), so isolation stays with the case's `run.sh` |
-| A void outcome, a graded-run count, stop on a broken attempt | absent | `poc/compare.md`, "Unmapped tokens"; `eval --help` offers only `--retry-errors` | These are what `run-suite.sh` has and promptfoo lacks |
+| A void outcome, a graded-run count, stop on a broken attempt | absent | `poc/compare.md`, "Unmapped tokens" and "Tokens mapped with a loss"; `eval --help` offers only `--retry-errors` | These are what `run-suite.sh` has and promptfoo lacks |
 
-Two behaviours seen in the replay matter to anyone building on it (both observed):
+Three things seen in the replay matter to anyone building on it (all observed):
 
 - promptfoo's export replaced each run id, a token of more than 60 letters, digits and hyphens, with `[REDACTED]`, in the variables and in the rendered prompt.
   Shorter values came through unchanged, and the rule behind it was not traced in the source.
   `compare.py` therefore matches results to run ids by test index.
 - A failed provider call puts the whole argument list, prompt included, into the error text and the log.
   The case contract keeps the prompt out of argv, so a script provider must be given an id, as here, never prompt text.
+- A run record names the harness commit it was graded at and carries no hash of the grader or the fixtures.
+  All 24 records name `e46615c471d7bdd2c09a8ffeebaa5fdf9540b44f`, which no local or remote branch of this repository contains: it was a commit of a branch that was squash-merged.
+  The replay therefore compares the grader and each scenario's fixtures with the commit that added the record, `0e2a4ef984e1a3fa8467d80fa5fad2ced367ce5e`, and lists a record as not replayed when they differ.
 
 ### 2. Can a script provider drive the existing agent runs and keep their semantics
 
@@ -103,7 +107,7 @@ Two behaviours seen in the replay matter to anyone building on it (both observed
 | Grading of committed recorded runs (`poc/compare.md`, "Replayed runs") | 24 of 24 suite run records grade to their recorded verdict with identical grader output | Nothing; 86 runs in records that predate the runner are listed and not replayed, and no parity is claimed for them |
 
 Grading recorded `actions.jsonl` through promptfoo is proven.
-Keeping void, graded and retry semantics is not: two tokens are unmapped and need a wrapper.
+Keeping void, graded and retry semantics is not: retry is unmapped and `error` maps with a loss, so both need a wrapper.
 Driving a live Claude Code or OpenCode run is not proven, because live orchestration was not run in this spike.
 
 Questions 3 to 7 are answered in `## Test types`, `## Corpus`, `## Infrastructure` (5 and 6) and `## Relations`.
@@ -144,11 +148,11 @@ Token counts are assumptions, because the run records hold no token counts: the 
 | Type | What it catches | Grading method | promptfoo mechanism | Cost per run | Measured or estimated |
 |---|---|---|---|---|---|
 | trigger | A skill that does not load for a request it covers, or loads for one a sibling covers | Tool-call assertion on the skill-load call | `skill-used` and `not-skill-used` on an agent provider (documented, in the build, not run); or a script provider with a `python` assertion over the tool-call record (mechanism observed in the replay) | 1 agent run of about 2 model calls; 0.02 USD at `deepseek/deepseek-v4-pro` for 25,000 input and 1,000 output tokens | estimated |
-| behaviour | A change that does not move the behaviour it targets: the candidate passes and the baseline fails | Tool-call and message-file assertion by the case's `grader.py` | Script provider plus a `python` assertion that runs `grader.py` (observed); void and retry semantics `not supported` | Grading: 0 model calls, 0 USD, about 0.1 s per run (promptfoo reported 2 s for 24 replayed runs at concurrency 1). Agent run: 0.08 USD at `deepseek/deepseek-v4-pro` for 100,000 input and 5,000 output tokens, bounded at 900 s by `EVAL_TIMEOUT` | grading measured, agent run estimated |
+| behaviour | A change that does not move the behaviour it targets: the candidate passes and the baseline fails | Tool-call and message-file assertion by the case's `grader.py` | Script provider plus a `python` assertion that runs `grader.py` (observed); void and retry semantics `not supported` | Grading: 0 model calls, 0 USD, about 0.13 s per run (promptfoo reported 3 s for 24 replayed runs at concurrency 1). Agent run: 0.08 USD at `deepseek/deepseek-v4-pro` for 100,000 input and 5,000 output tokens, bounded at 900 s by `EVAL_TIMEOUT` | grading measured, agent run estimated |
 | regression | A later change that breaks a behaviour that passed at both commits | Same as behaviour, on a control scenario or a regression-pin case | Same as behaviour | Same as behaviour | grading measured, agent run estimated |
 | prose rubric | Skill text that breaks a writing rule no pattern test can state | Model-graded rubric | `llm-rubric`, with `--grader` naming the grading model (documented, in the build, not run) | 1 model call; 0.002 USD at `deepseek/deepseek-flash` for 12,000 input and 500 output tokens | estimated |
 
-The whole replay command took 19 s and 29 s on two runs, most of it the install (measured).
+The whole replay command took 45 s and 52 s on two runs, 32 s and 38 s of it the install (measured).
 No benchmark campaign was run.
 
 ## Corpus
@@ -198,7 +202,7 @@ Deciding constraint: a live run needs an agent runtime that is already signed in
 
 Alternatives:
 
-- CI: fits checks that call no model (the repository tests, and the replay if it is ever wanted there, 19 to 29 s).
+- CI: fits checks that call no model (the repository tests, and the replay if it is ever wanted there, 45 to 52 s).
   It does not fit live runs: a public repository's pull request checks cannot hand provider credentials to a fork, and one suite run is over a hundred agent runs of up to 900 s each.
 - The self-hosted worker that SKL-312 names as the third option: fits scheduled runs once the run count outgrows what a person starts by hand.
   Its capabilities for this are unverified, and provisioning it is out of scope.
@@ -213,7 +217,7 @@ Other items:
   The agent runtime uses its own stored login, or a provider key the caller names in `EVAL_PASS_ENV`, such as `DEEPSEEK_API_KEY`; an attempt gets no other credential (stated in the evals README).
   A promptfoo model-graded assertion would read `DEEPSEEK_API_KEY` or `OPENROUTER_API_KEY` (names found in the build, not exercised), and the Claude agent provider reads `ANTHROPIC_API_KEY` (documented).
   The only CI secret in use is `LEAK_DENYLIST`.
-  The replay reads no credential: promptfoo starts under `env -i` (observed, the variable names are in `envelope.json`).
+  The replay reads no credential: `npm` and promptfoo both start under `env -i` with an empty home directory (observed; the variable names promptfoo's provider saw are in `envelope.json`).
 - **Result storage and retention.**
   Run records and suite summaries stay in git, under each case's `results/`, holding only what the grader reads plus the tool-call record (as today).
   promptfoo's database, logs and output files go to a temporary directory outside the repository and are deleted when the command succeeds (observed).
@@ -234,9 +238,10 @@ Other items:
   The 4-of-5 threshold differs from the definition in the evals README, so it is a proposal for the product owner.
 - **Node footprint.**
   Pinned version: promptfoo `0.125.1`, which needs Node.js 22.22.0 or later (observed in its package metadata).
-  Invocation: `npm install --prefix <temporary directory> --ignore-scripts promptfoo@0.125.1`, then the installed binary by path; no `npx`, no global install, nothing under the repository (observed).
+  Invocation: `npm install --prefix <temporary directory> --ignore-scripts --before=2026-11-15T00:00:00Z promptfoo@0.125.1`, then the installed binary by path; no `npx`, no global install, nothing under the repository (observed).
   Supply-chain check and result: `npm audit signatures` on the installed tree reported 617 packages with verified registry signatures and 157 with verified attestations, on every run (observed); the install ran with package scripts disabled and the replay passed (observed); the Socket report for `promptfoo@0.125.1` scored supply chain 69, vulnerability 100, quality 100, maintenance 99 and license 100 on 2026-11-15 (https://socket.dev/npm/package/promptfoo).
-  Open risk: no lockfile is committed, so the packages below the pin are resolved again on each install.
+  Open risk: no lockfile is committed.
+  The packages below the pin are fixed by the resolution date (`--before`), not by integrity hashes, so a version removed from the registry after that date changes or breaks the install.
   Telemetry and remote sharing: off, through `PROMPTFOO_DISABLE_TELEMETRY=1`, `PROMPTFOO_DISABLE_UPDATE=1`, `PROMPTFOO_DISABLE_SHARING=1`, `PROMPTFOO_DISABLE_REMOTE_GENERATION=1`, `--no-share` and `sharing: false` (observed set in `run.sh`; telemetry and the update check are documented at https://www.promptfoo.dev/docs/configuration/telemetry/ as on unless disabled).
 
 ## Split

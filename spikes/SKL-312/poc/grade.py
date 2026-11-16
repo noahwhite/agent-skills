@@ -14,8 +14,8 @@ import pathlib
 import subprocess
 import sys
 
-ROOT = pathlib.Path(__file__).resolve().parents[3]
-GRADER = ROOT / "skills" / "story-to-done" / "evals" / "qa-unfinished-own-steps" / "grader.py"
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import records  # noqa: E402  (the line above lets promptfoo's loader find it)
 
 
 def get_assert(output: str, context: dict) -> dict:
@@ -24,13 +24,17 @@ def get_assert(output: str, context: dict) -> dict:
     components, scores = [], {}
     for grade in replay["grades"]:
         done = subprocess.run(
-            [sys.executable, str(GRADER), "--run-dir", str(run_dir), "--expectation", grade["expectation"]],
+            [sys.executable, str(records.GRADER), "--run-dir", str(run_dir), "--expectation", grade["expectation"]],
             capture_output=True, text=True,
         )
         lines = [line for line in done.stdout.splitlines() if line.strip()]
         passed = bool(lines) and lines[-1] == "PASS"
         if done.returncode != (0 if passed else 1):
-            raise RuntimeError(f"grader.py exited {done.returncode} for {grade['expectation']}: {done.stderr.strip()}")
+            # The grader's stderr can quote the run, so it stays beside the run and out of the
+            # exception text, which promptfoo copies into its export and its log.
+            (run_dir / f"{grade['file']}.stderr").write_text(done.stderr)
+            raise RuntimeError(f"grader.py exited {done.returncode} for {grade['expectation']}; "
+                               f"its stderr is beside the rebuilt run, in {grade['file']}.stderr")
         # Kept beside the run under the name run.sh gives it, for compare.py to read.
         (run_dir / grade["file"]).write_text(done.stdout)
         scores[grade["expectation"]] = 1.0 if passed else 0.0

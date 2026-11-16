@@ -11,9 +11,14 @@ never starts an agent and never calls a model. It rebuilds the run directory the
 `grader_inputs`, and the tool-call record as `actions.jsonl`. It prints one JSON line naming
 that directory and the grades to take, which `grade.py` hands to the case's `grader.py`.
 
-Exit status follows the case's `run.sh`: 0 for a run rebuilt for grading, 2 for a void run
-(a record whose outcome is void, or a run id with no usable record), and the recorded status
-for a broken attempt. promptfoo reads any non-zero status as a provider error.
+Exit status follows the case's `run.sh` where the record has one: 0 for a run rebuilt for
+grading, 2 for a record whose outcome is void, and the recorded status (3 when it is not
+usable) for a broken attempt. Anything the provider cannot replay exits 64, a status the case
+contract does not use: a run id with no record, a malformed record, a missing call record, a
+record the suite redacted, a case that changed after the record's harness commit, or an evals
+directory with uncommitted changes. promptfoo reads every non-zero status as a provider
+error, so the provider also appends its status and what kind of answer it was to
+`$SKL312_WORK/provider-log/`, where `compare.py` reads which of them it was.
 
 Every invocation also writes what it was called with (argument roles and JSON shapes,
 environment variable names, never a value) under `$SKL312_WORK/envelopes/`, from which
@@ -27,27 +32,25 @@ first time it is called in a work directory and replays that run id after that.
 import json
 import os
 import pathlib
-import re
 import shutil
 import sys
 
-POC = pathlib.Path(__file__).resolve().parent
-ROOT = POC.parents[2]
-CASE = ROOT / "skills" / "story-to-done" / "evals" / "qa-unfinished-own-steps"
-RESULTS = CASE / "results"
-RUN_ID = re.compile(r"[A-Za-z0-9._-]+")
-# The suite's grade file names (suite.py GRADE_FILE): grader-output.txt is the scenario's own
-# grade and grader-<g>-output.txt a further grade named <scenario>-<g>.
-GRADE_FILE = re.compile(r"grader(?:-(?P<grade>[A-Za-z0-9._-]+))?-output\.txt")
-VOID, BROKEN = 2, 3
+import records
+
+VOID, BROKEN, UNUSABLE = 2, 3, 64
 
 
 def shape(value: object) -> object:
-    """The structure of a JSON value with every scalar replaced by its type name."""
+    """The structure of a JSON value with every scalar replaced by its type name; a list keeps
+    each distinct shape among its elements, in first-seen order."""
     if isinstance(value, dict):
         return {key: shape(value[key]) for key in sorted(value)}
     if isinstance(value, list):
-        return [shape(value[0])] if value else []
+        shapes = []
+        for item in map(shape, value):
+            if item not in shapes:
+                shapes.append(item)
+        return shapes
     return {str: "string", bool: "boolean", int: "number", float: "number", type(None): "null"}[type(value)]
 
 
@@ -61,7 +64,7 @@ def envelope(argv: list[str]) -> dict:
 
     return {
         "provider_id": "exec: python3 provider.py",
-        "working_directory": os.path.relpath(os.getcwd(), ROOT),
+        "working_directory": os.path.relpath(os.getcwd(), records.ROOT),
         "argv": [
             {"index": 0, "role": "script path, as the provider id names it", "value": argv[0]},
             {"index": 1, "role": "rendered prompt (here the run id)", "value": argv[1]},
@@ -75,70 +78,77 @@ def envelope(argv: list[str]) -> dict:
     }
 
 
-def stop(status: int, why: str) -> None:
-    print(f"provider.py: {why}", file=sys.stderr)
-    sys.exit(status)
-
-
-def rebuild(run_id: str, work: pathlib.Path) -> dict:
-    """Rebuild the run directory of one record and name the grades its run.sh took."""
-    if not RUN_ID.fullmatch(run_id):
-        stop(VOID, "the run id is not a record file stem")
-    record_path = RESULTS / f"{run_id}.json"
-    if not record_path.is_file():
-        stop(VOID, f"no run record {run_id}.json")
-    record = json.loads(record_path.read_text())
+def rebuild(run_id: str, work: pathlib.Path) -> tuple[int, str, str]:
+    """Rebuild the run directory of one record. Returns the exit status, the kind of answer,
+    and the JSON line for stdout or the reason for stderr."""
+    record = records.load(run_id)
     if record["outcome"] == "void":
-        stop(VOID, f"the recorded run is void: {record['void_reason']}")
-    if record["outcome"] not in ("pass", "fail"):
-        code = record["exit_code"]
-        stop(code if isinstance(code, int) and code > VOID else BROKEN, "the recorded attempt is broken")
-    scenario = CASE / "scenarios" / record["scenario"]
+        return VOID, "void record", f"the recorded run is void: {record.get('void_reason')}"
+    if record["outcome"] == "error":
+        code = record.get("exit_code")
+        return (code if type(code) is int and code > VOID and code != UNUSABLE else BROKEN,
+                "broken record", "the recorded attempt is broken")
+    changed = records.uncommitted()
+    if changed:
+        raise records.Unusable(f"the evals directory has uncommitted changes ({', '.join(changed[:3])})")
+    why = records.not_replayable(run_id, record)
+    if why:
+        raise records.Unusable(why)
+    grades, calls = records.grades_to_take(record), records.calls_text(run_id, record)
+    scenario = records.CASE / "scenarios" / record["scenario"]
     run = work / "runs" / run_id
     shutil.rmtree(run, ignore_errors=True)
     run.mkdir(parents=True)
     # What run.sh copies in before the agent starts, less the prompt and the stub runtime,
-    # which the grader never reads.
-    shutil.copy(scenario / "qa-round-1.json", run)
-    shutil.copytree(scenario / "checklists", run, dirs_exist_ok=True)
+    # which the grader never reads. not_replayable() showed they are the record's own.
+    try:
+        shutil.copy(scenario / "qa-round-1.json", run)
+        shutil.copytree(scenario / "checklists", run, dirs_exist_ok=True)
+    except OSError as error:
+        raise records.Unusable(f"scenario {record['scenario']} lacks a fixture: {error}") from None
     # What the run left for the grader, as the suite recorded it.
     for name, text in record["grader_inputs"].items():
         target = (run / name).resolve()
         if run.resolve() not in target.parents:
-            stop(VOID, f"the record names a grader input outside its run directory: {name}")
+            raise records.Unusable(f"the record names a grader input outside its run directory: {name}")
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(text)
-    if record["calls_record"] != "absent":
-        shutil.copy(RESULTS / f"{run_id}-calls.jsonl", run / "actions.jsonl")
-    grades = []
-    for file_name in sorted(record["grades"], key=lambda name: (name != "grader-output.txt", name)):
-        grade = GRADE_FILE.fullmatch(file_name)["grade"]
-        grades.append({"expectation": record["scenario"] + (f"-{grade}" if grade else ""), "file": file_name})
-    return {"run_id": run_id, "run_dir": f"runs/{run_id}", "grades": grades}
+    if calls is not None:
+        (run / "actions.jsonl").write_text(calls)
+    return 0, "replayed", json.dumps({"run_id": run_id, "run_dir": f"runs/{run_id}", "grades": grades})
 
 
-def main(argv: list[str]) -> int:
-    if len(argv) != 4:
-        stop(VOID, "usage: provider.py PROMPT OPTIONS_JSON CONTEXT_JSON")
-    work = pathlib.Path(os.environ.get("SKL312_WORK") or stop(VOID, "SKL312_WORK is not set"))
-    prompt = argv[1]
-    envelopes = work / "envelopes"
-    envelopes.mkdir(parents=True, exist_ok=True)
-    name = re.sub(r"[^A-Za-z0-9._-]", "_", prompt)
-    (envelopes / f"{name}.json").write_text(json.dumps(envelope(argv), indent=2) + "\n")
+def answer(prompt: str, work: pathlib.Path) -> tuple[int, str, str]:
     if prompt == "probe:void":
-        stop(VOID, "probe: a void run")
+        return VOID, "probe", "probe: a void run"
     if prompt == "probe:exit-3":
-        stop(BROKEN, "probe: a status the case contract does not define")
+        return BROKEN, "probe", "probe: a status the case contract does not define"
     if prompt.startswith("probe:void-once:"):
         marker = work / "probes" / "void-once"
         if not marker.exists():
             marker.parent.mkdir(parents=True, exist_ok=True)
             marker.write_text("the first call was void\n")
-            stop(VOID, "probe: void on the first call")
+            return VOID, "probe", "probe: void on the first call"
         prompt = prompt.removeprefix("probe:void-once:")
-    print(json.dumps(rebuild(prompt, work)))
-    return 0
+    try:
+        return rebuild(prompt, work)
+    except records.Unusable as why:
+        return UNUSABLE, "unusable", str(why)
+
+
+def main(argv: list[str]) -> int:
+    if len(argv) != 4 or not os.environ.get("SKL312_WORK"):
+        print("provider.py: usage: SKL312_WORK=DIR provider.py PROMPT OPTIONS_JSON CONTEXT_JSON", file=sys.stderr)
+        return UNUSABLE
+    work, name = pathlib.Path(os.environ["SKL312_WORK"]), records.file_name(argv[1])
+    for directory in ("envelopes", "provider-log"):
+        (work / directory).mkdir(parents=True, exist_ok=True)
+    (work / "envelopes" / f"{name}.json").write_text(json.dumps(envelope(argv), indent=2) + "\n")
+    status, kind, text = answer(argv[1], work)
+    with (work / "provider-log" / f"{name}.jsonl").open("a") as log:
+        log.write(json.dumps({"status": status, "kind": kind}) + "\n")
+    print(text if status == 0 else f"provider.py: {text}", file=sys.stdout if status == 0 else sys.stderr)
+    return status
 
 
 if __name__ == "__main__":
