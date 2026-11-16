@@ -276,17 +276,21 @@ This spike edits and closes none of these stories; every change below is a propo
 
 Pinned `skills-ref` reference, resolved from `.github/workflows/ci.yml`: `git+https://github.com/agentskills/agentskills@69ef37e9424c0a7ea9dd2293b559e43ec8176379#subdirectory=skills-ref`.
 
+The four guards ran on commit `a327b1adcfbbd9a668ec162749b0ccc16dcf738b` on 2026-11-16, locally and in [ci run 43783226403](https://github.com/noahwhite/agent-skills/actions/runs/43783226403), which ran on a draft pull request opened for that commit.
+After that commit, the only change this branch makes is to this section.
+
 | Guard | Command | Where it ran | Exit status |
 |---|---|---|---|
-| 1 | `uv run --locked pytest -q` | locally | 0 |
-| 2 | `uv run --locked python scripts/leak_scan.py --require-private` | the `checks` job of the `ci` workflow | 0 |
-| 3 | `uvx --from "<pinned reference>" skills-ref validate "$d"` for each of the 18 `skills/*/` directories | locally | 0 for each |
-| 4 | `bash scripts/smoke-opencode.sh` | locally | 0 |
+| 1 | `uv run --locked pytest -q` | locally (2561 passed), and the `checks` job of the CI run | 0 |
+| 2 | `uv run --locked python scripts/leak_scan.py --require-private` | the `checks` job of the CI run | 0 |
+| 3 | `uvx --from "<pinned reference>" skills-ref validate "$d"` for each of the 18 `skills/*/` directories | locally, and the `checks` job of the CI run | 0 for each |
+| 4 | `bash scripts/smoke-opencode.sh` | locally, and the `discovery` job of the CI run | 0 |
 
 - Guard 2 needs the private patterns, which exist only as the CI secret `LEAK_DENYLIST`.
   Run locally, the command exits 2 with `INCOMPLETE` because no private pattern is loaded, so its status above is the CI one.
   The public patterns alone, `uv run --locked python scripts/leak_scan.py`, exit 0 locally.
 - The `ci` workflow runs guards 1, 2 and 3 in its `checks` job and guard 4 in its `discovery` job on every pull request head, the merged one included.
+  The guard runs of the final head are therefore those two jobs on the pull request that merges this file.
 - No guard rejected a spike file, and no exemption entry was added: no tracked file outside `spikes/SKL-312/` changed.
 - One normalization was made before any guard ran.
   SKL-312 names the third runner option by its host name, and `## Infrastructure` calls it "the self-hosted worker", because a consumer's host name does not belong in the public base repository.
