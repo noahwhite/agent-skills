@@ -3279,7 +3279,7 @@ QA_ROUND_CAP_ROW = (
 QA_ROUND_CAP_GIVEN = (
     '- `qa-round-cap` is given as `qa-round-cap=<n>` or in plain words about capping QA rounds ("cap QA at <n> '
     'rounds" and "stop after <n> failed QA rounds" mean <n>); `python3 <skill dir>/scripts/qa-round-cap.py validate '
-    'qa-round-cap=<n>` exits 2 unless <n> is a positive integer; run step 4\'s `arm` before the first step 3.'
+    'qa-round-cap=<n>` exits 2 unless <n> is a positive integer; run step 4\'s `arm` once, before the first step 3.'
 )
 QA_ROUND_CAP_ASK = "- Ask the user about an invalid value and about any other phrasing about the cap; never guess."
 QA_ROUND_CAP_RESOLVE = "- Resolve `qa-round-cap` before step 0 creates the todo list; it sets no model or effort."

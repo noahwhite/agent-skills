@@ -38,7 +38,8 @@ QUERY = (
 EXIT_CODES = """exit codes:
   0  success
   1  any other failure: no count armed, a count already armed in this state dir,
-     unreadable state, failed tracker read or unexpected tracker payload, unexpected error
+     unreadable state, failed tracker read, unexpected tracker payload or malformed
+     QA evidence comment, unexpected error
   2  invalid argument or unknown subcommand
   3  the story's state is not the in_progress state given to arm
 
@@ -231,7 +232,22 @@ def is_qa_evidence(comment: object) -> bool:
     line = comment["body"].split("\n", 1)[0]
     if line.endswith("\r"):
         line = line[:-1]
-    return line == MARKER and isinstance(comment.get("id"), str)
+    return line == MARKER
+
+
+def qa_evidence(key: str, comments: list) -> list[tuple[datetime, str, str]]:
+    """Every QA evidence comment as (created, id, createdAt), oldest first; a malformed one exits 1."""
+    found = []
+    for comment in comments:
+        if not is_qa_evidence(comment):
+            continue
+        try:
+            if not isinstance(comment.get("id"), str):
+                raise ValueError("no id")
+            found.append((timestamp(comment.get("createdAt")), comment["id"], comment["createdAt"]))
+        except ValueError:
+            raise Refusal(1, f"tracker read for {key} returned a malformed QA evidence comment") from None
+    return sorted(found)
 
 
 def summary(state: dict) -> str:
@@ -249,7 +265,8 @@ def cmd_validate(args: argparse.Namespace) -> None:
 def cmd_arm(args: argparse.Namespace) -> None:
     key = story_key(args.story)
     cap = positive(args.cap, "--cap")
-    if not args.in_progress.strip():
+    in_progress = args.in_progress.strip()
+    if not in_progress:
         raise Refusal(2, "invalid --in-progress: expected the in_progress state name")
     state_dir = checked_state_dir(args.state_dir)
     with locked(state_dir):
@@ -260,9 +277,9 @@ def cmd_arm(args: argparse.Namespace) -> None:
             "story": key,
             "count_id": secrets.token_hex(8),
             "cap": cap,
-            "in_progress": args.in_progress,
+            "in_progress": in_progress,
             "armed_at": datetime.now(timezone.utc).isoformat(),
-            "baseline": sorted({c["id"] for c in comments if is_qa_evidence(c)}),
+            "baseline": sorted({comment_id for _, comment_id, _ in qa_evidence(key, comments)}),
             "rounds": [],
         }
         publish(summary(state), state_dir, key, state)
@@ -277,27 +294,12 @@ def cmd_record(args: argparse.Namespace) -> None:
         if name != state["in_progress"]:
             raise Refusal(3, f"state={name}")
         excluded = set(state["baseline"]) | {r["comment_id"] for r in state["rounds"]}
-        try:
-            since = timestamp(state["rounds"][-1]["created_at"]) if state["rounds"] else None
-        except ValueError:
-            raise Refusal(1, f"unreadable QA round state for {key}") from None
-        candidates = []
-        for comment in comments:
-            if not is_qa_evidence(comment) or comment["id"] in excluded:
-                continue
-            try:
-                created = timestamp(comment.get("createdAt"))
-            except ValueError:
-                continue
-            if since is None or created > since:
-                candidates.append((created, comment))
-        if not candidates:
+        new = [(cid, created_at) for _, cid, created_at in qa_evidence(key, comments) if cid not in excluded]
+        if not new:
             publish(summary(state), state_dir, key, None)
             return
-        _, comment = max(candidates, key=lambda item: item[0])
-        state["rounds"].append(
-            {"round": len(state["rounds"]) + 1, "comment_id": comment["id"], "created_at": comment["createdAt"]}
-        )
+        for comment_id, created_at in new:
+            state["rounds"].append({"round": len(state["rounds"]) + 1, "comment_id": comment_id, "created_at": created_at})
         publish(summary(state), state_dir, key, state)
 
 

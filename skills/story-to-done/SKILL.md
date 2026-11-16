@@ -38,7 +38,7 @@ Six arguments are optional, given as `key=value` or in plain words ("QA on <mode
 - `metrics` is given as `metrics=on` or `metrics=off`, or in plain words: "with metrics" and "metrics on" mean on, "without metrics" and "metrics off" mean off; ask the user about any other phrasing about metrics; never guess.
 - Resolve `metrics` before step 0 creates the todo list; it sets no model or effort.
 - With `metrics` off or omitted, read no metrics reference, collect no figure, create no metrics file, post no metrics comment, and add no metrics content to any brief, report, todo list, or tracker write, other than the `metrics: off` line.
-- `qa-round-cap` is given as `qa-round-cap=<n>` or in plain words about capping QA rounds ("cap QA at <n> rounds" and "stop after <n> failed QA rounds" mean <n>); `python3 <skill dir>/scripts/qa-round-cap.py validate qa-round-cap=<n>` exits 2 unless <n> is a positive integer; run step 4's `arm` before the first step 3.
+- `qa-round-cap` is given as `qa-round-cap=<n>` or in plain words about capping QA rounds ("cap QA at <n> rounds" and "stop after <n> failed QA rounds" mean <n>); `python3 <skill dir>/scripts/qa-round-cap.py validate qa-round-cap=<n>` exits 2 unless <n> is a positive integer; run step 4's `arm` once, before the first step 3.
 - Ask the user about an invalid value and about any other phrasing about the cap; never guess.
 - Resolve `qa-round-cap` before step 0 creates the todo list; it sets no model or effort.
 - Write the four resolved model and effort values, the `metrics: on|off` line, and the `qa-round-cap: <n>` line at the top of your todo list and in the closing report of every end state (the step 5 report, or the report made at any stop, including one before step 0).

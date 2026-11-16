@@ -250,6 +250,13 @@ def test_arm_takes_the_ac3_signature_without_in_progress(h: Harness) -> None:
     assert json.loads(h.state_file.read_text())["in_progress"] == IN_PROGRESS
 
 
+def test_arm_stores_the_in_progress_name_without_surrounding_spaces(h: Harness) -> None:
+    args = ("arm", "--story", KEY, "--cap", "2", "--in-progress", f" {IN_PROGRESS} ", "--state-dir", str(h.state_dir))
+    ok(h.run(*args))
+    h.serve(IN_PROGRESS, ["qa-1"])
+    assert ok(h.record()) == "round=1 cap=2 reached=no"
+
+
 def test_a_resumed_run_arms_again_in_its_own_scratch_and_starts_a_new_count(h: Harness, tmp_path: Path) -> None:
     ok(h.arm())
     h.serve(IN_PROGRESS, ["qa-1"])
@@ -350,12 +357,36 @@ def test_only_a_comment_whose_first_line_is_exactly_the_marker_counts(h: Harness
     assert ok(h.record()) == "round=0 cap=2 reached=no"
 
 
-def test_the_newest_qa_evidence_comment_since_the_last_round_is_the_round(h: Harness) -> None:
+def test_every_new_qa_evidence_comment_counts_in_creation_order(h: Harness) -> None:
+    ok(h.arm("3"))
+    h.serve(IN_PROGRESS, ["qa-1-later", "qa-1"])
+    assert ok(h.record()) == "round=2 cap=3 reached=no"
+    rounds = json.loads(h.state_file.read_text())["rounds"]
+    assert [(r["round"], r["comment_id"]) for r in rounds] == [(1, "comment-qa-1"), (2, "comment-qa-1-later")]
+    assert ok(h.record()) == "round=2 cap=3 reached=no"
+
+
+def test_a_comment_with_the_same_time_as_the_last_round_still_counts(h: Harness) -> None:
     ok(h.arm())
-    h.serve(IN_PROGRESS, ["qa-1", "qa-1-later"])
+    h.serve(IN_PROGRESS, ["qa-1"])
     assert ok(h.record()) == "round=1 cap=2 reached=no"
-    assert json.loads(h.state_file.read_text())["rounds"][0]["comment_id"] == "comment-qa-1-later"
-    assert ok(h.record()) == "round=1 cap=2 reached=no", "an older comment never counts after a newer one"
+    twin = {**COMMENTS["qa-1"], "id": "comment-qa-1-twin"}
+    h.serve_nodes(IN_PROGRESS, [COMMENTS["qa-1"], twin])
+    assert ok(h.record()) == "round=2 cap=2 reached=yes"
+
+
+@pytest.mark.parametrize(
+    "change",
+    [{"createdAt": "not-a-date"}, {"createdAt": "2099-01-01T00:00:00.000"}, {"createdAt": None}, {"id": None}],
+    ids=["unparseable", "zone-less", "missing-date", "missing-id"],
+)
+def test_a_malformed_qa_evidence_comment_exits_1(h: Harness, change: dict) -> None:
+    ok(h.arm())
+    before = h.state_file.read_bytes()
+    h.serve_nodes(IN_PROGRESS, [{**COMMENTS["qa-1"], **change}])
+    out = failed(h.record(), 1)
+    assert "malformed" in out
+    assert h.state_file.read_bytes() == before
 
 
 def test_a_comment_posted_after_arm_counts_whatever_the_local_clock_reads(h: Harness) -> None:
