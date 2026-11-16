@@ -60,8 +60,10 @@ def harness_error(problem: str) -> None:
 
 
 def stamp() -> str:
+    """The time in UTC to the microsecond, so the grader can order a call against a selector run
+    made within the same second."""
     now = datetime.datetime.now(datetime.timezone.utc)
-    return now.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return now.isoformat(timespec="microseconds").replace("+00:00", "Z")
 
 
 def load(path: pathlib.Path, default: object) -> object:

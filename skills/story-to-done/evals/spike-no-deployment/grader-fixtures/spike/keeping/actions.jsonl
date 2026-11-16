@@ -1,5 +1,5 @@
-{"action": "tracker-read", "at": "2026-11-16T07:39:48Z"}
-{"action": "engineer-launch", "at": "2026-11-16T07:43:13Z", "label": "senior-engineer", "message_id": 1, "served": "engineer-handback.md"}
-{"action": "read", "at": "2026-11-16T07:43:17Z", "path": "senior-engineer/senior-engineer-todo.md"}
-{"action": "tracker-read", "at": "2026-11-16T07:43:17Z"}
-{"action": "qa-launch", "at": "2026-11-16T07:43:34Z", "label": "qa-agent-round-1", "message_id": 2}
+{"action": "tracker-read", "at": "2026-11-16T07:39:48.000000Z"}
+{"action": "engineer-launch", "at": "2026-11-16T07:43:13.000000Z", "label": "senior-engineer", "message_id": 1, "served": "engineer-handback.md"}
+{"action": "read", "at": "2026-11-16T07:43:17.000000Z", "path": "senior-engineer/senior-engineer-todo.md"}
+{"action": "tracker-read", "at": "2026-11-16T07:43:17.000000Z"}
+{"action": "qa-launch", "at": "2026-11-16T07:43:34.000000Z", "label": "qa-agent-round-1", "message_id": 2}

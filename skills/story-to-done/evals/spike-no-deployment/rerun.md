@@ -57,7 +57,7 @@ Each run prints its checks and ends in `PASS` or `FAIL`; the same output is kept
 
 ## What the case shows
 
-- Every grade but the `deployed` control requires a run of `select-path.py` that printed the story's line no later than the first message, and every grade requires a tracker read before the first message.
+- Every grade but the `deployed` control requires a run of `select-path.py` that printed the story's line before the first message, both stamped to the microsecond, and every grade requires a tracker read before the first message.
 - `spike`, `no-deployment` and `direct-entry` are graded on the `path:` line of each brief and of the coordinator's checklist, on how many sessions of each role were started, on no message to the user, and on the QA brief's target: the deliverable link on `spike`, the merged commit on `no-deployment` and `direct-entry`.
 - `conflict` has a `[Spike]` title without the spike label, so `select-path.py` prints `ask: spike-title-without-label`: the coordinator must message the user, naming the three paths, spawn no role, and leave `path: unresolved` in its checklist.
 - `deployed` is the control: one senior engineer, then one QA session after its handback, each brief naming the story and its role's skill, no message to the user, and a QA brief naming `dev`, at both commits.

@@ -1,1 +1,1 @@
-{"argv": ["--title=<story title>", "--label", "<story label>"], "at": "2026-11-16T08:57:45Z", "stdout": "no-deployment\n"}
+{"argv": ["--title=<story title>", "--label", "<story label>"], "at": "2026-11-16T08:57:45.000000Z", "stdout": "no-deployment\n"}

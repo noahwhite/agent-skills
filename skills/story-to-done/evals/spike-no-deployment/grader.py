@@ -55,7 +55,9 @@ CLAUSE_END = re.compile(r"\n|[.;,!?](?=\s|$)")
 # A name inside a URL, a path, an email address or a dotted host name is not named on its own.
 BEFORE = r"(?<![A-Za-z0-9_\-/.@])"
 AFTER = r"(?![A-Za-z0-9_\-/@]|\.[A-Za-z0-9])"
-STAMP = re.compile(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ")
+# The runtime and the selector hook stamp to the microsecond in one fixed width, so comparing two
+# stamps as text orders them in time.
+STAMP = re.compile(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{6}Z")
 
 
 class Unreadable(Exception):
@@ -255,7 +257,7 @@ def selector_checks(expectation: str, runs: list[dict], sent: list[dict]) -> lis
     """The path selector ran and printed this story's line before anything was sent."""
     first = sent[0]["at"] if sent else None
     line = SELECTED[expectation]
-    selected = [run for run in runs if run["stdout"].strip() == line and (first is None or run["at"] <= first)]
+    selected = [run for run in runs if run["stdout"].strip() == line and (first is None or run["at"] < first)]
     return [(bool(selected), f"select-path.py printed `{line}` before the first message"
              + ("" if selected else f" (it ran {len(runs)} time(s), printing {[run['stdout'].strip() for run in runs]})"))]
 

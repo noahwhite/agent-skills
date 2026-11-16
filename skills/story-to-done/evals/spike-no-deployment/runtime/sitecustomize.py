@@ -50,8 +50,8 @@ def _watch(log: str) -> None:
     sys.stdout = copy
 
     def record() -> None:
-        now = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0)
-        entry = {"at": now.isoformat().replace("+00:00", "Z"), "argv": sys.argv[1:], "stdout": "".join(copy.seen)}
+        now = datetime.datetime.now(datetime.timezone.utc)
+        entry = {"at": now.isoformat(timespec="microseconds").replace("+00:00", "Z"), "argv": sys.argv[1:], "stdout": "".join(copy.seen)}
         with open(log, "a", encoding="utf-8") as handle:
             handle.write(json.dumps(entry, sort_keys=True) + "\n")
 

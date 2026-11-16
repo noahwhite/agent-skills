@@ -1,5 +1,6 @@
 """The spike-no-deployment eval case: its grader, its runtime, its run.sh and its recorded results."""
 
+import datetime
 import json
 import re
 import shutil
@@ -93,8 +94,31 @@ def test_the_grader_fails_a_selector_run_that_printed_another_path(tmp_path: Pat
 def test_the_grader_fails_a_selector_run_after_the_first_message(tmp_path: Path) -> None:
     run = copied(tmp_path, "spike")
     entry = json.loads((run / "selector.jsonl").read_text())
-    (run / "selector.jsonl").write_text(json.dumps({**entry, "at": "2999-01-01T00:00:00Z"}) + "\n")
+    (run / "selector.jsonl").write_text(json.dumps({**entry, "at": "2999-01-01T00:00:00.000000Z"}) + "\n")
     assert any("select-path.py" in line for line in failed(grade(run, "spike")))
+
+
+@pytest.mark.parametrize(("offset", "passes"), [(-1, True), (0, False), (1, False)])
+def test_the_selector_run_must_come_strictly_before_the_first_message(
+        tmp_path: Path, offset: int, passes: bool) -> None:
+    run = copied(tmp_path, "no-deployment")
+    first = next(call["at"] for call in calls(run) if call["action"].endswith("-launch"))
+    moment = datetime.datetime.strptime(first, "%Y-%m-%dT%H:%M:%S.%fZ") + datetime.timedelta(microseconds=offset)
+    at = moment.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    entry = json.loads((run / "selector.jsonl").read_text())
+    (run / "selector.jsonl").write_text(json.dumps({**entry, "at": at}) + "\n")
+    result = grade(run, "no-deployment")
+    if passes:
+        assert result.returncode == 0, result.stdout + result.stderr
+    else:
+        assert any("select-path.py" in line for line in failed(result))
+
+
+def test_a_stamp_without_microseconds_voids_the_run(tmp_path: Path) -> None:
+    run = copied(tmp_path, "spike")
+    entry = json.loads((run / "selector.jsonl").read_text())
+    (run / "selector.jsonl").write_text(json.dumps({**entry, "at": entry["at"][:19] + "Z"}) + "\n")
+    assert grade(run, "spike").returncode == 2
 
 
 @pytest.mark.parametrize("wrapper", ["```\n{line}\n```", "~~~text\n{line}\n~~~", "> {line}"])
