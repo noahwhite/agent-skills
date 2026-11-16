@@ -203,7 +203,7 @@ class Normaliser:
             text = pattern.sub(lambda _: placeholder, text)
         return text
 
-    def literal(self, match: re.Match) -> str:
+    def redact_literal(self, match: re.Match) -> str:
         literal = match.group()
         if match.group("end") is None:
             return literal
@@ -211,6 +211,8 @@ class Normaliser:
         try:
             value = json.loads(written)
         except ValueError:
+            # Step 1 matched a root after a \ that escapes its first slash (\/root/a becomes
+            # \{root}/a, an invalid escape), so decode the literal as written instead.
             try:
                 written, value = literal, json.loads(literal)
             except ValueError:
@@ -225,7 +227,7 @@ class Normaliser:
     def __call__(self, text: str) -> str:
         for value in self.secrets:
             text = text.replace(value, REDACTED)
-        text = STRING_LITERAL.sub(self.literal, text)
+        text = STRING_LITERAL.sub(self.redact_literal, text)
         text = self.roots(self.text_pairs, text)
         text = UUID.sub("{uuid}", text)
         text = ABSOLUTE_PATH.sub("{path}", text)
