@@ -320,8 +320,9 @@ QA_ROUND_SENTENCE = (
     "agent from an earlier round, since it carries that round's conclusions."
 )
 QA_ROUND_EXCEPTION = (
-    "Continuation of the current round under step 4 and the step 0 checklist read-back resume of the current "
-    "round's QA agent are the only exceptions to that sentence, and neither increments the round count."
+    "Continuation of the current round under step 4, the step 0 checklist read-back resume, and the "
+    "interim-handback deadline resume of the current round's QA agent are the only exceptions to that sentence, "
+    "and none increments the round count."
 )
 OLD_QA_ROUND_CLAUSE = "never resume an earlier QA agent, since it carries that round's conclusions"
 
@@ -974,8 +975,8 @@ METRICS_LAUNCH_POINTS = (
     "of the senior engineer under step 0, each interim-deadline resume of the senior engineer under "
     "`references/interim-handbacks.md`, and each resume or re-spawn in step 4; each QA round is a launch "
     "row in step 3, a continuation of that round under step 4 is a further launch row within the same "
-    "round, and each checklist read-back resume and each interim-deadline resume of a QA agent is a launch row "
-    "of its own within that QA agent's round."
+    "round, each checklist read-back resume of a QA agent is a launch row of its own within that QA agent's "
+    "round, and so is each interim-deadline resume of a QA agent under `references/interim-handbacks.md`."
 )
 METRICS_EXTRAS = (
     "- **Extras:** take each `story-to-done` extra at the step that observes it: **Start** from the step 1 "
@@ -3170,7 +3171,8 @@ INTERIM_QA_SCOPE = (
 )
 INTERIM_QA_MIXED = (
     "A QA agent's handback that also names a failed item, or an outstanding item owned by anyone other than that QA "
-    "agent, is not an interim handback; it goes to step 0's checklist read-back and step 4 as usual."
+    "agent (an awaited item of its own background work counts as its own), is not an interim handback; it goes to "
+    "step 0's checklist read-back and step 4 as usual."
 )
 INTERIM_QA_ORDER = (
     "The coordinator classifies a QA agent's interim handback before step 0's checklist read-back of that QA agent "
@@ -3178,7 +3180,7 @@ INTERIM_QA_ORDER = (
 )
 INTERIM_STEP_3_POINTER = (
     "A QA agent's interim handback goes to [references/interim-handbacks.md](references/interim-handbacks.md) "
-    "before the step 0 checklist read-back, every check below and step 4; any other handback continues here."
+    "first; any other handback continues here."
 )
 STEP_3_READ_BACK_FIRST = "When it hands back, do the step 0 checklist read-back first, then read the story's state yourself."
 INTERIM_QA_IN_PLACE = (
@@ -3212,8 +3214,8 @@ def test_step_3_points_to_the_interim_handbacks_reference_and_restates_none_of_i
     step_3 = " ".join(section(SKILL.read_text(), "3. QA agent: verify the deployed story").split())
     assert INTERIM_STEP_3_POINTER in step_3
     assert step_3.index(INTERIM_STEP_3_POINTER) < step_3.index(STEP_3_READ_BACK_FIRST)
-    rest = step_3.replace(INTERIM_STEP_3_POINTER, "").lower()
-    for token in INTERIM_VOCABULARY + ("50%",):
+    rest = step_3.replace(INTERIM_STEP_3_POINTER, "").replace(QA_ROUND_EXCEPTION, "").lower()
+    for token in INTERIM_VOCABULARY + ("50%", "before step 4", "before the step 0", "before step 0"):
         assert token not in rest, f"step 3 restates the interim rule ({token!r}) instead of pointing to it"
 
 
@@ -3504,7 +3506,7 @@ def test_the_record_shape_pattern_matches_the_record_and_not_the_bare_word_readi
 # step 3 section and the two step 4 bullets that brief QA and the engineer are also pinned whole; change a
 # digest only together with a reviewed change to the text it covers.
 STEP_3_HEADING = "3. QA agent: verify the deployed story"
-STEP_3_SHA256 = "5935548ca23b2754172cea199d4e5b4a093760fd3a64e07b20e501394e2bb22a"
+STEP_3_SHA256 = "81200e9cd0663f8098376a961a619121dd7b2ed6981513c91baa53c27c447690"
 IN_PROGRESS_SHA256 = "fd4768e7d39be8e29341cd0f5d186bfaf96a8bf7bfc8eebb8b1e39b101eb95e7"
 IN_DEPLOYMENT_REVIEW_SHA256 = "36da368bed892519776e5be61064d2fad186151ca58ae90aff897e9a1ffaa968"
 # The only lines of a state bullet that may state the pending owner ruling record.

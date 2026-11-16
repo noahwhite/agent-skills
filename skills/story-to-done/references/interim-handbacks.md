@@ -5,7 +5,7 @@ Read this when the senior engineer or a QA agent hands back.
 An interim handback is a handback from the senior engineer that names an awaited item of its own background work (a CI run, a deploy, a tracker move, a review in flight) and is neither a final handback nor blocked.
 Naming the awaited item does not make it a blocked handback or a stated blocker.
 A QA agent's handback that names an awaited item of its own background work (for example its evidence PR's review-of-record gate or CI run) and is neither a final handback nor blocked is an interim handback too.
-A QA agent's handback that also names a failed item, or an outstanding item owned by anyone other than that QA agent, is not an interim handback; it goes to step 0's checklist read-back and step 4 as usual.
+A QA agent's handback that also names a failed item, or an outstanding item owned by anyone other than that QA agent (an awaited item of its own background work counts as its own), is not an interim handback; it goes to step 0's checklist read-back and step 4 as usual.
 Step 0's stated-blocker sentence covers only the other handbacks, since an interim handback never reaches the read-back.
 The coordinator classifies an interim handback before step 0's checklist read-back and before step 2's deployment-review check and stop.
 The coordinator classifies a QA agent's interim handback before step 0's checklist read-back of that QA agent and before step 4's classification.

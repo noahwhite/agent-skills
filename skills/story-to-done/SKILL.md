@@ -193,7 +193,7 @@ For a waived PR, compare the merged PR's `headRefOid` with the SHA recorded when
 ## 3. QA agent: verify the deployed story
 
 Spawn a new clean, neutral subagent on qa-model at qa-effort for every new QA round; never resume an agent from an earlier round, since it carries that round's conclusions.
-Continuation of the current round under step 4 and the step 0 checklist read-back resume of the current round's QA agent are the only exceptions to that sentence, and neither increments the round count.
+Continuation of the current round under step 4, the step 0 checklist read-back resume, and the interim-handback deadline resume of the current round's QA agent are the only exceptions to that sentence, and none increments the round count.
 A stop for an owner action ends the round: once the owner clears it, that round's work starts over as a new round under this step with a new QA agent, and a fix/deploy cycle or an amended acceptance basis likewise starts a new round.
 Brief it as a QA agent, with only:
 
@@ -211,7 +211,7 @@ Brief it as a QA agent, with only:
 
 Never give it the senior engineer's handback beyond the environment, the PR's rationale, the fixes made, an earlier round's verdicts, or the verdict you expect.
 
-A QA agent's interim handback goes to [references/interim-handbacks.md](references/interim-handbacks.md) before the step 0 checklist read-back, every check below and step 4; any other handback continues here.
+A QA agent's interim handback goes to [references/interim-handbacks.md](references/interim-handbacks.md) first; any other handback continues here.
 When it hands back, do the step 0 checklist read-back first, then read the story's state yourself.
 For every PR it merged, such as the evidence PR, read the PR yourself with `gh pr view <n> --json headRefOid,mergeCommit` and `gh api --paginate repos/<owner>/<repo>/pulls/<n>/reviews`.
 Select the review of record as the merge guard in `references/code-review.md` does (the `COMMENTED` review whose body begins with `Review of record` and has the greatest `submitted_at`).
