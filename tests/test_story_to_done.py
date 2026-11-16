@@ -320,8 +320,8 @@ QA_ROUND_SENTENCE = (
     "agent from an earlier round, since it carries that round's conclusions."
 )
 QA_ROUND_EXCEPTION = (
-    "Continuation of the current round under step 4, the step 0 checklist read-back resume, and the "
-    "interim-handback deadline resume of the current round's QA agent are the only exceptions to that sentence, "
+    "Continuation of the current round under step 4, and the step 0 checklist read-back resume or the "
+    "interim-handback deadline resume of the current round's QA agent, are the only exceptions to that sentence, "
     "and none increments the round count."
 )
 OLD_QA_ROUND_CLAUSE = "never resume an earlier QA agent, since it carries that round's conclusions"
@@ -2957,18 +2957,23 @@ INTERIM_LIMITS = (
 )
 
 
+def visible(text: str) -> str:
+    """The text a reader of the rendered Markdown sees: HTML comments removed."""
+    return re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)
+
+
 def interim_text() -> str:
     assert INTERIM.is_file(), f"missing {INTERIM.relative_to(ROOT)}"
-    return " ".join(INTERIM.read_text().split())
+    return " ".join(visible(INTERIM.read_text()).split())
 
 
 def test_step_0_points_to_the_interim_handbacks_reference() -> None:
-    step_0 = " ".join(section(SKILL.read_text(), "0. Track everything on a todo list").split())
+    step_0 = " ".join(section(visible(SKILL.read_text()), "0. Track everything on a todo list").split())
     assert INTERIM_STEP_0_POINTER in step_0
 
 
 def test_step_0_classifies_an_interim_handback_before_reading_the_checklist() -> None:
-    step_0 = " ".join(section(SKILL.read_text(), "0. Track everything on a todo list").split())
+    step_0 = " ".join(section(visible(SKILL.read_text()), "0. Track everything on a todo list").split())
     assert step_0.index(INTERIM_STEP_0_POINTER) < step_0.index(STEP_0_CHECKLIST_READ)
 
 
@@ -3211,7 +3216,7 @@ def test_a_qa_handback_that_also_names_a_failed_or_foreign_owned_item_is_not_int
 
 
 def test_step_3_points_to_the_interim_handbacks_reference_and_restates_none_of_it() -> None:
-    step_3 = " ".join(section(SKILL.read_text(), "3. QA agent: verify the deployed story").split())
+    step_3 = " ".join(section(visible(SKILL.read_text()), "3. QA agent: verify the deployed story").split())
     assert INTERIM_STEP_3_POINTER in step_3
     assert step_3.index(INTERIM_STEP_3_POINTER) < step_3.index(STEP_3_READ_BACK_FIRST)
     rest = step_3.replace(INTERIM_STEP_3_POINTER, "").replace(QA_ROUND_EXCEPTION, "").lower()
@@ -3506,7 +3511,7 @@ def test_the_record_shape_pattern_matches_the_record_and_not_the_bare_word_readi
 # step 3 section and the two step 4 bullets that brief QA and the engineer are also pinned whole; change a
 # digest only together with a reviewed change to the text it covers.
 STEP_3_HEADING = "3. QA agent: verify the deployed story"
-STEP_3_SHA256 = "81200e9cd0663f8098376a961a619121dd7b2ed6981513c91baa53c27c447690"
+STEP_3_SHA256 = "8d0aef0df7ddfb790ce16875812301d9b068c8a798885783bdb155069eef955a"
 IN_PROGRESS_SHA256 = "fd4768e7d39be8e29341cd0f5d186bfaf96a8bf7bfc8eebb8b1e39b101eb95e7"
 IN_DEPLOYMENT_REVIEW_SHA256 = "36da368bed892519776e5be61064d2fad186151ca58ae90aff897e9a1ffaa968"
 # The only lines of a state bullet that may state the pending owner ruling record.

@@ -99,8 +99,8 @@ READ_BACK_FIRST = {
         "When it hands back, do the step 0 checklist read-back first, then read the story's state yourself.",
 }
 QA_EXCEPTIONS = (
-    "Continuation of the current round under step 4, the step 0 checklist read-back resume, and the "
-    "interim-handback deadline resume of the current round's QA agent are the only exceptions to that "
+    "Continuation of the current round under step 4, and the step 0 checklist read-back resume or the "
+    "interim-handback deadline resume of the current round's QA agent, are the only exceptions to that "
     "sentence, and none increments the round count."
 )
 
