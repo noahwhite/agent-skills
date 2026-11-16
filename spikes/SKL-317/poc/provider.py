@@ -343,6 +343,12 @@ def cost_of(counts: dict) -> Decimal:
     return sum((Decimal(counts[name]) * PRICES[name] for name in COUNTS), Decimal(0)) / Decimal(1_000_000)
 
 
+def measured(usage: dict | None) -> bool:
+    """True when the token counts of USAGE, at the prices above, are all its attempt spent:
+    the session reported counts, ran no other model and called no subagent."""
+    return usage is not None and usage["model"] in (NO_AGENT, STUB_AGENT, MODEL) and not usage["subagent_calls"]
+
+
 def attempt_env(cfg: dict, agent_command: str) -> dict:
     passed = {name for name in os.environ.get("EVAL_PASS_ENV", "").split() if not name.startswith(HARNESS_ENV_PREFIXES)}
     env = {name: value for name, value in os.environ.items()
@@ -452,7 +458,9 @@ def run_attempt(cfg: dict, call: int, number: int, reserved: Decimal) -> tuple[d
              "subagent_calls": 0, "agent_cost": None}
     if calls_model(cfg, number):
         usage = session_usage(cfg, title)
-    cost = None if usage is None else format(cost_of(usage["counts"]), "f")
+    # Spend the counts do not measure is written as unknown, so that no later invocation adds
+    # a part of it up as the whole: spend_of() stops every run on a row without a cost.
+    cost = format(cost_of(usage["counts"]), "f") if measured(usage) else None
     intact = ledger_write(cfg, {"at": now(), "run": cfg["run"], "attempt": number, "mode": cfg["mode"],
                                 "event": "end", "cost": cost})
     return {"attempt": number, "call": call, "exit_status": code, "outcome": cfg["outcomes"].get(code, "error"),
@@ -490,10 +498,10 @@ def one_call(cfg: dict, call: int, ran: list[int]) -> dict:
         # The grade of an attempt that left either clone changed is not the committed grader's.
         if not clones_as_committed(cfg):
             raise Stop(CHECKOUT_CHANGED)
-        if record["cost"] is None:
-            raise Stop(NO_TOKEN_COUNTS)
-        # An attempt whose spend is not what the cost above measures stops the run here, before
+        # An attempt whose spend is not measured has no cost, and stops the run here, before
         # another attempt is admitted against the ceiling.
+        if record["usage"] is None:
+            raise Stop(NO_TOKEN_COUNTS)
         if record["usage"]["model"] not in (NO_AGENT, STUB_AGENT, MODEL):
             raise Stop(WRONG_MODEL)
         if record["usage"]["subagent_calls"]:

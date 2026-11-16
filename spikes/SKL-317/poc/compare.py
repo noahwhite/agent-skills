@@ -135,15 +135,15 @@ def record_problems(attempts: list[dict], calls: list[dict], runs: int, inject: 
         problems.append("the `injected` label is not on the one attempt the run injects a void for, and only there")
     for attempt in attempts:
         usage = attempt["usage"]
-        if (usage is None) != (attempt["cost"] is None):
-            problems.append("an attempt has a cost without token counts, or token counts without a cost")
+        if provider.measured(usage) != (attempt["cost"] is not None):
+            problems.append("an attempt has a cost its token counts do not measure, or no cost for counts that do")
         elif usage is not None:
             ran_model = mode == "live" and not attempt["injected"]
             if not ran_model and usage["model"] != (provider.STUB_AGENT if mode == "stub" else provider.NO_AGENT):
                 problems.append("an attempt that ran no model names one")
             if ran_model != any(usage["counts"].values()):
                 problems.append("an attempt that ran no model has token counts, or one that ran the model has none")
-            if Decimal(attempt["cost"]) != provider.cost_of(usage["counts"]):
+            if attempt["cost"] is not None and Decimal(attempt["cost"]) != provider.cost_of(usage["counts"]):
                 problems.append("an attempt's cost is not its token counts times the prices")
     if [call["call"] for call in calls] != list(range(1, len(calls) + 1)):
         problems.append("the provider calls are not numbered 1, 2, 3 and so on, once each")

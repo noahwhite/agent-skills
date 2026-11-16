@@ -358,6 +358,12 @@ def main() -> int:
             check(f"an attempt with {name} stops the run before a second attempt: {reason}",
                   status == 1 and len(run.state("attempts")) == 1 and run.stopped() == reason
                   and run.reasons() == [reason, provider.STOPPED_EARLIER, provider.STOPPED_EARLIER])
+            later = drive(name.replace(" ", "-") + "-later", mode="live", seed=run.ledger.read_text(),
+                          exported=session())
+            check(f"an attempt with {name} leaves no known cost in the ledger, and a later run makes no attempt",
+                  run.state("attempts")[0]["cost"] is None and provider.entries(run.ledger)[-1]["cost"] is None
+                  and provider.SPEND_UNKNOWN in blockers(text)
+                  and later.state("attempts") == [] and later.stopped() == provider.SPEND_UNKNOWN)
         run = drive("rewrite", mode="live", exported=session(), write=lambda run: [(run.ledger, "")])
         status, text = report(run)
         kept = provider.entries(run.work / "ledger-mirror.jsonl")

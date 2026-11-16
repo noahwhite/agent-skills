@@ -122,6 +122,7 @@ An attempt whose agent never started, the injected void, has no session and coun
 When the session of an attempt is not found, or its export holds no token counts or only zeros, the provider stops the run with `no token counts`.
 When the export names another model than the one priced, it stops with `another model ran`, and when the session called a subagent, whose tokens its counts leave out, with `subagent tokens uncounted`.
 Each of these stops the run at that attempt, before another one is admitted against the ceiling, and `compare.md` records the blocker and claims no result.
+In each of them the attempt's row in the ledger holds no cost, because its token counts do not measure what it spent, so a later run stops as "Spend ceiling" below describes.
 
 The cost of an attempt is its token counts times the prices `provider.py` names, with their source and the date they were read.
 promptfoo holds a cost of 0 and a token count of 0 for every result of a script provider, so the spend is known only from the session record `opencode` keeps.
