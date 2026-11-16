@@ -3,19 +3,19 @@
 - promptfoo version: `0.125.1`.
 - Model id of the live runs: `deepseek/deepseek-v4-pro`.
 - Graded runs wanted, N: 3, with at most 2N = 6 attempts.
-- Live run of the final `run.sh`: one invocation of `bash spikes/SKL-317/poc/run.sh` on 2026-11-16 at commit `327ac853822bacbf5e775f59f1a43af18364c15e`, exit status 0; its report is `poc/compare.md`.
-- Earlier live run: one invocation of the same command on 2026-11-16 at commit `50893a214a8dfab55995737895d26bd30a292fc3`, exit status 0, of the scripts as they were before the pre-PR review changed them.
-  The final run's report replaced its report, and its rows are in `## Research questions`, 4.
-- Measured total spend of the two live runs: 0.218164716 + 0.333814448 = 0.551979164 USD.
+- Live run of the final `run.sh`: one invocation of `bash spikes/SKL-317/poc/run.sh` on 2026-11-16 at commit `c8574c3c3eb5e005b3fa38e0d0e26c93744cb42d`, exit status 0; its report is `poc/compare.md`.
+- Earlier live runs: two invocations of the same command on 2026-11-16, at commits `50893a214a8dfab55995737895d26bd30a292fc3` and `327ac853822bacbf5e775f59f1a43af18364c15e`, each with exit status 0, of the scripts as they were before each of two pre-PR review rounds changed them.
+  The final run's report replaced theirs, and their rows are in `## Research questions`, 4.
+- Measured total spend of the three live runs: 0.218164716 + 0.333814448 + 0.232140172 = 0.784119336 USD.
 
 Labels used throughout:
 
 - **live**: seen in the live invocation of the final `run.sh`, and written in `poc/compare.md` by that invocation.
-- **earlier live run**: seen in the earlier invocation.
-  It is reported for its attempt rows and its spend, and no status in this file rests on it.
+- **earlier live run**: seen in one of the two earlier invocations.
+  Each is reported for its attempt rows and its spend, and no status in this file rests on either.
 - **stub, not live**: seen in a dry run of the final `run.sh`, the same promptfoo build and the case's own `run.sh` and `grader.py`, with a stub agent in place of the model.
   A stub run calls no model, spends nothing and writes no file in the repository, and it never counts as a live observation.
-  The stub runs cited here ran at commit `5752704b870ece6394203b9e4e1d16cebcc4bc78`, whose scripts are the ones the live run ran.
+  The stub runs cited here ran at commit `9125b9634edd6059c78bedf6f7feaa2f3fc00787`, whose scripts are the ones the live run ran.
 - **observed**, **documented**, **absent**: defined in `## Capability re-check`.
 
 ## Decision
@@ -31,7 +31,7 @@ Neither decision is a decision to adopt promptfoo: SKL-312's No-Go on adopting i
 - Decider: the senior-engineer agent that implemented SKL-317.
   The decision stands when the product owner accepts it by closing the story, and that owner can overturn it.
 - Date: 2026-11-16.
-- Repository commit tested: `327ac853822bacbf5e775f59f1a43af18364c15e`.
+- Repository commit tested: `c8574c3c3eb5e005b3fa38e0d0e26c93744cb42d`.
 
 Observations that drove the behaviour decision:
 
@@ -62,12 +62,24 @@ Each is an open question, and none is counted as reproduced:
 Two more things the live run did not show:
 
 - No live attempt was a graded fail, so promptfoo reporting a live graded fail was not seen.
-- The longest live attempt took 559 seconds.
+- The longest attempt of the live run took 304 seconds, and the longest of the earlier live runs 559 seconds.
   An attempt that runs to its deadline, `EVAL_TIMEOUT` plus `EVAL_GRADING_MARGIN`, 1200 seconds by default, was not seen.
 
-The earlier live run had the same shape, 3 graded passes from 4 attempts with the injected void second, so it closes none of these.
+Both earlier live runs had the same shape, 3 graded passes from 4 attempts with the injected void second, so they close none of these.
 Stub runs, not live, exercised rule (ii), rule (iii) and a graded fail, and are described in `## Research questions`, 1 and 2.
 They do not change any status above.
+
+What the grade and the spend of the live run rest on:
+
+- The agent under test runs as the same OS user as the harness, with no sandbox around it.
+  Every check of the grade and of the spend is therefore one an agent that follows its prompt passes, not a barrier against one that sets out to defeat it (`poc/README.md`, "What the checks do not cover").
+- The checks are these: the case's `run.sh` and `grader.py` run from a harness clone the agent is not told of, the provider compares that clone and the agent's clone with the commit's tree by content before and after each attempt, and it compares the ledger with its own copy and with a length and hash `run.sh` took before the eval.
+  In the live run every one held, and `poc/compare.md` lists no blocker.
+- Not stopped: an agent that changes a file and restores it between two checks, one that rewrites the harness's own files, one that rewrites the session record `opencode` keeps, and one that writes the case's `actions.jsonl` itself.
+  The last is the case as committed, and `suite.py` runs the same case with the same limit, so the limit does not tell the two harnesses apart and changes neither decision.
+- A process sandbox is possible on the machine of the live run and is not part of the PoC.
+  Probed there on 2026-11-16, outside the PoC and with util-linux 2.39.3: `unshare -r -m`, a `tmpfs` mounted over a directory, then a nested `unshare -U -m --map-user=1000 --map-group=1000` gave a child process that saw the directory empty, could not unmount it or mount anything, and could not read the environment of the process that started it.
+  The same probe failed inside the sandbox the review's own agent runs in, and which paths to hide is a question of its own, so the defence is left to SKL-326 (Follow-up work, below).
 
 Conditions that would reverse the behaviour decision, as observations:
 
@@ -101,7 +113,9 @@ This decision rests on the rows cited above and does not depend on either spike.
   A natural void that cannot be told from a fail by the case's exit status moves it toward No-Go, because the provider's retry rests on that exit status.
   Its result for `skill-used` through an agent provider changes nothing here.
 
-Follow-up work: none is created.
+Follow-up work: no new issue is created, and one existing Backlog spike is linked.
+SKL-326, "Defend tabletop eval cases against the agent forging its own record", already owns the limit above for this case: its research questions cover an agent that restores a changed checkout before the end-of-run check and a sandboxed agent process.
+It is linked to SKL-317 as related.
 Rules (ii) and (iii) are provider logic that does not depend on the model: the stub runs exercised both through the same promptfoo build and the case's own runner, and `poc/selftest.py` checks both without promptfoo.
 A live run exercises them only when attempts void six times or one breaks, which a working case does not do on demand, and the story allows one injected void.
 The natural void is inside SKL-316's fourth research question.
@@ -142,7 +156,7 @@ promptfoo's totals were 1 success, 2 failures and 0 errors, the eval exited 100,
 
 Rules (ii) and (iii) are open questions in `## Decision`, and they make the behaviour decision Inconclusive.
 
-`poc/selftest.py` checks the three rules, the ceiling, the ledger checks and the checks of `compare.py` without promptfoo, Node.js or a model.
+`poc/selftest.py` checks the three rules, the ceiling, the clone and ledger checks and the checks of `compare.py` without promptfoo, Node.js or a model.
 It is run by hand, and no CI job runs it or `run.sh` (`poc/README.md`, "What no job runs").
 
 One difference from the suite is by design and is not a rule above.
@@ -164,12 +178,12 @@ The live run, from `poc/compare.md`, "Attempts" and "Spend":
 
 | Attempt | Outcome | Seconds | Input tokens | Cached input tokens | Output tokens | Reasoning tokens | Cost in USD |
 |---|---|---|---|---|---|---|---|
-| 1 | graded pass | 481 | 67925 | 1411456 | 2610 | 25785 | 0.132104632 |
+| 1 | graded pass | 204 | 30368 | 309248 | 1229 | 16977 | 0.062894216 |
 | 2 | void, `injected` | 0 | 0 | 0 | 0 | 0 | 0.000000 |
-| 3 | graded pass | 356 | 57845 | 843648 | 2313 | 19481 | 0.099890076 |
-| 4 | graded pass | 559 | 36842 | 469120 | 1605 | 32326 | 0.10181974 |
+| 3 | graded pass | 304 | 45530 | 400128 | 1683 | 25725 | 0.093120456 |
+| 4 | graded pass | 216 | 45453 | 467840 | 1649 | 16449 | 0.0761255 |
 
-The earlier live run, from the report it wrote and the ledger:
+The earlier live run at `50893a214a8dfab55995737895d26bd30a292fc3`, from the report it wrote and the ledger:
 
 | Attempt | Outcome | Seconds | Input tokens | Cached input tokens | Output tokens | Reasoning tokens | Cost in USD |
 |---|---|---|---|---|---|---|---|
@@ -178,30 +192,46 @@ The earlier live run, from the report it wrote and the ledger:
 | 3 | graded pass | 214 | 49562 | 713984 | 1553 | 19333 | 0.089772848 |
 | 4 | graded pass | 304 | 52479 | 412928 | 1544 | 28867 | 0.103934336 |
 
-- The N = 3 live run cost 0.132104632 + 0.000000 + 0.099890076 + 0.10181974 = 0.333814448 USD.
-- One attempt of it that called the model cost between 0.099890076 and 0.132104632 USD, and 0.333814448 / 3 = 0.111271 USD on average.
-- Over all 4 of its attempts, the void included, the average is 0.333814448 / 4 = 0.083454 USD.
-- The earlier live run cost 0.024457532 + 0.000000 + 0.089772848 + 0.103934336 = 0.218164716 USD; its script printed six decimals, 0.218165.
-- Over the 6 attempts of both runs that called the model, the cost was between 0.024457532 and 0.132104632 USD, and 0.551979164 / 6 = 0.091997 USD on average.
+The earlier live run at `327ac853822bacbf5e775f59f1a43af18364c15e`, from the report it wrote and the ledger:
+
+| Attempt | Outcome | Seconds | Input tokens | Cached input tokens | Output tokens | Reasoning tokens | Cost in USD |
+|---|---|---|---|---|---|---|---|
+| 1 | graded pass | 481 | 67925 | 1411456 | 2610 | 25785 | 0.132104632 |
+| 2 | void, `injected` | 0 | 0 | 0 | 0 | 0 | 0.000000 |
+| 3 | graded pass | 356 | 57845 | 843648 | 2313 | 19481 | 0.099890076 |
+| 4 | graded pass | 559 | 36842 | 469120 | 1605 | 32326 | 0.10181974 |
+
+- The N = 3 live run cost 0.062894216 + 0.000000 + 0.093120456 + 0.0761255 = 0.232140172 USD.
+- One attempt of it that called the model cost between 0.062894216 and 0.093120456 USD, and 0.232140172 / 3 = 0.077380 USD on average.
+- Over all 4 of its attempts, the void included, the average is 0.232140172 / 4 = 0.058035 USD.
+- The earlier live run at `50893a214a8dfab55995737895d26bd30a292fc3` cost 0.024457532 + 0.000000 + 0.089772848 + 0.103934336 = 0.218164716 USD; its script printed six decimals, 0.218165.
+- The earlier live run at `327ac853822bacbf5e775f59f1a43af18364c15e` cost 0.132104632 + 0.000000 + 0.099890076 + 0.10181974 = 0.333814448 USD.
+- Over the 9 attempts of the three runs that called the model, the cost was between 0.024457532 and 0.132104632 USD, and 0.784119336 / 9 = 0.087124 USD on average.
 - The injected void ran no agent and cost nothing, so the cost of a natural void, which may spend tokens before it fails, was not measured.
-- SKL-312 estimated 0.08 USD for an agent run: 5 of those 6 attempts cost more.
+- SKL-312 estimated 0.08 USD for an agent run: 6 of those 9 attempts cost more.
+- promptfoo holds a cost of 0 and a token count of 0 for every one of these results, so each figure comes from the session record `opencode` keeps and the prices above (`poc/compare.md`, "Spend").
 
 Spend ceiling:
 
-- The ceiling for all live runs of this spike is 1 USD.
-- The plan before the earlier run was at most 6 attempts at SKL-312's estimate: 6 x 0.08 = 0.48 USD, under the ceiling.
-- The plan before the final run was the 0.218164716 USD already spent and at most 6 attempts at the highest cost of one attempt so far: 0.218164716 + 6 x 0.103934336 = 0.841770732 USD, under the ceiling.
-- Before each attempt the provider adds up a ledger kept outside the repository and stops with `ceiling reached` when the total plus the estimate of the next attempt is over 1 USD; the estimate is 0.08 USD, or the highest cost of one attempt so far when that is more.
-- The ledger held 0 USD over 32 stub attempts before the earlier live run, development and dry runs included.
-- The earlier live run added 4 attempts and 0.218164716 USD, and three stub runs after it added 12 attempts and 0 USD.
-- So the ledger held 0.218164716 USD over 48 attempts before the final run (`poc/compare.md`, "Spend").
-- After the final run it holds 0.218164716 + 0.333814448 = 0.551979164 USD over 52 attempts, 44 stub and 8 live, which is 0.448020836 USD under the ceiling.
-- Not in the ledger, because each called no model and wrote to a throwaway ledger of its own: the stub runs and the runs of `poc/selftest.py` made while the scripts were changed after the pre-PR review, three rehearsals of the live path with a stand-in for `opencode` whose costs were made up, and one test that seeded a ledger with 0.80 USD spent and 0.08 USD reserved to see `ceiling reached`.
-- Two live invocations were made, and exactly one of them is of the final `run.sh`.
-  The pre-PR review of the earlier scripts found that the agent under test could reach the ledger and that `compare.py` did not check the cap, the results, the runtime options or the costs.
-  The fixes changed `run.sh`, `provider.py` and `compare.py`, so the run was made again on the final scripts.
-- The final scripts keep the ledger from the agent by not naming it and by comparing it with a copy before and after each attempt, not by an access control: the agent runs as the same user as the harness (`poc/README.md`, "Spend ceiling").
-  In the live run the ledger was its copy at every check, and `poc/compare.md` lists no blocker.
+- The ceiling for all live runs of this spike is 5 USD.
+  The product owner raised it from 1 USD on 2026-11-16, after the second live run, and the spend already recorded counts toward it.
+- The plan before the first run was at most 6 attempts at SKL-312's estimate: 6 x 0.08 = 0.48 USD, under the 1 USD ceiling of that time.
+- The plan before the second run was the 0.218164716 USD already spent and at most 6 attempts at the highest cost of one attempt so far: 0.218164716 + 6 x 0.103934336 = 0.841770732 USD, under the 1 USD ceiling of that time.
+- The plan before the final run was the 0.551979164 USD already spent and at most 6 attempts at the highest cost of one attempt so far: 0.551979164 + 6 x 0.132104632 = 1.344606956 USD, under the 5 USD ceiling.
+- Before each attempt that calls the model the provider adds up a ledger kept outside the repository and stops with `ceiling reached` when the total plus the estimate of the next attempt is over 5 USD; the estimate is 0.08 USD, or the highest cost of one attempt so far when that is more.
+  The estimate is not a bound on what one attempt costs.
+- The ledger held 0 USD over 32 stub attempts before the first live run, development and dry runs included.
+- The first live run added 4 attempts and 0.218164716 USD, and three stub runs after it added 12 attempts and 0 USD.
+- The second live run added 4 attempts and 0.333814448 USD, so the ledger held 0.551979164 USD over 52 attempts before the final run (`poc/compare.md`, "Spend").
+- The final run added 4 attempts and 0.232140172 USD, and the three stub runs cited in this file added 12 attempts and 0 USD after it.
+- The ledger now holds 0.218164716 + 0.333814448 + 0.232140172 = 0.784119336 USD over 68 attempts, 56 stub and 12 live, which is 4.215880664 USD under the ceiling.
+- Not in the ledger, because each called no model and wrote to a throwaway ledger of its own: the stub runs and the runs of `poc/selftest.py` made while the scripts were changed after each pre-PR review round, the rehearsals of the live path with a stand-in for `opencode` whose costs were made up, and one test that seeded a ledger with 0.80 USD spent and 0.08 USD reserved to see `ceiling reached`.
+- Three live invocations were made, and exactly one of them is of the final `run.sh`.
+  The first pre-PR review round found that the agent under test could reach the ledger and that `compare.py` did not check the cap, the results, the runtime options or the costs.
+  The fixes changed `run.sh`, `provider.py` and `compare.py`, so the run was made again.
+  The second round found that a grader rewritten in the agent's checkout behind `git update-index --assume-unchanged` graded every attempt a pass with no blocker listed, that a ledger and the provider's copy rewritten together passed as a smaller history, and that `EVAL_PASS_ENV` could hand the agent the harness's variable names.
+  The fixes changed `run.sh`, `provider.py`, `compare.py` and `grade.py`, so the run was made a third time, on the final scripts.
+- What the final scripts' checks of the ledger and of the grade do not cover is in `## Decision`, "What the grade and the spend of the live run rest on".
 
 ## Success criteria status
 
