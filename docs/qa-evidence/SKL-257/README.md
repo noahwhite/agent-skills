@@ -165,7 +165,7 @@ Line numbers below are at the target.
 | AC6: size cap | Verified |
 | DoD: all acceptance criteria met | Pending owner ruling (record 1) |
 | DoD: tests written and passing | Verified |
-| DoD: independently reviewed | Pending owner ruling (record 2) |
+| DoD: independently reviewed | Failed |
 | DoD: docs updated | Verified |
 | DoD: verified in a deployed environment | Correct by design |
 | DoD: no critical bugs or regressions | Verified |
@@ -203,7 +203,7 @@ DoD, tests: AC4, and the full suite passed on `main` at the target (2665 passed)
 
 DoD, independently reviewed: review 5915065265 is `COMMENTED` and names `cbee1552bfbf09d93e685c307118a7fde356c8a0`, the merged head, in its first line and as its `commit_id`.
 Its reviewer (GPT-6.1 Sol) and adjudicator (DeepSeek V4.1 Flash) match the profile at the target.
-Its one finding, the `SKILL.md` line 196 round-count clause (line 197 at the target), is ruled VALID, Low, not blocking merge, and is left unfixed by a stated owner decision; record 2 below covers it.
+Its one finding, the `SKILL.md` line 196 round-count clause (line 197 at the target), is ruled VALID, Low, not blocking merge, and PR 281 merged with it unfixed by a stated owner decision; the failed item section below covers it.
 
 DoD, docs: `references/interim-handbacks.md` and `references/metrics-protocol.md` carry the change.
 
@@ -225,21 +225,19 @@ At the merge base the sentence named only the continuation and the read-back res
   Verdict: failed.
 
 The DoD item "All acceptance criteria met" follows this record.
+The PR description and the round 2 review record an owner decision to keep the clause, but no dated amendment of AC1 is on the story.
 
-### Pending owner ruling, record 2: the review of record
+### Failed item: DoD "Independently reviewed"
 
-Owner: the product owner.
 Quoted text (Review Policy): "the review of record in references/code-review.md - an independent reviewer, then a separate clean, neutral adjudicator - is clean on the PR head, every finding is adjudicated".
-Evidence: the round 2 review at the merged head rules one finding VALID, Low, not blocking merge, with no fix commit, and states the owner decided to keep the clause.
-
-- Reading A: "clean" means every finding is fixed or resolved with a stated reason, as `shared/code-review.md` line 125 states ("Fix or resolve every finding with a stated reason"); the finding is resolved by the owner's stated reason and the adjudicator ruled it not blocking merge.
-  Verdict: verified.
-- Reading B: "clean" means every finding ruled valid is fixed in the PR, as `shared/code-review.md` lines 45 and 128 state ("Fix every finding ruled valid in the same PR"); the finding is unfixed.
-  Verdict: failed.
-
-This record does not depend on record 1: an AC1 amendment does not change the adjudicator's ruling on the finding.
-The PR description and the round 2 review record an owner decision to keep the clause, but no dated amendment is on the story for either record.
+Evidence: the round 2 review at the merged head rules one finding VALID, Low, not blocking merge, and PR 281 merged with no fix commit for it.
+`shared/code-review.md` line 45 reads "Fix every finding ruled valid in the same PR.", and line 128 reads "Valid findings are fixed in the PR, never filed as follow-ups."
+Line 125 ("Fix or resolve every finding with a stated reason") does not exempt a finding ruled valid, and the only waiver the file defines is an explicit per-PR instruction to skip the review, which PR 281 does not carry.
+`docs/qa-evidence/SKL-94/README.md` rules the same DoD item not met on the same facts.
+The item fails independently of record 1: an AC1 amendment does not change the adjudicator's ruling on the finding.
+A fix that removes the restatement from step 3 also meets AC1 under reading B.
 
 The concluded-item refinement proposal on SKL-257 is not an acceptance criterion; `interim-handbacks.md` line 43 now carries a bound for it.
 
-Closing decision: no item failed, so SKL-257 stays in In Deployment Review until the product owner rules on both records with dated amendments; a new QA round then verifies the amended items.
+Closing decision: the DoD review item failed, so SKL-257 moves to In Progress with a dated deployment-review note on that item.
+Record 1 is pending owner ruling and is not for the engineer.
