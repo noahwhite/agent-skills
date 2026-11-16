@@ -62,4 +62,8 @@ Each run prints its checks and ends in `PASS` or `FAIL`; the same output is kept
 
 ## Normalization
 
-The suite runner rewrites every record before writing it, as `../README.md` states; no guard rejected a recorded result of this case, so no further replacement was made.
+The suite runner rewrites every record before writing it, as `../README.md` states.
+One further replacement was made after the runs.
+`tests/test_signing_key.py` allows the git signing-key setting's name in a recorded run only inside the restated override sentence, and one line of `results/deepseek-v4-pro-baseline-ec533a6-deployed-ec533a6-harness-2271eb9-1.json` carried the coordinator's own wording of that sentence, with a comma before its final `or`.
+On that line each `user.` + `signingkey` was rewritten to `user.{signingkey}`.
+The line is a brief the coordinator wrote; its `path:` line and every grade and verdict in the record are unchanged.
