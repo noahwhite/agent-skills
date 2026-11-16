@@ -3478,6 +3478,24 @@ def test_the_engineer_hand_back_instruction_carries_no_pending_item() -> None:
 
 # SKL-270: step 1 selects the run's path with select-path.py after the terminal-state stops and
 # before the starting point, and the `path:` line goes in the todo list and every end-state report.
+# SKL-270 AC7: the recorded step 12 `path:` line is passed in every state step 1 routes to a role,
+# not only in_deployment_review, so a reopened story keeps its path.
+RECORDED_PATH_LINE = (
+    "In every state this step routes to a role (step 2 or step 3), add `--recorded-path` with the value of "
+    "the latest `engineering-workflow` step 12 note line whose whole text is exactly "
+    "`path: spike`, `path: no-deployment` or `path: deployed`, whenever the story has one, and add nothing "
+    "otherwise, so a reopened story, spike included, keeps its path."
+)
+# SKL-270 AC8: a role's `ask:` handback keeps the path step 1 selected; `path: unresolved` is only
+# for a run that stops before selection.
+ROLE_ASK_LINE = (
+    "When a spawned role's handback reports an `ask:` line, stop, and quote that line in the report of that "
+    "end state with the `path: <value>` line this step selected."
+)
+UNRESOLVED_LINE = (
+    "Report `path: unresolved` only for a run that stops before this step selects a path, on an unanswered "
+    "`ask:` line or on any other exit status."
+)
 STEP_1_PATH_LINES = [
     "- `profile.tracker.states.done`: report that there is nothing to do and stop.",
     "- `profile.tracker.states.blocked`, `profile.tracker.states.canceled`, or "
@@ -3489,16 +3507,14 @@ STEP_1_PATH_LINES = [
     "differing-team rule in [references/linear.md](references/linear.md) \"Team resolution\"; the script "
     "compares names only.",
     "Write each `'` inside the title or a label as `'\\''`, so the shell expands nothing in either.",
-    "When the story is in `profile.tracker.states.in_deployment_review`, add `--recorded-path` with the value "
-    "of the latest `engineering-workflow` step 12 note line whose whole text is exactly `path: spike`, "
-    "`path: no-deployment` or `path: deployed`, when one exists, and add nothing otherwise.",
+    RECORDED_PATH_LINE,
     "The script prints one line, the path or an `ask:` line, and exits 0; any other exit status is no path: "
     "stop and report its stderr line.",
     "On an `ask:` line, ask the user, accept only `spike`, `no-deployment` or `deployed` as the answer, which "
     "is the path, and spawn no role until answered.",
     "Never infer a path from prose, and read one only from an exact `path:` line as above.",
-    "When a spawned role's handback reports an `ask:` line, stop, and quote that line with `path: unresolved` "
-    "in the report of that end state.",
+    ROLE_ASK_LINE,
+    UNRESOLVED_LINE,
     "The selected path governs the whole run.",
     "Then pick the starting point:",
     "- `profile.tracker.states.in_deployment_review`: implementation already reached deployment review; "
@@ -3522,3 +3538,83 @@ def test_step_1_selects_the_path_with_the_script_in_order() -> None:
 
 def test_the_path_line_goes_in_the_todo_list_and_every_end_state_report() -> None:
     assert PATH_ARGUMENT_LINE in section(SKILL.read_text(), "Arguments").splitlines()
+
+
+def step_1_lines() -> list[str]:
+    return section(SKILL.read_text(), "1. Read the story and pick the starting point").splitlines()
+
+
+def latest_recorded_path(notes: list[str]) -> str | None:
+    """Step 1's rule: the latest note line whose whole text is exactly one of the three path lines."""
+    found = None
+    for note in notes:
+        for line in note.splitlines():
+            if line in ("path: spike", "path: no-deployment", "path: deployed"):
+                found = line.removeprefix("path: ")
+    return found
+
+
+def select_for_step_1(tmp_path: Path, title: str, labels: list[str], recorded: str | None, envs: str) -> str:
+    profile = tmp_path / "profile.yaml"
+    profile.write_text(
+        "tracker:\n  labels:\n    spike: Spike\ngit:\n  integration_branch: main\n" f"environments: {envs}\n"
+    )
+    args = [sys.executable, str(ROOT / "skills" / "story-to-done" / "scripts" / "select-path.py"), f"--title={title}"]
+    args += [f"--label={label}" for label in labels]
+    if recorded is not None:
+        args.append(f"--recorded-path={recorded}")
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    env["AGENT_SKILLS_PROFILE"] = str(profile)
+    result = subprocess.run(args, cwd=tmp_path, env=env, capture_output=True, text=True, check=False)
+    assert result.returncode == 0, result.stderr
+    return result.stdout
+
+
+def test_the_recorded_path_is_passed_in_every_state_routed_to_a_role() -> None:
+    lines = step_1_lines()
+    recorded = [line for line in lines if "--recorded-path" in line]
+    assert recorded == [RECORDED_PATH_LINE], "step 1 must carry exactly the AC7 `--recorded-path` rule"
+    assert "profile.tracker.states" not in RECORDED_PATH_LINE, "the rule must not be limited to one state"
+    assert "- `profile.tracker.states.in_deployment_review`: implementation already reached deployment review; " \
+        "go to step 3." in lines
+    assert "- Any other state: go to step 2." in lines
+
+
+# A reopened story moved back to in_progress keeps the step 12 note from its first landing; the
+# recorded path wins over a reselection that would now differ.
+@pytest.mark.parametrize(
+    ("title", "labels", "note_path", "envs", "reselected"),
+    [
+        ("[User Story] Ship X", [], "no-deployment", "[{name: dev, branch: main}]", "deployed"),
+        ("[Spike] Probe X", [], "spike", "[]", "ask: spike-title-without-label"),
+    ],
+    ids=["no-deployment-story-after-environments-change", "spike-after-label-removed"],
+)
+def test_a_reopened_story_in_progress_passes_its_recorded_path(
+    tmp_path: Path, title: str, labels: list[str], note_path: str, envs: str, reselected: str
+) -> None:
+    notes = [
+        "Implementation note.\n\nMerged abc123.\npath: deployed is not a line of its own here",
+        f"Step 12 note.\n\nMerged def456.\npath: {note_path}",
+        "QA reopened the story: back to In Progress.",
+    ]
+    recorded = latest_recorded_path(notes)
+    assert recorded == note_path
+    assert select_for_step_1(tmp_path, title, labels, None, envs) == f"{reselected}\n"
+    assert select_for_step_1(tmp_path, title, labels, recorded, envs) == f"{note_path}\n"
+
+
+def test_a_role_ask_handback_keeps_the_selected_path() -> None:
+    lines = step_1_lines()
+    assert ROLE_ASK_LINE in lines
+    assert "unresolved" not in ROLE_ASK_LINE
+    assert lines.index(ROLE_ASK_LINE) > lines.index("Otherwise select the run's path before any role is spawned.")
+
+
+def test_path_unresolved_is_reported_only_for_a_stop_before_selection() -> None:
+    unresolved = [line for line in SKILL.read_text().splitlines() if "path: unresolved" in line]
+    assert sorted(unresolved) == sorted([PATH_ARGUMENT_LINE, UNRESOLVED_LINE]), (
+        "`path: unresolved` may appear only in the Arguments line and step 1's before-selection rule"
+    )
+    assert "before this step selects a path" in UNRESOLVED_LINE
+    assert "until step 1 selects it" in PATH_ARGUMENT_LINE
