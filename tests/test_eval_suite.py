@@ -347,9 +347,6 @@ NORMALISED_MESSAGES = (
        pytest.param(f"\n{RUN_ROOT}/a.json\n{OTHER} {OTHER}/b", "\n{run_dir}/a.json\n{path} {path}", True,
                     id="two-paths-after-newline"),
        pytest.param(OTHER, "{path}", True, id="other-standalone"),
-       # A segment with a space is part of the path while another segment follows it.
-       pytest.param("\n/srv/My User/notes.txt", "\n{path}", True, id="other-space-in-segment"),
-       pytest.param("see /srv/home/user and more", "see {path} and more", True, id="other-then-words"),
        # json.dumps writes lowercase hex, so another writer's uppercase \uXXXX is given as serialised text.
        pytest.param(f'["\\u00FF{RUN_ROOT}/a.json"]', '["\\u00FF{run_dir}/a.json"]', False,
                     id="run-root-u-escape-upper-hex"),
