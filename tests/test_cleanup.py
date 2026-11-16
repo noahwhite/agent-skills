@@ -580,7 +580,7 @@ def test_any_other_status_entry_refuses_the_worktree_and_nothing_is_deleted() ->
         "When the status lists any other entry, the worktree is refused and nothing is deleted from it, the regenerable entries included",
         "an ignored entry that neither the fixed list nor `profile.cleanup.regenerable_dirs` qualifies "
         "(for example `.env`, a local note, or build output the profile does not declare)",
-        "a symlink or file named like a fixed-list or declared name",
+        "build output the profile does not declare), a symlink or file named like a fixed-list or declared name, a tracked",
         "a tracked modification (staged, unstaged, deleted, renamed or conflicted)",
         "an untracked entry (a file or a directory)",
         "The inventory and the refusal line name every such entry by exact path and kind",
@@ -707,11 +707,26 @@ def test_the_schema_accepts_an_optional_cleanup_regenerable_dirs(cleanup) -> Non
     jsonschema.validate(example_profile_with(cleanup), schema())
 
 
+REJECTED_NAMES = {
+    "slash": "a/b",
+    "star": "*",
+    "question-mark": "?",
+    "open-bracket": "[",
+    "empty": "",
+    "dot": ".",
+    "dot-dot": "..",
+    "dot-git": ".git",
+    "trailing-newline": "dist\n",
+    "trailing-carriage-return": "dist\r",
+    "nul": "di\x00st",
+}
+
+
 @pytest.mark.parametrize(
     "cleanup",
-    [{"regenerable_dirs": [name]} for name in ("a/b", "*", "?", "[", "", ".", "..", ".git", "dist\n", "dist\r", "di\x00st")]
+    [{"regenerable_dirs": [name]} for name in REJECTED_NAMES.values()]
     + [{"regenerable_dirs": "dist"}, {"regenerable_dirs": [1]}, {"regenerable_dirs": [], "unknown": True}],
-    ids=lambda value: repr(value),
+    ids=[*REJECTED_NAMES, "bare-string", "non-string-item", "unknown-key"],
 )
 def test_the_schema_rejects_an_unsafe_or_malformed_cleanup_value(cleanup) -> None:
     with pytest.raises(jsonschema.ValidationError):
