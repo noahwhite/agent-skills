@@ -1,31 +1,37 @@
 # SKL-317 findings: a live behaviour run through promptfoo with the void retry in the script provider
 
 - promptfoo version: `0.125.1`.
-- Model id of the live run: `deepseek/deepseek-v4-pro`.
+- Model id of the live runs: `deepseek/deepseek-v4-pro`.
 - Graded runs wanted, N: 3, with at most 2N = 6 attempts.
-- Live run: one invocation of `bash spikes/SKL-317/poc/run.sh` on 2026-11-16 at commit `50893a214a8dfab55995737895d26bd30a292fc3`, exit status 0; its report is `poc/compare.md`.
-- Measured spend of the live run: 0.218165 USD.
+- Live run of the final `run.sh`: one invocation of `bash spikes/SKL-317/poc/run.sh` on 2026-11-16 at commit `327ac853822bacbf5e775f59f1a43af18364c15e`, exit status 0; its report is `poc/compare.md`.
+- Earlier live run: one invocation of the same command on 2026-11-16 at commit `50893a214a8dfab55995737895d26bd30a292fc3`, exit status 0, of the scripts as they were before the pre-PR review changed them.
+  The final run's report replaced its report, and its rows are in `## Research questions`, 4.
+- Measured total spend of the two live runs: 0.218164716 + 0.333814448 = 0.551979164 USD.
 
 Labels used throughout:
 
-- **live**: seen in the one live invocation, and written in `poc/compare.md` by that invocation.
-- **stub, not live**: seen in a dry run of the same `run.sh`, the same promptfoo build and the case's own `run.sh` and `grader.py`, with a stub agent in place of the model.
+- **live**: seen in the live invocation of the final `run.sh`, and written in `poc/compare.md` by that invocation.
+- **earlier live run**: seen in the earlier invocation.
+  It is reported for its attempt rows and its spend, and no status in this file rests on it.
+- **stub, not live**: seen in a dry run of the final `run.sh`, the same promptfoo build and the case's own `run.sh` and `grader.py`, with a stub agent in place of the model.
   A stub run calls no model, spends nothing and writes no file in the repository, and it never counts as a live observation.
+  The stub runs cited here ran at commit `5752704b870ece6394203b9e4e1d16cebcc4bc78`, whose scripts are the ones the live run ran.
 - **observed**, **documented**, **absent**: defined in `## Capability re-check`.
 
 ## Decision
 
-**Behaviour test type: Partial-Go.**
+**Behaviour test type: Inconclusive.**
 **Regression test type: Inconclusive.**
 
-Partial-Go means: promptfoo `0.125.1` drove a live run of an existing behaviour case through a script provider that owns the void retry, every part the run exercised matched the suite, and the parts it did not exercise are the open questions below.
-It is a statement about whether promptfoo can carry the test type.
-It is not a decision to adopt promptfoo: SKL-312's No-Go on adopting it now rests on more than the live run, and the owner decides that.
+The behaviour decision is Inconclusive because the live run did not exercise rule (ii) or rule (iii) of `suite.py` and saw no natural void.
+Each is a gap of this spike's method, and the story records a rule the run did not exercise as Inconclusive with the gap named.
+Everything the live run did exercise matched the suite, and the observations below list it.
+Neither decision is a decision to adopt promptfoo: SKL-312's No-Go on adopting it now rests on more than a live run, and the owner decides that.
 
 - Decider: the senior-engineer agent that implemented SKL-317.
   The decision stands when the product owner accepts it by closing the story, and that owner can overturn it.
 - Date: 2026-11-16.
-- Repository commit tested: `50893a214a8dfab55995737895d26bd30a292fc3`.
+- Repository commit tested: `327ac853822bacbf5e775f59f1a43af18364c15e`.
 
 Observations that drove the behaviour decision:
 
@@ -43,22 +49,30 @@ Observations that drove the behaviour decision:
    The token counts and costs in that table come from the agent's own session export, read by the provider.
    The attempt record, the spend ledger and the suite-rule report are therefore the provider's and the report writer's work, and promptfoo adds the repeat loop, the assertion call, the export and the exit status.
 5. The cost of entry is the Node install measured in `## Infrastructure data`: 617 packages and 747M, with one signature check that exits 0 (rows "Package count", "Size on disk" and "Supply-chain check").
+6. Rules (ii) and (iii) were not exercised (`poc/compare.md`, "Suite rules" rows (ii) and (iii), `not exercised in this run`).
+   This observation alone makes the decision Inconclusive.
 
-Open questions, each a gap of this spike's method and none counted as reproduced:
+The gaps that make the behaviour decision Inconclusive.
+Each is an open question, and none is counted as reproduced:
 
 - Rule (ii), the run stops at 2N attempts, is `not exercised in this run`: the live run ended after 4 attempts (`poc/compare.md`, "Suite rules" row (ii)).
 - Rule (iii), any other exit status stops the run, is `not exercised in this run`: no live attempt exited outside 0, 1 and 2 (`poc/compare.md`, "Suite rules" row (iii)).
 - No natural void was seen: the one void was injected and ran no agent.
-- No live attempt was a graded fail, so promptfoo reporting a live graded fail was not seen.
-- The longest live provider call took 304 seconds.
-  A call that runs to the limit of `EVAL_TIMEOUT` plus 300 seconds, 1200 seconds by default, was not seen.
 
-Stub runs, not live, exercised the first, second and fourth of these and are described in `## Research questions`, 1 and 2.
+Two more things the live run did not show:
+
+- No live attempt was a graded fail, so promptfoo reporting a live graded fail was not seen.
+- The longest live attempt took 559 seconds.
+  An attempt that runs to its deadline, `EVAL_TIMEOUT` plus `EVAL_GRADING_MARGIN`, 1200 seconds by default, was not seen.
+
+The earlier live run had the same shape, 3 graded passes from 4 attempts with the injected void second, so it closes none of these.
+Stub runs, not live, exercised rule (ii), rule (iii) and a graded fail, and are described in `## Research questions`, 1 and 2.
 They do not change any status above.
 
 Conditions that would reverse the behaviour decision, as observations:
 
 - To Go: a live run whose `compare.md` marks rules (ii) and (iii) `reproduced`, and a live run in which a void that was not injected is absorbed and not counted toward N.
+- To Partial-Go: a live run whose `compare.md` marks rules (ii) and (iii) `reproduced`, while no natural void has been seen.
 - To No-Go: a `compare.md` that marks any rule `differs`.
 - To No-Go: promptfoo makes more provider calls than repeats when `--retry-errors` is not passed, or runs two calls at once at `--max-concurrency 1`, because the cap of 2N then no longer holds across the run.
 - To No-Go: promptfoo ends a provider call before the case's `run.sh` returns, for an attempt inside its deadline.
@@ -66,7 +80,7 @@ Conditions that would reverse the behaviour decision, as observations:
 
 Regression test type, and the limit of this evidence:
 
-- The evidence is one behaviour scenario, run at one commit with one model, 3 graded runs, all passes.
+- The evidence is one behaviour scenario, run with one model at one commit per live run, 3 graded runs each, all passes.
 - Regression testing runs the same cases against two versions of a skill and reports a graded fail on the version that has the defect.
   No run here compared two checkouts, and no live attempt failed its grade.
 - A matrix of two provider entries was observed only with a script that prints its inputs (`## Capability re-check`, row 9), not with an agent.
@@ -83,12 +97,13 @@ This decision rests on the rows cited above and does not depend on either spike.
   A No-Go there moves it toward No-Go: the install would be carried for what observation 4 lists alone.
 - SKL-316, the live trigger run.
   Its fourth research question is how a void run is told from a failed one in a live run through the script provider.
-  A natural void that the script provider there classifies as void, and tells from a fail, closes the third open question and moves the behaviour decision toward Go.
+  A natural void that the script provider there classifies as void, and tells from a fail, closes the third gap above and moves the behaviour decision toward Go.
   A natural void that cannot be told from a fail by the case's exit status moves it toward No-Go, because the provider's retry rests on that exit status.
   Its result for `skill-used` through an agent provider changes nothing here.
 
 Follow-up work: none is created.
-Rules (ii) and (iii) are provider logic that does not depend on the model, the stub runs exercised both through the same promptfoo build and the case's own runner, and one more live run for them alone would spend money to show the same code path.
+Rules (ii) and (iii) are provider logic that does not depend on the model: the stub runs exercised both through the same promptfoo build and the case's own runner, and `poc/selftest.py` checks both without promptfoo.
+A live run exercises them only when attempts void six times or one breaks, which a working case does not do on demand, and the story allows one injected void.
 The natural void is inside SKL-316's fourth research question.
 The two-checkout observation for the regression type is worth a spike only if the owner moves toward adopting promptfoo, which SKL-312 ruled No-Go for now.
 Work to adopt promptfoo waits on that decision and on SKL-315 and SKL-316, which are already in Backlog.
@@ -125,7 +140,10 @@ promptfoo's totals were 1 success, 2 failures and 0 errors, the eval exited 100,
 | (ii) the run stops at 2N attempts | `not exercised in this run` | Plan of six voids: the provider stopped after attempt 6 of 6 and started no further attempt |
 | (iii) any other exit status stops the run | `not exercised in this run` | Plan `pass,void,broken,pass`: attempt 3 exited 3, the provider started no further attempt, the next call was refused, and `run.sh` exited 1 |
 
-Rules (ii) and (iii) are open questions in `## Decision`.
+Rules (ii) and (iii) are open questions in `## Decision`, and they make the behaviour decision Inconclusive.
+
+`poc/selftest.py` checks the three rules, the ceiling, the ledger checks and the checks of `compare.py` without promptfoo, Node.js or a model.
+It is run by hand, and no CI job runs it or `run.sh` (`poc/README.md`, "What no job runs").
 
 One difference from the suite is by design and is not a rule above.
 The suite stops its whole run at a broken attempt and exits 1.
@@ -139,40 +157,58 @@ Two rows disagree with SKL-312 on the page that documents a name, not on the lab
 
 ### 4. What one live attempt costs, void attempts included, and what the N = 3 run costs
 
-All figures are live, from `poc/compare.md`, "Attempts" and "Spend".
 The cost of an attempt is its token counts times the prices of `deepseek/deepseek-v4-pro` at https://models.dev/api.json , read 2026-11-16.
+The seconds are the time between the attempt's start and end lines in the spend ledger.
+
+The live run, from `poc/compare.md`, "Attempts" and "Spend":
 
 | Attempt | Outcome | Seconds | Input tokens | Cached input tokens | Output tokens | Reasoning tokens | Cost in USD |
 |---|---|---|---|---|---|---|---|
-| 1 | graded pass | 46 | 18863 | 166016 | 1073 | 3147 | 0.024458 |
+| 1 | graded pass | 481 | 67925 | 1411456 | 2610 | 25785 | 0.132104632 |
 | 2 | void, `injected` | 0 | 0 | 0 | 0 | 0 | 0.000000 |
-| 3 | graded pass | 214 | 49562 | 713984 | 1553 | 19333 | 0.089773 |
-| 4 | graded pass | 304 | 52479 | 412928 | 1544 | 28867 | 0.103934 |
+| 3 | graded pass | 356 | 57845 | 843648 | 2313 | 19481 | 0.099890076 |
+| 4 | graded pass | 559 | 36842 | 469120 | 1605 | 32326 | 0.10181974 |
 
-- The N = 3 run cost 0.024458 + 0.000000 + 0.089773 + 0.103934 = 0.218165 USD.
-- One attempt that called the model cost between 0.024458 and 0.103934 USD, and 0.218165 / 3 = 0.072722 USD on average.
-- Over all 4 attempts, the void included, the average is 0.218165 / 4 = 0.054541 USD.
+The earlier live run, from the report it wrote and the ledger:
+
+| Attempt | Outcome | Seconds | Input tokens | Cached input tokens | Output tokens | Reasoning tokens | Cost in USD |
+|---|---|---|---|---|---|---|---|
+| 1 | graded pass | 46 | 18863 | 166016 | 1073 | 3147 | 0.024457532 |
+| 2 | void, `injected` | 0 | 0 | 0 | 0 | 0 | 0.000000 |
+| 3 | graded pass | 214 | 49562 | 713984 | 1553 | 19333 | 0.089772848 |
+| 4 | graded pass | 304 | 52479 | 412928 | 1544 | 28867 | 0.103934336 |
+
+- The N = 3 live run cost 0.132104632 + 0.000000 + 0.099890076 + 0.10181974 = 0.333814448 USD.
+- One attempt of it that called the model cost between 0.099890076 and 0.132104632 USD, and 0.333814448 / 3 = 0.111271 USD on average.
+- Over all 4 of its attempts, the void included, the average is 0.333814448 / 4 = 0.083454 USD.
+- The earlier live run cost 0.024457532 + 0.000000 + 0.089772848 + 0.103934336 = 0.218164716 USD; its script printed six decimals, 0.218165.
+- Over the 6 attempts of both runs that called the model, the cost was between 0.024457532 and 0.132104632 USD, and 0.551979164 / 6 = 0.091997 USD on average.
 - The injected void ran no agent and cost nothing, so the cost of a natural void, which may spend tokens before it fails, was not measured.
-- SKL-312 estimated 0.08 USD for an agent run: the average here is below it, and 2 of the 3 attempts are above it.
-- The seconds are the time between the attempt's start and end lines in the spend ledger.
+- SKL-312 estimated 0.08 USD for an agent run: 5 of those 6 attempts cost more.
 
 Spend ceiling:
 
 - The ceiling for all live runs of this spike is 1 USD.
-- The plan before the run was at most 6 attempts at SKL-312's estimate: 6 x 0.08 = 0.48 USD, under the ceiling.
+- The plan before the earlier run was at most 6 attempts at SKL-312's estimate: 6 x 0.08 = 0.48 USD, under the ceiling.
+- The plan before the final run was the 0.218164716 USD already spent and at most 6 attempts at the highest cost of one attempt so far: 0.218164716 + 6 x 0.103934336 = 0.841770732 USD, under the ceiling.
 - Before each attempt the provider adds up a ledger kept outside the repository and stops with `ceiling reached` when the total plus the estimate of the next attempt is over 1 USD; the estimate is 0.08 USD, or the highest cost of one attempt so far when that is more.
-- The ledger held 0 USD over 32 stub attempts before the live run, development and dry runs included.
-- After the live run it held 0.000000 + 0.218165 = 0.218165 USD, which is 0.781835 USD under the ceiling.
-- The three stub runs made afterwards for questions 1 and 2 added 12 attempts and 0 USD, so the ledger holds 44 stub attempts and 4 live ones.
-- Three development checks are not in the ledger, because their costs were made up and no model was called: two rehearsals with a fake agent in place of the model, and one test that seeded a ledger with 0.80 USD spent and 0.08 USD reserved to see `ceiling reached`.
-- Exactly one live invocation was made.
+- The ledger held 0 USD over 32 stub attempts before the earlier live run, development and dry runs included.
+- The earlier live run added 4 attempts and 0.218164716 USD, and three stub runs after it added 12 attempts and 0 USD.
+- So the ledger held 0.218164716 USD over 48 attempts before the final run (`poc/compare.md`, "Spend").
+- After the final run it holds 0.218164716 + 0.333814448 = 0.551979164 USD over 52 attempts, 44 stub and 8 live, which is 0.448020836 USD under the ceiling.
+- Not in the ledger, because each called no model and wrote to a throwaway ledger of its own: the stub runs and the runs of `poc/selftest.py` made while the scripts were changed after the pre-PR review, three rehearsals of the live path with a stand-in for `opencode` whose costs were made up, and one test that seeded a ledger with 0.80 USD spent and 0.08 USD reserved to see `ceiling reached`.
+- Two live invocations were made, and exactly one of them is of the final `run.sh`.
+  The pre-PR review of the earlier scripts found that the agent under test could reach the ledger and that `compare.py` did not check the cap, the results, the runtime options or the costs.
+  The fixes changed `run.sh`, `provider.py` and `compare.py`, so the run was made again on the final scripts.
+- The final scripts keep the ledger from the agent by not naming it and by comparing it with a copy before and after each attempt, not by an access control: the agent runs as the same user as the harness (`poc/README.md`, "Spend ceiling").
+  In the live run the ledger was its copy at every check, and `poc/compare.md` lists no blocker.
 
 ## Success criteria status
 
 | Criterion | Status | Evidence |
 |---|---|---|
 | 1. `bash spikes/SKL-317/poc/run.sh` makes one live invocation through a promptfoo `0.125.1` script provider that owns the void retry, grades with the unmodified `grader.py` and writes `poc/compare.md`, with N = 3, at most 6 attempts, concurrency 1, no promptfoo retry, one row per attempt, and the ceiling check before each attempt | met | `poc/compare.md`: "Attempts" (4 rows and the list under them), "Provider calls" (runtime options and the retry line), "Spend"; the command exited 0 |
-| 2. `compare.md` states each `suite.py` rule with its quoted lines, the provider's observed behaviour and one of the three statuses | met | `poc/compare.md`, "Suite rules": (i) `reproduced` with an `injected` void, (ii) and (iii) `not exercised in this run`, both named in `## Decision` as open questions |
+| 2. `compare.md` states each `suite.py` rule with its quoted lines, the provider's observed behaviour and one of the three statuses | met | `poc/compare.md`, "Suite rules": (i) `reproduced` with an `injected` void, (ii) and (iii) `not exercised in this run`, both named in `## Decision` as open questions that make the behaviour decision Inconclusive |
 | 3. Every capability label of the SKL-312 table is re-checked, one row per label | met | `## Capability re-check`, rows 1 to 19; no label is `not re-checked` |
 | 4. `## Infrastructure data` holds the Node footprint as measurements only | met | `## Infrastructure data` |
 | 5. `## Decision` gives a decision for the behaviour and the regression test type, with its observations, reversal conditions, the limit for regression testing, and SKL-315 and SKL-316 | met | `## Decision` |
@@ -194,7 +230,7 @@ Every probe ran from a throwaway directory outside the repository with a scrubbe
 The probe provider is `exec: python3 echo_provider.py`, a script that appends its prompt to a call log and prints its prompt, the `config.variant` of its options argument, whether its working directory is the config directory, and whether a variable set in promptfoo's environment is visible.
 The probe config `matrix.yaml` holds two tests and two such providers whose `config.variant` is `baseline` and `candidate`, with a `contains` assertion on each test and a `python` assertion on the first.
 The probe config `fail.yaml` holds one provider and two tests, one of whose `python` assertions fails.
-No agent provider and no `llm-rubric` assertion was run, because either is a model call outside the one live invocation this spike allows; those labels are re-checked against the pages and looked up in the build.
+No agent provider and no `llm-rubric` assertion was run, because either is a model call outside the live invocation of `run.sh`; those labels are re-checked against the pages and looked up in the build.
 "In the build" means `grep -rlF --include='*.js' -e '<name>' dist | wc -l`, run in the installed `promptfoo` package directory, printed a count above 0 with grep exit status 0; the count is the number of files holding the name.
 
 The pages were fetched with `curl` at 2026-11-16T05:15:20Z, each with HTTP 200.
@@ -253,6 +289,11 @@ Each figure is a measurement of one install into a throwaway directory outside t
 
 `--ignore-scripts` keeps every package's install script from running, and `--before` resolves no version published after 2026-11-15T00:00:00Z.
 `poc/run.sh` installs with the same command and runs the same signature check before each eval.
+In the live run that install added 617 packages, and the check exited 0 with 617 verified registry signatures and 157 verified attestations.
+
+The story keeps a Node lockfile out of the repository, so only `promptfoo` itself is pinned by version.
+Every other package is the newest version its range allows among those published before the `--before` instant, so two installs are the same while the registry serves the same versions for that instant, and the install is not byte-reproducible.
+The signature check shows that each installed package is signed by the registry, not that the set equals an earlier install's.
 
 ## Guard results
 
