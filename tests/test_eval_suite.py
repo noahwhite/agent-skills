@@ -122,12 +122,10 @@ case "$scenario" in
 esac
 printf '{"action": "%s", "run_dir": "%s", "id": "%s"}\n' "$action" "$run" "$STUB_UUID" > "$run/actions.jsonl"
 if [ "$scenario" = bad-bytes ]; then printf '\xff\n' >> "$run/actions.jsonl"; fi
-if [ "$scenario" = pass ]; then
-  printf '{"seen_in": "\\n%s", "escaped": "%s", "canary": "%s"}\n' "$run" "${run//\//\\/}" \
-    "${CANARY-${EVAL_CANARY-unset}}" > "$run/evidence.json"
-else
-  printf '{"seen_in": "\\n%s", "canary": "%s"}\n' "$run" "${CANARY-${EVAL_CANARY-unset}}" > "$run/evidence.json"
-fi
+escaped=""
+if [ "$scenario" = pass ]; then escaped=", \"escaped\": \"${run//\//\\/}\""; fi
+printf '{"seen_in": "\\n%s"%s, "canary": "%s"}\n' "$run" "$escaped" "${CANARY-${EVAL_CANARY-unset}}" \
+  > "$run/evidence.json"
 mkdir -p "$run/nested"
 echo kept > "$run/nested/kept.md"
 """
@@ -299,6 +297,25 @@ def test_every_attempt_writes_a_run_record_and_a_call_record_named_for_it(suite)
     assert json.loads(calls)["action"] == "pass"
 
 
+def decoded_strings(text: str):
+    """Yield text and, wherever it is JSON or JSON Lines, every string it holds, decoded recursively."""
+    yield text
+    documents = []
+    for chunk in [text, *text.splitlines()]:
+        try:
+            documents.append(json.loads(chunk))
+        except ValueError:
+            continue
+    while documents:
+        value = documents.pop()
+        if isinstance(value, dict):
+            documents.extend(value.values())
+        elif isinstance(value, list):
+            documents.extend(value)
+        elif isinstance(value, str):
+            yield from decoded_strings(value)
+
+
 def test_run_directories_sit_outside_both_checkouts_and_never_reach_a_record(suite) -> None:
     suite["run"]("--runs", "1", str(suite["checkout"]), "lab-1", "stub")
     run_dirs = (suite["state"] / "run-dirs").read_text().split()
@@ -312,14 +329,11 @@ def test_run_directories_sit_outside_both_checkouts_and_never_reach_a_record(sui
         for run_dir in run_dirs:
             assert run_dir not in text, record.name
         assert STUB_UUID not in text, "a UUID shape is normalised"
-        if record.suffix == ".json":
-            for name, content in json.loads(text)["grader_inputs"].items():
-                try:
-                    decoded = json.dumps(json.loads(content), ensure_ascii=False)
-                except json.JSONDecodeError:
-                    continue
-                for run_dir in run_dirs:
-                    assert run_dir not in decoded, f"{record.name} {name}"
+        # Every string a record holds, at any depth and decoded again wherever it is JSON text
+        # itself (a grader input such as evidence.json), holds no run directory.
+        for string in decoded_strings(text):
+            for run_dir in run_dirs:
+                assert run_dir not in string, f"{record.name}: {string!r}"
     calls = next((suite["evals"] / "stub" / "results").glob("*-pass-*-calls.jsonl")).read_text()
     assert json.loads(calls)["run_dir"] == "{run_dir}"
     record = json.loads(next((suite["evals"] / "stub" / "results").glob("*-pass-*-1.json")).read_text())
@@ -392,8 +406,7 @@ def test_the_normaliser_rewrites_a_path_after_each_boundary_in_a_serialised_mess
 # SKL-318: a known root inside a JSON string literal is redacted whatever JSON spelling the
 # literal gives it, because the Normaliser decodes each literal. Each set holds one synthetic root
 # per placeholder; the non-ASCII set lets a root itself be spelled as raw UTF-8 or as \uXXXX.
-ASCII_ROOTS = {"run_dir": "/scratch/run-1", "home": "/scratch/home-1", "tmp": "/scratch/tmp-1",
-               "tmpdir": "/scratch/tmpdir-1"}
+ASCII_ROOTS = {"run_dir": RUN_ROOT, "home": HOME_ROOT, "tmp": "/scratch/tmp-1", "tmpdir": "/scratch/tmpdir-1"}
 NON_ASCII_ROOTS = {"run_dir": "/scratch/r\u00fcn-1", "home": "/scratch/h\u00f4me-1",
                    "tmp": "/scratch/tmp-\u00f8", "tmpdir": "/scratch/tmpd\u00edr-1"}
 DECODED_TAILS = {"file": "/a.json", "spaced": "/My Notes/a b.txt"}
@@ -447,6 +460,15 @@ DECODED_LITERALS = (
                      '{"a": "{run_dir}"}\n{"b": "{home}/x"}\n', id="must-fail-json-lines"),
         pytest.param("ascii", 'stderr: wrote "\\/scratch\\/run-1\\/a.json" and stopped',
                      'stderr: wrote "{run_dir}/a.json" and stopped', id="must-fail-literal-in-prose"),
+        # A root after an escaped letter is found in the literal as written, and one behind \/ in
+        # the decoded value; the changed literal is not all ASCII, so it is re-encoded as raw UTF-8.
+        pytest.param("ascii", in_message('"é\\u00e9/scratch/run-1/a \\/scratch\\/home-1\\/b"'),
+                     in_message('"éé{run_dir}/a {home}/b"'),
+                     id="must-fail-root-after-an-escaped-letter-in-a-raw-utf8-literal"),
+        # A name that only starts like a root, and a quote no literal closes, keep every byte.
+        pytest.param("ascii", 'he wrote " then "\\/scratch\\/run-10\\/a" and "\\/scratch\\/run-1x"',
+                     'he wrote " then "\\/scratch\\/run-10\\/a" and "\\/scratch\\/run-1x"',
+                     id="guard-root-prefix-and-unmatched-quote"),
         # A text with no known root keeps every byte: spacing, key order, escapes and raw UTF-8.
         pytest.param("ascii", '{"b" : "caf\u00e9 \\u00E9 \\/srv\\/x \\ud800",\n  "a": [1, "\\"q\\""]}',
                      '{"b" : "caf\u00e9 \\u00E9 \\/srv\\/x \\ud800",\n  "a": [1, "\\"q\\""]}', id="guard-no-known-root"),
@@ -458,7 +480,8 @@ DECODED_LITERALS = (
 
 
 @pytest.mark.parametrize("roots, text, expected", DECODED_LITERALS)
-def test_the_normaliser_redacts_a_known_root_in_a_decoded_string_literal(roots: str, text: str, expected: str) -> None:
+def test_the_normaliser_decodes_each_string_literal_before_redacting_known_roots(
+        roots: str, text: str, expected: str) -> None:
     paths = ASCII_ROOTS if roots == "ascii" else NON_ASCII_ROOTS
     normalise = SUITE.Normaliser(SUITE.leak_patterns(), **{name: Path(root) for name, root in paths.items()})
     result = normalise(text)
