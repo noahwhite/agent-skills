@@ -616,7 +616,9 @@ def test_qa_added_blocks_appear_once_in_order() -> None:
 # SKL-270 re-baselined it for its one change outside the blocks: the `compatibility:` line now names
 # python3 and PyYAML>=6, which `scripts/select-path.py` needs (the path block is rebuilt from the new
 # pins and cut out as before).
-QA_BASE_SHA256 = "6796f77669a29db3e3ef3b6765bdc268aadc0e3eaeee58e577fc1c25140d394d"
+# SKL-284 re-baselined it for its one change outside the blocks: the QA evidence comment's first line is
+# exactly `## QA evidence` (section 4, item 5), which story-to-done's qa-round-cap.py counts rounds by.
+QA_BASE_SHA256 = "c4d1f2c6d44a42bb390ee14ff57247c92363be192025eb127f91331db1301217"
 
 
 def test_qa_text_outside_the_added_blocks_is_unchanged() -> None:

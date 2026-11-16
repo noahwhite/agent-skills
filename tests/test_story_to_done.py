@@ -3278,20 +3278,20 @@ QA_ROUND_CAP_ROW = (
 )
 QA_ROUND_CAP_GIVEN = (
     '- `qa-round-cap` is given as `qa-round-cap=<n>` or in plain words about capping QA rounds ("cap QA at <n> '
-    'rounds" and "stop after <n> failed QA rounds" mean <n>); a positive integer (1 or more) is valid, and zero, '
-    "a negative number, or a non-integer is invalid."
+    'rounds" and "stop after <n> failed QA rounds" mean <n>); `python3 <skill dir>/scripts/qa-round-cap.py validate '
+    'qa-round-cap=<n>` exits 2 unless <n> is a positive integer; run step 4\'s `arm` once, before the first step 3.'
 )
 QA_ROUND_CAP_ASK = "- Ask the user about an invalid value and about any other phrasing about the cap; never guess."
 QA_ROUND_CAP_RESOLVE = "- Resolve `qa-round-cap` before step 0 creates the todo list; it sets no model or effort."
 QA_ROUND_CAP_ECHO = "- " + METRICS_LINE_SENTENCE + " (the step 5 report, or the report made at any stop, including one before step 0)."
+# SKL-284: qa-round-cap.py counts the rounds; the bullet calls it and relays its stdout line.
 CAP_COUNT = (
-    "QA rounds are counted within this invocation: the first QA round this coordinator runs is round 1, a run "
-    "resumed at step 3 starts a new count that the report states, and only a round whose read-back is "
-    "`profile.tracker.states.in_progress` counts."
+    "Arguments orders `python3 <skill dir>/scripts/qa-round-cap.py arm --story <STORY_ID> "
+    "--cap <n> --in-progress '<profile.tracker.states.in_progress>' --state-dir <scratch>`; when a round ends here, "
+    "run `python3 <skill dir>/scripts/qa-round-cap.py record --story <STORY_ID> --state-dir <scratch>`, relaying its "
+    "stdout line, never a tracker payload."
 )
-CAP_STOP = (
-    "When the `qa-round-cap`-th counted round ends here, stop before the hand-back below and launch nothing further."
-)
+CAP_STOP = "When `record` prints `reached=yes`, stop before the hand-back below and launch nothing further."
 CAP_PAYLOAD = (
     "The stop report gives, per round, every failed item as QA recorded it in the tracker, re-read from the tracker "
     "rather than taken from a handback (the item, its verdict, and the evidence it cites)."
@@ -3306,18 +3306,20 @@ CAP_ASK = (
     "again, never guessed."
 )
 CAP_REARM = (
-    'On "N additional rounds", re-arm the same cap at N further counted rounds and resume the pending hand-back '
-    "below with every item failed so far; the next QA round runs with a new QA agent."
+    'On "N additional rounds", run `python3 <skill dir>/scripts/qa-round-cap.py rearm --story <STORY_ID> '
+    "--additional-rounds <N> --state-dir <scratch>`; on exit 0, relay its stdout line and resume the pending hand-back "
+    "below with every item "
+    "failed so far; the next QA round runs with a new QA agent."
 )
 CAP_LEFT = (
     'On "stop", end the invocation with the story left in the state QA left it: '
     "`profile.tracker.states.in_progress`, failed items outstanding, the owner deciding next."
 )
-CAP_HISTORY = "Round numbers run on across re-arms, and each later stop report gives every counted round so far."
+CAP_HISTORY = "Each later stop report gives every round `record` counted so far, across re-arms."
 CAP_REREAD = (
-    "The reply never overrides the tracker state: before resuming, read the story's state again; if it is "
-    "`profile.tracker.states.done`, apply the `profile.tracker.states.done` bullet above, and if it is any other "
-    "state but `profile.tracker.states.in_progress`, report that state and stop."
+    "The reply never overrides the tracker state: on a `record` or `rearm` `state=` `profile.tracker.states.done`, "
+    "apply the `profile.tracker.states.done` bullet above; on any other non-zero exit of the script, report its "
+    "stderr line and stop."
 )
 CAP_NO_WRITE = (
     "In either case the coordinator writes nothing to the tracker beyond what the Boundaries permit, rules on no "
@@ -3360,7 +3362,7 @@ def test_qa_round_cap_is_echoed_in_the_todo_list_and_every_closing_report() -> N
     assert "the `qa-round-cap: <n>` line" in close_out
 
 
-def test_qa_rounds_count_within_the_invocation_and_only_in_progress_rounds_count() -> None:
+def test_qa_rounds_are_armed_and_recorded_by_the_script() -> None:
     assert CAP_COUNT in in_progress_bullet()
 
 
@@ -3393,7 +3395,7 @@ def test_a_cap_stop_waiting_for_the_reply_defers_the_metrics_summary_to_the_end_
     assert lines.index(METRICS_CAP_STOP) == lines.index(METRICS_CLOSING_REPORT) + 1
 
 
-def test_a_re_arm_reads_the_story_state_again_before_resuming_the_hand_back() -> None:
+def test_a_re_arm_acts_on_the_state_rearm_reads_before_resuming_the_hand_back() -> None:
     assert in_order(in_progress_bullet(), CAP_REARM, CAP_REREAD, "Hand them back to the senior engineer")
 
 
@@ -3541,7 +3543,8 @@ def test_the_record_shape_pattern_matches_the_record_and_not_the_bare_word_readi
 STEP_3_HEADING = "3. QA agent: verify the deployed story"
 # SKL-278 re-baselined this digest for the step 3 `path:` brief line and the path's verification target.
 STEP_3_SHA256 = "591d06fa9099fdf6f4958f7888bc4d3260de1d86838126145e008a44215173c0"
-IN_PROGRESS_SHA256 = "fd4768e7d39be8e29341cd0f5d186bfaf96a8bf7bfc8eebb8b1e39b101eb95e7"
+# SKL-284 re-pinned IN_PROGRESS_SHA256: the cap sentences now call qa-round-cap.py and carry no pending item.
+IN_PROGRESS_SHA256 = "9dbeb7719d9105b33029d7a6bf043a26bc348a3e3ec18894ec7b5cb43e0c6115"
 IN_DEPLOYMENT_REVIEW_SHA256 = "36da368bed892519776e5be61064d2fad186151ca58ae90aff897e9a1ffaa968"
 # The only lines of a state bullet that may state the pending owner ruling record.
 IN_DEPLOYMENT_REVIEW_RECORD_LINES = ("  " + STEP4_OTHER_OWNER, PENDING_REPORT, PENDING_NO_RULING)
