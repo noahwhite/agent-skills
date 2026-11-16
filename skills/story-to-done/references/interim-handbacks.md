@@ -40,6 +40,7 @@ The stop report to the owner names the awaited item, its primary source, the sta
 For a QA agent's interim handback the deadline rule above applies with that QA agent in place of the engineer, except for the resume message.
 At a concluded deadline the coordinator resumes the same QA agent with a message that states only that the round is unfinished and names the round's scratch subdirectory and the awaited item; it carries nothing else the coordinator observed (no conclusion, no verdict, no earlier round's conclusions, no senior engineer handback).
 A QA deadline resume does not increment the QA round count, does not count against step 0's read-back resume cap, and does not consume step 4's "once per observed change to the remainder" continuation allowance.
+A QA agent's handback that names an awaited item the coordinator already observed concluded at an earlier deadline of that round is not an interim handback, since that item is no longer awaited; it goes to step 0's checklist read-back and step 4 as usual, so step 0's read-back resume cap and step 4's no-progress rule bound it.
 With `metrics` on, each QA deadline resume is its own launch row within that round.
 
 ## Limits

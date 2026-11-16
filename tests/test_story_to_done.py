@@ -33,8 +33,8 @@ def section(text: str, heading: str) -> str:
 
 
 def visible(text: str) -> str:
-    """The text a reader of the rendered Markdown sees: HTML comments removed."""
-    return re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)
+    """The text a reader of the rendered Markdown sees: HTML comments removed, an unclosed one to the end."""
+    return re.sub(r"<!--.*?(?:-->|\Z)", "", text, flags=re.DOTALL)
 
 
 def test_skill_file_exists() -> None:
@@ -3203,6 +3203,11 @@ INTERIM_QA_COUNTS = (
     "cap, and does not consume step 4's \"once per observed change to the remainder\" continuation allowance."
 )
 INTERIM_QA_ROW = "With `metrics` on, each QA deadline resume is its own launch row within that round."
+INTERIM_QA_CONCLUDED = (
+    "A QA agent's handback that names an awaited item the coordinator already observed concluded at an earlier "
+    "deadline of that round is not an interim handback, since that item is no longer awaited; it goes to step 0's "
+    "checklist read-back and step 4 as usual, so step 0's read-back resume cap and step 4's no-progress rule bound it."
+)
 
 
 def test_the_interim_definition_covers_a_qa_agents_own_background_work() -> None:
@@ -3243,11 +3248,20 @@ def test_with_metrics_on_each_qa_deadline_resume_is_a_launch_row_within_its_roun
     assert INTERIM_QA_ROW in interim_text()
 
 
+def test_a_qa_handback_on_an_item_already_observed_concluded_is_not_interim() -> None:
+    text = interim_text()
+    assert text.index(INTERIM_QA_RESUME) < text.index(INTERIM_QA_CONCLUDED) < text.index(INTERIM_LIMITS)
+
+
+def test_an_unclosed_html_comment_hides_the_rest_of_the_file() -> None:
+    assert visible("kept <!-- closed --> kept <!-- unclosed hides this") == "kept  kept "
+
+
 def test_each_qa_interim_contract_appears_exactly_once() -> None:
     text = interim_text()
     for phrase in (
         INTERIM_QA_SCOPE, INTERIM_QA_MIXED, INTERIM_QA_ORDER, INTERIM_QA_IN_PLACE,
-        INTERIM_QA_RESUME, INTERIM_QA_COUNTS, INTERIM_QA_ROW,
+        INTERIM_QA_RESUME, INTERIM_QA_COUNTS, INTERIM_QA_ROW, INTERIM_QA_CONCLUDED,
     ):
         assert text.count(phrase) == 1, phrase
     skill = " ".join(visible(SKILL.read_text()).split())

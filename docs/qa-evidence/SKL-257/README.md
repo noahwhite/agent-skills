@@ -1,7 +1,7 @@
 # SKL-257 AC5 fixture run: QA interim handback deadline resume
 
 - Date: 2026-11-16
-- Skill under test: `skills/story-to-done/` at commit 6a567c875f32deeaeee3553883f1975c2d75fe8d (branch `feature/SKL-257-qa-interim-handbacks`), read by path from the worktree; `git diff 6a567c8 HEAD -- skills/` is empty on the branch, so the text exercised is the text at the head
+- Skill under test: `skills/story-to-done/` at commit 6a567c875f32deeaeee3553883f1975c2d75fe8d (branch `feature/SKL-257-qa-interim-handbacks`), read by path from the worktree; `git diff 6a567c8 HEAD -- skills/` adds only one sentence to `references/interim-handbacks.md` (a later QA handback naming an item already observed concluded is not interim), which applies only after a first concluded-deadline resume and so does not change the path this run exercises
 - Fixture issue: SKL-314, `[Tabletop fixture] SKL-257 QA interim handback deadline resume`, in In Deployment Review for the run so the coordinator starts at step 3, and Canceled after the run (tracker read below)
 - Awaited item: CI run 43769704269 on noahwhite/agent-skills, already `completed`/`success` (updated 2026-11-15T22:37:01Z) before the run started
 - Runtime: Claude Code 2.1.325
