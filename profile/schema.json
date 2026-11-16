@@ -531,7 +531,7 @@
         "regenerable_dirs": {
           "type": "array",
           "default": [],
-          "description": "Directory names the cleanup skill also treats as regenerable ignored build output. Default `[]`: no declared names. Each entry is a bare final path component (no `/`, no `*`, `?` or `[`, no line break or NUL, and not `.`, `..` or `.git`), matched against the final path component of an ignored directory by exact, case-sensitive string equality with no glob or shell expansion; a duplicate entry has no effect. The names add to the skill's fixed list and never replace it.",
+          "description": "Directory names the cleanup skill also treats as regenerable ignored build output. Default `[]`: no declared names. Each entry is a bare final path component (no `/`, no `*`, `?` or `[`, no `\\n`, `\\r` or NUL, and not `.`, `..` or `.git`), matched against the final path component of an ignored directory by exact, case-sensitive string equality with no glob or shell expansion; a duplicate entry has no effect. The names add to the skill's fixed list and never replace it.",
           "items": {
             "type": "string",
             "minLength": 1,

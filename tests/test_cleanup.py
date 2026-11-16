@@ -580,7 +580,7 @@ def test_any_other_status_entry_refuses_the_worktree_and_nothing_is_deleted() ->
         "When the status lists any other entry, the worktree is refused and nothing is deleted from it, the regenerable entries included",
         "an ignored entry that neither the fixed list nor `profile.cleanup.regenerable_dirs` qualifies "
         "(for example `.env`, a local note, or build output the profile does not declare)",
-        "build output the profile does not declare), a symlink or file named like a fixed-list or declared name, a tracked",
+        "build output the profile does not declare), a symlink or file named like a fixed-list or declared name",
         "a tracked modification (staged, unstaged, deleted, renamed or conflicted)",
         "an untracked entry (a file or a directory)",
         "The inventory and the refusal line name every such entry by exact path and kind",
@@ -666,6 +666,14 @@ def test_a_declared_name_has_no_content_check_and_a_fixed_name_keeps_its_own() -
     node_modules = "- `node_modules` has no content check and is subject to the nested-repository refusal only."
     assert DECLARED_CHECK_ITEM in lines, DECLARED_CHECK_ITEM
     assert lines[lines.index(node_modules) + 1] == DECLARED_CHECK_ITEM
+    # The unchanged lead line demands a content check for every entry; the sentence right before it scopes
+    # that demand to the list, so the `node_modules` and declared-name items are exceptions, not contradictions.
+    scope = (
+        "The list below is the whole content-check rule: an entry it says has no content check needs none, "
+        "and that is the only exception."
+    )
+    lead = "It also requires a per-name content check before an entry counts as regenerable:"
+    assert lines[lines.index(lead) - 1] == scope, scope
 
 
 def test_the_inventory_and_report_mark_each_regenerable_entry_with_its_source() -> None:
@@ -735,6 +743,22 @@ def test_the_schema_rejects_an_unsafe_or_malformed_cleanup_value(cleanup) -> Non
 
 def test_the_regenerable_dirs_default_is_an_empty_list() -> None:
     assert schema()["properties"]["cleanup"]["properties"]["regenerable_dirs"]["default"] == []
+
+
+def test_the_cleanup_descriptions_state_the_default_the_name_form_and_additivity() -> None:
+    cleanup = schema()["properties"]["cleanup"]
+    assert cleanup["description"] == (
+        "Settings for the cleanup skill. Optional: its one key defaults to `[]`, "
+        "so the skill never needs this object and never stops to ask for it."
+    )
+    description = cleanup["properties"]["regenerable_dirs"]["description"]
+    for phrase in (
+        "Default `[]`: no declared names.",
+        "Each entry is a bare final path component",
+        "by exact, case-sensitive string equality with no glob or shell expansion; a duplicate entry has no effect.",
+        "The names add to the skill's fixed list and never replace it.",
+    ):
+        assert phrase in description, phrase
 
 
 def test_each_regenerable_dirs_item_is_declared_a_string() -> None:

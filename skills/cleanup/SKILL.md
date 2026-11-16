@@ -191,6 +191,7 @@ Remove in this order, so a branch is never refused because a worktree still hold
     Only when the worktree passes every other check in this step and its status lists no other entry, the run first lists the contents of each regenerable directory, fixed-list or declared, at any depth, including entries whose names begin with a dot and without following symlinks (`find ./<path> -print` does; `ls -R` hides dot entries and does not qualify), and refuses the worktree when a listing holds a nested repository: an entry named `.git` at any depth, whether a directory or a file.
     A bare repository, a directory holding `HEAD`, `objects` and `refs` side by side, counts as a nested repository too.
     A listing that exits non-zero refuses the worktree, whatever it printed.
+    The list below is the whole content-check rule: an entry it says has no content check needs none, and that is the only exception.
     It also requires a per-name content check before an entry counts as regenerable:
     - `__pycache__` holds only `*.pyc` files: every entry inside it is a regular file whose name ends in `.pyc`.
     - `.venv` and `venv` have `pyvenv.cfg` at their top: a regular file of that name directly inside the directory.
