@@ -2901,7 +2901,7 @@ def test_record_has_the_triage_record_template_with_exactly_the_fields() -> None
         "",
         "- Priority: <the decided value, read back; or unset when the PO could not decide>",
         "- Priority comparison: <each comparable story's identifier and priority; or `needs input` with the open "
-        "question when the PO could not decide>",
+        "question when the PO could not decide; or `not compared: short path` on a short-path move>",
         "- State: <for a Bug, an Investigation or a Spike: ready: all conditions met, or backlog with each unmet "
         "condition, or for an issue already in progress or later its retained state with all conditions met or with "
         "each unmet condition; for a Spike with more than one independent research thread the unmet condition reads "
@@ -5434,9 +5434,7 @@ SHORT_PATH_LEAD = (
 SHORT_PATH_TODO = "Each todo item of a skipped step is left open and named as not done with the reason `short path`."
 SHORT_PATH_PRIORITY = (
     "The path makes no new priority decision, so the priority step under [Triage](#triage) does not apply: the Triage "
-    "record's `Priority comparison:` line repeats the comparison on the story's latest Triage record, and a story with "
-    "no earlier Triage record cannot have its priority verified, so no write is made and the normal ceremony runs from "
-    "Step 1 item 2."
+    "record's `Priority comparison:` line reads `not compared: short path`."
 )
 SHORT_PATH_PROMOTION = "That move follows the promotion rule in `persona-product-owner/SKILL.md`."
 SHORT_PATH_UNVERIFIED = (
@@ -5559,9 +5557,7 @@ def stated_outcome(text: str, story: dict) -> str:
         return NORMAL_CEREMONY if SHORT_PATH_FAILED in body else "unstated"
     if not story["verifiable"]:
         return NORMAL_CEREMONY if SHORT_PATH_UNVERIFIED in body else "unstated"
-    if not story["earlier triage record"]:
-        return NORMAL_CEREMONY if SHORT_PATH_PRIORITY in body else "unstated"
-    if SHORT_PATH_PO_WRITES not in body or SHORT_PATH_CLOSING not in body:
+    if any(phrase not in body for phrase in (SHORT_PATH_PO_WRITES, SHORT_PATH_PRIORITY, SHORT_PATH_CLOSING)):
         return "unstated"
     if story["triage record denied"]:
         return DENIED_AFTER_MOVE if SHORT_PATH_DENIED in body else "unstated"
@@ -5570,7 +5566,7 @@ def stated_outcome(text: str, story: dict) -> str:
 
 ELIGIBLE_STORY = {
     "a": True, "b": True, "c": True, "d": True, "e": True, "state": "backlog", "verifiable": True,
-    "earlier triage record": True, "triage record denied": False,
+    "triage record denied": False,
 }
 # One story that takes the path and one case per failed condition the AC names, each with the condition it fails
 # and the outcome AC3 fixes for it, written here rather than read from the text.
@@ -5588,7 +5584,6 @@ SHORT_PATH_OTHER_CASES = {
     "done": ({"e": False, "state": "done"}, EXCLUDED),
     "triage": ({"e": False, "state": "triage"}, NORMAL_CEREMONY),
     "a clause the PO cannot verify": ({"verifiable": False}, NORMAL_CEREMONY),
-    "no earlier triage record": ({"earlier triage record": False}, NORMAL_CEREMONY),
     "triage record post denied": ({"triage record denied": True}, DENIED_AFTER_MOVE),
 }
 

@@ -231,7 +231,7 @@ The priority is the value read back after the PO applied it; when the PO could n
 ## Triage record
 
 - Priority: <the decided value, read back; or unset when the PO could not decide>
-- Priority comparison: <each comparable story's identifier and priority; or `needs input` with the open question when the PO could not decide>
+- Priority comparison: <each comparable story's identifier and priority; or `needs input` with the open question when the PO could not decide; or `not compared: short path` on a short-path move>
 - State: <for a Bug, an Investigation or a Spike: ready: all conditions met, or backlog with each unmet condition, or for an issue already in progress or later its retained state with all conditions met or with each unmet condition; for a Spike with more than one independent research thread the unmet condition reads re-file as separate Spikes (owner); when the `Scope signal:` line is missing or carries neither of its type's readings the unmet condition reads scope signal missing; omitted for a User Story>
 - Tracker writes: product owner
 ```
