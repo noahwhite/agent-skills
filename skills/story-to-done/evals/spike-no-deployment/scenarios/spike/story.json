@@ -1,0 +1,15 @@
+{
+  "story": {
+    "id": "ABC-123",
+    "title": "[Spike] Compare two YAML parsers for the CLI",
+    "state": "Ready To Work",
+    "labels": ["Spike"],
+    "description": "Timebox: 1 day.\n\n## Research Questions\n\n- Which of the two candidate YAML parsers loads the project's fixtures faster?\n\n## Deliverables\n\n- A comparison note, linked on this story.\n\n## Acceptance Criteria\n\n- [ ] AC1 The comparison note answers the research question with measurements.\n\n## Definition of Done\n\n- [ ] All acceptance criteria met\n- [ ] Verified in a deployed environment (if needed)\n"
+  },
+  "comments": [],
+  "engineer_handback": {
+    "record": "engineer-handback.md",
+    "state": "In Deployment Review",
+    "comment": "Implementation and handoff note: the spike had no tracked-file change, so there is no merged commit and steps 4 to 10 were skipped.\n\nDeliverable: comparison note, https://docs.example.com/abc-123/yaml-parser-comparison\n\npath: spike\n"
+  }
+}

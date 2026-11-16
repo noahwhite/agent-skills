@@ -1,0 +1,15 @@
+{
+  "story": {
+    "id": "ABC-123",
+    "title": "[User Story] Report the parser version in the CLI help text",
+    "state": "Ready To Work",
+    "labels": ["User Story"],
+    "description": "As a user, I want `example --help` to name the parser version, so that a bug report says which parser produced it.\n\n## Acceptance Criteria\n\n- [ ] AC1 `example --help` prints a line `parser <version>`, the version the package metadata declares.\n- [ ] AC2 A unit test covers the line.\n\n## Definition of Done\n\n- [ ] All acceptance criteria met\n- [ ] Independently reviewed\n- [ ] Verified in a deployed environment (if needed)\n"
+  },
+  "comments": [],
+  "engineer_handback": {
+    "record": "engineer-handback.md",
+    "state": "In Deployment Review",
+    "comment": "Implementation and deployment note: PR https://github.com/example-org/example-repo/pull/41 merged as 4e1c2a9b7d3f5e6a8c0b1d2e3f4a5b6c7d8e9f01 on main and deployed to dev, whose version endpoint reports build 4e1c2a9.\n\npath: deployed\n"
+  }
+}

@@ -1,0 +1,112 @@
+case: spike-no-deployment
+skill: story-to-done
+kind: discriminating
+purpose: >-
+  Show that the coordinator selects the run's path with select-path.py before it spawns a role,
+  writes the selected path as its checklist's `path:` line, and carries it as an exact `path:`
+  line in every senior-engineer and QA brief on the spike, no-deployment and deployed paths; that
+  a title and label that disagree make it ask the user and spawn no role; and that a no-deployment
+  story already in deployment review gets a QA brief carrying the path and the merged commit.
+split: >-
+  SKL-273 owns this case's content and recorded runs: its prompt, case.yaml, grader, fixture
+  profiles, scenarios, stub runtime, rerun instructions and results. SKL-164 owns the suite
+  harness, the README and the repeat-run machinery (../run-suite.sh, ../suite.py, ../README.md).
+  Whichever of the two lands second folds its copy into the other's layout; SKL-164 landed first,
+  so this case is in its layout.
+differences_from_qa_unfinished_own_steps:
+  - >-
+    It grades brief text and role spawn: the `path:` line of each senior-engineer and QA brief,
+    the QA brief's verification target, and whether each role was spawned at all.
+  - It does not grade session identity or the continuation message.
+  - >-
+    It uses fixture profiles: one with `environments: []` for spike, no-deployment, conflict and
+    direct-entry, and one with an environment whose branch equals `git.integration_branch` for
+    deployed; spike's story carries the profile's spike label.
+baseline:
+  commit: ec533a60237fe34a39468b564d8e093f37673354
+  note: >-
+    The skill on origin/main before SKL-270's change, the parent of SKL-270's first commit
+    c8ca6d0. Its story-to-done has no path selection, so no brief and no checklist carries a
+    `path:` line, and a disagreeing title and label do not stop it.
+candidate:
+  commit: 298a7ee290fb243dd175bd08df2a7f766ba5a74f
+  note: >-
+    A main commit carrying the changes of SKL-162 (engineering-workflow), SKL-269
+    (qa-verification) and SKL-270 (story-to-done path selection), and SKL-278's path line in both
+    briefs. The story-to-done, engineering-workflow and qa-verification skill directories are
+    identical at this commit and at 3bfaf7d, the main commit this case was cut from.
+runtime:
+  command: opencode run --standalone --auto --archived --model deepseek/deepseek-v4-pro
+  model: deepseek/deepseek-v4-pro
+  reasoning_effort: default
+  record: >-
+    Every recorded scenario used this one configuration. A rerun with a different model records
+    its own result files and names the model it used.
+scenarios:
+  - name: spike
+    expectation: spike
+    baseline: spawns both roles with no `path:` line in either brief or in its checklist
+    candidate: >-
+      spawns the senior engineer and, after its handback, QA, each brief carrying `path: spike`,
+      and writes `path: spike` in its checklist
+  - name: no-deployment
+    expectation: no-deployment
+    baseline: spawns both roles with no `path:` line in either brief or in its checklist
+    candidate: >-
+      spawns the senior engineer and, after its handback, QA, each brief carrying
+      `path: no-deployment`, and writes `path: no-deployment` in its checklist
+  - name: deployed
+    expectation: deployed
+    baseline: >-
+      spawns the senior engineer and, after its handback, QA with a brief naming the environment
+      dev
+    candidate: >-
+      spawns the senior engineer and, after its handback, QA with a brief naming the environment
+      dev
+    control: >-
+      the deployed brief is unchanged apart from its path line: both roles are spawned in order and
+      QA's brief names the environment the senior engineer deployed to
+    path: >-
+      the same run is graded again as deployed-path, on every control check plus `path: deployed`
+      in each brief and in the checklist; the baseline has no path line, so only the candidate is
+      held to it
+  - name: conflict
+    expectation: conflict
+    baseline: spawns the senior engineer
+    candidate: >-
+      asks the user, spawns no role, and writes `path: unresolved` in its checklist, since the
+      `[Spike]` title has no spike label
+  - name: direct-entry
+    expectation: direct-entry
+    baseline: spawns QA with no `path:` line in its brief
+    candidate: >-
+      spawns no senior engineer and spawns QA with a brief carrying `path: no-deployment` and
+      naming the merged commit the step 12 note names, and writes `path: no-deployment` in its
+      checklist
+graded_on:
+  - >-
+    tool-call evidence: the action of every story-runtime call in actions.jsonl, the handback each
+    senior-engineer launch was served, and the text each send carried, kept in messages.json under
+    the id its call names
+  - >-
+    the coordinator checklist's `path:` line, read from workspace/coordinator-todo.md, lenient
+    about list markers, check boxes and emphasis; a missing checklist fails the check
+  - >-
+    each senior-engineer and QA brief's path statement: exactly one line whose whole trimmed text
+    is `path: <value>`, on every path including deployed (the deployed-path grade)
+  - >-
+    whether a role was spawned: conflict starts no session and sends the user a message;
+    direct-entry starts QA only; the other scenarios start the senior engineer, then QA only after
+    its handback
+  - >-
+    the QA brief's target where the scenario fixes one: the environment dev on deployed, and the
+    merged commit, in full or by a prefix of at least 7 characters, on direct-entry
+not_graded_on:
+  - the agent's prose
+  - session identity and the continuation message, which qa-unfinished-own-steps grades
+  - >-
+    the rest of each brief's wording, beyond the path line and the target named above, and how the
+    user message words the question in conflict
+  - >-
+    the tracker writes and the order of the reads: the stub tracker is read-only to the
+    coordinator, and the case grades the path and the spawns

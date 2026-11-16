@@ -1,0 +1,10 @@
+{
+  "story": {
+    "id": "ABC-123",
+    "title": "[Spike] Compare two YAML parsers for the CLI",
+    "state": "Ready To Work",
+    "labels": ["User Story"],
+    "description": "Timebox: 1 day.\n\n## Research Questions\n\n- Which of the two candidate YAML parsers loads the project's fixtures faster?\n\n## Deliverables\n\n- A comparison note, linked on this story.\n\n## Acceptance Criteria\n\n- [ ] AC1 The comparison note answers the research question with measurements.\n\n## Definition of Done\n\n- [ ] All acceptance criteria met\n- [ ] Verified in a deployed environment (if needed)\n"
+  },
+  "comments": []
+}

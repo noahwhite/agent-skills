@@ -1,0 +1,65 @@
+# Fixture profile for the spike, no-deployment, conflict and direct-entry scenarios: the project
+# deploys nothing, so environments is the empty list.
+version: 1
+project:
+  name: Example Project
+  repos:
+    - example-org/example-repo
+  test_command: make test
+tracker:
+  kind: linear
+  team_key: ABC
+  team_name: Example Team
+  assignee: self
+  states:
+    triage: Triage
+    backlog: Backlog
+    ready: Ready To Work
+    in_progress: In Progress
+    blocked: Blocked
+    in_review: In PR Review
+    in_deployment_review: In Deployment Review
+    done: Done
+    canceled: Canceled
+    duplicate: Duplicate
+  labels:
+    user_story: User Story
+    spike: Spike
+    bug: Bug
+git:
+  host: github
+  integration_branch: main
+  release_branch: main
+  promotion: none
+  merge_method: squash
+  signed_commits: true
+  ai_attribution: forbid
+review:
+  reviewer:
+    name: Example Reviewer
+    runtime: claude-code
+    model: example-reviewer-model
+  adjudicator:
+    name: Example Adjudicator
+    runtime: claude-code
+    model: example-adjudicator-model
+  merge_owner: agent
+  pre_pr:
+    arbiter:
+      name: Example Arbiter
+      runtime: claude-code
+      model: example-arbiter-model
+story_to_done:
+  engineer:
+    name: Example Engineer
+    runtime: claude-code
+    model: example-engineer-model
+    effort: high
+  qa:
+    name: Example QA
+    runtime: claude-code
+    model: example-qa-model
+    effort: high
+environments: []
+qa:
+  evidence_dir: docs/qa-evidence
