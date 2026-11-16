@@ -163,6 +163,7 @@ The brief carries facts and constraints, never your expectations about the outco
 It must include:
 
 - The story identifier.
+- The line `path: <value>`, whose whole text is exactly that, `<value>` being the path step 1 selected, so the role never reselects the path.
 - An instruction to load and follow `engineering-workflow` for the whole story, from triage, the pre-PR gate and the PR to `profile.git.integration_branch` to the merge per `profile.review.merge_owner`, the deploy, and the move to `profile.tracker.states.in_deployment_review`.
 - What to hand back: the story state, each PR link, the head SHA each PR's review of record covered, the merged commit, and the environment and deployed build it verified; or, if it stops, that it is blocked and why, including when no arbiter can launch; a missing arbitration is never clean or converged.
 - Keep working until everything the brief asks for is done, and only stop to ask when you can't go on without the coordinator or before a risky step. The stop this brief already defines still holds: if you must stop, hand back blocked and say why.
@@ -178,6 +179,10 @@ It must include:
 - Its own subdirectory of the scratch directory, `<scratch>/senior-engineer/`, which you create and hand it in place of the scratch directory itself, never another role's files.
 - A "Track your work" paragraph: before starting, write a fine-grained checklist file at the full path you give it in that subdirectory (`<scratch>/senior-engineer/senior-engineer-todo.md`, `- [ ]` and `- [x]` items, one per slice step, test, gate round, review round, remediation, deploy, verification, and wait, the current step marked `(in progress)`) and update it at every step.
 
+On `deployed` the brief is the list above.
+On `no-deployment`, its hand-back item asks for the merged commit in place of the environment and deployed build.
+On `spike`, it also says that the steps from the PR through the merge run only when the spike changes a tracked file, and its hand-back item asks for each deliverable's link, with its commit when one exists, in place of the environment and deployed build.
+
 This skill assigns merge approval to no manager, so `engineering-workflow`'s own merge rules apply.
 Let the senior engineer do the engineering; do not pre-empt its choices.
 The engineer never does pre-PR arbitration (`adversarial-review-pipeline` Phase 3, `engineering-workflow` step 4 Verify stage) or rules a finding valid, invalid or accepted risk or the gate converged (applying the gate's scope guard is not arbitration), and fixes what QA ruled not met or the adjudicator ruled valid without overturning those rulings; a separate clean, neutral arbiter on `profile.review.pre_pr.arbiter`, independent of engineer and coordinator, arbitrates every head.
@@ -190,6 +195,9 @@ Select the review of record as the merge guard in `references/code-review.md` do
 Compare the merged PR's `headRefOid` (its head at merge, not the merge commit) separately with that review's `commit_id` and with the full head SHA on its first line.
 Except under the explicit per-PR review waiver in The gate, a missing review, a missing SHA, or either mismatch is reported with the PR and all available SHAs, and stops the loop.
 For a waived PR, compare the merged PR's `headRefOid` with the SHA recorded when the user gave the instruction; report and stop if that SHA is missing or differs.
+These read-backs, and step 3's, run unchanged on every path for every PR a role reports as merged.
+A final handback from the senior engineer that reports no merged PR stops the run on `deployed` and `no-deployment`; on `spike` the run continues to step 3 only when the `engineering-workflow` step 12 note says the spike had no tracked-file change, and otherwise stops.
+No path adds a waiver, an admin override, or a change to the expected-head condition.
 
 ## 3. QA agent: verify the deployed story
 
@@ -200,6 +208,7 @@ Brief it as a QA agent, with only:
 
 - The story identifier and the environment under test: the environment the senior engineer deployed to.
   When step 2 did not run in this engagement, use the environment the user named; if they named none, leave it out so `qa-verification` picks its default.
+- The line `path: <value>`, whose whole text is exactly that, `<value>` being the path step 1 selected, so the role never reselects the path.
 - An instruction to load and follow `qa-verification` for the story, including its evidence and its closing status decision.
 - What to hand back: the story's final state, the verdict and evidence for each AC and DoD item, any item left outstanding with its owner, any incidental defect it noted, and each PR it merged with the head SHA its review of record covered.
 - Keep working until everything the brief asks for is done, and only stop to ask when you can't go on without the coordinator or before a risky step. The stop this brief already defines still holds: hand back any item left outstanding with its owner.
@@ -209,6 +218,9 @@ Brief it as a QA agent, with only:
 - The git rule: run every commit-creating git command with the git identity already configured and, when `profile.git.signed_commits` is true, the signing already configured; never pass `-c user.name`, `-c user.email`, `--author`, `GIT_AUTHOR_*` or `GIT_COMMITTER_*`, never write `user.name` or `user.email` with `git config`, and when signing is on never pass `-c user.signingkey`, `-c gpg.*` or `-c commit.gpgsign`; a missing identity, a failed signing check or a pushed commit whose `.commit.verification.verified` is false is a configuration fault, so stop, do not override per command or write git config, make no further commits, and report it to the user.
 - The secrets rule and a "Track your work" paragraph (checklist file at the full path you give it, `<scratch>/qa-agent-round-<n>/qa-agent-round-<n>-todo.md`).
 - The shell rule: run each shell step as one simple command with literal values; never assign a variable and use it in the same command (`W=<path>; git -C $W ...`) - write the literal path; never feed a `$(...)` result into a later argument of the same command - run the inner command as its own call and use its literal output in the next call; and never prefix a command with an inline `VAR="$SECRET"` assignment - rely on the credential the session environment or the tool's own credential configuration already provides (for `gh`, its stored auth), and never set a credential per command.
+
+On `deployed` the brief is the list above.
+On `no-deployment` and `spike`, on every entry, a run that starts at step 3 included, it names the path's verification target in place of the environment: on `no-deployment`, the merged commit the `engineering-workflow` step 12 note names, on `profile.git.integration_branch`; on `spike`, each deliverable the `engineering-workflow` step 12 note links.
 
 Never give it the senior engineer's handback beyond the environment, the PR's rationale, the fixes made, an earlier round's verdicts, or the verdict you expect.
 
@@ -223,6 +235,7 @@ For a waived PR, compare the merged PR's `headRefOid` with the SHA recorded when
 ## 4. Act on the QA outcome
 
 - **`profile.tracker.states.done`:** confirm the completion record before you accept it.
+  On `no-deployment` and `spike`, the DoD item "Verified in a deployed environment (if needed)" counts as verified in the record below when its box is ticked and QA's handback rules it not needed on that path.
   On read-back every AC and DoD box is ticked, QA's handback rules every item verified, and, when `profile.qa.evidence_dir` is set, the evidence PR is merged on the head its review of record covered.
   Done is never set on an AC amendment alone, so the record also needs no item still `pending owner ruling` in QA's handback or its record in the tracker, and a verified verdict, from a new QA round (a new QA agent on the unchanged step 3 brief) run after the product owner's dated AC amendment, for each item that amendment ruled on.
   If all of these hold, go to step 5; if any does not, report the mismatch and stop.
