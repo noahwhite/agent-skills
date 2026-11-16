@@ -3168,6 +3168,10 @@ INTERIM_QA_SCOPE = (
     "A QA agent's handback that names an awaited item of its own background work (for example its evidence PR's "
     "review-of-record gate or CI run) and is neither a final handback nor blocked is an interim handback too."
 )
+INTERIM_QA_MIXED = (
+    "A QA agent's handback that also names a failed item, or an outstanding item owned by anyone other than that QA "
+    "agent, is not an interim handback; it goes to step 0's checklist read-back and step 4 as usual."
+)
 INTERIM_QA_ORDER = (
     "The coordinator classifies a QA agent's interim handback before step 0's checklist read-back of that QA agent "
     "and before step 4's classification."
@@ -3197,6 +3201,11 @@ INTERIM_QA_ROW = "With `metrics` on, each QA deadline resume is its own launch r
 def test_the_interim_definition_covers_a_qa_agents_own_background_work() -> None:
     text = interim_text()
     assert text.index(INTERIM_DEFINITION) < text.index(INTERIM_QA_SCOPE) < text.index(INTERIM_STATED_BLOCKER)
+
+
+def test_a_qa_handback_that_also_names_a_failed_or_foreign_owned_item_is_not_interim() -> None:
+    text = interim_text()
+    assert text.index(INTERIM_QA_SCOPE) < text.index(INTERIM_QA_MIXED) < text.index(INTERIM_STATED_BLOCKER)
 
 
 def test_step_3_points_to_the_interim_handbacks_reference_and_restates_none_of_it() -> None:
