@@ -394,6 +394,10 @@ class PromotionRepo:
 
     def commit(self, message: str) -> str:
         self.git("add", "-A")
+        # Stage the submodule pointer with plumbing: newer `git add` honours `.gitmodules` `ignore = all` and
+        # leaves a moved pointer unstaged.
+        module = self.git("-C", "mod", "rev-parse", "HEAD")
+        self.git("update-index", "--add", "--cacheinfo", f"160000,{module},mod")
         self.git("commit", "-qm", message)
         return self.git("rev-parse", "HEAD")
 
