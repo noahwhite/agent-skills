@@ -19,14 +19,29 @@ class Unusable(Exception):
     """A run id, a record or the checkout cannot be replayed; the text says why."""
 
 
+# No git command or grader run of the replay takes a second; one that hangs is stopped.
+SECONDS = 60
+# The provider's exit statuses: the case's run.sh's for a void run, 3 for a broken attempt whose
+# record names no usable status, and one the case contract does not use for anything the
+# provider cannot replay.
+VOID, BROKEN, UNUSABLE = 2, 3, 64
+
+
 def git(*args: str) -> subprocess.CompletedProcess:
     """One read-only git command in this checkout; it takes no lock and refreshes no index."""
-    return subprocess.run(["git", "--no-optional-locks", "-C", str(POC), *args], capture_output=True, text=True)
+    try:
+        return subprocess.run(["git", "--no-optional-locks", "-C", str(POC), *args],
+                              capture_output=True, text=True, timeout=SECONDS)
+    except subprocess.TimeoutExpired:
+        raise Unusable(f"git {args[0]} did not finish in {SECONDS} s") from None
 
 
 def checkout_root() -> pathlib.Path:
     """The repository this file is in, as git names it, so no path depth is assumed."""
-    top = git("rev-parse", "--show-toplevel")
+    try:
+        top = git("rev-parse", "--show-toplevel")
+    except Unusable as why:
+        raise SystemExit(f"records.py: {why}") from None
     if top.returncode != 0:
         raise SystemExit(f"records.py: the replay needs the git checkout it is in: {top.stderr.strip()}")
     return pathlib.Path(top.stdout.strip())
@@ -79,10 +94,24 @@ def load(run_id: str) -> dict:
         raise Unusable(f"{path.name} is not a suite run record: {', '.join(wrong)} missing or of the wrong type")
     if record["outcome"] not in OUTCOMES or not NAME.fullmatch(record["scenario"]):
         raise Unusable(f"{path.name} names an outcome or a scenario the suite does not write")
-    if not all(isinstance(lines, list) for lines in record["grades"].values()) or \
+    if not all(isinstance(lines, list) and all(isinstance(line, str) for line in lines)
+               for lines in record["grades"].values()) or \
             not all(isinstance(text, str) for text in record["grader_inputs"].values()):
         raise Unusable(f"{path.name} is not a suite run record: its grades or grader inputs are not text")
+    if not all(mark in GRADED for mark in record["verdicts"].values()):
+        raise Unusable(f"{path.name} names a verdict the suite does not write")
     return record
+
+
+def provider_answer(record: dict) -> tuple[int, str]:
+    """The exit status provider.py gives a record it can use, which is the case's run.sh's
+    where the record has one, and the kind of answer it logs beside that status."""
+    if record["outcome"] == "void":
+        return VOID, "void record"
+    if record["outcome"] == "error":
+        code = record.get("exit_code")
+        return (code if type(code) is int and code > VOID and code != UNUSABLE else BROKEN), "broken record"
+    return 0, "replayed"
 
 
 def calls_text(run_id: str, record: dict) -> str | None:

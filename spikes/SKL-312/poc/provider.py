@@ -20,9 +20,10 @@ directory with uncommitted changes. promptfoo reads every non-zero status as a p
 error, so the provider also appends its status and what kind of answer it was to
 `$SKL312_WORK/provider-log/`, where `compare.py` reads which of them it was.
 
-Every invocation also writes what it was called with (argument roles and JSON shapes,
-environment variable names, never a value) under `$SKL312_WORK/envelopes/`, from which
-`compare.py` keeps one as `provider-contract/envelope.json`.
+Every invocation also writes what it was called with under `$SKL312_WORK/envelopes/`, from
+which `compare.py` keeps one as `provider-contract/envelope.json`: the script path and the
+prompt as given (the prompt is a run id here), the shape of each JSON argument and the names of
+the environment variables. It holds no environment value and no content of a JSON argument.
 
 Three probe ids exercise the statuses no committed record has. They replay no case content:
 `probe:void` exits 2, `probe:exit-3` exits 3, and `probe:void-once:<run id>` exits 2 the
@@ -37,7 +38,7 @@ import sys
 
 import records
 
-VOID, BROKEN, UNUSABLE = 2, 3, 64
+VOID, BROKEN, UNUSABLE = records.VOID, records.BROKEN, records.UNUSABLE
 
 
 def shape(value: object) -> object:
@@ -55,7 +56,8 @@ def shape(value: object) -> object:
 
 
 def envelope(argv: list[str]) -> dict:
-    """What promptfoo handed this process, with names and shapes only."""
+    """What promptfoo handed this process: the first two arguments as given, the shape of the
+    two JSON arguments, and the names of the environment variables."""
     def parsed(text: str) -> object:
         try:
             return shape(json.loads(text))
@@ -82,12 +84,11 @@ def rebuild(run_id: str, work: pathlib.Path) -> tuple[int, str, str]:
     """Rebuild the run directory of one record. Returns the exit status, the kind of answer,
     and the JSON line for stdout or the reason for stderr."""
     record = records.load(run_id)
+    status, kind = records.provider_answer(record)
     if record["outcome"] == "void":
-        return VOID, "void record", f"the recorded run is void: {record.get('void_reason')}"
+        return status, kind, f"the recorded run is void: {record.get('void_reason')}"
     if record["outcome"] == "error":
-        code = record.get("exit_code")
-        return (code if type(code) is int and code > VOID and code != UNUSABLE else BROKEN,
-                "broken record", "the recorded attempt is broken")
+        return status, kind, "the recorded attempt is broken"
     changed = records.uncommitted()
     if changed:
         raise records.Unusable(f"the evals directory has uncommitted changes ({', '.join(changed[:3])})")
@@ -98,24 +99,25 @@ def rebuild(run_id: str, work: pathlib.Path) -> tuple[int, str, str]:
     scenario = records.CASE / "scenarios" / record["scenario"]
     run = work / "runs" / run_id
     shutil.rmtree(run, ignore_errors=True)
-    run.mkdir(parents=True)
-    # What run.sh copies in before the agent starts, less the prompt and the stub runtime,
-    # which the grader never reads. not_replayable() showed they are the record's own.
     try:
+        run.mkdir(parents=True)
+        # What run.sh copies in before the agent starts, less the prompt and the stub runtime,
+        # which the grader never reads. not_replayable() showed they are the record's own.
         shutil.copy(scenario / "qa-round-1.json", run)
         shutil.copytree(scenario / "checklists", run, dirs_exist_ok=True)
+        # What the run left for the grader, as the suite recorded it.
+        for name, text in record["grader_inputs"].items():
+            target = (run / name).resolve()
+            if run.resolve() not in target.parents:
+                raise records.Unusable(f"the record names a grader input outside its run directory: {name}")
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(text)
+        if calls is not None:
+            (run / "actions.jsonl").write_text(calls)
     except OSError as error:
-        raise records.Unusable(f"scenario {record['scenario']} lacks a fixture: {error}") from None
-    # What the run left for the grader, as the suite recorded it.
-    for name, text in record["grader_inputs"].items():
-        target = (run / name).resolve()
-        if run.resolve() not in target.parents:
-            raise records.Unusable(f"the record names a grader input outside its run directory: {name}")
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(text)
-    if calls is not None:
-        (run / "actions.jsonl").write_text(calls)
-    return 0, "replayed", json.dumps({"run_id": run_id, "run_dir": f"runs/{run_id}", "grades": grades})
+        raise records.Unusable(f"the run directory cannot be rebuilt from scenario {record['scenario']} "
+                               f"and the record: {type(error).__name__}") from None
+    return status, kind, json.dumps({"run_id": run_id, "run_dir": f"runs/{run_id}", "grades": grades})
 
 
 def answer(prompt: str, work: pathlib.Path) -> tuple[int, str, str]:

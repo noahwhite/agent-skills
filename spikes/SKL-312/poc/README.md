@@ -24,7 +24,7 @@ No Node lockfile is committed, because the story keeps one out of the repository
 
 ## Prerequisites
 
-`run.sh` checks these before it creates anything.
+`run.sh` checks each of these, except network access, before it creates anything.
 
 - `bash`, `git` and `python3` 3.12 or later, as the repository already requires.
 - Node.js 22.22.0 or later with `npm`, the range promptfoo `0.125.1` declares.
@@ -40,10 +40,16 @@ No credential is needed.
 The command stops with one line on stderr, before the install, when any of these holds.
 
 - A file under `skills/story-to-done/evals/` differs from `HEAD`: the replay would be of no commit.
-- A run record is not one the suite wrote: not JSON, a field missing, a grade file the suite does not name, or a call record that is missing.
+- A run record is not one the suite wrote: not JSON, a field missing, a verdict or a grade file the suite does not name, or a call record that is missing.
 - No record with outcome `pass` can be replayed, which the retry probe needs.
 
-A graded record is listed in `compare.md` as not replayed, with no parity claimed, when the suite redacted text the grader reads or when the case's grader or the scenario's fixtures changed after the commit that added the record.
+A graded record is listed in `compare.md` as not replayed, with no parity claimed, when the suite redacted text the grader reads or when the case's grader or the scenario's fixtures differ from those at the commit that added the record, or from those at the harness commit the record names where the clone holds that commit.
+
+After the evals, the report stops the same way and writes nothing when what promptfoo and the provider left is not what it was written against.
+
+- An export of promptfoo is not of an eval that called no model: it names another provider than the script, another assertion type than `python`, a token count or a cost.
+- An export does not hold exactly one result for each listed id, or holds an outcome the mapping does not know.
+- The provider's log or its envelope is missing or is not one `provider.py` wrote.
 
 ## Files
 
@@ -63,7 +69,8 @@ A graded record is listed in `compare.md` as not replayed, with no parity claime
 
 No CI job runs `run.sh` or `selftest.py`.
 The story keeps every tracked change under `spikes/SKL-312/`, and the repository's test job collects `tests/` only, so both are run by hand.
-`run.sh` exits 1 when a generated file comes out different from the committed one, so a stale `compare.md` or `envelope.json` is found by the next run.
+`selftest.py` does not run `run.sh`: the prerequisites, the install, promptfoo itself and its export are checked only by running that command.
+`run.sh` exits 1 when a generated file is missing or comes out different from the committed one, so a stale `compare.md` or `envelope.json` is found by the next run.
 
 ## What stays out of the repository
 

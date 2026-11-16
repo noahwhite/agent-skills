@@ -13,12 +13,15 @@ Labels used throughout:
 | Criterion | Status | Evidence |
 |---|---|---|
 | `## Decision` states Go, Partial-Go or No-Go with decider, date, version, commit, observations and reversal conditions | met | `## Decision` |
-| `bash spikes/SKL-312/poc/run.sh` replays the recorded runs with zero model API calls and writes `compare.md` and `envelope.json` | met, with a recorded exclusion | `poc/compare.md`: 24 of 24 suite run records replay and match; the 86 runs in records that predate the runner are listed, not replayed, and no parity is claimed for them (`## Research questions`, 2). `poc/provider-contract/envelope.json` |
+| `bash spikes/SKL-312/poc/run.sh` replays the recorded runs with zero model API calls and writes `compare.md` and `envelope.json` | met | `poc/compare.md`: 24 of 24 suite run records replay and match. The records that predate the runner (83 runs with 85 grade lines in call records, and 1 record kept in prose only) cannot be used safely, so that blocker is recorded, they are listed and not replayed, and no parity is claimed for them (`## Research questions`, 2). `poc/provider-contract/envelope.json` |
 | `## Scope` names first skills, behaviours in scope and an out-of-scope list | met | `## Scope` |
 | `## Test types` has one row per type with grading method, mechanism and cost per run | met | `## Test types` |
 | `## Corpus` proposes sources, format, labels, size target, versioning and private-material exclusion | met | `## Corpus` |
 | `## Infrastructure` recommends one runner and covers providers, credentials, storage, ceilings, gating and the Node footprint | met | `## Infrastructure` |
 | `## Split` chooses one follow-up shape and defines each item | met | `## Split` |
+
+How the replay criterion was checked: `bash spikes/SKL-312/poc/run.sh` was run by hand, at 45 to 52 s a run.
+No CI job runs it, because a CI step is a tracked change outside `spikes/SKL-312/`, and `poc/selftest.py`, also run by hand, checks the report's rules without running it.
 
 ## Decision
 
@@ -26,8 +29,8 @@ Labels used throughout:
 `skills/story-to-done/evals/run-suite.sh` stays the harness for behaviour and regression cases.
 For the two test types `run-suite.sh` has no mechanism for, trigger and prose rubric, the evidence is insufficient, and the missing prerequisites are named below.
 
-- Decider: the senior engineer implementing SKL-312, by role.
-  The product owner accepts or overturns the decision when closing SKL-312.
+- Decider: the senior-engineer agent that the `story-to-done` skill ran to implement SKL-312; it has no other name.
+  The decision stands when the product owner of SKL-312, the repository owner (`noahwhite` on GitHub), accepts it by closing the story, and that owner can overturn it.
 - Date: 2026-11-15.
 - promptfoo version: `0.125.1`.
 - Repository commit tested: `186df218014aeb4ecee41cb2801ab72e4c794063`, where the last commit that changed `skills/story-to-done/evals/` is `192070793c871937e817be1c8f4105af8650a01a`.
@@ -97,6 +100,9 @@ Three things seen in the replay matter to anyone building on it (all observed):
 - A run record names the harness commit it was graded at and carries no hash of the grader or the fixtures.
   All 24 records name `e46615c471d7bdd2c09a8ffeebaa5fdf9540b44f`, which no local or remote branch of this repository contains: it was a commit of a branch that was squash-merged.
   The replay therefore compares the grader and each scenario's fixtures with the commit that added the record, `0e2a4ef984e1a3fa8467d80fa5fad2ced367ce5e`, and lists a record as not replayed when they differ.
+  In a clone without the harness commit, parity is thus shown against the tree at the commit that added the record, which is taken, not shown, to be the tree the suite graded with.
+  Checked on 2026-11-16 in a clone that fetched the head of pull request 218, whose branch holds that harness commit: `git diff --quiet e46615c471d7bdd2c09a8ffeebaa5fdf9540b44f HEAD` over the case's `grader.py` and `scenarios/` exits 0, and the replay's own comparison then runs against both commits and leaves none of the 24 records out (observed).
+  A grader or a fixture at the harness commit that differs from the replayed one would reverse observation 1 of `## Decision`: the 24 matches would then be of another grader.
 
 ### 2. Can a script provider drive the existing agent runs and keep their semantics
 
@@ -104,7 +110,7 @@ Three things seen in the replay matter to anyone building on it (all observed):
 |---|---|---|
 | Provider invocation (`poc/provider-contract/envelope.json`) | The script receives the rendered prompt, the provider options and the call context as three arguments, with stdin closed, the config directory as working directory and promptfoo's environment; its trimmed stdout is the output and a non-zero status is a provider error | That the same provider can start a live agent through `<case>/run.sh CHECKOUT SCENARIO RUN_DIR`; that a run of up to `EVAL_TIMEOUT` seconds completes under promptfoo's own timeout settings |
 | Verdict mapping (`poc/compare.md`, "Verdict mapping") | pass, fail and each further grade map one to one; exit 2 and exit 3 both map to ERROR; `--retry-errors` runs ERROR rows again once | A void by deadline, which no record or probe exercises |
-| Grading of committed recorded runs (`poc/compare.md`, "Replayed runs") | 24 of 24 suite run records grade to their recorded verdict with identical grader output | Nothing; 86 runs in records that predate the runner are listed and not replayed, and no parity is claimed for them |
+| Grading of committed recorded runs (`poc/compare.md`, "Replayed runs") | 24 of 24 suite run records grade to their recorded verdict with identical grader output | Nothing; the 83 runs in call records that predate the runner, and the 1 record kept in prose only, are listed and not replayed, and no parity is claimed for them |
 
 Grading recorded `actions.jsonl` through promptfoo is proven.
 Keeping void, graded and retry semantics is not: retry is unmapped and `error` maps with a loss, so both need a wrapper.
@@ -276,8 +282,10 @@ This spike edits and closes none of these stories; every change below is a propo
 
 Pinned `skills-ref` reference, resolved from `.github/workflows/ci.yml`: `git+https://github.com/agentskills/agentskills@69ef37e9424c0a7ea9dd2293b559e43ec8176379#subdirectory=skills-ref`.
 
-The four guards ran on commit `a327b1adcfbbd9a668ec162749b0ccc16dcf738b` on 2026-11-16, locally and in [ci run 43783226403](https://github.com/noahwhite/agent-skills/actions/runs/43783226403), which ran on a draft pull request opened for that commit.
-After that commit, the only change this branch makes is to this section.
+Before this section was written, the four guards last ran on commit `a327b1adcfbbd9a668ec162749b0ccc16dcf738b` on 2026-11-16, locally and in [ci run 43783226403](https://github.com/noahwhite/agent-skills/actions/runs/43783226403), which ran on a draft pull request opened for that commit and closed unmerged.
+A file cannot name the CI run of the commit that holds it.
+Every commit after that one, the merged one included, gets the same four guards from the `ci` workflow, which runs guards 1, 2 and 3 in its `checks` job and guard 4 in its `discovery` job on every pull request head and on every push to `main`.
+The pull request that merges this file and the SKL-312 handoff comment name those runs.
 
 | Guard | Command | Where it ran | Exit status |
 |---|---|---|---|
@@ -289,8 +297,6 @@ After that commit, the only change this branch makes is to this section.
 - Guard 2 needs the private patterns, which exist only as the CI secret `LEAK_DENYLIST`.
   Run locally, the command exits 2 with `INCOMPLETE` because no private pattern is loaded, so its status above is the CI one.
   The public patterns alone, `uv run --locked python scripts/leak_scan.py`, exit 0 locally.
-- The `ci` workflow runs guards 1, 2 and 3 in its `checks` job and guard 4 in its `discovery` job on every pull request head, the merged one included.
-  The guard runs of the final head are therefore those two jobs on the pull request that merges this file.
 - No guard rejected a spike file, and no exemption entry was added: no tracked file outside `spikes/SKL-312/` changed.
 - One normalization was made before any guard ran.
   SKL-312 names the third runner option by its host name, and `## Infrastructure` calls it "the self-hosted worker", because a consumer's host name does not belong in the public base repository.

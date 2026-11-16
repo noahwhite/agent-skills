@@ -8,13 +8,15 @@ It holds run ids, verdicts and counts only.
 - Suite run records: 24, of which graded: 24, replayed: 24
 - Replayed runs that match their recorded verdict: 24 of 24
 - Mapping probes that landed as mapped: 3 of 3
-- Recorded runs listed and not replayed: 0 suite run records and 86 runs in records that predate the runner (see the last section); no parity is claimed for them
+- Recorded runs listed and not replayed: 0 suite run records, and from before the runner 83 runs with 85 grade lines in call records and 1 kept in prose only (see the last section); no parity is claimed for them
 
 ## Zero model API calls
 
-- Providers in the eval, from promptfoo's export: `exec: python3 provider.py`, a local script.
-- Assertion types in the eval: `python`, none model-graded.
-- promptfoo's own count for the eval: 0 tokens, cost 0.
+The report is written only when promptfoo's export of each of the three evals (the replay, the probes, the probes retried) says all of this.
+
+- The only provider: `exec: python3 provider.py`, the script in this directory.
+- The only assertion type: `python`, which runs `grade.py` and is not model-graded.
+- promptfoo's own count: 0 tokens, and no result with a cost.
 - `run.sh` starts promptfoo with `env -i`, so no provider credential reaches it.
   The variable names the provider script saw: `HOME`, `LANG`, `PATH`, `PROMPTFOO_CACHE_ENABLED`, `PROMPTFOO_CONFIG_DIR`, `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION`, `PROMPTFOO_DISABLE_REMOTE_GENERATION`, `PROMPTFOO_DISABLE_SHARING`, `PROMPTFOO_DISABLE_TELEMETRY`, `PROMPTFOO_DISABLE_UPDATE`, `SKL312_WORK`, `TMPDIR`.
 
@@ -24,8 +26,15 @@ One row per suite run record under `skills/story-to-done/evals/qa-unfinished-own
 The recorded verdict is the record's `outcome` and, in brackets, each grade `grader.py` gave when the suite ran.
 The promptfoo verdict is what promptfoo reported after `grade.py` ran the committed `grader.py` on the rebuilt run.
 The mapped outcome is the promptfoo outcome the mapping table gives the recorded outcome.
-Grader output compares each rebuilt grade file with the lines the record kept, a placeholder the suite wrote standing for any text.
+Grader output compares each rebuilt grade file with the lines the record kept: `identical` is line for line, with a placeholder the suite wrote standing for any text.
+The verdict is checked apart from that text, grade by grade.
 Placeholders names each kind the suite wrote into the grader inputs or the call record; the replay grades that text as committed.
+
+The grader and the scenario fixtures a run is graded with are the committed ones.
+A record names the harness commit it was graded at and carries no hash of the grader or the fixtures; the replayed records name `e46615c471d7bdd2c09a8ffeebaa5fdf9540b44f`.
+The replay compares the grader and the fixtures with the commit that added the record and, where the clone holds it, with that harness commit, and lists a record as not replayed when either differs.
+A harness commit of a squash-merged branch is on no branch, so a clone holds it only once it is fetched by id.
+Without it the match is with the tree at the commit that added the record, which is then taken, not shown, to be the tree the suite graded with.
 
 | Run id | `grader.py` verdict (recorded) | promptfoo verdict | Mapped outcome | Grader output | Placeholders | Match |
 |---|---|---|---|---|---|---|
@@ -103,7 +112,7 @@ None.
 ### Records that predate the suite runner
 
 The eval README keeps these records as history.
-A file holds several runs as call lines and one grade line each, with no run record: no scenario name, no grader inputs and no session ledger.
+A call file holds several runs as call lines and one grade line for each expectation a run was graded on, with no run record: no scenario name, no grader inputs and no session ledger.
 Each grade came from the grader at that file's own commit, not the current one.
 Replaying them would compare two graders, so they are listed and not replayed.
 

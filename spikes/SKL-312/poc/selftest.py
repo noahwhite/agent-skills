@@ -7,13 +7,20 @@ It does what promptfoo does in `run.sh` (call provider.py per run id, hand its o
 grade.py, write an export) in this process, then:
 
 - writes the report from that replay and requires it to be the committed compare.md, apart
-  from the two lines that name promptfoo's version and its environment;
-- breaks one thing at a time, in the export, the provider's log or a copy of the records, and
-  requires the report to refuse it or to exit 1.
+  from the two lines that name promptfoo's version and its environment, and requires the
+  committed envelope.json to be an envelope of the first replayed run with the variable names
+  the committed compare.md lists;
+- requires `report` to exit 1 when a file it writes was not there or held other text;
+- breaks one thing at a time, in the export, the provider's log, the lists or a copy of the
+  records, and requires the report to refuse it or to exit 1;
+- requires the rules that read history (a changed case, a shallow clone) and the way grade.py
+  reads the grader to hold.
 
-The repository's test job collects `tests/` only, and the spike keeps every tracked change
-under `spikes/SKL-312/`, so this file is run by hand: it exits 0 when every check holds and 1,
-naming the check, when one does not. It writes under a temporary directory only.
+It does not run `run.sh`, so the prerequisites, the install, promptfoo itself and its export
+are checked only by running that command. The repository's test job collects `tests/` only,
+and the spike keeps every tracked change under `spikes/SKL-312/`, so this file is run by hand:
+it exits 0 when every check holds and 1, naming the check, when one does not. It writes under
+a temporary directory only.
 """
 
 import contextlib
@@ -23,6 +30,7 @@ import json
 import os
 import pathlib
 import shutil
+import subprocess
 import sys
 import tempfile
 
@@ -69,16 +77,14 @@ def replay(work: pathlib.Path) -> pathlib.Path:
 
 
 def report(work: pathlib.Path) -> tuple[object, str]:
-    """What `compare.py report` does with a work directory: its exit status or the refusal's
-    name, and the compare.md it wrote."""
-    out = work / "out"
-    shutil.rmtree(out, ignore_errors=True)
+    """What `compare.py report` makes of a work directory, whatever files were there before:
+    0 or 1 as every run and probe landed as mapped or not, or the refusal's name, and the
+    compare.md it gives."""
     try:
-        with contextlib.redirect_stderr(io.StringIO()):
-            status = compare.report(work, out)
+        text, _, mapped = compare.build(work)
     except (records.Unusable, compare.ContractChange) as refusal:
         return type(refusal).__name__, ""
-    return status, (out / "compare.md").read_text()
+    return (0 if mapped else 1), text
 
 
 def edit_json(path: pathlib.Path, change) -> None:
@@ -104,6 +110,32 @@ def main() -> int:
         check("the replay without promptfoo exits 0", status == 0)
         check("its compare.md is the committed one", kept(written) == kept(committed))
         first_id = compare.listed(base / "tests.csv")[0]
+
+        def committed_envelope() -> bool:
+            envelope = (records.POC / "provider-contract" / "envelope.json").read_text()
+            try:
+                names = compare.environment_names(envelope)
+            except compare.ContractChange:
+                return False
+            listed = NOT_PROMPTFOO[1] + " " + ", ".join(f"`{name}`" for name in names) + "."
+            return json.loads(envelope)["argv"][1].get("value") == first_id and listed in committed.splitlines()
+
+        check("the committed envelope.json is the first replayed run's, with the variable names compare.md lists",
+              committed_envelope())
+
+        out = scratch / "out"
+
+        def written_again() -> int:
+            with contextlib.redirect_stderr(io.StringIO()):
+                return compare.report(base, out)
+
+        check("a report whose two files were not there exits 1", written_again() == 1)
+        check("the same report again exits 0", written_again() == 0)
+        for name in ("compare.md", "provider-contract/envelope.json"):
+            (out / name).unlink()
+            check(f"a report whose {name} was deleted exits 1", written_again() == 1)
+            (out / name).write_text((out / name).read_text() + "\n")
+            check(f"a report whose {name} held other text exits 1", written_again() == 1)
 
         def broken_export(name: str, file_name: str, change, wanted: object) -> None:
             """One change to a copy of the replay's work directory."""
@@ -139,6 +171,27 @@ def main() -> int:
                       lambda document: results(document)[0].update(success=True, failureReason=0), 1)
         broken_export("a probe whose logged exit status is not the mapped one fails the report", "provider-log/probe_void.jsonl",
                       lambda path: path.write_text(json.dumps({"status": 64, "kind": "unusable"}) + "\n" + path.read_text()), 1)
+        broken_export("an export that names another provider is refused", "results.json",
+                      lambda document: document["config"]["providers"][0].update(id="synthetic-remote-model"), "ContractChange")
+        broken_export("an export with a second assertion type is refused", "results.json",
+                      lambda document: document["config"]["defaultTest"]["assert"].append({"type": "llm-rubric"}), "ContractChange")
+        broken_export("an export that counts tokens is refused", "results.json",
+                      lambda document: document["results"]["stats"]["tokenUsage"].update(total=123), "ContractChange")
+        broken_export("an export with a result that has a cost is refused", "results.json",
+                      lambda document: results(document)[0].update(cost=5), "ContractChange")
+        broken_export("a probe export that names another provider is refused", "probes-first.json",
+                      lambda document: document["config"]["providers"][0].update(id="synthetic-remote-model"), "ContractChange")
+        broken_export("a retried probe export that counts tokens is refused", "probes.json",
+                      lambda document: document["results"]["stats"]["tokenUsage"].update(total=123), "ContractChange")
+        log = f"provider-log/{records.file_name(first_id)}.jsonl"
+        broken_export("a replayed run the provider logged with another exit status is a mismatch", log,
+                      lambda path: path.write_text(json.dumps({"status": 64, "kind": "replayed"}) + "\n"), 1)
+        broken_export("a provider log line that is not JSON is refused", log,
+                      lambda path: path.write_text("{\n"), "ContractChange")
+        broken_export("a missing envelope is refused", "envelopes",
+                      lambda path: (path / f"{records.file_name(first_id)}.json").unlink(), "ContractChange")
+        broken_export("a probe list that is not the one the replay writes is refused", "probes.csv",
+                      lambda path: path.write_text("run_id\nprobe:void\n"), "Unusable")
 
         def broken_records(name: str, change, wanted: object, then=None) -> None:
             """One change to a copy of the records, replayed again from the start."""
@@ -197,11 +250,61 @@ def main() -> int:
                        lambda copied: record(copied, lambda r: r["verdicts"].update(extra="pass")), "Unusable")
         broken_records("no record at all is refused",
                        lambda copied: [path.unlink() for path in copied.glob("*.json")], "Unusable")
+        broken_records("a verdict the suite does not write is refused",
+                       lambda copied: record(copied, lambda r: r["verdicts"].update({next(iter(r["verdicts"])): "maybe"})), "Unusable")
+        broken_records("a grade line that is not text is refused",
+                       lambda copied: record(copied, lambda r: r["grades"][graded].__setitem__(0, 7)), "Unusable")
+        broken_records("a grader input the run directory cannot hold is a provider error the report names",
+                       lambda copied: record(copied, lambda r: r["grader_inputs"].update({"qa-round-1.json/child": "text"})),
+                       (1, "the provider's log holds `unusable` with exit status 64 for this run"))
 
         os.environ["SKL312_WORK"] = str(scratch / "unknown")
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
             status = provider.main(["provider.py", "no-such-run", "{}", "{}"])
-        check("a run id with no record exits 64, not the void status", status == provider.UNUSABLE)
+        check("a run id with no record exits 64, not the void status", status == records.UNUSABLE)
+
+        # The rules that read history, with the real comparison: every record was added after
+        # the repository's first commit, where the case's grader and fixtures did not exist.
+        graded_ids = {run_id for run_id in records.run_ids() if records.load(run_id)["outcome"] in records.GRADED}
+        first_commit = records.git("rev-list", "--max-parents=0", "HEAD").stdout.split()[0]
+        saved = records.added_in
+        records.added_in = lambda run_id: first_commit
+        try:
+            left_out = compare.plan()[1]
+        finally:
+            records.added_in = saved
+        check("a record added at a commit whose grader and fixtures were others is listed, not replayed",
+              set(left_out) == graded_ids and all("changed after the commit that added the record" in why for why in left_out.values()))
+
+        saved = records.git
+        records.git = lambda *args: (subprocess.CompletedProcess(args, 0, "true\n", "")
+                                     if args == ("rev-parse", "--is-shallow-repository") else saved(*args))
+        try:
+            records.added_in.__wrapped__(first_id)
+            refused = False
+        except records.Unusable:
+            refused = True
+        finally:
+            records.git = saved
+        check("a shallow clone is refused", refused)
+
+        # grade.py with a stand-in grader: a last line the suite reads as PASS once stripped,
+        # and a line before it that must not reach promptfoo.
+        work = scratch / "graded"
+        shutil.copytree(base, work)
+        stand_in = scratch / "grader.py"
+        stand_in.write_text('print("a line that quotes the run")\nprint("PASS ")\n')
+        os.environ["SKL312_WORK"] = str(work)
+        saved, records.GRADER = records.GRADER, stand_in
+        try:
+            taken = grade.get_assert(json.dumps({"run_dir": f"runs/{first_id}",
+                                                 "grades": records.grades_to_take(records.load(first_id))}), {})
+        finally:
+            records.GRADER = saved
+        check("a grade whose last line is PASS before trailing space passes, as the suite reads it", taken["pass"] is True)
+        check("what the grader prints is not handed to promptfoo", "quotes the run" not in json.dumps(taken))
+        check("a table cell with a column separator or a line break stays one cell",
+              compare.row("run|extra", "two\nlines") == "| run\\|extra | two lines |")
 
     print(f"selftest: {len(failed)} failed" if failed else "selftest: every check holds")
     return 1 if failed else 0
