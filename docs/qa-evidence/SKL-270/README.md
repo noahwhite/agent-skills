@@ -131,3 +131,54 @@ Details, DoD independently reviewed:
 - PR 248's head did not change: the merge commit `c8ca6d0881dc5644a3dcee4f510d2764bab72d9c` squashes `a93708fc3eff87a5f4224f59af10268cc3aa18d2`, merged at 07:09:55Z.
 
 Closing decision: every item is met; SKL-270 moves to Done once this evidence is merged.
+
+## QA round 4
+
+Date: 2026-11-16 UTC, independent QA round 4, after the owner reopened SKL-270 on 2026-11-16 and added AC7, AC8 and AC9.
+Path: `no-deployment`, selected by the `qa-verification` copy of `select-path.py`, with `--recorded-path` from the latest step 12 note.
+Target: `main` at `f46a7685ee964bb8a5166b76a5166960c5d74fb5`, the squash merge of PR 276 (reviewed head `c4769742acefe2b127d4fe1b0d44c76385345355`), confirmed on `origin/main` with `git merge-base --is-ancestor`.
+Environment: none; the profile sets `environments: []`, so no build SHA applies.
+Fixtures: none.
+The raw output is attached to SKL-270 as `SKL-270-qa-round-4-assertions.txt`; there is no visual surface, so no screenshot applies.
+The blockers SKL-162, SKL-269 and SKL-282 are Done.
+
+| Item | Verdict | Evidence |
+|---|---|---|
+| AC1: script | Verified | 112 of 112 black-box cases pass across `shared/` and the three vendored copies, including profile discovery; the copies are mode `100644` with one blob and the generated header above the shebang; `select-path.py` and `skills.json` are unchanged since PR 248. |
+| AC2: unit tests | Verified | `tests/test_select_path.py` passes (55 passed) and is unchanged since PR 248. |
+| AC3: story-to-done | Verified | Arguments, step 1 and the step 5 report read at the target; the two AC3 rules that AC7 and AC8 replace are replaced as those ACs state. |
+| AC4: other skills | Verified | "Select the path", "The run's path" and the step 12 `path:` note line read at the target. |
+| AC5: repository guards | Verified | Same guard run as AC9. |
+| AC6: docs and compatibility | Verified | `shared/README.md` keeps the pinned substring and names `select-path.py`; the three `compatibility:` lines name python3 and PyYAML>=6. |
+| AC7: reopened story keeps its path | Verified | Step 1 passes the step 12 `path:` line in every state routed to a role; details below. |
+| AC8: closing report keeps the selected path | Verified | Step 1 quotes a role's `ask:` line with the selected path; details below. |
+| AC9: repository guards | Verified | Details below. |
+| DoD: all acceptance criteria met | Verified | AC1 to AC9. |
+| DoD: tests written and passing | Verified | AC2, AC7, AC8 and AC9. |
+| DoD: independently reviewed | Verified | PR 248 under the owner's amendment of 2026-11-16, and PR 276's own review of record before its merge; details below. |
+| DoD: docs updated | Verified | AC3, AC4, AC6, AC7 and AC8. |
+| DoD: verified in a deployed environment (if needed) | Correct by design | Not needed: the path is `no-deployment`. |
+| DoD: no critical bugs or regressions | Verified | Full suite and CI passed on the reviewed head and on `main`. |
+
+Details:
+
+- AC7:
+  - `skills/story-to-done/SKILL.md` step 1 line 140 adds `--recorded-path` with the latest `engineering-workflow` step 12 note `path:` line in every state that routes to step 2 or step 3, and nothing otherwise; the `in_deployment_review`-only rule is gone.
+  - `test_the_recorded_path_is_passed_in_every_state_routed_to_a_role` applies that rule to six states and three paths, and `test_a_reopened_story_in_progress_passes_its_recorded_path` runs the vendored script for a reopened `in_progress` story, spike included, and asserts the recorded path wins.
+- AC8:
+  - Step 1 line 144 quotes a role's `ask:` line in the end-state report with the `path: <value>` step 1 selected.
+  - Line 145 reports `path: unresolved` only for a run that stops before selection, naming the step 1 `ask:` and exit 16 stops; the Arguments line keeps `path: unresolved` for earlier stops, as AC3 still requires.
+  - `test_a_role_ask_handback_keeps_the_selected_path_in_the_closing_report` and `test_path_unresolved_is_reported_only_for_a_stop_before_selection` cover the two cases.
+- AC9:
+  - At the target, `uv run --locked pytest -q` passed locally (2655 passed), `scripts/vendor_shared.py --check` and the public leak scan exited 0, and `--require-private` exited 2 locally with "leak scan INCOMPLETE", as decided.
+  - CI reports 2673 passed on the same suite: 18 tests in `tests/test_story_to_done.py` are parametrized over the awk binaries on `PATH`, and the CI image has one more awk than the local host, which has only `mawk`.
+  - `skills-ref validate` passed for `story-to-done`, `engineering-workflow` and `qa-verification`, and `bash scripts/smoke-opencode.sh` discovered all 18 skills.
+  - CI run 43795285467 on the reviewed head passed `checks`, which runs the leak scan with `--require-private`, and `discovery`; CI run 43797857803 on `main` at the target passed both jobs.
+  - PR 276 changes only `skills/story-to-done/SKILL.md` and `tests/test_story_to_done.py`.
+  - Its pin changes replace the two step 1 pins that AC7 and AC8 rewrite with the three new lines and add a digest of step 1's unpinned lines; no other pin or guard changed.
+- DoD, independently reviewed:
+  - Review 5914678836 on PR 276 is `COMMENTED`, its `commit_id` and first line name the head `c4769742acefe2b127d4fe1b0d44c76385345355`, and it reports no findings.
+  - Its reviewer is GPT-6.1 Sol (`gpt-6.1-sol`) and its adjudicator is DeepSeek V4.1 Flash (`deepseek/deepseek-flash`), the seats in `profile.review` at that head.
+  - It was posted at 03:22:46Z, before PR 276 merged at 03:23:01Z on the same head; the merged commit is signed and verified.
+
+Closing decision: every item is met; SKL-270 moves to Done once this evidence is merged.
