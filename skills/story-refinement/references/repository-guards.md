@@ -4,6 +4,7 @@ The repository guard check that Step 1 item 6 of `SKILL.md` runs.
 This file is hand-written and edited directly.
 
 The facilitator runs this check in Step 1, after the tracker-write preflight and before any voter launches, whenever the story's acceptance criteria add or change any tracked file.
+A [Short path](../SKILL.md#short-path) ending skips this check.
 The guards and their commands come from the repository under refinement; this skill names guard kinds only.
 
 1. **Guard list.** The facilitator lists the guards of the repository under refinement that every added or changed tracked file must pass, not only checks on the files the story edits: test modules that scan tracked files, linters, schema or spec validators, and leak or spelling scanners.

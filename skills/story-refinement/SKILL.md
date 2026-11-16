@@ -23,7 +23,7 @@ The process has two stages and four steps.
 Stage 1 is refinement: independent inputs, then reconciliation and the accept round.
 Stage 2 is pointing: secret votes, then a consensus check and, where the check calls for them, one high/low discussion and one re-vote ending in a recorded estimate or an unpointed stop.
 A Bug, an Investigation or a Spike is unestimated: it runs Stage 1 only and is never pointed, as [Unestimated issue types](#unestimated-issue-types) states.
-A refine request on a story that is already refined, pointed and unblocked ends at the [Short path](#short-path), before any stage runs.
+A refine request on a story that meets every [Short path](#short-path) condition, or is already in or past ready, ends at the short path before any stage runs.
 Each step names its inputs, outputs, and stop conditions.
 
 ## Arguments
@@ -112,18 +112,18 @@ Never retry a denied write through a different tool or server.
 
 A refine request on a story that is already refined, pointed and unblocked moves it to ready without a ceremony.
 The facilitator evaluates the short path immediately after Step 1 item 1 (story read), applying the Step 1 item 3 type check within that evaluation, before Step 1 item 2 (roster check) and before any voter launch, preflight comment or tracker write.
-It applies only when every condition holds, each read from the tracker: (a) the story is an estimated type (`type: estimated`); (b) refined: it carries a Refinement record comment and its latest Accept round result comment has outcome `accepted`; (c) pointed: its tracker estimate, read with `linear api` and never from `linear issue view`, is set to a value on the `profile.tracker.estimate_scale` sequence; (d) unblocked: `linear issue relation list <ID>` shows every blocking relation in both directions with the blocker in `profile.tracker.states.done`, where a canceled or duplicate blocker is not done; (e) ready-eligible: the story is in `profile.tracker.states.backlog`, its priority and assignee are set, the blocker Definition of Ready box exists, and every other Definition of Ready box is already ticked.
+It applies only when every condition holds, each read from the tracker: (a) the story is an estimated type (`type: estimated`); (b) refined: it carries a Refinement record comment and its latest Accept round result comment has outcome `accepted`; (c) pointed: its tracker estimate, read with `linear api` and never from `linear issue view`, is set to a value on the `profile.tracker.estimate_scale` sequence; (d) unblocked: `linear issue relation list <ID>` shows every blocking relation in both directions with the blocker in `profile.tracker.states.done`, where a canceled or duplicate blocker is not done; (e) ready-eligible: the story is in `profile.tracker.states.backlog`, its priority is set and its assignee is `profile.tracker.assignee`, the blocker Definition of Ready box exists, and every other Definition of Ready box is already ticked.
 On the path the facilitator skips the roster check, the exemplar lookup and anchor table, the tracker-write preflight, the repository guard check, the voter launches and Steps 2 to 4, runs no pointing round, and does not ask the owner to confirm the path.
 Each todo item of a skipped step is left open and named as not done with the reason `short path`.
 The product owner verifies every clause of the "No blocking stories, no unresolved external dependencies, and no other story already owns this scope" Definition of Ready box from what the story records, the relation-list evidence for the blockers and the story's recorded backlog search for ownership, ticks the box with that evidence, moves the story to `profile.tracker.states.ready`, reads back both the box and the state, and posts the Triage record from [references/refinement-record.md](references/refinement-record.md) with the priority as read back.
-The path makes no new priority decision, so the priority step under [Triage](#triage) does not apply: the Triage record's `Priority comparison:` line repeats the comparison on the story's latest Triage record, or reads `set before this invocation` when the story has none.
+The path makes no new priority decision, so the priority step under [Triage](#triage) does not apply: the Triage record's `Priority comparison:` line repeats the comparison on the story's latest Triage record, and a story with no earlier Triage record cannot have its priority verified, so no write is made and the normal ceremony runs from Step 1 item 2.
 That move follows the promotion rule in `persona-product-owner/SKILL.md`.
 If the product owner cannot verify a clause from what the story records, no write is made and the normal ceremony runs from Step 1 item 2.
 A story in `profile.tracker.states.backlog` that fails any of conditions (a) to (e) runs the normal ceremony as today: an unrefined or unpointed story is refined or pointed, and a story with a blocker not done stays out of `profile.tracker.states.ready`.
-A Bug, an Investigation, a Spike, and a story whose filing template has no blocker Definition of Ready box never take the path.
+A Bug, an Investigation, a Spike, and a story whose filing template has no blocker Definition of Ready box never take the path, and a story in `profile.tracker.states.triage` runs the normal ceremony.
 A story already in `profile.tracker.states.ready` runs no ceremony, takes no write and is reported `short path: already ready`; one in `profile.tracker.states.in_progress` or a later state is excluded, runs no ceremony, takes no write and is reported `short path: excluded`.
 The product owner authors every write on the path; when the team of `STORY_ID` differs from `profile.tracker.team_key`, the differing-team rule in Team resolution in [references/linear.md](references/linear.md) confirms `profile.tracker.states.ready`, `profile.tracker.states.backlog` and each label name on that team before the write.
-A denied or failed write stops the path with `needs input` under [Denied tracker writes](#denied-tracker-writes) and is never retried through another tool; with the preflight skipped, the path's first write is the check that decides whether tracker writes are permitted.
+A denied or failed write stops the path with `needs input` under [Denied tracker writes](#denied-tracker-writes) and is never retried through another tool; the writes run in the order above, so a denied Triage record post leaves the ticked box and the move to `profile.tracker.states.ready` in place, read back, and the stop names the denied write.
 "Does not ask" never overrides that stop or an owner authorization that rule requires; an unset priority is a failed condition (e), so the normal ceremony and its priority stop under [Triage](#triage) apply.
 Every short-path ending names its outcome in the closing message, `short path: moved to ready` on the move, and carries `exemplars: not looked up` and `anchors: not looked up`.
 
@@ -134,7 +134,7 @@ Every short-path ending names its outcome in the closing message, `short path: m
 - **Inputs:** the story description, acceptance criteria, comments, and formal relations; the profile; the capability references; the Definition of Ready and Definition of Done template from the matching filing skill, where that template has them.
 - **Process:**
   1. With the todo list already created (Read first), read the story completely, including its labels and `linear issue relation list <ID>` for every blocker.
-     Then evaluate the [Short path](#short-path); when it applies, Steps 1 to 4 end here.
+     Then evaluate the [Short path](#short-path); when it applies or reports `short path: already ready` or `short path: excluded`, Steps 1 to 4 end here.
   2. Validate the refinement roster before the tracker-write preflight and before any voter launch.
      Resolve the profile through the first-existing-file rule in [references/profile.md](references/profile.md) (the `shared/profile.md` rule), never a repository-only read.
      Stop with a message naming the violated requirement when `profile.refinement.reviewers` does not hold exactly three entries, when fewer than three reviewers are enabled, when a required role (`facilitator`, `product_owner`, `reviewers`) is unset, when a reviewer `family` is missing or empty, when two reviewer families are equal, or when two reviewer model ids are equal.
@@ -428,7 +428,7 @@ When `metrics` is on, the metrics summary is the one comment the SM/EM posts out
 - Set `profile.tracker.states.ready` only when no blocker remains.
 - For a Bug, an Investigation or a Spike, the PO also applies the ready gate and the `State:` line in [Unestimated issue types](#unestimated-issue-types).
 - Leave blocked siblings in `profile.tracker.states.backlog` with the blocker Definition of Ready box unchecked.
-- Priority is the PO's decision on every refinement outcome: the story moving to `profile.tracker.states.ready`, the story staying in `profile.tracker.states.backlog`, and each split sibling.
+- Priority is the PO's decision on every refinement outcome except a [Short path](#short-path) move, which reuses the read-back priority: the story moving to `profile.tracker.states.ready`, the story staying in `profile.tracker.states.backlog`, and each split sibling.
   The PO decides, applies and reads back a priority before the invocation ends and before any move to `profile.tracker.states.ready`, unless the ceremony stops on priority as this bullet states.
   The PO chooses the priority by comparing the story with at least one comparable story already prioritised in the team of `STORY_ID`.
   The PO applies the priority and reads it back as a PO-authored tracker write.
@@ -452,6 +452,7 @@ For a Bug, an Investigation or a Spike, no pointing record is posted: the refine
 Every refinement comment carries the `Exemplars:` line and its skip lines, and every pointing record the `Anchors:` line and its skip lines, naming keys only, never an anchor's point value; for a Bug, an Investigation or a Spike the refinement comment carries `Anchors: not pointed` instead.
 For a Bug, an Investigation or a Spike, the refinement comment also carries the `Scope signal:` line, and an oversize split of a Bug or an Investigation posts the split comment that maps every acceptance criterion or findings-scope item to a slice and every slice criterion or item to exactly one criterion or item of the issue it is split from.
 When the [references/repository-guards.md](references/repository-guards.md) check ran, the refinement comment also records the guard list with each guard's command and discovery source; for each guard run, its command, exit status and result; each sample's provenance and coverage limits; and each rejection with its resolution and passing re-run, with no secrets under item 7 of [references/repository-guards.md](references/repository-guards.md).
+A [Short path](#short-path) ending posts at most its Triage record and records none of the other items this section lists.
 
 ## Metrics
 
