@@ -137,12 +137,12 @@ Otherwise select the run's path before any role is spawned.
 From inside the target repository, run `python3 <skill dir>/scripts/select-path.py --title='<story title>'`, where `<skill dir>` is the absolute directory your runtime loaded this skill from.
 Add `--label='<name>'` for each label name the story carries as read from the tracker, under the differing-team rule in [references/linear.md](references/linear.md) "Team resolution"; the script compares names only.
 Write each `'` inside the title or a label as `'\''`, so the shell expands nothing in either.
-In every state this step routes to a role (step 2 or step 3), add `--recorded-path` with the value of the latest `engineering-workflow` step 12 note line whose whole text is exactly `path: spike`, `path: no-deployment` or `path: deployed`, whenever the story has one, and add nothing otherwise, so a reopened story, spike included, keeps its path.
+In every state that routes to step 2 or step 3 below, add `--recorded-path` with the value of the latest `engineering-workflow` step 12 note line whose whole text is exactly `path: spike`, `path: no-deployment` or `path: deployed`, whenever such a step 12 note exists, and add nothing otherwise, so a reopened story, spike included, keeps its path.
 The script prints one line, the path or an `ask:` line, and exits 0; any other exit status is no path: stop and report its stderr line.
 On an `ask:` line, ask the user, accept only `spike`, `no-deployment` or `deployed` as the answer, which is the path, and spawn no role until answered.
 Never infer a path from prose, and read one only from an exact `path:` line as above.
-When a spawned role's handback reports an `ask:` line, stop, and quote that line in the step 5 report with the `path: <value>` line, `<value>` being the path this step selected.
-Report `path: unresolved` only for a run that stops in this step before it selects a path: on an `ask:` line the user does not answer with one of the three values, or on exit 16 or any other nonzero exit status.
+When a spawned role's handback reports an `ask:` line, stop, and quote that line in the report of that end state with the `path: <value>` line, `<value>` being the path this step selected.
+Report `path: unresolved` only for a run that stops before this step selects a path, in this step or an earlier one; in this step that is an `ask:` line the user does not answer with one of the three values, or exit 16 or any other nonzero exit status.
 The selected path governs the whole run.
 
 Then pick the starting point:
