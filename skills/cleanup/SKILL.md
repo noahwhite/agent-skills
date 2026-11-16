@@ -17,7 +17,7 @@ It deletes; it never implements, reviews, or verifies a story.
 ## Read first
 
 - [references/profile.md](references/profile.md) - find the profile and this skill's overlay before anything else.
-  Every value this skill names comes from the profile: the tracker team, the branch prefixes, the merge method, the scratch base, and the evidence directory.
+  Every value this skill names comes from the profile: the tracker team, the branch prefixes, the merge method, the scratch base, the evidence directory, and the declared regenerable directories.
 - [references/todo-tracking.md](references/todo-tracking.md) - required before step 1: one item per named story key, per inventory source, per removal, per tracker attachment, and for the final report.
 - [references/linear.md](references/linear.md) - background for the tracker: resolving an issue, the status lifecycle the run leaves alone, and the comment path.
   The exact commands this skill runs are in steps 1 and 5.
@@ -73,6 +73,8 @@ Sources, all of them:
 - **Worktrees.** Every entry `git worktree list` reports whose path or branch carries the key, which includes worktrees any worktree helper created.
   Under each worktree's line, the inventory lists by exact path every entry its status read (step 3) reports.
   Each regenerable ignored entry the run will delete (step 3) has disposition `remove`; the run will delete it only when the worktree passes every step 3 check, so the inventory evaluates those checks before it prints, and step 3 evaluates them again before deleting.
+  Each regenerable entry line, `remove` or `keep`, ends with `(source: fixed list)` or `(source: profile)`.
+  A name that is both on the fixed list and declared is labelled `fixed list`; `profile` is used only for a name not on the fixed list.
   A regenerable entry in a worktree that fails any of them is `keep`, and each other entry is `refuse`, with its kind.
   Under a recorded instruction (step 3) that waives untracked entries, an untracked entry of a worktree that passes the instruction's checks is `remove` instead.
 - **Local branches.** Every branch whose name carries the key under a prefix in `profile.git.branch_prefixes`.
@@ -138,11 +140,11 @@ Naming the worktree or branch authorizes every loss in it; naming a loss authori
 A worktree is named by its path and a branch by its name, and naming either names both the worktree and the branch it holds, because the branch cannot be removed while that worktree holds it.
 "Don't skip anything" without that scope does not count, and neither does any other text that names neither an artifact nor a loss.
 The instruction waives the merge-evidence guard only when it names the worktree or branch or names unlanded commits, and waives untracked entries only when it names the worktree or branch or names untracked entries.
-It waives nothing else: tracked modifications, ignored entries that the regenerable list does not qualify (including a symlink or file named like a list entry), a detached HEAD, the worktree hosting the current session, remote branch deletion, the open-PR guard, token-boundary attribution and the read-back all still refuse or apply.
+It waives nothing else: tracked modifications, ignored entries that neither the fixed list nor `profile.cleanup.regenerable_dirs` qualifies (including a symlink or file named like a fixed-list or declared name), a detached HEAD, the worktree hosting the current session, remote branch deletion, the open-PR guard, token-boundary attribution and the read-back all still refuse or apply.
 Every other check in this step, such as a worktree git cannot remove, the status-read rules and the regenerable-entry checks, holds as well.
 With such an instruction, for a worktree or local branch that fails merge evidence or has untracked entries, the run takes these steps in order:
 
-1. It refuses the worktree before deleting anything if it has a tracked modification, ignored entries that the regenerable list does not qualify (including a symlink or file named like a list entry), a detached HEAD, or is the worktree hosting the current session, and refuses its branch if the worktree is refused.
+1. It refuses the worktree before deleting anything if it has a tracked modification, ignored entries that neither the fixed list nor `profile.cleanup.regenerable_dirs` qualifies (including a symlink or file named like a fixed-list or declared name), a detached HEAD, or is the worktree hosting the current session, and refuses its branch if the worktree is refused.
    It also refuses before deleting anything when the instruction does not authorize every loss removal would incur that normal merge evidence does not cover: untracked entries need an instruction that waives them, and a worktree or branch without merge evidence needs one that waives the merge-evidence guard.
    It also refuses before deleting anything a worktree git cannot remove, as the worktree rules below define it: the main working tree, a worktree `git worktree list --porcelain` marks `locked`, and a worktree whose submodule paths are not removable with nothing lost.
    An untracked directory is listed at any depth with `find ./<path> -print0`, whose output is split on NUL so each path arrives exactly as it is on disk, and a listing that exits non-zero refuses the worktree.
@@ -179,9 +181,14 @@ Remove in this order, so a branch is never refused because a worktree still hold
   - **Status read.** Every status read in this step runs `git status --porcelain --ignored -z` inside the worktree and must exit 0; a read that exits non-zero refuses the worktree, whatever it printed.
     The `-z` form lists the same entries as `git status --porcelain --ignored`, separated by NUL and never quoted, so a path with a space, a quote or a non-ASCII character reaches the checks below exactly as it is on disk.
   - **Regenerable ignored entries.** An ignored entry is regenerable when `git status --porcelain --ignored -z` reports it with the ignored code `!!` as a directory (with a trailing `/`) whose final path component, with that trailing `/` removed, is one of `.venv`, `venv`, `node_modules`, `__pycache__`, `.pytest_cache`, `.mypy_cache`, `.ruff_cache`; so `tests/__pycache__/` qualifies.
+    An ignored entry is also regenerable when `git status --porcelain --ignored -z` reports it with the ignored code `!!` as a directory (with a trailing `/`) whose final path component, with that trailing `/` removed, equals a name in `profile.cleanup.regenerable_dirs`, compared exactly and with letter case (unset means `[]`, and the run does not stop to ask for it); so `apps/web/dist/` qualifies when `dist` is declared.
+    A declared name is compared as a plain string, with no glob or shell expansion, and a duplicate entry has no effect.
+    "Regenerable entry" in steps 2, 3 and 6 means an entry that either source, the fixed list or the profile, qualifies, and every other rule in this step for a regenerable entry applies to a declared one unchanged.
     An untracked entry (code `??`) is never regenerable, even with a matching name and a trailing `/`.
+    An untracked entry (`??`), a symlink, or a file named like a declared entry is never regenerable.
     A package manager or test runner recreates these directories, so deleting them loses nothing.
-    Only when the worktree passes every other check in this step and its status lists no other entry, the run first lists the contents of each such directory at any depth, including entries whose names begin with a dot and without following symlinks (`find ./<path> -print` does; `ls -R` hides dot entries and does not qualify), and refuses the worktree when a listing holds a nested repository: an entry named `.git` at any depth, whether a directory or a file.
+    A declared directory is regenerable on the consumer's declaration alone: the skill cannot check its content, so the profile answers for the name.
+    Only when the worktree passes every other check in this step and its status lists no other entry, the run first lists the contents of each regenerable directory, fixed-list or declared, at any depth, including entries whose names begin with a dot and without following symlinks (`find ./<path> -print` does; `ls -R` hides dot entries and does not qualify), and refuses the worktree when a listing holds a nested repository: an entry named `.git` at any depth, whether a directory or a file.
     A bare repository, a directory holding `HEAD`, `objects` and `refs` side by side, counts as a nested repository too.
     A listing that exits non-zero refuses the worktree, whatever it printed.
     It also requires a per-name content check before an entry counts as regenerable:
@@ -189,6 +196,7 @@ Remove in this order, so a branch is never refused because a worktree still hold
     - `.venv` and `venv` have `pyvenv.cfg` at their top: a regular file of that name directly inside the directory.
     - `.pytest_cache`, `.mypy_cache` and `.ruff_cache` have `CACHEDIR.TAG` at their top: a regular file of that name directly inside the directory.
     - `node_modules` has no content check and is subject to the nested-repository refusal only.
+    - A declared name that is not on the fixed list has no content check and is subject to the nested-repository refusal only; a name on the fixed list keeps its own content check even if a profile also declares it, and a failed fixed-list check refuses the worktree and never falls back to the profile.
 
     A directory that fails its check is not regenerable and the worktree is refused.
     The run checks every regenerable entry before it deletes any, so a nested repository or a failed content check deletes nothing.
@@ -204,7 +212,7 @@ Remove in this order, so a branch is never refused because a worktree still hold
     A worktree locked after its checks passed has its regenerable entries deleted before `git worktree remove` refuses it; the report names it as a refused removal, and since only regenerable entries are lost, this window is accepted too.
     A nested repository created inside a regenerable entry after its listing is still deleted with it; nothing short of locking the directory closes this, so this window is accepted as well.
   - **Any other entry refuses.** When the status lists any other entry, the worktree is refused and nothing is deleted from it, the regenerable entries included.
-    The other entries are: an ignored entry not on the regenerable list (for example `.env`, a local note, or other build output), a symlink or file named like a list entry, a tracked modification (staged, unstaged, deleted, renamed or conflicted), and an untracked entry (a file or a directory).
+    The other entries are: an ignored entry that neither the fixed list nor `profile.cleanup.regenerable_dirs` qualifies (for example `.env`, a local note, or build output the profile does not declare), a symlink or file named like a fixed-list or declared name, a tracked modification (staged, unstaged, deleted, renamed or conflicted), and an untracked entry (a file or a directory).
     `git worktree remove` deletes ignored files with the directory, so an entry the run cannot prove regenerable would be lost although the run never chose to delete it.
     The inventory and the refusal line name every such entry by exact path and kind.
     An untracked entry stops refusing only under a recorded instruction that waives untracked entries (above), which deletes it in the instruction's order.
@@ -212,6 +220,7 @@ Remove in this order, so a branch is never refused because a worktree still hold
   - **Report.** The final report lists, under the worktree it came from and by exact path, each entry deleted, including when the worktree removal was then refused, with the failed check, and each failed deletion as a refusal.
     A worktree refused because its status lists any other entry lists no entry as deleted.
     The step 6 template shows where these lines go.
+    Each regenerable entry line carries its source as step 2 marks it; an untracked entry line carries none.
 - **Local branch.** Removed with `git branch -D` once it has merge evidence, or once a recorded instruction (above) waives the merge-evidence guard for it and its tip re-read matches the inventory.
   `-D` rather than `-d`, because a squash or a rebase merge leaves the tip unmerged in git's own eyes.
   Read the tip with `git rev-parse refs/heads/<branch>` a second time immediately before `git branch -D` and refuse if it moved; when containment is the evidence, run `git merge-base --is-ancestor <tip> refs/remotes/origin/<profile.git.integration_branch>` again with that tip and refuse unless it exits 0, running the delete immediately after these reads with no other step between.
@@ -292,7 +301,7 @@ instruction: "<recorded instruction, verbatim>" (only when one applied)
 
 removed:
 - <artifact>: <path or URL>
-  - deleted: <regenerable entry path>
+  - deleted: <regenerable entry path> (source: <fixed list | profile>)
   - deleted: <untracked entry path>
   - discarded: <abbreviated commit SHA> <subject>
 
@@ -304,9 +313,9 @@ skipped:
 
 refused:
 - <artifact>: <failed check>, <why>
-  - deleted: <regenerable entry path>
+  - deleted: <regenerable entry path> (source: <fixed list | profile>)
   - deleted: <untracked entry path>
-  - refused: <regenerable entry path>: <failed deletion>
+  - refused: <regenerable entry path> (source: <fixed list | profile>): <failed deletion>
 ```
 
 - Every story named at invocation gets its own section, including an unresolved key, which carries only its resolution line.
