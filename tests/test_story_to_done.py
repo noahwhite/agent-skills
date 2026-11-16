@@ -32,6 +32,11 @@ def section(text: str, heading: str) -> str:
     return rest[: following.start()] if following else rest
 
 
+def visible(text: str) -> str:
+    """The text a reader of the rendered Markdown sees: HTML comments removed."""
+    return re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)
+
+
 def test_skill_file_exists() -> None:
     assert SKILL.is_file(), f"missing {SKILL.relative_to(ROOT)}"
 
@@ -328,7 +333,7 @@ OLD_QA_ROUND_CLAUSE = "never resume an earlier QA agent, since it carries that r
 
 
 def test_each_qa_round_is_a_new_agent_with_a_minimal_brief() -> None:
-    body = section(SKILL.read_text(), "3. QA agent: verify the deployed story")
+    body = section(visible(SKILL.read_text()), "3. QA agent: verify the deployed story")
     assert QA_ROUND_SENTENCE in body.splitlines(), "step 3 must read the pinned new-round sentence exactly"
     assert QA_ROUND_EXCEPTION in body.splitlines(), "step 3 must scope the exception a round may take"
     assert OLD_QA_ROUND_CLAUSE not in body, "the clause that forbids resuming is replaced, not kept beside it"
@@ -1260,7 +1265,7 @@ def test_readme_row_names_the_metrics_switch_and_its_default() -> None:
 
 def metrics_section() -> str:
     """The Metrics rules: the SKILL.md stub plus the protocol reference it points at."""
-    return section(SKILL.read_text(), "Metrics") + "\n" + PROTOCOL.read_text()
+    return visible(section(SKILL.read_text(), "Metrics") + "\n" + PROTOCOL.read_text())
 
 
 def metrics_body() -> str:
@@ -2955,11 +2960,6 @@ INTERIM_LIMITS = (
     "no-verdict constraints unchanged; it only comes before step 0's read-back, step 2's check and step 4's "
     "classification."
 )
-
-
-def visible(text: str) -> str:
-    """The text a reader of the rendered Markdown sees: HTML comments removed."""
-    return re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)
 
 
 def interim_text() -> str:
