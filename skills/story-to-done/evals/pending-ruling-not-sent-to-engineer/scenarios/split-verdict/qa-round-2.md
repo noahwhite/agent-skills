@@ -27,5 +27,3 @@ Fixture: the test account `qa-export-10k`, holding 10,000 transactions.
 - Reading 1: the export finishes when the user has the file, timed from the click to the completed download. Evidence: 40 seconds for `qa-export-10k` (timing output attached). Verdict: failed.
 - Reading 2: the export finishes when the export job completes, as the export job log records its duration. Evidence: 23 seconds for `qa-export-10k` (job log line attached). Verdict: verified.
 - Owner: the product owner.
-
-Items also `pending owner ruling` are listed apart here as not for the engineer; no deployment-review AC amendment is written for them.

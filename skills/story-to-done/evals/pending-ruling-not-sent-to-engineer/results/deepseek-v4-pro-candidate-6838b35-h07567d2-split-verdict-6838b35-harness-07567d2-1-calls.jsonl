@@ -1,0 +1,20 @@
+{"action": "tracker-read", "at": "2026-11-16T05:02:04Z", "qa_round": 0}
+{"action": "read", "at": "2026-11-16T05:02:04Z", "path": "senior-engineer/senior-engineer-todo.md", "qa_round": 0}
+{"action": "qa-launch", "at": "2026-11-16T05:02:07Z", "label": "qa-agent-round-1", "message_id": 1, "qa_round": 0, "served": "qa-round-1.md"}
+{"action": "read", "at": "2026-11-16T05:02:11Z", "path": "qa-agent-round-1/qa-agent-round-1-todo.md", "qa_round": 1}
+{"action": "tracker-read", "at": "2026-11-16T05:02:11Z", "qa_round": 1}
+{"action": "engineer-launch", "at": "2026-11-16T05:02:16Z", "label": "senior-engineer-fix-1", "message_id": 2, "qa_round": 1, "served": "engineer-handback-1.md"}
+{"action": "user-message", "at": "2026-11-16T05:02:16Z", "message_id": 3, "qa_round": 1}
+{"action": "tracker-read", "at": "2026-11-16T05:02:22Z", "qa_round": 1}
+{"action": "read", "at": "2026-11-16T05:02:22Z", "path": "senior-engineer-fix-1/senior-engineer-fix-1-todo.md", "qa_round": 1}
+{"action": "qa-launch", "at": "2026-11-16T05:02:25Z", "label": "qa-agent-round-2", "message_id": 4, "qa_round": 1, "served": "qa-round-2.md"}
+{"action": "read", "at": "2026-11-16T05:02:28Z", "path": "qa-agent-round-2/qa-agent-round-2-todo.md", "qa_round": 2}
+{"action": "tracker-read", "at": "2026-11-16T05:02:28Z", "qa_round": 2}
+{"action": "user-message", "at": "2026-11-16T05:02:33Z", "message_id": 5, "qa_round": 2}
+{"action": "engineer-launch", "at": "2026-11-16T05:02:33Z", "label": "senior-engineer-fix-2", "message_id": 6, "qa_round": 2, "served": "engineer-handback-2.md"}
+{"action": "tracker-read", "at": "2026-11-16T05:02:37Z", "qa_round": 2}
+{"action": "read", "at": "2026-11-16T05:02:37Z", "path": "senior-engineer-fix-2/senior-engineer-fix-2-todo.md", "qa_round": 2}
+{"action": "qa-launch", "at": "2026-11-16T05:02:40Z", "label": "qa-agent-round-3", "message_id": 7, "qa_round": 2, "served": "qa-round-3.md"}
+{"action": "tracker-read", "at": "2026-11-16T05:02:45Z", "qa_round": 3}
+{"action": "read", "at": "2026-11-16T05:02:45Z", "path": "qa-agent-round-3/qa-agent-round-3-todo.md", "qa_round": 3}
+{"action": "user-message", "at": "2026-11-16T05:02:50Z", "message_id": 8, "qa_round": 3}

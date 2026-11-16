@@ -523,6 +523,28 @@
         }
       }
     },
+    "cleanup": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Settings for the cleanup skill. Optional: its one key defaults to `[]`, so the skill never needs this object and never stops to ask for it.",
+      "properties": {
+        "regenerable_dirs": {
+          "type": "array",
+          "default": [],
+          "description": "Directory names the cleanup skill also treats as regenerable ignored build output. Default `[]`: no declared names. Each entry is a bare final path component (no `/`, no `*`, `?` or `[`, no `\\n`, `\\r` or NUL, and not `.`, `..` or `.git`), matched against the final path component of an ignored directory by exact, case-sensitive string equality with no glob or shell expansion; a duplicate entry has no effect. The names add to the skill's fixed list and never replace it.",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "not": {
+              "anyOf": [
+                {"pattern": "[/*?\\[\\n\\r\\u0000]"},
+                {"enum": [".", "..", ".git"]}
+              ]
+            }
+          }
+        }
+      }
+    },
     "overlays": {
       "type": "object",
       "description": "Consumer overlay file per skill name or shared capability name, relative to the profile file.",

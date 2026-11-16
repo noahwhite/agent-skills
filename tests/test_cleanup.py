@@ -5,14 +5,21 @@ story and moves the evidence it hosted onto the story. These checks pin the regi
 repository contract-tests for every skill, and then the behaviour the acceptance criteria name.
 """
 
+import copy
 import importlib.util
 import json
 import re
 from pathlib import Path
 
+import jsonschema
+import pytest
+import yaml
+
 ROOT = Path(__file__).resolve().parent.parent
 SKILL = ROOT / "skills" / "cleanup" / "SKILL.md"
 MANIFEST = json.loads((ROOT / "skills.json").read_text())
+SCHEMA_FILE = ROOT / "profile" / "schema.json"
+EXAMPLE_PROFILE = ROOT / "profile" / "example.yaml"
 HOST_RE = re.compile(r"\b[a-z0-9][a-z0-9-]*\.(?:ai|com|io|net|org|dev)\b", re.IGNORECASE)
 
 
@@ -496,7 +503,8 @@ def test_a_worktree_holding_only_regenerable_ignored_entries_is_emptied_then_rem
 def test_a_regenerable_entry_needs_no_nested_repository_and_its_content_check() -> None:
     body = section(text(), "3. Delete only with merge evidence")
     nested = (
-        "the run first lists the contents of each such directory at any depth, including entries whose names begin "
+        "the run first lists the contents of each regenerable directory, fixed-list or declared, at any depth, "
+        "including entries whose names begin "
         "with a dot and without following symlinks (`find ./<path> -print` does; `ls -R` hides dot entries and does "
         "not qualify), and refuses the worktree when a listing holds a nested repository: "
         "an entry named `.git` at any depth, whether a directory or a file."
@@ -570,8 +578,9 @@ def test_any_other_status_entry_refuses_the_worktree_and_nothing_is_deleted() ->
     body = section(text(), "3. Delete only with merge evidence")
     for phrase in (
         "When the status lists any other entry, the worktree is refused and nothing is deleted from it, the regenerable entries included",
-        "an ignored entry not on the regenerable list (for example `.env`, a local note, or other build output)",
-        "a symlink or file named like a list entry",
+        "an ignored entry that neither the fixed list nor `profile.cleanup.regenerable_dirs` qualifies "
+        "(for example `.env`, a local note, or build output the profile does not declare)",
+        "build output the profile does not declare), a symlink or file named like a fixed-list or declared name",
         "a tracked modification (staged, unstaged, deleted, renamed or conflicted)",
         "an untracked entry (a file or a directory)",
         "The inventory and the refusal line name every such entry by exact path and kind",
@@ -600,16 +609,192 @@ def test_the_inventory_and_report_name_each_regenerable_entry_by_exact_path() ->
     ):
         assert phrase in body, phrase
     report = section(text(), "6. Report and confirm")
-    removed = "removed:\n- <artifact>: <path or URL>\n  - deleted: <regenerable entry path>\n"
+    removed = (
+        "removed:\n- <artifact>: <path or URL>\n"
+        "  - deleted: <regenerable entry path> (source: <fixed list | profile>)\n"
+    )
     refused = (
         "refused:\n- <artifact>: <failed check>, <why>\n"
-        "  - deleted: <regenerable entry path>\n"
+        "  - deleted: <regenerable entry path> (source: <fixed list | profile>)\n"
         "  - deleted: <untracked entry path>\n"
-        "  - refused: <regenerable entry path>: <failed deletion>\n"
+        "  - refused: <regenerable entry path> (source: <fixed list | profile>): <failed deletion>\n"
     )
     assert removed in report, removed
     assert refused in report, refused
     assert report.index(removed) < report.index(refused)
+
+
+# SKL-286: profile-declared regenerable directories, additive to the fixed seven names.
+DECLARED_SENTENCE = (
+    "An ignored entry is also regenerable when `git status --porcelain --ignored -z` reports it with the ignored code "
+    "`!!` as a directory (with a trailing `/`) whose final path component, with that trailing `/` removed, equals a "
+    "name in `profile.cleanup.regenerable_dirs`, compared exactly and with letter case (unset means `[]`, and the run "
+    "does not stop to ask for it); so `apps/web/dist/` qualifies when `dist` is declared."
+)
+DECLARATION_ALONE = (
+    "A declared directory is regenerable on the consumer's declaration alone: the skill cannot check its content, "
+    "so the profile answers for the name."
+)
+DECLARED_CHECK_ITEM = (
+    "- A declared name that is not on the fixed list has no content check and is subject to the nested-repository "
+    "refusal only; a name on the fixed list keeps its own content check even if a profile also declares it, and a "
+    "failed fixed-list check refuses the worktree and never falls back to the profile."
+)
+PLAIN_STRING = "A declared name is compared as a plain string, with no glob or shell expansion, and a duplicate entry has no effect."
+EITHER_SOURCE = (
+    "\"Regenerable entry\" in steps 2, 3 and 6 means an entry that either source, the fixed list or the profile, "
+    "qualifies, and every other rule in this step for a regenerable entry applies to a declared one unchanged."
+)
+NEVER_REGENERABLE = "An untracked entry (`??`), a symlink, or a file named like a declared entry is never regenerable."
+STEP2_SOURCE = "Each regenerable entry line, `remove` or `keep`, ends with `(source: fixed list)` or `(source: profile)`."
+STEP3_REPORT_SOURCE = "Each regenerable entry line carries its source as step 2 marks it; an untracked entry line carries none."
+
+
+def test_a_declared_directory_is_regenerable_right_after_the_fixed_list() -> None:
+    body = section(text(), "3. Delete only with merge evidence")
+    lines = [line.strip() for line in body.splitlines()]
+    # Whole lines, so the `!!`-directory-only condition, the exact case-sensitive match and the unset
+    # default cannot be dropped from or contradicted inside the sentence.
+    assert DECLARED_SENTENCE in lines, DECLARED_SENTENCE
+    list_index = next(i for i, line in enumerate(lines) if LIST_LEAD in line)
+    assert lines[list_index + 1] == DECLARED_SENTENCE
+    # Whole and in place, so "regenerable entry" in steps 2, 3 and 6 keeps covering both sources.
+    assert lines[list_index + 2] == PLAIN_STRING, PLAIN_STRING
+    assert lines[list_index + 3] == EITHER_SOURCE, EITHER_SOURCE
+    assert NEVER_REGENERABLE in lines, NEVER_REGENERABLE
+    assert DECLARATION_ALONE in lines, DECLARATION_ALONE
+    recreate = "A package manager or test runner recreates these directories, so deleting them loses nothing."
+    assert lines[lines.index(recreate) + 1] == DECLARATION_ALONE
+    assert body.count("profile.cleanup.regenerable_dirs") >= 1
+
+
+def test_no_line_outside_the_pinned_ones_names_the_fixed_list() -> None:
+    # A presence pin cannot see an added sentence that narrows regenerable handling back to the fixed
+    # list, so every line naming the fixed list must be one of the lines the source rules already pin.
+    allowed = {
+        STEP2_SOURCE,
+        "A name that is both on the fixed list and declared is labelled `fixed list`; `profile` is used only for a name not on the fixed list.",
+        EITHER_SOURCE,
+        DECLARED_CHECK_ITEM,
+        "- deleted: <regenerable entry path> (source: <fixed list | profile>)",
+        "- refused: <regenerable entry path> (source: <fixed list | profile>): <failed deletion>",
+    }
+    found = [line.strip() for line in text().splitlines() if re.search(r"fixed[ -]list", line, re.IGNORECASE)]
+    unexpected = [
+        line
+        for line in found
+        if line not in allowed
+        and "neither the fixed list nor `profile.cleanup.regenerable_dirs` qualifies" not in line
+        and not line.startswith("Only when the worktree passes every other check in this step")
+    ]
+    assert unexpected == [], unexpected
+
+
+def test_a_declared_name_has_no_content_check_and_a_fixed_name_keeps_its_own() -> None:
+    body = section(text(), "3. Delete only with merge evidence")
+    lines = [line.strip() for line in body.splitlines()]
+    node_modules = "- `node_modules` has no content check and is subject to the nested-repository refusal only."
+    assert DECLARED_CHECK_ITEM in lines, DECLARED_CHECK_ITEM
+    assert lines[lines.index(node_modules) + 1] == DECLARED_CHECK_ITEM
+    # The unchanged lead line demands a content check for every entry; the sentence right before it scopes
+    # that demand to the list, so the `node_modules` and declared-name items are exceptions, not contradictions.
+    scope = (
+        "The list below is the whole content-check rule: an entry it says has no content check needs none, "
+        "and that is the only exception."
+    )
+    lead = "It also requires a per-name content check before an entry counts as regenerable:"
+    assert lines[lines.index(lead) - 1] == scope, scope
+
+
+def test_the_inventory_and_report_mark_each_regenerable_entry_with_its_source() -> None:
+    inventory = section(text(), "2. Inventory every artifact before removing any")
+    remove_sentence = "and step 3 evaluates them again before deleting."
+    assert STEP2_SOURCE in inventory, STEP2_SOURCE
+    assert inventory.index(remove_sentence) < inventory.index(STEP2_SOURCE)
+    both = "A name that is both on the fixed list and declared is labelled `fixed list`; `profile` is used only for a name not on the fixed list."
+    assert both in inventory, both
+    body = section(text(), "3. Delete only with merge evidence")
+    assert STEP3_REPORT_SOURCE in body, STEP3_REPORT_SOURCE
+    assert body.index("**Report.**") < body.index(STEP3_REPORT_SOURCE)
+
+
+def test_read_first_names_the_declared_regenerable_directories() -> None:
+    read_first = section(text(), "Read first")
+    assert "the declared regenerable directories" in read_first
+
+
+def schema() -> dict:
+    return json.loads(SCHEMA_FILE.read_text(encoding="utf-8"))
+
+
+def example_profile_with(cleanup) -> dict:
+    """A complete, otherwise valid profile from profile/example.yaml, with `cleanup` set as given."""
+    profile = copy.deepcopy(yaml.safe_load(EXAMPLE_PROFILE.read_text(encoding="utf-8")))
+    profile.pop("cleanup", None)
+    if cleanup is not None:
+        profile["cleanup"] = cleanup
+    return profile
+
+
+@pytest.mark.parametrize(
+    "cleanup",
+    [None, {}, {"regenerable_dirs": []}, {"regenerable_dirs": ["dist", ".astro", ".lighthouseci"]}, {"regenerable_dirs": [".venv"]}],
+    ids=["no-cleanup", "empty-cleanup", "empty-list", "declared-names", "fixed-list-name"],
+)
+def test_the_schema_accepts_an_optional_cleanup_regenerable_dirs(cleanup) -> None:
+    jsonschema.validate(example_profile_with(cleanup), schema())
+
+
+REJECTED_NAMES = {
+    "slash": "a/b",
+    "star": "*",
+    "question-mark": "?",
+    "open-bracket": "[",
+    "empty": "",
+    "dot": ".",
+    "dot-dot": "..",
+    "dot-git": ".git",
+    "trailing-newline": "dist\n",
+    "trailing-carriage-return": "dist\r",
+    "nul": "di\x00st",
+}
+
+
+@pytest.mark.parametrize(
+    "cleanup",
+    [{"regenerable_dirs": [name]} for name in REJECTED_NAMES.values()]
+    + [{"regenerable_dirs": "dist"}, {"regenerable_dirs": [1]}, {"regenerable_dirs": [], "unknown": True}],
+    ids=[*REJECTED_NAMES, "bare-string", "non-string-item", "unknown-key"],
+)
+def test_the_schema_rejects_an_unsafe_or_malformed_cleanup_value(cleanup) -> None:
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(example_profile_with(cleanup), schema())
+
+
+def test_the_regenerable_dirs_default_is_an_empty_list() -> None:
+    assert schema()["properties"]["cleanup"]["properties"]["regenerable_dirs"]["default"] == []
+
+
+def test_the_cleanup_descriptions_state_the_default_the_name_form_and_additivity() -> None:
+    cleanup = schema()["properties"]["cleanup"]
+    assert cleanup["description"] == (
+        "Settings for the cleanup skill. Optional: its one key defaults to `[]`, "
+        "so the skill never needs this object and never stops to ask for it."
+    )
+    description = cleanup["properties"]["regenerable_dirs"]["description"]
+    for phrase in (
+        "Default `[]`: no declared names.",
+        "Each entry is a bare final path component",
+        "by exact, case-sensitive string equality with no glob or shell expansion; a duplicate entry has no effect.",
+        "The names add to the skill's fixed list and never replace it.",
+    ):
+        assert phrase in description, phrase
+
+
+def test_each_regenerable_dirs_item_is_declared_a_string() -> None:
+    # A `pattern` is vacuously true for a non-string, so the `not` predicate alone already rejects `[1]`;
+    # pin the declared item type directly so dropping it cannot go unnoticed.
+    assert schema()["properties"]["cleanup"]["properties"]["regenerable_dirs"]["items"]["type"] == "string"
 
 
 def recorded_instruction_block() -> str:
@@ -649,8 +834,9 @@ def test_a_recorded_instruction_is_scoped_to_a_named_artifact_or_a_named_loss() 
 def test_a_recorded_instruction_inventories_the_tip_and_every_loss_before_deleting() -> None:
     block = recorded_instruction_block()
     refuse_first = (
-        "1. It refuses the worktree before deleting anything if it has a tracked modification, ignored entries that the "
-        "regenerable list does not qualify (including a symlink or file named like a list entry), a detached HEAD, "
+        "1. It refuses the worktree before deleting anything if it has a tracked modification, ignored entries that "
+        "neither the fixed list nor `profile.cleanup.regenerable_dirs` qualifies (including a symlink or file named "
+        "like a fixed-list or declared name), a detached HEAD, "
         "or is the worktree hosting the current session, and refuses its branch if the worktree is refused."
     )
     unauthorized = (
@@ -818,8 +1004,9 @@ def test_a_recorded_instruction_waives_only_the_two_guards_it_names() -> None:
     for phrase in (
         "The instruction waives the merge-evidence guard only when it names the worktree or branch or names unlanded commits, "
         "and waives untracked entries only when it names the worktree or branch or names untracked entries.",
-        "It waives nothing else: tracked modifications, ignored entries that the regenerable list does not qualify "
-        "(including a symlink or file named like a list entry), a detached HEAD, the worktree hosting the current session, "
+        "It waives nothing else: tracked modifications, ignored entries that neither the fixed list nor "
+        "`profile.cleanup.regenerable_dirs` qualifies (including a symlink or file named like a fixed-list or declared "
+        "name), a detached HEAD, the worktree hosting the current session, "
         "remote branch deletion, the open-PR guard, token-boundary attribution and the read-back all still refuse or apply.",
         "Every other check in this step, such as a worktree git cannot remove, the status-read rules and the "
         "regenerable-entry checks, holds as well.",
