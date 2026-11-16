@@ -1,0 +1,53 @@
+{
+  "_comment": "Synthetic `linear issue view <KEY> --json` payloads for tests/test_qa_round_cap.py. Comments dated 2001 predate any arm; comments dated 2099 follow it.",
+  "comments": {
+    "old-qa": {
+      "id": "comment-old-qa",
+      "body": "## QA evidence\n\n- AC1 | failed | attachment old-run.txt",
+      "createdAt": "2001-01-01T00:00:00.000Z",
+      "url": "https://tracker.example/ABC-123#comment-old-qa"
+    },
+    "stamp": {
+      "id": "comment-stamp",
+      "body": "Worked by agent synthetic-session at 2001-01-01 00:00 UTC",
+      "createdAt": "2001-01-01T00:01:00.000Z",
+      "url": "https://tracker.example/ABC-123#comment-stamp"
+    },
+    "qa-1": {
+      "id": "comment-qa-1",
+      "body": "## QA evidence\n\nBuild synthetic. AC1 failed: the artifact is missing.",
+      "createdAt": "2099-01-01T00:00:00.000Z",
+      "url": "https://tracker.example/ABC-123#comment-qa-1"
+    },
+    "marker-not-first": {
+      "id": "comment-marker-not-first",
+      "body": "Notes from the engineer\n## QA evidence\nnot a QA evidence comment",
+      "createdAt": "2099-01-01T06:00:00.000Z",
+      "url": "https://tracker.example/ABC-123#comment-marker-not-first"
+    },
+    "marker-suffix": {
+      "id": "comment-marker-suffix",
+      "body": "## QA evidence summary\nthe first line is not exactly the marker",
+      "createdAt": "2099-01-01T07:00:00.000Z",
+      "url": "https://tracker.example/ABC-123#comment-marker-suffix"
+    },
+    "qa-1-later": {
+      "id": "comment-qa-1-later",
+      "body": "## QA evidence\n\nA second QA evidence comment posted before the next record.",
+      "createdAt": "2099-01-01T12:00:00.000Z",
+      "url": "https://tracker.example/ABC-123#comment-qa-1-later"
+    },
+    "qa-2": {
+      "id": "comment-qa-2",
+      "body": "## QA evidence\r\n\r\nRound two. AC2 failed.",
+      "createdAt": "2099-01-02T00:00:00.000Z",
+      "url": "https://tracker.example/ABC-123#comment-qa-2"
+    },
+    "qa-3": {
+      "id": "comment-qa-3",
+      "body": "## QA evidence\n\nRound three. AC2 failed again.",
+      "createdAt": "2099-01-03T00:00:00.000Z",
+      "url": "https://tracker.example/ABC-123#comment-qa-3"
+    }
+  }
+}
