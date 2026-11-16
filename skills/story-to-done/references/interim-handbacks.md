@@ -1,11 +1,13 @@
 # Interim handbacks (story-to-done)
 
-Read this when the senior engineer hands back.
+Read this when the senior engineer or a QA agent hands back.
 
 An interim handback is a handback from the senior engineer that names an awaited item of its own background work (a CI run, a deploy, a tracker move, a review in flight) and is neither a final handback nor blocked.
 Naming the awaited item does not make it a blocked handback or a stated blocker.
+A QA agent's handback that names an awaited item of its own background work (for example its evidence PR's review-of-record gate or CI run) and is neither a final handback nor blocked is an interim handback too.
 Step 0's stated-blocker sentence covers only the other handbacks, since an interim handback never reaches the read-back.
 The coordinator classifies an interim handback before step 0's checklist read-back and before step 2's deployment-review check and stop.
+The coordinator classifies a QA agent's interim handback before step 0's checklist read-back of that QA agent and before step 4's classification.
 So the awaited item gets the deadline below, never step 0's read-back resume.
 
 ## Deadline
@@ -32,6 +34,13 @@ After the second miss on the same awaited item the coordinator stops before sett
 A repeated interim handback on the same awaited item does not reset the count; an interim handback on a different awaited item starts a new count.
 The stop report to the owner names the awaited item, its primary source, the state or read error observed at each missed deadline, and both missed deadlines.
 
+## QA agents
+
+For a QA agent's interim handback the deadline rule above applies with that QA agent in place of the engineer, except for the resume message.
+At a concluded deadline the coordinator resumes the same QA agent with a message that states only that the round is unfinished and names the round's scratch subdirectory and the awaited item; it carries nothing else the coordinator observed (no conclusion, no verdict, no earlier round's conclusions, no senior engineer handback).
+A QA deadline resume does not increment the QA round count, does not count against step 0's read-back resume cap, and does not consume step 4's "once per observed change to the remainder" continuation allowance.
+With `metrics` on, each QA deadline resume is its own launch row within that round.
+
 ## Limits
 
-This rule changes no step logic for final or blocked handbacks, and leaves step 2's stop clause, every QA step, and the no-write and no-verdict constraints unchanged; it only comes before step 0's read-back and step 2's check.
+This rule changes no step logic for final or blocked handbacks, and leaves step 2's stop clause, step 4's continuation content limits, mixed-owner stop, owner-action stop, and new-round rules, and the no-write and no-verdict constraints unchanged; it only comes before step 0's read-back, step 2's check and step 4's classification.

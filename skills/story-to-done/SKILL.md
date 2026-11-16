@@ -112,7 +112,7 @@ After reading `references/todo-tracking.md`, expand the list to the seed items b
 Seed it with at least: read the story state, spawn the senior engineer, each check on its checklist until it hands back, the checklist read-back at each handback with each subagent's read-back resume count, read back the deployment-review state, each QA round, each read-back of QA's state, each failed item handed back, each fix round, and the final state read-back.
 With `metrics` on, seed two more items: collect the metrics figures; then post the metrics summary on the story and read it back before giving the summary in the closing report.
 Add an item for each new round as it starts; mark each done once its outcome is observed.
-An interim handback from the senior engineer is classified first, before the checklist read-back below, under [references/interim-handbacks.md](references/interim-handbacks.md).
+An interim handback from the senior engineer or a QA agent is classified first, before the checklist read-back below, under [references/interim-handbacks.md](references/interim-handbacks.md).
 Every subagent brief requires a checklist file in that subagent's own subdirectory of the scratch directory; read it from there and mirror it into your list whenever you check on the subagent.
 When a senior engineer or QA agent hands back, read that subagent's checklist file before acting on the result; a missing or unreadable checklist counts as open items.
 If items remain open with no stated blocker, resume that subagent with "Your checklist still has open items. Continue with them; if one is blocked, say what blocks it", at most twice per subagent, and then record the remaining items in your report and continue with this skill's existing step logic.
@@ -211,6 +211,7 @@ Brief it as a QA agent, with only:
 
 Never give it the senior engineer's handback beyond the environment, the PR's rationale, the fixes made, an earlier round's verdicts, or the verdict you expect.
 
+A QA agent's interim handback goes to [references/interim-handbacks.md](references/interim-handbacks.md) before the step 0 checklist read-back, every check below and step 4; any other handback continues here.
 When it hands back, do the step 0 checklist read-back first, then read the story's state yourself.
 For every PR it merged, such as the evidence PR, read the PR yourself with `gh pr view <n> --json headRefOid,mergeCommit` and `gh api --paginate repos/<owner>/<repo>/pulls/<n>/reviews`.
 Select the review of record as the merge guard in `references/code-review.md` does (the `COMMENTED` review whose body begins with `Review of record` and has the greatest `submitted_at`).
