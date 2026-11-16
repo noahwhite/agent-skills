@@ -30,10 +30,11 @@ No CI job runs it, because a CI step is a tracked change outside `spikes/SKL-312
 For the two test types `run-suite.sh` has no mechanism for, trigger and prose rubric, the evidence is insufficient, and the missing prerequisites are named below.
 
 - Decider: the senior-engineer agent that the `story-to-done` skill ran to implement SKL-312; it has no other name.
-  The decision stands when the product owner of SKL-312, the repository owner (`noahwhite` on GitHub), accepts it by closing the story, and that owner can overturn it.
+  The decision stands when the product owner of SKL-312, who owns this repository, accepts it by closing the story, and that owner can overturn it.
 - Date: 2026-11-15.
 - promptfoo version: `0.125.1`.
-- Repository commit tested: `186df218014aeb4ecee41cb2801ab72e4c794063`, where the last commit that changed `skills/story-to-done/evals/` is `192070793c871937e817be1c8f4105af8650a01a`.
+- Repository commit tested: `8a099a8181d21d9a2bc9ab10ae32eec15fc90935` on `main`, which is also the last commit that changed `skills/story-to-done/evals/`, replayed on 2026-11-16; `poc/compare.md` names it.
+  The replay first ran on 2026-11-15 at `186df218014aeb4ecee41cb2801ab72e4c794063`, where that last commit was `192070793c871937e817be1c8f4105af8650a01a`, with the same 24 of 24; between the two commits only `suite.py` changed under that directory.
 
 Observations that drove it:
 

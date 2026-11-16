@@ -4,7 +4,7 @@ Written by `bash spikes/SKL-312/poc/run.sh`; never edited by hand.
 It holds run ids, verdicts and counts only.
 
 - promptfoo version: 0.125.1
-- Commit of `skills/story-to-done/evals/` replayed (the last commit that changed it; nothing under it was uncommitted): `192070793c871937e817be1c8f4105af8650a01a`
+- Commit of `skills/story-to-done/evals/` replayed (the last commit that changed it; nothing under it was uncommitted): `8a099a8181d21d9a2bc9ab10ae32eec15fc90935`
 - Suite run records: 24, of which graded: 24, replayed: 24
 - Replayed runs that match their recorded verdict: 24 of 24
 - Mapping probes that landed as mapped: 3 of 3
