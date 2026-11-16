@@ -324,8 +324,11 @@ def test_the_normaliser_rewrites_paths_and_leak_shapes_and_keeps_the_rest() -> N
 RUN_ROOT, OTHER = "/scratch/run-1", "/srv/home/user"
 BOUNDARIES = {"newline": "\n", "tab": "\t", "return": "\r", "backspace": "\b", "formfeed": "\f",
               "u-escape-digit": "\x01", "u-escape-letter": "\x7f\xff", "space": "see ",
-              "quote": "", "escaped-quote": 'see "'}
-KEPT = {"url": "https://host", "relative": "a/b/c", "word": "prefix", "bare-n": "n"}
+              "quote": "", "escaped-quote": 'see "', "word-then-newline": "x\n", "return-newline": "\r\n",
+              # Over-redaction by design: a message that quotes an escape is redacted like the escape.
+              "quoted-escape": "\\n"}
+KEPT = {"url": "https://host", "relative": "a/b/c", "word": "prefix", "bare-n": "n", "newline-then-word": "\nx",
+        "newline-then-url": "\nhttps://host"}
 NORMALISED_MESSAGES = (
     [pytest.param(f"{before}{RUN_ROOT}/a.json", f"{before}{{run_dir}}/a.json", True, id=f"run-root-{name}")
      for name, before in BOUNDARIES.items()]
@@ -333,12 +336,17 @@ NORMALISED_MESSAGES = (
        for name, before in BOUNDARIES.items()]
     + [pytest.param(f"{RUN_ROOT}/a.json", "{run_dir}/a.json", False, id="run-root-start-of-string"),
        pytest.param(f"{OTHER}/notes.txt", "{path}", False, id="other-start-of-string"),
-       pytest.param(OTHER, "{path}", True, id="other-standalone")]
+       pytest.param(OTHER, "{path}", True, id="other-standalone"),
+       # json.dumps writes lowercase hex, so another writer's uppercase \uXXXX is given as serialised text.
+       pytest.param(f'["\\u00FF{RUN_ROOT}/a.json"]', '["\\u00FF{run_dir}/a.json"]', False,
+                    id="run-root-u-escape-upper-hex"),
+       pytest.param(f'["\\u00FF{OTHER}/notes.txt"]', '["\\u00FF{path}"]', False, id="other-u-escape-upper-hex")]
     + [pytest.param(f"{before}{RUN_ROOT}/a.json", f"{before}{RUN_ROOT}/a.json", True, id=f"run-root-kept-{name}")
        for name, before in KEPT.items() if name != "relative"]
     + [pytest.param(f"{before}{OTHER}", f"{before}{OTHER}", True, id=f"other-kept-{name}")
        for name, before in KEPT.items() if name != "relative"]
-    + [pytest.param("a/b/c", "a/b/c", True, id="kept-relative")]
+    + [pytest.param("a/b/c", "a/b/c", True, id="kept-relative"),
+       pytest.param("\na/b/c", "\na/b/c", True, id="kept-relative-after-newline")]
 )
 
 
@@ -348,7 +356,7 @@ def test_the_normaliser_rewrites_a_path_after_each_boundary_in_a_serialised_mess
     normalise = SUITE.Normaliser(SUITE.leak_patterns(), run_dir=Path(RUN_ROOT))
     if serialise:
         text, wanted = (json.dumps([{"role": "assistant", "content": value}]) for value in (message, expected))
-        assert "\n" not in text and "\t" not in text, "the escape is characters, not a control character"
+        assert not any(ord(char) < 0x20 for char in text), "the escape is characters, not a control character"
     else:
         text, wanted = message, expected
     assert normalise(text) == wanted

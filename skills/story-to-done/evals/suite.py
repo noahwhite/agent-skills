@@ -45,8 +45,9 @@ REDACTED = "{redacted}"
 UUID = re.compile(r"(?i)\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b")
 # A record holds files such as messages.json as JSON text, where a newline is the two characters
 # backslash and n, so a path that starts a line follows a word character. A complete JSON escape
-# that ends in a word character (\n \t \r \b \f \uXXXX) therefore still starts a path; a doubled
-# backslash before n is read the same way, which redacts more, never less.
+# that ends in a word character (\n \t \r \b \f \uXXXX) therefore still starts a path. The pattern
+# cannot tell an escape from a message that quotes one (printf("\t/srv/x"), serialised as a doubled
+# backslash before t), so that path is redacted too: the accepted cost is over-redaction, never less.
 AFTER_ESCAPE = r"(?<=\\[ntrbf])|(?<=\\u[0-9A-Fa-f]{4})"
 # An absolute path of two or more segments that no known root above accounted for. The
 # lookbehind keeps URLs (scheme://host/path) and relative paths (a/b/c) as they are.
