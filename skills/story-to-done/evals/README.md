@@ -93,7 +93,7 @@ A run without `--resume` refuses a label that already has records, and no run wr
   A control scenario's own row therefore counts its control grade alone.
 - Both short SHAs are `git rev-parse --short=7`, at least 7 characters.
 - The runner never overwrites a file: a name that exists stops it with exit 2, and each file is written whole or not at all.
-- Before writing, it rewrites passed variable values to `{redacted}`, the run's roots to placeholders (`{run_dir}`, `{tmp}`, `{checkout}`, `{harness}`, `{tmpdir}`, `{home}`) where a whole path starts with one, UUID shapes to `{uuid}`, any other absolute path to `{path}`, and anything else the repository's leak scan rejects to `{redacted}`, so a record passes that scan.
+- Before writing, it rewrites passed variable values to `{redacted}`, the run's roots to placeholders (`{run_dir}`, `{tmp}`, `{checkout}`, `{harness}`, `{tmpdir}`, `{home}`) where a whole path starts with one, whether the path is plain or spelled with any JSON escape inside a string literal, UUID shapes to `{uuid}`, any other absolute path to `{path}`, and anything else the repository's leak scan rejects to `{redacted}`, so a record passes that scan.
 - Only files directly in `results/` or `<case>/results/` count as the suite's own records; any other uncommitted file stops the runner.
 - The older `baseline-<sha>[-harness-<sha>]` and `candidate-<sha>` files in a case's `results/` predate the runner and stay as history.
 

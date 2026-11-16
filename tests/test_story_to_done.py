@@ -325,9 +325,9 @@ QA_ROUND_SENTENCE = (
     "agent from an earlier round, since it carries that round's conclusions."
 )
 QA_ROUND_EXCEPTION = (
-    "Continuation of the current round under step 4, and the step 0 checklist read-back resume or the "
-    "interim-handback deadline resume of the current round's QA agent, are the only exceptions to that sentence, "
-    "and none increments the round count."
+    "Continuation of the current round under step 4, and the step 0 checklist read-back resume or the resume "
+    "under the handback reference this step points to of the current round's QA agent, are the only exceptions "
+    "to that sentence."
 )
 OLD_QA_ROUND_CLAUSE = "never resume an earlier QA agent, since it carries that round's conclusions"
 
@@ -3224,8 +3224,10 @@ def test_step_3_points_to_the_interim_handbacks_reference_and_restates_none_of_i
     step_3 = " ".join(section(visible(SKILL.read_text()), "3. QA agent: verify the deployed story").split())
     assert INTERIM_STEP_3_POINTER in step_3
     assert step_3.index(INTERIM_STEP_3_POINTER) < step_3.index(STEP_3_READ_BACK_FIRST)
-    rest = step_3.replace(INTERIM_STEP_3_POINTER, "").replace(QA_ROUND_EXCEPTION, "").lower()
-    for token in INTERIM_VOCABULARY + ("50%", "before step 4", "before the step 0", "before step 0"):
+    rest = step_3.replace(INTERIM_STEP_3_POINTER, "").lower()
+    for token in INTERIM_VOCABULARY + (
+        "50%", "before step 4", "before the step 0", "before step 0", "round count", "increment",
+    ):
         assert token not in rest, f"step 3 restates the interim rule ({token!r}) instead of pointing to it"
 
 
@@ -3537,7 +3539,8 @@ def test_the_record_shape_pattern_matches_the_record_and_not_the_bare_word_readi
 # step 3 section and the two step 4 bullets that brief QA and the engineer are also pinned whole; change a
 # digest only together with a reviewed change to the text it covers.
 STEP_3_HEADING = "3. QA agent: verify the deployed story"
-STEP_3_SHA256 = "8d0aef0df7ddfb790ce16875812301d9b068c8a798885783bdb155069eef955a"
+# SKL-278 re-baselined this digest for the step 3 `path:` brief line and the path's verification target.
+STEP_3_SHA256 = "591d06fa9099fdf6f4958f7888bc4d3260de1d86838126145e008a44215173c0"
 IN_PROGRESS_SHA256 = "fd4768e7d39be8e29341cd0f5d186bfaf96a8bf7bfc8eebb8b1e39b101eb95e7"
 IN_DEPLOYMENT_REVIEW_SHA256 = "36da368bed892519776e5be61064d2fad186151ca58ae90aff897e9a1ffaa968"
 # The only lines of a state bullet that may state the pending owner ruling record.
@@ -3752,6 +3755,33 @@ def test_a_role_ask_handback_keeps_the_selected_path_in_the_closing_report() -> 
     assert lines.index("Otherwise select the run's path before any role is spawned.") < lines.index(ROLE_ASK_LINE)
     # "the report of that end state" is the closing report the Arguments section defines for a stop.
     assert CLOSING_REPORT_PHRASE in section(SKILL.read_text(), "Arguments")
+
+
+# SKL-278 AC2: a final engineer handback with no merged PR never passes the merged-PR read-back by
+# running it zero times, and no path weakens a PR gate.
+NO_MERGED_PR_STOP = (
+    "A final handback from the senior engineer that reports no merged PR stops the run on `deployed` and "
+    "`no-deployment`; on `spike` the run continues to step 3 only when the `engineering-workflow` step 12 note "
+    "says the spike had no tracked-file change, and otherwise stops."
+)
+NO_PATH_WAIVER = "No path adds a waiver, an admin override, or a change to the expected-head condition."
+
+
+def test_a_final_handback_with_no_merged_pr_stops_except_a_spike_with_no_tracked_file_change() -> None:
+    lines = step_2_lines()
+    assert NO_MERGED_PR_STOP in lines, "step 2 must state the no-merged-PR stop exactly"
+    assert lines.index(NO_MERGED_PR_STOP) in prose_lines(lines), "the stop must be operative prose"
+    assert SKILL.read_text().count(NO_MERGED_PR_STOP) == 1, "the no-merged-PR stop is stated once"
+    waived = next((line for line in lines if line.startswith("For a waived PR, compare")), None)
+    assert waived is not None, "step 2 must keep the waived-PR read-back the stop follows"
+    assert lines.index(waived) < lines.index(NO_MERGED_PR_STOP), "the stop follows the merged-PR read-back"
+
+
+def test_no_path_weakens_a_pr_gate() -> None:
+    lines = step_2_lines()
+    assert NO_PATH_WAIVER in lines, "step 2 must state that no path adds a waiver"
+    assert lines.index(NO_PATH_WAIVER) in prose_lines(lines), "the no-waiver rule must be operative prose"
+    assert SKILL.read_text().count(NO_PATH_WAIVER) == 1, "the no-waiver rule is stated once"
 
 
 def test_path_unresolved_is_reported_only_for_a_stop_before_selection() -> None:
