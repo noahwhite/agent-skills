@@ -32,6 +32,11 @@ def section(text: str, heading: str) -> str:
     return rest[: following.start()] if following else rest
 
 
+def visible(text: str) -> str:
+    """The text a reader of the rendered Markdown sees: HTML comments removed, an unclosed one to the end."""
+    return re.sub(r"<!--.*?(?:-->|\Z)", "", text, flags=re.DOTALL)
+
+
 def test_skill_file_exists() -> None:
     assert SKILL.is_file(), f"missing {SKILL.relative_to(ROOT)}"
 
@@ -320,14 +325,15 @@ QA_ROUND_SENTENCE = (
     "agent from an earlier round, since it carries that round's conclusions."
 )
 QA_ROUND_EXCEPTION = (
-    "Continuation of the current round under step 4 and the step 0 checklist read-back resume of the current "
-    "round's QA agent are the only exceptions to that sentence, and neither increments the round count."
+    "Continuation of the current round under step 4, and the step 0 checklist read-back resume or the "
+    "interim-handback deadline resume of the current round's QA agent, are the only exceptions to that sentence, "
+    "and none increments the round count."
 )
 OLD_QA_ROUND_CLAUSE = "never resume an earlier QA agent, since it carries that round's conclusions"
 
 
 def test_each_qa_round_is_a_new_agent_with_a_minimal_brief() -> None:
-    body = section(SKILL.read_text(), "3. QA agent: verify the deployed story")
+    body = section(visible(SKILL.read_text()), "3. QA agent: verify the deployed story")
     assert QA_ROUND_SENTENCE in body.splitlines(), "step 3 must read the pinned new-round sentence exactly"
     assert QA_ROUND_EXCEPTION in body.splitlines(), "step 3 must scope the exception a round may take"
     assert OLD_QA_ROUND_CLAUSE not in body, "the clause that forbids resuming is replaced, not kept beside it"
@@ -961,8 +967,8 @@ METRICS_USAGE = (
 )
 METRICS_TIMED_LAUNCHES = (
     "- **Timed launches:** time each senior engineer launch and each QA launch row, meaning each QA round's "
-    "spawn in step 3, each continuation of that round in step 4, and each checklist read-back resume of a QA "
-    "agent under step 0, taking the start immediately before that "
+    "spawn in step 3, each continuation of that round in step 4, each checklist read-back resume of a QA "
+    "agent under step 0, and each interim-deadline resume of a QA agent, taking the start immediately before that "
     "launch and the end when it returns, and record it as one row in launch order under a "
     "label unique within the invocation, with its runtime, model, effort, duration, tokens, and tool "
     "calls as `references/metrics.md` defines; `not "
@@ -974,8 +980,8 @@ METRICS_LAUNCH_POINTS = (
     "of the senior engineer under step 0, each interim-deadline resume of the senior engineer under "
     "`references/interim-handbacks.md`, and each resume or re-spawn in step 4; each QA round is a launch "
     "row in step 3, a continuation of that round under step 4 is a further launch row within the same "
-    "round, and each checklist read-back resume of a QA agent under step 0 is a launch row of its own "
-    "within that QA agent's round."
+    "round, each checklist read-back resume of a QA agent is a launch row of its own within that QA agent's "
+    "round, and so is each interim-deadline resume of a QA agent under `references/interim-handbacks.md`."
 )
 METRICS_EXTRAS = (
     "- **Extras:** take each `story-to-done` extra at the step that observes it: **Start** from the step 1 "
@@ -1259,7 +1265,7 @@ def test_readme_row_names_the_metrics_switch_and_its_default() -> None:
 
 def metrics_section() -> str:
     """The Metrics rules: the SKILL.md stub plus the protocol reference it points at."""
-    return section(SKILL.read_text(), "Metrics") + "\n" + PROTOCOL.read_text()
+    return section(visible(SKILL.read_text()), "Metrics") + "\n" + visible(PROTOCOL.read_text())
 
 
 def metrics_body() -> str:
@@ -2876,7 +2882,8 @@ def test_the_case_runner_detects_a_change_made_through_an_untracked_link(tmp_pat
 # SKL-254: interim senior-engineer handbacks get a deadline and a primary-source read.
 INTERIM = ROOT / "skills" / "story-to-done" / "references" / "interim-handbacks.md"
 INTERIM_STEP_0_POINTER = (
-    "An interim handback from the senior engineer is classified first, before the checklist read-back below, under "
+    "An interim handback from the senior engineer or a QA agent is classified first, before the checklist read-back "
+    "below, under "
     "[references/interim-handbacks.md](references/interim-handbacks.md)."
 )
 STEP_0_CHECKLIST_READ = (
@@ -2948,24 +2955,25 @@ INTERIM_CLEAR_LATE = (
     "deadline."
 )
 INTERIM_LIMITS = (
-    "This rule changes no step logic for final or blocked handbacks, and leaves step 2's stop clause, every QA "
-    "step, and the no-write and no-verdict constraints unchanged; it only comes before step 0's read-back and "
-    "step 2's check."
+    "This rule changes no step logic for final or blocked handbacks, and leaves step 2's stop clause, step 4's "
+    "continuation content limits, mixed-owner stop, owner-action stop, and new-round rules, and the no-write and "
+    "no-verdict constraints unchanged; it only comes before step 0's read-back, step 2's check and step 4's "
+    "classification."
 )
 
 
 def interim_text() -> str:
     assert INTERIM.is_file(), f"missing {INTERIM.relative_to(ROOT)}"
-    return " ".join(INTERIM.read_text().split())
+    return " ".join(visible(INTERIM.read_text()).split())
 
 
 def test_step_0_points_to_the_interim_handbacks_reference() -> None:
-    step_0 = " ".join(section(SKILL.read_text(), "0. Track everything on a todo list").split())
+    step_0 = " ".join(section(visible(SKILL.read_text()), "0. Track everything on a todo list").split())
     assert INTERIM_STEP_0_POINTER in step_0
 
 
 def test_step_0_classifies_an_interim_handback_before_reading_the_checklist() -> None:
-    step_0 = " ".join(section(SKILL.read_text(), "0. Track everything on a todo list").split())
+    step_0 = " ".join(section(visible(SKILL.read_text()), "0. Track everything on a todo list").split())
     assert step_0.index(INTERIM_STEP_0_POINTER) < step_0.index(STEP_0_CHECKLIST_READ)
 
 
@@ -3159,6 +3167,106 @@ def test_no_other_sentence_in_the_rule_stops_or_halts() -> None:
     assert stops == [
         INTERIM_ORDER, INTERIM_NO_RESUME_STOP, INTERIM_REDEADLINE, INTERIM_TWO_MISS_STOP, INTERIM_STOP, INTERIM_LIMITS,
     ]
+
+
+# SKL-257: the interim-handback rule covers a QA agent waiting on its own background work.
+INTERIM_QA_SCOPE = (
+    "A QA agent's handback that names an awaited item of its own background work (for example its evidence PR's "
+    "review-of-record gate or CI run) and is neither a final handback nor blocked is an interim handback too."
+)
+INTERIM_QA_MIXED = (
+    "A QA agent's handback that also names a failed item, or an outstanding item owned by anyone other than that QA "
+    "agent (an awaited item of its own background work counts as its own), is not an interim handback; it goes to "
+    "step 0's checklist read-back and step 4 as usual."
+)
+INTERIM_QA_ORDER = (
+    "The coordinator classifies a QA agent's interim handback before step 0's checklist read-back of that QA agent "
+    "and before step 4's classification."
+)
+INTERIM_STEP_3_POINTER = (
+    "A QA agent's interim handback goes to [references/interim-handbacks.md](references/interim-handbacks.md) "
+    "first; any other handback continues here."
+)
+STEP_3_READ_BACK_FIRST = "When it hands back, do the step 0 checklist read-back first, then read the story's state yourself."
+INTERIM_QA_IN_PLACE = (
+    "For a QA agent's interim handback the deadline rule above applies with that QA agent in place of the engineer, "
+    "except for the resume message."
+)
+INTERIM_QA_RESUME = (
+    "At a concluded deadline the coordinator resumes the same QA agent with a message that states only that the "
+    "round is unfinished and names the round's scratch subdirectory and the awaited item; it carries nothing else "
+    "the coordinator observed (no conclusion, no verdict, no earlier round's conclusions, no senior engineer "
+    "handback)."
+)
+INTERIM_QA_COUNTS = (
+    "A QA deadline resume does not increment the QA round count, does not count against step 0's read-back resume "
+    "cap, and does not consume step 4's \"once per observed change to the remainder\" continuation allowance."
+)
+INTERIM_QA_ROW = "With `metrics` on, each QA deadline resume is its own launch row within that round."
+INTERIM_QA_CONCLUDED = (
+    "A QA agent's handback that names an awaited item the coordinator already observed concluded at an earlier "
+    "deadline of that round is not an interim handback, since that item is no longer awaited; it goes to step 0's "
+    "checklist read-back and step 4 as usual, so step 0's read-back resume cap and step 4's no-progress rule bound it."
+)
+
+
+def test_the_interim_definition_covers_a_qa_agents_own_background_work() -> None:
+    text = interim_text()
+    assert text.index(INTERIM_DEFINITION) < text.index(INTERIM_QA_SCOPE) < text.index(INTERIM_STATED_BLOCKER)
+
+
+def test_a_qa_handback_that_also_names_a_failed_or_foreign_owned_item_is_not_interim() -> None:
+    text = interim_text()
+    assert text.index(INTERIM_QA_SCOPE) < text.index(INTERIM_QA_MIXED) < text.index(INTERIM_STATED_BLOCKER)
+
+
+def test_step_3_points_to_the_interim_handbacks_reference_and_restates_none_of_it() -> None:
+    step_3 = " ".join(section(visible(SKILL.read_text()), "3. QA agent: verify the deployed story").split())
+    assert INTERIM_STEP_3_POINTER in step_3
+    assert step_3.index(INTERIM_STEP_3_POINTER) < step_3.index(STEP_3_READ_BACK_FIRST)
+    rest = step_3.replace(INTERIM_STEP_3_POINTER, "").replace(QA_ROUND_EXCEPTION, "").lower()
+    for token in INTERIM_VOCABULARY + ("50%", "before step 4", "before the step 0", "before step 0"):
+        assert token not in rest, f"step 3 restates the interim rule ({token!r}) instead of pointing to it"
+
+
+def test_a_qa_interim_handback_is_classified_before_the_read_back_and_step_4() -> None:
+    text = interim_text()
+    assert text.index(INTERIM_ORDER) < text.index(INTERIM_QA_ORDER) < text.index(INTERIM_NO_RESUME)
+
+
+def test_a_qa_deadline_resume_carries_only_the_unfinished_round_its_subdirectory_and_the_awaited_item() -> None:
+    text = interim_text()
+    assert text.index(INTERIM_STOP) < text.index(INTERIM_QA_IN_PLACE) < text.index(INTERIM_QA_RESUME)
+
+
+def test_a_qa_deadline_resume_leaves_the_round_count_and_both_resume_caps_alone() -> None:
+    text = interim_text()
+    assert text.index(INTERIM_QA_RESUME) < text.index(INTERIM_QA_COUNTS) < text.index(INTERIM_LIMITS)
+
+
+def test_with_metrics_on_each_qa_deadline_resume_is_a_launch_row_within_its_round() -> None:
+    assert INTERIM_QA_ROW in interim_text()
+
+
+def test_a_qa_handback_on_an_item_already_observed_concluded_is_not_interim() -> None:
+    text = interim_text()
+    assert text.index(INTERIM_QA_RESUME) < text.index(INTERIM_QA_CONCLUDED) < text.index(INTERIM_LIMITS)
+
+
+def test_an_unclosed_html_comment_hides_the_rest_of_the_file() -> None:
+    assert visible("kept <!-- closed --> kept <!-- unclosed hides this") == "kept  kept "
+
+
+def test_each_qa_interim_contract_appears_exactly_once() -> None:
+    text = interim_text()
+    for phrase in (
+        INTERIM_QA_SCOPE, INTERIM_QA_MIXED, INTERIM_QA_ORDER, INTERIM_QA_IN_PLACE,
+        INTERIM_QA_RESUME, INTERIM_QA_COUNTS, INTERIM_QA_ROW, INTERIM_QA_CONCLUDED,
+    ):
+        assert text.count(phrase) == 1, phrase
+    skill = " ".join(visible(SKILL.read_text()).split())
+    assert skill.count(INTERIM_STEP_3_POINTER) == 1
+    assert skill.count(QA_ROUND_EXCEPTION) == 1
 
 
 # SKL-155: the `qa-round-cap` argument stops the loop at the cap-th counted QA round that ends in
@@ -3429,7 +3537,7 @@ def test_the_record_shape_pattern_matches_the_record_and_not_the_bare_word_readi
 # step 3 section and the two step 4 bullets that brief QA and the engineer are also pinned whole; change a
 # digest only together with a reviewed change to the text it covers.
 STEP_3_HEADING = "3. QA agent: verify the deployed story"
-STEP_3_SHA256 = "cad1e67bc899ba7d255c3923674592ae90a3066aa871eb7d9f998ad0973c0ac2"
+STEP_3_SHA256 = "8d0aef0df7ddfb790ce16875812301d9b068c8a798885783bdb155069eef955a"
 IN_PROGRESS_SHA256 = "fd4768e7d39be8e29341cd0f5d186bfaf96a8bf7bfc8eebb8b1e39b101eb95e7"
 IN_DEPLOYMENT_REVIEW_SHA256 = "36da368bed892519776e5be61064d2fad186151ca58ae90aff897e9a1ffaa968"
 # The only lines of a state bullet that may state the pending owner ruling record.
