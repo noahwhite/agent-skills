@@ -43,9 +43,15 @@ BASE_ENV_PREFIXES = ("LC_", "XDG_")
 MIN_REDACTED = 8
 REDACTED = "{redacted}"
 UUID = re.compile(r"(?i)\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b")
+# A record holds files such as messages.json as JSON text, where a newline is the two characters
+# backslash and n, so a path that starts a line follows a word character. A complete JSON escape
+# that ends in a word character (\n \t \r \b \f \uXXXX) therefore still starts a path. The pattern
+# cannot tell an escape from a message that quotes one (printf("\t/srv/x"), serialised as a doubled
+# backslash before t), so that path is redacted too: the accepted cost is over-redaction, never less.
+AFTER_ESCAPE = r"(?:(?<=\\[ntrbf])|(?<=\\u[0-9A-Fa-f]{4}))"
 # An absolute path of two or more segments that no known root above accounted for. The
 # lookbehind keeps URLs (scheme://host/path) and relative paths (a/b/c) as they are.
-ABSOLUTE_PATH = re.compile(r"(?<![\w.:/{}~-])/(?:[\w.@+-]+/)+[\w.@+-]*")
+ABSOLUTE_PATH = re.compile(r"(?:(?<![\w.:/{}~-])|" + AFTER_ESCAPE + r")/(?:[\w.@+-]+/)+[\w.@+-]*")
 VOID_LINE = re.compile(r"^(HARNESS|run\.sh):")
 # The record fields --resume compares with this run, each against its run context key.
 RECORD_FIELDS = {"label": "label", "checkout_commit": "checkout_commit", "harness_commit": "harness_commit",
@@ -168,7 +174,8 @@ class Normaliser:
             text = text.replace(value, REDACTED)
         for path, placeholder in self.pairs:
             # A root is only replaced whole: /home/user never rewrites /home/user2 or /srv/home/user.
-            text = re.sub(r"(?<![\w.-])" + re.escape(path) + r"(?![\w.-])", lambda _: placeholder, text)
+            text = re.sub(r"(?:(?<![\w.-])|" + AFTER_ESCAPE + ")" + re.escape(path) + r"(?![\w.-])",
+                          lambda _: placeholder, text)
         text = UUID.sub("{uuid}", text)
         text = ABSOLUTE_PATH.sub("{path}", text)
         for regex in self.leaks:
