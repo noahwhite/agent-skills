@@ -252,7 +252,7 @@ Each line names issue keys only, never an anchor's point value.
 - **Exemplar skipped:** one `Exemplar skipped: <key> <reason>` line per skipped candidate, where `<reason>` is exactly one of `not done`, `reopened`, `no Capstone comment`, `Capstone comment names a value` or `conflicting type labels`.
 - **Exemplar not selected:** one `Exemplar not selected: <key>` line per eligible candidate of the story's type that was not selected because another has a more recent `Capstone` comment.
 - **Anchor skipped:** one `Anchor skipped: <key> <reason>` line per skipped anchor, where `<reason>` is exactly one of `not done`, `no estimate`, `above point cap`, `no Calibration anchor comment` or `comment point value differs`.
-- **Not looked up:** a closing-message outcome only, written on both the `exemplars:` and the `anchors:` line when a roster stop (Step 1 item 2) or a type-check stop (item 3) ends the ceremony before the lookups run and before any record is posted; it takes precedence over `none configured` and `not pointed` and never appears on a record line.
+- **Not looked up:** a closing-message outcome only, written on both the `exemplars:` and the `anchors:` line when a roster stop (Step 1 item 2) or a type-check stop (item 3) ends the ceremony before the lookups run and before any record is posted, or on every short-path ending, which skips the lookups and posts no record other than its Triage record; it takes precedence over `none configured` and `not pointed` and never appears on a record line.
 
 ## Comment headings
 
