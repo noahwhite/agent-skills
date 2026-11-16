@@ -1265,7 +1265,7 @@ def test_readme_row_names_the_metrics_switch_and_its_default() -> None:
 
 def metrics_section() -> str:
     """The Metrics rules: the SKILL.md stub plus the protocol reference it points at."""
-    return visible(section(SKILL.read_text(), "Metrics") + "\n" + PROTOCOL.read_text())
+    return section(visible(SKILL.read_text()), "Metrics") + "\n" + visible(PROTOCOL.read_text())
 
 
 def metrics_body() -> str:
@@ -3241,6 +3241,18 @@ def test_a_qa_deadline_resume_leaves_the_round_count_and_both_resume_caps_alone(
 
 def test_with_metrics_on_each_qa_deadline_resume_is_a_launch_row_within_its_round() -> None:
     assert INTERIM_QA_ROW in interim_text()
+
+
+def test_each_qa_interim_contract_appears_exactly_once() -> None:
+    text = interim_text()
+    for phrase in (
+        INTERIM_QA_SCOPE, INTERIM_QA_MIXED, INTERIM_QA_ORDER, INTERIM_QA_IN_PLACE,
+        INTERIM_QA_RESUME, INTERIM_QA_COUNTS, INTERIM_QA_ROW,
+    ):
+        assert text.count(phrase) == 1, phrase
+    skill = " ".join(visible(SKILL.read_text()).split())
+    assert skill.count(INTERIM_STEP_3_POINTER) == 1
+    assert skill.count(QA_ROUND_EXCEPTION) == 1
 
 
 # SKL-155: the `qa-round-cap` argument stops the loop at the cap-th counted QA round that ends in
