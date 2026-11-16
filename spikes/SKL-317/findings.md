@@ -301,21 +301,23 @@ The guards are the four in `.github/workflows/ci.yml` at this branch's head.
 Their commands are the ones the story lists; the one difference is that the workflow sets `OPENCODE_FORCE_INSTALL=1` for guard 4, which makes `scripts/smoke-opencode.sh` install the pinned opencode even when the same version is already on the machine.
 Pinned `skills-ref` reference, from that file: `git+https://github.com/agentskills/agentskills@69ef37e9424c0a7ea9dd2293b559e43ec8176379#subdirectory=skills-ref`.
 
-The four guards ran on commit `8c59dc9672d5ca4fb3ee1dcb1dc96280e208d00b` on 2026-11-16, locally and in [ci run 43812144326](https://github.com/noahwhite/agent-skills/actions/runs/43812144326), which ran on a draft pull request opened for that commit and closed unmerged.
+The four guards ran on commit `cfb7a8a33daa3feae6df361ca060ba05c9ef0025` on 2026-11-16, locally and in [ci run 43827196891](https://github.com/noahwhite/agent-skills/actions/runs/43827196891), which ran on a draft pull request opened for that commit and closed unmerged.
 A file cannot name the CI run of the commit that holds it.
 Every commit after that one, the merged one included, gets the same four guards from the `ci` workflow, which runs guards 1, 2 and 3 in its `checks` job and guard 4 in its `discovery` job on every pull request head and on every push to `main`.
 The pull request that merges this file and the SKL-317 handoff comment name those runs.
 
 | Guard | Command | Commit | Where it ran | Exit status | Result |
 |---|---|---|---|---|---|
-| 1 | `uv run --locked pytest -q` | `8c59dc9672d5ca4fb3ee1dcb1dc96280e208d00b` | locally, and the `checks` job of ci run 43812144326 | 0 in both | pass: 2665 passed locally; the step "Repository tests" succeeded |
-| 2 | `uv run --locked python scripts/leak_scan.py --require-private` | `8c59dc9672d5ca4fb3ee1dcb1dc96280e208d00b` | the `checks` job of ci run 43812144326 | 0 | pass: the step "Leak scan (public and private patterns)" succeeded |
-| 3 | `uvx --from "<pinned reference>" skills-ref validate "$d"` for each of the 18 `skills/*/` directories | `8c59dc9672d5ca4fb3ee1dcb1dc96280e208d00b` | locally, and the `checks` job of ci run 43812144326 | 0 for each | pass: "Valid skill" for each of the 18 locally; the step "Validate skills against the Agent Skills spec" succeeded |
-| 4 | `bash scripts/smoke-opencode.sh` | `8c59dc9672d5ca4fb3ee1dcb1dc96280e208d00b` | locally, and the `discovery` job of ci run 43812144326 with `OPENCODE_FORCE_INSTALL=1` | 0 in both | pass: opencode discovered all 18 skills in each of the 6 locations locally; the step "opencode discovers every skill" succeeded |
+| 1 | `uv run --locked pytest -q` | `cfb7a8a33daa3feae6df361ca060ba05c9ef0025` | locally, and the `checks` job of ci run 43827196891 | 0 in both | pass: 2708 passed locally; the step "Repository tests" succeeded |
+| 2 | `uv run --locked python scripts/leak_scan.py --require-private` | `cfb7a8a33daa3feae6df361ca060ba05c9ef0025` | the `checks` job of ci run 43827196891 | 0 | pass: the step "Leak scan (public and private patterns)" succeeded |
+| 3 | `uvx --from "<pinned reference>" skills-ref validate "$d"` for each of the 18 `skills/*/` directories | `cfb7a8a33daa3feae6df361ca060ba05c9ef0025` | locally, and the `checks` job of ci run 43827196891 | 0 for each | pass: "Valid skill" for each of the 18 locally; the step "Validate skills against the Agent Skills spec" succeeded |
+| 4 | `bash scripts/smoke-opencode.sh` | `cfb7a8a33daa3feae6df361ca060ba05c9ef0025` | locally, and the `discovery` job of ci run 43827196891 with `OPENCODE_FORCE_INSTALL=1` | 0 in both | pass: opencode discovered all 18 skills in each of the 6 locations locally; the step "opencode discovers every skill" succeeded |
 
 - Guard 2 needs the private patterns, which exist only as the CI secret `LEAK_DENYLIST`.
   Run locally, the command exits 2 with `INCOMPLETE` because no private pattern is loaded, so its status above is the CI one.
   The public patterns alone, `uv run --locked python scripts/leak_scan.py`, exit 0 locally.
+- `python3 spikes/SKL-317/poc/selftest.py` exited 0 on the same commit with "selftest: every check holds".
+  It is not one of the four guards, and no CI job runs it.
 - No guard rejected a spike file, so no normalization, encoding, exemption or amendment was needed after a guard ran.
 - No exemption entry was added: no tracked file outside `spikes/SKL-317/` changed, and the locked uv environment and its lockfile are unchanged.
 - `poc/compare.md` was committed as the live run wrote it: `poc/compare.py` writes tabulated fields only, and no path outside the repository, session id, prompt text or agent output.
