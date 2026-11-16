@@ -1,0 +1,20 @@
+{"action": "tracker-read", "at": "2026-11-16T05:43:48Z", "qa_round": 0}
+{"action": "read", "at": "2026-11-16T05:43:48Z", "path": "senior-engineer/senior-engineer-todo.md", "qa_round": 0}
+{"action": "qa-launch", "at": "2026-11-16T05:43:52Z", "label": "qa-agent-round-1", "message_id": 1, "qa_round": 0, "served": "qa-round-1.md"}
+{"action": "read", "at": "2026-11-16T05:43:56Z", "path": "qa-agent-round-1/qa-agent-round-1-todo.md", "qa_round": 1}
+{"action": "tracker-read", "at": "2026-11-16T05:43:56Z", "qa_round": 1}
+{"action": "user-message", "at": "2026-11-16T05:44:00Z", "message_id": 2, "qa_round": 1}
+{"action": "engineer-launch", "at": "2026-11-16T05:44:02Z", "label": "senior-engineer", "message_id": 3, "qa_round": 1, "served": "engineer-handback-1.md"}
+{"action": "read", "at": "2026-11-16T05:44:06Z", "path": "senior-engineer/senior-engineer-todo.md", "qa_round": 1}
+{"action": "tracker-read", "at": "2026-11-16T05:44:06Z", "qa_round": 1}
+{"action": "qa-launch", "at": "2026-11-16T05:44:09Z", "label": "qa-agent-round-2", "message_id": 4, "qa_round": 1, "served": "qa-round-2.md"}
+{"action": "read", "at": "2026-11-16T05:44:12Z", "path": "qa-agent-round-2/qa-agent-round-2-todo.md", "qa_round": 2}
+{"action": "tracker-read", "at": "2026-11-16T05:44:12Z", "qa_round": 2}
+{"action": "user-message", "at": "2026-11-16T05:44:15Z", "message_id": 5, "qa_round": 2}
+{"action": "engineer-launch", "at": "2026-11-16T05:44:18Z", "label": "senior-engineer", "message_id": 6, "qa_round": 2, "served": "engineer-handback-2.md"}
+{"action": "read", "at": "2026-11-16T05:44:23Z", "path": "senior-engineer/senior-engineer-todo.md", "qa_round": 2}
+{"action": "tracker-read", "at": "2026-11-16T05:44:23Z", "qa_round": 2}
+{"action": "qa-launch", "at": "2026-11-16T05:44:26Z", "label": "qa-agent-round-3", "message_id": 7, "qa_round": 2, "served": "qa-round-3.md"}
+{"action": "read", "at": "2026-11-16T05:44:29Z", "path": "qa-agent-round-3/qa-agent-round-3-todo.md", "qa_round": 3}
+{"action": "tracker-read", "at": "2026-11-16T05:44:29Z", "qa_round": 3}
+{"action": "user-message", "at": "2026-11-16T05:44:34Z", "message_id": 8, "qa_round": 3}
