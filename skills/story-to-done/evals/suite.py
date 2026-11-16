@@ -73,7 +73,8 @@ AFTER_ESCAPE = r"(?:(?<=\\[ntrbf])|(?<=\\u[0-9A-Fa-f]{4}))"
 # The left boundary of a known root, in both passes, is ASCII: only an ASCII letter, digit, _, .
 # or - directly before a root keeps it whole (prefix/root is left as it is), so a root behind any
 # non-ASCII character, a letter such as é included, or behind a control character is replaced.
-# The absolute-path rewrite below keeps its own boundary.
+# The right boundary stays (?![\w.-]), only the text pass also accepts a root after AFTER_ESCAPE,
+# and the absolute-path rewrite below keeps its own boundary.
 ROOT_LEFT = r"(?<![A-Za-z0-9_.-])"
 # An absolute path of two or more segments that no known root above accounted for. The
 # lookbehind keeps URLs (scheme://host/path) and relative paths (a/b/c) as they are.

@@ -354,7 +354,7 @@ def test_run_directories_sit_outside_both_checkouts_and_never_reach_a_record(sui
     assert f'"accented": "é{run_dirs[0]}"' in written, written
     # No grader input of any run record holds a run directory once its JSON content is decoded.
     for path in (suite["evals"] / "stub" / "results").glob("*[0-9].json"):
-        for name, content in json.loads(path.read_text())["grader_inputs"].items():
+        for name, content in json.loads(path.read_text(errors="replace"))["grader_inputs"].items():
             for string in decoded_strings(content):
                 for run_dir in run_dirs:
                     assert run_dir not in string, f"{path.name} {name}: {string!r}"
@@ -533,15 +533,19 @@ def test_the_normaliser_decodes_each_string_literal_before_redacting_known_roots
 def left_boundary_forms(name: str, message: str, expected, labels: dict):
     spelled = {"decoded": lambda text: text,
                "raw-utf8": lambda text: in_message(json.dumps(text, ensure_ascii=False)),
-               "u-escape": lambda text: in_message(json.dumps(text))}
+               "u-escape": lambda text: in_message(json.dumps(text)),
+               # \/ hides the root from the text pass, so only the decoded pass can replace it; the
+               # changed literal is re-encoded as raw UTF-8 with plain solidi.
+               "solidus": lambda text: in_message(json.dumps(text, ensure_ascii=False).replace("/", "\\/"))}
     for form, label in labels.items():
-        wanted = expected[form] if isinstance(expected, dict) else spelled[form](expected)
+        wanted = (expected[form] if isinstance(expected, dict)
+                  else spelled["raw-utf8" if form == "solidus" else form](expected))
         yield pytest.param(spelled[form](message), wanted, id=f"{label}-{name}-{form}")
 
 
 ALL_GUARD = {"decoded": "guard", "raw-utf8": "guard", "u-escape": "guard"}
 # A raw non-ASCII character ahead of a root blocked it at 57807ed only where it is a word character.
-WORD_BEFORE_ROOT = {"decoded": "must-fail", "raw-utf8": "must-fail", "u-escape": "guard"}
+WORD_BEFORE_ROOT = {"decoded": "must-fail", "raw-utf8": "must-fail", "u-escape": "guard", "solidus": "must-fail"}
 LEFT_BOUNDARY = [
     *left_boundary_forms("e-acute-run-root", f"é{RUN_ROOT}/a.json", "é{run_dir}/a.json", WORD_BEFORE_ROOT),
     *left_boundary_forms("cjk-home-root", f"中{HOME_ROOT}/x", "中{home}/x", WORD_BEFORE_ROOT),
