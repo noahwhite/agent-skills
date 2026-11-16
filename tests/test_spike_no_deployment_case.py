@@ -137,6 +137,79 @@ def test_a_qa_brief_that_denies_the_environment_fails(tmp_path: Path, denial: st
     assert any("environment dev" in line for line in failed(grade(run, "deployed")))
 
 
+def edit_brief(run: Path, channel: str, edit) -> None:
+    kept = messages(run)
+    for message in kept:
+        if message["channel"] == channel:
+            message["text"] = edit(message["text"])
+    write_messages(run, kept)
+
+
+def test_the_deployed_path_grade_holds_every_control_check_and_the_path_lines() -> None:
+    run = FIXTURES / "deployed" / "keeping"
+    control = grade(run, "deployed").stdout.splitlines()[:-1]
+    path = grade(run, "deployed-path").stdout.splitlines()[:-1]
+    assert control and set(control) <= set(path)
+    assert sum("`path: deployed`" in line for line in path) == 3
+
+
+def test_deployed_briefs_without_a_path_line_pass_the_control_and_fail_the_path_grade(tmp_path: Path) -> None:
+    run = copied(tmp_path, "deployed")
+    for channel in ("engineer", "qa"):
+        edit_brief(run, channel, lambda text: text.replace("path: deployed\n", ""))
+    assert grade(run, "deployed").returncode == 0
+    assert sum("path line" in line for line in failed(grade(run, "deployed-path"))) == 2
+
+
+@pytest.mark.parametrize("environment", ["Environment under test: dev; no production changes.",
+                                         "Environment under test: dev, not production."])
+def test_a_denial_in_another_clause_keeps_the_environment(tmp_path: Path, environment: str) -> None:
+    run = copied(tmp_path, "deployed")
+    edit_brief(run, "qa", lambda text: text.replace("Environment under test: dev.", environment))
+    assert grade(run, "deployed").returncode == 0
+
+
+@pytest.mark.parametrize("edit", [
+    lambda text: text + "\nVerify on production, not the dev environment.\n",
+    lambda text: text.replace("Environment under test: dev.", "Health check: https://dev.example.com/health."),
+    lambda text: text.replace("Environment under test: dev.", "Environment under test: dev.example.com."),
+])
+def test_a_qa_brief_that_denies_or_only_hosts_the_environment_fails(tmp_path: Path, edit) -> None:
+    run = copied(tmp_path, "deployed")
+    edit_brief(run, "qa", edit)
+    assert any("environment dev" in line for line in failed(grade(run, "deployed")))
+
+
+@pytest.mark.parametrize("edit", [
+    lambda text: text.replace("ABC-123", "https://example.com/ABC-123"),
+    lambda text: text.replace("ABC-123", "ops@ABC-123.example.com"),
+    lambda text: text.replace("Load and follow the `qa-verification` skill", "Do not load the `qa-verification` skill")
+    .replace("that `qa-verification` defines", "that QA defines"),
+])
+def test_a_brief_that_names_its_story_or_skill_only_in_a_url_or_a_denial_fails(tmp_path: Path, edit) -> None:
+    run = copied(tmp_path, "deployed")
+    edit_brief(run, "qa", edit)
+    assert any("the qa brief" in line and "names ABC-123" in line for line in failed(grade(run, "deployed")))
+
+
+DELIVERABLE = "https://docs.example.com/abc-123/yaml-parser-comparison"
+COMMIT = "4e1c2a9b7d3f5e6a8c0b1d2e3f4a5b6c7d8e9f01"
+
+
+@pytest.mark.parametrize(("scenario", "old", "new"), [
+    ("spike", DELIVERABLE, f"(do not verify {DELIVERABLE})"),
+    ("spike", DELIVERABLE, f"{DELIVERABLE}-draft"),
+    ("no-deployment", COMMIT, f"https://example.com/{COMMIT}"),
+    ("no-deployment", COMMIT, f"(do not use {COMMIT})"),
+    ("direct-entry", COMMIT, f"https://example.com/commit/{COMMIT[:7]}"),
+])
+def test_a_qa_brief_that_names_its_target_only_in_a_denial_or_a_longer_url_fails(
+        tmp_path: Path, scenario: str, old: str, new: str) -> None:
+    run = copied(tmp_path, scenario)
+    edit_brief(run, "qa", lambda text: text.replace(old, new))
+    assert any("the QA brief" in line for line in failed(grade(run, scenario)))
+
+
 @pytest.mark.parametrize("scenario", ["spike", "no-deployment", "direct-entry", "conflict"])
 def test_a_run_that_read_no_story_before_sending_fails(tmp_path: Path, scenario: str) -> None:
     run = copied(tmp_path, scenario)
@@ -224,6 +297,13 @@ def test_run_sh_records_each_selector_run(tmp_path: Path) -> None:
     entries = [json.loads(line) for line in (tmp_path / "run" / "selector.jsonl").read_text().splitlines()]
     assert [(entry["argv"][:1], entry["stdout"]) for entry in entries] == [(["--title=[Spike] X"], "spike\n")]
     assert "PASS select-path.py printed `spike`" in result.stdout
+
+
+def test_run_sh_grades_a_deployed_run_on_its_path_grade_too(tmp_path: Path) -> None:
+    result = run_sh(tmp_path, "deployed", SELECTING_AGENT)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert (tmp_path / "run" / "grader-output.txt").is_file()
+    assert "`path: deployed`" in (tmp_path / "run" / "grader-path-output.txt").read_text()
 
 
 @pytest.mark.parametrize("target", ["workspace/story-runtime", "workspace/profile.yaml", "selector-hook/sitecustomize.py"])

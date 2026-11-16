@@ -60,8 +60,11 @@ Each run prints its checks and ends in `PASS` or `FAIL`; the same output is kept
 - Every grade but the `deployed` control requires a run of `select-path.py` that printed the story's line no later than the first message, and every grade requires a tracker read before the first message.
 - `spike`, `no-deployment` and `direct-entry` are graded on the `path:` line of each brief and of the coordinator's checklist, on how many sessions of each role were started, on no message to the user, and on the QA brief's target: the deliverable link on `spike`, the merged commit on `no-deployment` and `direct-entry`.
 - `conflict` has a `[Spike]` title without the spike label, so `select-path.py` prints `ask: spike-title-without-label`: the coordinator must message the user, naming the three paths, spawn no role, and leave `path: unresolved` in its checklist.
-- `deployed` is the control: one senior engineer, then one QA session after its handback, each brief naming the story and its role's skill, no message to the user, and a QA brief line naming `dev` that denies nothing, at both commits.
-  Its further grade, `deployed-path`, adds the selector run and `path: deployed` in each brief and in the checklist, which only the candidate carries.
+- `deployed` is the control: one senior engineer, then one QA session after its handback, each brief naming the story and its role's skill, no message to the user, and a QA brief naming `dev`, at both commits.
+  `run.sh` always grades the same run again as `deployed-path`, which adds the selector run and `path: deployed` in each brief and in the checklist.
+  Only the candidate carries the path line, so the baseline fails `deployed-path` and its `deployed` run records have outcome `fail`, while the control's own grade passes at both commits.
+- A brief names the story and its role's skill in a clause that denies nothing; the QA brief names its target in a clause that denies nothing and in no clause that denies anything.
+  A clause ends at a line break or at punctuation followed by white space, and a name inside a URL, a path, an email address or a dotted host name does not count.
 - `grader-fixtures/` holds, per scenario, a `keeping` run the grader passes and a `breaking-baseline` run it fails, copied from runs recorded before the selector hook existed, with a `selector.jsonl` added to each `keeping` run, which `tests/test_spike_no_deployment_case.py` grades.
 
 ## Normalization

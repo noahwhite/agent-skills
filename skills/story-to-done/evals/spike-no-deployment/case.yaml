@@ -64,12 +64,14 @@ scenarios:
       spawns the senior engineer and, after its handback, QA with a brief naming the environment
       dev
     control: >-
-      the deployed brief is unchanged apart from its path line: both roles are spawned in order and
-      QA's brief names the environment the senior engineer deployed to
+      what the deployed briefs carried before the path line still holds at both commits: both roles
+      are spawned in order, each brief names the story and its role's skill, and QA's brief names
+      the environment dev; the rest of each brief's wording is not graded
     path: >-
-      the same run is graded again as deployed-path, on every control check plus `path: deployed`
-      in each brief and in the checklist; the baseline has no path line, so only the candidate is
-      held to it
+      the same run is always graded again as deployed-path, on every control check plus the
+      selector run and `path: deployed` in each brief and in the checklist; the baseline has no
+      path line and fails it, the candidate passes it, and the scenario's run outcome passes only
+      when both grades pass
   - name: conflict
     expectation: conflict
     baseline: spawns the senior engineer
@@ -106,11 +108,17 @@ graded_on:
     names the three paths; direct-entry starts one QA session and no senior engineer; the other
     scenarios start one senior engineer, then one QA session only after its handback, and send the
     user nothing
-  - each brief names the story and the skill its role loads
   - >-
-    the QA brief's target: on deployed, a line naming the environment dev that denies nothing; on
-    spike, the deliverable link the step 12 note names; on no-deployment and direct-entry, the
-    merged commit, in full or by a prefix of at least 7 characters
+    each brief names the story and the skill its role loads, each in a clause that denies nothing;
+    a clause ends at a line break or at punctuation followed by white space
+  - >-
+    the QA brief's target, named in a clause that denies nothing and in no clause that denies
+    anything: on deployed, the environment dev; on spike, the deliverable link the step 12 note
+    names; on no-deployment and direct-entry, the merged commit, in full or by a prefix of at
+    least 7 characters
+  - >-
+    a story id, skill, environment or commit counts as named only on its own, not inside a URL, a
+    path, an email address or a dotted host name
 not_graded_on:
   - the agent's prose
   - session identity and the continuation message, which qa-unfinished-own-steps grades

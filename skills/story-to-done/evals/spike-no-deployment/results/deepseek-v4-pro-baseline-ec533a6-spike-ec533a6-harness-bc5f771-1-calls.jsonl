@@ -1,5 +1,0 @@
-{"action": "tracker-read", "at": "2026-11-16T11:27:01Z"}
-{"action": "engineer-launch", "at": "2026-11-16T11:27:18Z", "label": "senior-engineer", "message_id": 1, "served": "engineer-handback.md"}
-{"action": "read", "at": "2026-11-16T11:27:23Z", "path": "senior-engineer/senior-engineer-todo.md"}
-{"action": "tracker-read", "at": "2026-11-16T11:27:23Z"}
-{"action": "qa-launch", "at": "2026-11-16T11:27:41Z", "label": "qa-agent-round-1", "message_id": 2}

@@ -8,7 +8,10 @@ the agent's prose. Prints one line per check and ends with PASS or FAIL.
 
   grader.py --run-dir DIR --expectation EXPECTATION
 
-EXPECTATION is a scenario name, or deployed-path, the deployed scenario's path grade.
+EXPECTATION is a scenario name, or deployed-path, the deployed scenario's path grade. The deployed
+grade is the control alone, which both commits must pass; it carries no path check. run.sh always
+grades a deployed run as deployed-path too, which adds the selector run and `path: deployed` in
+each brief and in the checklist, and the run passes only when both grades pass.
 
 Exit codes: 0 PASS, 1 FAIL, 2 the run cannot be graded, so nothing was: it has no `actions.jsonl`,
 or holds a record or message store the runtime could not have written.
@@ -45,7 +48,13 @@ ACTIONS = {*SENDS, "tracker-read", "read"}
 FIELDS = {"action", "at", "message_id", "label", "path", "served"}
 PATH_LINE = re.compile(r"path:\s*(\S+)")
 FENCE = re.compile(r"(`{3,}|~{3,})")
-NEGATION = re.compile(r"\b(?:no|not|none|without|never)\b|n't\b", re.IGNORECASE)
+NEGATION = re.compile(r"\b(?:no|not|none|without|never)\b(?!-)|n't\b", re.IGNORECASE)
+# A clause ends at a line break or at punctuation followed by white space, so a URL or a dotted
+# name stays inside its clause.
+CLAUSE_END = re.compile(r"\n|[.;,!?](?=\s|$)")
+# A name inside a URL, a path, an email address or a dotted host name is not named on its own.
+BEFORE = r"(?<![A-Za-z0-9_\-/.@])"
+AFTER = r"(?![A-Za-z0-9_\-/@]|\.[A-Za-z0-9])"
 STAMP = re.compile(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ")
 
 
@@ -62,8 +71,25 @@ def scenario_of(expectation: str) -> str:
 
 
 def word(name: str, text: str) -> bool:
-    """Whether the text names the name as a whole word, not inside a longer token."""
-    return re.search(rf"(?<![A-Za-z0-9_-]){re.escape(name)}(?![A-Za-z0-9_-])", text) is not None
+    """Whether the text names the name on its own: not inside a longer token, a URL, a path, an
+    email address or a dotted host name."""
+    return re.search(BEFORE + re.escape(name) + AFTER, text) is not None
+
+
+def naming_clauses(names, text: str) -> list[str]:
+    """The clauses of the text that name it; `names` says whether a clause does."""
+    return [clause for clause in CLAUSE_END.split(text) if names(clause)]
+
+
+def affirms(names, text: str) -> bool:
+    """Whether a clause of the text names it and denies nothing."""
+    return any(not NEGATION.search(clause) for clause in naming_clauses(names, text))
+
+
+def affirms_only(names, text: str) -> bool:
+    """Whether the text names it and no clause that names it denies anything."""
+    named = naming_clauses(names, text)
+    return bool(named) and not any(NEGATION.search(clause) for clause in named)
 
 
 def message_store(run_dir: pathlib.Path) -> dict[int, dict]:
@@ -196,12 +222,12 @@ def checklist_paths(run_dir: pathlib.Path) -> list[str] | None:
 def names_merged_commit(text: str) -> bool:
     """Whether the text names the merged commit, in full or by a prefix of at least 7 characters."""
     return any(MERGED_COMMIT.startswith(token.lower())
-               for token in re.findall(r"(?<![0-9A-Za-z])[0-9a-fA-F]{7,40}(?![0-9A-Za-z])", text))
+               for token in re.findall(BEFORE + r"[0-9a-fA-F]{7,40}" + AFTER, text))
 
 
-def names_environment(text: str) -> bool:
-    """Whether a line of the text names the environment and denies nothing."""
-    return any(word(ENVIRONMENT, line) and not NEGATION.search(line) for line in text.splitlines())
+def names_deliverable(text: str) -> bool:
+    """Whether the text names the deliverable link, not a longer link that starts with it."""
+    return re.search(re.escape(DELIVERABLE) + r"(?![A-Za-z0-9_\-/?#=&]|\.[A-Za-z0-9])", text) is not None
 
 
 def path_checks(run_dir: pathlib.Path, path: str, briefs: list[dict]) -> list[tuple[bool, str]]:
@@ -235,9 +261,13 @@ def selector_checks(expectation: str, runs: list[dict], sent: list[dict]) -> lis
 
 
 def brief_checks(briefs: list[dict]) -> list[tuple[bool, str]]:
-    """Each role brief names the story and the skill its role loads."""
-    return [(word(STORY, brief["text"]) and ROLE_SKILL[brief["to"]] in brief["text"],
-             f"the {brief['to']} brief, message {brief['message_id']}, names {STORY} and {ROLE_SKILL[brief['to']]}")
+    """Each role brief names the story and the skill its role loads, each in a clause that denies
+    nothing. A brief's rules may also name the skill in a clause that denies something, such as a
+    step the role never does, so other clauses are not held to it."""
+    return [(affirms(lambda clause: word(STORY, clause), brief["text"])
+             and affirms(lambda clause, skill=ROLE_SKILL[brief["to"]]: word(skill, clause), brief["text"]),
+             f"the {brief['to']} brief, message {brief['message_id']}, names {STORY} and {ROLE_SKILL[brief['to']]}, "
+             "each in a clause that denies nothing")
             for brief in briefs]
 
 
@@ -247,14 +277,16 @@ def launch_checks(engineer: list[dict], qa: list[dict], engineers: int) -> list[
 
 
 def target_checks(expectation: str, qa: list[dict]) -> list[tuple[bool, str]]:
-    """The QA brief names what QA verifies on the scenario's path."""
+    """The QA brief names what QA verifies on the scenario's path, and no clause naming it denies
+    anything."""
     if expectation in ("deployed", "deployed-path"):
-        check, target = names_environment, f"the environment {ENVIRONMENT}, on a line that denies nothing"
+        names, target = (lambda clause: word(ENVIRONMENT, clause)), f"the environment {ENVIRONMENT}"
     elif expectation == "spike":
-        check, target = (lambda text: DELIVERABLE in text), f"the deliverable {DELIVERABLE}"
+        names, target = names_deliverable, f"the deliverable {DELIVERABLE}"
     else:
-        check, target = names_merged_commit, f"the merged commit {MERGED_COMMIT[:7]}"
-    return [(check(brief["text"]), f"the QA brief, message {brief['message_id']}, names {target}") for brief in qa]
+        names, target = names_merged_commit, f"the merged commit {MERGED_COMMIT[:7]}"
+    return [(affirms_only(names, brief["text"]), f"the QA brief, message {brief['message_id']}, names {target}, "
+             "and no clause naming it denies anything") for brief in qa]
 
 
 def checks(expectation: str, run_dir: pathlib.Path, recorded: list[dict], sent: list[dict]) -> list[tuple[bool, str]]:
