@@ -342,7 +342,7 @@ def build_parser() -> Parser:
     arm.add_argument("--state-dir", required=True)
     arm.set_defaults(run=cmd_arm)
 
-    record = sub.add_parser("record", help="count the newest new QA evidence comment; prints round=<n> cap=<c> reached=yes|no")
+    record = sub.add_parser("record", help="count every new QA evidence comment; prints round=<n> cap=<c> reached=yes|no")
     record.add_argument("--story", required=True)
     record.add_argument("--state-dir", required=True)
     record.set_defaults(run=cmd_record)
