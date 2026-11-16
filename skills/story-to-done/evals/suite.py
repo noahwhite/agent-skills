@@ -43,6 +43,16 @@ BASE_ENV_PREFIXES = ("LC_", "XDG_")
 MIN_REDACTED = 8
 REDACTED = "{redacted}"
 UUID = re.compile(r"(?i)\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b")
+# Known roots (the run directory, home, scratch) are redacted in two passes. The decoded-literal
+# pass finds each JSON string literal in the text, whether the text is JSON, JSON Lines or prose,
+# decodes it, and replaces the roots in the decoded value, so no JSON spelling of a root (\/,
+# \uXXXX, raw UTF-8) survives; it never parses the whole text as one document. Only a literal
+# whose value changed is re-encoded: with \uXXXX escapes when the literal was all ASCII or its value
+# holds a lone surrogate (which UTF-8 cannot encode), else as raw UTF-8, so a \/ in it becomes a
+# plain /; every other byte is kept. A literal that does not decode, and a root outside any
+# literal, are left to the text pass below, the second line of defence.
+STRING_LITERAL = re.compile(r'"(?:[^"\\\n]|\\.)*"')
+LONE_SURROGATE = re.compile("[\ud800-\udfff]")
 # A record holds files such as messages.json as JSON text, where a newline is the two characters
 # backslash and n, so a path that starts a line follows a word character. A complete JSON escape
 # that ends in a word character (\n \t \r \b \f \uXXXX) therefore still starts a path. The pattern
@@ -165,17 +175,33 @@ class Normaliser:
             for form in {str(path), str(path.resolve())}:
                 if len(form) > 1:
                     pairs.setdefault(form, "{" + name + "}")
-        self.pairs = sorted(pairs.items(), key=lambda pair: -len(pair[0]))
+        # A root is only replaced whole: /home/user never rewrites /home/user2 or /srv/home/user.
+        self.pairs = [(re.compile(r"(?:(?<![\w.-])|" + AFTER_ESCAPE + ")" + re.escape(path) + r"(?![\w.-])"),
+                       placeholder) for path, placeholder in sorted(pairs.items(), key=lambda pair: -len(pair[0]))]
         self.secrets = sorted({value for value in secrets if len(value) >= MIN_REDACTED}, key=len, reverse=True)
         self.leaks = leaks
+
+    def roots(self, text: str) -> str:
+        for pattern, placeholder in self.pairs:
+            text = pattern.sub(lambda _: placeholder, text)
+        return text
+
+    def literal(self, match: re.Match) -> str:
+        literal = match.group()
+        try:
+            value = json.loads(literal)
+        except ValueError:
+            return literal
+        redacted = self.roots(value)
+        if redacted == value:
+            return literal
+        return json.dumps(redacted, ensure_ascii=literal.isascii() or bool(LONE_SURROGATE.search(redacted)))
 
     def __call__(self, text: str) -> str:
         for value in self.secrets:
             text = text.replace(value, REDACTED)
-        for path, placeholder in self.pairs:
-            # A root is only replaced whole: /home/user never rewrites /home/user2 or /srv/home/user.
-            text = re.sub(r"(?:(?<![\w.-])|" + AFTER_ESCAPE + ")" + re.escape(path) + r"(?![\w.-])",
-                          lambda _: placeholder, text)
+        text = STRING_LITERAL.sub(self.literal, text)
+        text = self.roots(text)
         text = UUID.sub("{uuid}", text)
         text = ABSOLUTE_PATH.sub("{path}", text)
         for regex in self.leaks:

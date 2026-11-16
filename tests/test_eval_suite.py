@@ -99,7 +99,8 @@ sys.exit(0 if ok else 1)
 # and is void, as a real run.sh voids an agent that changed it. It writes its run directory into
 # the call, so the record shows whether the runner normalised the path, and the CANARY or EVAL_CANARY variable
 # into evidence.json, so the record shows what environment it got. evidence.json holds its run directory
-# after an escaped newline, as messages.json holds a path that starts a line. EVAL_AGENT_CMD passes
+# after an escaped newline, as messages.json holds a path that starts a line, and for pass also behind
+# \/ escapes, a JSON spelling that only a decoded string literal shows as the path. EVAL_AGENT_CMD passes
 # --model MODEL first, as a real agent command names its model.
 STUB_AGENT = r"""#!/usr/bin/env bash
 set -euo pipefail
@@ -121,7 +122,12 @@ case "$scenario" in
 esac
 printf '{"action": "%s", "run_dir": "%s", "id": "%s"}\n' "$action" "$run" "$STUB_UUID" > "$run/actions.jsonl"
 if [ "$scenario" = bad-bytes ]; then printf '\xff\n' >> "$run/actions.jsonl"; fi
-printf '{"seen_in": "\\n%s", "canary": "%s"}\n' "$run" "${CANARY-${EVAL_CANARY-unset}}" > "$run/evidence.json"
+if [ "$scenario" = pass ]; then
+  printf '{"seen_in": "\\n%s", "escaped": "%s", "canary": "%s"}\n' "$run" "${run//\//\\/}" \
+    "${CANARY-${EVAL_CANARY-unset}}" > "$run/evidence.json"
+else
+  printf '{"seen_in": "\\n%s", "canary": "%s"}\n' "$run" "${CANARY-${EVAL_CANARY-unset}}" > "$run/evidence.json"
+fi
 mkdir -p "$run/nested"
 echo kept > "$run/nested/kept.md"
 """
@@ -306,8 +312,18 @@ def test_run_directories_sit_outside_both_checkouts_and_never_reach_a_record(sui
         for run_dir in run_dirs:
             assert run_dir not in text, record.name
         assert STUB_UUID not in text, "a UUID shape is normalised"
+        if record.suffix == ".json":
+            for name, content in json.loads(text)["grader_inputs"].items():
+                try:
+                    decoded = json.dumps(json.loads(content), ensure_ascii=False)
+                except json.JSONDecodeError:
+                    continue
+                for run_dir in run_dirs:
+                    assert run_dir not in decoded, f"{record.name} {name}"
     calls = next((suite["evals"] / "stub" / "results").glob("*-pass-*-calls.jsonl")).read_text()
     assert json.loads(calls)["run_dir"] == "{run_dir}"
+    record = json.loads(next((suite["evals"] / "stub" / "results").glob("*-pass-*-1.json")).read_text())
+    assert json.loads(record["grader_inputs"]["evidence.json"])["escaped"] == "{run_dir}"
 
 
 def test_the_normaliser_rewrites_paths_and_leak_shapes_and_keeps_the_rest() -> None:
@@ -371,6 +387,84 @@ def test_the_normaliser_rewrites_a_path_after_each_boundary_in_a_serialised_mess
     assert not any(ord(char) < 0x20 for char in text), "the escape is characters, not a control character"
     assert normalise(text) == wanted
     assert normalise(wanted) == wanted, "a normalised record is left as it is"
+
+
+# SKL-318: a known root inside a JSON string literal is redacted whatever JSON spelling the
+# literal gives it, because the Normaliser decodes each literal. Each set holds one synthetic root
+# per placeholder; the non-ASCII set lets a root itself be spelled as raw UTF-8 or as \uXXXX.
+ASCII_ROOTS = {"run_dir": "/scratch/run-1", "home": "/scratch/home-1", "tmp": "/scratch/tmp-1",
+               "tmpdir": "/scratch/tmpdir-1"}
+NON_ASCII_ROOTS = {"run_dir": "/scratch/r\u00fcn-1", "home": "/scratch/h\u00f4me-1",
+                   "tmp": "/scratch/tmp-\u00f8", "tmpdir": "/scratch/tmpd\u00edr-1"}
+DECODED_TAILS = {"file": "/a.json", "spaced": "/My Notes/a b.txt"}
+
+
+def every_char_escaped(root: str) -> str:
+    return "".join(f"\\u{ord(char):04x}" for char in root)
+
+
+# Each form spells a literal holding a root and a tail; the guard forms redact at 57807ed already.
+DECODED_FORMS = {
+    "ascii": {
+        "solidus": ("must-fail", lambda root, tail: json.dumps(root + tail).replace("/", "\\/")),
+        "u-escape": ("must-fail", lambda root, tail: '"' + every_char_escaped(root) + tail + '"'),
+        "combined": ("must-fail", lambda root, tail: '"' + "\\/".join(every_char_escaped(part)
+                                                                     for part in root.split("/"))
+                     + tail.replace("/", "\\/") + '"'),
+    },
+    "non-ascii": {
+        "raw-utf8": ("guard", lambda root, tail: json.dumps(root + tail, ensure_ascii=False)),
+        "solidus": ("must-fail", lambda root, tail: json.dumps(root + tail, ensure_ascii=False).replace("/", "\\/")),
+        "u-escape": ("must-fail", lambda root, tail: json.dumps(root + tail)),
+        "combined": ("must-fail", lambda root, tail: json.dumps(root + tail).replace("/", "\\/")),
+    },
+}
+
+
+def in_message(literal: str) -> str:
+    return '[{"role": "assistant", "content": ' + literal + "}]"
+
+
+DECODED_LITERALS = (
+    [pytest.param(roots, in_message(spell(root, tail)), in_message(json.dumps(f"{{{name}}}{tail}")),
+                  id=f"{label}-{roots}-{name}-{form}-{tail_name}")
+     for roots, forms in DECODED_FORMS.items()
+     for form, (label, spell) in forms.items()
+     for name, root in (ASCII_ROOTS if roots == "ascii" else NON_ASCII_ROOTS).items()
+     for tail_name, tail in DECODED_TAILS.items()]
+    + [
+        # A literal whose value holds a lone surrogate is re-encoded with \uXXXX escapes, so the
+        # record still encodes as UTF-8: one literal all ASCII, one that also holds a raw é.
+        pytest.param("ascii", in_message('"\\ud800 \\/scratch\\/run-1\\/a.json"'),
+                     in_message('"\\ud800 {run_dir}/a.json"'), id="must-fail-lone-surrogate-ascii-with-root"),
+        pytest.param("ascii", in_message('"\u00e9\\ud800 \\/scratch\\/run-1\\/a.json"'),
+                     in_message('"\\u00e9\\ud800 {run_dir}/a.json"'),
+                     id="must-fail-lone-surrogate-raw-e-acute-with-root"),
+        # A changed literal is the only one re-encoded: the unchanged literal keeps its spelling.
+        pytest.param("ascii", '{"a" :"\\/scratch\\/run-1",  "b": "\\u00E9\\/srv"}',
+                     '{"a" :"{run_dir}",  "b": "\\u00E9\\/srv"}', id="must-fail-only-the-changed-literal"),
+        pytest.param("ascii", '{"a": "\\/scratch\\/run-1"}\n{"b": "\\/scratch\\/home-1\\/x"}\n',
+                     '{"a": "{run_dir}"}\n{"b": "{home}/x"}\n', id="must-fail-json-lines"),
+        pytest.param("ascii", 'stderr: wrote "\\/scratch\\/run-1\\/a.json" and stopped',
+                     'stderr: wrote "{run_dir}/a.json" and stopped', id="must-fail-literal-in-prose"),
+        # A text with no known root keeps every byte: spacing, key order, escapes and raw UTF-8.
+        pytest.param("ascii", '{"b" : "caf\u00e9 \\u00E9 \\/srv\\/x \\ud800",\n  "a": [1, "\\"q\\""]}',
+                     '{"b" : "caf\u00e9 \\u00E9 \\/srv\\/x \\ud800",\n  "a": [1, "\\"q\\""]}', id="guard-no-known-root"),
+        # A literal that does not decode is left to the text pass.
+        pytest.param("ascii", in_message('"\\q /scratch/run-1/a.json"'), in_message('"\\q {run_dir}/a.json"'),
+                     id="guard-literal-that-does-not-decode"),
+    ]
+)
+
+
+@pytest.mark.parametrize("roots, text, expected", DECODED_LITERALS)
+def test_the_normaliser_redacts_a_known_root_in_a_decoded_string_literal(roots: str, text: str, expected: str) -> None:
+    paths = ASCII_ROOTS if roots == "ascii" else NON_ASCII_ROOTS
+    normalise = SUITE.Normaliser(SUITE.leak_patterns(), **{name: Path(root) for name, root in paths.items()})
+    result = normalise(text)
+    assert result == expected
+    assert normalise(result) == result, "a normalised record is left as it is"
+    result.encode("utf-8")  # a record is written as UTF-8
 
 
 def test_a_record_with_bytes_that_are_not_utf8_is_still_written(suite) -> None:
