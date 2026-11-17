@@ -3,8 +3,10 @@
 Each rule is pinned verbatim, as rendered text, at its home section and position, and its anchor
 occurs only once across `shared/` and every `skills/*/SKILL.md`, so a later edit that drops,
 weakens, hides, moves or duplicates it fails here.
-Rendered text is the visible text of the CommonMark parse: inline markup, link targets and titles,
-HTML (comments included) and image alt text do not count, and a code span keeps its backticks.
+A cross-referenced target is checked for presence only, not pinned: its text belongs to other rules.
+Rendered text is the text of the CommonMark parse outside any HTML element: inline markup, link
+targets and titles, HTML tags and comments, text inside an HTML element, and image alt text do not
+count, and a code span keeps its backticks.
 """
 
 import re
@@ -19,13 +21,31 @@ ROOT = Path(__file__).resolve().parent.parent
 SHARED = ROOT / "shared"
 MARKDOWN = MarkdownIt("commonmark")
 EM_DASH = chr(0x2014)
+HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.S)
+HTML_OPEN_RE = re.compile(r"<([A-Za-z][\w-]*)\b[^>]*?(/?)>")
+HTML_CLOSE_RE = re.compile(r"</[A-Za-z][\w-]*\s*>")
+VOID_ELEMENTS = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"}
+
+
+def html_depth(html: str) -> int:
+    """How many HTML elements a raw HTML fragment leaves open (negative when it closes more)."""
+    html = HTML_COMMENT_RE.sub("", html)
+    opened = sum(
+        1 for tag, self_closing in HTML_OPEN_RE.findall(html)
+        if not self_closing and tag.lower() not in VOID_ELEMENTS
+    )
+    return opened - len(HTML_CLOSE_RE.findall(html))
 
 
 def rendered(inline: Token) -> str:
-    """The visible text of an inline token, whitespace collapsed."""
-    parts = []
+    """The text of an inline token outside any HTML element, whitespace collapsed."""
+    parts, depth = [], 0
     for child in inline.children or []:
-        if child.type == "text":
+        if child.type == "html_inline":
+            depth = max(0, depth + html_depth(child.content))
+        elif depth:
+            continue
+        elif child.type == "text":
             parts.append(child.content)
         elif child.type == "code_inline":
             parts.append(f"`{child.content}`")
@@ -36,15 +56,18 @@ def rendered(inline: Token) -> str:
 
 @dataclass
 class Doc:
+    path: Path
     headings: list[str] = field(default_factory=list)
     lists: dict[str, list[list[str]]] = field(default_factory=dict)
-    prose: list[str] = field(default_factory=list)
     paragraphs: dict[str, list[str]] = field(default_factory=dict)
+    # Every rendered unit once: each heading, each whole top-level bullet, and each other paragraph.
+    units: list[str] = field(default_factory=list)
 
     def section(self, heading: str) -> list[list[str]]:
         """The top-level bullet lists under a heading that occurs exactly once."""
         count = self.headings.count(heading)
-        assert count == 1, f"heading {heading!r} occurs {count} times"
+        if count != 1:
+            raise AssertionError(f"{self.path}: heading {heading!r} occurs {count} times")
         return self.lists[heading]
 
     def bullets(self, heading: str) -> list[str]:
@@ -59,26 +82,32 @@ def parse(path: Path) -> Doc:
 
     Every heading at document level opens a section; a heading nested in a list item or quote does
     not. A bullet item's text is its own paragraphs only, not a nested list or quote inside it.
-    Content before the first heading belongs to the PREAMBLE section.
+    Content before the first heading belongs to the PREAMBLE section, and blocks inside an HTML
+    element left open by an HTML block are skipped.
     """
-    doc = Doc(lists={PREAMBLE: []}, paragraphs={PREAMBLE: []})
-    current, opened, item, in_bullets = PREAMBLE, None, None, False
+    doc = Doc(path=path, lists={PREAMBLE: []}, paragraphs={PREAMBLE: []})
+    current, opened, item, in_bullets, html_open = PREAMBLE, None, None, False, 0
     for token in MARKDOWN.parse(path.read_text(encoding="utf-8")):
-        if token.type in ("heading_open", "paragraph_open"):
-            opened = token
+        if token.type == "html_block":
+            html_open = max(0, html_open + html_depth(token.content))
+        elif token.type in ("heading_open", "paragraph_open"):
+            opened = None if html_open else token
         elif token.type == "inline" and opened is not None:
             text = rendered(token)
-            if opened.type == "heading_open" and opened.level == 0:
-                current = text
-                doc.headings.append(current)
-                doc.lists.setdefault(current, [])
-                doc.paragraphs.setdefault(current, [])
+            if opened.type == "heading_open":
+                doc.units.append(text)
+                if opened.level == 0:
+                    current = text
+                    doc.headings.append(current)
+                    doc.lists.setdefault(current, [])
+                    doc.paragraphs.setdefault(current, [])
             elif opened.type == "paragraph_open":
-                doc.prose.append(text)
                 doc.paragraphs[current].append(text)
                 if item is not None and opened.level == 2:
                     group = doc.lists[current][-1]
                     group[item] = f"{group[item]} {text}".strip()
+                else:
+                    doc.units.append(text)
             opened = None
         elif token.type == "bullet_list_open" and token.level == 0:
             doc.lists[current].append([])
@@ -87,6 +116,7 @@ def parse(path: Path) -> Doc:
             doc.lists[current][-1].append("")
             item = len(doc.lists[current][-1]) - 1
         elif token.type == "bullet_list_close" and token.level == 0:
+            doc.units.extend(doc.lists[current][-1])
             item, in_bullets = None, False
     return doc
 
@@ -108,7 +138,7 @@ def source_docs() -> list[Doc]:
 
 
 def assert_once(anchor: str) -> None:
-    hits = sum(text.count(anchor) for doc in source_docs() for text in doc.prose)
+    hits = sum(text.count(anchor) for doc in source_docs() for text in doc.units)
     assert hits == 1, f"{anchor!r} occurs {hits} times in shared/ and skills/*/SKILL.md"
 
 
@@ -208,15 +238,20 @@ def test_k4_named_story_keys_follows_team_resolution() -> None:
 
 
 def test_k4_cross_reference_resolves() -> None:
-    """A skill that takes `STORY_ID` still carries the "never guess" line K4 points to."""
-    lines = [
-        text
+    """Every skill's `STORY_ID` argument rule still carries the "never guess" line K4 points to."""
+    argument_rules = {
+        md.parent.name: text
         for md in sorted(ROOT.glob("skills/*/SKILL.md"))
-        if "STORY_ID" in md.read_text(encoding="utf-8")
-        for text in parse(md).prose
-        if re.search(r"before doing anything else; never guess (a story number|an issue key)\.", text)
-    ]
-    assert lines
+        for text in parse(md).units
+        if re.match(r"(This skill takes one argument, `STORY_ID`:|`STORY_ID` is required:)", text)
+    }
+    assert argument_rules, "no skill declares a `STORY_ID` argument rule"
+    never_guess = re.compile(
+        r" If none was given, ask the (user|owner) for one before doing anything else; "
+        r"never guess (a story number|an issue key)\."
+    )
+    missing = [skill for skill, text in argument_rules.items() if not never_guess.search(text)]
+    assert not missing, f"`STORY_ID` argument rule without the never-guess line in: {missing}"
 
 
 # --- K5: shared/github.md ---------------------------------------------------------------------
