@@ -44,7 +44,7 @@ STORY = re.compile(r"[A-Z][A-Z0-9]*-[0-9]+")
 ROUND = re.compile(r"[1-9][0-9]*")
 ENVIRONMENT = re.compile(r"[a-z0-9][a-z0-9-]{0,62}")
 COMMIT = re.compile(r"[0-9a-f]{40}")
-LINK = re.compile(r"https://[\x21-\x7e]+")
+LINK = re.compile(r"https://[A-Za-z0-9][A-Za-z0-9.-]*(?::[0-9]+)?(?:[/?#][\x21-\x7e]*)?")
 SCRATCH = re.compile(r"/[A-Za-z0-9._/-]+")
 REFERENCE_NAME = re.compile(r"[a-z0-9-]+\.md")
 REFERENCE_OPEN = "`references/"
@@ -209,11 +209,17 @@ def write_atomic(role_dir: str, name: str, data: bytes) -> str:
         refuse("could not write the brief", 1)
     if mode is not None and not stat.S_ISREG(mode):
         refuse("could not write the brief: the output path is not a regular file", 1)
+    if mode is None:
+        # mkstemp creates the file 0600; a new brief gets the mode a plain create would give it.
+        umask = os.umask(0)
+        os.umask(umask)
+        mode = 0o666 & ~umask
     try:
         fd, temp = tempfile.mkstemp(prefix="." + name + ".", suffix=".tmp", dir=role_dir)
     except OSError:
         refuse("could not write the brief", 1)
     try:
+        os.fchmod(fd, stat.S_IMODE(mode))
         with os.fdopen(fd, "wb") as handle:
             handle.write(data)
             handle.flush()

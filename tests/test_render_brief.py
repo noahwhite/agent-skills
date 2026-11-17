@@ -407,6 +407,7 @@ FAILURES = {
     "link not https": lambda s: ok_qa(s, "spike") + ["--link", "http://example.com/x"],
     "link with whitespace": lambda s: ok_qa(s, "spike") + ["--link", "https://example.com/a b"],
     "link empty host": lambda s: ok_qa(s, "spike") + ["--link", "https://"],
+    "link without host": lambda s: ok_qa(s, "spike") + ["--link", "https://#"],
     "missing role": lambda s: ["--story", "ABC-123", "--path", "deployed", "--scratch", s],
     "missing story": lambda s: ["--role", "engineer", "--path", "deployed", "--scratch", s],
     "missing path": lambda s: ["--role", "engineer", "--story", "ABC-123", "--scratch", s],
@@ -473,6 +474,52 @@ def test_each_failure_exits_with_one_line_and_touches_nothing(case, skill_copy, 
     assert "Traceback" not in err
     assert CANARY not in err
     assert snapshot(str(base)) == before
+
+
+@pytest.mark.parametrize("step", ["write", "fsync", "replace"])
+def test_a_failure_after_the_temp_file_exists_leaves_the_old_brief_and_no_temp(step, tmp_path_factory, monkeypatch,
+                                                                                capsys):
+    """The brief is written to a temp file and renamed: a failure at any later step removes the temp file and
+    leaves the existing brief byte-identical, so an in-place overwrite or a missing cleanup fails this test."""
+    base = Path(os.path.realpath(tempfile.mkdtemp(prefix="atomic", dir=tmp_path_factory.getbasetemp())))
+    scratch = seeded_scratch(base)
+    before = snapshot(str(base))
+    module = load_module()
+
+    def boom(*args, **kwargs):
+        raise OSError("injected")
+
+    if step == "write":
+        real_fdopen = os.fdopen
+
+        def fdopen(fd, *args, **kwargs):
+            handle = real_fdopen(fd, *args, **kwargs)
+            handle.write = boom
+            return handle
+
+        monkeypatch.setattr(module.os, "fdopen", fdopen)
+    else:
+        monkeypatch.setattr(module.os, step, boom)
+    assert module.main(ok_engineer(scratch)) == 1
+    out, err = capsys.readouterr()
+    assert out == ""
+    assert err.endswith("\n") and err.count("\n") == 1, err
+
+    # Creating and removing the temp file moves the role directory's own mtime; every entry and byte is unchanged.
+    def entries(state: dict) -> dict:
+        return {path: value if value[2] is not None else value[0] for path, value in state.items()}
+
+    assert entries(snapshot(str(base))) == entries(before)
+
+
+def test_a_new_brief_gets_the_umask_mode_and_a_replaced_brief_keeps_its_mode(scratch):
+    umask = os.umask(0)
+    os.umask(umask)
+    out, _ = engineer(scratch, "deployed")
+    assert os.stat(out).st_mode & 0o7777 == 0o666 & ~umask
+    os.chmod(out, 0o640)
+    engineer(scratch, "deployed")
+    assert os.stat(out).st_mode & 0o7777 == 0o640
 
 
 def test_the_canary_reaches_a_successful_render(skill_copy, tmp_path_factory):
