@@ -17,6 +17,7 @@ flows: `run`, and `dossier` followed by `record`.
 import hashlib
 import os
 import re
+import shutil
 import stat
 import subprocess
 from pathlib import Path
@@ -404,31 +405,70 @@ def test_recording_an_accepted_arbitration_again_fails_and_retains_nothing_more(
     assert "Retained arbitration report" not in again.stderr
 
 
-def test_a_signal_during_retention_rolls_the_arbitration_back(gate):
+# The record process runs as a session leader, so its PID is the session id a shim reads from /proc.
+SIGNAL_TARGETS = {
+    "group": "kill -TERM 0",
+    "record-pid": "kill -TERM \"$(cut -d' ' -f6 /proc/$$/stat)\"",
+}
+
+
+def signalling_shim(g: dict, command: str, target: str) -> dict[str, str]:
+    """An environment whose `command` sends TERM once (to the target), then runs the real command."""
+    shim = g["home"] / "signal-bin"
+    shim.mkdir(exist_ok=True)
+    real = shutil.which(command, path=g["env"]["PATH"])
+    marker = g["home"] / f"signalled-{command}"
+    (shim / command).write_text(
+        f"#!/bin/sh\nif [ ! -e '{marker}' ]; then : > '{marker}'; {SIGNAL_TARGETS[target]}; fi\n"
+        f"exec '{real}' \"$@\"\n")
+    (shim / command).chmod(0o755)
+    return {**g["env"], "PATH": f"{shim}{os.pathsep}{g['env']['PATH']}"}
+
+
+def record_arbitration_in_own_session(g: dict, env: dict[str, str]) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        ["bash", str(SCRIPT), "record", "arbitrate", "--repo", str(g["repo"]), "--base", BASE_REF,
+         "--spec", str(g["spec"]), "--agent", AGENT_NAME, "--model", MODEL_ID],
+        capture_output=True, text=True, env=env, cwd=str(ROOT), timeout=120, start_new_session=True)
+
+
+@pytest.mark.parametrize("target", sorted(SIGNAL_TARGETS))
+def test_a_signal_before_publishing_rolls_the_arbitration_back(gate, target):
     ready_for_arbitration(gate, "dossier")
     written = run_script("dossier", "arbitrate", *common(gate), env=gate["env"])
     assert written.returncode == 0, written.stdout + written.stderr
     artifact = artifact_paths(gate)["arbitrate"]
     report = f"REVIEW-RAN: yes\n{REPORT_BODY}".encode()
     artifact.write_bytes(report)
-    # An `ln` that sends TERM to the whole record process group while the copy is being published.
-    shim = gate["home"] / "signal-bin"
-    shim.mkdir()
-    (shim / "ln").write_text("#!/bin/sh\nkill -TERM 0\nsleep 5\nexit 1\n")
-    (shim / "ln").chmod(0o755)
-    env = {**gate["env"], "PATH": f"{shim}{os.pathsep}{gate['env']['PATH']}"}
-    record_args = ["bash", str(SCRIPT), "record", "arbitrate", "--repo", str(gate["repo"]),
-                   "--base", BASE_REF, "--spec", str(gate["spec"]), "--agent", AGENT_NAME,
-                   "--model", MODEL_ID]
-    interrupted = subprocess.run(record_args, capture_output=True, text=True, env=env, cwd=str(ROOT),
-                                 timeout=120, start_new_session=True)
+    # `tail` runs only while the identity lines are being written, before anything is published.
+    interrupted = record_arbitration_in_own_session(gate, signalling_shim(gate, "tail", target))
     assert interrupted.returncode == 143, interrupted.stdout + interrupted.stderr
+    assert "this phase is not accepted" in interrupted.stderr
     assert not Path(f"{artifact}.stamp").exists()
     assert artifact.read_bytes() == report
-    assert [p for p in retained(gate["repo"]) if p.name.startswith("round-")] == []
-    retry = run_script(*record_args[2:], env=gate["env"])
+    assert retained(gate["repo"]) == []
+    retry = record_arbitration_in_own_session(gate, gate["env"])
     assert retry.returncode == 0, retry.stdout + retry.stderr
     assert artifact.read_text() == expected_report(AGENT_NAME, MODEL_ID, head_sha(gate))
+    cleanup(gate, Path(line_value(written.stderr, "CHECKOUT: ")))
+
+
+@pytest.mark.parametrize("target", sorted(SIGNAL_TARGETS))
+def test_a_signal_while_publishing_lets_the_copy_and_the_stamp_land_together(gate, target):
+    ready_for_arbitration(gate, "dossier")
+    written = run_script("dossier", "arbitrate", *common(gate), env=gate["env"])
+    assert written.returncode == 0, written.stdout + written.stderr
+    artifact = artifact_paths(gate)["arbitrate"]
+    artifact.write_bytes(f"REVIEW-RAN: yes\n{REPORT_BODY}".encode())
+    # `ln` publishes the retained copy.
+    result = record_arbitration_in_own_session(gate, signalling_shim(gate, "ln", target))
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "it stays accepted" in result.stderr
+    report = artifact.read_text()
+    assert report == expected_report(AGENT_NAME, MODEL_ID, head_sha(gate))
+    stamp = Path(f"{artifact}.stamp").read_text()
+    assert f"sha256={hashlib.sha256(report.encode()).hexdigest()}\n" in stamp
+    assert retained(gate["repo"]) == [retained_path_from(result.stderr)]
     cleanup(gate, Path(line_value(written.stderr, "CHECKOUT: ")))
 
 

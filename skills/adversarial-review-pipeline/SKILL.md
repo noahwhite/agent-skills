@@ -247,7 +247,8 @@ Every accepted arbitration is retained, before its stamp is written, as an immut
 That directory belongs to the clone, not to the run directory, `--scratch` or the worktree, so every worktree of the clone resolves the same directory and removing a worktree loses nothing; a linked worktree's own `git rev-parse --git-path adversarial-pipeline` is under that worktree's git directory, which is why the run state is not used.
 The copy is named `round-<UTC timestamp>-<full HEAD SHA>-<first 12 hex of the report sha256>-<n>.md`, with the timestamp as `date -u +%Y%m%dT%H%M%SZ`.
 It is written to a temporary file in that directory and published with a no-clobber hard link; when the name exists the next `<n>` is tried, so two byte-identical arbitrations at one head leave two files and nothing is overwritten.
-Any failure to write or publish it, or to stamp the report after it, fails the phase (exit 21): no stamp is left and the report is restored as the agent wrote it, so the phase is not accepted; an INT, TERM or HUP restores it the same way.
+Any failure to write or publish it, or to stamp the report after it, fails the phase (exit 21): no stamp is left and the report is restored as the agent wrote it, so the phase is not accepted.
+A signal before publishing starts restores it the same way; once publishing starts, the copy and the stamp land together and the phase stays accepted.
 On acceptance the script prints `Retained arbitration report -> <path>` on stderr with the copy's absolute path; stdout still carries the artifact alone.
 One dossier accepts one arbitration: recording an accepted arbitration again fails (exit 15), and a new round needs a new `dossier arbitrate` or `run arbitrate`.
 No re-run, discard or `cleanup` removes a retained copy: a re-run of arbitration at an unchanged head discards `phase3-arbitration.md`, and the retained copy keeps the earlier round countable.
