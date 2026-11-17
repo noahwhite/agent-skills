@@ -1,60 +1,79 @@
 """SKL-233: five working rules moved from agent memory into the shared capability files.
 
-Each rule is pinned by its load-bearing clauses at its home section and position, only in
-rendered prose (fenced blocks and HTML comments do not count), and only once across `shared/`,
-so a later edit that drops, hides, moves or duplicates it fails here.
+Each rule is pinned by its key clauses at its home section and position, only in rendered prose
+(the CommonMark parse, so code blocks and HTML comments do not count), and only once across
+`shared/`, so a later edit that drops, hides, moves or duplicates it fails here.
 """
 
 import re
+from dataclasses import dataclass, field
 from pathlib import Path
+
+from markdown_it import MarkdownIt
 
 
 ROOT = Path(__file__).resolve().parent.parent
 SHARED = ROOT / "shared"
-FENCE_RE = re.compile(r"^ {0,3}(```|~~~)")
+MARKDOWN = MarkdownIt("commonmark")
 COMMENT_RE = re.compile(r"<!--.*?-->", re.S)
 
 
 def spaced(text: str) -> str:
-    return re.sub(r"\s+", " ", text).strip()
+    return re.sub(r"\s+", " ", COMMENT_RE.sub(" ", text)).strip()
 
 
-def active(text: str) -> str:
-    """The rendered prose of a Markdown file: HTML comments and fenced blocks removed."""
-    lines, fenced = [], False
-    for line in COMMENT_RE.sub("", text).splitlines():
-        if FENCE_RE.match(line):
-            fenced = not fenced
-        elif not fenced:
-            lines.append(line)
-    return "\n".join(lines)
+@dataclass
+class Doc:
+    headings: list[str] = field(default_factory=list)
+    lists: dict[str, list[list[str]]] = field(default_factory=dict)
+    prose: list[str] = field(default_factory=list)
+    paragraphs: dict[str, list[str]] = field(default_factory=dict)
+
+    def section(self, heading: str) -> list[list[str]]:
+        """The top-level bullet lists under a `##` heading that occurs exactly once."""
+        count = self.headings.count(heading)
+        assert count == 1, f"heading {heading!r} occurs {count} times"
+        return self.lists[heading]
+
+    def bullets(self, heading: str) -> list[str]:
+        return [item for group in self.section(heading) for item in group]
 
 
-def read(path: Path) -> str:
-    return active(path.read_text())
-
-
-def headings(text: str) -> list[str]:
-    return [line[3:].strip() for line in text.splitlines() if line.startswith("## ")]
-
-
-def section(text: str, heading: str) -> str:
-    parts = re.split(r"^## (.+?)[ \t]*$", text, flags=re.M)
-    bodies = {parts[i]: parts[i + 1] for i in range(1, len(parts), 2)}
-    if heading not in bodies:
-        raise AssertionError(f"missing section: {heading}")
-    return bodies[heading]
-
-
-def bullets(body: str) -> list[str]:
-    """Top-level bullets of a section body, each with its indented lines joined onto one line."""
-    items: list[str] = []
-    for line in body.splitlines():
-        if line.startswith("- "):
-            items.append(line[2:])
-        elif line.startswith("  ") and items:
-            items[-1] += " " + line
-    return [spaced(item) for item in items]
+def parse(path: Path) -> Doc:
+    """`##` headings, the top-level bullet items under each, and every rendered paragraph."""
+    doc, current, depth, in_heading, in_paragraph, in_bullet = Doc(), None, 0, False, False, False
+    for token in MARKDOWN.parse(path.read_text()):
+        if token.type == "heading_open":
+            in_heading = token.tag == "h2"
+        elif token.type == "inline" and in_heading:
+            current = token.content.strip()
+            doc.headings.append(current)
+            doc.lists.setdefault(current, [])
+            doc.paragraphs.setdefault(current, [])
+            in_heading = False
+        elif token.type == "bullet_list_open" and depth == 0 and current is not None:
+            doc.lists[current].append([])
+        elif token.type == "list_item_open":
+            depth += 1
+            if depth == 1:
+                in_bullet = token.markup in ("-", "*", "+") and current is not None and bool(doc.lists[current])
+                if in_bullet:
+                    doc.lists[current][-1].append("")
+        elif token.type == "list_item_close":
+            depth -= 1
+        elif token.type == "paragraph_open":
+            in_paragraph = True
+        elif token.type == "paragraph_close":
+            in_paragraph = False
+        elif token.type == "inline" and in_paragraph:
+            text = spaced(token.content)
+            doc.prose.append(text)
+            if current is not None:
+                doc.paragraphs[current].append(text)
+            if depth and in_bullet:
+                group = doc.lists[current][-1]
+                group[-1] = spaced(group[-1] + " " + text)
+    return doc
 
 
 def index_of(items: list[str], prefix: str) -> int:
@@ -69,13 +88,13 @@ def assert_clauses(item: str, clauses: list[str]) -> None:
     assert not missing, f"missing clauses {missing} in: {item}"
 
 
-def shared_bullets() -> list[str]:
-    return [b for md in sorted(SHARED.glob("*.md")) for b in bullets(read(md))]
+def shared_docs() -> list[Doc]:
+    return [parse(md) for md in sorted(SHARED.glob("*.md"))]
 
 
 def assert_once_in_shared(anchor: str) -> None:
-    hits = [b for b in shared_bullets() if anchor in b]
-    assert len(hits) == 1, f"{anchor!r} appears in {len(hits)} bullets of shared/"
+    hits = sum(text.count(anchor) for doc in shared_docs() for text in doc.prose)
+    assert hits == 1, f"{anchor!r} occurs {hits} times in the rendered prose of shared/"
 
 
 # --- K1 and K2: shared/engineering-practice.md --------------------------------------------------
@@ -99,22 +118,25 @@ K2 = [
     "Remove X only when that reasoning shows it is unneeded and the removal is within what was asked.",
 ]
 
+# Reading files for completeness or confirmation, the behaviour K1 limits.
+OVER_READ_RE = re.compile(r"\bread\b[^.]*?\bfiles?\b[^.]*?\bfor (?:completeness|confirmation)\b", re.I)
+
 
 def test_k1_over_reading_follows_the_search_bullet() -> None:
-    items = bullets(section(read(SHARED / "engineering-practice.md"), "Reuse and study existing code"))
+    items = parse(SHARED / "engineering-practice.md").bullets("Reuse and study existing code")
     assert items[0].startswith("Before writing code for an operation"), "the search bullet must stay first"
     assert_clauses(items[1], K1)
     assert any(item.startswith("When porting") for item in items[2:]), "the porting bullet must stay below K1"
     assert_once_in_shared(K1[0])
 
 
-def test_k1_has_no_contradicting_read_for_completeness_rule() -> None:
-    hits = [b for b in shared_bullets() if re.search(r"for (?:completeness|confirmation)", b)]
+def test_k1_has_no_contradicting_over_read_rule() -> None:
+    hits = [b for doc in shared_docs() for g in doc.lists.values() for i in g for b in i if OVER_READ_RE.search(b)]
     assert len(hits) == 1 and hits[0].startswith(K1[0]), hits
 
 
 def test_k2_why_is_x_needed_follows_change_exactly_what_was_asked() -> None:
-    items = bullets(section(read(SHARED / "engineering-practice.md"), "Make minimal, durable changes"))
+    items = parse(SHARED / "engineering-practice.md").bullets("Make minimal, durable changes")
     asked = index_of(items, "Change exactly what was asked")
     assert_clauses(items[asked + 1], K2)
     assert_once_in_shared(K2[0])
@@ -136,20 +158,20 @@ K3 = [
 
 
 def test_k3_delegation_sits_in_the_clean_and_neutral_block() -> None:
-    body = section(read(SHARED / "code-review.md"), "Review of record")
-    block = body.split("the two always go together:\n", 1)[1].split("\n1. ", 1)[0]
-    items = bullets(block)
-    assert items[0].startswith("**Clean:**")
-    assert items[1].startswith("**Neutral:**")
-    assert_clauses(items[2], K3)
+    block = parse(SHARED / "code-review.md").section("Review of record")[0]
+    assert block[0].startswith("**Clean:**")
+    assert block[1].startswith("**Neutral:**")
+    assert_clauses(block[2], K3)
     assert_once_in_shared(K3[0])
 
 
 def test_k3_cross_references_resolve() -> None:
-    review = read(SHARED / "code-review.md")
-    assert any("fixer" in b and "commits" in b for b in bullets(section(review, "Automated pre-PR gates")))
-    step2 = section(read(ROOT / "skills" / "story-to-done" / "SKILL.md"), "2. Senior engineer: implement to deployment review")
-    assert "for every PR it merged, read the PR yourself" in spaced(step2)
+    gates = parse(SHARED / "code-review.md").bullets("Automated pre-PR gates")
+    assert any("fixer" in b and "commits" in b for b in gates)
+    story_to_done = parse(ROOT / "skills" / "story-to-done" / "SKILL.md")
+    story_to_done.section("2. Senior engineer: implement to deployment review")
+    step2 = " ".join(story_to_done.paragraphs["2. Senior engineer: implement to deployment review"])
+    assert "for every PR it merged, read the PR yourself" in step2
 
 
 # --- K4: shared/linear.md ---------------------------------------------------------------------
@@ -168,10 +190,10 @@ K4 = [
 
 
 def test_k4_named_story_keys_follows_team_resolution() -> None:
-    text = read(SHARED / "linear.md")
-    names = headings(text)
-    assert names[names.index("Team resolution") + 1] == "Named story keys"
-    items = bullets(section(text, "Named story keys"))
+    doc = parse(SHARED / "linear.md")
+    doc.section("Team resolution")
+    assert doc.headings[doc.headings.index("Team resolution") + 1] == "Named story keys"
+    items = doc.bullets("Named story keys")
     assert len(items) == len(K4)
     for item, clauses in zip(items, K4):
         assert_clauses(item, clauses)
@@ -186,7 +208,9 @@ K5 = [
     ["`<branch>` is `profile.git.integration_branch`",
      "`profile.git.release_branch` for a path that exists only there",
      "for an environment's declared state, the branch that deploys that environment (`profile.environments[].branch`)"],
-    ["The exception is your own uncommitted or unpushed change in your story worktree."],
+    ["your own uncommitted or unpushed change in your story worktree",
+     "a task bound to an explicitly named commit or PR head",
+     "reads that commit, in a checkout made at it or with `git show <sha>:<path>`"],
     ["When the fetch or the read fails, report the limitation and never present stale content as current."],
     ["Related rules, not restated here: the fetch rule in \"Branching and worktrees\" below",
      "\"Verify running state from the primary source\" in the `infra-deploy` capability file",
@@ -196,11 +220,10 @@ K5 = [
 
 
 def test_k5_read_repo_facts_sits_between_tooling_and_branching() -> None:
-    text = read(SHARED / "github.md")
-    names = headings(text)
-    at = names.index("Read repo facts from the remote")
-    assert names[at - 1 : at + 2] == ["Tooling", "Read repo facts from the remote", "Branching and worktrees"]
-    items = bullets(section(text, "Read repo facts from the remote"))
+    doc = parse(SHARED / "github.md")
+    items = doc.bullets("Read repo facts from the remote")
+    at = doc.headings.index("Read repo facts from the remote")
+    assert doc.headings[at - 1 : at + 2] == ["Tooling", "Read repo facts from the remote", "Branching and worktrees"]
     assert len(items) == len(K5)
     for item, clauses in zip(items, K5):
         assert_clauses(item, clauses)
@@ -208,6 +231,6 @@ def test_k5_read_repo_facts_sits_between_tooling_and_branching() -> None:
 
 
 def test_k5_cross_references_resolve() -> None:
-    assert "Verify running state from the primary source" in headings(read(SHARED / "infra-deploy.md"))
-    gates = spaced(section(read(SHARED / "code-review.md"), "Automated pre-PR gates"))
-    assert "Base the run on `origin/<integration branch>` after a fetch" in gates
+    parse(SHARED / "infra-deploy.md").section("Verify running state from the primary source")
+    gates = parse(SHARED / "code-review.md").bullets("Automated pre-PR gates")
+    assert any("Base the run on `origin/<integration branch>` after a fetch" in b for b in gates)
