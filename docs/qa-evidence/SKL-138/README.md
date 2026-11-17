@@ -144,6 +144,7 @@ path: no-deployment
 report: final
 ```
 
+The coordinator mapped the seat's `claude-sonnet-5-5` to the `Agent` tool's `sonnet` model selector, as the report states, and kept effort `high`.
 The foreground QA launch follows the skill's `nested=yes` instruction under the configuration above; the run does not show that it would hold under another host configuration.
 
 #### Run 2: `nested=no`
@@ -181,7 +182,7 @@ SKL-360 is Done after one QA round.
 - Final state: Done, read back from the tracker. AC1 and AC2 are both ticked.
 - PRs: none.
 - Rounds: 1. QA round 1 had no failed items, and the engineer was never launched because the story started in In Deployment Review.
-- Evidence: the "QA round 1 verdicts" comment on SKL-360 (https://linear.app/officina-pub/issue/SKL-360/tabletop-fixture-skl-138-c6-run-2-nestedno#comment-16c61cb1).
+- Evidence: the "QA round 1 verdicts" comment on SKL-360 ([tracker link removed]).
   - AC1: VERIFIED. `test 2 -eq 2; echo exit=$?` printed `exit=0`.
   - AC2: VERIFIED. `test -d /tmp; echo exit=$?` printed `exit=0`.
 - Incidental defects: none noted.
