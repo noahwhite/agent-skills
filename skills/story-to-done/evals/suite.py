@@ -147,18 +147,31 @@ def committed_records(root: Path) -> dict[str, tuple[int, str]]:
     for path in git(root, "ls-files", "-z", strip=False).split("\0"):
         if not path or not is_record(path):
             continue
+        name = os.fsencode(root / path)
         try:
-            mode = (root / path).lstat().st_mode
-            if stat.S_ISLNK(mode):
-                held = os.readlink(root / path).encode()
-            elif stat.S_ISREG(mode):
-                held = (root / path).read_bytes()
-            else:
-                held = b""
-            records[path] = (mode, hashlib.sha256(held).hexdigest())
+            mode = os.lstat(name).st_mode
         except OSError:
-            records[path] = (0, "unreadable")
+            records[path] = (0, "missing")
+            continue
+        try:
+            records[path] = (mode, hashlib.sha256(held_by(name, mode)).hexdigest())
+        except OSError:
+            records[path] = (mode, "unreadable")
     return records
+
+
+def held_by(name: bytes, mode: int) -> bytes:
+    """What a record holds: a symlink's target bytes, a regular file's content read through a
+    descriptor that follows no link and never blocks, nothing for any other kind of file."""
+    if stat.S_ISLNK(mode):
+        return os.readlink(name)
+    if not stat.S_ISREG(mode):
+        return b""
+    descriptor = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    with os.fdopen(descriptor, "rb") as handle:
+        if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
+            return b""
+        return handle.read()
 
 
 def parse(argv: list[str]) -> argparse.Namespace:

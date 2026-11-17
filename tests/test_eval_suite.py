@@ -98,7 +98,8 @@ sys.exit(0 if ok else 1)
 # bad-bytes records a byte that is not UTF-8; dirty-once changes CHECKOUT on its first attempt
 # and is void, as a real run.sh voids an agent that changed it; record-once, mode-once and perm-once do
 # the same to the committed record STUB_RECORD names, by its content, its executable bit or a
-# permission git ignores, and relink-once points that record's symlink at STUB_TARGET. It writes its run directory into
+# permission git ignores, relink-once points that record's symlink at STUB_TARGET, and locked-once
+# makes an unreadable record writable and overwrites it. It writes its run directory into
 # the call, so the record shows whether the runner normalised the path, and the CANARY or EVAL_CANARY variable
 # into evidence.json, so the record shows what environment it got. evidence.json holds its run directory
 # after an escaped newline, as messages.json holds a path that starts a line, and for pass also behind
@@ -126,6 +127,7 @@ case "$scenario" in
   mode-once) [ "$count" -gt 1 ] || { chmod 700 "$STUB_RECORD"; exit 3; }; action=pass ;;
   perm-once) [ "$count" -gt 1 ] || { chmod 600 "$STUB_RECORD"; exit 3; }; action=pass ;;
   relink-once) [ "$count" -gt 1 ] || { ln -sfn "$STUB_TARGET" "$STUB_RECORD"; exit 3; }; action=pass ;;
+  locked-once) [ "$count" -gt 1 ] || { chmod 200 "$STUB_RECORD"; echo overwritten > "$STUB_RECORD"; exit 3; }; action=pass ;;
 esac
 printf '{"action": "%s", "run_dir": "%s", "id": "%s"}\n' "$action" "$run" "$STUB_UUID" > "$run/actions.jsonl"
 if [ "$scenario" = bad-bytes ]; then printf '\xff\n' >> "$run/actions.jsonl"; fi
@@ -665,7 +667,8 @@ def test_an_attempt_that_changes_a_checkout_stops_the_suite(suite) -> None:
 # A committed record the run started with, clean or with an unstaged modification, is allowed;
 # an attempt that then changes its content or mode changed the harness, so the suite stops.
 @pytest.mark.parametrize("scenario, edited_first", [("record-once", False), ("record-once", True),
-                                                     ("mode-once", False), ("perm-once", False)])
+                                                     ("mode-once", False), ("perm-once", False),
+                                                     ("locked-once", False)])
 def test_an_attempt_that_changes_a_committed_record_stops_the_suite(suite, scenario: str, edited_first: bool) -> None:
     suite["recommit"](scenario)
     record = suite["evals"] / "results" / "suite-a.md"
@@ -674,6 +677,8 @@ def test_an_attempt_that_changes_a_committed_record_stops_the_suite(suite, scena
     commit_all(suite["harness"])
     if edited_first:
         record.write_text("edited before the run\n")
+    if scenario == "locked-once":
+        record.chmod(0o000)  # unreadable when the run starts, a permission git ignores
     result = suite["run"]("--runs", "1", str(suite["checkout"]), "lab-1", STUB_RECORD=str(record),
                           EVAL_PASS_ENV="STUB_STATE STUB_UUID STUB_RECORD")
     assert result.returncode == 1, result.stderr
@@ -704,6 +709,29 @@ def test_an_attempt_that_retargets_a_record_symlink_stops_the_suite(suite) -> No
     assert ("committed records an attempt of this run changed (skills/story-to-done/evals/results/suite-a.md)"
             in result.stderr), result.stderr
     assert not (suite["evals"] / "results" / "suite-lab-1.md").exists()
+
+
+def test_a_record_symlink_whose_target_is_not_utf8_does_not_block_a_run(suite) -> None:
+    suite["recommit"]("pass")
+    results = suite["evals"] / "results"
+    results.mkdir(exist_ok=True)
+    os.symlink(b"target-\xff", os.fsencode(results / "suite-a.md"))
+    commit_all(suite["harness"])
+    result = suite["run"]("--runs", "1", str(suite["checkout"]), "lab-1")
+    assert result.returncode == 0, result.stderr
+
+
+# A record swapped between its lstat and its read: the read follows no symlink and never blocks
+# on a FIFO, whatever kind the earlier lstat reported.
+def test_reading_a_swapped_record_follows_no_link_and_never_blocks(tmp_path: Path) -> None:
+    fifo = tmp_path / "fifo"
+    os.mkfifo(fifo)
+    link = tmp_path / "link"
+    link.symlink_to(fifo)
+    regular = stat.S_IFREG | 0o644
+    with pytest.raises(OSError):
+        SUITE.held_by(os.fsencode(link), regular)
+    assert SUITE.held_by(os.fsencode(fifo), regular) == b""
 
 
 @pytest.mark.parametrize("name", ["CANARY", "EVAL_CANARY"])
