@@ -3796,3 +3796,41 @@ def test_path_unresolved_is_reported_only_for_a_stop_before_selection() -> None:
     # Both lines cover every stop before selection, in step 1 or earlier, so they agree.
     assert "until step 1 selects it" in PATH_ARGUMENT_LINE
     assert "before this step selects a path, in this step or an earlier one" in UNRESOLVED_LINE
+
+
+# SKL-70 AC2: the delegating session creates the story worktree before the spawn, because a subagent
+# starts in its spawner's directory, and names its path in the brief.
+WORKTREE_CREATE = (
+    "Before you spawn the senior engineer, fetch `origin` and run `git worktree add` to create the story worktree on a "
+    "new story branch cut from `origin/<profile.git.integration_branch>`, per the branch and worktree rules in "
+    "`references/github.md`."
+)
+WORKTREE_LATER_PR = (
+    "A later PR for the same story, opened after an earlier one merged, gets a fresh worktree under the existing "
+    "worktree rule in `references/github.md`, and the hand-back reports its path too."
+)
+WORKTREE_BRIEF_LINE = (
+    "- The line `worktree: <absolute path>`, whose whole text is exactly that, `<absolute path>` being the story "
+    "worktree you created, distinct from the `path: <value>` line."
+)
+WORKTREE_HANDBACK = "- That the hand-back also returns each worktree path it worked in."
+
+
+def test_step_2_creates_the_story_worktree_before_the_spawn() -> None:
+    lines = step_2_lines()
+    for sentence in (WORKTREE_CREATE, WORKTREE_LATER_PR):
+        assert sentence in lines, f"step 2 must state: {sentence}"
+        assert lines.index(sentence) in prose_lines(lines), "the worktree rule must be operative prose"
+        assert SKILL.read_text().count(sentence) == 1, "each worktree sentence is stated once"
+    spawn = next(i for i, line in enumerate(lines) if line.startswith("Spawn a clean, neutral subagent"))
+    assert lines.index(WORKTREE_CREATE) < spawn, "the worktree exists before the engineer spawns"
+
+
+def test_step_2_brief_names_the_worktree_and_the_hand_back_returns_it() -> None:
+    lines = step_2_lines()
+    path_line = next(i for i, line in enumerate(lines) if line.startswith("- The line `path: <value>`"))
+    assert lines[path_line + 1] == WORKTREE_BRIEF_LINE, "the brief names the worktree right after the path line"
+    handback = next(i for i, line in enumerate(lines) if line.startswith("- What to hand back:"))
+    assert lines[handback + 1] == WORKTREE_HANDBACK, "the hand-back item is followed by the worktree paths"
+    for line in (WORKTREE_BRIEF_LINE, WORKTREE_HANDBACK):
+        assert SKILL.read_text().count(line) == 1, "each brief item is stated once"

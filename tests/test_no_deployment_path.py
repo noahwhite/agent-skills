@@ -326,6 +326,14 @@ DEPLOYED_NOTE = (
     "exactly `path: deployed`."
 )
 DEPLOYED_NOTE_BEFORE_SKL_270 = "2. Add a concise implementation and deployment note."
+# SKL-70 adds one step 2 line that accepts a worktree the brief names. The digest above is kept: the
+# line is pinned here (and in tests/test_engineering_workflow_worktree.py) and cut out before hashing.
+WORKTREE_CLAUSE = (
+    "When the brief names a `worktree:` path, work in that worktree and cut no other, after confirming that its "
+    "branch is based on `origin/<profile.git.integration_branch>` and recutting it per the worktree rule in "
+    "`references/github.md` if it is not; without a `worktree:` line, cut the branch and worktree as the sentence "
+    "above states."
+)
 
 
 def steps_two_to_twelve() -> str:
@@ -350,6 +358,9 @@ def test_steps_two_to_twelve_outside_the_handoff_blocks_are_unchanged() -> None:
         text = text.replace(block, "", 1)
     assert text.count(f"\n{DEPLOYED_NOTE}\n") == 1, "step 12 must carry the `path: deployed` note line once"
     text = text.replace(f"\n{DEPLOYED_NOTE}\n", f"\n{DEPLOYED_NOTE_BEFORE_SKL_270}\n", 1)
+    step_two = text[: text.index("\n## 3. ")]
+    assert step_two.count(f"\n{WORKTREE_CLAUSE}\n") == 1, "step 2 must carry the SKL-70 worktree clause once"
+    text = text.replace(f"\n{WORKTREE_CLAUSE}\n", "\n", 1)
     assert hashlib.sha256(text.encode()).hexdigest() == STEPS_TWO_TO_TWELVE_SHA256
 
 

@@ -48,6 +48,51 @@ def test_v2_invocation_separates_automation_and_interactive_model_selection() ->
     assert "does not retain a `#variant`" not in text
 
 
+DELEGATED_DIRECTORY_MARKER = "- **Delegated working directory.**"
+DELEGATED_DIRECTORY_CLAUSES = (
+    "A delegated agent (a subagent) starts in the working directory of the session that spawns it, and no runtime in "
+    "the map lets the delegating session set that directory to a chosen path.",
+    "The delegating session therefore creates the per-story worktree itself before the spawn and names its absolute "
+    "path in the brief, and the delegated agent addresses every file and git command to that path, by absolute path "
+    "or `git -C <path>`.",
+    "A runtime's own worktree isolation does not replace the per-story worktree, because it chooses its own branch, "
+    "base and lifetime.",
+    "Removing the worktree is not part of the spawn and stays with the existing branch and worktree rules and the "
+    "`cleanup` skill.",
+)
+
+
+def delegated_directory_bullet() -> list[str]:
+    """The SKL-70 bullet under "Rules that follow from the map", one physical line per entry."""
+    rules = RUNTIMES.read_text().split("## Rules that follow from the map\n", 1)[1].split("\n## ", 1)[0]
+    lines = rules.splitlines()
+    starts = [i for i, line in enumerate(lines) if line.startswith(DELEGATED_DIRECTORY_MARKER)]
+    assert len(starts) == 1, "expected one delegated working directory bullet under the map rules"
+    bullet = [lines[starts[0]]]
+    for line in lines[starts[0] + 1:]:
+        if not line.startswith("  "):
+            break
+        bullet.append(line)
+    return bullet
+
+
+def test_delegated_agent_works_in_the_worktree_the_delegating_session_creates() -> None:
+    bullet = delegated_directory_bullet()
+    first = bullet[0].removeprefix(DELEGATED_DIRECTORY_MARKER + " ")
+    assert [first, *(line.removeprefix("  ") for line in bullet[1:])] == list(DELEGATED_DIRECTORY_CLAUSES), (
+        "one clause per physical line, continuation lines indented two spaces"
+    )
+    assert all(not line.startswith("   ") for line in bullet[1:]), "continuation lines are indented exactly two spaces"
+
+
+def test_delegated_directory_bullet_names_no_path_helper_or_memory_rule() -> None:
+    text = "\n".join(delegated_directory_bullet())
+    assert not re.search(r"memory|retir", text, re.IGNORECASE)
+    # A `references/<name>.md` mention would vendor that file into every runtimes.md copy.
+    assert not re.search(r"[\w.-]+/[\w./-]+|\.md\b|\.py\b|\.sh\b", text), "the bullet names no file path"
+    assert "opencode-worktree" not in text, "the bullet names no helper tool"
+
+
 def test_todo_is_optional_tool_not_optional_tracking() -> None:
     text = (ROOT / "shared" / "todo-tracking.md").read_text()
     assert "primary session" in text

@@ -156,6 +156,9 @@ Do not triage the story yourself; `engineering-workflow` does, including the Def
 
 ## 2. Senior engineer: implement to deployment review
 
+Before you spawn the senior engineer, fetch `origin` and run `git worktree add` to create the story worktree on a new story branch cut from `origin/<profile.git.integration_branch>`, per the branch and worktree rules in `references/github.md`.
+A later PR for the same story, opened after an earlier one merged, gets a fresh worktree under the existing worktree rule in `references/github.md`, and the hand-back reports its path too.
+
 Spawn a clean, neutral subagent on `engineer-model` at `engineer-effort`, and brief it as a senior engineer working this story.
 It spawns reviewers of its own, and so does the QA agent in step 3, so check the nesting rule in `references/runtimes.md` first.
 Where nesting is restricted, give both delegated agents nesting per that runtime map, or launch their review roles as shell commands (`runtime: command`, `codex` or `opencode`).
@@ -166,8 +169,10 @@ It must include:
 
 - The story identifier.
 - The line `path: <value>`, whose whole text is exactly that, `<value>` being the path step 1 selected, so the role never reselects the path.
+- The line `worktree: <absolute path>`, whose whole text is exactly that, `<absolute path>` being the story worktree you created, distinct from the `path: <value>` line.
 - An instruction to load and follow `engineering-workflow` for the whole story, from triage, the pre-PR gate and the PR to `profile.git.integration_branch` to the merge per `profile.review.merge_owner`, the deploy, and the move to `profile.tracker.states.in_deployment_review`.
 - What to hand back: the story state, each PR link, the head SHA each PR's review of record covered, the merged commit, and the environment and deployed build it verified; or, if it stops, that it is blocked and why, including when no arbiter can launch; a missing arbitration is never clean or converged.
+- That the hand-back also returns each worktree path it worked in.
 - Keep working until everything the brief asks for is done, and only stop to ask when you can't go on without the coordinator or before a risky step. The stop this brief already defines still holds: if you must stop, hand back blocked and say why.
 - The real-check rule: report a change done only with the output of a real check that exercises it (tests, type-checker, build, the changed command, or for infrastructure a plan or dry run against the target); a syntax-only check, or a check that failed to start, does not count. Install declared dependencies only with the project's own package manager and lockfile, never with sudo or the system package manager. If no real check can run, the report names the check not run and why.
 - When the work in the brief is done, stop and report. Don't add features, tests, files, docs or refactors the brief or the story's acceptance criteria don't call for. The tests the real-check rule needs are called for by this brief.

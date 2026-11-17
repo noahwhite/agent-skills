@@ -67,6 +67,10 @@ If your runtime is not listed, map each capability to its closest equivalent and
   Alternatively the primary session can run review roles after the delegated agent hands back its PR, only when the calling skill permits that handback boundary.
   V1 legacy guidance: raise top-level `subagent_depth` to 2 and grant `permission: { task: allow }` to the child.
   Both versions also need skill loading available; V2 uses the `skill` permission action, while V1 uses `permission.skill` / `tools.skill`.
+- **Delegated working directory.** A delegated agent (a subagent) starts in the working directory of the session that spawns it, and no runtime in the map lets the delegating session set that directory to a chosen path.
+  The delegating session therefore creates the per-story worktree itself before the spawn and names its absolute path in the brief, and the delegated agent addresses every file and git command to that path, by absolute path or `git -C <path>`.
+  A runtime's own worktree isolation does not replace the per-story worktree, because it chooses its own branch, base and lifetime.
+  Removing the worktree is not part of the spawn and stays with the existing branch and worktree rules and the `cleanup` skill.
 - **Tracker writes from a subagent.** State only what was observed.
   On Claude Code, on 2026-10-21 a subagent's tracker write was denied by the auto-mode permission check, although a matching `permissions.allow` rule existed.
   The same write passed in a later session after the owner's own message in that session asked for PO tracker writes.
