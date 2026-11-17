@@ -53,4 +53,4 @@ Round 2 re-checked every item at the target, with the round 1 failures (K5 and "
 | DoD: verified in a deployed environment (if needed) | Correct by design | Not needed on the `no-deployment` path. |
 | DoD: no critical bugs or regressions | Verified | The full suite passes at the target and in CI. |
 
-Closing decision: Done.
+Closing decision: Done once this evidence PR merges.
