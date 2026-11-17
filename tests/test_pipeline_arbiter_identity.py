@@ -4,7 +4,7 @@ SKL-178 (AC 6). When the script accepts an arbitrate phase, on `run` or on `reco
 `ARBITER-AGENT: <name>`, `ARBITER-MODEL: <model id as given>` and `ARBITER-HEAD: <full HEAD SHA>`
 directly after the unchanged first line `REVIEW-RAN: yes`, before it stamps the artifact. The name
 comes from `--agent` (or `ADVERSARIAL_AGENT`, which `--agent` overrides); an absent agent or model is
-written as `not-supplied`. It then publishes an immutable copy of the stamped report under
+written as `not-supplied`. It then publishes an immutable copy of the report, before stamping it, under
 `<git common dir>/adversarial-pipeline/arbitration-rounds` as
 `round-<UTC timestamp>-<full HEAD SHA>-<first 12 hex of the report sha256>-<n>.md` with a no-clobber
 hard link, and prints the retained absolute path on stderr. A re-run's discard and `cleanup` never
@@ -385,6 +385,77 @@ def test_a_rerun_discard_and_cleanup_keep_the_retained_copy(gate, flow):
     cleanup(gate, Path(line_value(again.stderr, "CHECKOUT: ")))
     assert kept.read_bytes() == content
     assert retained(gate["repo"]) == [kept]
+
+
+def test_recording_an_accepted_arbitration_again_fails_and_retains_nothing_more(gate):
+    ready_for_arbitration(gate, "dossier")
+    first = dossier_and_record(gate, "arbitrate", "--agent", AGENT_NAME, "--model", MODEL_ID)
+    assert first.returncode == 0, first.stdout + first.stderr
+    artifact = artifact_paths(gate)["arbitrate"]
+    accepted_report = artifact.read_bytes()
+    kept = retained(gate["repo"])
+    again = run_script("record", "arbitrate", "--repo", str(gate["repo"]), "--base", BASE_REF,
+                       "--spec", str(gate["spec"]), "--agent", "Other Agent", "--model", "other/model",
+                       env=gate["env"])
+    assert again.returncode == 15, again.stdout + again.stderr
+    assert artifact.read_bytes() == accepted_report
+    assert Path(f"{artifact}.stamp").exists(), "the earlier acceptance stands"
+    assert retained(gate["repo"]) == kept
+    assert "Retained arbitration report" not in again.stderr
+
+
+def test_a_signal_during_retention_rolls_the_arbitration_back(gate):
+    ready_for_arbitration(gate, "dossier")
+    written = run_script("dossier", "arbitrate", *common(gate), env=gate["env"])
+    assert written.returncode == 0, written.stdout + written.stderr
+    artifact = artifact_paths(gate)["arbitrate"]
+    report = f"REVIEW-RAN: yes\n{REPORT_BODY}".encode()
+    artifact.write_bytes(report)
+    # An `ln` that sends TERM to the whole record process group while the copy is being published.
+    shim = gate["home"] / "signal-bin"
+    shim.mkdir()
+    (shim / "ln").write_text("#!/bin/sh\nkill -TERM 0\nsleep 5\nexit 1\n")
+    (shim / "ln").chmod(0o755)
+    env = {**gate["env"], "PATH": f"{shim}{os.pathsep}{gate['env']['PATH']}"}
+    record_args = ["bash", str(SCRIPT), "record", "arbitrate", "--repo", str(gate["repo"]),
+                   "--base", BASE_REF, "--spec", str(gate["spec"]), "--agent", AGENT_NAME,
+                   "--model", MODEL_ID]
+    interrupted = subprocess.run(record_args, capture_output=True, text=True, env=env, cwd=str(ROOT),
+                                 timeout=120, start_new_session=True)
+    assert interrupted.returncode == 143, interrupted.stdout + interrupted.stderr
+    assert not Path(f"{artifact}.stamp").exists()
+    assert artifact.read_bytes() == report
+    assert [p for p in retained(gate["repo"]) if p.name.startswith("round-")] == []
+    retry = run_script(*record_args[2:], env=gate["env"])
+    assert retry.returncode == 0, retry.stdout + retry.stderr
+    assert artifact.read_text() == expected_report(AGENT_NAME, MODEL_ID, head_sha(gate))
+    cleanup(gate, Path(line_value(written.stderr, "CHECKOUT: ")))
+
+
+def test_a_nul_byte_in_the_first_line_writes_and_retains_nothing(gate):
+    ready_for_arbitration(gate, "dossier")
+    written = f"REVIEW-RAN: ye\0s\n{REPORT_BODY}"
+    result = dossier_and_record(gate, "arbitrate", raw_report=written)
+    assert result.returncode == 17, result.stdout + result.stderr
+    artifact = artifact_paths(gate)["arbitrate"]
+    assert artifact.read_bytes() == written.encode()
+    assert not Path(f"{artifact}.stamp").exists()
+    assert retained(gate["repo"]) == []
+
+
+def test_a_clone_path_with_a_backslash_keeps_the_documented_filename(tmp_path):
+    parent = tmp_path / "back\\slash"
+    parent.mkdir()
+    g = make_gate(tmp_path, make_repo(parent))
+    # The dossier flow: the reports are written from Python, so no test shell command re-reads the path.
+    ready_for_arbitration(g, "dossier")
+    result = dossier_and_record(g, "arbitrate", "--agent", AGENT_NAME, "--model", MODEL_ID)
+    assert result.returncode == 0, result.stdout + result.stderr
+    path = retained_path_from(result.stderr)
+    match = RETAINED_RE.match(path.name)
+    assert match, path.name
+    report = artifact_paths(g)["arbitrate"].read_bytes()
+    assert match.group(3) == hashlib.sha256(report).hexdigest()[:12]
 
 
 def test_every_worktree_of_the_clone_resolves_the_same_directory(gate, tmp_path):

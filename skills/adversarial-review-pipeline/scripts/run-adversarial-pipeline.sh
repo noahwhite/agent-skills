@@ -128,8 +128,8 @@
 # identity block: the body below them is the model's text, copied unchanged, so a reader never scans
 # it for ARBITER- lines. ARBITER-HEAD is the HEAD when the script runs, so run `record arbitrate` at
 # the reviewed head. A report whose first line is not exactly 'REVIEW-RAN: yes' (trailing whitespace
-# or a CR included) fails (exit 17) and writes and retains nothing. The accepted, stamped report
-# is then retained as an immutable (read-only) copy in
+# or a CR included) fails (exit 17) and writes and retains nothing. The report with its identity
+# lines is retained, before it is stamped, as an immutable (read-only) copy in
 #   <git common dir>/adversarial-pipeline/arbitration-rounds
 # where <git common dir> is the absolute `git rev-parse --git-common-dir`, so every worktree of the
 # clone resolves the same directory, independent of the run directory, --scratch and the worktree:
@@ -137,11 +137,14 @@
 # The timestamp is `date -u +%Y%m%dT%H%M%SZ`. The copy is written to a temporary file in that
 # directory and published with a no-clobber hard link; when the name exists the next <n> is tried,
 # so two byte-identical arbitrations at one head leave two files and nothing is overwritten. Any
-# failure to write or publish the copy fails the phase (exit 21): the stamp is removed and the report
-# is restored as the agent wrote it. An accepted phase prints
+# failure to write or publish the copy, or to stamp the report after it, fails the phase (exit 21):
+# no stamp is left and the report is restored as the agent wrote it; an INT, TERM or HUP restores it
+# the same way. An accepted phase prints
 #   Retained arbitration report -> <path>
-# on stderr, the absolute path of the copy; stdout still carries the artifact alone. No re-run,
-# discard or `cleanup` removes a retained copy.
+# on stderr, the absolute path of the copy; stdout still carries the artifact alone. One dossier
+# accepts one arbitration: recording an accepted arbitration again fails (exit 15), and a new round
+# needs a new `dossier arbitrate` or `run arbitrate`. No re-run, discard or `cleanup` removes a
+# retained copy.
 #
 # --model ID (ADVERSARIAL_MODEL) is the model id this phase was given, quoted whole into the probe
 # and echoed on every line as a label in which anything outside letters, digits and . _ / : @ # + ~
@@ -482,7 +485,8 @@ if [ -n "$phase" ]; then
   case "$phase" in sweep|hunt|arbitrate) ;; *) die 2 "unknown phase '$phase' (sweep|hunt|arbitrate)" ;; esac
 fi
 
-sha_of() { sha256sum -- "$1" | cut -d' ' -f1; }
+# Hashed through stdin: sha256sum escapes the digest of a named file whose path holds a backslash or newline.
+sha_of() { sha256sum < "$1" | cut -d' ' -f1; }
 if [ -n "$SPEC_FILE" ]; then SPEC_SHA="$(sha_of "$SPEC_FILE")"; else SPEC_SHA="none"; fi
 
 deps_of() {  # $1 = phase -> the phases its dossier is built from, one per line
@@ -588,7 +592,7 @@ primary_state() {
 accept_phase() {  # $1 = phase, $2 = stderr log or "": validate a freshly written artifact, then stamp it
   local art; art="$(artifact_for "$1")"
   [ -f "$RUN_DIR/$1.launch" ] && [ -f "$RUN_DIR/$1.binding" ] && [ -f "$RUN_DIR/$1.primary" ] \
-    || die 15 "no launch for $1 in this run (never started, or discarded by a later re-run of an earlier phase); write its dossier with 'dossier $1' first."
+    || die 15 "no launch for $1 in this run (never started, discarded by a later re-run of an earlier phase, or an arbitration already accepted); write its dossier with 'dossier $1' first."
   if [ "$(cat -- "$RUN_DIR/$1.binding")" != "$(binding_text "$1")" ]; then
     die 13 "the $1 inputs changed since its dossier was written (spec, --no-sweep or a predecessor artifact); start the $1 phase again."
   fi
@@ -617,43 +621,65 @@ accept_phase() {  # $1 = phase, $2 = stderr log or "": validate a freshly writte
   fi
 }
 
-# Arbitration identity and retention (see "Arbiter identity and retention" in the header). The
-# report's first line was already checked; this writes the three identity lines after it, stamps the
-# report, and publishes an immutable copy. Any failure restores the report as the agent wrote it and
-# removes the stamp, so the phase is not accepted and a retried `record` starts from the same report.
+# Arbitration identity and retention (see "Arbiter identity and retention" in the header). This
+# writes the three identity lines after the first line, publishes an immutable copy, and only then
+# stamps the report, so no arbitration is accepted without its retained copy. The launch is consumed
+# for the transaction, so one dossier accepts one arbitration and recording it again fails (exit 15).
+# Any failure, or an INT, TERM or HUP, restores the report as the agent wrote it, the launch, and no
+# stamp, so the phase is not accepted and a retried `record` starts from the same report; a copy
+# already published stays, because no retained copy is ever removed.
 # The retained path goes to fd 3, which each caller points at the script's own stderr.
 ARBITRATION_ROUNDS="$COMMON_DIR/adversarial-pipeline/arbitration-rounds"
+ARB_ART="" ARB_LAUNCH="" ARB_CONSUMED="" ARB_ORIGINAL="" ARB_HEADED=""
+arbitration_rollback() {
+  rm -f -- "$ARB_ART.stamp"
+  if [ -n "$ARB_HEADED" ]; then rm -f -- "$ARB_HEADED"; fi
+  if [ -f "$ARB_ORIGINAL" ]; then
+    mv -f -- "$ARB_ORIGINAL" "$ARB_ART" || echo "WARNING: could not restore $ARB_ART as the agent wrote it" >&2
+  fi
+  if [ -f "$ARB_CONSUMED" ]; then
+    mv -f -- "$ARB_CONSUMED" "$ARB_LAUNCH" || echo "WARNING: could not restore the arbitrate launch" >&2
+  fi
+}
 stamp_and_retain_arbitration() {
-  local art first original headed dest
-  art="$(artifact_for arbitrate)"
+  local dest
+  ARB_ART="$(artifact_for arbitrate)"
+  ARB_LAUNCH="$RUN_DIR/arbitrate.launch"
+  ARB_CONSUMED="$RUN_DIR/arbitrate.launch.accepting"
   # The shared check tolerates trailing whitespace and a CR; the identity block follows a first line
-  # that is exactly 'REVIEW-RAN: yes', so anything else fails here, before anything is written.
-  first=""
-  IFS= read -r first < "$art" || true
-  if [ "$first" != "REVIEW-RAN: yes" ]; then
+  # that is exactly 'REVIEW-RAN: yes', compared byte for byte (a shell variable would drop a NUL), so
+  # anything else fails here, before anything is written.
+  if ! head -n 1 -- "$ARB_ART" | cmp -s - <(printf 'REVIEW-RAN: yes\n') \
+    && ! cmp -s -- "$ARB_ART" <(printf 'REVIEW-RAN: yes'); then
     die 17 "the arbitrate report's first line is not exactly 'REVIEW-RAN: yes' (trailing whitespace or a CR included); nothing was written or retained, and the phase is not accepted."
   fi
-  original="$(mktemp -p "$RUN_DIR" arbitrate-original.XXXXXX)" \
+  ARB_ORIGINAL="$(mktemp -p "$RUN_DIR" arbitrate-original.XXXXXX)" \
     || die 21 "could not save the arbitration report before writing its identity lines; nothing was written or retained."
-  if ! cp -p -- "$art" "$original"; then
-    rm -f -- "$original"
+  if ! cp -p -- "$ARB_ART" "$ARB_ORIGINAL" || ! mv -f -- "$ARB_LAUNCH" "$ARB_CONSUMED"; then
+    rm -f -- "$ARB_ORIGINAL"
     die 21 "could not save the arbitration report before writing its identity lines; nothing was written or retained."
   fi
-  if ! headed="$(mktemp -p "$RUN_DIR" arbitrate-headed.XXXXXX)" \
-    || ! { IFS= read -r first < "$art" || [ -n "$first" ]; } \
-    || ! { printf '%s\nARBITER-AGENT: %s\nARBITER-MODEL: %s\nARBITER-HEAD: %s\n' "$first" \
+  trap 'arbitration_rollback; exit 130' INT
+  trap 'arbitration_rollback; exit 143' TERM
+  trap 'arbitration_rollback; exit 129' HUP
+  if ! ARB_HEADED="$(mktemp -p "$RUN_DIR" arbitrate-headed.XXXXXX)" \
+    || ! { printf 'REVIEW-RAN: yes\nARBITER-AGENT: %s\nARBITER-MODEL: %s\nARBITER-HEAD: %s\n' \
              "${ARBITER_AGENT:-not-supplied}" "${MODEL:-not-supplied}" "$HEAD_SHA" \
-           && tail -n +2 -- "$art"; } > "$headed" \
-    || ! mv -f -- "$headed" "$art"; then
-    rm -f -- "${headed:-}" "$original"
-    die 21 "could not write the arbiter identity lines into $art; the phase is not accepted."
+           && tail -n +2 -- "$ARB_ART"; } > "$ARB_HEADED" \
+    || ! mv -f -- "$ARB_HEADED" "$ARB_ART"; then
+    arbitration_rollback
+    die 21 "could not write the arbiter identity lines into $ARB_ART; the phase is not accepted."
   fi
-  if ! stamp arbitrate || ! dest="$(retain_arbitration "$art")"; then
-    rm -f -- "$art.stamp"
-    mv -f -- "$original" "$art" || echo "WARNING: could not restore $art as the agent wrote it" >&2
+  if ! dest="$(retain_arbitration "$ARB_ART")"; then
+    arbitration_rollback
     die 21 "could not retain the accepted arbitration report under $ARBITRATION_ROUNDS; the phase is not accepted."
   fi
-  rm -f -- "$original"
+  if ! stamp arbitrate; then
+    arbitration_rollback
+    die 21 "could not stamp the arbitration report after retaining it as $dest; the phase is not accepted."
+  fi
+  trap - INT TERM HUP
+  rm -f -- "$ARB_ORIGINAL" "$ARB_CONSUMED"
   printf 'Retained arbitration report -> %s\n' "$dest" >&3
 }
 
@@ -1689,6 +1715,10 @@ case "$cmd" in
     rc_accept=0
     reason_file="$(mktemp -p "$RUN_DIR" record-reason.XXXXXX)" \
       || die 2 "could not create a status file in the run directory"
+    # A signal waits for the acceptance subshell, which rolls an interrupted arbitration back itself.
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    trap 'exit 129' HUP
     ( accept_phase "$phase" "" ) 3>&2 2> "$reason_file" || rc_accept=$?
     if [ "$rc_accept" -ne 0 ]; then
       diagnose_phase "$phase" "$rc_accept" "$(cat -- "$reason_file" 2>/dev/null || true)" "$(artifact_for "$phase")"

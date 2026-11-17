@@ -243,12 +243,13 @@ ARBITER-HEAD: <full HEAD SHA>
 - `ARBITER-HEAD` is the HEAD when the script runs, so `record arbitrate` must run at the reviewed head: never record a report after moving the branch.
 - A report whose first line is not exactly `REVIEW-RAN: yes` (trailing whitespace or a CR included) fails (exit 17) and writes and retains nothing.
 
-Every accepted arbitration is retained as an immutable, read-only copy of the stamped report in `<git common dir>/adversarial-pipeline/arbitration-rounds`, where `<git common dir>` is the absolute output of `git rev-parse --git-common-dir`.
+Every accepted arbitration is retained, before its stamp is written, as an immutable, read-only copy of the report with its identity lines in `<git common dir>/adversarial-pipeline/arbitration-rounds`, where `<git common dir>` is the absolute output of `git rev-parse --git-common-dir`.
 That directory belongs to the clone, not to the run directory, `--scratch` or the worktree, so every worktree of the clone resolves the same directory and removing a worktree loses nothing; a linked worktree's own `git rev-parse --git-path adversarial-pipeline` is under that worktree's git directory, which is why the run state is not used.
 The copy is named `round-<UTC timestamp>-<full HEAD SHA>-<first 12 hex of the report sha256>-<n>.md`, with the timestamp as `date -u +%Y%m%dT%H%M%SZ`.
 It is written to a temporary file in that directory and published with a no-clobber hard link; when the name exists the next `<n>` is tried, so two byte-identical arbitrations at one head leave two files and nothing is overwritten.
-Any failure to write or publish it fails the phase (exit 21): the stamp is removed and the report is restored as the agent wrote it, so the phase is not accepted.
+Any failure to write or publish it, or to stamp the report after it, fails the phase (exit 21): no stamp is left and the report is restored as the agent wrote it, so the phase is not accepted; an INT, TERM or HUP restores it the same way.
 On acceptance the script prints `Retained arbitration report -> <path>` on stderr with the copy's absolute path; stdout still carries the artifact alone.
+One dossier accepts one arbitration: recording an accepted arbitration again fails (exit 15), and a new round needs a new `dossier arbitrate` or `run arbitrate`.
 No re-run, discard or `cleanup` removes a retained copy: a re-run of arbitration at an unchanged head discards `phase3-arbitration.md`, and the retained copy keeps the earlier round countable.
 
 ## Phase 4: fix, prove the mutants, one bounded re-verify
