@@ -668,7 +668,8 @@ def test_an_attempt_that_changes_a_checkout_stops_the_suite(suite) -> None:
 # an attempt that then changes its content or mode changed the harness, so the suite stops.
 @pytest.mark.parametrize("scenario, edited_first", [("record-once", False), ("record-once", True),
                                                      ("mode-once", False), ("perm-once", False),
-                                                     ("locked-once", False)])
+                                                     pytest.param("locked-once", False, marks=pytest.mark.skipif(
+                                                         os.geteuid() == 0, reason="root reads through mode 000"))])
 def test_an_attempt_that_changes_a_committed_record_stops_the_suite(suite, scenario: str, edited_first: bool) -> None:
     suite["recommit"](scenario)
     record = suite["evals"] / "results" / "suite-a.md"
