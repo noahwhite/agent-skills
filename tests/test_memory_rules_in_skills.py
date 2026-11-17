@@ -91,3 +91,24 @@ def test_k3_delegation_sits_in_the_clean_and_neutral_block() -> None:
     assert items[0].startswith("**Clean:**")
     assert items[1].startswith("**Neutral:**")
     assert items[2] == K3
+
+
+# --- K4: shared/linear.md ---------------------------------------------------------------------
+
+K4 = [
+    "An issue key the owner names explicitly is acted on as written, also when it appears inside an "
+    "instruction about a different story, and is never treated as a typo for another key.",
+    "When the named story is not yet in the state the action needs, wait, re-read its state, and say that "
+    "you are waiting; when the instruction contradicts the story's state or another instruction, ask the "
+    "owner before acting.",
+    "Never substitute another key. "
+    "A missing key is covered by the \"never guess\" line of each skill's `STORY_ID` argument rule, "
+    "not restated here.",
+]
+
+
+def test_k4_named_story_keys_follows_team_resolution() -> None:
+    text = (SHARED / "linear.md").read_text()
+    names = headings(text)
+    assert names[names.index("Team resolution") + 1] == "Named story keys"
+    assert bullets(section(text, "Named story keys")) == K4
