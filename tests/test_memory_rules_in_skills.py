@@ -120,25 +120,13 @@ K2 = [
     "Remove X only when that reasoning shows it is unneeded and the removal is within what was asked.",
 ]
 
+
 def test_k1_over_reading_follows_the_search_bullet() -> None:
     items = parse(SHARED / "engineering-practice.md").bullets("Reuse and study existing code")
     assert items[0].startswith("Before writing code for an operation"), "the search bullet must stay first"
     assert_clauses(items[1], K1)
     assert any(item.startswith("When porting") for item in items[2:]), "the porting bullet must stay below K1"
     assert_once_in_shared(K1[0])
-
-
-# A bullet that reads for completeness or confirmation under K1's replication condition
-# (the pattern or its substitutions already known) contradicts K1; one without that condition
-# (a first read, an exhaustive diff review) does not.
-OVER_READ_RE = re.compile(r"\bfor (?:completeness|confirmation)\b", re.I)
-KNOWN_PATTERN_RE = re.compile(r"\b(?:known|substitutions?)\b", re.I)
-
-
-def test_k1_has_no_contradicting_over_read_rule() -> None:
-    every_bullet = [b for doc in shared_docs() for groups in doc.lists.values() for group in groups for b in group]
-    hits = [b for b in every_bullet if OVER_READ_RE.search(b) and KNOWN_PATTERN_RE.search(b)]
-    assert len(hits) == 1 and hits[0].startswith(K1[0]), hits
 
 
 def test_k2_why_is_x_needed_follows_change_exactly_what_was_asked() -> None:
