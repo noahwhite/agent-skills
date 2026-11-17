@@ -142,9 +142,13 @@ def run_all_phases(g: dict) -> dict[str, tuple[str, dict[str, str]]]:
         result = run_phase(g, phase)
         assert result.returncode == 0, result.stdout + result.stderr
         report = paths[phase].read_text()
-        # The script writes three ARBITER-* identity lines (SKL-178) after the arbitration report's first line.
-        body = report.splitlines()[4 if phase == "arbitrate" else 1:]
-        observed = dict(line.split("=", 1) for line in body)
+        lines = report.splitlines()
+        if phase == "arbitrate":
+            # The script writes three ARBITER-* identity lines (SKL-178) after the first line.
+            assert [line.split(": ", 1)[0] for line in lines[1:4]] == \
+                ["ARBITER-AGENT", "ARBITER-MODEL", "ARBITER-HEAD"], report
+            lines = lines[3:]
+        observed = dict(line.split("=", 1) for line in lines[1:])
         dossier = (g["scratch"] / f"seen-{phase}" / "dossier.md").read_text()
         seen[phase] = (dossier, observed)
     return seen

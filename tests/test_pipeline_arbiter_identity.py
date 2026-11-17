@@ -36,12 +36,14 @@ RETAINED_RE = re.compile(r"^round-(\d{8}T\d{6}Z)-([0-9a-f]{40})-([0-9a-f]{12})-(
 
 GIT_ISOLATION = {"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
 GIT_LOCATORS = ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE",
-                "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_EXTERNAL_DIFF")
+                "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_EXTERNAL_DIFF",
+                "GIT_DEFAULT_HASH", "GIT_CONFIG_PARAMETERS", "GIT_CONFIG_COUNT")
 
 
 def isolated_env() -> dict[str, str]:
     env = {k: v for k, v in os.environ.items()
-           if not k.startswith("ADVERSARIAL_") and k not in GIT_LOCATORS}
+           if not k.startswith(("ADVERSARIAL_", "GIT_CONFIG_KEY_", "GIT_CONFIG_VALUE_"))
+           and k not in GIT_LOCATORS}
     return {**env, **GIT_ISOLATION}
 
 
@@ -140,10 +142,12 @@ def cleanup(g: dict, checkout: Path) -> None:
 
 
 def dossier_and_record(g: dict, phase: str, *extra: str, env: dict[str, str] | None = None,
-                       first_line: str = "REVIEW-RAN: yes") -> subprocess.CompletedProcess:
+                       first_line: str = "REVIEW-RAN: yes",
+                       raw_report: str | None = None) -> subprocess.CompletedProcess:
     written = run_script("dossier", phase, *common(g), env=g["env"])
     assert written.returncode == 0, written.stdout + written.stderr
-    artifact_paths(g)[phase].write_text(f"{first_line}\n{REPORT_BODY}")
+    report = raw_report if raw_report is not None else f"{first_line}\n{REPORT_BODY}"
+    artifact_paths(g)[phase].write_bytes(report.encode())
     recorded = run_script("record", phase, "--repo", str(g["repo"]), "--base", BASE_REF,
                           "--spec", str(g["spec"]), *extra, env=env or g["env"])
     cleanup(g, Path(line_value(written.stderr, "CHECKOUT: ")))
@@ -248,6 +252,25 @@ def test_a_report_without_review_ran_writes_and_retains_nothing(gate, flow):
     assert not Path(f"{artifact}.stamp").exists()
     assert retained(gate["repo"]) == []
     assert "Retained arbitration report" not in result.stderr
+
+
+@pytest.mark.parametrize("flow", FLOWS)
+@pytest.mark.parametrize("first_line", ["REVIEW-RAN: yes ", "REVIEW-RAN: yes\t", "REVIEW-RAN: yes\r"])
+def test_an_arbitration_first_line_that_is_not_exact_writes_and_retains_nothing(gate, flow, first_line):
+    ready_for_arbitration(gate, flow)
+    if flow == "run":
+        command = f"printf 'REVIEW-RAN: yes{first_line[15:]}\\n%s' '{REPORT_BODY}' > {{output_file}}"
+        result = run_script("run", "arbitrate", *common(gate), "--agent-cmd", command, env=gate["env"])
+        written = None
+    else:
+        written = f"{first_line}\n{REPORT_BODY}"
+        result = dossier_and_record(gate, "arbitrate", raw_report=written)
+    assert result.returncode == 17, result.stdout + result.stderr
+    artifact = artifact_paths(gate)["arbitrate"]
+    assert not Path(f"{artifact}.stamp").exists()
+    assert retained(gate["repo"]) == []
+    if written is not None:
+        assert artifact.read_bytes() == written.encode()
 
 
 @pytest.mark.parametrize("flow", FLOWS)

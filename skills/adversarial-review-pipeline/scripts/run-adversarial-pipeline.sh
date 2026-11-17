@@ -127,8 +127,8 @@
 # command accepts it (`run` still refuses an empty --model with exit 2). Lines 2 to 4 are the only
 # identity block: the body below them is the model's text, copied unchanged, so a reader never scans
 # it for ARBITER- lines. ARBITER-HEAD is the HEAD when the script runs, so run `record arbitrate` at
-# the reviewed head. A report whose first line is not 'REVIEW-RAN: yes' fails as before and writes
-# and retains nothing. The accepted, stamped report
+# the reviewed head. A report whose first line is not exactly 'REVIEW-RAN: yes' (trailing whitespace
+# or a CR included) fails (exit 17) and writes and retains nothing. The accepted, stamped report
 # is then retained as an immutable (read-only) copy in
 #   <git common dir>/adversarial-pipeline/arbitration-rounds
 # where <git common dir> is the absolute `git rev-parse --git-common-dir`, so every worktree of the
@@ -626,6 +626,13 @@ ARBITRATION_ROUNDS="$COMMON_DIR/adversarial-pipeline/arbitration-rounds"
 stamp_and_retain_arbitration() {
   local art first original headed dest
   art="$(artifact_for arbitrate)"
+  # The shared check tolerates trailing whitespace and a CR; the identity block follows a first line
+  # that is exactly 'REVIEW-RAN: yes', so anything else fails here, before anything is written.
+  first=""
+  IFS= read -r first < "$art" || true
+  if [ "$first" != "REVIEW-RAN: yes" ]; then
+    die 17 "the arbitrate report's first line is not exactly 'REVIEW-RAN: yes' (trailing whitespace or a CR included); nothing was written or retained, and the phase is not accepted."
+  fi
   original="$(mktemp -p "$RUN_DIR" arbitrate-original.XXXXXX)" \
     || die 21 "could not save the arbitration report before writing its identity lines; nothing was written or retained."
   if ! cp -p -- "$art" "$original"; then

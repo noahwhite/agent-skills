@@ -241,7 +241,7 @@ ARBITER-HEAD: <full HEAD SHA>
 - An absent `--agent` or `--model` value is written as `not-supplied`, and so is an empty one where the command accepts it (`run` still refuses an empty `--model` with exit 2); a reader treats `not-supplied` in either field as a missing field.
 - Lines 2 to 4 are the only identity block: the report body below them is the model's text, copied unchanged, so a reader takes the identity from those three lines and never scans the body for `ARBITER-` lines.
 - `ARBITER-HEAD` is the HEAD when the script runs, so `record arbitrate` must run at the reviewed head: never record a report after moving the branch.
-- A report whose first line is not `REVIEW-RAN: yes` fails as before (exit 17) and writes and retains nothing.
+- A report whose first line is not exactly `REVIEW-RAN: yes` (trailing whitespace or a CR included) fails (exit 17) and writes and retains nothing.
 
 Every accepted arbitration is retained as an immutable, read-only copy of the stamped report in `<git common dir>/adversarial-pipeline/arbitration-rounds`, where `<git common dir>` is the absolute output of `git rev-parse --git-common-dir`.
 That directory belongs to the clone, not to the run directory, `--scratch` or the worktree, so every worktree of the clone resolves the same directory and removing a worktree loses nothing; a linked worktree's own `git rev-parse --git-path adversarial-pipeline` is under that worktree's git directory, which is why the run state is not used.
