@@ -629,7 +629,9 @@ def test_qa_added_blocks_appear_once_in_order() -> None:
 # pins and cut out as before).
 # SKL-284 re-baselined it for its one change outside the blocks: the QA evidence comment's first line is
 # exactly `## QA evidence` (section 4, item 5), which story-to-done's qa-round-cap.py counts rounds by.
-QA_BASE_SHA256 = "c4d1f2c6d44a42bb390ee14ff57247c92363be192025eb127f91331db1301217"
+# SKL-182 re-baselined it for its one change outside the blocks: the "Await the gate" bullet in section 5,
+# which tests/test_qa_await_gate.py pins.
+QA_BASE_SHA256 = "ee6498dd7ebc949eed181d140827daf8ab1e33fdecc3b8410c4b9e15d94dbc60"
 
 
 def test_qa_text_outside_the_added_blocks_is_unchanged() -> None:

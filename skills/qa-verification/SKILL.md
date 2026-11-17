@@ -144,6 +144,12 @@ If `profile.qa.evidence_dir` is unset, the project does not keep in-repo evidenc
   The review of record is `profile.review.reviewer`, then a separate clean, neutral `profile.review.adjudicator`, as `references/code-review.md` defines.
   Never hand the reviewer or the adjudicator your QA verdicts.
   A docs-only diff, green checks, a long wait, or user frustration do not waive the gate; if you cannot get a review, hold and say so.
+- **Await the gate.**
+  Launch the reviewer and the adjudicator in the foreground where the runtime supports it, so each stays awaitable until it exits.
+  A gate command the runtime moves to the background is still running: wait for it to exit and read its report before the run continues.
+  A run never ends while a gate step it launched is still outstanding, and no stop is lawful while a gate command it launched is still running, so a closing message that the review or the adjudication is still running never ends a run.
+  Once every gate command has exited, the run reads each report and carries on to the review of record, the merge guard and the closing decision in step 6.
+  When a gate command exited unsuccessfully or was killed after exceeding a timeout, or the gate needs an owner action or an access grant the run cannot supply itself, the run stops and reports itself incomplete: it names the unfinished gate step, the reason, and who owns the next action, and never claims successful completion.
 - Fix what the adjudicator rules valid, and post the review of record on the PR as a `--comment` PR review before the merge, never after.
 - Merge only on the exact final head with CI finished, never by an admin override over pending checks, and per `profile.review.merge_owner` (hand the merge to the user when it is `human`): run the merge guard in `references/code-review.md` and merge with the reviewed full head SHA as the expected-head condition (on GitHub, `gh pr merge <n> --match-head-commit <full reviewed SHA>`); if the merge command cannot carry it, stop and report the merge blocked.
   An update-branch after the review is a new head that needs a delta review first, even for a docs-only PR.
