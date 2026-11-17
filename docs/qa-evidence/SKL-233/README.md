@@ -33,3 +33,32 @@ A probe on a throwaway bare repository showed that in a single-branch clone a ba
 No reading of the AC is served by the bare form that the refspec form fails, so this is not a pending owner ruling.
 
 Closing decision: stays In Deployment Review until the memory holder retires the five notes; no item failed.
+
+## QA round 2
+
+Date: 2026-11-17 UTC, independent QA round 2.
+Target: unchanged, `main` at `b2888e3575df8a868fa6d4683b5543a03d0ab545`, the squash merge of PR 315, whose reviewed head is `2f1cdb6fb7b196638c2464e1662e35fc1cc0e5d0`.
+`git merge-base --is-ancestor` confirmed the merged commit on `origin/main`, `git diff 2f1cdb6 b2888e3` is empty, and the only later change on `main` is this README.
+Path: `no-deployment`, selected by `select-path.py` with the story's title, its two labels and the recorded `path: no-deployment` line, so no environment or build SHA applies.
+Fixtures: a detached worktree at the target, a throwaway local bare repository for the K5 fetch probe, and a read-only read of the agent's persistent memory store, including the harness's pre-edit snapshot of the reduced note.
+The raw output is attached to SKL-233 as "QA round 2: K1-K7 and DoD checks (raw output)"; there is no visual surface, so no screenshot applies.
+Round 2 re-checked every item at the target; the change since round 1 is the owner-side memory retirement named in K7.
+
+| Item | Verdict | Evidence |
+|---|---|---|
+| K1: over-reading | Verified | The new bullet is second in "Reuse and study existing code", after the search bullet, and refers to "the search above". It has every clause of the AC, keeps the full read for an unknown substitution, a transaction, dependency-injection or credential boundary and a first read, and names "When mirroring a proven handler" and the porting bullet, which both exist. It says it never limits reading an authoritative source before asserting a fact. |
+| K2: think before agreeing | Verified | The bullet directly after "Change exactly what was asked" in "Make minimal, durable changes" carries every clause of the AC. |
+| K3: delegation | Verified | "Scoped sub-task" is the third bullet of the Clean and Neutral block of "Review of record". It sends a scoped sub-task to a clean, neutral agent, which the Clean bullet defines as fresh, with a self-contained prompt naming what it must not touch and where it stops, never to a `fork`. It requires checking a self-report against git history and refs, the PR list and run conclusions, and reading the subagent's code before merging. Its three cross-reference targets exist. No `SKILL.md` or `skills.json` changed. |
+| K4: named story keys | Verified | `## Named story keys` directly follows "Team resolution" and carries every clause of the AC. The four skills that take a `STORY_ID` each carry the "never guess" line and vendor `linear`; `adversarial-review-pipeline`, the one skill without `linear`, takes no story key. |
+| K5: sync before reading | Verified | `## Read repo facts from the remote` sits between "Tooling" and "Branching and worktrees", with the stale-clone presumption, the fetch and `git show origin/<branch>:<path>` read, the three branch keys, both amended exceptions, the failure rule and the three named related rules, which all exist. The round 1 fetch ruling holds: a fresh probe again showed a bare `git fetch origin` in a single-branch clone exiting 0 with `origin/release` absent, and the shipped refspec form updating it. |
+| K6: placement | Verified | The refinement record has the per-rule placement table, and the PR 315 description gives the rows of its one slice. 36 distinctive phrases were searched in `shared/*.md` and `skills/*/SKILL.md` at `2536932` (the PR's stated base) and at `8c6e16c` (the merge parent): five have a prior hit, each in an unrelated sentence. No relative link was added. |
+| K7: copies and guards | Verified | At the target: `vendor_shared.py --check` exits 0, `uv run --locked pytest -q` passes (3076 passed), the public leak scan exits 0, the CI-pinned `skills-ref validate` passes all 18 skills, and `smoke-opencode.sh` exits 0. CI run 44130963078 on the reviewed head (with `--require-private`) and run 44135884823 on the merged commit succeeded. The added lines name project facts only through profile keys, with no em dash and no consumer branch, host, path or tracker key. |
+| K7: memory retirement | Verified | The four notes `feedback_stop_over_reading`, `feedback_think_before_agreeing`, `feedback_fork_subagent_overreach` and `feedback_explicit_story_ids_never_reinterpreted` are absent, with no index entry and no reference left in the store. `feedback_sync_before_reading_repo_facts` keeps its hostname rule and its overlay pointer verbatim from the pre-edit snapshot, and replaces its general rule and consumer branch mapping with a pointer to `shared/github.md` "Read repo facts from the remote"; its index entry was rewritten to match. The PR 315 description names all five notes by slug, four deleted and one reduced. |
+| DoD: all AC met | Verified | K1 to K7 are verified. |
+| DoD: unit and integration tests written and passing | Verified | `tests/test_memory_rules_in_skills.py` (nine tests over K1 to K5) passes at the target, and the full suite passes at the target and in CI. |
+| DoD: independently reviewed | Verified | PR 315 review 5943254735 (COMMENTED, `commit_id` `2f1cdb6`, equal to the head on its first line) was run by `profile.review.reviewer` GPT-6.1 Sol (`gpt-6.1-sol`) and `profile.review.adjudicator` DeepSeek V4.1 Flash (`deepseek/deepseek-flash`), and the merged tree equals the reviewed tree. |
+| DoD: docs updated (if applicable) | Verified | The change is the documentation itself, in four `shared/` files and their generated copies. |
+| DoD: verified in a deployed environment (if needed) | Correct by design | Not needed on the `no-deployment` path. |
+| DoD: no critical bugs or regressions | Verified | The full suite passes at the target and in CI, and the pre-PR arbiter reported no Critical at the reviewed head. |
+
+Closing decision: Done once this evidence PR merges.
