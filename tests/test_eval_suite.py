@@ -96,8 +96,9 @@ sys.exit(0 if ok else 1)
 # The stub agent: pass and fail record one call; void-once is void on its first attempt only,
 # void-thrice on its first three; void-always is void every time; hang outlives any deadline;
 # bad-bytes records a byte that is not UTF-8; dirty-once changes CHECKOUT on its first attempt
-# and is void, as a real run.sh voids an agent that changed it; record-once and mode-once do the same
-# to the committed record STUB_RECORD names, by its content or its mode. It writes its run directory into
+# and is void, as a real run.sh voids an agent that changed it; record-once, mode-once and perm-once do
+# the same to the committed record STUB_RECORD names, by its content, its executable bit or a
+# permission git ignores, and relink-once points that record's symlink at STUB_TARGET. It writes its run directory into
 # the call, so the record shows whether the runner normalised the path, and the CANARY or EVAL_CANARY variable
 # into evidence.json, so the record shows what environment it got. evidence.json holds its run directory
 # after an escaped newline, as messages.json holds a path that starts a line, and for pass also behind
@@ -123,6 +124,8 @@ case "$scenario" in
   dirty-once) [ "$count" -gt 1 ] || { echo dirt > "$checkout/dirt.txt"; exit 3; }; action=pass ;;
   record-once) [ "$count" -gt 1 ] || { echo overwritten > "$STUB_RECORD"; exit 3; }; action=pass ;;
   mode-once) [ "$count" -gt 1 ] || { chmod 700 "$STUB_RECORD"; exit 3; }; action=pass ;;
+  perm-once) [ "$count" -gt 1 ] || { chmod 600 "$STUB_RECORD"; exit 3; }; action=pass ;;
+  relink-once) [ "$count" -gt 1 ] || { ln -sfn "$STUB_TARGET" "$STUB_RECORD"; exit 3; }; action=pass ;;
 esac
 printf '{"action": "%s", "run_dir": "%s", "id": "%s"}\n' "$action" "$run" "$STUB_UUID" > "$run/actions.jsonl"
 if [ "$scenario" = bad-bytes ]; then printf '\xff\n' >> "$run/actions.jsonl"; fi
@@ -662,7 +665,7 @@ def test_an_attempt_that_changes_a_checkout_stops_the_suite(suite) -> None:
 # A committed record the run started with, clean or with an unstaged modification, is allowed;
 # an attempt that then changes its content or mode changed the harness, so the suite stops.
 @pytest.mark.parametrize("scenario, edited_first", [("record-once", False), ("record-once", True),
-                                                     ("mode-once", False)])
+                                                     ("mode-once", False), ("perm-once", False)])
 def test_an_attempt_that_changes_a_committed_record_stops_the_suite(suite, scenario: str, edited_first: bool) -> None:
     suite["recommit"](scenario)
     record = suite["evals"] / "results" / "suite-a.md"
@@ -677,6 +680,29 @@ def test_an_attempt_that_changes_a_committed_record_stops_the_suite(suite, scena
     assert ("committed records an attempt of this run changed (skills/story-to-done/evals/results/suite-a.md)"
             in result.stderr), result.stderr
     assert int((suite["state"] / scenario).read_text(encoding="utf-8")) == 1, "no attempt runs against the changed record"
+    assert not (suite["evals"] / "results" / "suite-lab-1.md").exists()
+
+
+def test_an_attempt_that_retargets_a_record_symlink_stops_the_suite(suite) -> None:
+    """A record symlink already retargeted before the run, pointed by an attempt at another file
+    with the same content, is still a change: the snapshot holds the link, not what it reaches."""
+    suite["recommit"]("relink-once")
+    results = suite["evals"] / "results"
+    results.mkdir(exist_ok=True)
+    for name in ("one.txt", "two.txt", "three.txt"):
+        (suite["harness"] / name).write_text("same\n")
+    record = results / "suite-a.md"
+    record.symlink_to(suite["harness"] / "one.txt")
+    commit_all(suite["harness"])
+    record.unlink()
+    record.symlink_to(suite["harness"] / "two.txt")
+    assert first_porcelain_entry(suite["harness"]) == " M skills/story-to-done/evals/results/suite-a.md"
+    result = suite["run"]("--runs", "1", str(suite["checkout"]), "lab-1", STUB_RECORD=str(record),
+                          STUB_TARGET=str(suite["harness"] / "three.txt"),
+                          EVAL_PASS_ENV="STUB_STATE STUB_UUID STUB_RECORD STUB_TARGET")
+    assert result.returncode == 1, result.stderr
+    assert ("committed records an attempt of this run changed (skills/story-to-done/evals/results/suite-a.md)"
+            in result.stderr), result.stderr
     assert not (suite["evals"] / "results" / "suite-lab-1.md").exists()
 
 

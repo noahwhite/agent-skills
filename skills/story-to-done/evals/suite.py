@@ -20,6 +20,7 @@ import os
 import re
 import shutil
 import signal
+import stat
 import subprocess
 import sys
 import tempfile
@@ -137,18 +138,27 @@ def commit_of(repo: Path, role: str) -> tuple[Path, str, str]:
     return root, git(root, "rev-parse", "HEAD"), git(root, "rev-parse", "--short=7", "HEAD")
 
 
-def edited_records(root: Path) -> dict[str, tuple[int, str]]:
-    """Each committed record with an unstaged modification, by path, as its file mode and content
-    hash. The suite only ever writes new records, so a change to this set during a run is a
-    change an attempt made, not the suite's own output."""
-    status = git(root, "status", "--porcelain", "--untracked-files=no", strip=False).splitlines()
-    edited = {}
-    for path in (line[3:] for line in status if line[:2] == " M" and is_record(line[3:])):
+def committed_records(root: Path) -> dict[str, tuple[int, str]]:
+    """Each committed record, by path, as its file mode and a hash of what it holds: a symlink's
+    target text, a regular file's content, nothing for any other kind of file, so no read follows
+    a link or blocks. The suite only ever writes new records, so a change to this during a run is
+    a change an attempt made, not the suite's own output."""
+    records = {}
+    for path in git(root, "ls-files", "-z", strip=False).split("\0"):
+        if not path or not is_record(path):
+            continue
         try:
-            edited[path] = ((root / path).lstat().st_mode, hashlib.sha256((root / path).read_bytes()).hexdigest())
+            mode = (root / path).lstat().st_mode
+            if stat.S_ISLNK(mode):
+                held = os.readlink(root / path).encode()
+            elif stat.S_ISREG(mode):
+                held = (root / path).read_bytes()
+            else:
+                held = b""
+            records[path] = (mode, hashlib.sha256(held).hexdigest())
         except OSError:
-            edited[path] = (0, "unreadable")
-    return edited
+            records[path] = (0, "unreadable")
+    return records
 
 
 def parse(argv: list[str]) -> argparse.Namespace:
@@ -562,7 +572,7 @@ def main(argv: list[str]) -> int:
                       "or --resume with the arguments that run started with")
     harness, harness_commit, harness_short = commit_of(EVALS, "harness")
     checkout, checkout_commit, checkout_short = commit_of(args.checkout, "skill")
-    edited = {harness: edited_records(harness), checkout: edited_records(checkout)}
+    committed = {harness: committed_records(harness), checkout: committed_records(checkout)}
     cases = args.cases or sorted(path.parent.name for path in EVALS.glob("*/case.yaml"))
     specs = {}
     for case in cases:
@@ -594,10 +604,10 @@ def main(argv: list[str]) -> int:
                 raise Broken(f"{error}, after an attempt of this run changed it") from None
             if now != commit:
                 raise Broken(f"the {role} checkout moved from {commit} to {now} during the run")
-            records = edited_records(repo)
-            if records != edited[repo]:
-                paths = sorted(path for path in records.keys() | edited[repo].keys()
-                               if records.get(path) != edited[repo].get(path))
+            records = committed_records(repo)
+            if records != committed[repo]:
+                paths = sorted(path for path in records.keys() | committed[repo].keys()
+                               if records.get(path) != committed[repo].get(path))
                 raise Broken(f"the {role} checkout {repo} has committed records an attempt of this run "
                              f"changed ({', '.join(paths[:5])})")
 
