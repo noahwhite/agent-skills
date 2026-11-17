@@ -866,8 +866,13 @@ kill_guarded() {  # SIGKILL the in-flight guarded process group, if any
   fi
 }
 
+PHASE_ACCEPTED=0  # set once `run` has accepted its phase; a later signal then leaves it accepted
 on_signal() {  # $1 exit code: an interrupted gate orphans neither its process group nor its state
   kill_guarded
+  if [ "$PHASE_ACCEPTED" -eq 1 ]; then
+    printf 'adversarial-pipeline: interrupted (exit %s) after the phase was accepted; it stays accepted\n' "$1" >&2
+    exit "$1"
+  fi
   printf 'adversarial-pipeline: interrupted (exit %s); this phase is not accepted\n' "$1" >&2
   if [ -n "${phase:-}" ] && [ -n "${RUN_DIR:-}" ] && [ -d "$RUN_DIR" ]; then
     rm -f -- "$RUN_DIR/$phase.launch" "$RUN_DIR/$phase.binding" "$RUN_DIR/$phase.primary" \
@@ -1893,6 +1898,7 @@ case "$cmd" in
     reason_file="$(mktemp -p "$RUN_DIR" accept-reason.XXXXXX)" \
       || fail_phase 2 "could not create a status file in the run directory"
     accept_in_child "$phase" "$errlog" "$reason_file" || rc_accept=$?
+    if [ "$rc_accept" -eq 0 ]; then PHASE_ACCEPTED=1; fi
     install_run_signal_traps
     if [ "$rc_accept" -ne 0 ] && [ -n "$ACCEPT_SIGNAL" ]; then
       rm -f -- "$reason_file"

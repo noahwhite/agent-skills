@@ -497,6 +497,27 @@ def test_a_signal_after_the_stamp_lands_keeps_the_phase_accepted(gate, target):
     cleanup(gate, Path(line_value(written.stderr, "CHECKOUT: ")))
 
 
+@pytest.mark.parametrize("target", sorted(SIGNAL_TARGETS))
+def test_a_signal_after_run_accepts_the_arbitration_keeps_it_accepted(gate, target):
+    ready_for_arbitration(gate, "run")
+    # This `rm` runs in `run` itself, after the acceptance child has returned.
+    shimmed = signalling_shim(gate, "rm", target, args="accept-reason.")
+    result = subprocess.run(
+        ["bash", str(SCRIPT), "run", "arbitrate", *common(gate), "--agent-cmd", agent_cmd("REVIEW-RAN: yes"),
+         "--agent", AGENT_NAME, "--model", MODEL_ID],
+        capture_output=True, text=True, env=shimmed, cwd=str(ROOT), timeout=120, start_new_session=True)
+    assert (gate["home"] / "signalled-rm").exists()
+    assert result.returncode == 143, result.stdout + result.stderr
+    assert "after the phase was accepted; it stays accepted" in result.stderr
+    assert "this phase is not accepted" not in result.stderr
+    artifact = artifact_paths(gate)["arbitrate"]
+    report = artifact.read_text()
+    assert report.startswith(f"REVIEW-RAN: yes\nARBITER-AGENT: {AGENT_NAME}\n")
+    stamp = Path(f"{artifact}.stamp").read_text()
+    assert f"sha256={hashlib.sha256(report.encode()).hexdigest()}\n" in stamp
+    assert retained(gate["repo"]) == [retained_path_from(result.stderr)]
+
+
 def test_a_stamp_that_cannot_land_removes_the_copy_published_for_it(gate):
     ready_for_arbitration(gate, "dossier")
     written = run_script("dossier", "arbitrate", *common(gate), env=gate["env"])
