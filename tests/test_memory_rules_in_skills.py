@@ -73,7 +73,7 @@ def test_k2_why_is_x_needed_follows_change_exactly_what_was_asked() -> None:
 # --- K3: shared/code-review.md --------------------------------------------------------------
 
 K3 = (
-    "**Scoped sub-task:** a scoped sub-task goes to a fresh agent whose self-contained prompt names the files, "
+    "**Scoped sub-task:** a scoped sub-task goes to a clean, neutral agent whose self-contained prompt names the files, "
     "areas and systems it must not touch and the point where it stops, never to a `fork`, because a fork "
     "inherits the whole conversation. "
     "Before acting on a subagent's self-report, the delegator verifies it against ground truth (git history "
@@ -112,3 +112,28 @@ def test_k4_named_story_keys_follows_team_resolution() -> None:
     names = headings(text)
     assert names[names.index("Team resolution") + 1] == "Named story keys"
     assert bullets(section(text, "Named story keys")) == K4
+
+
+# --- K5: shared/github.md ---------------------------------------------------------------------
+
+K5 = [
+    "Presume a persistent local clone or checkout stale: before citing a repo fact, run `git fetch origin` "
+    "and read `git show origin/<branch>:<path>`, never the working tree.",
+    "`<branch>` is `profile.git.integration_branch`; `profile.git.release_branch` for a path that exists "
+    "only there; or, for an environment's declared state, the branch that deploys that environment "
+    "(`profile.environments[].branch`).",
+    "The exception is your own uncommitted or unpushed change in your story worktree.",
+    "When the fetch or the read fails, report the limitation and never present stale content as current.",
+    "Related rules, not restated here: the fetch rule in \"Branching and worktrees\" below; "
+    "\"Verify running state from the primary source\" in the `infra-deploy` capability file; and "
+    "\"Base the run on `origin/<integration branch>` after a fetch\" in \"Automated pre-PR gates\" "
+    "of the `code-review` capability file.",
+]
+
+
+def test_k5_read_repo_facts_sits_between_tooling_and_branching() -> None:
+    text = (SHARED / "github.md").read_text()
+    names = headings(text)
+    at = names.index("Read repo facts from the remote")
+    assert names[at - 1 : at + 2] == ["Tooling", "Read repo facts from the remote", "Branching and worktrees"]
+    assert bullets(section(text, "Read repo facts from the remote")) == K5

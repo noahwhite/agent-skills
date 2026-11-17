@@ -30,7 +30,7 @@ Every agent that judges work or takes delegated work (reviewer, adjudicator, sha
 - **Neutral:** its prompt carries only the facts the task needs and never a steer toward an outcome.
   A judging agent gets the repo, head SHA, diff reference, the findings, evidence, or AC to verify, and the gate's own review criteria, never the author's intent or rationale, QA verdicts, or conclusions from earlier rounds or other gates.
   A delegated engineer gets the story, plan, and constraints, plus the findings or QA gaps ruled valid that it must fix, never the delegator's expectations about the outcome.
-- **Scoped sub-task:** a scoped sub-task goes to a fresh agent whose self-contained prompt names the files, areas and systems it must not touch and the point where it stops, never to a `fork`, because a fork inherits the whole conversation.
+- **Scoped sub-task:** a scoped sub-task goes to a clean, neutral agent whose self-contained prompt names the files, areas and systems it must not touch and the point where it stops, never to a `fork`, because a fork inherits the whole conversation.
   Before acting on a subagent's self-report, the delegator verifies it against ground truth (git history and refs, the PR list, run conclusions), and it reads the code the subagent wrote before merging it.
   Related rules, not restated here: Clean, above; reading an automated fixer's commits, in "Automated pre-PR gates" below; and the coordinator's own read of each merged PR, in `story-to-done` step 2.
 
