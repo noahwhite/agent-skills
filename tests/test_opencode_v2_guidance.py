@@ -64,7 +64,9 @@ DELEGATED_DIRECTORY_CLAUSES = (
 
 def delegated_directory_bullet() -> list[str]:
     """The SKL-70 bullet under "Rules that follow from the map", one physical line per entry."""
-    rules = RUNTIMES.read_text(encoding="utf-8").split("## Rules that follow from the map\n", 1)[1]
+    text = RUNTIMES.read_text(encoding="utf-8")
+    assert "## Rules that follow from the map\n" in text, "missing the 'Rules that follow from the map' heading"
+    rules = text.split("## Rules that follow from the map\n", 1)[1]
     lines = rules.split("\n## ", 1)[0].splitlines()
     starts = [i for i, line in enumerate(lines) if line.startswith(DELEGATED_DIRECTORY_MARKER)]
     assert len(starts) == 1, "expected one delegated working directory bullet under the map rules"
@@ -80,8 +82,9 @@ def delegated_directory_bullet() -> list[str]:
 
 def test_delegated_agent_works_in_the_worktree_the_delegating_session_creates() -> None:
     bullet = delegated_directory_bullet()
-    first = bullet[0].removeprefix(DELEGATED_DIRECTORY_MARKER + " ")
-    assert [first, *(line.removeprefix("  ") for line in bullet[1:])] == list(DELEGATED_DIRECTORY_CLAUSES), (
+    first, *rest = DELEGATED_DIRECTORY_CLAUSES
+    expected = [f"{DELEGATED_DIRECTORY_MARKER} {first}", *(f"  {clause}" for clause in rest)]
+    assert bullet == expected, (
         "one clause per physical line, continuation lines indented exactly two spaces, and nothing else"
     )
 

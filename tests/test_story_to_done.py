@@ -3823,7 +3823,13 @@ WORKTREE_CREATE = (
 WORKTREE_LATER_PR = (
     "A later PR for the same story, opened after an earlier one merged, gets a fresh worktree under the existing "
     "worktree rule in `references/github.md`, which you create the same way and name in the `worktree:` line of "
-    "every later brief, and the hand-back reports its path too."
+    "every later brief, including the brief or message with which step 4 resumes or relaunches the senior engineer, "
+    "and the hand-back reports its path too."
+)
+WORKTREE_EXISTING = (
+    "When an open PR or a remote branch for the story already exists, create the story worktree on that branch "
+    "instead of cutting a new one, per the existing PR or branch rule in `references/github.md`, and name it in the "
+    "`worktree:` line the same way."
 )
 WORKTREE_BRIEF_LINE = (
     "- The line `worktree: <absolute path>`, whose whole text is exactly that, `<absolute path>` being the story "
@@ -3834,7 +3840,7 @@ WORKTREE_HANDBACK = "- That the hand-back also returns each worktree path it wor
 
 def test_step_2_creates_the_story_worktree_before_the_spawn() -> None:
     lines = step_2_lines()
-    for sentence in (WORKTREE_CREATE, WORKTREE_LATER_PR):
+    for sentence in (WORKTREE_CREATE, WORKTREE_LATER_PR, WORKTREE_EXISTING):
         assert sentence in lines, f"step 2 must state: {sentence}"
         assert lines.index(sentence) in prose_lines(lines), "the worktree rule must be operative prose"
         assert SKILL.read_text().count(sentence) == 1, "each worktree sentence is stated once"
