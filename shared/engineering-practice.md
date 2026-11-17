@@ -76,7 +76,7 @@ Read this when diagnosing, implementing, testing, or fixing code, or when changi
 ## Read the source before asserting
 
 - Before theorizing, asserting, acting, filing, or writing a fact into code, a comment, a commit message, or a handback, read the authoritative source for that kind of fact: the error and logs, live state, `--help`, or the registry or provider API.
-- Quote the real error instead of paraphrasing it, and prove the before-state before claiming a change fixed it.
+- Quote the real error instead of paraphrasing it, leaving out any secret value it carries, and prove the before-state before claiming a change fixed it.
 - Check every fact, capability, and "because X" justification before stating it.
 - A clearly labelled hypothesis may be stated; check its factual premises before any action relies on it.
 - For a bug or failure, [Diagnose before you touch code](#diagnose-before-you-touch-code) applies as well.

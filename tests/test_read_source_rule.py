@@ -1,9 +1,10 @@
 """SKL-232: the read-before-asserting rule has one home in shared/engineering-practice.md.
 
-Markdown is read as CommonMark renders it (markdown-it-py), so code, HTML comments and HTML
-blocks hide what they hide on the rendered page, and nothing else does.
+Markdown is read as CommonMark renders it (markdown-it-py): HTML comments and tags are hidden,
+while text in paragraphs, list items, raw HTML blocks and code is visible.
 """
 
+import html
 import importlib.util
 import re
 from dataclasses import dataclass, field
@@ -26,7 +27,8 @@ BULLETS = (
     "Before theorizing, asserting, acting, filing, or writing a fact into code, a comment, a commit message,"
     " or a handback, read the authoritative source for that kind of fact: the error and logs, live state,"
     " --help, or the registry or provider API.",
-    "Quote the real error instead of paraphrasing it, and prove the before-state before claiming a change fixed it.",
+    "Quote the real error instead of paraphrasing it, leaving out any secret value it carries,"
+    " and prove the before-state before claiming a change fixed it.",
     "Check every fact, capability, and \"because X\" justification before stating it.",
     "A clearly labelled hypothesis may be stated; check its factual premises before any action relies on it.",
     "For a bug or failure, Diagnose before you touch code applies as well.",
@@ -50,6 +52,7 @@ class Section:
     title: str
     bullets: list[str] = field(default_factory=list)  # rendered text of each top-level list item
     links: list[list[str]] = field(default_factory=list)  # 'text -> href' links of each top-level list item
+    other: list[str] = field(default_factory=list)  # visible content outside the top-level list items
 
 
 @dataclass
@@ -90,11 +93,17 @@ def rendered(inline) -> tuple[str, list[str]]:
     return norm("".join(parts)), links
 
 
+def visible_html(raw: str) -> str:
+    """The text a raw HTML block shows: comments and tags dropped, entities decoded."""
+    return norm(html.unescape(re.sub(r"<[^>]*>", " ", re.sub(r"<!--.*?(-->|$)", " ", raw, flags=re.DOTALL))))
+
+
 def parse(path: Path) -> Doc:
     tokens = MARKDOWN.parse(path.read_text(encoding="utf-8"))
     sections = [Section(0, "")]
     prose, depth, item = [], 0, None
     for i, tok in enumerate(tokens):
+        text, links = "", []
         if tok.type == "heading_open":
             sections.append(Section(int(tok.tag[1]), rendered(tokens[i + 1])[0]))
         elif tok.type in ("bullet_list_open", "ordered_list_open"):
@@ -107,12 +116,19 @@ def parse(path: Path) -> Doc:
             sections[-1].bullets.append(norm(" ".join(item[0])))
             sections[-1].links.append(item[1])
             item = None
-        elif tok.type == "inline":
+        elif tok.type == "inline" and tokens[i - 1].type != "heading_open":
             text, links = rendered(tok)
+        elif tok.type == "html_block":
+            text = visible_html(tok.content)
+        elif tok.type in ("fence", "code_block"):
+            text = norm(tok.content)
+        if text or links:
             prose.append(text)
             if item is not None:
                 item[0].append(text)
                 item[1].extend(links)
+            else:
+                sections[-1].other.append(text)
     return Doc(sections, norm(" ".join(prose)))
 
 
@@ -148,6 +164,7 @@ def test_the_section_follows_do_not_hide_failures() -> None:
 def test_the_section_renders_exactly_the_rule() -> None:
     section = the_section(parse(HOME), HOME.name)
     assert section.bullets == [norm(b) for b in BULLETS]
+    assert section.other == [], f"visible content outside the rule's bullets: {section.other}"
 
 
 def test_the_payload_shape_bullet_links_to_the_anchor() -> None:
@@ -187,7 +204,8 @@ def test_every_generated_copy_exists_is_current_and_resolves_both_anchors() -> N
         where = str(copy.relative_to(ROOT))
         assert copy.read_text(encoding="utf-8") == body, f"stale copy, rerun scripts/vendor_shared.py: {where}"
         doc = parse(copy)
-        assert the_section(doc, where).bullets == [norm(b) for b in BULLETS], where
+        section = the_section(doc, where)
+        assert section.bullets == [norm(b) for b in BULLETS] and section.other == [], where
         anchors = doc.slugs()
         assert anchors.count(ANCHOR) == 1, f"'{TITLE}' anchor does not resolve once in {where}"
         assert DIAGNOSE_ANCHOR in anchors, f"diagnosis anchor does not resolve in {where}"
