@@ -10,11 +10,12 @@
 # Usage:
 #   run-adversarial-pipeline.sh preflight --base REF [--test-cmd CMD] [--test-dir DIR] [--scratch DIR]
 #   run-adversarial-pipeline.sh run <sweep|hunt|arbitrate> --base REF --agent-cmd TEMPLATE
-#                               [--model ID] [--probe-cmd TEMPLATE] [--probe-timeout SECONDS]
+#                               [--model ID] [--agent NAME] [--probe-cmd TEMPLATE] [--probe-timeout SECONDS]
 #                               [--spec FILE] [--no-sweep] [--scratch DIR] [--timeout SECONDS]
 #   run-adversarial-pipeline.sh dossier <sweep|hunt|arbitrate> --base REF [--spec FILE] [--no-sweep] [--scratch DIR]
 #                               # also creates the phase's checkout and prints 'CHECKOUT: <path>' on stderr
-#   run-adversarial-pipeline.sh record <sweep|hunt|arbitrate> --base REF [--model ID] [--spec FILE] [--no-sweep]  # accept a subagent's report
+#   run-adversarial-pipeline.sh record <sweep|hunt|arbitrate> --base REF [--model ID] [--agent NAME] [--spec FILE] [--no-sweep]
+#                               # accept a subagent's report
 #   run-adversarial-pipeline.sh checkout --base REF [--scratch DIR]   # an extra throwaway detached worktree at HEAD
 #   run-adversarial-pipeline.sh cleanup <checkout-path>               # removes a checkout this script made
 #   run-adversarial-pipeline.sh paths --base REF                      # prints this run's artifact paths,
@@ -111,8 +112,41 @@
 # prints one WARNING and changes no exit status or acceptance.
 #
 # Env equivalents: ADVERSARIAL_REPO, ADVERSARIAL_TEST_CMD, ADVERSARIAL_TEST_DIR, ADVERSARIAL_BASE,
-# ADVERSARIAL_SPEC_FILE, ADVERSARIAL_SCRATCH, ADVERSARIAL_AGENT_CMD, ADVERSARIAL_MODEL,
+# ADVERSARIAL_SPEC_FILE, ADVERSARIAL_SCRATCH, ADVERSARIAL_AGENT_CMD, ADVERSARIAL_MODEL, ADVERSARIAL_AGENT,
 # ADVERSARIAL_PROBE_CMD, ADVERSARIAL_PROBE_TIMEOUT (30), ADVERSARIAL_TIMEOUT (900).
+#
+# Arbiter identity and retention: --agent NAME (ADVERSARIAL_AGENT) carries the name of the profile
+# arbiter entry; --agent wins over ADVERSARIAL_AGENT when both are set, and it must not contain control
+# characters. When the script accepts an arbitrate phase, on `run` or on `record`, it (not the model)
+# writes three lines directly after the unchanged first line 'REVIEW-RAN: yes' and before it stamps
+# the artifact:
+#   ARBITER-AGENT: <name>
+#   ARBITER-MODEL: <model id exactly as given by --model>
+#   ARBITER-HEAD: <full HEAD SHA>
+# An absent --agent or --model value is written as not-supplied, and so is an empty one where the
+# command accepts it (`run` still refuses an empty --model with exit 2). Lines 2 to 4 are the only
+# identity block: the body below them is the model's text, copied unchanged, so a reader never scans
+# it for ARBITER- lines. ARBITER-HEAD is the HEAD when the script runs, so run `record arbitrate` at
+# the reviewed head. A report whose first line is not exactly 'REVIEW-RAN: yes' (trailing whitespace
+# or a CR included) fails (exit 17) and writes and retains nothing. The report with its identity
+# lines is retained, before it is stamped, as an immutable (read-only) copy in
+#   <git common dir>/adversarial-pipeline/arbitration-rounds
+# where <git common dir> is the absolute `git rev-parse --git-common-dir`, so every worktree of the
+# clone resolves the same directory, independent of the run directory, --scratch and the worktree:
+#   round-<UTC timestamp>-<full HEAD SHA>-<first 12 hex of the report sha256>-<n>.md
+# The timestamp is `date -u +%Y%m%dT%H%M%SZ`. The copy is written to a temporary file in that
+# directory and published with a no-clobber hard link; when the name exists the next <n> is tried,
+# so two byte-identical arbitrations at one head leave two files and nothing is overwritten. Any
+# failure to write or publish the copy, or to stamp the report after it, fails the phase (exit 21):
+# no stamp is left, a copy it had published is removed, and the report is restored as the agent
+# wrote it. A signal before publishing
+# starts restores it the same way; once publishing starts, the copy and the stamp land together and
+# the phase stays accepted. An accepted phase prints
+#   Retained arbitration report -> <path>
+# on stderr, the absolute path of the copy; stdout still carries the artifact alone. One dossier
+# accepts one arbitration: recording an accepted arbitration again fails (exit 15), and a new round
+# needs a new `dossier arbitrate` or `run arbitrate`. No re-run, discard or `cleanup` removes a
+# retained copy.
 #
 # --model ID (ADVERSARIAL_MODEL) is the model id this phase was given, quoted whole into the probe
 # and echoed on every line as a label in which anything outside letters, digits and . _ / : @ # + ~
@@ -199,7 +233,8 @@
 # 12 bad base, 13 missing or invalid prior artifact, 14 cleanup refused, 15 agent command failed
 # or wrote no fresh report, 17 agent ran blind (sandbox error on its stderr, or no `REVIEW-RAN: yes`
 # first line), 18 the agent changed the primary checkout, 19 the phase was killed by --timeout,
-# 20 the phase's availability check failed before any agent ran. An accepted arbitration report that
+# 20 the phase's availability check failed before any agent ran, 21 the arbitrate phase could not
+# write its identity lines or retain its accepted report (not accepted). An accepted arbitration report that
 # cannot be written to stdout still exits 1, as it did before the completion-line work; the message
 # names the stamped artifact so a driver does not re-run the model call.
 # A checkout that cannot be created exits with git's own status, which is what that path did before
@@ -277,6 +312,7 @@ AGENT_CMD="${ADVERSARIAL_AGENT_CMD:-}"
 TIMEOUT="${ADVERSARIAL_TIMEOUT:-900}"
 MODEL="${ADVERSARIAL_MODEL:-}"
 MODEL_SET=0
+ARBITER_AGENT="${ADVERSARIAL_AGENT:-}"
 PROBE_CMD="${ADVERSARIAL_PROBE_CMD:-}"
 PROBE_TIMEOUT="${ADVERSARIAL_PROBE_TIMEOUT:-30}"
 PROBE_SET=0
@@ -284,7 +320,7 @@ NO_SWEEP=0
 SCRATCH_SET=0
 while [ $# -gt 0 ]; do
   case "$1" in
-    --repo|--base|--spec|--test-cmd|--test-dir|--scratch|--agent-cmd|--timeout|--model|--probe-cmd|--probe-timeout)
+    --repo|--base|--spec|--test-cmd|--test-dir|--scratch|--agent-cmd|--agent|--timeout|--model|--probe-cmd|--probe-timeout)
       [ $# -ge 2 ] || die 2 "$1 needs a value"
       case "$1" in
         --repo) REPO="$2" ;;
@@ -294,6 +330,7 @@ while [ $# -gt 0 ]; do
         --test-dir) TEST_DIR="$2" ;;
         --scratch) SCRATCH="$2"; SCRATCH_SET=1 ;;
         --agent-cmd) AGENT_CMD="$2" ;;
+        --agent) ARBITER_AGENT="$2" ;;
         --timeout) TIMEOUT="$2" ;;
         --model) MODEL="$2"; MODEL_SET=1 ;;
         --probe-cmd) PROBE_CMD="$2"; PROBE_SET=1 ;;
@@ -331,6 +368,9 @@ fi
 # better than printing a line it could forge.
 case "$MODEL" in
   *[[:cntrl:]]*) die 2 "--model must not contain control characters; pass the model id on one line" ;;
+esac
+case "$ARBITER_AGENT" in
+  *[[:cntrl:]]*) die 2 "--agent (ADVERSARIAL_AGENT) must not contain control characters; pass the agent name on one line" ;;
 esac
 # The label is printed by every command, so any character that could forge a field or a line is
 # mapped to '_' here; the model id's own shell metacharacters are still quoted whole into the probe.
@@ -447,7 +487,8 @@ if [ -n "$phase" ]; then
   case "$phase" in sweep|hunt|arbitrate) ;; *) die 2 "unknown phase '$phase' (sweep|hunt|arbitrate)" ;; esac
 fi
 
-sha_of() { sha256sum -- "$1" | cut -d' ' -f1; }
+# Hashed through stdin: sha256sum escapes the digest of a named file whose path holds a backslash or newline.
+sha_of() { sha256sum < "$1" | cut -d' ' -f1; }
 if [ -n "$SPEC_FILE" ]; then SPEC_SHA="$(sha_of "$SPEC_FILE")"; else SPEC_SHA="none"; fi
 
 deps_of() {  # $1 = phase -> the phases its dossier is built from, one per line
@@ -553,7 +594,7 @@ primary_state() {
 accept_phase() {  # $1 = phase, $2 = stderr log or "": validate a freshly written artifact, then stamp it
   local art; art="$(artifact_for "$1")"
   [ -f "$RUN_DIR/$1.launch" ] && [ -f "$RUN_DIR/$1.binding" ] && [ -f "$RUN_DIR/$1.primary" ] \
-    || die 15 "no launch for $1 in this run (never started, or discarded by a later re-run of an earlier phase); write its dossier with 'dossier $1' first."
+    || die 15 "no launch for $1 in this run (never started, discarded by a later re-run of an earlier phase, or an arbitration already accepted); write its dossier with 'dossier $1' first."
   if [ "$(cat -- "$RUN_DIR/$1.binding")" != "$(binding_text "$1")" ]; then
     die 13 "the $1 inputs changed since its dossier was written (spec, --no-sweep or a predecessor artifact); start the $1 phase again."
   fi
@@ -575,7 +616,157 @@ accept_phase() {  # $1 = phase, $2 = stderr log or "": validate a freshly writte
   if [ "$(primary_state)" != "$(cat -- "$RUN_DIR/$1.primary")" ]; then
     die 18 "the primary checkout ($ROOT) changed while the $1 agent ran; this phase is not accepted. Inspect 'git status' there."
   fi
-  stamp "$1"
+  if [ "$1" = "arbitrate" ]; then
+    stamp_and_retain_arbitration
+  else
+    stamp "$1"
+  fi
+}
+
+# Arbitration identity and retention (see "Arbiter identity and retention" in the header). This
+# writes the three identity lines after the first line and prepares the stamp, then publishes an
+# immutable copy and puts the stamp in place as one step, so a phase is accepted exactly when its
+# copy is retained. The launch is consumed for the transaction, so one dossier accepts one
+# arbitration and recording it again fails (exit 15). Until publishing starts, any failure or signal
+# restores the report as the agent wrote it and the launch, with no stamp, so the phase is not
+# accepted and a retried `record` starts from the same report. Once publishing starts, signals are
+# ignored (child processes inherit that) for the rest of the transaction, which runs in its own child
+# (accept_in_child); a stamp that cannot be put in place removes the copy just published.
+# The retained path goes to fd 3, which each caller points at the script's own stderr.
+ARBITRATION_ROUNDS="$COMMON_DIR/adversarial-pipeline/arbitration-rounds"
+ARB_SIGNALS="INT TERM HUP QUIT USR1 USR2"
+ARB_ART="" ARB_LAUNCH="" ARB_CONSUMED="" ARB_ORIGINAL="" ARB_SAVED=0 ARB_HEADED="" ARB_STAMP_NEW=""
+arbitration_rollback() {
+  local f
+  for f in "$ARB_HEADED" "$ARB_STAMP_NEW"; do
+    if [ -n "$f" ]; then rm -f -- "$f"; fi
+  done
+  if [ "$ARB_SAVED" -eq 1 ]; then
+    mv -f -- "$ARB_ORIGINAL" "$ARB_ART" || echo "WARNING: could not restore $ARB_ART as the agent wrote it" >&2
+  elif [ -n "$ARB_ORIGINAL" ]; then
+    rm -f -- "$ARB_ORIGINAL"   # a partial save is never restored over the report
+  fi
+  if [ -f "$ARB_CONSUMED" ]; then
+    mv -f -- "$ARB_CONSUMED" "$ARB_LAUNCH" || echo "WARNING: could not restore the arbitrate launch" >&2
+  fi
+}
+stamp_and_retain_arbitration() {
+  local dest
+  ARB_ART="$(artifact_for arbitrate)"
+  ARB_LAUNCH="$RUN_DIR/arbitrate.launch"
+  ARB_CONSUMED="$RUN_DIR/arbitrate.launch.accepting"
+  ARB_ORIGINAL="" ARB_SAVED=0 ARB_HEADED="" ARB_STAMP_NEW=""
+  # The shared check tolerates trailing whitespace and a CR; the identity block follows a first line
+  # that is exactly 'REVIEW-RAN: yes', compared byte for byte (a shell variable would drop a NUL), so
+  # anything else fails here, before anything is written.
+  if ! head -n 1 -- "$ARB_ART" | cmp -s - <(printf 'REVIEW-RAN: yes\n') \
+    && ! cmp -s -- "$ARB_ART" <(printf 'REVIEW-RAN: yes'); then
+    die 17 "the arbitrate report's first line is not exactly 'REVIEW-RAN: yes' (trailing whitespace or a CR included); nothing was written or retained, and the phase is not accepted."
+  fi
+  # From the first change on, a signal rolls the transaction back.
+  trap 'arbitration_rollback; exit 130' INT
+  trap 'arbitration_rollback; exit 143' TERM
+  trap 'arbitration_rollback; exit 129' HUP
+  trap 'arbitration_rollback; exit 131' QUIT
+  trap 'arbitration_rollback; exit 138' USR1
+  trap 'arbitration_rollback; exit 140' USR2
+  if ! ARB_ORIGINAL="$(mktemp -p "$RUN_DIR" arbitrate-original.XXXXXX)" \
+    || ! cp -p -- "$ARB_ART" "$ARB_ORIGINAL" \
+    || ! ARB_SAVED=1 \
+    || ! mv -f -- "$ARB_LAUNCH" "$ARB_CONSUMED"; then
+    arbitration_rollback
+    die 21 "could not save the arbitration report before writing its identity lines; nothing was written or retained."
+  fi
+  if ! ARB_HEADED="$(mktemp -p "$RUN_DIR" arbitrate-headed.XXXXXX)" \
+    || ! { printf 'REVIEW-RAN: yes\nARBITER-AGENT: %s\nARBITER-MODEL: %s\nARBITER-HEAD: %s\n' \
+             "${ARBITER_AGENT:-not-supplied}" "${MODEL:-not-supplied}" "$HEAD_SHA" \
+           && tail -n +2 -- "$ARB_ART"; } > "$ARB_HEADED" \
+    || ! mv -f -- "$ARB_HEADED" "$ARB_ART"; then
+    arbitration_rollback
+    die 21 "could not write the arbiter identity lines into $ARB_ART; the phase is not accepted."
+  fi
+  ARB_HEADED=""
+  if ! ARB_STAMP_NEW="$(mktemp -p "$RUN_DIR" arbitrate-stamp.XXXXXX)" \
+    || ! stamp_text arbitrate > "$ARB_STAMP_NEW"; then
+    arbitration_rollback
+    die 21 "could not prepare the arbitration stamp; nothing was retained, and the phase is not accepted."
+  fi
+  # shellcheck disable=SC2086 # the signal list is meant to split
+  trap '' $ARB_SIGNALS
+  if ! dest="$(retain_arbitration "$ARB_ART")"; then
+    arbitration_rollback
+    die 21 "could not retain the accepted arbitration report under $ARBITRATION_ROUNDS; the phase is not accepted."
+  fi
+  # -T: a directory at the stamp path fails here instead of receiving the stamp.
+  if ! mv -fT -- "$ARB_STAMP_NEW" "$ARB_ART.stamp"; then
+    rm -f -- "$dest" || echo "WARNING: could not remove $dest, published for an arbitration that was not accepted" >&2
+    arbitration_rollback
+    die 21 "could not put the arbitration stamp in place; the copy published for it was removed, and the phase is not accepted."
+  fi
+  # Signals stay ignored to the end: the child exits right after this, and the phase is accepted.
+  rm -f -- "$ARB_ORIGINAL" "$ARB_CONSUMED"
+  printf 'Retained arbitration report -> %s\n' "$dest" >&3
+}
+
+# Runs accept_phase in a child and waits for it. A signal this shell receives meanwhile is forwarded
+# to the child as TERM, so the child alone decides the outcome (an arbitration not yet publishing rolls
+# back; one publishing completes). Returns the child's status, and sets ACCEPT_SIGNAL to the exit code
+# of the signal that arrived (empty when none did). The caller reinstalls its own traps afterwards.
+ACCEPT_PID="" ACCEPT_SIGNAL="" ACCEPT_INTERRUPTED=0
+forward_to_accept() {  # $1 the exit code of the signal received
+  ACCEPT_SIGNAL="$1"
+  ACCEPT_INTERRUPTED=1
+  if [ -n "$ACCEPT_PID" ]; then kill -TERM "$ACCEPT_PID" 2>/dev/null || true; fi
+}
+accept_in_child() {  # $1 phase, $2 the agent's stderr log or "", $3 the reason file for the child's stderr
+  local rc
+  ACCEPT_SIGNAL=""
+  trap 'forward_to_accept 130' INT
+  trap 'forward_to_accept 143' TERM
+  trap 'forward_to_accept 129' HUP
+  trap 'forward_to_accept 131' QUIT
+  trap 'forward_to_accept 138' USR1
+  trap 'forward_to_accept 140' USR2
+  ( accept_phase "$1" "$2" ) 3>&2 2> "$3" &
+  ACCEPT_PID=$!
+  # A trapped signal ends `wait` early; wait again until the child's own status is in.
+  while :; do
+    ACCEPT_INTERRUPTED=0
+    rc=0
+    wait "$ACCEPT_PID" || rc=$?
+    [ "$ACCEPT_INTERRUPTED" -eq 1 ] || break
+  done
+  ACCEPT_PID=""
+  return "$rc"
+}
+
+# Publishes an immutable copy of $1 as round-<UTC timestamp>-<HEAD>-<sha12>-<n>.md: written to a
+# temporary file in the retention directory, then hard-linked into place, which fails rather than
+# overwrites when the name exists; on that failure the next <n> is tried. Prints the published path.
+retain_arbitration() {
+  local src="$1" ts sha12 tmp dest n=1
+  mkdir -p -- "$ARBITRATION_ROUNDS" || return 1
+  ts="$(date -u +%Y%m%dT%H%M%SZ)" && [ -n "$ts" ] || return 1
+  sha12="$(sha_of "$src" | cut -c1-12)" && [ "${#sha12}" -eq 12 ] || return 1
+  tmp="$(mktemp -p "$ARBITRATION_ROUNDS" .round-tmp.XXXXXX)" || return 1
+  if ! cat -- "$src" > "$tmp" || ! chmod 0444 -- "$tmp"; then
+    rm -f -- "$tmp"
+    return 1
+  fi
+  while :; do
+    dest="$ARBITRATION_ROUNDS/round-$ts-$HEAD_SHA-$sha12-$n.md"
+    if ln -T -- "$tmp" "$dest" 2>/dev/null; then
+      break
+    fi
+    if [ ! -e "$dest" ] && [ ! -L "$dest" ]; then
+      echo "ERROR: could not publish the retained arbitration report as $dest" >&2
+      rm -f -- "$tmp"
+      return 1
+    fi
+    n=$(( n + 1 ))
+  done
+  rm -f -- "$tmp" || echo "WARNING: could not remove the temporary file $tmp" >&2
+  printf '%s\n' "$dest"
 }
 
 # The dossier and checkouts live outside .git: some agent runtimes refuse to read files under a
@@ -675,14 +866,28 @@ kill_guarded() {  # SIGKILL the in-flight guarded process group, if any
   fi
 }
 
+PHASE_ACCEPTED=0  # set once `run` has accepted its phase; a later signal then leaves it accepted
 on_signal() {  # $1 exit code: an interrupted gate orphans neither its process group nor its state
   kill_guarded
+  if [ "$PHASE_ACCEPTED" -eq 1 ]; then
+    printf 'adversarial-pipeline: interrupted (exit %s) after the phase was accepted; it stays accepted\n' "$1" >&2
+    exit "$1"
+  fi
   printf 'adversarial-pipeline: interrupted (exit %s); this phase is not accepted\n' "$1" >&2
   if [ -n "${phase:-}" ] && [ -n "${RUN_DIR:-}" ] && [ -d "$RUN_DIR" ]; then
     rm -f -- "$RUN_DIR/$phase.launch" "$RUN_DIR/$phase.binding" "$RUN_DIR/$phase.primary" \
       "$(artifact_for "$phase").stamp" 2>/dev/null || true
   fi
   exit "$1"
+}
+
+install_run_signal_traps() {  # a `run` attempt's handlers, also reinstalled after accept_in_child
+  trap 'on_signal 130' INT
+  trap 'on_signal 143' TERM
+  trap 'on_signal 129' HUP
+  trap 'on_signal 131' QUIT
+  trap 'on_signal 138' USR1
+  trap 'on_signal 140' USR2
 }
 
 progress_line() {  # $1 phase, $2 elapsed seconds: stderr only, never the artifact or the agent's stdout
@@ -1581,7 +1786,15 @@ case "$cmd" in
     rc_accept=0
     reason_file="$(mktemp -p "$RUN_DIR" record-reason.XXXXXX)" \
       || die 2 "could not create a status file in the run directory"
-    ( accept_phase "$phase" "" ) 2> "$reason_file" || rc_accept=$?
+    accept_in_child "$phase" "" "$reason_file" || rc_accept=$?
+    # shellcheck disable=SC2086 # the signal list is meant to split
+    trap - $ARB_SIGNALS
+    if [ "$rc_accept" -ne 0 ] && [ -n "$ACCEPT_SIGNAL" ]; then
+      printf 'adversarial-pipeline: interrupted (exit %s); this phase is not accepted\n' "$ACCEPT_SIGNAL" >&2
+      rc_accept="$ACCEPT_SIGNAL"
+    elif [ -n "$ACCEPT_SIGNAL" ]; then
+      printf 'adversarial-pipeline: interrupted (exit %s) after the phase was accepted; it stays accepted\n' "$ACCEPT_SIGNAL" >&2
+    fi
     if [ "$rc_accept" -ne 0 ]; then
       diagnose_phase "$phase" "$rc_accept" "$(cat -- "$reason_file" 2>/dev/null || true)" "$(artifact_for "$phase")"
       rm -f -- "$reason_file"
@@ -1596,12 +1809,7 @@ case "$cmd" in
     PHASE_START=$SECONDS
     CHECKOUT_PATH=""
     COMPLETION_EMITTED=0
-    trap 'on_signal 130' INT
-    trap 'on_signal 143' TERM
-    trap 'on_signal 129' HUP
-    trap 'on_signal 131' QUIT
-    trap 'on_signal 138' USR1
-    trap 'on_signal 140' USR2
+    install_run_signal_traps
     trap on_run_exit EXIT
     # From here the phase attempt is real, so every exit reports completion; a missing predecessor is
     # one of those failures, not a refusal before the attempt starts. A re-run discards this phase's
@@ -1689,7 +1897,15 @@ case "$cmd" in
     rc_accept=0
     reason_file="$(mktemp -p "$RUN_DIR" accept-reason.XXXXXX)" \
       || fail_phase 2 "could not create a status file in the run directory"
-    ( accept_phase "$phase" "$errlog" ) 2> "$reason_file" || rc_accept=$?
+    accept_in_child "$phase" "$errlog" "$reason_file" || rc_accept=$?
+    if [ "$rc_accept" -eq 0 ]; then PHASE_ACCEPTED=1; fi
+    install_run_signal_traps
+    if [ "$rc_accept" -ne 0 ] && [ -n "$ACCEPT_SIGNAL" ]; then
+      rm -f -- "$reason_file"
+      on_signal "$ACCEPT_SIGNAL"
+    elif [ -n "$ACCEPT_SIGNAL" ]; then
+      printf 'adversarial-pipeline: interrupted (exit %s) after the phase was accepted; it stays accepted\n' "$ACCEPT_SIGNAL" >&2
+    fi
     if [ "$rc_accept" -ne 0 ]; then
       fail_phase "$rc_accept" "$(cat -- "$reason_file" 2>/dev/null || true)"
     fi
