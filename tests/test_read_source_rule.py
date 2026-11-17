@@ -101,13 +101,20 @@ class _VisibleText(HTMLParser):
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
         self.parts: list[str] = []
-        self.hidden = 0
+        self.hidden: list[str] = []  # open hidden elements, innermost last
 
     def handle_starttag(self, tag, attrs) -> None:
-        self.hidden += tag in self.HIDDEN
+        if tag in self.HIDDEN:
+            self.hidden.append(tag)
+
+    def handle_startendtag(self, tag, attrs) -> None:
+        """HTML ignores the slash on a non-void element, so '<script />' still opens it."""
+        self.handle_starttag(tag, attrs)
 
     def handle_endtag(self, tag) -> None:
-        self.hidden -= tag in self.HIDDEN and self.hidden > 0
+        """Only the matching end tag closes a hidden element; a stray one is ignored, as in a browser."""
+        if tag in self.hidden:
+            del self.hidden[len(self.hidden) - 1 - self.hidden[::-1].index(tag):]
 
     def handle_data(self, data) -> None:
         if not self.hidden:
