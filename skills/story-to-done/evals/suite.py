@@ -100,11 +100,11 @@ class Broken(Exception):
     """An attempt broke the case contract or changed a checkout: exit 1."""
 
 
-def git(repo: Path, *args: str) -> str:
+def git(repo: Path, *args: str, strip: bool = True) -> str:
     result = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True)
     if result.returncode != 0:
         raise Refused(f"git {' '.join(args)} failed in {repo}: {result.stderr.strip()}")
-    return result.stdout.strip()
+    return result.stdout.strip() if strip else result.stdout
 
 
 def is_record(path: str) -> bool:
@@ -121,8 +121,11 @@ def commit_of(repo: Path, role: str) -> tuple[Path, str, str]:
     refused, because its commit would not describe what ran; only the suite's own uncommitted
     records under a results/ directory are allowed, since they are outputs, not code."""
     root = Path(git(repo, "rev-parse", "--show-toplevel")).resolve()
-    status = [line for line in git(root, "status", "--porcelain", "--untracked-files=all").splitlines() if line]
-    changed = [line[3:] for line in status if not (line.startswith("??") and is_record(line[3:]))]
+    # Unstripped: each porcelain line is two status columns, a space and the path, and the first
+    # line's index column is a space for an unstaged change, so stripping would cut the path.
+    status = [line for line in git(root, "status", "--porcelain", "--untracked-files=all", strip=False).splitlines()
+              if line]
+    changed = [line[3:] for line in status if not is_record(line[3:])]
     if changed:
         raise Refused(f"the {role} checkout {root} has uncommitted changes ({', '.join(changed[:5])}), "
                       "so its commit would not describe the run")

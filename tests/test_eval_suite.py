@@ -839,6 +839,74 @@ def test_uncommitted_records_do_not_block_a_later_run(suite) -> None:
     assert second.returncode == 0, second.stderr
 
 
+def first_porcelain_entry(repo: Path) -> str:
+    return subprocess.run(["git", "-C", str(repo), "status", "--porcelain", "--untracked-files=all"],
+                          check=True, capture_output=True, text=True).stdout.splitlines()[0]
+
+
+def refused_paths(stderr: str) -> str:
+    match = re.search(r"has uncommitted changes \((.*)\), so its commit", stderr)
+    assert match, stderr
+    return match.group(1)
+
+
+# SKL-289: each change is the first `git status --porcelain` entry, so a blank index column at the
+# start of the output shows whether the refusal still names the whole path.
+@pytest.mark.parametrize("change, entry, named", [
+    ("unstaged", " M README.md", "README.md"),
+    ("staged", "M  README.md", "README.md"),
+    ("untracked", "?? NEW.md", "NEW.md"),
+    ("renamed", "R  README.md -> MOVED.md", "README.md -> MOVED.md"),
+])
+def test_the_refusal_names_the_first_changed_path_whole(suite, change: str, entry: str, named: str) -> None:
+    harness = suite["harness"]
+    (harness / "README.md").write_text("readme\n")
+    commit_all(harness)
+    if change == "unstaged":
+        (harness / "README.md").write_text("")
+    elif change == "staged":
+        (harness / "README.md").write_text("")
+        git(harness, "add", "README.md")
+    elif change == "untracked":
+        (harness / "NEW.md").write_text("new\n")
+    else:
+        git(harness, "mv", "README.md", "MOVED.md")
+    assert first_porcelain_entry(harness) == entry
+    result = suite["run"]("--runs", "1", str(suite["checkout"]), "repro3")
+    assert result.returncode == 2, result.stderr
+    assert refused_paths(result.stderr) == named
+    assert not (suite["state"] / "pass").exists(), "nothing ran"
+
+
+def commit_a_record(suite) -> Path:
+    suite["recommit"]("pass")
+    record = suite["evals"] / "results" / "suite-a.md"
+    record.parent.mkdir(exist_ok=True)
+    record.write_text("a record\n")
+    commit_all(suite["harness"])
+    record.write_text("a changed record\n")
+    return record
+
+
+def test_a_tracked_record_with_an_unstaged_change_does_not_block_a_run(suite) -> None:
+    commit_a_record(suite)
+    assert first_porcelain_entry(suite["harness"]) == " M skills/story-to-done/evals/results/suite-a.md"
+    result = suite["run"]("--runs", "1", str(suite["checkout"]), "lab")
+    assert result.returncode == 0, result.stderr
+
+
+def test_a_changed_record_does_not_hide_another_change(suite) -> None:
+    (suite["harness"] / "README.md").write_text("readme\n")
+    commit_a_record(suite)
+    (suite["harness"] / "README.md").write_text("")
+    assert first_porcelain_entry(suite["harness"]) == " M README.md"
+    assert "results/suite-a.md" in git(suite["harness"], "status", "--porcelain"), "the record is changed too"
+    result = suite["run"]("--runs", "1", str(suite["checkout"]), "lab")
+    assert result.returncode == 2, result.stderr
+    assert refused_paths(result.stderr) == "README.md"
+    assert not (suite["state"] / "pass").exists(), "nothing ran"
+
+
 def test_a_run_directory_inside_a_checkout_is_refused(suite) -> None:
     inside = suite["checkout"] / ".git" / "scratch"
     inside.mkdir()
