@@ -124,6 +124,7 @@ Seed it with at least: read the story state, spawn the senior engineer, each che
 With `metrics` on, seed two more items: collect the metrics figures; then post the metrics summary on the story and read it back before giving the summary in the closing report.
 Add an item for each new round as it starts; mark each done once its outcome is observed.
 An interim handback from the senior engineer or a QA agent is classified first, before the checklist read-back below, under [references/interim-handbacks.md](references/interim-handbacks.md).
+So is an unnamed waiting handback as that reference defines it, which never reaches the read-back or spends its resume cap.
 Every subagent brief requires a checklist file in that subagent's own subdirectory of the scratch directory; read it from there and mirror it into your list whenever you check on the subagent.
 When a senior engineer or QA agent hands back, read that subagent's checklist file before acting on the result; a missing or unreadable checklist counts as open items.
 If items remain open with no stated blocker, resume that subagent with "Your checklist still has open items. Continue with them; if one is blocked, say what blocks it", at most twice per subagent, and then record the remaining items in your report and continue with this skill's existing step logic.
@@ -188,6 +189,7 @@ It must include:
 - The git rule: run every commit-creating git command with the git identity already configured and, when `profile.git.signed_commits` is true, the signing already configured; never pass `-c user.name`, `-c user.email`, `--author`, `GIT_AUTHOR_*` or `GIT_COMMITTER_*`, never write `user.name` or `user.email` with `git config`, and when signing is on never pass `-c user.signingkey`, `-c gpg.*` or `-c commit.gpgsign`; a missing identity, a failed signing check or a pushed commit whose `.commit.verification.verified` is false is a configuration fault, so stop, do not override per command or write git config, make no further commits, and report it to the user.
 - The secrets rule (never write secrets to files or argv) and the attribution rule from `profile.git.ai_attribution`.
 - The shell rule: run each shell step as one simple command with literal values; never assign a variable and use it in the same command (`W=<path>; git -C $W ...`) - write the literal path; never feed a `$(...)` result into a later argument of the same command - run the inner command as its own call and use its literal output in the next call; and never prefix a command with an inline `VAR="$SECRET"` assignment - rely on the credential the session environment or the tool's own credential configuration already provides (for `gh`, its stored auth), and never set a credential per command.
+- A handback that is neither final nor blocked and is waiting on your own work names what it waits on, where you read its state, and when you expect it to finish.
 - Its own subdirectory of the scratch directory, `<scratch>/senior-engineer/`, which you create and hand it in place of the scratch directory itself, never another role's files.
 - A "Track your work" paragraph: before starting, write a fine-grained checklist file at the full path you give it in that subdirectory (`<scratch>/senior-engineer/senior-engineer-todo.md`, `- [ ]` and `- [x]` items, one per slice step, test, gate round, review round, remediation, deploy, verification, and wait, the current step marked `(in progress)`) and update it at every step.
 
@@ -200,6 +202,7 @@ Let the senior engineer do the engineering; do not pre-empt its choices.
 The engineer never does pre-PR arbitration (`adversarial-review-pipeline` Phase 3, `engineering-workflow` step 4 Verify stage) or rules a finding valid, invalid or accepted risk or the gate converged (applying the gate's scope guard is not arbitration), and fixes what QA ruled not met or the adjudicator ruled valid without overturning those rulings; a separate clean, neutral arbiter on `profile.review.pre_pr.arbiter`, independent of engineer and coordinator, arbitrates every head.
 
 An interim handback goes to [references/interim-handbacks.md](references/interim-handbacks.md) before the step 0 checklist read-back and every check below; any other handback continues here.
+An unnamed waiting handback, as that reference defines it, goes there too and does not continue here.
 When it hands back, do the step 0 checklist read-back first, then read the story yourself and confirm it is in `profile.tracker.states.in_deployment_review`; a handback is a claim, the tracker is the record.
 If it handed back blocked or the story is not in deployment review, stop and report why.
 Then, for every PR it merged, read the PR yourself with `gh pr view <n> --json headRefOid,mergeCommit` and `gh api --paginate repos/<owner>/<repo>/pulls/<n>/reviews`.
@@ -215,7 +218,7 @@ No path adds a waiver, an admin override, or a change to the expected-head condi
 
 Spawn a new clean, neutral subagent on qa-model at qa-effort for every new QA round; never resume an agent from an earlier round, since it carries that round's conclusions.
 With `nested=yes`, make each QA launch in the foreground, so the call returns the QA agent's handback to you; with `nested=no`, make it in the runtime's default mode.
-Continuation of the current round under step 4, and the step 0 checklist read-back resume or the resume under the handback reference this step points to of the current round's QA agent, are the only exceptions to that sentence.
+Continuation of the current round under step 4, and the step 0 checklist read-back resume or the resumes under the handback reference this step points to of the current round's QA agent, are the only exceptions to that sentence.
 A stop for an owner action ends the round: once the owner clears it, that round's work starts over as a new round under this step with a new QA agent, and a fix/deploy cycle or an amended acceptance basis likewise starts a new round.
 Brief it as a QA agent, with only:
 
@@ -231,6 +234,7 @@ Brief it as a QA agent, with only:
 - The git rule: run every commit-creating git command with the git identity already configured and, when `profile.git.signed_commits` is true, the signing already configured; never pass `-c user.name`, `-c user.email`, `--author`, `GIT_AUTHOR_*` or `GIT_COMMITTER_*`, never write `user.name` or `user.email` with `git config`, and when signing is on never pass `-c user.signingkey`, `-c gpg.*` or `-c commit.gpgsign`; a missing identity, a failed signing check or a pushed commit whose `.commit.verification.verified` is false is a configuration fault, so stop, do not override per command or write git config, make no further commits, and report it to the user.
 - The secrets rule and a "Track your work" paragraph (checklist file at the full path you give it, `<scratch>/qa-agent-round-<n>/qa-agent-round-<n>-todo.md`).
 - The shell rule: run each shell step as one simple command with literal values; never assign a variable and use it in the same command (`W=<path>; git -C $W ...`) - write the literal path; never feed a `$(...)` result into a later argument of the same command - run the inner command as its own call and use its literal output in the next call; and never prefix a command with an inline `VAR="$SECRET"` assignment - rely on the credential the session environment or the tool's own credential configuration already provides (for `gh`, its stored auth), and never set a credential per command.
+- A handback that is neither final nor blocked and is waiting on your own work names what it waits on, where you read its state, and when you expect it to finish.
 
 On `deployed` the brief is the list above.
 On `no-deployment` and `spike`, on every entry, a run that starts at step 3 included, it names the path's verification target in place of the environment: on `no-deployment`, the merged commit the `engineering-workflow` step 12 note names, on `profile.git.integration_branch`; on `spike`, each deliverable the `engineering-workflow` step 12 note links.
@@ -238,6 +242,7 @@ On `no-deployment` and `spike`, on every entry, a run that starts at step 3 incl
 Never give it the senior engineer's handback beyond the environment, the PR's rationale, the fixes made, an earlier round's verdicts, or the verdict you expect.
 
 A QA agent's interim handback goes to [references/interim-handbacks.md](references/interim-handbacks.md) first; any other handback continues here.
+A QA agent's unnamed waiting handback, as that reference defines it, goes there too and does not continue here.
 When it hands back, do the step 0 checklist read-back first, then read the story's state yourself.
 For every PR it merged, such as the evidence PR, read the PR yourself with `gh pr view <n> --json headRefOid,mergeCommit` and `gh api --paginate repos/<owner>/<repo>/pulls/<n>/reviews`.
 Select the review of record as the merge guard in `references/code-review.md` does (the `COMMENTED` review whose body begins with `Review of record` and has the greatest `submitted_at`).
