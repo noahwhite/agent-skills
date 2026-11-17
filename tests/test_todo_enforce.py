@@ -916,6 +916,9 @@ def test_a_not_done_line_names_only_the_exact_task_id(rig, tmp_path):
     assert_allowed(rig.report("#12 not done\n" + REPORT))
     (tmp_path / "longer-id").mkdir()
     assert block_an_open_item_when_only_a_longer_id_is_named(Rig(tmp_path / "longer-id"))
+    for longer in ("1-2", "1_2", "1a"):
+        (tmp_path / longer).mkdir()
+        assert block_an_open_item_when_only_an_id_extending_it_is_named(Rig(tmp_path / longer), longer)
 
 
 def block_an_open_item_when_only_a_longer_id_is_named(rig):
@@ -924,6 +927,15 @@ def block_an_open_item_when_only_a_longer_id_is_named(rig):
     rig.main_task("12", "completed")
     res = rig.report("#12 not done\n" + REPORT)
     return is_blocked(res) and "#1 First" in json.loads(res.stdout)["reason"]
+
+
+def block_an_open_item_when_only_an_id_extending_it_is_named(rig, longer="1-2"):
+    rig.arm()
+    rig.main_task("1", "pending", "First")
+    rig.main_task(longer, "pending", "Second")
+    res = rig.report("#%s not done: x\n%s" % (longer, REPORT))
+    return is_blocked(res) and json.loads(res.stdout)["reason"].count("#1 First") == 1 and (
+        "#%s Second" % longer not in json.loads(res.stdout)["reason"])
 
 
 def allow_a_report_naming_its_open_item(rig):
@@ -1000,9 +1012,9 @@ BRANCHES = {
         "    return any(\"not done\" in line.lower() and mention.search(line) for line in lines)\n",
         [allow_a_report_naming_its_open_item],
     ),
-    "#<id> is not followed by a digit": (
-        "#%s(?!\\d)\"",
-        [block_an_open_item_when_only_a_longer_id_is_named],
+    "#<id> is not followed by an id character": (
+        "#%s(?![0-9A-Za-z_-])\"",
+        [block_an_open_item_when_only_a_longer_id_is_named, block_an_open_item_when_only_an_id_extending_it_is_named],
     ),
     "a Stop carrying agent_id is not gated": (
         "    if agent_of(payload) is not None or not is_armed(session):\n",
@@ -1019,7 +1031,7 @@ NEUTRAL = {
     "            if blocks < REPORT_BLOCK_LIMIT:\n": "            if True:\n",
     "        if data.get(\"status\") in OPEN:\n": "        if True:\n",
     "    return any(\"not done\" in line.lower() and mention.search(line) for line in lines)\n": "    return False\n",
-    "#%s(?!\\d)\"": "#%s\"",
+    "#%s(?![0-9A-Za-z_-])\"": "#%s\"",
     "    if agent_of(payload) is not None or not is_armed(session):\n": "    if not is_armed(session):\n",
 }
 

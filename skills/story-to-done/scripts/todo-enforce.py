@@ -398,7 +398,7 @@ def open_main_items(session):
 
 
 def named_not_done(task, lines):
-    mention = re.compile(r"(?<!\w)#%s(?!\d)" % re.escape(task))
+    mention = re.compile(r"(?<!\w)#%s(?![0-9A-Za-z_-])" % re.escape(task))
     return any("not done" in line.lower() and mention.search(line) for line in lines)
 
 
