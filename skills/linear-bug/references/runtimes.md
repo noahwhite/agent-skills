@@ -71,11 +71,12 @@ If your runtime is not listed, map each capability to its closest equivalent and
   Both versions also need skill loading available; V2 uses the `skill` permission action, while V1 uses `permission.skill` / `tools.skill`.
   A coordinator started as a subagent cannot tell that it is one: the runtime documentation read for this rule gives no in-agent signal that identifies a subagent in every mode.
   A signal observed on one runtime or mode is recorded with its version and date and is not relied on; for example, a nested coordinator called the `SubagentHandback` tool in the SKL-95 run (`docs/qa-evidence/SKL-95/raw-output-round-2.txt`).
-  So a spawner that starts a coordinator as a subagent states so in the brief (for `story-to-done`, `nested=yes`), and a nested coordinator launches its roles in the foreground, so each call returns the role's handback to it.
+  So a spawner that starts a coordinator as a subagent states so in the brief, and a nested coordinator whose skill takes that input (for `story-to-done`, `nested=yes`) launches its roles in the foreground, so each call returns the role's handback to it; where this map gives it no foreground launch, it stops and reports.
   Claude Code: the fork-mode gate decides whether a nested coordinator can launch in the foreground.
   `CLAUDE_CODE_FORK_SUBAGENT` is on by default (from v2.1.302; interactive terminal from v2.1.232); set it to `0` to turn it off.
-  While it is on, an agent cannot wait for a subagent in interactive terminal, VS Code or desktop sessions; in `claude -p` and the Agent SDK it can.
-  The docs say that in an interactive terminal a launching subagent waits for its background nested subagents, and that under `claude -p` and the Agent SDK a background nested subagent may report to the main conversation if it outlasts the spawning subagent.
+  While it is on, the main conversation cannot wait for a subagent in interactive terminal, VS Code or desktop sessions; in `claude -p` and the Agent SDK it can.
+  So with fork mode on in an interactive terminal, VS Code or desktop session, a nested coordinator has no foreground launch and stops and reports.
+  The docs also say that in an interactive terminal a spawning subagent waits for its background nested subagents, and that under `claude -p` and the Agent SDK a background nested subagent may report to the main conversation if it outlasts the spawning subagent.
   `SubagentHandback` is documented as a delivery tool, provided only in auto mode to local non-fork subagents (v2.1.271 or later), not as a way to detect being a subagent.
   Sources, read 2026-10-30: [sub-agents](https://code.claude.com/docs/en/sub-agents.md), [env-vars](https://code.claude.com/docs/en/env-vars.md), [tools-reference](https://code.claude.com/docs/en/tools-reference.md).
   Observed on Claude Code v2.1.312, 2026-10-30: with fork mode on, a nested launch with no background flag returned asynchronously, and the `Agent` tool schema had no `run_in_background` parameter.

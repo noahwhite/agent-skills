@@ -46,7 +46,9 @@ Seven arguments are optional, given as `key=value` or in plain words ("QA on <mo
 - Resolve `nested` before step 0 creates the todo list; it sets no model or effort.
 - Never infer nesting from the environment, the tool list, or a failed handback.
 - The spawner states `nested=yes` because a background role launched by a subagent may report to the root session instead of the launcher.
-- `nested` sets only the launch mode steps 2, 3 and 4 name: briefs, role rows, and metrics rules are identical with `nested=yes` and `nested=no`.
+- With `nested=yes`, every other launch or resume of a role you make, such as step 0's read-back resume, step 4's continuation of the QA agent, and a resume under `references/interim-handbacks.md`, is also made in the foreground.
+- With `nested=yes`, where `references/runtimes.md` gives a nested coordinator no foreground launch on your runtime, stop and report before any role is launched.
+- `nested` sets only the launch mode, or that stop: briefs, role rows, and metrics rules are identical with `nested=yes` and `nested=no`.
 - Write the four resolved model and effort values, the `metrics: on|off` line, the `qa-round-cap: <n>` line, and the `nested: yes|no` line at the top of your todo list and in the closing report of every end state (the step 5 report, or the report made at any stop, including one before step 0).
 - The one exception: a stop while an ambiguous `nested` value is unanswered reports `nested: unresolved` in place of `nested: yes|no`.
 - End a report that ends the job (the step 5 report, or a failed or terminal stop) with `report: final` as a bare line on its own, with no list marker, emphasis or backticks and nothing else on that line; a `needs input` stop or any other question or pause to the owner never carries that line, and neither does any other message; the todo-enforce hook (`scripts/todo-enforce.py`) recognises a final report by that line.

@@ -803,7 +803,7 @@ NESTED_REASON = (
     "session instead of the launcher."
 )
 NESTED_IDENTICAL = (
-    "- `nested` sets only the launch mode steps 2, 3 and 4 name: briefs, role rows, and metrics rules are identical "
+    "- `nested` sets only the launch mode, or that stop: briefs, role rows, and metrics rules are identical "
     "with `nested=yes` and `nested=no`."
 )
 
@@ -3827,6 +3827,15 @@ NESTED_UNRESOLVED = (
     "- The one exception: a stop while an ambiguous `nested` value is unanswered reports `nested: unresolved` in "
     "place of `nested: yes|no`."
 )
+NESTED_EVERY_LAUNCH = (
+    "- With `nested=yes`, every other launch or resume of a role you make, such as step 0's read-back resume, step "
+    "4's continuation of the QA agent, and a resume under `references/interim-handbacks.md`, is also made in the "
+    "foreground."
+)
+NESTED_NO_FOREGROUND_STOP = (
+    "- With `nested=yes`, where `references/runtimes.md` gives a nested coordinator no foreground launch on your "
+    "runtime, stop and report before any role is launched."
+)
 DEFAULT_MODE = "with `nested=no`, make it in the runtime's default mode."
 NESTED_STEP_2 = (
     "With `nested=yes`, make this launch in the foreground, so the call returns the engineer's handback to you; "
@@ -3841,7 +3850,7 @@ NESTED_STEP_4 = (
     "returns its handback to you; " + DEFAULT_MODE
 )
 README_NESTED_CLAUSE = (
-    "a `nested` argument, `no` by default, makes a coordinator its spawner started as a subagent launch its roles "
+    "a `nested` argument, `no` by default, makes a coordinator that its spawner started as a subagent launch its roles "
     "in the foreground"
 )
 RUNTIMES_NESTED_LINES = [
@@ -3850,15 +3859,17 @@ RUNTIMES_NESTED_LINES = [
     "  A signal observed on one runtime or mode is recorded with its version and date and is not relied on; for "
     "example, a nested coordinator called the `SubagentHandback` tool in the SKL-95 run "
     "(`docs/qa-evidence/SKL-95/raw-output-round-2.txt`).",
-    "  So a spawner that starts a coordinator as a subagent states so in the brief (for `story-to-done`, "
-    "`nested=yes`), and a nested coordinator launches its roles in the foreground, so each call returns the role's "
-    "handback to it.",
+    "  So a spawner that starts a coordinator as a subagent states so in the brief, and a nested coordinator whose "
+    "skill takes that input (for `story-to-done`, `nested=yes`) launches its roles in the foreground, so each call "
+    "returns the role's handback to it; where this map gives it no foreground launch, it stops and reports.",
     "  Claude Code: the fork-mode gate decides whether a nested coordinator can launch in the foreground.",
     "  `CLAUDE_CODE_FORK_SUBAGENT` is on by default (from v2.1.302; interactive terminal from v2.1.232); set it to "
     "`0` to turn it off.",
-    "  While it is on, an agent cannot wait for a subagent in interactive terminal, VS Code or desktop sessions; in "
-    "`claude -p` and the Agent SDK it can.",
-    "  The docs say that in an interactive terminal a launching subagent waits for its background nested subagents, "
+    "  While it is on, the main conversation cannot wait for a subagent in interactive terminal, VS Code or desktop "
+    "sessions; in `claude -p` and the Agent SDK it can.",
+    "  So with fork mode on in an interactive terminal, VS Code or desktop session, a nested coordinator has no "
+    "foreground launch and stops and reports.",
+    "  The docs also say that in an interactive terminal a spawning subagent waits for its background nested subagents, "
     "and that under `claude -p` and the Agent SDK a background nested subagent may report to the main conversation "
     "if it outlasts the spawning subagent.",
     "  `SubagentHandback` is documented as a delivery tool, provided only in auto mode to local non-fork subagents "
@@ -3895,9 +3906,12 @@ def test_nested_is_given_by_key_value_or_a_closed_plain_words_map_and_otherwise_
 
 def resolve_nested(phrase: str) -> str:
     """Apply the Arguments plain-words map as SKILL.md states it: an exact phrase maps, anything else is asked."""
-    line = next(line for line in arguments_lines() if line.startswith("- `nested` is given as"))
-    words = line.split("; ask the user", 1)[0].split("or in plain words: ", 1)[1]
-    yes_part, no_part = words.split(" means yes, ")
+    line = next((line for line in arguments_lines() if line.startswith("- `nested` is given as")), None)
+    assert line is not None, "Arguments carries no `nested` is given as ... line"
+    head = line.split("; ask the user", 1)[0]
+    assert "or in plain words: " in head and " means yes, " in head, "the plain-words map is not stated as yes then no"
+    words = head.split("or in plain words: ", 1)[1]
+    yes_part, no_part = words.split(" means yes, ", 1)
     mapping = {p: "yes" for p in re.findall(r'"([^"]+)"', yes_part)}
     mapping |= {p: "no" for p in re.findall(r'"([^"]+)"', no_part)}
     return mapping.get(phrase, "ask")
@@ -3936,6 +3950,30 @@ def test_steps_2_3_and_4_launch_in_the_foreground_when_nested() -> None:
     assert follows(bullet_lines("`profile.tracker.states.in_progress`"), HAND_BACK_LINE, NESTED_STEP_4)
 
 
+def test_every_other_role_launch_is_foreground_and_a_runtime_without_one_stops() -> None:
+    assert NESTED_EVERY_LAUNCH in arguments_lines()
+    assert NESTED_NO_FOREGROUND_STOP in arguments_lines()
+
+
+def test_every_nested_line_is_visible_when_rendered() -> None:
+    rendered = visible(SKILL.read_text()).splitlines()
+    for line in [
+        NESTED_ROW,
+        NESTED_GIVEN,
+        NESTED_RESOLVE,
+        NESTED_NEVER_INFER,
+        NESTED_REASON,
+        NESTED_EVERY_LAUNCH,
+        NESTED_NO_FOREGROUND_STOP,
+        NESTED_IDENTICAL,
+        NESTED_UNRESOLVED,
+        NESTED_STEP_2,
+        NESTED_STEP_3,
+        NESTED_STEP_4,
+    ]:
+        assert line in rendered, f"hidden from the rendered skill: {line[:60]}"
+
+
 def test_a_launch_under_nested_no_keeps_the_runtime_default_mode() -> None:
     launches = [line for line in SKILL.read_text().splitlines() if "With `nested=yes`, make" in line]
     assert launches == [NESTED_STEP_2, NESTED_STEP_3, NESTED_STEP_4]
@@ -3956,6 +3994,8 @@ def test_nested_changes_no_brief_role_row_or_metrics_rule() -> None:
         NESTED_GIVEN,
         NESTED_RESOLVE,
         NESTED_REASON,
+        NESTED_EVERY_LAUNCH,
+        NESTED_NO_FOREGROUND_STOP,
         NESTED_IDENTICAL,
         "- " + METRICS_LINE_SENTENCE + " (the step 5 report, or the report made at any stop, including one before step 0).",
         NESTED_UNRESOLVED,
@@ -3978,7 +4018,10 @@ def test_runtimes_nesting_rule_covers_both_runtimes() -> None:
     lines = (ROOT / "shared" / "runtimes.md").read_text().splitlines()
     rule = lines.index("- **Nested subagents.** A delegated agent that runs a review gate spawns subagents of its own.")
     end = next(i for i in range(rule + 1, len(lines)) if not lines[i].startswith("  "))
-    assert lines[end - len(RUNTIMES_NESTED_LINES):end] == RUNTIMES_NESTED_LINES
+    block = lines[rule + 1:end]
+    assert RUNTIMES_NESTED_LINES[0] in block, "the nesting lines are not inside the Nested subagents rule"
+    start = block.index(RUNTIMES_NESTED_LINES[0])
+    assert block[start:start + len(RUNTIMES_NESTED_LINES)] == RUNTIMES_NESTED_LINES
     assert RUNTIMES_TOOLS_REFERENCE in lines
     assert sum(line.startswith("- **Nested subagents.**") for line in lines) == 1
 
