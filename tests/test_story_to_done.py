@@ -3833,8 +3833,10 @@ NESTED_EVERY_LAUNCH = (
     "foreground."
 )
 NESTED_NO_FOREGROUND_STOP = (
-    "- With `nested=yes`, where `references/runtimes.md` gives a nested coordinator no foreground launch on your "
-    "runtime, stop and report before any role is launched."
+    "- With `nested=yes`, once seat resolution has decided each seat's launch, stop and report before any role is "
+    "launched when a seat launches as a subagent and `references/runtimes.md` gives a nested coordinator no "
+    "foreground subagent launch on that runtime; a `command` or `codex` seat is a process you wait on and never "
+    "needs one."
 )
 DEFAULT_MODE = "with `nested=no`, make it in the runtime's default mode."
 NESTED_STEP_2 = (
@@ -3861,14 +3863,17 @@ RUNTIMES_NESTED_LINES = [
     "(`docs/qa-evidence/SKL-95/raw-output-round-2.txt`).",
     "  So a spawner that starts a coordinator as a subagent states so in the brief, and a nested coordinator whose "
     "skill takes that input (for `story-to-done`, `nested=yes`) launches its roles in the foreground, so each call "
-    "returns the role's handback to it; where this map gives it no foreground launch, it stops and reports.",
+    "returns the role's handback to it; where this map gives it no foreground subagent launch, it stops and reports "
+    "rather than launching a role as a subagent.",
+    "  A role launched by the shell-launched agents rule below (`runtime: command` or `runtime: codex`) is a process "
+    "the coordinator waits on, so it needs no foreground subagent launch and that stop never applies to it.",
     "  Claude Code: the fork-mode gate decides whether a nested coordinator can launch in the foreground.",
     "  `CLAUDE_CODE_FORK_SUBAGENT` is on by default (from v2.1.302; interactive terminal from v2.1.232); set it to "
     "`0` to turn it off.",
     "  While it is on, the main conversation cannot wait for a subagent in interactive terminal, VS Code or desktop "
     "sessions; in `claude -p` and the Agent SDK it can.",
     "  So with fork mode on in an interactive terminal, VS Code or desktop session, a nested coordinator has no "
-    "foreground launch and stops and reports.",
+    "foreground subagent launch.",
     "  The docs also say that in an interactive terminal a spawning subagent waits for its background nested subagents, "
     "and that under `claude -p` and the Agent SDK a background nested subagent may report to the main conversation "
     "if it outlasts the spawning subagent.",
@@ -3885,7 +3890,7 @@ RUNTIMES_NESTED_LINES = [
     "  OpenCode V2: [Tools](https://opencode.ai/v2/docs/tools) (read 2026-11-17, with the CLI at the version in "
     "`.opencode-version`; the page names no version) documents no foreground form of the `subagent` call: \"Subagents always run in "
     "the background\", and the parent receives a `<subagent>` message when the child goes idle.",
-    "  So a nested coordinator on OpenCode V2 stops and reports, rather than launching its roles in the background.",
+    "  So a nested coordinator on OpenCode V2 has no foreground subagent launch.",
     "  OpenCode V2 depth: [Config](https://opencode.ai/v2/docs/config) says `subagent_depth` \"Defaults to `1`, so a "
     "subagent cannot start another subagent\", so each hop below the primary session takes one level.",
     "  A top-level spawner -> coordinator -> role -> reviewer chain needs `experimental.subagent_depth: 3`; when the "

@@ -47,7 +47,7 @@ Seven arguments are optional, given as `key=value` or in plain words ("QA on <mo
 - Never infer nesting from the environment, the tool list, or a failed handback.
 - The spawner states `nested=yes` because a background role launched by a subagent may report to the root session instead of the launcher.
 - With `nested=yes`, every other launch or resume of a role you make, such as step 0's read-back resume, step 4's continuation of the QA agent, and a resume under `references/interim-handbacks.md`, is also made in the foreground.
-- With `nested=yes`, where `references/runtimes.md` gives a nested coordinator no foreground launch on your runtime, stop and report before any role is launched.
+- With `nested=yes`, once seat resolution has decided each seat's launch, stop and report before any role is launched when a seat launches as a subagent and `references/runtimes.md` gives a nested coordinator no foreground subagent launch on that runtime; a `command` or `codex` seat is a process you wait on and never needs one.
 - `nested` sets only the launch mode, or that stop: briefs, role rows, and metrics rules are identical with `nested=yes` and `nested=no`.
 - Write the four resolved model and effort values, the `metrics: on|off` line, the `qa-round-cap: <n>` line, and the `nested: yes|no` line at the top of your todo list and in the closing report of every end state (the step 5 report, or the report made at any stop, including one before step 0).
 - The one exception: a stop while an ambiguous `nested` value is unanswered reports `nested: unresolved` in place of `nested: yes|no`.
