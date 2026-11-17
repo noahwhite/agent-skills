@@ -34,10 +34,13 @@ DISTINCTIVE = (
 )
 
 
+def norm(raw: str) -> str:
+    """Whitespace collapsed and curly quotes straightened, so a reflow still matches."""
+    return " ".join(raw.translate(str.maketrans("“”‘’", "\"\"''")).split())
+
+
 def text(path: Path) -> str:
-    """File text with whitespace collapsed and curly quotes straightened, so a reflow still matches."""
-    raw = path.read_text(encoding="utf-8").translate(str.maketrans("“”‘’", "\"\"''"))
-    return " ".join(raw.split())
+    return norm(path.read_text(encoding="utf-8"))
 
 
 def generated_copies() -> list[Path]:
@@ -54,9 +57,11 @@ def test_the_heading_occurs_exactly_once_across_shared() -> None:
 
 
 def test_the_payload_shape_bullet_links_to_the_anchor() -> None:
-    lines = [line for line in HOME.read_text(encoding="utf-8").splitlines() if PAYLOAD_BULLET in line]
-    assert len(lines) == 1, lines
-    assert ANCHOR_LINK in lines[0], lines[0]
+    """The bullet with its continuation lines, normalized, so a reflowed link still counts."""
+    blocks = [norm(b) for b in re.split(r"\n(?=- |#)", HOME.read_text(encoding="utf-8"))]
+    hits = [b for b in blocks if PAYLOAD_BULLET in b]
+    assert len(hits) == 1, hits
+    assert ANCHOR_LINK in hits[0], hits[0]
 
 
 def test_no_distinctive_sentence_is_restated_elsewhere() -> None:
