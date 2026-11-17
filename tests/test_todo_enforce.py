@@ -100,8 +100,8 @@ class Rig:
         self.task(task_id, status, subject)
 
     def report(self, text=None, name="stop_final_report", **changes):
-        if text is not None:
-            changes["last_assistant_message"] = text
+        """A Stop whose last_assistant_message is text, by default a final report with the marker."""
+        changes["last_assistant_message"] = REPORT if text is None else text
         return self.send(name, **changes)
 
     def subagent_task(self, task_id, status):
@@ -430,7 +430,7 @@ def test_a_malformed_payload_exits_zero_and_logs(rig, stdin):
 
 def test_an_unknown_event_is_ignored(rig):
     rig.arm()
-    assert_allowed(rig.send("main_pre_tool_use_bash", hook_event_name="Stop"))
+    assert_allowed(rig.send("main_pre_tool_use_bash", hook_event_name="Notification"))
 
 
 def test_unwritable_state_exits_zero(tmp_path):
@@ -557,15 +557,18 @@ def test_a_tilde_in_the_state_root_is_expanded(tmp_path):
 
 # --- SKL-265: the Stop report gate --------------------------------------------------------------
 
-REPORT = "Final report.\nmetrics: on"
+REPORT = "Final report.\nreport: final"
+REPORT_BLOCK_LIMIT = 3
 
 
-def test_the_stop_fixtures_record_their_version_and_origin():
+def test_the_stop_fixtures_record_their_version_origin_and_session_type():
     assert STOP_FIXTURE["claude_code_version"] == "2.1.326"
     origins = {name: entry["origin"] for name, entry in STOP_FIXTURE["payloads"].items()}
     assert set(origins.values()) == {"copied", "synthesized"}
     for entry in STOP_FIXTURE["payloads"].values():
         assert entry["payload"]["hook_event_name"] == "Stop"
+        if entry["origin"] == "copied":
+            assert entry["session_type"] in ("headless", "interactive", "background")
 
 
 def is_blocked(res):
@@ -588,6 +591,19 @@ def block_a_report_with_an_open_item(rig):
     return is_blocked(rig.report())
 
 
+def allow_the_report_after_the_block_limit(rig):
+    rig.arm()
+    rig.main_task("1", "pending")
+    blocked = [is_blocked(rig.report()) for _ in range(REPORT_BLOCK_LIMIT + 1)]
+    return blocked == [True] * REPORT_BLOCK_LIMIT + [False]
+
+
+def allow_a_report_whose_only_item_is_completed(rig):
+    rig.arm()
+    rig.main_task("1", "completed")
+    return not is_blocked(rig.report())
+
+
 # (a)
 def test_a_report_with_an_open_item_not_named_as_not_done_is_blocked(rig):
     rig.arm()
@@ -597,6 +613,13 @@ def test_a_report_with_an_open_item_not_named_as_not_done_is_blocked(rig):
     rig.subagent_task("4", "pending")
     reason = assert_blocked(rig.report(), "#1 Write the tests", "#2 Open the PR", "not done")
     assert "#3" not in reason and "#4" not in reason
+    assert_blocked(rig.send("stop_final_report_with_trailing_lines"), "#1 Write the tests")
+
+
+def test_an_open_item_without_a_subject_is_listed_with_a_placeholder(rig):
+    rig.arm()
+    rig.main_task("1", "pending", "")
+    assert_blocked(rig.report(), "#1 (no subject)")
 
 
 # (b)
@@ -611,13 +634,15 @@ def test_a_report_naming_every_open_item_as_not_done_is_allowed(rig):
 
 # (c)
 @pytest.mark.parametrize("text", [
-    None, "Settings: metrics: off, qa-round-cap: 3", "- metrics: on", "`metrics: off`", "metrics: onward",
-], ids=["copied-report", "inline", "list-marker", "backticks", "longer-word"])
+    None, "Status: report: final, metrics: on", "- report: final", "`report: final`", "**report: final**",
+    "report: finally", "Report: final", "metrics: on",
+], ids=["fixtures", "inline", "list-marker", "backticks", "emphasis", "longer-word", "capitalised", "metrics-line"])
 def test_a_stop_without_the_report_signal_is_allowed(rig, text):
     rig.arm()
     rig.main_task("1", "pending")
     if text is None:
-        for name in ("stop_pause_on_background_work", "stop_question_to_the_owner"):
+        for name in ("stop_final_report", "stop_pause_on_background_work", "stop_question_to_the_owner",
+                     "stop_needs_input"):
             assert_allowed(rig.send(name))
         assert_blocked(rig.report(), "#1")
     else:
@@ -627,7 +652,7 @@ def test_a_stop_without_the_report_signal_is_allowed(rig, text):
 def test_the_report_signal_allows_trailing_whitespace(rig):
     rig.arm()
     rig.main_task("1", "pending")
-    assert_blocked(rig.report("Final report.\nmetrics: off  \n"), "#1")
+    assert_blocked(rig.report("Final report.\nreport: final  \n"), "#1")
 
 
 # (d)
@@ -671,6 +696,39 @@ def test_a_subagent_prompt_does_not_reset_the_block_count(rig):
         assert_blocked(rig.report())
     assert_allowed(rig.send("user_prompt_plain", agent_id="sub-1"))
     assert_allowed(rig.report())
+
+
+def test_a_stop_carrying_agent_id_is_an_allowed_stop_and_resets_the_block_count(rig):
+    rig.arm()
+    rig.main_task("1", "pending")
+    assert_blocked(rig.report())
+    assert_blocked(rig.report())
+    assert_allowed(rig.send("stop_with_agent_id", last_assistant_message=REPORT))
+    for _ in range(3):
+        assert_blocked(rig.report())
+    assert_allowed(rig.report())
+
+
+def test_overlapping_stops_count_their_blocks_one_at_a_time(rig):
+    fcntl = pytest.importorskip("fcntl")
+    rig.arm()
+    rig.main_task("1", "pending")
+    state = rig.state / "agent-skills" / "todo-enforce" / SESSION
+    with open(state / "report-blocks.lock", "a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        proc = subprocess.Popen(
+            [sys.executable, "-I", str(rig.script)], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE, env=rig.env(), text=True,
+        )
+        proc.stdin.write(json.dumps(rig.payload("stop_final_report", last_assistant_message=REPORT)))
+        proc.stdin.close()
+        with pytest.raises(subprocess.TimeoutExpired):
+            proc.wait(timeout=1)
+        (state / "report-blocks").write_text("3")
+    assert proc.wait(timeout=30) == 0
+    out, err = proc.stdout.read(), proc.stderr.read()
+    assert out == ""
+    assert "REPORT_BLOCK_LIMIT" in err
 
 
 # (e)
@@ -727,7 +785,34 @@ def test_unreadable_gate_state_allows_the_report_with_a_stderr_line(rig, content
     (rig.state / "agent-skills" / "todo-enforce" / SESSION / "report-blocks").write_text(content)
     res = rig.report()
     assert_allowed(res)
-    assert "todo-enforce" in res.stderr
+    assert "report gate state is unreadable" in res.stderr
+    for _ in range(3):
+        assert_blocked(rig.report())
+    assert_allowed(rig.report())
+
+
+@pytest.mark.parametrize("stored, blocks_left", [("-5", 3), ("7", 0)])
+def test_an_out_of_range_block_count_is_clamped_with_a_stderr_line(rig, stored, blocks_left):
+    rig.arm()
+    rig.main_task("1", "pending")
+    (rig.state / "agent-skills" / "todo-enforce" / SESSION / "report-blocks").write_text(stored)
+    results = [rig.report() for _ in range(blocks_left + 1)]
+    assert "clamped" in results[0].stderr
+    assert [is_blocked(res) for res in results] == [True] * blocks_left + [False]
+
+
+def test_a_block_that_cannot_be_written_is_not_counted(rig):
+    rig.arm()
+    rig.main_task("1", "pending")
+    assert_blocked(rig.report())
+    proc = subprocess.Popen(
+        [sys.executable, "-I", str(rig.script)], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE, env=rig.env(), text=True,
+    )
+    proc.stdout.close()
+    _, err = proc.communicate(json.dumps(rig.payload("stop_final_report", last_assistant_message=REPORT)), timeout=30)
+    assert "the block could not be written" in err
+    assert not (rig.state / "agent-skills" / "todo-enforce" / SESSION / "report-blocks").exists()
 
 
 @pytest.mark.skipif(os.geteuid() == 0, reason="root ignores directory permissions")
@@ -742,6 +827,28 @@ def test_unwritable_gate_state_allows_the_report_with_a_stderr_line(rig):
         assert "todo-enforce" in res.stderr
     finally:
         state.chmod(0o700)
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root ignores directory permissions")
+def test_an_unreadable_state_directory_allows_the_report_with_a_stderr_line(rig):
+    rig.arm()
+    rig.main_task("1", "pending")
+    state = rig.state / "agent-skills" / "todo-enforce" / SESSION
+    state.chmod(0o000)
+    try:
+        res = rig.report()
+        assert_allowed(res)
+        assert "the state is unreadable" in res.stderr
+    finally:
+        state.chmod(0o700)
+
+
+def test_a_report_with_no_owner_record_is_allowed_with_a_stderr_line(rig):
+    rig.arm()
+    rig.task("1", "pending")
+    res = rig.report()
+    assert_allowed(res)
+    assert "no main-created task is recorded" in res.stderr
 
 
 # (h)
@@ -772,8 +879,8 @@ def test_stop_hook_active_does_not_suppress_a_block(rig):
     rig.arm()
     rig.main_task("1", "pending")
     for _ in range(3):
-        assert_blocked(rig.send("stop_after_a_block"), "#1")
-    assert_allowed(rig.send("stop_after_a_block"))
+        assert_blocked(rig.report(name="stop_after_a_block"), "#1")
+    assert_allowed(rig.report(name="stop_after_a_block"))
 
 
 # --- mutation proof: removing each deny or refuse branch fails its test ---------------------------
@@ -803,6 +910,14 @@ BRANCHES = {
         "    return block(reason)\n",
         [block_a_report_with_an_open_item],
     ),
+    "allow a report once the gate blocked REPORT_BLOCK_LIMIT times": (
+        "            if blocks < REPORT_BLOCK_LIMIT:\n",
+        [allow_the_report_after_the_block_limit],
+    ),
+    "only a pending or in_progress task is open": (
+        "        if data.get(\"status\") in OPEN:\n",
+        [allow_a_report_whose_only_item_is_completed],
+    ),
 }
 NEUTRAL = {
     "    return deny(reason)\n": "    return 0\n",
@@ -811,6 +926,8 @@ NEUTRAL = {
     "        return refuse(NOT_IN_PROGRESS.format(task=task, status=status))\n": "        return 0\n",
     "        return refuse(UNREADABLE.format(task=task, error=error))\n": "        return 0\n",
     "    return block(reason)\n": "    return 0\n",
+    "            if blocks < REPORT_BLOCK_LIMIT:\n": "            if True:\n",
+    "        if data.get(\"status\") in OPEN:\n": "        if True:\n",
 }
 
 
@@ -903,24 +1020,20 @@ def test_no_skill_frontmatter_has_a_hooks_key():
         assert "hooks" not in yaml.safe_load(front), skill_md
 
 
-# --- SKL-265 AC9: both skills write the report signal as a bare line ----------------------------
+# --- SKL-265 AC9: both skills end a job-ending report with the bare report: final line -----------
 
-BARE_LINE = {
-    "story-to-done": (
-        "- In every closing report, write the metrics value as a bare line on its own, exactly `metrics: on` or "
-        "`metrics: off`, with no list marker, emphasis or backticks and nothing else on that line;"
-    ),
-    "story-refinement": (
-        "That line is bare and on its own, exactly `metrics: on` or `metrics: off`, with no list marker, "
-        "emphasis or backticks and nothing else on that line;"
-    ),
-}
+MARKER_RULE = (
+    "with `report: final` as a bare line on its own, with no list marker, emphasis or backticks and nothing "
+    "else on that line;",
+    "never carries that line",
+    "`needs input`",
+)
 
 
 @pytest.mark.parametrize("skill", SKILLS)
-def test_each_skill_requires_the_bare_metrics_line_in_its_closing_report(skill):
+def test_each_skill_puts_the_report_marker_only_in_a_job_ending_report(skill):
     lines = (ROOT / "skills" / skill / "SKILL.md").read_text().splitlines()
-    assert any(line.startswith(BARE_LINE[skill]) for line in lines), skill
+    assert any(all(part in line for part in MARKER_RULE) for line in lines), skill
 
 
 # --- the README settings block (AC10) ----------------------------------------------------------
@@ -940,3 +1053,15 @@ def test_the_readme_block_registers_the_enforcer_for_the_five_events():
         assert hook["type"] == "command", event
         assert hook["command"] == "python3 ~/.claude/skills/story-to-done/scripts/todo-enforce.py", event
     assert (ROOT / "skills" / "story-to-done" / "scripts" / "todo-enforce.py").is_file()
+
+
+def test_the_readme_states_how_the_report_gate_behaves():
+    readme = (ROOT / "README.md").read_text()
+    section = readme.split("### Todo enforcer hook (Claude Code)", 1)[1].split("\n## ", 1)[0]
+    for phrase in (
+        "`^report: final\\s*$`", "`not done`", "`#<id>`", "is never blocked", "`REPORT_BLOCK_LIMIT` (3)",
+        "resets on any stop the gate allows and on each main-thread prompt", "never gates a subagent's stop",
+        "fails open", "The gate checks the naming, not whether the stated reason is adequate.",
+        "delete those five entries",
+    ):
+        assert phrase in section, phrase

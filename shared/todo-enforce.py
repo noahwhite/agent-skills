@@ -20,13 +20,18 @@ payload's hook_event_name and, per session_id:
   (TaskCompleted fires before the status is written) or when that file is unreadable;
 - report gate: in an armed session that has the task tools, blocks a Stop (stdout
   {"decision": "block", ...}, exit 0) whose last_assistant_message has a line matching
-  ^metrics: (on|off)\\s*$ while a main-owned task whose file reads pending or in_progress is not
+  ^report: final\\s*$ while a main-owned task whose file reads pending or in_progress is not
   named on a line containing "not done" and its #<id>; a Stop without that line, or carrying
-  agent_id, is allowed, and a missing or non-string last_assistant_message or an unreadable task
-  file allows it with a stderr warning;
+  agent_id, is allowed, and a missing or non-string last_assistant_message, unreadable state or an
+  unreadable task file allows it with a stderr warning;
 - loop guard: the report gate blocks at most REPORT_BLOCK_LIMIT consecutive times, then allows with
-  a stderr line; the count lives in the state directory and resets on any Stop the gate allows and
-  on a main-thread UserPromptSubmit, and stop_hook_active is not used.
+  a stderr line; the count lives in the state directory, increments only when a block is emitted,
+  and resets on any Stop the gate allows and on a main-thread UserPromptSubmit, and
+  stop_hook_active is not used.
+
+The report gate does nothing, silently, in a session that is not armed, has no task tools, or
+whose report has no signal line; it logs to stderr when it allows a report because the state, the
+owner records or a task file cannot be read.
 
 A session has the task tools when the transcript at transcript_path lists TaskCreate in its
 deferred_tools_delta attachments. Subagent tool calls (agent_id set) are never denied.
@@ -36,10 +41,17 @@ It fails open: a malformed payload, unwritable state or any internal error is lo
 stderr and exits 0. Python 3 standard library only.
 """
 
+import contextlib
 import json
 import os
 import re
+import stat
 import sys
+
+try:
+    import fcntl
+except ImportError:  # no flock on this platform: the loop guard runs unlocked
+    fcntl = None
 
 SKILLS = ("story-to-done", "story-refinement")
 EXEMPT = frozenset({"TaskCreate", "TaskUpdate", "TaskList", "TaskGet", "ToolSearch", "Skill", "AskUserQuestion"})
@@ -68,14 +80,17 @@ NOT_IN_PROGRESS = (
     "todo-enforce: task {task} was not completed because it is {status}, not in_progress. "
     "Mark it in_progress with TaskUpdate when you start the work, then complete it when done."
 )
-REPORT_BLOCK_LIMIT = 3
-REPORT_SIGNAL = re.compile(r"^metrics: (on|off)\s*$")
-OPEN = ("pending", "in_progress")
 OPEN_ITEMS = (
     "todo-enforce: this final report was held back because these tasks you created are still open: {items}. "
     "Complete each one with TaskUpdate, or name it on a line with \"not done\", its #<id> and the reason, "
     "then report again."
 )
+NO_SUBJECT = "(no subject)"
+
+IN_PROGRESS = "in_progress"
+OPEN = ("pending", IN_PROGRESS)
+REPORT_BLOCK_LIMIT = 3
+REPORT_SIGNAL = re.compile(r"^report: final\s*$")
 
 
 def home_dir(var, *default):
@@ -118,7 +133,15 @@ def task_of(payload):
 
 
 def is_armed(session):
-    return os.path.isfile(os.path.join(state_dir(session), "armed"))
+    """False when the armed marker is absent, and, with a log, when the state cannot be read."""
+    try:
+        return stat.S_ISREG(os.stat(os.path.join(state_dir(session), "armed")).st_mode)
+    except FileNotFoundError:
+        return False
+    except OSError as exc:
+        log("treating the session as not armed, the state is unreadable: %s: %s"
+            % (type(exc).__name__, exc))
+        return False
 
 
 def arm(session):
@@ -173,18 +196,31 @@ def task_status(session, task):
     return task_file(session, task).get("status")
 
 
-def main_task_in_progress(session):
-    """(progress, owned): progress is True, False, or None when no main-owned task is
-    in_progress and one that exists is unreadable; owned counts the main-owned tasks recorded."""
+def main_owned_tasks(session):
+    """The ids of the tasks the owner records mark main; none when no owner is recorded."""
     try:
         tasks = os.listdir(os.path.join(state_dir(session), "owners"))
     except FileNotFoundError:
-        tasks = []
-    owned = readable = 0
-    unreadable = None
+        return []
+    owned = []
     for task in tasks:
         if task.startswith(".") or owner_of(session, task) != MAIN:
             continue
+        owned.append(task)
+    return owned
+
+
+def log_no_main_task():
+    log("no main-created task is recorded for this session; if one was created, "
+        "check that the TaskCreated hook is registered")
+
+
+def main_task_in_progress(session):
+    """(progress, owned): progress is True, False, or None when no main-owned task is
+    in_progress and one that exists is unreadable; owned counts the main-owned tasks recorded."""
+    owned = readable = 0
+    unreadable = None
+    for task in main_owned_tasks(session):
         owned += 1
         try:
             status = task_status(session, task)
@@ -195,13 +231,12 @@ def main_task_in_progress(session):
             unreadable = task
             continue
         readable += 1
-        if status == "in_progress":
+        if status == IN_PROGRESS:
             return True, owned
     if unreadable is not None:
         return None, owned
     if not owned:
-        log("no main-created task is recorded for this session; if one was created, "
-            "check that the TaskCreated hook is registered")
+        log_no_main_task()
     elif not readable:
         log("none of this session's %d main-created tasks has a task file under %s"
             % (owned, tasks_dir(session)))
@@ -285,11 +320,23 @@ def refuse(reason):
 
 def block(reason):
     json.dump({"decision": "block", "reason": reason}, sys.stdout)
+    sys.stdout.flush()
     return 0
 
 
 def report_blocks_path(session):
     return os.path.join(state_dir(session), "report-blocks")
+
+
+@contextlib.contextmanager
+def report_blocks_lock(session):
+    """Holds an exclusive lock on the block count, so overlapping Stops count one at a time."""
+    if fcntl is None:
+        yield
+        return
+    with open(report_blocks_path(session) + ".lock", "a") as fh:
+        fcntl.flock(fh, fcntl.LOCK_EX)
+        yield
 
 
 def reset_report_blocks(session):
@@ -301,42 +348,45 @@ def reset_report_blocks(session):
         log("report block count not reset: %s: %s" % (type(exc).__name__, exc))
 
 
-def count_report_block(session):
-    """The number of consecutive report blocks before this one, after recording this one."""
-    path = report_blocks_path(session)
+def read_report_blocks(session):
+    """The consecutive report blocks emitted so far: 0 when none is recorded, and a stored value
+    outside 0..REPORT_BLOCK_LIMIT is clamped into that range with a log."""
     try:
-        with open(path) as fh:
-            count = int(fh.read())
+        with open(report_blocks_path(session)) as fh:
+            blocks = int(fh.read())
     except FileNotFoundError:
-        count = 0
-    if count >= REPORT_BLOCK_LIMIT:
-        return count
+        return 0
+    if not 0 <= blocks <= REPORT_BLOCK_LIMIT:
+        log("report block count %d is outside 0..%d, clamped" % (blocks, REPORT_BLOCK_LIMIT))
+        blocks = max(0, min(blocks, REPORT_BLOCK_LIMIT))
+    return blocks
+
+
+def write_report_blocks(session, blocks):
+    path = report_blocks_path(session)
     tmp = "%s.%d" % (path, os.getpid())
     with open(tmp, "w") as fh:
-        fh.write(str(count + 1))
+        fh.write(str(blocks))
     os.replace(tmp, path)
-    return count
 
 
 def open_main_items(session):
     """[(id, subject)] of the main-owned tasks whose task file reads pending or in_progress;
     an unreadable task file raises."""
-    try:
-        tasks = os.listdir(os.path.join(state_dir(session), "owners"))
-    except FileNotFoundError:
-        tasks = []
+    tasks = main_owned_tasks(session)
+    if not tasks:
+        log_no_main_task()
     items = []
     for task in tasks:
-        if not task.startswith(".") and owner_of(session, task) == MAIN:
-            try:
-                data = task_file(session, task)
-            except FileNotFoundError:
-                continue
-            except (OSError, ValueError) as exc:
-                raise ValueError("task %s file unreadable: %s: %s" % (task, type(exc).__name__, exc))
-            if data.get("status") in OPEN:
-                subject = data.get("subject")
-                items.append((task, subject if isinstance(subject, str) else ""))
+        try:
+            data = task_file(session, task)
+        except FileNotFoundError:
+            continue
+        except (OSError, ValueError) as exc:
+            raise ValueError("task %s file unreadable: %s: %s" % (task, type(exc).__name__, exc))
+        if data.get("status") in OPEN:
+            subject = data.get("subject")
+            items.append((task, subject if isinstance(subject, str) and subject else NO_SUBJECT))
     return sorted(items, key=lambda item: (len(item[0]), item[0]))
 
 
@@ -375,17 +425,18 @@ def on_stop(payload, session):
         reset_report_blocks(session)
         return 0
     try:
-        count = count_report_block(session)
-    except (OSError, ValueError) as exc:
-        log("allowing the report, the report gate state is unreadable or unwritable: %s: %s"
-            % (type(exc).__name__, exc))
-        return 0
-    if count >= REPORT_BLOCK_LIMIT:
+        with report_blocks_lock(session):
+            blocks = read_report_blocks(session)
+            if blocks < REPORT_BLOCK_LIMIT:
+                write_report_blocks(session, blocks + 1)
+                return block(reason)
         log("allowing the report: the report gate already blocked %d consecutive times "
-            "(REPORT_BLOCK_LIMIT = %d)" % (count, REPORT_BLOCK_LIMIT))
-        reset_report_blocks(session)
-        return 0
-    return block(reason)
+            "(REPORT_BLOCK_LIMIT = %d)" % (blocks, REPORT_BLOCK_LIMIT))
+    except (OSError, ValueError) as exc:
+        log("allowing the report, the report gate state is unreadable or unwritable or the block "
+            "could not be written: %s: %s" % (type(exc).__name__, exc))
+    reset_report_blocks(session)
+    return 0
 
 
 def on_user_prompt(payload, session):
@@ -454,7 +505,7 @@ def on_task_completed(payload, session):
         error = "%s: %s" % (type(exc).__name__, exc)
         log("task %s file unreadable: %s" % (task, error))
         return refuse(UNREADABLE.format(task=task, error=error))
-    if status != "in_progress":
+    if status != IN_PROGRESS:
         return refuse(NOT_IN_PROGRESS.format(task=task, status=status))
     return 0
 
