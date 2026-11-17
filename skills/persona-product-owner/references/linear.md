@@ -15,6 +15,13 @@ The `linear` CLI (schpet/linear-cli) is the primary tool; the Linear MCP server 
 - Differing team: when the named issue's team differs from `profile.tracker.team_key`, each profile state or label name (including `profile.tracker.states.ready` and `profile.tracker.states.backlog`, and the labels on split siblings) is used only after it is confirmed on that team with `linear team states <KEY>` and `linear label list --team <KEY>` (whose listing includes the workspace labels), where `<KEY>` is the team key, the issue key's prefix; use the Linear MCP list_issue_statuses and list_issue_labels tools if the CLI fails.
   A missing name, an unknown team or a failed listing stops the step before any write and asks; no other name is substituted.
 
+## Named story keys
+
+- An issue key the owner names explicitly is acted on as written, also when it appears inside an instruction about a different story, and is never treated as a typo for another key.
+- When the named story is not yet in the state the action needs, wait, re-read its state, and say that you are waiting; when the instruction contradicts the story's state or another instruction, ask the owner before acting.
+- Never substitute another key.
+  A missing key is covered by the "never guess" line of the `STORY_ID` argument rule of a skill that takes one, not restated here.
+
 ## Status lifecycle
 
 - Follow the flow `profile.tracker.states.in_progress` -> `profile.tracker.states.in_review` (PR open) -> `profile.tracker.states.in_deployment_review` (build deployed to the target environment) -> `profile.tracker.states.done`.
