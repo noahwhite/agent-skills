@@ -1,13 +1,13 @@
 """SKL-232: the read-before-asserting rule has one home in shared/engineering-practice.md.
 
-Markdown is read as CommonMark renders it (markdown-it-py): HTML comments and tags are hidden,
-while text in paragraphs, list items, raw HTML blocks and code is visible.
+Markdown is read as CommonMark renders it (markdown-it-py): HTML comments, tags, and script or
+style bodies are hidden, while text in paragraphs, list items, raw HTML blocks and code is visible.
 """
 
-import html
 import importlib.util
 import re
 from dataclasses import dataclass, field
+from html.parser import HTMLParser
 from pathlib import Path
 
 from markdown_it import MarkdownIt
@@ -93,19 +93,49 @@ def rendered(inline) -> tuple[str, list[str]]:
     return norm("".join(parts)), links
 
 
+class _VisibleText(HTMLParser):
+    """Collects the text a browser shows: tags, comments, and script or style bodies dropped."""
+
+    HIDDEN = ("script", "style", "template")
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.parts: list[str] = []
+        self.hidden = 0
+
+    def handle_starttag(self, tag, attrs) -> None:
+        self.hidden += tag in self.HIDDEN
+
+    def handle_endtag(self, tag) -> None:
+        self.hidden -= tag in self.HIDDEN and self.hidden > 0
+
+    def handle_data(self, data) -> None:
+        if not self.hidden:
+            self.parts.append(data)
+
+
 def visible_html(raw: str) -> str:
-    """The text a raw HTML block shows: comments and tags dropped, entities decoded."""
-    return norm(html.unescape(re.sub(r"<[^>]*>", " ", re.sub(r"<!--.*?(-->|$)", " ", raw, flags=re.DOTALL))))
+    """The text a raw HTML block shows."""
+    parser = _VisibleText()
+    parser.feed(raw)
+    parser.close()
+    return norm(" ".join(parser.parts))
 
 
 def parse(path: Path) -> Doc:
+    """Sections by heading; a subheading and its content also count as content of the enclosing h2."""
     tokens = MARKDOWN.parse(path.read_text(encoding="utf-8"))
     sections = [Section(0, "")]
+    owner = sections[0]  # the nearest section at level 2 or above
     prose, depth, item = [], 0, None
     for i, tok in enumerate(tokens):
         text, links = "", []
         if tok.type == "heading_open":
             sections.append(Section(int(tok.tag[1]), rendered(tokens[i + 1])[0]))
+            if sections[-1].level <= 2:
+                owner = sections[-1]
+            else:
+                owner.other.append(f"{tok.markup} {sections[-1].title}")
         elif tok.type in ("bullet_list_open", "ordered_list_open"):
             depth += 1
         elif tok.type in ("bullet_list_close", "ordered_list_close"):
@@ -128,7 +158,7 @@ def parse(path: Path) -> Doc:
                 item[0].append(text)
                 item[1].extend(links)
             else:
-                sections[-1].other.append(text)
+                owner.other.append(text)
     return Doc(sections, norm(" ".join(prose)))
 
 
