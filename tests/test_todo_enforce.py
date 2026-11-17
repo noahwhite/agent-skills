@@ -562,7 +562,8 @@ REPORT_BLOCK_LIMIT = 3
 
 
 def test_the_stop_fixtures_record_their_version_origin_and_session_type():
-    assert STOP_FIXTURE["claude_code_version"] == "2.1.326"
+    assert re.fullmatch(r"\d+\.\d+\.\d+", STOP_FIXTURE["claude_code_version"])
+    assert not set(FIXTURE["payloads"]) & set(STOP_FIXTURE["payloads"])
     origins = {name: entry["origin"] for name, entry in STOP_FIXTURE["payloads"].items()}
     assert set(origins.values()) == {"copied", "synthesized"}
     for entry in STOP_FIXTURE["payloads"].values():
@@ -611,7 +612,9 @@ def test_a_report_with_an_open_item_not_named_as_not_done_is_blocked(rig):
     rig.main_task("2", "in_progress", "Open the PR")
     rig.main_task("3", "completed", "Read the story")
     rig.subagent_task("4", "pending")
-    reason = assert_blocked(rig.report(), "#1 Write the tests", "#2 Open the PR", "not done")
+    reason = assert_blocked(rig.report(), "#1 Write the tests", "#2 Open the PR", "not done",
+                            "mark it in_progress with TaskUpdate if it is pending",
+                            "in the same message as the report: final line")
     assert "#3" not in reason and "#4" not in reason
     assert_blocked(rig.send("stop_final_report_with_trailing_lines"), "#1 Write the tests")
 
@@ -620,6 +623,12 @@ def test_an_open_item_without_a_subject_is_listed_with_a_placeholder(rig):
     rig.arm()
     rig.main_task("1", "pending", "")
     assert_blocked(rig.report(), "#1 (no subject)")
+
+
+def test_an_open_item_subject_is_listed_on_one_line(rig):
+    rig.arm()
+    rig.main_task("1", "pending", "Write\nthe  tests")
+    assert_blocked(rig.report(), "#1 Write the tests")
 
 
 # (b)
@@ -731,11 +740,44 @@ def test_overlapping_stops_count_their_blocks_one_at_a_time(rig):
     assert "REPORT_BLOCK_LIMIT" in err
 
 
+def test_a_main_thread_prompt_resets_the_block_count_under_the_lock(rig):
+    fcntl = pytest.importorskip("fcntl")
+    rig.arm()
+    rig.main_task("1", "pending")
+    for _ in range(3):
+        assert_blocked(rig.report())
+    state = rig.state / "agent-skills" / "todo-enforce" / SESSION
+    with open(state / "report-blocks.lock", "a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        proc = subprocess.Popen(
+            [sys.executable, "-I", str(rig.script)], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE, env=rig.env(), text=True,
+        )
+        proc.stdin.write(json.dumps(rig.payload("user_prompt_plain")))
+        proc.stdin.close()
+        with pytest.raises(subprocess.TimeoutExpired):
+            proc.wait(timeout=1)
+        assert (state / "report-blocks").read_text() == "3"
+    assert proc.wait(timeout=30) == 0
+    assert not (state / "report-blocks").exists()
+
+
+def test_a_stop_with_a_malformed_agent_id_is_an_allowed_stop_and_resets_the_block_count(rig):
+    rig.arm()
+    rig.main_task("1", "pending")
+    for _ in range(3):
+        assert_blocked(rig.report())
+    res = rig.report(agent_id="")
+    assert_allowed(res)
+    assert "allowing the stop" in res.stderr
+    assert_blocked(rig.report(), "#1")
+
+
 # (e)
 def test_a_stop_carrying_agent_id_is_allowed(rig):
     rig.arm()
     rig.main_task("1", "pending")
-    assert_allowed(rig.send("stop_with_agent_id"))
+    assert_allowed(rig.send("stop_with_agent_id", last_assistant_message=REPORT))
 
 
 # (f)
@@ -843,6 +885,20 @@ def test_an_unreadable_state_directory_allows_the_report_with_a_stderr_line(rig)
         state.chmod(0o700)
 
 
+@pytest.mark.skipif(os.geteuid() == 0, reason="root ignores directory permissions")
+def test_unreadable_owner_records_allow_the_report_with_a_stderr_line(rig):
+    rig.arm()
+    rig.main_task("1", "pending")
+    owners = rig.state / "agent-skills" / "todo-enforce" / SESSION / "owners"
+    owners.chmod(0o000)
+    try:
+        res = rig.report()
+        assert_allowed(res)
+        assert "the report gate could not read the payload or the state" in res.stderr
+    finally:
+        owners.chmod(0o700)
+
+
 def test_a_report_with_no_owner_record_is_allowed_with_a_stderr_line(rig):
     rig.arm()
     rig.task("1", "pending")
@@ -852,12 +908,34 @@ def test_a_report_with_no_owner_record_is_allowed_with_a_stderr_line(rig):
 
 
 # (h)
-def test_a_not_done_line_names_only_the_exact_task_id(rig):
+def test_a_not_done_line_names_only_the_exact_task_id(rig, tmp_path):
     rig.arm()
     rig.main_task("1", "completed")
     rig.main_task("12", "pending", "Twelfth")
     assert_blocked(rig.report("#1 not done\n" + REPORT), "#12 Twelfth")
     assert_allowed(rig.report("#12 not done\n" + REPORT))
+    (tmp_path / "longer-id").mkdir()
+    assert block_an_open_item_when_only_a_longer_id_is_named(Rig(tmp_path / "longer-id"))
+
+
+def block_an_open_item_when_only_a_longer_id_is_named(rig):
+    rig.arm()
+    rig.main_task("1", "pending", "First")
+    rig.main_task("12", "completed")
+    res = rig.report("#12 not done\n" + REPORT)
+    return is_blocked(res) and "#1 First" in json.loads(res.stdout)["reason"]
+
+
+def allow_a_report_naming_its_open_item(rig):
+    rig.arm()
+    rig.main_task("1", "pending")
+    return not is_blocked(rig.report("#1 not done: the owner runs it.\n" + REPORT))
+
+
+def allow_a_report_stop_carrying_agent_id(rig):
+    rig.arm()
+    rig.main_task("1", "pending")
+    return not is_blocked(rig.send("stop_with_agent_id", last_assistant_message=REPORT))
 
 
 def test_a_bare_task_id_without_not_done_does_not_name_it(rig):
@@ -918,6 +996,18 @@ BRANCHES = {
         "        if data.get(\"status\") in OPEN:\n",
         [allow_a_report_whose_only_item_is_completed],
     ),
+    "a not done line with the #<id> names the item": (
+        "    return any(\"not done\" in line.lower() and mention.search(line) for line in lines)\n",
+        [allow_a_report_naming_its_open_item],
+    ),
+    "#<id> is not followed by a digit": (
+        "#%s(?!\\d)\"",
+        [block_an_open_item_when_only_a_longer_id_is_named],
+    ),
+    "a Stop carrying agent_id is not gated": (
+        "    if agent_of(payload) is not None or not is_armed(session):\n",
+        [allow_a_report_stop_carrying_agent_id],
+    ),
 }
 NEUTRAL = {
     "    return deny(reason)\n": "    return 0\n",
@@ -928,6 +1018,9 @@ NEUTRAL = {
     "    return block(reason)\n": "    return 0\n",
     "            if blocks < REPORT_BLOCK_LIMIT:\n": "            if True:\n",
     "        if data.get(\"status\") in OPEN:\n": "        if True:\n",
+    "    return any(\"not done\" in line.lower() and mention.search(line) for line in lines)\n": "    return False\n",
+    "#%s(?!\\d)\"": "#%s\"",
+    "    if agent_of(payload) is not None or not is_armed(session):\n": "    if not is_armed(session):\n",
 }
 
 
@@ -1028,12 +1121,14 @@ MARKER_RULE = (
     "never carries that line",
     "`needs input`",
 )
+NAMING_RULE = ("on a line with `not done`, its `#<id>` and the reason", "in the same message as the `report: final` line")
 
 
 @pytest.mark.parametrize("skill", SKILLS)
 def test_each_skill_puts_the_report_marker_only_in_a_job_ending_report(skill):
     lines = (ROOT / "skills" / skill / "SKILL.md").read_text().splitlines()
     assert any(all(part in line for part in MARKER_RULE) for line in lines), skill
+    assert any(all(part in line for part in NAMING_RULE) for line in lines), skill
 
 
 # --- the README settings block (AC10) ----------------------------------------------------------

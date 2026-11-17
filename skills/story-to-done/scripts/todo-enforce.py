@@ -83,8 +83,9 @@ NOT_IN_PROGRESS = (
 )
 OPEN_ITEMS = (
     "todo-enforce: this final report was held back because these tasks you created are still open: {items}. "
-    "Complete each one with TaskUpdate, or name it on a line with \"not done\", its #<id> and the reason, "
-    "then report again."
+    "For each one, mark it in_progress with TaskUpdate if it is pending, then complete it, or name it "
+    "on a line with \"not done\", its #<id> and the reason in the same message as the report: final "
+    "line, then report again."
 )
 NO_SUBJECT = "(no subject)"
 
@@ -198,17 +199,16 @@ def task_status(session, task):
 
 
 def main_owned_tasks(session):
-    """The ids of the tasks the owner records mark main; none when no owner is recorded."""
+    """Yields the ids of the tasks the owner records mark main, reading each record only when the
+    caller asks for the next id; none when no owner is recorded."""
     try:
         tasks = os.listdir(os.path.join(state_dir(session), "owners"))
     except FileNotFoundError:
-        return []
-    owned = []
+        return
     for task in tasks:
         if task.startswith(".") or owner_of(session, task) != MAIN:
             continue
-        owned.append(task)
-    return owned
+        yield task
 
 
 def log_no_main_task():
@@ -341,8 +341,13 @@ def report_blocks_lock(session):
 
 
 def reset_report_blocks(session):
+    """Removes the block count under the count's lock; a session with no state directory has
+    no count to reset."""
+    if not os.path.isdir(state_dir(session)):
+        return
     try:
-        os.remove(report_blocks_path(session))
+        with report_blocks_lock(session):
+            os.remove(report_blocks_path(session))
     except FileNotFoundError:
         pass
     except OSError as exc:
@@ -374,7 +379,7 @@ def write_report_blocks(session, blocks):
 def open_main_items(session):
     """[(id, subject)] of the main-owned tasks whose task file reads pending or in_progress;
     an unreadable task file raises."""
-    tasks = main_owned_tasks(session)
+    tasks = list(main_owned_tasks(session))
     if not tasks:
         log_no_main_task()
     items = []
@@ -387,7 +392,8 @@ def open_main_items(session):
             raise ValueError("task %s file unreadable: %s: %s" % (task, type(exc).__name__, exc))
         if data.get("status") in OPEN:
             subject = data.get("subject")
-            items.append((task, subject if isinstance(subject, str) and subject else NO_SUBJECT))
+            subject = " ".join(subject.split()) if isinstance(subject, str) else ""
+            items.append((task, subject or NO_SUBJECT))
     return sorted(items, key=lambda item: (len(item[0]), item[0]))
 
 
@@ -421,7 +427,12 @@ def report_gate(payload, session):
 
 
 def on_stop(payload, session):
-    reason = report_gate(payload, session)
+    try:
+        reason = report_gate(payload, session)
+    except (OSError, ValueError) as exc:
+        log("allowing the stop, the report gate could not read the payload or the state: %s: %s"
+            % (type(exc).__name__, exc))
+        reason = None
     if reason is None:
         reset_report_blocks(session)
         return 0

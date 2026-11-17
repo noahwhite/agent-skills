@@ -117,6 +117,7 @@ In such a session it enforces three things on the main thread:
   A turn is a final report when the Stop payload's `last_assistant_message`, which in v2.1.326 holds the turn's last text block, has a line matching `^report: final\s*$`.
   Both skills end a report that ends the job (completed, failed or a terminal stop) with that bare line, and never write it in a `needs input` stop or any other question or pause to the owner.
   A task is named as not done by a line of that text containing `not done` (any case) and its `#<id>`, not preceded by a letter, digit or underscore and not followed by a digit, so `#1` never names task 12.
+  The gate reads only that text, so the `not done` lines belong in the same text block as the `report: final` line.
   The block lists each such task as `#<id> <subject>` and tells the model to complete it or name it, then report again.
   The gate checks the naming, not whether the stated reason is adequate.
   A question to the owner, a `needs input` stop or a pause on background work has no such line and is never blocked.
