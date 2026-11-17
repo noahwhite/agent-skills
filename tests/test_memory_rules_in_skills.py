@@ -1,12 +1,11 @@
 """SKL-233: five working rules moved from agent memory into the shared capability files.
 
-Each rule is pinned verbatim, as rendered text, at its home section and position, and its anchor
-occurs only once across `shared/` and every `skills/*/SKILL.md`, so a later edit that drops,
-weakens, hides, moves or duplicates it fails here.
+Each rule is pinned verbatim, as rendered text, at its home section and position, its home section
+carries no raw HTML, and its anchor occurs only once across `shared/` and every
+`skills/*/SKILL.md`, so a later edit that drops, weakens, hides, moves or duplicates it fails here.
 A cross-referenced target is checked for presence only, not pinned: its text belongs to other rules.
-Rendered text is the text of the CommonMark parse outside any HTML element: inline markup, link
-targets and titles, HTML tags and comments, text inside an HTML element, and image alt text do not
-count, and a code span keeps its backticks.
+Rendered text is the text of the CommonMark parse: inline markup, link targets and titles, HTML
+tags and image alt text do not count, and a code span keeps its backticks.
 """
 
 import re
@@ -21,37 +20,23 @@ ROOT = Path(__file__).resolve().parent.parent
 SHARED = ROOT / "shared"
 MARKDOWN = MarkdownIt("commonmark")
 EM_DASH = chr(0x2014)
-HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.S)
-HTML_OPEN_RE = re.compile(r"<([A-Za-z][\w-]*)\b[^>]*?(/?)>")
-HTML_CLOSE_RE = re.compile(r"</[A-Za-z][\w-]*\s*>")
-VOID_ELEMENTS = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"}
 
 
-def html_depth(html: str) -> int:
-    """How many HTML elements a raw HTML fragment leaves open (negative when it closes more)."""
-    html = HTML_COMMENT_RE.sub("", html)
-    opened = sum(
-        1 for tag, self_closing in HTML_OPEN_RE.findall(html)
-        if not self_closing and tag.lower() not in VOID_ELEMENTS
-    )
-    return opened - len(HTML_CLOSE_RE.findall(html))
+def collapse(text: str) -> str:
+    return re.sub(r"\s+", " ", text).strip()
 
 
 def rendered(inline: Token) -> str:
-    """The text of an inline token outside any HTML element, whitespace collapsed."""
-    parts, depth = [], 0
+    """The rendered text of an inline token, whitespace collapsed."""
+    parts = []
     for child in inline.children or []:
-        if child.type == "html_inline":
-            depth = max(0, depth + html_depth(child.content))
-        elif depth:
-            continue
-        elif child.type == "text":
+        if child.type == "text":
             parts.append(child.content)
         elif child.type == "code_inline":
             parts.append(f"`{child.content}`")
         elif child.type in ("softbreak", "hardbreak"):
             parts.append(" ")
-    return re.sub(r"\s+", " ", "".join(parts)).strip()
+    return collapse("".join(parts))
 
 
 @dataclass
@@ -60,8 +45,9 @@ class Doc:
     headings: list[str] = field(default_factory=list)
     lists: dict[str, list[list[str]]] = field(default_factory=dict)
     paragraphs: dict[str, list[str]] = field(default_factory=dict)
-    # Every rendered unit once: each heading, each whole top-level bullet, and each other paragraph.
-    units: list[str] = field(default_factory=list)
+    html: dict[str, bool] = field(default_factory=dict)
+    # Every heading, paragraph and HTML block in document order, for counting anchors.
+    flow: list[str] = field(default_factory=list)
 
     def section(self, heading: str) -> list[list[str]]:
         """The top-level bullet lists under a heading that occurs exactly once."""
@@ -73,6 +59,16 @@ class Doc:
     def bullets(self, heading: str) -> list[str]:
         return [item for group in self.section(heading) for item in group]
 
+    def home(self, heading: str) -> list[str]:
+        """The bullets of a rule's home section, which must carry no raw HTML that could hide text."""
+        items = self.bullets(heading)
+        if self.html[heading]:
+            raise AssertionError(f"{self.path}: section {heading!r} carries raw HTML")
+        return items
+
+    def text(self) -> str:
+        return collapse(" ".join(self.flow))
+
 
 PREAMBLE = ""  # the section key for content before the first heading
 
@@ -82,32 +78,33 @@ def parse(path: Path) -> Doc:
 
     Every heading at document level opens a section; a heading nested in a list item or quote does
     not. A bullet item's text is its own paragraphs only, not a nested list or quote inside it.
-    Content before the first heading belongs to the PREAMBLE section, and blocks inside an HTML
-    element left open by an HTML block are skipped.
+    Content before the first heading belongs to the PREAMBLE section.
     """
-    doc = Doc(path=path, lists={PREAMBLE: []}, paragraphs={PREAMBLE: []})
-    current, opened, item, in_bullets, html_open = PREAMBLE, None, None, False, 0
+    doc = Doc(path=path, lists={PREAMBLE: []}, paragraphs={PREAMBLE: []}, html={PREAMBLE: False})
+    current, opened, item, in_bullets = PREAMBLE, None, None, False
     for token in MARKDOWN.parse(path.read_text(encoding="utf-8")):
         if token.type == "html_block":
-            html_open = max(0, html_open + html_depth(token.content))
+            doc.html[current] = True
+            doc.flow.append(token.content)
         elif token.type in ("heading_open", "paragraph_open"):
-            opened = None if html_open else token
+            opened = token
         elif token.type == "inline" and opened is not None:
             text = rendered(token)
-            if opened.type == "heading_open":
-                doc.units.append(text)
-                if opened.level == 0:
-                    current = text
-                    doc.headings.append(current)
-                    doc.lists.setdefault(current, [])
-                    doc.paragraphs.setdefault(current, [])
-            elif opened.type == "paragraph_open":
-                doc.paragraphs[current].append(text)
-                if item is not None and opened.level == 2:
-                    group = doc.lists[current][-1]
-                    group[item] = f"{group[item]} {text}".strip()
-                else:
-                    doc.units.append(text)
+            doc.flow.append(text)
+            if opened.type == "heading_open" and opened.level == 0:
+                current = text
+                doc.headings.append(current)
+                doc.lists.setdefault(current, [])
+                doc.paragraphs.setdefault(current, [])
+                doc.html.setdefault(current, False)
+            else:
+                if any(child.type == "html_inline" for child in token.children or []):
+                    doc.html[current] = True
+                if opened.type == "paragraph_open":
+                    doc.paragraphs[current].append(text)
+                    if item is not None and opened.level == 2:
+                        group = doc.lists[current][-1]
+                        group[item] = f"{group[item]} {text}".strip()
             opened = None
         elif token.type == "bullet_list_open" and token.level == 0:
             doc.lists[current].append([])
@@ -116,7 +113,6 @@ def parse(path: Path) -> Doc:
             doc.lists[current][-1].append("")
             item = len(doc.lists[current][-1]) - 1
         elif token.type == "bullet_list_close" and token.level == 0:
-            doc.units.extend(doc.lists[current][-1])
             item, in_bullets = None, False
     return doc
 
@@ -138,8 +134,10 @@ def source_docs() -> list[Doc]:
 
 
 def assert_once(anchor: str) -> None:
-    hits = sum(text.count(anchor) for doc in source_docs() for text in doc.units)
+    """The anchor occurs once in the text of all sources, however it is split across blocks."""
+    hits = sum(doc.text().count(anchor) for doc in source_docs())
     assert hits == 1, f"{anchor!r} occurs {hits} times in shared/ and skills/*/SKILL.md"
+
 
 
 # --- K1 and K2: shared/engineering-practice.md --------------------------------------------------
@@ -164,7 +162,7 @@ K2 = (
 
 
 def test_k1_over_reading_follows_the_search_bullet() -> None:
-    items = parse(SHARED / "engineering-practice.md").bullets("Reuse and study existing code")
+    items = parse(SHARED / "engineering-practice.md").home("Reuse and study existing code")
     assert items[0].startswith("Before writing code for an operation"), "the search bullet must stay first"
     assert_rule(items[1], K1)
     assert any(item.startswith("When porting") for item in items[2:]), "the porting bullet must stay below K1"
@@ -177,7 +175,7 @@ def test_k1_cross_reference_resolves() -> None:
 
 
 def test_k2_why_is_x_needed_follows_change_exactly_what_was_asked() -> None:
-    items = parse(SHARED / "engineering-practice.md").bullets("Make minimal, durable changes")
+    items = parse(SHARED / "engineering-practice.md").home("Make minimal, durable changes")
     asked = index_of(items, "Change exactly what was asked")
     assert_rule(items[asked + 1], K2)
     assert_once(K2[:80])
@@ -197,7 +195,9 @@ K3 = (
 
 
 def test_k3_delegation_sits_in_the_clean_and_neutral_block() -> None:
-    block = parse(SHARED / "code-review.md").section("Review of record")[0]
+    doc = parse(SHARED / "code-review.md")
+    doc.home("Review of record")
+    block = doc.section("Review of record")[0]
     assert block[0].startswith("Clean:")
     assert block[1].startswith("Neutral:")
     assert_rule(block[2], K3)
@@ -229,8 +229,10 @@ K4 = [
 def test_k4_named_story_keys_follows_team_resolution() -> None:
     doc = parse(SHARED / "linear.md")
     doc.section("Team resolution")
-    assert doc.headings[doc.headings.index("Team resolution") + 1] == "Named story keys"
-    items = doc.bullets("Named story keys")
+    items = doc.home("Named story keys")
+    assert doc.headings[doc.headings.index("Team resolution") + 1] == "Named story keys", (
+        f"{doc.path}: \"Named story keys\" must directly follow \"Team resolution\""
+    )
     assert len(items) == len(K4)
     for item, expected in zip(items, K4):
         assert_rule(item, expected)
@@ -238,20 +240,23 @@ def test_k4_named_story_keys_follows_team_resolution() -> None:
 
 
 def test_k4_cross_reference_resolves() -> None:
-    """Every skill's `STORY_ID` argument rule still carries the "never guess" line K4 points to."""
-    argument_rules = {
-        md.parent.name: text
-        for md in sorted(ROOT.glob("skills/*/SKILL.md"))
-        for text in parse(md).units
-        if re.match(r"(This skill takes one argument, `STORY_ID`:|`STORY_ID` is required:)", text)
-    }
-    assert argument_rules, "no skill declares a `STORY_ID` argument rule"
+    """Every skill that mentions `STORY_ID` has exactly one `STORY_ID` argument rule, and it carries
+    the "never guess" line K4 points to."""
+    declaration = re.compile(r"(This skill takes one argument, `STORY_ID`:|`STORY_ID` is required:)")
     never_guess = re.compile(
         r" If none was given, ask the (user|owner) for one before doing anything else; "
         r"never guess (a story number|an issue key)\."
     )
-    missing = [skill for skill, text in argument_rules.items() if not never_guess.search(text)]
-    assert not missing, f"`STORY_ID` argument rule without the never-guess line in: {missing}"
+    skills = [md for md in sorted(ROOT.glob("skills/*/SKILL.md")) if "STORY_ID" in md.read_text(encoding="utf-8")]
+    assert skills, "no skill mentions `STORY_ID`"
+    problems = []
+    for md in skills:
+        rules = [p for ps in parse(md).paragraphs.values() for p in ps if declaration.match(p)]
+        if len(rules) != 1:
+            problems.append(f"{md.parent.name}: {len(rules)} `STORY_ID` argument rules")
+        elif not never_guess.search(rules[0]):
+            problems.append(f"{md.parent.name}: argument rule without the never-guess line")
+    assert not problems, problems
 
 
 # --- K5: shared/github.md ---------------------------------------------------------------------
@@ -276,9 +281,11 @@ K5 = [
 
 def test_k5_read_repo_facts_sits_between_tooling_and_branching() -> None:
     doc = parse(SHARED / "github.md")
-    items = doc.bullets("Read repo facts from the remote")
+    items = doc.home("Read repo facts from the remote")
     at = doc.headings.index("Read repo facts from the remote")
-    assert doc.headings[at - 1 : at + 2] == ["Tooling", "Read repo facts from the remote", "Branching and worktrees"]
+    assert doc.headings[at - 1 : at + 2] == ["Tooling", "Read repo facts from the remote", "Branching and worktrees"], (
+        f"{doc.path}: \"Read repo facts from the remote\" must sit between \"Tooling\" and \"Branching and worktrees\""
+    )
     assert len(items) == len(K5)
     for item, expected in zip(items, K5):
         assert_rule(item, expected)
