@@ -18,6 +18,9 @@ Read this when diagnosing, implementing, testing, or fixing code, or when changi
 
 - Ship only durable root-cause fixes; never a workaround, temporary unblock, or bypass.
 - Change exactly what was asked; do not tear down working functionality and rebuild it.
+- A "why is X needed" question is a genuine question, not an instruction to remove X.
+  Before agreeing or removing X, state what X does and what fails without it; when X is needed, say so and change nothing.
+  Remove X only when that reasoning shows it is unneeded and the removal is within what was asked.
 - When a mechanism works in one context and fails in another, the fault is the context (who can read the secret, what the runner can reach), not the mechanism.
   Fix the context; never rewrite the working mechanism on a theory.
 - Before changing a working credential, auth, or transport path, find a recent successful run.
@@ -61,6 +64,9 @@ Read this when diagnosing, implementing, testing, or fixing code, or when changi
 ## Reuse and study existing code
 
 - Before writing code for an operation (API call, CLI invocation, auth flow, secret operation), search the codebase for a working implementation; reuse it directly or extract it into a shared unit (see DRY below), and where only its shape applies (a different endpoint or resource), follow its pattern exactly.
+- When the source pattern found by the search above has been read in this session and every substitution is known (names, identifiers, paths), write the output, and read another file only to obtain a named missing fact, never for confirmation or completeness.
+  The full read stays when a substitution is unknown, when the target crosses a transaction, dependency-injection or credential boundary ("When mirroring a proven handler" in "Fix the whole class, not the first instance"), or when this is the first read of the source (the porting bullet below).
+  This bounds re-reading a known template only, and never limits reading an authoritative source before asserting a fact.
 - Apply DRY (Don't Repeat Yourself): when the logic you need already exists, call it, or extract it into a shared function, module, or script that every caller uses, rather than copying it.
   Each copy is another place a later fix must reach; look for these opportunities in every change, including duplicates your own diff introduces.
 - Read the repo's decision records (ADRs or equivalent) before design work in an area they cover, and cite the ones that apply; the design is often already decided.
