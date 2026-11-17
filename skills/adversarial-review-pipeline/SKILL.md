@@ -218,13 +218,37 @@ Its dossier asks for both jobs and demands execution rather than reasoning:
 ## Phase 3: arbitration
 
 ```bash
-"$PIPELINE" run arbitrate --base "$BASE" --model "<profile.review.pre_pr.arbiter model>" --spec "$SPEC" --scratch "$scratch" --agent-cmd "<template>"
+"$PIPELINE" run arbitrate --base "$BASE" --model "<profile.review.pre_pr.arbiter model>" --agent "<profile.review.pre_pr.arbiter name>" --spec "$SPEC" --scratch "$scratch" --agent-cmd "<template>"
 ```
 
 Its dossier carries the story, the diffstat, both phase reports, the base and head, and the path of its own read-only checkout, but no diff: the arbiter reads the diff and any file it needs in that checkout.
 The arbiter filters hallucinations and unexploitable edge cases, weighs Phase-2 empirical results over Phase-1 theory, surfaces cross-module and architectural regressions, writes the report, and states which categories it found clean.
 Its output is the gate's deliverable.
-Record the arbiter's agent name and model at the top of the report.
+
+### Arbiter identity and retained rounds
+
+The script, not the model, records who arbitrated.
+When it accepts an arbitrate phase, whether from `run arbitrate` or from `record arbitrate` after a subagent wrote the report, it writes three lines directly after the unchanged first line `REVIEW-RAN: yes` and before it stamps the artifact:
+
+```text
+ARBITER-AGENT: <name>
+ARBITER-MODEL: <model id exactly as given by --model>
+ARBITER-HEAD: <full HEAD SHA>
+```
+
+- `--agent NAME` (`ADVERSARIAL_AGENT`) carries the name of the `profile.review.pre_pr.arbiter` entry, and `--model ID` its model; `--agent` wins when both it and `ADVERSARIAL_AGENT` are set.
+  Pass both on `run arbitrate` and on `record arbitrate`.
+- An absent or empty `--agent` or `--model` value is written as `not-supplied`; a reader treats `not-supplied` in either field as a missing field.
+- `ARBITER-HEAD` is the HEAD when the script runs, so `record arbitrate` must run at the reviewed head: never record a report after moving the branch.
+- A report whose first line is not `REVIEW-RAN: yes` fails as before (exit 17) and writes and retains nothing.
+
+Every accepted arbitration is retained as an immutable, read-only copy of the stamped report in `<git common dir>/adversarial-pipeline/arbitration-rounds`, where `<git common dir>` is the absolute output of `git rev-parse --git-common-dir`.
+That directory belongs to the clone, not to the run directory, `--scratch` or the worktree, so every worktree of the clone resolves the same directory and removing a worktree loses nothing; a linked worktree's own `git rev-parse --git-path adversarial-pipeline` is under that worktree's git directory, which is why the run state is not used.
+The copy is named `round-<UTC timestamp>-<full HEAD SHA>-<first 12 hex of the report sha256>-<n>.md`, with the timestamp as `date -u +%Y%m%dT%H%M%SZ`.
+It is written to a temporary file in that directory and published with a no-clobber hard link; when the name exists the next `<n>` is tried, so two byte-identical arbitrations at one head leave two files and nothing is overwritten.
+Any failure to write or publish it fails the phase (exit 21): the stamp is removed and the report is restored as the agent wrote it, so the phase is not accepted.
+On acceptance the script prints `Retained arbitration report -> <path>` on stderr with the copy's absolute path; stdout still carries the artifact alone.
+No re-run, discard or `cleanup` removes a retained copy: a re-run of arbitration at an unchanged head discards `phase3-arbitration.md`, and the retained copy keeps the earlier round countable.
 
 ## Phase 4: fix, prove the mutants, one bounded re-verify
 

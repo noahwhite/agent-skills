@@ -10,11 +10,12 @@
 # Usage:
 #   run-adversarial-pipeline.sh preflight --base REF [--test-cmd CMD] [--test-dir DIR] [--scratch DIR]
 #   run-adversarial-pipeline.sh run <sweep|hunt|arbitrate> --base REF --agent-cmd TEMPLATE
-#                               [--model ID] [--probe-cmd TEMPLATE] [--probe-timeout SECONDS]
+#                               [--model ID] [--agent NAME] [--probe-cmd TEMPLATE] [--probe-timeout SECONDS]
 #                               [--spec FILE] [--no-sweep] [--scratch DIR] [--timeout SECONDS]
 #   run-adversarial-pipeline.sh dossier <sweep|hunt|arbitrate> --base REF [--spec FILE] [--no-sweep] [--scratch DIR]
 #                               # also creates the phase's checkout and prints 'CHECKOUT: <path>' on stderr
-#   run-adversarial-pipeline.sh record <sweep|hunt|arbitrate> --base REF [--model ID] [--spec FILE] [--no-sweep]  # accept a subagent's report
+#   run-adversarial-pipeline.sh record <sweep|hunt|arbitrate> --base REF [--model ID] [--agent NAME] [--spec FILE] [--no-sweep]
+#                               # accept a subagent's report
 #   run-adversarial-pipeline.sh checkout --base REF [--scratch DIR]   # an extra throwaway detached worktree at HEAD
 #   run-adversarial-pipeline.sh cleanup <checkout-path>               # removes a checkout this script made
 #   run-adversarial-pipeline.sh paths --base REF                      # prints this run's artifact paths,
@@ -111,8 +112,33 @@
 # prints one WARNING and changes no exit status or acceptance.
 #
 # Env equivalents: ADVERSARIAL_REPO, ADVERSARIAL_TEST_CMD, ADVERSARIAL_TEST_DIR, ADVERSARIAL_BASE,
-# ADVERSARIAL_SPEC_FILE, ADVERSARIAL_SCRATCH, ADVERSARIAL_AGENT_CMD, ADVERSARIAL_MODEL,
+# ADVERSARIAL_SPEC_FILE, ADVERSARIAL_SCRATCH, ADVERSARIAL_AGENT_CMD, ADVERSARIAL_MODEL, ADVERSARIAL_AGENT,
 # ADVERSARIAL_PROBE_CMD, ADVERSARIAL_PROBE_TIMEOUT (30), ADVERSARIAL_TIMEOUT (900).
+#
+# Arbiter identity and retention: --agent NAME (ADVERSARIAL_AGENT) carries the name of the profile
+# arbiter entry; --agent wins over ADVERSARIAL_AGENT when both are set, and it must not contain control
+# characters. When the script accepts an arbitrate phase, on `run` or on `record`, it (not the model)
+# writes three lines directly after the unchanged first line 'REVIEW-RAN: yes' and before it stamps
+# the artifact:
+#   ARBITER-AGENT: <name>
+#   ARBITER-MODEL: <model id exactly as given by --model>
+#   ARBITER-HEAD: <full HEAD SHA>
+# An absent or empty --agent or --model value is written as not-supplied. ARBITER-HEAD is the HEAD
+# when the script runs, so run `record arbitrate` at the reviewed head. A report whose first line is
+# not 'REVIEW-RAN: yes' fails as before and writes and retains nothing. The accepted, stamped report
+# is then retained as an immutable (read-only) copy in
+#   <git common dir>/adversarial-pipeline/arbitration-rounds
+# where <git common dir> is the absolute `git rev-parse --git-common-dir`, so every worktree of the
+# clone resolves the same directory, independent of the run directory, --scratch and the worktree:
+#   round-<UTC timestamp>-<full HEAD SHA>-<first 12 hex of the report sha256>-<n>.md
+# The timestamp is `date -u +%Y%m%dT%H%M%SZ`. The copy is written to a temporary file in that
+# directory and published with a no-clobber hard link; when the name exists the next <n> is tried,
+# so two byte-identical arbitrations at one head leave two files and nothing is overwritten. Any
+# failure to write or publish the copy fails the phase (exit 21): the stamp is removed and the report
+# is restored as the agent wrote it. An accepted phase prints
+#   Retained arbitration report -> <path>
+# on stderr, the absolute path of the copy; stdout still carries the artifact alone. No re-run,
+# discard or `cleanup` removes a retained copy.
 #
 # --model ID (ADVERSARIAL_MODEL) is the model id this phase was given, quoted whole into the probe
 # and echoed on every line as a label in which anything outside letters, digits and . _ / : @ # + ~
@@ -199,7 +225,8 @@
 # 12 bad base, 13 missing or invalid prior artifact, 14 cleanup refused, 15 agent command failed
 # or wrote no fresh report, 17 agent ran blind (sandbox error on its stderr, or no `REVIEW-RAN: yes`
 # first line), 18 the agent changed the primary checkout, 19 the phase was killed by --timeout,
-# 20 the phase's availability check failed before any agent ran. An accepted arbitration report that
+# 20 the phase's availability check failed before any agent ran, 21 the arbitrate phase could not
+# write its identity lines or retain its accepted report (not accepted). An accepted arbitration report that
 # cannot be written to stdout still exits 1, as it did before the completion-line work; the message
 # names the stamped artifact so a driver does not re-run the model call.
 # A checkout that cannot be created exits with git's own status, which is what that path did before
@@ -277,6 +304,7 @@ AGENT_CMD="${ADVERSARIAL_AGENT_CMD:-}"
 TIMEOUT="${ADVERSARIAL_TIMEOUT:-900}"
 MODEL="${ADVERSARIAL_MODEL:-}"
 MODEL_SET=0
+ARBITER_AGENT="${ADVERSARIAL_AGENT:-}"
 PROBE_CMD="${ADVERSARIAL_PROBE_CMD:-}"
 PROBE_TIMEOUT="${ADVERSARIAL_PROBE_TIMEOUT:-30}"
 PROBE_SET=0
@@ -284,7 +312,7 @@ NO_SWEEP=0
 SCRATCH_SET=0
 while [ $# -gt 0 ]; do
   case "$1" in
-    --repo|--base|--spec|--test-cmd|--test-dir|--scratch|--agent-cmd|--timeout|--model|--probe-cmd|--probe-timeout)
+    --repo|--base|--spec|--test-cmd|--test-dir|--scratch|--agent-cmd|--agent|--timeout|--model|--probe-cmd|--probe-timeout)
       [ $# -ge 2 ] || die 2 "$1 needs a value"
       case "$1" in
         --repo) REPO="$2" ;;
@@ -294,6 +322,7 @@ while [ $# -gt 0 ]; do
         --test-dir) TEST_DIR="$2" ;;
         --scratch) SCRATCH="$2"; SCRATCH_SET=1 ;;
         --agent-cmd) AGENT_CMD="$2" ;;
+        --agent) ARBITER_AGENT="$2" ;;
         --timeout) TIMEOUT="$2" ;;
         --model) MODEL="$2"; MODEL_SET=1 ;;
         --probe-cmd) PROBE_CMD="$2"; PROBE_SET=1 ;;
@@ -331,6 +360,9 @@ fi
 # better than printing a line it could forge.
 case "$MODEL" in
   *[[:cntrl:]]*) die 2 "--model must not contain control characters; pass the model id on one line" ;;
+esac
+case "$ARBITER_AGENT" in
+  *[[:cntrl:]]*) die 2 "--agent (ADVERSARIAL_AGENT) must not contain control characters; pass the agent name on one line" ;;
 esac
 # The label is printed by every command, so any character that could forge a field or a line is
 # mapped to '_' here; the model id's own shell metacharacters are still quoted whole into the probe.
@@ -575,7 +607,73 @@ accept_phase() {  # $1 = phase, $2 = stderr log or "": validate a freshly writte
   if [ "$(primary_state)" != "$(cat -- "$RUN_DIR/$1.primary")" ]; then
     die 18 "the primary checkout ($ROOT) changed while the $1 agent ran; this phase is not accepted. Inspect 'git status' there."
   fi
-  stamp "$1"
+  if [ "$1" = "arbitrate" ]; then
+    stamp_and_retain_arbitration
+  else
+    stamp "$1"
+  fi
+}
+
+# Arbitration identity and retention (see "Arbiter identity and retention" in the header). The
+# report's first line was already checked; this writes the three identity lines after it, stamps the
+# report, and publishes an immutable copy. Any failure restores the report as the agent wrote it and
+# removes the stamp, so the phase is not accepted and a retried `record` starts from the same report.
+# The retained path goes to fd 3, which each caller points at the script's own stderr.
+ARBITRATION_ROUNDS="$COMMON_DIR/adversarial-pipeline/arbitration-rounds"
+stamp_and_retain_arbitration() {
+  local art first original headed dest
+  art="$(artifact_for arbitrate)"
+  original="$(mktemp -p "$RUN_DIR" arbitrate-original.XXXXXX)" \
+    || die 21 "could not save the arbitration report before writing its identity lines; nothing was written or retained."
+  if ! cp -p -- "$art" "$original"; then
+    rm -f -- "$original"
+    die 21 "could not save the arbitration report before writing its identity lines; nothing was written or retained."
+  fi
+  if ! headed="$(mktemp -p "$RUN_DIR" arbitrate-headed.XXXXXX)" \
+    || ! { IFS= read -r first < "$art" || [ -n "$first" ]; } \
+    || ! { printf '%s\nARBITER-AGENT: %s\nARBITER-MODEL: %s\nARBITER-HEAD: %s\n' "$first" \
+             "${ARBITER_AGENT:-not-supplied}" "${MODEL:-not-supplied}" "$HEAD_SHA"
+           tail -n +2 -- "$art"; } > "$headed" \
+    || ! mv -f -- "$headed" "$art"; then
+    rm -f -- "${headed:-}" "$original"
+    die 21 "could not write the arbiter identity lines into $art; the phase is not accepted."
+  fi
+  if ! stamp arbitrate || ! dest="$(retain_arbitration "$art")"; then
+    rm -f -- "$art.stamp"
+    mv -f -- "$original" "$art" || echo "WARNING: could not restore $art as the agent wrote it" >&2
+    die 21 "could not retain the accepted arbitration report under $ARBITRATION_ROUNDS; the phase is not accepted."
+  fi
+  rm -f -- "$original"
+  printf 'Retained arbitration report -> %s\n' "$dest" >&3
+}
+
+# Publishes an immutable copy of $1 as round-<UTC timestamp>-<HEAD>-<sha12>-<n>.md: written to a
+# temporary file in the retention directory, then hard-linked into place, which fails rather than
+# overwrites when the name exists; on that failure the next <n> is tried. Prints the published path.
+retain_arbitration() {
+  local src="$1" ts sha12 tmp dest n=1
+  mkdir -p -- "$ARBITRATION_ROUNDS" || return 1
+  ts="$(date -u +%Y%m%dT%H%M%SZ)" && [ -n "$ts" ] || return 1
+  sha12="$(sha_of "$src" | cut -c1-12)" && [ "${#sha12}" -eq 12 ] || return 1
+  tmp="$(mktemp -p "$ARBITRATION_ROUNDS" .round-tmp.XXXXXX)" || return 1
+  if ! cat -- "$src" > "$tmp" || ! chmod 0444 -- "$tmp"; then
+    rm -f -- "$tmp"
+    return 1
+  fi
+  while :; do
+    dest="$ARBITRATION_ROUNDS/round-$ts-$HEAD_SHA-$sha12-$n.md"
+    if ln -T -- "$tmp" "$dest" 2>/dev/null; then
+      break
+    fi
+    if [ ! -e "$dest" ] && [ ! -L "$dest" ]; then
+      echo "ERROR: could not publish the retained arbitration report as $dest" >&2
+      rm -f -- "$tmp"
+      return 1
+    fi
+    n=$(( n + 1 ))
+  done
+  rm -f -- "$tmp" || echo "WARNING: could not remove the temporary file $tmp" >&2
+  printf '%s\n' "$dest"
 }
 
 # The dossier and checkouts live outside .git: some agent runtimes refuse to read files under a
@@ -1581,7 +1679,7 @@ case "$cmd" in
     rc_accept=0
     reason_file="$(mktemp -p "$RUN_DIR" record-reason.XXXXXX)" \
       || die 2 "could not create a status file in the run directory"
-    ( accept_phase "$phase" "" ) 2> "$reason_file" || rc_accept=$?
+    ( accept_phase "$phase" "" ) 3>&2 2> "$reason_file" || rc_accept=$?
     if [ "$rc_accept" -ne 0 ]; then
       diagnose_phase "$phase" "$rc_accept" "$(cat -- "$reason_file" 2>/dev/null || true)" "$(artifact_for "$phase")"
       rm -f -- "$reason_file"
@@ -1689,7 +1787,7 @@ case "$cmd" in
     rc_accept=0
     reason_file="$(mktemp -p "$RUN_DIR" accept-reason.XXXXXX)" \
       || fail_phase 2 "could not create a status file in the run directory"
-    ( accept_phase "$phase" "$errlog" ) 2> "$reason_file" || rc_accept=$?
+    ( accept_phase "$phase" "$errlog" ) 3>&2 2> "$reason_file" || rc_accept=$?
     if [ "$rc_accept" -ne 0 ]; then
       fail_phase "$rc_accept" "$(cat -- "$reason_file" 2>/dev/null || true)"
     fi
