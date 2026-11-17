@@ -63,7 +63,7 @@ git worktree remove <scratch>/skill-7a6cb17
 ```
 
 The runner lists cases from the harness checkout, never from `<checkout>`, so a baseline commit that predates a case still runs it.
-It refuses a harness or skill checkout with any uncommitted change, tracked or untracked, because the commit it records would not describe the run; only the suite's own uncommitted records under a `results/` directory are allowed.
+It refuses a harness or skill checkout with any uncommitted change, tracked or untracked, because the commit it records would not describe the run; only the suite's own records under a `results/` directory are allowed, untracked or with an unstaged modification; a record staged, deleted, renamed or unmerged is refused.
 
 A run that stopped before writing its summary is continued with `--resume` and the same arguments and environment: each attempt that already has both records is counted from them instead of running again.
 Resume refuses a record whose label, commits, model, reasoning effort or agent command differ from this run's, a record whose outcome or verdicts are not the ones its exit code and grades give (a verdict line that redaction rewrote keeps the recorded verdict), and a record of a broken attempt.
@@ -78,7 +78,7 @@ A run without `--resume` refuses a label that already has records, and no run wr
   Its record names the runner's classified reason (`run.sh exited 2: void`, or `run.sh did not finish within N seconds`), never text from `run.sh`; the first `HARNESS:` or `run.sh:` line `run.sh` wrote to stderr goes to the operator's stderr only.
 - The exit status is the scenario's verdict; only a scenario with further grades is counted from its grade files, and its status must still be 0 exactly when every grade passes.
 - Any other exit status, further grades without the scenario's own `grader-output.txt`, further grade files that contradict the status, or grades that differ from an earlier graded attempt's of the same scenario mean the case or the machine is broken: the attempt is recorded with outcome `error` and the suite stops with exit 1, writing no summary.
-- Before each attempt and before the summary, the runner checks that both checkouts are still clean and at their commits; a checkout an attempt changed stops the suite with exit 1.
+- Before each attempt and before the summary, the runner checks that both checkouts are still clean and at their commits, with every committed record as it was when the run started; a checkout an attempt changed, a committed record included, stops the suite with exit 1.
 - A case that names a scenario twice is refused.
 - The runner exits 0 when every scenario has N graded runs, 1 when any has fewer or it stopped on a broken attempt, and 2 when it refuses to start or would overwrite a file.
 

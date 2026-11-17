@@ -96,7 +96,8 @@ sys.exit(0 if ok else 1)
 # The stub agent: pass and fail record one call; void-once is void on its first attempt only,
 # void-thrice on its first three; void-always is void every time; hang outlives any deadline;
 # bad-bytes records a byte that is not UTF-8; dirty-once changes CHECKOUT on its first attempt
-# and is void, as a real run.sh voids an agent that changed it. It writes its run directory into
+# and is void, as a real run.sh voids an agent that changed it; record-once and mode-once do the same
+# to the committed record STUB_RECORD names, by its content or its mode. It writes its run directory into
 # the call, so the record shows whether the runner normalised the path, and the CANARY or EVAL_CANARY variable
 # into evidence.json, so the record shows what environment it got. evidence.json holds its run directory
 # after an escaped newline, as messages.json holds a path that starts a line, and for pass also behind
@@ -120,6 +121,8 @@ case "$scenario" in
   hang) sleep 30; action=pass ;;
   bad-bytes) action=pass ;;
   dirty-once) [ "$count" -gt 1 ] || { echo dirt > "$checkout/dirt.txt"; exit 3; }; action=pass ;;
+  record-once) [ "$count" -gt 1 ] || { echo overwritten > "$STUB_RECORD"; exit 3; }; action=pass ;;
+  mode-once) [ "$count" -gt 1 ] || { chmod 700 "$STUB_RECORD"; exit 3; }; action=pass ;;
 esac
 printf '{"action": "%s", "run_dir": "%s", "id": "%s"}\n' "$action" "$run" "$STUB_UUID" > "$run/actions.jsonl"
 if [ "$scenario" = bad-bytes ]; then printf '\xff\n' >> "$run/actions.jsonl"; fi
@@ -653,6 +656,27 @@ def test_an_attempt_that_changes_a_checkout_stops_the_suite(suite) -> None:
     result = suite["run"]("--runs", "1", str(suite["checkout"]), "lab-1")
     assert result.returncode == 1 and "after an attempt of this run changed it" in result.stderr, result.stderr
     assert int((suite["state"] / "dirty-once").read_text(encoding="utf-8")) == 1, "no attempt runs against the changed checkout"
+    assert not (suite["evals"] / "results" / "suite-lab-1.md").exists()
+
+
+# A committed record the run started with, clean or with an unstaged modification, is allowed;
+# an attempt that then changes its content or mode changed the harness, so the suite stops.
+@pytest.mark.parametrize("scenario, edited_first", [("record-once", False), ("record-once", True),
+                                                     ("mode-once", False)])
+def test_an_attempt_that_changes_a_committed_record_stops_the_suite(suite, scenario: str, edited_first: bool) -> None:
+    suite["recommit"](scenario)
+    record = suite["evals"] / "results" / "suite-a.md"
+    record.parent.mkdir(exist_ok=True)
+    record.write_text("a record\n")
+    commit_all(suite["harness"])
+    if edited_first:
+        record.write_text("edited before the run\n")
+    result = suite["run"]("--runs", "1", str(suite["checkout"]), "lab-1", STUB_RECORD=str(record),
+                          EVAL_PASS_ENV="STUB_STATE STUB_UUID STUB_RECORD")
+    assert result.returncode == 1, result.stderr
+    assert ("committed records an attempt of this run changed (skills/story-to-done/evals/results/suite-a.md)"
+            in result.stderr), result.stderr
+    assert int((suite["state"] / scenario).read_text(encoding="utf-8")) == 1, "no attempt runs against the changed record"
     assert not (suite["evals"] / "results" / "suite-lab-1.md").exists()
 
 

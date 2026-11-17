@@ -13,6 +13,7 @@ on a broken attempt, 2 the suite refused to start or would have overwritten a fi
 
 import argparse
 import ast
+import hashlib
 import importlib.util
 import json
 import os
@@ -134,6 +135,20 @@ def commit_of(repo: Path, role: str) -> tuple[Path, str, str]:
         raise Refused(f"the {role} checkout {root} has uncommitted changes ({', '.join(changed[:5])}), "
                       "so its commit would not describe the run")
     return root, git(root, "rev-parse", "HEAD"), git(root, "rev-parse", "--short=7", "HEAD")
+
+
+def edited_records(root: Path) -> dict[str, tuple[int, str]]:
+    """Each committed record with an unstaged modification, by path, as its file mode and content
+    hash. The suite only ever writes new records, so a change to this set during a run is a
+    change an attempt made, not the suite's own output."""
+    status = git(root, "status", "--porcelain", "--untracked-files=no", strip=False).splitlines()
+    edited = {}
+    for path in (line[3:] for line in status if line[:2] == " M" and is_record(line[3:])):
+        try:
+            edited[path] = ((root / path).lstat().st_mode, hashlib.sha256((root / path).read_bytes()).hexdigest())
+        except OSError:
+            edited[path] = (0, "unreadable")
+    return edited
 
 
 def parse(argv: list[str]) -> argparse.Namespace:
@@ -547,6 +562,7 @@ def main(argv: list[str]) -> int:
                       "or --resume with the arguments that run started with")
     harness, harness_commit, harness_short = commit_of(EVALS, "harness")
     checkout, checkout_commit, checkout_short = commit_of(args.checkout, "skill")
+    edited = {harness: edited_records(harness), checkout: edited_records(checkout)}
     cases = args.cases or sorted(path.parent.name for path in EVALS.glob("*/case.yaml"))
     specs = {}
     for case in cases:
@@ -569,7 +585,8 @@ def main(argv: list[str]) -> int:
 
     def unchanged() -> None:
         """Both checkouts are still at the commits the records name, with nothing uncommitted
-        but the suite's own records: an attempt that changed either stops the suite."""
+        but the suite's own records, and every committed record as it was when the run started:
+        an attempt that changed either stops the suite."""
         for repo, role, commit in ((harness, "harness", harness_commit), (checkout, "skill", checkout_commit)):
             try:
                 now = commit_of(repo, role)[1]
@@ -577,6 +594,12 @@ def main(argv: list[str]) -> int:
                 raise Broken(f"{error}, after an attempt of this run changed it") from None
             if now != commit:
                 raise Broken(f"the {role} checkout moved from {commit} to {now} during the run")
+            records = edited_records(repo)
+            if records != edited[repo]:
+                paths = sorted(path for path in records.keys() | edited[repo].keys()
+                               if records.get(path) != edited[repo].get(path))
+                raise Broken(f"the {role} checkout {repo} has committed records an attempt of this run "
+                             f"changed ({', '.join(paths[:5])})")
 
     try:
         for root in (harness, checkout):
