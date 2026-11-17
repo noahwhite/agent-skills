@@ -4,7 +4,7 @@
 
 Date: 2026-11-17 UTC, independent QA round 1.
 Path: `spike`, selected by `select-path.py` with the label `Spike` and the recorded `path: spike` line, so no environment or build SHA applies.
-Target: the deliverables the handoff note links, the "SKL-334 gap table" comment on SKL-334 and the "Go/No-Go" section inside it.
+Target: the deliverables the handoff note links, the "SKL-334 gap table" comment on SKL-334 (comment `e567e01c-c0b8-4b0c-80ee-e0c454130a72`, https://linear.app/officina-pub/issue/SKL-334/spike-review-agent-skills-testing-against-the-claude-code-verification#comment-e567e01c) and the "Go/No-Go" section inside it.
 Neither deliverable is a tracked file, so neither has a commit.
 The gap table reviews agent-skills at `ee17dfb64b44a59f4a5886177e3354ff5817e85c`, which `git merge-base --is-ancestor` confirmed on `origin/main`.
 Fixtures: none; QA made no model call and changed no repository setting.
