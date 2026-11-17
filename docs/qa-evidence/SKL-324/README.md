@@ -4,7 +4,8 @@
 
 Date: 2026-11-17 UTC, independent QA round 1.
 Target: `main` at `1f8d6338301f9e5966f6b6ddbf54104b4fe894ce`, the squash merge of PR 316, whose reviewed head is `938f2dba3a947b9c5dfa29f37e238d39e44b0dab`.
-`git merge-base --is-ancestor` confirmed the merged commit on `origin/main`, and `git diff --stat` between the reviewed head and the target is empty.
+`git merge-base --is-ancestor` confirmed the merged commit on `origin/main`.
+`git diff --stat` between the reviewed head and the target is empty outside `docs/qa-evidence/`; the only differences are the SKL-246 and SKL-334 evidence READMEs that reached `main` before the merge.
 Path: `no-deployment`, selected by `select-path.py` with the recorded `path: no-deployment` line, so no environment or build SHA applies.
 AC2 baseline: `skills/story-to-done/SKILL.md` steps 2 and 3 at the merge-base `ee17dfb64b44a59f4a5886177e3354ff5817e85c`.
 Fixtures: a detached worktree at the target; every render wrote only into throwaway scratch directories, and the failure cases ran on a canary copy of the skill.
