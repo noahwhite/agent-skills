@@ -2,6 +2,7 @@
 
 import ast
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -3399,7 +3400,17 @@ def rendered_brief(tmp_path: Path, case: tuple[str, ...]) -> str:
         capture_output=True, text=True, stdin=subprocess.DEVNULL,
     )
     assert result.returncode == 0, result.stderr
-    return Path(result.stdout.strip()).read_text()
+    brief = f"{role_dir}/{role_dir.name}-brief.md"
+    assert result.stdout == brief + "\n", result.stdout
+    return Path(brief).read_text()
+
+
+def test_the_render_cases_cover_every_role_and_path_the_renderer_accepts() -> None:
+    spec = importlib.util.spec_from_file_location("render_brief", RENDER_BRIEF)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    covered = {(case[case.index("--role") + 1], case[case.index("--path") + 1]) for case in RENDER_CASES.values()}
+    assert covered == {(role, path) for role in module.ROLES for path in module.PATHS}
 
 
 @pytest.mark.parametrize("name", ["brief-engineer.md", "brief-qa.md"])
@@ -3464,10 +3475,12 @@ STEP_3_UNNAMED_MIRROR = (
 def test_steps_2_and_3_send_an_unnamed_waiting_handback_to_the_reference() -> None:
     skill = visible(SKILL.read_text())
     step_2 = " ".join(section(skill, "2. Senior engineer: implement to deployment review").split())
+    step_3 = " ".join(section(skill, "3. QA agent: verify the deployed story").split())
+    assert step_2.count(STEP_2_UNNAMED_MIRROR) == 1
+    assert step_3.count(STEP_3_UNNAMED_MIRROR) == 1
     assert step_2.index(INTERIM_STEP_2_POINTER) < step_2.index(STEP_2_UNNAMED_MIRROR) < step_2.index(
         STEP_2_READ_BACK_FIRST
     )
-    step_3 = " ".join(section(skill, "3. QA agent: verify the deployed story").split())
     assert step_3.index(INTERIM_STEP_3_POINTER) < step_3.index(STEP_3_UNNAMED_MIRROR) < step_3.index(
         STEP_3_READ_BACK_FIRST
     )
@@ -3481,6 +3494,7 @@ STEP_0_UNNAMED_MIRROR = (
 
 def test_step_0_classifies_an_unnamed_waiting_handback_before_the_read_back() -> None:
     step_0 = " ".join(section(visible(SKILL.read_text()), "0. Track everything on a todo list").split())
+    assert step_0.count(STEP_0_UNNAMED_MIRROR) == 1
     assert step_0.index(INTERIM_STEP_0_POINTER) < step_0.index(STEP_0_UNNAMED_MIRROR) < step_0.index(
         STEP_0_CHECKLIST_READ
     )
@@ -3516,6 +3530,14 @@ def test_each_unnamed_and_checklist_contract_appears_exactly_once() -> None:
     text = interim_text()
     for sentence in UNNAMED_SENTENCES:
         assert text.count(sentence) == 1, sentence
+
+
+# SKL-357: a digest of the whole interim-handbacks reference, so an added overriding sentence fails too.
+INTERIM_SHA256 = "9918637916c5941a58bef867eb57a4590741bbb50df0ecc207808d5c13c65d5f"
+
+
+def test_the_interim_handbacks_reference_is_pinned() -> None:
+    assert hashlib.sha256(INTERIM.read_bytes()).hexdigest() == INTERIM_SHA256
 
 
 # SKL-155: the `qa-round-cap` argument stops the loop at the cap-th counted QA round that ends in
