@@ -13,6 +13,7 @@ tags such as `<name>`.
 
 import re
 from dataclasses import dataclass, field
+from html.parser import HTMLParser
 from pathlib import Path
 
 from markdown_it import MarkdownIt
@@ -50,9 +51,34 @@ def rendered(inline: Token, prose: bool = False) -> str:
     return collapse("".join(parts))
 
 
+class _VisibleText(HTMLParser):
+    """Collects the character data a browser shows: entities decoded; tags, attributes, comments,
+    and script and style bodies dropped."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.parts: list[str] = []
+        self.hidden = 0
+
+    def handle_starttag(self, tag: str, attrs: list) -> None:
+        if tag in ("script", "style"):
+            self.hidden += 1
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in ("script", "style") and self.hidden:
+            self.hidden -= 1
+
+    def handle_data(self, data: str) -> None:
+        if not self.hidden:
+            self.parts.append(data)
+
+
 def html_text(html: str) -> str:
-    """The text an HTML block shows: comments and tags (with their attributes) removed."""
-    return re.sub(r"<[^>]*>", " ", re.sub(r"<!--.*?-->", " ", html, flags=re.S))
+    """The text an HTML block shows."""
+    parser = _VisibleText()
+    parser.feed(html)
+    parser.close()
+    return "".join(parser.parts)
 
 
 @dataclass
