@@ -3807,7 +3807,8 @@ WORKTREE_CREATE = (
 )
 WORKTREE_LATER_PR = (
     "A later PR for the same story, opened after an earlier one merged, gets a fresh worktree under the existing "
-    "worktree rule in `references/github.md`, and the hand-back reports its path too."
+    "worktree rule in `references/github.md`, which you create the same way and name in the `worktree:` line of "
+    "every later brief, and the hand-back reports its path too."
 )
 WORKTREE_BRIEF_LINE = (
     "- The line `worktree: <absolute path>`, whose whole text is exactly that, `<absolute path>` being the story "

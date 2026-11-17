@@ -157,7 +157,7 @@ Do not triage the story yourself; `engineering-workflow` does, including the Def
 ## 2. Senior engineer: implement to deployment review
 
 Before you spawn the senior engineer, fetch `origin` and run `git worktree add` to create the story worktree on a new story branch cut from `origin/<profile.git.integration_branch>`, per the branch and worktree rules in `references/github.md`.
-A later PR for the same story, opened after an earlier one merged, gets a fresh worktree under the existing worktree rule in `references/github.md`, and the hand-back reports its path too.
+A later PR for the same story, opened after an earlier one merged, gets a fresh worktree under the existing worktree rule in `references/github.md`, which you create the same way and name in the `worktree:` line of every later brief, and the hand-back reports its path too.
 
 Spawn a clean, neutral subagent on `engineer-model` at `engineer-effort`, and brief it as a senior engineer working this story.
 It spawns reviewers of its own, and so does the QA agent in step 3, so check the nesting rule in `references/runtimes.md` first.

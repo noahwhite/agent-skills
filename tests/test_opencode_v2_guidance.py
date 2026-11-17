@@ -64,13 +64,15 @@ DELEGATED_DIRECTORY_CLAUSES = (
 
 def delegated_directory_bullet() -> list[str]:
     """The SKL-70 bullet under "Rules that follow from the map", one physical line per entry."""
-    rules = RUNTIMES.read_text().split("## Rules that follow from the map\n", 1)[1].split("\n## ", 1)[0]
-    lines = rules.splitlines()
+    rules = RUNTIMES.read_text(encoding="utf-8").split("## Rules that follow from the map\n", 1)[1]
+    lines = rules.split("\n## ", 1)[0].splitlines()
     starts = [i for i, line in enumerate(lines) if line.startswith(DELEGATED_DIRECTORY_MARKER)]
     assert len(starts) == 1, "expected one delegated working directory bullet under the map rules"
+    # The bullet runs to the next bullet or blank line, so an unindented (lazy) continuation line is
+    # part of it and fails the clause comparison instead of escaping it.
     bullet = [lines[starts[0]]]
     for line in lines[starts[0] + 1:]:
-        if not line.startswith("  "):
+        if not line.strip() or line.startswith("- "):
             break
         bullet.append(line)
     return bullet
@@ -80,9 +82,8 @@ def test_delegated_agent_works_in_the_worktree_the_delegating_session_creates() 
     bullet = delegated_directory_bullet()
     first = bullet[0].removeprefix(DELEGATED_DIRECTORY_MARKER + " ")
     assert [first, *(line.removeprefix("  ") for line in bullet[1:])] == list(DELEGATED_DIRECTORY_CLAUSES), (
-        "one clause per physical line, continuation lines indented two spaces"
+        "one clause per physical line, continuation lines indented exactly two spaces, and nothing else"
     )
-    assert all(not line.startswith("   ") for line in bullet[1:]), "continuation lines are indented exactly two spaces"
 
 
 def test_delegated_directory_bullet_names_no_path_helper_or_memory_rule() -> None:

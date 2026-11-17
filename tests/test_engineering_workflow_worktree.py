@@ -11,10 +11,10 @@ CUT_SENTENCE = (
     "branch is `profile.git.integration_branch`) after a fetch."
 )
 WORKTREE_CLAUSE = (
-    "When the brief names a `worktree:` path, work in that worktree and cut no other, after confirming that its "
-    "branch is based on `origin/<profile.git.integration_branch>` and recutting it per the worktree rule in "
-    "`references/github.md` if it is not; without a `worktree:` line, cut the branch and worktree as the sentence "
-    "above states."
+    "When the brief names a `worktree:` path, work in that worktree and cut no other story worktree, after "
+    "confirming that its branch is based on `origin/<profile.git.integration_branch>` and recutting it per the "
+    "worktree rule in `references/github.md` if it is not; without a `worktree:` line, cut the branch and worktree "
+    "as the sentence above states."
 )
 
 
@@ -23,7 +23,8 @@ def step_2_lines() -> list[str]:
     match = re.search(r"^## 2\. Plan slices\n", text, re.MULTILINE)
     assert match, "missing step 2"
     rest = text[match.end():]
-    return rest[: re.search(r"^## ", rest, re.MULTILINE).start()].splitlines()
+    following = re.search(r"^## ", rest, re.MULTILINE)
+    return (rest[: following.start()] if following else rest).splitlines()
 
 
 def test_step_2_works_in_the_briefed_worktree_and_otherwise_cuts_one() -> None:
