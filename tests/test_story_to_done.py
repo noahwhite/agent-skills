@@ -3433,6 +3433,19 @@ def test_each_base_brief_requires_a_waiting_handback_to_name_its_awaited_item(na
     assert visible((ASSETS / name).read_text()).splitlines().count(WAITING_BULLET) == 1
 
 
+SKILL_WAITING_BULLET = (
+    "- A handback that is neither final nor blocked and is waiting on your own work names what it waits on, where "
+    "you read its state, and when you expect it to finish."
+)
+
+
+@pytest.mark.parametrize(
+    "heading", ["2. Senior engineer: implement to deployment review", "3. QA agent: verify the deployed story"]
+)
+def test_each_brief_list_in_the_skill_carries_the_waiting_handback_bullet(heading: str) -> None:
+    assert visible(section(SKILL.read_text(), heading)).splitlines().count(SKILL_WAITING_BULLET) == 1
+
+
 @pytest.mark.parametrize("case", sorted(RENDER_CASES))
 def test_every_rendered_brief_carries_the_waiting_handback_bullet(case: str, tmp_path: Path) -> None:
     assert visible(rendered_brief(tmp_path, RENDER_CASES[case])).splitlines().count(WAITING_BULLET) == 1
@@ -3827,7 +3840,7 @@ def test_the_record_shape_pattern_matches_the_record_and_not_the_bare_word_readi
 STEP_3_HEADING = "3. QA agent: verify the deployed story"
 # SKL-138 re-baselined this digest for the step 3 nested launch line (NESTED_STEP_3), which carries no ruling.
 # SKL-357 re-pinned it for the step 3 unnamed-waiting-handback pointer and the plural "resumes" exception.
-STEP_3_SHA256 = "36e67c1b7ce848fff9c23cfb4cc9cff902723647fa33fa97bba70efcc050203f"
+STEP_3_SHA256 = "2c57b85346ce7030aab1edc8e0fad3769538a4d38b2aff6dfd673adfb10fa330"
 # SKL-138 re-pinned IN_PROGRESS_SHA256 for the step 4 nested launch line (NESTED_STEP_4), which carries no pending item.
 IN_PROGRESS_SHA256 = "4e8e9242319fe952b90429a32214ec0de742e348a4de360808b88f052c63fb0c"
 IN_DEPLOYMENT_REVIEW_SHA256 = "36da368bed892519776e5be61064d2fad186151ca58ae90aff897e9a1ffaa968"
