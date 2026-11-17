@@ -89,3 +89,37 @@ The raw output, including every mutation proof, is attached to SKL-246 as `SKL-2
 | DoD: no new regressions | Partly verified, live half owner | The tests cover sessions without either skill, subagents and sessions without the task tools; the live adjacent paths are AC12. |
 
 Closing decision: stays In Deployment Review until the owner runs the AC11 and AC12 sessions with the README block registered.
+
+## Round 4
+
+Date: 2026-11-17 UTC, independent QA round 4.
+Path: `no-deployment`.
+Build under test: `main` at `d2c2b0fba7e49b8479ee9fda1fe93bb52f727a29`, the squash merge of PR 209, whose reviewed head is `5ec94c287c7f476e1998eb7152dee5fc6bae666d`.
+The merge tree and the reviewed head tree are the same tree, `44e16c1120a436679abe2328ac1ff2b049da6b1b`.
+Environment: none; the lanes are the repository (a detached worktree of the build), GitHub, the tracker and the owner-run session transcripts.
+Fixtures: the owner-run sessions `28933d80`, `7fbfc9f1`, `de5be545` and `3f043d1c`, re-scanned with an independent scanner.
+The raw output, including every mutation proof and the transcript scans, is attached to SKL-246 as `SKL-246-qa-round-4-assertions.txt`; there is no visual surface, so no screenshot applies.
+
+| Item | Verdict | Evidence |
+|---|---|---|
+| AC1: baseline | Verified | The attachment "SKL-246 AC1 reproduction and cause" is linked and records the pre-fix sessions and the cause. |
+| AC2: pre-implementation probe | Verified | The probe record was attached at 21:27:37 UTC on 2026-11-11, before the first enforcer commit `38bfda9` at 21:38:30 UTC. It answers (a), (b) and (c) and finds no contradiction with the Fix. Its logging hook was registered through a `--settings` file layered over the user settings rather than in the user-level settings file, a deviation the record states and round 3 accepted. |
+| AC3: briefs | Verified | The `story-to-done` "Track your work" lines are identical before PR 197 and at the build, `story-refinement` has none before or after, and neither SKILL.md names a task tool or `ToolSearch`. |
+| AC4: list-creation order and the five rules | Verified | At the build, the creation sentence opens `story-to-done` step 0 (line 71) and `story-refinement` "Read first" (line 48). The earlier `references/` mentions are deferred: `story-to-done` line 35 reads "After step 0 creates the todo list" and line 45 "Step 0 creates the todo list before any file below is read", and `story-refinement` line 40 belongs to the command that runs "right after the todo list is created". The section-scoped guard `test_list_creation_precedes_the_first_read` passes for both skills, and `shared/todo-tracking.md` carries the five rules. |
+| AC5: unchanged files and no ToolSearch wording | Verified | Neither PR 197 nor PR 209 changes a `runtimes.md`, the "Missing todo tools" section is identical across both, and no added Markdown line has `ToolSearch` or deferred-tool wording. |
+| AC6: `todo-tracking.md` vendoring | Verified | Two runs of `scripts/vendor_shared.py` left the tree clean, `--check` exited 0, and all 18 copies equal the generated header plus the source. |
+| AC7: PR 197 guard mutation proof | Verified | Nine on-disk mutants, deleting each of the five rule lines and moving or deleting the creation sentence in each skill, each failed `tests/test_todo_tracking.py`. |
+| AC8: enforcer vendoring | Verified | Both copies equal the generated header plus `shared/todo-enforce.py`, a second run changed nothing, a one-byte drift made `--check` exit 1, and no SKILL.md frontmatter has a `hooks` key. |
+| AC9: enforcer tests | Verified | `tests/test_todo_enforce.py` reported 81 passed. Ten on-disk mutants of `shared/todo-enforce.py` each failed behavioural tests: the deny, the three refusals, the owner check, the `agent_id` pass, the no-task-tools allow, the arming guard and both arming signals. |
+| AC10: README block | Verified | The README registers one enforcer copy for the four events and states what it enforces, in which sessions, that it fails open, and how to remove it. |
+| AC11: post-fix interactive sessions | Verified | The README block was in the user settings from 19:42 UTC on 2026-11-16, before every session, and the installed enforcer is byte-identical to the build's copy. The slash-typed sessions `28933d80` (`story-refinement`) and `7fbfc9f1` (`story-to-done`) both reached their final reports. In each main thread, no non-exempt call ran with no main task in progress, and no completion skipped in progress. Every denial and refusal was followed by the session continuing. The `story-to-done` subagents ran 606 tool calls with no denial. |
+| AC12: `claude -p` and no-skill sessions | Verified | The `claude -p` run `de5be545` (story-to-done, without the task tools) and the interactive session `3f043d1c` (neither skill) each finished with no enforcer message. |
+| AC13: guards | Verified | CI run 43125210216 on the PR head passed the tests, the leak scan with private patterns, skills-ref validation and discovery, and run 43126011555 on `main` passed. Locally on the build, the suite reported 1796 passed, skills-ref validated all 18 skills, and the smoke script discovered all 18 skills. |
+| DoD: root cause identified | Verified | AC1 and round 2. |
+| DoD: fix verified against the original failing case | Verified | The AC11 scan. |
+| DoD: regression protection | Verified | AC7 and AC9. |
+| DoD: independently reviewed | Verified | Review 5867064915 names `5ec94c287c7f476e1998eb7152dee5fc6bae666d` in its first line and as its `commit_id`, and was posted at 00:12:15 UTC, before the merge at 00:15:53 UTC. |
+| DoD: docs updated | Verified | The README section, `shared/README.md` and the enforcer's docstring. |
+| DoD: no new regressions | Verified | AC12 for the live adjacent paths, plus the suite and CI. |
+
+Closing decision: every AC and DoD item is verified, so SKL-246 moves to Done once this evidence is merged.
