@@ -1,0 +1,37 @@
+{
+  "claude_code_version": "2.1.326",
+  "source": "SKL-265 AC1 probe Stop payloads (sanitized); each entry is copied from a probe session, with that session's type, or synthesized from the same normalized schema. The probe predates the report: final marker, so the copied reports carry the metrics: on line instead",
+  "payloads": {
+    "stop_final_report": {
+      "origin": "copied",
+      "session_type": "background",
+      "payload": {"session_id": "<session-id>", "transcript_path": "~/.claude/projects/-workspace/<session-id>.jsonl", "cwd": "/workspace", "scratchpad_dir": "<tmp>", "prompt_id": "<prompt-id>", "permission_mode": "auto", "effort": {"level": "medium"}, "hook_event_name": "Stop", "stop_hook_active": false, "last_assistant_message": "The subagent replied \"done\" and the final step printed `probe-last`, so all four probe steps have run.\n\nProbe final report.\nmetrics: on", "background_tasks": [], "session_crons": []}
+    },
+    "stop_after_a_block": {
+      "origin": "copied",
+      "session_type": "background",
+      "payload": {"session_id": "<session-id>", "transcript_path": "~/.claude/projects/-workspace/<session-id>.jsonl", "cwd": "/workspace", "scratchpad_dir": "<tmp>", "prompt_id": "<prompt-id>", "permission_mode": "auto", "effort": {"level": "medium"}, "hook_event_name": "Stop", "stop_hook_active": true, "last_assistant_message": "Hook feedback received.\nThe subagent has not returned yet, so step 4 (`echo probe-last`) has not run.\n\nProbe final report.\nmetrics: on", "background_tasks": [], "session_crons": []}
+    },
+    "stop_pause_on_background_work": {
+      "origin": "copied",
+      "session_type": "background",
+      "payload": {"session_id": "<session-id>", "transcript_path": "~/.claude/projects/-workspace/<session-id>.jsonl", "cwd": "/workspace", "scratchpad_dir": "<tmp>", "prompt_id": "<prompt-id>", "permission_mode": "auto", "effort": {"level": "medium"}, "hook_event_name": "Stop", "stop_hook_active": false, "last_assistant_message": "The subagent is still running; I'll finish the remaining probe steps once it returns.", "background_tasks": [{"id": "<agent-id>", "type": "subagent", "status": "running", "description": "Run probe-sub echo", "agent_type": "general-purpose"}], "session_crons": []}
+    },
+    "stop_question_to_the_owner": {
+      "origin": "synthesized",
+      "payload": {"session_id": "<session-id>", "transcript_path": "~/.claude/projects/-workspace/<session-id>.jsonl", "cwd": "/workspace", "scratchpad_dir": "<tmp>", "prompt_id": "<prompt-id>", "permission_mode": "auto", "effort": {"level": "medium"}, "hook_event_name": "Stop", "stop_hook_active": false, "last_assistant_message": "The story has two open questions. Should QA run on Opus 5.5 at high, or at max?", "background_tasks": [], "session_crons": []}
+    },
+    "stop_needs_input": {
+      "origin": "synthesized",
+      "payload": {"session_id": "<session-id>", "transcript_path": "~/.claude/projects/-workspace/<session-id>.jsonl", "cwd": "/workspace", "scratchpad_dir": "<tmp>", "prompt_id": "<prompt-id>", "permission_mode": "auto", "effort": {"level": "medium"}, "hook_event_name": "Stop", "stop_hook_active": false, "last_assistant_message": "SKL-1 stopped before pointing.\nneeds input: the tracker write was denied; authorize it to continue.\nmetrics: on", "background_tasks": [], "session_crons": []}
+    },
+    "stop_final_report_with_trailing_lines": {
+      "origin": "synthesized",
+      "payload": {"session_id": "<session-id>", "transcript_path": "~/.claude/projects/-workspace/<session-id>.jsonl", "cwd": "/workspace", "scratchpad_dir": "<tmp>", "prompt_id": "<prompt-id>", "permission_mode": "auto", "effort": {"level": "medium"}, "hook_event_name": "Stop", "stop_hook_active": false, "last_assistant_message": "SKL-1 is Done.\nreport: final\nmetrics: on\nqa-round-cap: 3", "background_tasks": [], "session_crons": []}
+    },
+    "stop_with_agent_id": {
+      "origin": "synthesized",
+      "payload": {"session_id": "<session-id>", "transcript_path": "~/.claude/projects/-workspace/<session-id>.jsonl", "cwd": "/workspace", "scratchpad_dir": "<tmp>", "prompt_id": "<prompt-id>", "permission_mode": "auto", "agent_id": "<agent-id>", "agent_type": "general-purpose", "effort": {"level": "medium"}, "hook_event_name": "Stop", "stop_hook_active": false, "last_assistant_message": "Probe final report.\nmetrics: on", "background_tasks": [], "session_crons": []}
+    }
+  }
+}

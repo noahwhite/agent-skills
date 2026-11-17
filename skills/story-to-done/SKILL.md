@@ -42,6 +42,8 @@ Six arguments are optional, given as `key=value` or in plain words ("QA on <mode
 - Ask the user about an invalid value and about any other phrasing about the cap; never guess.
 - Resolve `qa-round-cap` before step 0 creates the todo list; it sets no model or effort.
 - Write the four resolved model and effort values, the `metrics: on|off` line, and the `qa-round-cap: <n>` line at the top of your todo list and in the closing report of every end state (the step 5 report, or the report made at any stop, including one before step 0).
+- End a report that ends the job (the step 5 report, or a failed or terminal stop) with `report: final` as a bare line on its own, with no list marker, emphasis or backticks and nothing else on that line; a `needs input` stop or any other question or pause to the owner never carries that line, and neither does any other message; the todo-enforce hook (`scripts/todo-enforce.py`) recognises a final report by that line.
+- In that report, name each todo item left open on a line with `not done`, its `#<id>` and the reason (for example `#4 not done: the owner runs AC7`), in the same text block as the `report: final` line, which closes the message with nothing after it; the hook reads only that last text block and holds the report back while an open item is not named that way.
 - Write the `path: <value>` line step 1 selects in the same two places, as `path: unresolved` until step 1 selects it, including in the end-state report of a run that stops before then.
 
 ### Seat resolution
@@ -285,6 +287,7 @@ After each round, tell the user its number, the failed items, and the outcome.
 
 Read the story back and confirm it is in `profile.tracker.states.done` with the completion record step 4 checks, then finish your todo list.
 Report the story identifier, its final state, the four resolved model and effort values and the `metrics: on|off` line, the `qa-round-cap: <n>` line, the `path: <value>` line, each PR, the number of QA rounds with the items fixed in each, where QA recorded its evidence, and any incidental defects left open.
+End the report with the bare `report: final` line, as [Arguments](#arguments) states.
 
 ## Boundaries
 

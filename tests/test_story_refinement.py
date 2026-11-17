@@ -5431,7 +5431,10 @@ SHORT_PATH_PO_WRITES = (
 SHORT_PATH_LEAD = (
     "A refine request on a story that is already refined, pointed and unblocked moves it to ready without a ceremony."
 )
-SHORT_PATH_TODO = "Each todo item of a skipped step is left open and named as not done with the reason `short path`."
+SHORT_PATH_TODO = (
+    "Each todo item of a skipped step is left open and named as not done on a line with its `#<id>` and the reason "
+    "`short path` (for example `#3 not done: short path`)."
+)
 SHORT_PATH_PRIORITY = (
     "The path makes no new priority decision, so the priority step under [Triage](#triage) does not apply: the Triage "
     "record's `Priority comparison:` line reads `not compared: short path`."
