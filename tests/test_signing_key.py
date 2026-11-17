@@ -864,6 +864,7 @@ RESTATEMENT_LINES = {
     "skills/persona-staff-devops/SKILL.md": 1,
     "skills/persona-staff-engineer/SKILL.md": 1,
     "skills/story-to-done/SKILL.md": 2,
+    "skills/story-to-done/assets/brief-rules.md": 1,
 }
 # Recorded eval runs embed the same briefs, so a transcript line that restates the override is kind d too.
 EVAL_TRANSCRIPT = re.compile(r"skills/[^/]+/evals/[^/]+/results/[^/]+")

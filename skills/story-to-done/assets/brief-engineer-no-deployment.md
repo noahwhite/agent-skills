@@ -1,0 +1,1 @@
+- What to hand back: the story state, each PR link, the head SHA each PR's review of record covered, and the merged commit, in place of the environment and deployed build; or, if it stops, that it is blocked and why, including when no arbiter can launch; a missing arbitration is never clean or converged.
