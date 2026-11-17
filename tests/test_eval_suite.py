@@ -96,7 +96,10 @@ sys.exit(0 if ok else 1)
 # The stub agent: pass and fail record one call; void-once is void on its first attempt only,
 # void-thrice on its first three; void-always is void every time; hang outlives any deadline;
 # bad-bytes records a byte that is not UTF-8; dirty-once changes CHECKOUT on its first attempt
-# and is void, as a real run.sh voids an agent that changed it. It writes its run directory into
+# and is void, as a real run.sh voids an agent that changed it; record-once, mode-once and perm-once do
+# the same to the committed record STUB_RECORD names, by its content, its executable bit or a
+# permission git ignores, relink-once points that record's symlink at STUB_TARGET, and locked-once
+# makes an unreadable record writable and overwrites it. It writes its run directory into
 # the call, so the record shows whether the runner normalised the path, and the CANARY or EVAL_CANARY variable
 # into evidence.json, so the record shows what environment it got. evidence.json holds its run directory
 # after an escaped newline, as messages.json holds a path that starts a line, and for pass also behind
@@ -120,6 +123,11 @@ case "$scenario" in
   hang) sleep 30; action=pass ;;
   bad-bytes) action=pass ;;
   dirty-once) [ "$count" -gt 1 ] || { echo dirt > "$checkout/dirt.txt"; exit 3; }; action=pass ;;
+  record-once) [ "$count" -gt 1 ] || { echo overwritten > "$STUB_RECORD"; exit 3; }; action=pass ;;
+  mode-once) [ "$count" -gt 1 ] || { chmod 700 "$STUB_RECORD"; exit 3; }; action=pass ;;
+  perm-once) [ "$count" -gt 1 ] || { chmod 600 "$STUB_RECORD"; exit 3; }; action=pass ;;
+  relink-once) [ "$count" -gt 1 ] || { ln -sfn "$STUB_TARGET" "$STUB_RECORD"; exit 3; }; action=pass ;;
+  locked-once) [ "$count" -gt 1 ] || { chmod 200 "$STUB_RECORD"; echo overwritten > "$STUB_RECORD"; exit 3; }; action=pass ;;
 esac
 printf '{"action": "%s", "run_dir": "%s", "id": "%s"}\n' "$action" "$run" "$STUB_UUID" > "$run/actions.jsonl"
 if [ "$scenario" = bad-bytes ]; then printf '\xff\n' >> "$run/actions.jsonl"; fi
@@ -656,6 +664,77 @@ def test_an_attempt_that_changes_a_checkout_stops_the_suite(suite) -> None:
     assert not (suite["evals"] / "results" / "suite-lab-1.md").exists()
 
 
+# A committed record the run started with, clean or with an unstaged modification, is allowed;
+# an attempt that then changes its content or mode changed the harness, so the suite stops.
+@pytest.mark.parametrize("scenario, edited_first", [("record-once", False), ("record-once", True),
+                                                     ("mode-once", False), ("perm-once", False),
+                                                     pytest.param("locked-once", False, marks=pytest.mark.skipif(
+                                                         os.geteuid() == 0, reason="root reads through mode 000"))])
+def test_an_attempt_that_changes_a_committed_record_stops_the_suite(suite, scenario: str, edited_first: bool) -> None:
+    suite["recommit"](scenario)
+    record = suite["evals"] / "results" / "suite-a.md"
+    record.parent.mkdir(exist_ok=True)
+    record.write_text("a record\n")
+    commit_all(suite["harness"])
+    if edited_first:
+        record.write_text("edited before the run\n")
+    if scenario == "locked-once":
+        record.chmod(0o000)  # unreadable when the run starts, a permission git ignores
+    result = suite["run"]("--runs", "1", str(suite["checkout"]), "lab-1", STUB_RECORD=str(record),
+                          EVAL_PASS_ENV="STUB_STATE STUB_UUID STUB_RECORD")
+    assert result.returncode == 1, result.stderr
+    assert ("committed records an attempt of this run changed (skills/story-to-done/evals/results/suite-a.md)"
+            in result.stderr), result.stderr
+    assert int((suite["state"] / scenario).read_text(encoding="utf-8")) == 1, "no attempt runs against the changed record"
+    assert not (suite["evals"] / "results" / "suite-lab-1.md").exists()
+
+
+def test_an_attempt_that_retargets_a_record_symlink_stops_the_suite(suite) -> None:
+    """A record symlink already retargeted before the run, pointed by an attempt at another file
+    with the same content, is still a change: the snapshot holds the link, not what it reaches."""
+    suite["recommit"]("relink-once")
+    results = suite["evals"] / "results"
+    results.mkdir(exist_ok=True)
+    for name in ("one.txt", "two.txt", "three.txt"):
+        (suite["harness"] / name).write_text("same\n")
+    record = results / "suite-a.md"
+    record.symlink_to(suite["harness"] / "one.txt")
+    commit_all(suite["harness"])
+    record.unlink()
+    record.symlink_to(suite["harness"] / "two.txt")
+    assert first_porcelain_entry(suite["harness"]) == " M skills/story-to-done/evals/results/suite-a.md"
+    result = suite["run"]("--runs", "1", str(suite["checkout"]), "lab-1", STUB_RECORD=str(record),
+                          STUB_TARGET=str(suite["harness"] / "three.txt"),
+                          EVAL_PASS_ENV="STUB_STATE STUB_UUID STUB_RECORD STUB_TARGET")
+    assert result.returncode == 1, result.stderr
+    assert ("committed records an attempt of this run changed (skills/story-to-done/evals/results/suite-a.md)"
+            in result.stderr), result.stderr
+    assert not (suite["evals"] / "results" / "suite-lab-1.md").exists()
+
+
+def test_a_record_symlink_whose_target_is_not_utf8_does_not_block_a_run(suite) -> None:
+    suite["recommit"]("pass")
+    results = suite["evals"] / "results"
+    results.mkdir(exist_ok=True)
+    os.symlink(b"target-\xff", os.fsencode(results / "suite-a.md"))
+    commit_all(suite["harness"])
+    result = suite["run"]("--runs", "1", str(suite["checkout"]), "lab-1")
+    assert result.returncode == 0, result.stderr
+
+
+# A record swapped between its lstat and its read: the read follows no symlink and never blocks
+# on a FIFO, whatever kind the earlier lstat reported.
+def test_reading_a_swapped_record_follows_no_link_and_never_blocks(tmp_path: Path) -> None:
+    fifo = tmp_path / "fifo"
+    os.mkfifo(fifo)
+    link = tmp_path / "link"
+    link.symlink_to(fifo)
+    regular = stat.S_IFREG | 0o644
+    with pytest.raises(OSError):
+        SUITE.held_by(os.fsencode(link), regular)
+    assert SUITE.held_by(os.fsencode(fifo), regular) == b""
+
+
 @pytest.mark.parametrize("name", ["CANARY", "EVAL_CANARY"])
 def test_the_agent_gets_only_the_base_environment_and_the_variables_passed(suite, name) -> None:
     suite["recommit"]("pass")
@@ -837,6 +916,131 @@ def test_uncommitted_records_do_not_block_a_later_run(suite) -> None:
     assert git(suite["harness"], "status", "--porcelain", "--untracked-files=all"), "the records are untracked"
     second = suite["run"]("--runs", "1", str(suite["checkout"]), "lab-2")
     assert second.returncode == 0, second.stderr
+
+
+def first_porcelain_entry(repo: Path) -> str:
+    return subprocess.run(["git", "-C", str(repo), "status", "--porcelain", "--untracked-files=all"],
+                          check=True, capture_output=True, text=True).stdout.splitlines()[0]
+
+
+def refused_paths(stderr: str) -> str:
+    match = re.search(r"has uncommitted changes \((.*)\), so its commit", stderr)
+    assert match, stderr
+    return match.group(1)
+
+
+# SKL-289: each change is the first `git status --porcelain` entry, so a blank index column at the
+# start of the output shows whether the refusal still names the whole path.
+@pytest.mark.parametrize("change, entry, named", [
+    ("unstaged", " M README.md", "README.md"),
+    ("staged", "M  README.md", "README.md"),
+    ("untracked", "?? NEW.md", "NEW.md"),
+    ("renamed", "R  README.md -> MOVED.md", "README.md -> MOVED.md"),
+])
+@pytest.mark.parametrize("where, role", [("harness", "harness"), ("checkout", "skill")])
+def test_the_refusal_names_the_first_changed_path_whole(suite, where: str, role: str, change: str, entry: str,
+                                                        named: str) -> None:
+    repo = suite[where]
+    git(repo, "config", "status.renames", "true")  # the porcelain rename shape this test asserts
+    (repo / "README.md").write_text("readme\n")
+    commit_all(repo)
+    if change == "unstaged":
+        (repo / "README.md").write_text("")
+    elif change == "staged":
+        (repo / "README.md").write_text("")
+        git(repo, "add", "README.md")
+    elif change == "untracked":
+        (repo / "NEW.md").write_text("new\n")
+    else:
+        git(repo, "mv", "README.md", "MOVED.md")
+    assert first_porcelain_entry(repo) == entry
+    result = suite["run"]("--runs", "1", str(suite["checkout"]), "repro3")
+    assert result.returncode == 2, result.stderr
+    assert f"the {role} checkout" in result.stderr, result.stderr
+    assert refused_paths(result.stderr) == named
+    assert not (suite["state"] / "pass").exists(), "nothing ran"
+
+
+def commit_a_record(suite) -> Path:
+    suite["recommit"]("pass")
+    record = suite["evals"] / "results" / "suite-a.md"
+    record.parent.mkdir(exist_ok=True)
+    record.write_text("a record\n")
+    commit_all(suite["harness"])
+    record.write_text("a changed record\n")
+    return record
+
+
+def test_a_tracked_record_with_an_unstaged_change_does_not_block_a_run(suite) -> None:
+    commit_a_record(suite)
+    assert first_porcelain_entry(suite["harness"]) == " M skills/story-to-done/evals/results/suite-a.md"
+    result = suite["run"]("--runs", "1", str(suite["checkout"]), "lab")
+    assert result.returncode == 0, result.stderr
+
+
+def test_a_changed_record_does_not_hide_another_change(suite) -> None:
+    (suite["harness"] / "README.md").write_text("readme\n")
+    commit_a_record(suite)
+    (suite["harness"] / "README.md").write_text("")
+    assert first_porcelain_entry(suite["harness"]) == " M README.md"
+    assert "results/suite-a.md" in git(suite["harness"], "status", "--porcelain"), "the record is changed too"
+    result = suite["run"]("--runs", "1", str(suite["checkout"]), "lab")
+    assert result.returncode == 2, result.stderr
+    assert refused_paths(result.stderr) == "README.md"
+    assert not (suite["state"] / "pass").exists(), "nothing ran"
+
+
+def test_a_changed_record_first_does_not_hide_a_later_change(suite) -> None:
+    commit_a_record(suite)
+    (suite["harness"] / "zzz.md").write_text("new\n")
+    assert first_porcelain_entry(suite["harness"]) == " M skills/story-to-done/evals/results/suite-a.md"
+    result = suite["run"]("--runs", "1", str(suite["checkout"]), "lab")
+    assert result.returncode == 2, result.stderr
+    assert refused_paths(result.stderr) == "zzz.md"
+    assert not (suite["state"] / "pass").exists(), "nothing ran"
+
+
+def make_record_conflict(harness: Path, record: Path) -> None:
+    git(harness, "checkout", "-q", "--", str(record))
+    base = git(harness, "rev-parse", "--abbrev-ref", "HEAD")
+    git(harness, "checkout", "-q", "-b", "other")
+    record.write_text("other\n")
+    commit_all(harness)
+    git(harness, "checkout", "-q", base)
+    record.write_text("ours\n")
+    commit_all(harness)
+    subprocess.run(["git", "-C", str(harness), "merge", "-q", "other"], capture_output=True, text=True)
+
+
+RECORD = "skills/story-to-done/evals/results/suite-a.md"
+
+
+# Only an untracked record or one with an unstaged modification is the suite's own output; any
+# other state on a record path is a change the harness commit would not describe.
+@pytest.mark.parametrize("state, entry, named", [
+    ("staged", f"M  {RECORD}", RECORD),
+    ("deleted", f" D {RECORD}", RECORD),
+    ("renamed-out", f"R  {RECORD} -> Makefile", f"{RECORD} -> Makefile"),
+    ("unmerged", f"UU {RECORD}", RECORD),
+])
+def test_a_record_in_any_other_state_is_refused(suite, state: str, entry: str, named: str) -> None:
+    harness = suite["harness"]
+    git(harness, "config", "status.renames", "true")  # the porcelain rename shape this test asserts
+    record = commit_a_record(suite)
+    if state == "staged":
+        git(harness, "add", str(record))
+    elif state == "deleted":
+        record.unlink()
+    elif state == "renamed-out":
+        git(harness, "checkout", "-q", "--", str(record))
+        git(harness, "mv", str(record), "Makefile")
+    else:
+        make_record_conflict(harness, record)
+    assert first_porcelain_entry(harness) == entry
+    result = suite["run"]("--runs", "1", str(suite["checkout"]), "lab")
+    assert result.returncode == 2, result.stderr
+    assert refused_paths(result.stderr) == named
+    assert not (suite["state"] / "pass").exists(), "nothing ran"
 
 
 def test_a_run_directory_inside_a_checkout_is_refused(suite) -> None:

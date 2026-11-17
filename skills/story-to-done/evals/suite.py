@@ -13,12 +13,14 @@ on a broken attempt, 2 the suite refused to start or would have overwritten a fi
 
 import argparse
 import ast
+import hashlib
 import importlib.util
 import json
 import os
 import re
 import shutil
 import signal
+import stat
 import subprocess
 import sys
 import tempfile
@@ -100,11 +102,11 @@ class Broken(Exception):
     """An attempt broke the case contract or changed a checkout: exit 1."""
 
 
-def git(repo: Path, *args: str) -> str:
+def git(repo: Path, *args: str, strip: bool = True) -> str:
     result = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True)
     if result.returncode != 0:
         raise Refused(f"git {' '.join(args)} failed in {repo}: {result.stderr.strip()}")
-    return result.stdout.strip()
+    return result.stdout.strip() if strip else result.stdout
 
 
 def is_record(path: str) -> bool:
@@ -118,15 +120,58 @@ def is_record(path: str) -> bool:
 
 def commit_of(repo: Path, role: str) -> tuple[Path, str, str]:
     """The checkout's root, full and short HEAD. A checkout with tracked or untracked changes is
-    refused, because its commit would not describe what ran; only the suite's own uncommitted
-    records under a results/ directory are allowed, since they are outputs, not code."""
+    refused, because its commit would not describe what ran; only the suite's own records under a
+    results/ directory, untracked or with an unstaged modification, are allowed, since they are
+    outputs, not code."""
     root = Path(git(repo, "rev-parse", "--show-toplevel")).resolve()
-    status = [line for line in git(root, "status", "--porcelain", "--untracked-files=all").splitlines() if line]
-    changed = [line[3:] for line in status if not (line.startswith("??") and is_record(line[3:]))]
+    # Unstripped: each porcelain line is two status columns, a space and the path, and the first
+    # line's index column is a space for an unstaged change, so stripping would cut the path.
+    status = [line for line in git(root, "status", "--porcelain", "--untracked-files=all", strip=False).splitlines()
+              if line]
+    # A record is allowed only untracked or with an unstaged modification: any other state on a
+    # record (staged, deleted, unmerged, or a rename whose " -> " joins a record to another path)
+    # is a change the commit would not describe.
+    changed = [line[3:] for line in status if not (line[:2] in ("??", " M") and is_record(line[3:]))]
     if changed:
         raise Refused(f"the {role} checkout {root} has uncommitted changes ({', '.join(changed[:5])}), "
                       "so its commit would not describe the run")
     return root, git(root, "rev-parse", "HEAD"), git(root, "rev-parse", "--short=7", "HEAD")
+
+
+def committed_records(root: Path) -> dict[str, tuple[int, str]]:
+    """Each committed record, by path, as its file mode and a hash of what it holds: a symlink's
+    target text, a regular file's content, nothing for any other kind of file, so no read follows
+    a link or blocks. The suite only ever writes new records, so a change to this during a run is
+    a change an attempt made, not the suite's own output."""
+    records = {}
+    for path in git(root, "ls-files", "-z", strip=False).split("\0"):
+        if not path or not is_record(path):
+            continue
+        name = os.fsencode(root / path)
+        try:
+            mode = os.lstat(name).st_mode
+        except OSError:
+            records[path] = (0, "missing")
+            continue
+        try:
+            records[path] = (mode, hashlib.sha256(held_by(name, mode)).hexdigest())
+        except OSError:
+            records[path] = (mode, "unreadable")
+    return records
+
+
+def held_by(name: bytes, mode: int) -> bytes:
+    """What a record holds: a symlink's target bytes, a regular file's content read through a
+    descriptor that follows no link and never blocks, nothing for any other kind of file."""
+    if stat.S_ISLNK(mode):
+        return os.readlink(name)
+    if not stat.S_ISREG(mode):
+        return b""
+    descriptor = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    with os.fdopen(descriptor, "rb") as handle:
+        if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
+            return b""
+        return handle.read()
 
 
 def parse(argv: list[str]) -> argparse.Namespace:
@@ -540,6 +585,7 @@ def main(argv: list[str]) -> int:
                       "or --resume with the arguments that run started with")
     harness, harness_commit, harness_short = commit_of(EVALS, "harness")
     checkout, checkout_commit, checkout_short = commit_of(args.checkout, "skill")
+    committed = {harness: committed_records(harness), checkout: committed_records(checkout)}
     cases = args.cases or sorted(path.parent.name for path in EVALS.glob("*/case.yaml"))
     specs = {}
     for case in cases:
@@ -562,7 +608,8 @@ def main(argv: list[str]) -> int:
 
     def unchanged() -> None:
         """Both checkouts are still at the commits the records name, with nothing uncommitted
-        but the suite's own records: an attempt that changed either stops the suite."""
+        but the suite's own records, and every committed record as it was when the run started:
+        an attempt that changed either stops the suite."""
         for repo, role, commit in ((harness, "harness", harness_commit), (checkout, "skill", checkout_commit)):
             try:
                 now = commit_of(repo, role)[1]
@@ -570,6 +617,12 @@ def main(argv: list[str]) -> int:
                 raise Broken(f"{error}, after an attempt of this run changed it") from None
             if now != commit:
                 raise Broken(f"the {role} checkout moved from {commit} to {now} during the run")
+            records = committed_records(repo)
+            if records != committed[repo]:
+                paths = sorted(path for path in records.keys() | committed[repo].keys()
+                               if records.get(path) != committed[repo].get(path))
+                raise Broken(f"the {role} checkout {repo} has committed records an attempt of this run "
+                             f"changed ({', '.join(paths[:5])})")
 
     try:
         for root in (harness, checkout):
