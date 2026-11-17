@@ -118,14 +118,18 @@ def is_record(path: str) -> bool:
 
 def commit_of(repo: Path, role: str) -> tuple[Path, str, str]:
     """The checkout's root, full and short HEAD. A checkout with tracked or untracked changes is
-    refused, because its commit would not describe what ran; only the suite's own uncommitted
-    records under a results/ directory are allowed, since they are outputs, not code."""
+    refused, because its commit would not describe what ran; only the suite's own records under a
+    results/ directory, untracked or with an unstaged modification, are allowed, since they are
+    outputs, not code."""
     root = Path(git(repo, "rev-parse", "--show-toplevel")).resolve()
     # Unstripped: each porcelain line is two status columns, a space and the path, and the first
     # line's index column is a space for an unstaged change, so stripping would cut the path.
     status = [line for line in git(root, "status", "--porcelain", "--untracked-files=all", strip=False).splitlines()
               if line]
-    changed = [line[3:] for line in status if not is_record(line[3:])]
+    # A record is allowed only untracked or with an unstaged modification: any other state on a
+    # record (staged, deleted, unmerged, or a rename whose " -> " joins a record to another path)
+    # is a change the commit would not describe.
+    changed = [line[3:] for line in status if not (line[:2] in ("??", " M") and is_record(line[3:]))]
     if changed:
         raise Refused(f"the {role} checkout {root} has uncommitted changes ({', '.join(changed[:5])}), "
                       "so its commit would not describe the run")

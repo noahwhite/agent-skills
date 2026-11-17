@@ -858,22 +858,26 @@ def refused_paths(stderr: str) -> str:
     ("untracked", "?? NEW.md", "NEW.md"),
     ("renamed", "R  README.md -> MOVED.md", "README.md -> MOVED.md"),
 ])
-def test_the_refusal_names_the_first_changed_path_whole(suite, change: str, entry: str, named: str) -> None:
-    harness = suite["harness"]
-    (harness / "README.md").write_text("readme\n")
-    commit_all(harness)
+@pytest.mark.parametrize("where, role", [("harness", "harness"), ("checkout", "skill")])
+def test_the_refusal_names_the_first_changed_path_whole(suite, where: str, role: str, change: str, entry: str,
+                                                        named: str) -> None:
+    repo = suite[where]
+    git(repo, "config", "status.renames", "true")  # the porcelain rename shape this test asserts
+    (repo / "README.md").write_text("readme\n")
+    commit_all(repo)
     if change == "unstaged":
-        (harness / "README.md").write_text("")
+        (repo / "README.md").write_text("")
     elif change == "staged":
-        (harness / "README.md").write_text("")
-        git(harness, "add", "README.md")
+        (repo / "README.md").write_text("")
+        git(repo, "add", "README.md")
     elif change == "untracked":
-        (harness / "NEW.md").write_text("new\n")
+        (repo / "NEW.md").write_text("new\n")
     else:
-        git(harness, "mv", "README.md", "MOVED.md")
-    assert first_porcelain_entry(harness) == entry
+        git(repo, "mv", "README.md", "MOVED.md")
+    assert first_porcelain_entry(repo) == entry
     result = suite["run"]("--runs", "1", str(suite["checkout"]), "repro3")
     assert result.returncode == 2, result.stderr
+    assert f"the {role} checkout" in result.stderr, result.stderr
     assert refused_paths(result.stderr) == named
     assert not (suite["state"] / "pass").exists(), "nothing ran"
 
@@ -904,6 +908,59 @@ def test_a_changed_record_does_not_hide_another_change(suite) -> None:
     result = suite["run"]("--runs", "1", str(suite["checkout"]), "lab")
     assert result.returncode == 2, result.stderr
     assert refused_paths(result.stderr) == "README.md"
+    assert not (suite["state"] / "pass").exists(), "nothing ran"
+
+
+def test_a_changed_record_first_does_not_hide_a_later_change(suite) -> None:
+    commit_a_record(suite)
+    (suite["harness"] / "zzz.md").write_text("new\n")
+    assert first_porcelain_entry(suite["harness"]) == " M skills/story-to-done/evals/results/suite-a.md"
+    result = suite["run"]("--runs", "1", str(suite["checkout"]), "lab")
+    assert result.returncode == 2, result.stderr
+    assert refused_paths(result.stderr) == "zzz.md"
+    assert not (suite["state"] / "pass").exists(), "nothing ran"
+
+
+def make_record_conflict(harness: Path, record: Path) -> None:
+    git(harness, "checkout", "-q", "--", str(record))
+    base = git(harness, "rev-parse", "--abbrev-ref", "HEAD")
+    git(harness, "checkout", "-q", "-b", "other")
+    record.write_text("other\n")
+    commit_all(harness)
+    git(harness, "checkout", "-q", base)
+    record.write_text("ours\n")
+    commit_all(harness)
+    subprocess.run(["git", "-C", str(harness), "merge", "-q", "other"], capture_output=True, text=True)
+
+
+RECORD = "skills/story-to-done/evals/results/suite-a.md"
+
+
+# Only an untracked record or one with an unstaged modification is the suite's own output; any
+# other state on a record path is a change the harness commit would not describe.
+@pytest.mark.parametrize("state, entry, named", [
+    ("staged", f"M  {RECORD}", RECORD),
+    ("deleted", f" D {RECORD}", RECORD),
+    ("renamed-out", f"R  {RECORD} -> Makefile", f"{RECORD} -> Makefile"),
+    ("unmerged", f"UU {RECORD}", RECORD),
+])
+def test_a_record_in_any_other_state_is_refused(suite, state: str, entry: str, named: str) -> None:
+    harness = suite["harness"]
+    git(harness, "config", "status.renames", "true")  # the porcelain rename shape this test asserts
+    record = commit_a_record(suite)
+    if state == "staged":
+        git(harness, "add", str(record))
+    elif state == "deleted":
+        record.unlink()
+    elif state == "renamed-out":
+        git(harness, "checkout", "-q", "--", str(record))
+        git(harness, "mv", str(record), "Makefile")
+    else:
+        make_record_conflict(harness, record)
+    assert first_porcelain_entry(harness) == entry
+    result = suite["run"]("--runs", "1", str(suite["checkout"]), "lab")
+    assert result.returncode == 2, result.stderr
+    assert refused_paths(result.stderr) == named
     assert not (suite["state"] / "pass").exists(), "nothing ran"
 
 
