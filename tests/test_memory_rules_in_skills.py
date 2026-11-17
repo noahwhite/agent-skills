@@ -6,14 +6,13 @@ weakens, hides, moves or duplicates it fails here.
 A cross-referenced target is checked for presence only, not pinned: its text belongs to other rules.
 Rendered text is the text of the CommonMark parse: inline markup, link targets and titles, HTML
 tags, comments and attributes, and image alt text do not count, and a code span keeps its backticks.
-Every file these tests read a rule or a cross-reference from carries no raw HTML that could hide
-text: no HTML block, comment, closing tag or attribute anywhere in the file, only bare placeholder
-tags such as `<name>`.
+No file in `shared/` or `skills/*/SKILL.md` carries raw HTML, which could hide text or hold text the
+count misses: no HTML block, comment, closing tag or attribute anywhere, only bare placeholder tags
+such as `<name>`.
 """
 
 import re
 from dataclasses import dataclass, field
-from html.parser import HTMLParser
 from pathlib import Path
 
 from markdown_it import MarkdownIt
@@ -26,7 +25,7 @@ MARKDOWN = MarkdownIt("commonmark")
 EM_DASH = chr(0x2014)
 # Placeholders written as tags in the files these tests read. None is an HTML element or carries an
 # attribute that hides content, so each hides nothing; a new one is added here after that check.
-PLACEHOLDER_TAGS = {"<model>", "<n>", "<name>", "<retained state>", "<type>"}
+PLACEHOLDER_TAGS = {"<issue>", "<model>", "<n>", "<name>", "<retained state>", "<type>"}
 
 
 def collapse(text: str) -> str:
@@ -51,36 +50,6 @@ def rendered(inline: Token, prose: bool = False) -> str:
     return collapse("".join(parts))
 
 
-class _VisibleText(HTMLParser):
-    """Collects the character data a browser shows: entities decoded; tags, attributes, comments,
-    and script and style bodies dropped."""
-
-    def __init__(self) -> None:
-        super().__init__(convert_charrefs=True)
-        self.parts: list[str] = []
-        self.hidden = 0
-
-    def handle_starttag(self, tag: str, attrs: list) -> None:
-        if tag in ("script", "style"):
-            self.hidden += 1
-
-    def handle_endtag(self, tag: str) -> None:
-        if tag in ("script", "style") and self.hidden:
-            self.hidden -= 1
-
-    def handle_data(self, data: str) -> None:
-        if not self.hidden:
-            self.parts.append(data)
-
-
-def html_text(html: str) -> str:
-    """The text an HTML block shows."""
-    parser = _VisibleText()
-    parser.feed(html)
-    parser.close()
-    return "".join(parser.parts)
-
-
 @dataclass
 class Doc:
     path: Path
@@ -89,7 +58,7 @@ class Doc:
     paragraphs: dict[str, list[str]] = field(default_factory=dict)
     # Raw HTML other than a placeholder tag, anywhere in the file.
     html: list[str] = field(default_factory=list)
-    # Every heading, paragraph and HTML block's text in document order, for counting anchors.
+    # Every heading and paragraph in document order, for counting anchors.
     flow: list[str] = field(default_factory=list)
     # Every heading and paragraph as prose (see `rendered`), in document order.
     prose: list[str] = field(default_factory=list)
@@ -123,7 +92,6 @@ def parse(path: Path) -> Doc:
     for token in MARKDOWN.parse(path.read_text(encoding="utf-8")):
         if token.type == "html_block":
             doc.html.append(token.content.strip())
-            doc.flow.append(html_text(token.content))
         elif token.type in ("heading_open", "paragraph_open"):
             opened = token
         elif token.type == "inline" and opened is not None:
@@ -157,7 +125,7 @@ def parse(path: Path) -> Doc:
 
 
 def read(path: Path) -> Doc:
-    """Parse a file a rule or a cross-reference is read from; it must carry no raw HTML."""
+    """Parse a source file; it must carry no raw HTML, so no text can hide in or behind it."""
     doc = parse(path)
     assert not doc.html, f"{path}: raw HTML that could hide text: {doc.html}"
     return doc
@@ -176,7 +144,7 @@ def assert_rule(item: str, expected: str) -> None:
 
 def source_docs() -> list[Doc]:
     sources = sorted(SHARED.rglob("*.md")) + sorted(ROOT.glob("skills/*/SKILL.md"))
-    return [parse(md) for md in sources]
+    return [read(md) for md in sources]
 
 
 def assert_once(anchor: str) -> None:
