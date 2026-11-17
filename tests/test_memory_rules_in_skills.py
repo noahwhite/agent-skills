@@ -68,3 +68,26 @@ def test_k2_why_is_x_needed_follows_change_exactly_what_was_asked() -> None:
     items = bullets(section((SHARED / "engineering-practice.md").read_text(), "Make minimal, durable changes"))
     asked = next(i for i, item in enumerate(items) if item.startswith("Change exactly what was asked"))
     assert items[asked + 1] == K2
+
+
+# --- K3: shared/code-review.md --------------------------------------------------------------
+
+K3 = (
+    "**Scoped sub-task:** a scoped sub-task goes to a fresh agent whose self-contained prompt names the files, "
+    "areas and systems it must not touch and the point where it stops, never to a `fork`, because a fork "
+    "inherits the whole conversation. "
+    "Before acting on a subagent's self-report, the delegator verifies it against ground truth (git history "
+    "and refs, the PR list, run conclusions), and it reads the code the subagent wrote before merging it. "
+    "Related rules, not restated here: Clean, above; reading an automated fixer's commits, in "
+    "\"Automated pre-PR gates\" below; and the coordinator's own read of each merged PR, in "
+    "`story-to-done` step 2."
+)
+
+
+def test_k3_delegation_sits_in_the_clean_and_neutral_block() -> None:
+    body = section((SHARED / "code-review.md").read_text(), "Review of record")
+    block = body.split("the two always go together:\n", 1)[1].split("\n1. ", 1)[0]
+    items = bullets(block)
+    assert items[0].startswith("**Clean:**")
+    assert items[1].startswith("**Neutral:**")
+    assert items[2] == K3
