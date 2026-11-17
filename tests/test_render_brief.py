@@ -41,6 +41,10 @@ SHELL_RULE = (
 )
 RULES = {"merge": MERGE_RULE, "git": GIT_RULE, "shell": SHELL_RULE}
 
+NO_SELF_REVIEW = (
+    "- Don't start review or hardening rounds, or launch reviewer subagents, beyond the review gates this brief and "
+    "the skills it tells you to load define."
+)
 ENGINEER_LINES = [
     "- Load and follow `engineering-workflow` for the whole story, from triage, the pre-PR gate and the PR to "
     "`profile.git.integration_branch` to the merge per `profile.review.merge_owner`, the deploy, and the move to "
@@ -51,6 +55,12 @@ ENGINEER_LINES = [
     "- The real-check rule: report a change done only with the output of a real check that exercises it (tests, "
     "type-checker, build, the changed command, or for infrastructure a plan or dry run against the target); a "
     "syntax-only check, or a check that failed to start, does not count.",
+    "Install declared dependencies only with the project's own package manager and lockfile, never with sudo or the "
+    "system package manager.",
+    "If no real check can run, the report names the check not run and why.",
+    "- When the work in the brief is done, stop and report.",
+    "The tests the real-check rule needs are called for by this brief.",
+    NO_SELF_REVIEW,
     "Don't add features, tests, files, docs or refactors the brief or the story's acceptance criteria don't call for.",
     "The pre-PR gate and the review of record that `engineering-workflow` defines stay allowed.",
     "- The engineer never does pre-PR arbitration (`adversarial-review-pipeline` Phase 3, `engineering-workflow` step 4 "
@@ -89,7 +99,10 @@ QA_LINES = [
     "- What to hand back: the story's final state, the verdict and evidence for each AC and DoD item, any item left "
     "outstanding with its owner, any incidental defect it noted, and each PR it merged with the head SHA its review of "
     "record covered.",
+    "- Keep working until everything the brief asks for is done, and only stop to ask when you can't go on without the "
+    "coordinator or before a risky step.",
     "The stop this brief already defines still holds: hand back any item left outstanding with its owner.",
+    NO_SELF_REVIEW,
     "The pre-PR gate and the review of record that `engineering-workflow` defines, and the evidence PR's review of "
     "record that `qa-verification` defines, stay allowed.",
     "- The secrets rule (never write secrets to files or argv).",
@@ -254,6 +267,13 @@ def test_copied_placeholders_survive_byte_identical(scratch):
         assert "`profile.git.signed_commits`" in text, name
 
 
+@pytest.mark.parametrize("link", ["https://[::1]/report", "https://user@example.com/x", "https://example.com",
+                                  "https://example.com:8443/a?b=c#d"])
+def test_any_whitespace_free_https_url_with_a_host_renders(scratch, link):
+    _, text = qa(scratch, "spike", "--link", link)
+    assert text.endswith("one per line:\n\n" + link + "\n")
+
+
 def test_token_values_are_not_reexpanded(scratch):
     _, text = qa(scratch, "spike", "--link", "https://example.com/{{story}}/{{round}}")
     assert "https://example.com/{{story}}/{{round}}\n" in text
@@ -408,6 +428,9 @@ FAILURES = {
     "link with whitespace": lambda s: ok_qa(s, "spike") + ["--link", "https://example.com/a b"],
     "link empty host": lambda s: ok_qa(s, "spike") + ["--link", "https://"],
     "link without host": lambda s: ok_qa(s, "spike") + ["--link", "https://#"],
+    "link with userinfo and no host": lambda s: ok_qa(s, "spike") + ["--link", "https://user@/x"],
+    "link with port and no host": lambda s: ok_qa(s, "spike") + ["--link", "https://:443/x"],
+    "link with empty brackets": lambda s: ok_qa(s, "spike") + ["--link", "https://[]/x"],
     "missing role": lambda s: ["--story", "ABC-123", "--path", "deployed", "--scratch", s],
     "missing story": lambda s: ["--role", "engineer", "--path", "deployed", "--scratch", s],
     "missing path": lambda s: ["--role", "engineer", "--story", "ABC-123", "--scratch", s],

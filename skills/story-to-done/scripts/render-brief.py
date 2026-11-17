@@ -44,7 +44,8 @@ STORY = re.compile(r"[A-Z][A-Z0-9]*-[0-9]+")
 ROUND = re.compile(r"[1-9][0-9]*")
 ENVIRONMENT = re.compile(r"[a-z0-9][a-z0-9-]{0,62}")
 COMMIT = re.compile(r"[0-9a-f]{40}")
-LINK = re.compile(r"https://[A-Za-z0-9][A-Za-z0-9.-]*(?::[0-9]+)?(?:[/?#][\x21-\x7e]*)?")
+# AC1: a link is a whitespace-free https:// URL. has_host() also requires the URL to name a host.
+LINK = re.compile(r"https://\S+")
 SCRATCH = re.compile(r"/[A-Za-z0-9._/-]+")
 REFERENCE_NAME = re.compile(r"[a-z0-9-]+\.md")
 REFERENCE_OPEN = "`references/"
@@ -86,6 +87,15 @@ def refuse(line: str, code: int = 2) -> None:
 def check(value, pattern: re.Pattern, option: str) -> None:
     if not pattern.fullmatch(value):
         refuse(f"invalid {option}: the value does not match its pattern")
+
+
+def has_host(link: str) -> bool:
+    """Whether the authority of an https:// URL names a host, after any userinfo and port."""
+    authority = re.split(r"[/?#]", link.removeprefix("https://"), maxsplit=1)[0]
+    host = authority.rpartition("@")[2]
+    if host.startswith("["):
+        return host.find("]") > 1
+    return bool(host.partition(":")[0])
 
 
 def not_taken(ns: argparse.Namespace, options: tuple[str, ...], what: str) -> None:
@@ -151,6 +161,8 @@ def plan(ns: argparse.Namespace) -> tuple[str, str, list[str], dict]:
                 refuse("missing --link")
             for link in ns.link:
                 check(link, LINK, "--link")
+                if not has_host(link):
+                    refuse("invalid --link: the URL names no host")
             values["target"] = "\n".join(ns.link)
         templates = ["brief-qa.md", "brief-rules.md", fragment]
 
