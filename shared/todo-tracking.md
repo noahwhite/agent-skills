@@ -28,6 +28,7 @@ The list is the visible record of the run: how many steps there are and where yo
 7. **An item is completed only when its outcome was observed** (test output seen, run concluded, state read back), not when the command was issued.
 8. **Finish the list before reporting.**
    Before the final report, every item is completed, or is left open and named as not done with the reason.
+   When the todo tool gives items ids, that line carries the item's `#<id>` (for example `#4 not done: the owner runs AC7`), in the same text block as the `report: final` line.
 
 ## Subagents
 

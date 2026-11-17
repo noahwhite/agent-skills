@@ -614,7 +614,7 @@ def test_a_report_with_an_open_item_not_named_as_not_done_is_blocked(rig):
     rig.subagent_task("4", "pending")
     reason = assert_blocked(rig.report(), "#1 Write the tests", "#2 Open the PR", "not done",
                             "mark it in_progress with TaskUpdate if it is pending",
-                            "in the same message as the report: final line")
+                            "in the same text block as the report: final line")
     assert "#3" not in reason and "#4" not in reason
     assert_blocked(rig.send("stop_final_report_with_trailing_lines"), "#1 Write the tests")
 
@@ -1121,7 +1121,7 @@ MARKER_RULE = (
     "never carries that line",
     "`needs input`",
 )
-NAMING_RULE = ("on a line with `not done`, its `#<id>` and the reason", "in the same message as the `report: final` line")
+NAMING_RULE = ("on a line with `not done`, its `#<id>` and the reason", "in the same text block as the `report: final` line")
 
 
 @pytest.mark.parametrize("skill", SKILLS)
@@ -1129,6 +1129,12 @@ def test_each_skill_puts_the_report_marker_only_in_a_job_ending_report(skill):
     lines = (ROOT / "skills" / skill / "SKILL.md").read_text().splitlines()
     assert any(all(part in line for part in MARKER_RULE) for line in lines), skill
     assert any(all(part in line for part in NAMING_RULE) for line in lines), skill
+
+
+def test_the_closing_todo_rule_names_an_open_item_by_its_id_beside_the_marker():
+    rule = (ROOT / "shared" / "todo-tracking.md").read_text()
+    assert "that line carries the item's `#<id>`" in rule
+    assert "in the same text block as the `report: final` line" in rule
 
 
 # --- the README settings block (AC10) ----------------------------------------------------------

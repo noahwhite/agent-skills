@@ -83,7 +83,7 @@ NOT_IN_PROGRESS = (
 OPEN_ITEMS = (
     "todo-enforce: this final report was held back because these tasks you created are still open: {items}. "
     "For each one, mark it in_progress with TaskUpdate if it is pending, then complete it, or name it "
-    "on a line with \"not done\", its #<id> and the reason in the same message as the report: final "
+    "on a line with \"not done\", its #<id> and the reason in the same text block as the report: final "
     "line, then report again."
 )
 NO_SUBJECT = "(no subject)"

@@ -43,7 +43,7 @@ Six arguments are optional, given as `key=value` or in plain words ("QA on <mode
 - Resolve `qa-round-cap` before step 0 creates the todo list; it sets no model or effort.
 - Write the four resolved model and effort values, the `metrics: on|off` line, and the `qa-round-cap: <n>` line at the top of your todo list and in the closing report of every end state (the step 5 report, or the report made at any stop, including one before step 0).
 - End a report that ends the job (the step 5 report, or a failed or terminal stop) with `report: final` as a bare line on its own, with no list marker, emphasis or backticks and nothing else on that line; a `needs input` stop or any other question or pause to the owner never carries that line, and neither does any other message; the todo-enforce hook (`scripts/todo-enforce.py`) recognises a final report by that line.
-- In that report, name each todo item left open on a line with `not done`, its `#<id>` and the reason (for example `#4 not done: the owner runs AC7`), in the same message as the `report: final` line; the hook reads only that message and holds the report back while an open item is not named that way.
+- In that report, name each todo item left open on a line with `not done`, its `#<id>` and the reason (for example `#4 not done: the owner runs AC7`), in the same text block as the `report: final` line, which closes the message with nothing after it; the hook reads only that last text block and holds the report back while an open item is not named that way.
 - Write the `path: <value>` line step 1 selects in the same two places, as `path: unresolved` until step 1 selects it, including in the end-state report of a run that stops before then.
 
 ### Seat resolution
