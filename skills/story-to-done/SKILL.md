@@ -190,6 +190,7 @@ Let the senior engineer do the engineering; do not pre-empt its choices.
 The engineer never does pre-PR arbitration (`adversarial-review-pipeline` Phase 3, `engineering-workflow` step 4 Verify stage) or rules a finding valid, invalid or accepted risk or the gate converged (applying the gate's scope guard is not arbitration), and fixes what QA ruled not met or the adjudicator ruled valid without overturning those rulings; a separate clean, neutral arbiter on `profile.review.pre_pr.arbiter`, independent of engineer and coordinator, arbitrates every head.
 
 An interim handback goes to [references/interim-handbacks.md](references/interim-handbacks.md) before the step 0 checklist read-back and every check below; any other handback continues here.
+An unnamed waiting handback, as that reference defines it, goes there too and does not continue here.
 When it hands back, do the step 0 checklist read-back first, then read the story yourself and confirm it is in `profile.tracker.states.in_deployment_review`; a handback is a claim, the tracker is the record.
 If it handed back blocked or the story is not in deployment review, stop and report why.
 Then, for every PR it merged, read the PR yourself with `gh pr view <n> --json headRefOid,mergeCommit` and `gh api --paginate repos/<owner>/<repo>/pulls/<n>/reviews`.
@@ -227,6 +228,7 @@ On `no-deployment` and `spike`, on every entry, a run that starts at step 3 incl
 Never give it the senior engineer's handback beyond the environment, the PR's rationale, the fixes made, an earlier round's verdicts, or the verdict you expect.
 
 A QA agent's interim handback goes to [references/interim-handbacks.md](references/interim-handbacks.md) first; any other handback continues here.
+A QA agent's unnamed waiting handback, as that reference defines it, goes there too and does not continue here.
 When it hands back, do the step 0 checklist read-back first, then read the story's state yourself.
 For every PR it merged, such as the evidence PR, read the PR yourself with `gh pr view <n> --json headRefOid,mergeCommit` and `gh api --paginate repos/<owner>/<repo>/pulls/<n>/reviews`.
 Select the review of record as the merge guard in `references/code-review.md` does (the `COMMENTED` review whose body begins with `Review of record` and has the greatest `submitted_at`).

@@ -342,9 +342,9 @@ def pin(text: str, scratch: str) -> str:
 
 
 # Fixed inputs: story ABC-123, round 1, environment `dev`.
-DEPLOYED_QA_SHA256 = "277e2e46ec9814635931646e5fc4c9dd4344ae92630d25d1ad11056284d277e3"
+DEPLOYED_QA_SHA256 = "e014ba2c8f79c83455b632bff598a92baffdafd605cc816d3a227eccb08c8277"
 # Fixed inputs: story ABC-123, round 1, the two LINKS above.
-SPIKE_QA_SHA256 = "f8cace2ce0059ee916b794e2c65b46169cfd95c2b8c5d94092cc692fb27d7de1"
+SPIKE_QA_SHA256 = "c54650b59adf54cc751e5437942bfe235c71187da28cf9ca360f794efa4d47a3"
 
 
 def test_deployed_qa_render_is_pinned(scratch):

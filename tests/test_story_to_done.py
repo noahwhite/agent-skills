@@ -2939,8 +2939,8 @@ INTERIM_NO_SHORT_WAIT = (
 )
 INTERIM_RECEIPT = "Receipt is the coordinator's first clock read after the handback arrives."
 INTERIM_STATED_BLOCKER = (
-    "Step 0's stated-blocker sentence covers only the other handbacks, since an interim handback never reaches the "
-    "read-back."
+    "Step 0's stated-blocker sentence covers only the other handbacks, since neither an interim handback nor an "
+    "unnamed waiting handback reaches the read-back."
 )
 INTERIM_PR_WATCH = (
     "When the awaited CI run belongs to a PR, it also watches the PR, so a new head and its new run are not missed "
@@ -2958,7 +2958,8 @@ INTERIM_LIMITS = (
     "This rule changes no step logic for final or blocked handbacks, and leaves step 2's stop clause, step 4's "
     "continuation content limits, mixed-owner stop, owner-action stop, and new-round rules, and the no-write and "
     "no-verdict constraints unchanged; it only comes before step 0's read-back, step 2's check and step 4's "
-    "classification."
+    "classification, and adds only its own checklist reads, its own resumes (the deadline resume, the naming resume "
+    "and the stale-checklist resume) and its own stops."
 )
 
 
@@ -3165,7 +3166,8 @@ def test_no_other_sentence_in_the_rule_stops_or_halts() -> None:
     sentences = re.split(r"(?<=\.)\s+", " ".join(body.split()))
     stops = [s for s in sentences if "stop" in s.lower() or "halt" in s.lower()]
     assert stops == [
-        INTERIM_ORDER, INTERIM_NO_RESUME_STOP, INTERIM_REDEADLINE, INTERIM_TWO_MISS_STOP, INTERIM_STOP, INTERIM_LIMITS,
+        INTERIM_ORDER, INTERIM_NO_RESUME_STOP, INTERIM_REDEADLINE, INTERIM_TWO_MISS_STOP, INTERIM_STOP,
+        UNNAMED_SECOND, UNNAMED_NO_RESUME_STOP, STALE_BOUND, STALE_NO_RESUME_STOP, INTERIM_LIMITS,
     ]
 
 
@@ -3269,6 +3271,186 @@ def test_each_qa_interim_contract_appears_exactly_once() -> None:
     skill = " ".join(visible(SKILL.read_text()).split())
     assert skill.count(INTERIM_STEP_3_POINTER) == 1
     assert skill.count(QA_ROUND_EXCEPTION) == 1
+
+
+# SKL-357: a waiting handback that names no awaited item, and a checklist that stops updating.
+ASSETS = ROOT / "skills" / "story-to-done" / "assets"
+RENDER_BRIEF = ROOT / "skills" / "story-to-done" / "scripts" / "render-brief.py"
+WAITING_BULLET = (
+    "- A handback that is neither final nor blocked and waits on your own background work must name the awaited "
+    "item, its primary source and its expected duration."
+)
+RENDER_CASES = {
+    "engineer-deployed": ("--role", "engineer", "--path", "deployed"),
+    "engineer-no-deployment": ("--role", "engineer", "--path", "no-deployment"),
+    "engineer-spike": ("--role", "engineer", "--path", "spike"),
+    "qa-deployed": ("--role", "qa", "--path", "deployed", "--round", "1", "--environment", "dev"),
+    "qa-deployed-default": ("--role", "qa", "--path", "deployed", "--round", "1"),
+    "qa-no-deployment": ("--role", "qa", "--path", "no-deployment", "--round", "1", "--commit", "0" * 40),
+    "qa-spike": ("--role", "qa", "--path", "spike", "--round", "1", "--link", "https://example.com/spike"),
+}
+UNNAMED_DEFINITION = (
+    "An unnamed waiting handback is a handback from the senior engineer or a QA agent that is neither a final "
+    "handback nor blocked, says it waits on the role's own background work, and names no awaited item."
+)
+UNNAMED_QA_EXCLUSION = (
+    "A QA agent's handback that names a failed item, or an outstanding item owned by anyone other than that QA "
+    "agent, is not an unnamed waiting handback; it goes to step 0's checklist read-back and step 4 as usual."
+)
+UNNAMED_STALL = "An unnamed waiting handback is a stall, never an interim handback."
+UNNAMED_ORDER = (
+    "The coordinator classifies an unnamed waiting handback before step 0's checklist read-back, step 2's check and "
+    "step 4's classification."
+)
+UNNAMED_RESUME = (
+    "On an unnamed waiting handback the coordinator resumes that role once, asking only for the awaited item, its "
+    "primary source and its expected duration."
+)
+UNNAMED_RESUME_COUNTS = (
+    "The naming resume carries no conclusion or verdict, does not count against step 0's read-back resume cap, does "
+    "not increment a QA round count or consume step 4's continuation allowance, and with `metrics` on is its own "
+    "launch row."
+)
+UNNAMED_ANSWER = (
+    "If the answer is an interim handback as defined above, the deadline rule above applies from receipt of the "
+    "answer."
+)
+UNNAMED_SECOND = (
+    "A second unnamed waiting handback from the same role after that resume, within the same senior-engineer "
+    "delegation or, for a QA agent, the same QA round, counts as a missed deadline and stops the coordinator as at a "
+    "second miss under the two-miss stop above; the stop report names the role and both unnamed waiting handbacks."
+)
+UNNAMED_NO_RESUME_STOP = (
+    "If the runtime cannot resume the role for the naming resume, the coordinator reports the limitation and stops, "
+    "and spawns no new subagent."
+)
+CHECKLIST_READ = (
+    "At each interim handback and each unnamed waiting handback the coordinator reads the role's checklist file and "
+    "records on the todo list the item marked `(in progress)`, or else the first `- [ ]` item, or `none` when every "
+    "item is checked, or `missing or unreadable`, and whether the contents are identical to the contents read at the "
+    "previous such handback from that role (`no previous read` at the first)."
+)
+CHECKLIST_READ_SILENT = (
+    "The read sends nothing to the role, is separate from step 0's checklist read-back, and does not count against "
+    "its resume cap."
+)
+STALE_DEFINITION = (
+    "A checklist file is stale when its contents are identical, or it is missing or unreadable, at two consecutive "
+    "interim or unnamed waiting handbacks from the same role within the same senior-engineer delegation or QA round."
+)
+STALE_RESUME = (
+    "The coordinator then sends that role one stale-checklist resume asking it to update the checklist and name what "
+    "blocks it."
+)
+STALE_BOUND = (
+    "The stale-checklist resume is sent at most once per senior-engineer delegation and once per QA round, never on "
+    "a handback that gets the naming resume, and never on a handback on which the coordinator stops under Unnamed "
+    "waiting handbacks; that stop takes precedence over this resume, and staleness is judged again at the next such "
+    "handback on which the coordinator does not stop."
+)
+STALE_COUNTS = (
+    "It carries no conclusion or verdict, does not count against step 0's read-back resume cap, does not increment a "
+    "QA round count or consume step 4's continuation allowance, changes no awaited item's deadline or miss count, and "
+    "with `metrics` on is its own launch row."
+)
+STALE_NO_RESUME_STOP = (
+    "If the runtime cannot resume the role for the stale-checklist resume, the coordinator reports the limitation and "
+    "stops, and spawns no new subagent."
+)
+UNNAMED_SENTENCES = (
+    UNNAMED_DEFINITION, UNNAMED_QA_EXCLUSION, UNNAMED_STALL, INTERIM_STATED_BLOCKER, UNNAMED_ORDER, UNNAMED_RESUME,
+    UNNAMED_RESUME_COUNTS, UNNAMED_ANSWER, UNNAMED_SECOND, UNNAMED_NO_RESUME_STOP, CHECKLIST_READ,
+    CHECKLIST_READ_SILENT, STALE_DEFINITION, STALE_RESUME, STALE_BOUND, STALE_COUNTS, STALE_NO_RESUME_STOP,
+)
+
+
+def rendered_brief(tmp_path: Path, case: tuple[str, ...]) -> str:
+    scratch = Path(os.path.realpath(tmp_path))
+    role_dir = scratch / ("senior-engineer" if case[1] == "engineer" else "qa-agent-round-1")
+    role_dir.mkdir(exist_ok=True)
+    result = subprocess.run(
+        [sys.executable, str(RENDER_BRIEF), *case, "--story", "ABC-123", "--scratch", str(scratch)],
+        capture_output=True, text=True, stdin=subprocess.DEVNULL,
+    )
+    assert result.returncode == 0, result.stderr
+    return Path(result.stdout.strip()).read_text()
+
+
+@pytest.mark.parametrize("name", ["brief-engineer.md", "brief-qa.md"])
+def test_each_base_brief_requires_a_waiting_handback_to_name_its_awaited_item(name: str) -> None:
+    assert (ASSETS / name).read_text().splitlines().count(WAITING_BULLET) == 1
+
+
+@pytest.mark.parametrize("case", sorted(RENDER_CASES))
+def test_every_rendered_brief_carries_the_waiting_handback_bullet(case: str, tmp_path: Path) -> None:
+    assert rendered_brief(tmp_path, RENDER_CASES[case]).splitlines().count(WAITING_BULLET) == 1
+
+
+def test_the_unnamed_waiting_handback_is_defined_with_its_qa_exclusion_and_is_a_stall() -> None:
+    text = interim_text()
+    order = (INTERIM_QA_MIXED, UNNAMED_DEFINITION, UNNAMED_QA_EXCLUSION, UNNAMED_STALL, INTERIM_STATED_BLOCKER)
+    positions = [text.index(sentence) for sentence in order]
+    assert positions == sorted(positions)
+
+
+def test_an_unnamed_waiting_handback_is_classified_before_the_read_back_step_2_and_step_4() -> None:
+    text = interim_text()
+    assert text.index(INTERIM_QA_ORDER) < text.index(UNNAMED_ORDER) < text.index(INTERIM_RECORD)
+
+
+def test_an_unnamed_waiting_handback_gets_one_naming_resume_outside_every_cap() -> None:
+    text = interim_text()
+    order = (INTERIM_QA_CONCLUDED, UNNAMED_RESUME, UNNAMED_RESUME_COUNTS, UNNAMED_ANSWER)
+    positions = [text.index(sentence) for sentence in order]
+    assert positions == sorted(positions)
+
+
+def test_a_second_unnamed_waiting_handback_stops_as_a_second_miss() -> None:
+    text = interim_text()
+    assert text.index(INTERIM_TWO_MISS_STOP) < text.index(UNNAMED_ANSWER) < text.index(UNNAMED_SECOND)
+
+
+def test_a_runtime_that_cannot_make_the_naming_resume_stops_without_a_new_subagent() -> None:
+    text = interim_text()
+    assert text.index(UNNAMED_SECOND) < text.index(UNNAMED_NO_RESUME_STOP) < text.index(CHECKLIST_READ)
+
+
+def test_each_interim_or_unnamed_waiting_handback_reads_the_checklist_without_a_resume() -> None:
+    text = interim_text()
+    assert text.index(CHECKLIST_READ) < text.index(CHECKLIST_READ_SILENT) < text.index(STALE_DEFINITION)
+
+
+def test_a_stale_checklist_gets_one_bounded_resume_that_yields_to_the_unnamed_stop() -> None:
+    text = interim_text()
+    order = (STALE_DEFINITION, STALE_RESUME, STALE_BOUND, STALE_COUNTS, STALE_NO_RESUME_STOP, INTERIM_LIMITS)
+    positions = [text.index(sentence) for sentence in order]
+    assert positions == sorted(positions)
+
+
+STEP_2_UNNAMED_MIRROR = (
+    "An unnamed waiting handback, as that reference defines it, goes there too and does not continue here."
+)
+STEP_3_UNNAMED_MIRROR = (
+    "A QA agent's unnamed waiting handback, as that reference defines it, goes there too and does not continue here."
+)
+
+
+def test_steps_2_and_3_send_an_unnamed_waiting_handback_to_the_reference() -> None:
+    skill = visible(SKILL.read_text())
+    step_2 = " ".join(section(skill, "2. Senior engineer: implement to deployment review").split())
+    assert step_2.index(INTERIM_STEP_2_POINTER) < step_2.index(STEP_2_UNNAMED_MIRROR) < step_2.index(
+        STEP_2_READ_BACK_FIRST
+    )
+    step_3 = " ".join(section(skill, "3. QA agent: verify the deployed story").split())
+    assert step_3.index(INTERIM_STEP_3_POINTER) < step_3.index(STEP_3_UNNAMED_MIRROR) < step_3.index(
+        STEP_3_READ_BACK_FIRST
+    )
+
+
+def test_each_unnamed_and_checklist_contract_appears_exactly_once() -> None:
+    text = interim_text()
+    for sentence in UNNAMED_SENTENCES:
+        assert text.count(sentence) == 1, sentence
 
 
 # SKL-155: the `qa-round-cap` argument stops the loop at the cap-th counted QA round that ends in
@@ -3542,7 +3724,7 @@ def test_the_record_shape_pattern_matches_the_record_and_not_the_bare_word_readi
 # digest only together with a reviewed change to the text it covers.
 STEP_3_HEADING = "3. QA agent: verify the deployed story"
 # SKL-278 re-baselined this digest for the step 3 `path:` brief line and the path's verification target.
-STEP_3_SHA256 = "591d06fa9099fdf6f4958f7888bc4d3260de1d86838126145e008a44215173c0"
+STEP_3_SHA256 = "34b61d3d8350a12694af99d208da9cdca8ef8a337ff747f80bc49b5dc8e376f6"
 # SKL-284 re-pinned IN_PROGRESS_SHA256: the cap sentences now call qa-round-cap.py and carry no pending item.
 IN_PROGRESS_SHA256 = "9dbeb7719d9105b33029d7a6bf043a26bc348a3e3ec18894ec7b5cb43e0c6115"
 IN_DEPLOYMENT_REVIEW_SHA256 = "36da368bed892519776e5be61064d2fad186151ca58ae90aff897e9a1ffaa968"
