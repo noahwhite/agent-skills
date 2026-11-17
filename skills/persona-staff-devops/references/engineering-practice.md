@@ -53,7 +53,7 @@ Read this when diagnosing, implementing, testing, or fixing code, or when changi
 - A guard test is not proven by being green.
   Mutation-test it, with the literal original defect as one of the mutants.
 - Pair a positive assertion (the correct thing is present) with a negative one (the bad construction is absent), and add a false-positive probe: reformat a correct input and assert the check still passes.
-- ⛔ Never guess an external API's payload shape.
+- ⛔ Never guess an external API's payload shape (see [Read the source before asserting](#read-the-source-before-asserting)).
   Ground every parser and fixture in real evidence: the provider's documented example verbatim, a captured live payload, or a sandbox response.
   Handle and test the absence of fields the docs mark conditional, and keep an acceptance criterion that verifies against the real integration before done.
 - Run the existing test suite, not only syntax checks, before every commit.
@@ -74,6 +74,19 @@ Read this when diagnosing, implementing, testing, or fixing code, or when changi
 - The only legitimate suppression is a benign miss (for example "not found" on first creation), with an inline comment naming which error is benign and why the fallback is correct.
 - Before committing, search your diff for `2>/dev/null`, `|| true`, `except`, and `.catch`, and justify every hit.
   When something ran green but did nothing, suspect a silenced error first.
+
+## Read the source before asserting
+
+- Before theorizing, asserting, acting, filing, or writing a fact into code, a comment, a commit message, or a handback, read the authoritative source for that kind of fact: the error and logs, live state, `--help`, or the registry or provider API.
+- Quote the real error instead of paraphrasing it, leaving out any secret value it carries, and prove the before-state before claiming a change fixed it.
+- Check every fact, capability, and "because X" justification before stating it.
+- A clearly labelled hypothesis may be stated; check its factual premises before any action relies on it.
+- For a bug or failure, [Diagnose before you touch code](#diagnose-before-you-touch-code) applies as well.
+- ⛔ When a claim cannot be checked, say you do not know, or name what you could not check; never write a plausible sentence in its place.
+  Carry that unverified label into the PR description or handback.
+- Pick the option that is correct and robust, not the one with least effort or cost.
+- ⛔ "Follow-up", "good enough", "probably fine", "out of scope", and "low value" are not reasons to skip work that the Definition of Done, an acceptance criterion, or a rule calls for.
+  Work that cannot be completed is reported as incomplete with its blocker, never claimed done.
 
 ## Migrations
 
