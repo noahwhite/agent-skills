@@ -417,10 +417,7 @@ def test_the_log_alone_changes_neither_the_binding_nor_acceptance(gate, flow):
     assert {phase: Path(f"{artifact_paths(gate)[phase]}.stamp").read_text()
             for phase in PHASES} == stamps
     size_log(gate).unlink()
-    if flow == "dossier":
-        recorded = record(gate, "arbitrate")
-        assert recorded.returncode == 0, recorded.stdout + recorded.stderr
-    else:
-        complete(gate, flow, "arbitrate")
+    # A fresh round on either flow: one arbitrate dossier accepts one arbitration.
+    complete(gate, flow, "arbitrate")
     for phase in PHASES:
         assert "dossier-sizes" not in Path(f"{artifact_paths(gate)[phase]}.stamp").read_text()
