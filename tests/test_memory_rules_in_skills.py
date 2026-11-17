@@ -5,7 +5,7 @@ occurs only once across `shared/` and every `skills/*/SKILL.md`, so a later edit
 weakens, hides, moves or duplicates it fails here.
 A cross-referenced target is checked for presence only, not pinned: its text belongs to other rules.
 Rendered text is the text of the CommonMark parse: inline markup, link targets and titles, HTML
-and image alt text do not count, and a code span keeps its backticks.
+tags, comments and attributes, and image alt text do not count, and a code span keeps its backticks.
 Every file these tests read a rule or a cross-reference from carries no raw HTML that could hide
 text: no HTML block, comment, closing tag or attribute anywhere in the file, only bare placeholder
 tags such as `<name>`.
@@ -32,17 +32,27 @@ def collapse(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
-def rendered(inline: Token) -> str:
-    """The rendered text of an inline token, whitespace collapsed."""
+def rendered(inline: Token, prose: bool = False) -> str:
+    """The rendered text of an inline token, whitespace collapsed.
+
+    In prose, a code span that holds more than one word stands for an example, not an instruction,
+    and renders as `code`; a one-word code span such as `STORY_ID` keeps its text.
+    """
     parts = []
     for child in inline.children or []:
         if child.type == "text":
             parts.append(child.content)
         elif child.type == "code_inline":
-            parts.append(f"`{child.content}`")
+            code = "code" if prose and re.search(r"\s", child.content.strip()) else child.content
+            parts.append(f"`{code}`")
         elif child.type in ("softbreak", "hardbreak"):
             parts.append(" ")
     return collapse("".join(parts))
+
+
+def html_text(html: str) -> str:
+    """The text an HTML block shows: comments and tags (with their attributes) removed."""
+    return re.sub(r"<[^>]*>", " ", re.sub(r"<!--.*?-->", " ", html, flags=re.S))
 
 
 @dataclass
@@ -53,8 +63,10 @@ class Doc:
     paragraphs: dict[str, list[str]] = field(default_factory=dict)
     # Raw HTML other than a placeholder tag, anywhere in the file.
     html: list[str] = field(default_factory=list)
-    # Every heading and paragraph in document order, for counting anchors.
+    # Every heading, paragraph and HTML block's text in document order, for counting anchors.
     flow: list[str] = field(default_factory=list)
+    # Every heading and paragraph as prose (see `rendered`), in document order.
+    prose: list[str] = field(default_factory=list)
 
     def section(self, heading: str) -> list[list[str]]:
         """The top-level bullet lists under a heading that occurs exactly once."""
@@ -85,6 +97,7 @@ def parse(path: Path) -> Doc:
     for token in MARKDOWN.parse(path.read_text(encoding="utf-8")):
         if token.type == "html_block":
             doc.html.append(token.content.strip())
+            doc.flow.append(html_text(token.content))
         elif token.type in ("heading_open", "paragraph_open"):
             opened = token
         elif token.type == "inline" and opened is not None:
@@ -94,6 +107,7 @@ def parse(path: Path) -> Doc:
             )
             text = rendered(token)
             doc.flow.append(text)
+            doc.prose.append(rendered(token, prose=True))
             if opened.type == "heading_open" and opened.level == 0:
                 current = text
                 doc.headings.append(current)
@@ -260,8 +274,8 @@ def test_k4_cross_reference_resolves() -> None:
     problems = []
     for md in skills:
         doc = read(md)
-        declared = len(declaration.findall(doc.text()))
-        rules = [p for ps in doc.paragraphs.values() for p in ps if declaration.search(p)]
+        declared = sum(len(declaration.findall(unit)) for unit in doc.prose)
+        rules = [unit for unit in doc.prose if declaration.search(unit)]
         if declared != 1:
             problems.append(f"{md.parent.name}: {declared} `STORY_ID` argument declarations")
         elif not never_guess.search(rules[0]):
