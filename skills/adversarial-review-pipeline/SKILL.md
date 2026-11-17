@@ -105,7 +105,7 @@ Launching a phase depends on the profile agent's `runtime`:
   If the dossier cannot be written, the command removes that checkout itself before it exits.
   Spawn a clean, neutral subagent (its whole brief is the dossier) with the agent's model, tell it to read the dossier and work only in that checkout, and save its final report to the phase's artifact path (`paths` prints them).
   The sweep and the arbiter treat the checkout as read-only; only the hunter mutates its own.
-  Then run `record <phase>` with the same `--base`, `--spec` and `--no-sweep` as the dossier; it reads the script's own run state, not a scratch directory.
+  Then run `record <phase>` with the same `--base`, `--spec` and `--no-sweep` as the dossier (for arbitration, also the arbiter's `--model` and `--agent`, see "Arbiter identity and retained rounds"); it reads the script's own run state, not a scratch directory.
   It accepts the report only if it is non-empty, newer than the dossier, starts with `REVIEW-RAN: yes`, its inputs still match the dossier's, and the tripwire saw no change to the primary checkout since the dossier was written.
   Remove the checkout with `cleanup <path>` once the phase is recorded; it removes only a checkout the script created and registered, and refuses any other path.
 
@@ -238,7 +238,8 @@ ARBITER-HEAD: <full HEAD SHA>
 
 - `--agent NAME` (`ADVERSARIAL_AGENT`) carries the name of the `profile.review.pre_pr.arbiter` entry, and `--model ID` its model; `--agent` wins when both it and `ADVERSARIAL_AGENT` are set.
   Pass both on `run arbitrate` and on `record arbitrate`.
-- An absent or empty `--agent` or `--model` value is written as `not-supplied`; a reader treats `not-supplied` in either field as a missing field.
+- An absent `--agent` or `--model` value is written as `not-supplied`, and so is an empty one where the command accepts it (`run` still refuses an empty `--model` with exit 2); a reader treats `not-supplied` in either field as a missing field.
+- Lines 2 to 4 are the only identity block: the report body below them is the model's text, copied unchanged, so a reader takes the identity from those three lines and never scans the body for `ARBITER-` lines.
 - `ARBITER-HEAD` is the HEAD when the script runs, so `record arbitrate` must run at the reviewed head: never record a report after moving the branch.
 - A report whose first line is not `REVIEW-RAN: yes` fails as before (exit 17) and writes and retains nothing.
 

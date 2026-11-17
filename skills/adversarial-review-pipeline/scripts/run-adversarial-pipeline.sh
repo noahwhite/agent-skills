@@ -123,9 +123,12 @@
 #   ARBITER-AGENT: <name>
 #   ARBITER-MODEL: <model id exactly as given by --model>
 #   ARBITER-HEAD: <full HEAD SHA>
-# An absent or empty --agent or --model value is written as not-supplied. ARBITER-HEAD is the HEAD
-# when the script runs, so run `record arbitrate` at the reviewed head. A report whose first line is
-# not 'REVIEW-RAN: yes' fails as before and writes and retains nothing. The accepted, stamped report
+# An absent --agent or --model value is written as not-supplied, and so is an empty one where the
+# command accepts it (`run` still refuses an empty --model with exit 2). Lines 2 to 4 are the only
+# identity block: the body below them is the model's text, copied unchanged, so a reader never scans
+# it for ARBITER- lines. ARBITER-HEAD is the HEAD when the script runs, so run `record arbitrate` at
+# the reviewed head. A report whose first line is not 'REVIEW-RAN: yes' fails as before and writes
+# and retains nothing. The accepted, stamped report
 # is then retained as an immutable (read-only) copy in
 #   <git common dir>/adversarial-pipeline/arbitration-rounds
 # where <git common dir> is the absolute `git rev-parse --git-common-dir`, so every worktree of the
@@ -632,8 +635,8 @@ stamp_and_retain_arbitration() {
   if ! headed="$(mktemp -p "$RUN_DIR" arbitrate-headed.XXXXXX)" \
     || ! { IFS= read -r first < "$art" || [ -n "$first" ]; } \
     || ! { printf '%s\nARBITER-AGENT: %s\nARBITER-MODEL: %s\nARBITER-HEAD: %s\n' "$first" \
-             "${ARBITER_AGENT:-not-supplied}" "${MODEL:-not-supplied}" "$HEAD_SHA"
-           tail -n +2 -- "$art"; } > "$headed" \
+             "${ARBITER_AGENT:-not-supplied}" "${MODEL:-not-supplied}" "$HEAD_SHA" \
+           && tail -n +2 -- "$art"; } > "$headed" \
     || ! mv -f -- "$headed" "$art"; then
     rm -f -- "${headed:-}" "$original"
     die 21 "could not write the arbiter identity lines into $art; the phase is not accepted."

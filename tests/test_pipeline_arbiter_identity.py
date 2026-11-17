@@ -375,6 +375,8 @@ def test_every_worktree_of_the_clone_resolves_the_same_directory(gate, tmp_path)
     second = run_phase(other, "arbitrate", "--agent", AGENT_NAME, "--model", MODEL_ID)
     assert second.returncode == 0, second.stdout + second.stderr
     one, two = retained_path_from(first.stderr), retained_path_from(second.stderr)
+    assert one != two
+    assert retained(gate["repo"]) == sorted([one, two])
     assert one.parent == two.parent == retention_dir(gate["repo"]) == retention_dir(linked)
     # The linked worktree's own git-path is elsewhere, and removing the worktree keeps both copies.
     assert Path(git(linked, "rev-parse", "--path-format=absolute", "--git-path",
