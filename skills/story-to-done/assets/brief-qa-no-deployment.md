@@ -1,0 +1,1 @@
+- The verification target, in place of an environment: the merged commit `{{target}}` on `profile.git.integration_branch`, which the `engineering-workflow` step 12 note names.

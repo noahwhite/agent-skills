@@ -1,0 +1,1 @@
+- The environment under test: none is named, so `qa-verification` picks its default.
