@@ -39,40 +39,42 @@ class Doc:
         return [item for group in self.section(heading) for item in group]
 
 
+PREAMBLE = ""  # the section key for content before the first `##` heading
+
+
 def parse(path: Path) -> Doc:
-    """`##` headings, the top-level bullet items under each, and every rendered paragraph."""
-    doc, current, depth, in_heading, in_paragraph, in_bullet = Doc(), None, 0, False, False, False
+    """Document-level `##` headings, the top-level bullet items under each, and every rendered paragraph.
+
+    Only a heading at document level opens a section; a heading nested in a list item or quote is
+    text of its container. Content before the first `##` heading belongs to the PREAMBLE section.
+    """
+    doc = Doc(lists={PREAMBLE: []}, paragraphs={PREAMBLE: []})
+    current, opened, item = PREAMBLE, None, None
     for token in MARKDOWN.parse(path.read_text()):
-        if token.type == "heading_open":
-            in_heading = token.tag == "h2"
-        elif token.type == "inline" and in_heading:
-            current = token.content.strip()
-            doc.headings.append(current)
-            doc.lists.setdefault(current, [])
-            doc.paragraphs.setdefault(current, [])
-            in_heading = False
-        elif token.type == "bullet_list_open" and depth == 0 and current is not None:
-            doc.lists[current].append([])
-        elif token.type == "list_item_open":
-            depth += 1
-            if depth == 1:
-                in_bullet = token.markup in ("-", "*", "+") and current is not None and bool(doc.lists[current])
-                if in_bullet:
-                    doc.lists[current][-1].append("")
-        elif token.type == "list_item_close":
-            depth -= 1
-        elif token.type == "paragraph_open":
-            in_paragraph = True
-        elif token.type == "paragraph_close":
-            in_paragraph = False
-        elif token.type == "inline" and in_paragraph:
+        if token.type in ("heading_open", "paragraph_open"):
+            opened = token
+        elif token.type == "inline" and opened is not None:
             text = spaced(token.content)
-            doc.prose.append(text)
-            if current is not None:
-                doc.paragraphs[current].append(text)
-            if depth and in_bullet:
-                group = doc.lists[current][-1]
-                group[-1] = spaced(group[-1] + " " + text)
+            if opened.type == "heading_open" and opened.tag == "h2" and opened.level == 0:
+                current = token.content.strip()
+                doc.headings.append(current)
+                doc.lists.setdefault(current, [])
+                doc.paragraphs.setdefault(current, [])
+            else:
+                if opened.type == "paragraph_open":
+                    doc.prose.append(text)
+                    doc.paragraphs[current].append(text)
+                if item is not None:
+                    group = doc.lists[current][-1]
+                    group[item] = spaced(group[item] + " " + text)
+            opened = None
+        elif token.type == "bullet_list_open" and token.level == 0:
+            doc.lists[current].append([])
+        elif token.type == "list_item_open" and token.level == 1 and token.markup in ("-", "*", "+"):
+            doc.lists[current][-1].append("")
+            item = len(doc.lists[current][-1]) - 1
+        elif token.type == "bullet_list_close" and token.level == 0:
+            item = None
     return doc
 
 
@@ -118,10 +120,6 @@ K2 = [
     "Remove X only when that reasoning shows it is unneeded and the removal is within what was asked.",
 ]
 
-# Reading files for completeness or confirmation, the behaviour K1 limits.
-OVER_READ_RE = re.compile(r"\bread\b[^.]*?\bfiles?\b[^.]*?\bfor (?:completeness|confirmation)\b", re.I)
-
-
 def test_k1_over_reading_follows_the_search_bullet() -> None:
     items = parse(SHARED / "engineering-practice.md").bullets("Reuse and study existing code")
     assert items[0].startswith("Before writing code for an operation"), "the search bullet must stay first"
@@ -130,8 +128,16 @@ def test_k1_over_reading_follows_the_search_bullet() -> None:
     assert_once_in_shared(K1[0])
 
 
+# A bullet that reads for completeness or confirmation under K1's replication condition
+# (the pattern or its substitutions already known) contradicts K1; one without that condition
+# (a first read, an exhaustive diff review) does not.
+OVER_READ_RE = re.compile(r"\bfor (?:completeness|confirmation)\b", re.I)
+KNOWN_PATTERN_RE = re.compile(r"\b(?:known|substitutions?)\b", re.I)
+
+
 def test_k1_has_no_contradicting_over_read_rule() -> None:
-    hits = [b for doc in shared_docs() for g in doc.lists.values() for i in g for b in i if OVER_READ_RE.search(b)]
+    every_bullet = [b for doc in shared_docs() for groups in doc.lists.values() for group in groups for b in group]
+    hits = [b for b in every_bullet if OVER_READ_RE.search(b) and KNOWN_PATTERN_RE.search(b)]
     assert len(hits) == 1 and hits[0].startswith(K1[0]), hits
 
 
