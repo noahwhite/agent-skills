@@ -138,7 +138,8 @@
 # directory and published with a no-clobber hard link; when the name exists the next <n> is tried,
 # so two byte-identical arbitrations at one head leave two files and nothing is overwritten. Any
 # failure to write or publish the copy, or to stamp the report after it, fails the phase (exit 21):
-# no stamp is left and the report is restored as the agent wrote it. A signal before publishing
+# no stamp is left, a copy it had published is removed, and the report is restored as the agent
+# wrote it. A signal before publishing
 # starts restores it the same way; once publishing starts, the copy and the stamp land together and
 # the phase stays accepted. An accepted phase prints
 #   Retained arbitration report -> <path>
@@ -629,7 +630,8 @@ accept_phase() {  # $1 = phase, $2 = stderr log or "": validate a freshly writte
 # arbitration and recording it again fails (exit 15). Until publishing starts, any failure or signal
 # restores the report as the agent wrote it and the launch, with no stamp, so the phase is not
 # accepted and a retried `record` starts from the same report. Once publishing starts, signals are
-# ignored (child processes inherit that) until the copy and the stamp have both landed.
+# ignored (child processes inherit that) for the rest of the transaction, which runs in its own child
+# (accept_in_child); a stamp that cannot be put in place removes the copy just published.
 # The retained path goes to fd 3, which each caller points at the script's own stderr.
 ARBITRATION_ROUNDS="$COMMON_DIR/adversarial-pipeline/arbitration-rounds"
 ARB_SIGNALS="INT TERM HUP QUIT USR1 USR2"
@@ -695,12 +697,13 @@ stamp_and_retain_arbitration() {
     arbitration_rollback
     die 21 "could not retain the accepted arbitration report under $ARBITRATION_ROUNDS; the phase is not accepted."
   fi
-  if ! mv -f -- "$ARB_STAMP_NEW" "$ARB_ART.stamp"; then
+  # -T: a directory at the stamp path fails here instead of receiving the stamp.
+  if ! mv -fT -- "$ARB_STAMP_NEW" "$ARB_ART.stamp"; then
+    rm -f -- "$dest" || echo "WARNING: could not remove $dest, published for an arbitration that was not accepted" >&2
     arbitration_rollback
-    die 21 "could not put the arbitration stamp in place after publishing $dest; that copy stays, and the phase is not accepted."
+    die 21 "could not put the arbitration stamp in place; the copy published for it was removed, and the phase is not accepted."
   fi
-  # shellcheck disable=SC2086
-  trap - $ARB_SIGNALS
+  # Signals stay ignored to the end: the child exits right after this, and the phase is accepted.
   rm -f -- "$ARB_ORIGINAL" "$ARB_CONSUMED"
   printf 'Retained arbitration report -> %s\n' "$dest" >&3
 }

@@ -412,14 +412,18 @@ SIGNAL_TARGETS = {
 }
 
 
-def signalling_shim(g: dict, command: str, target: str) -> dict[str, str]:
-    """An environment whose `command` sends TERM once (to the target), then runs the real command."""
+def signalling_shim(g: dict, command: str, target: str, args: str = "") -> dict[str, str]:
+    """An environment whose `command` sends TERM once (to the target), then runs the real command.
+
+    With `args`, only a call whose arguments contain that text sends it.
+    """
     shim = g["home"] / "signal-bin"
     shim.mkdir(exist_ok=True)
     real = shutil.which(command, path=g["env"]["PATH"])
     marker = g["home"] / f"signalled-{command}"
     (shim / command).write_text(
-        f"#!/bin/sh\nif [ ! -e '{marker}' ]; then : > '{marker}'; {SIGNAL_TARGETS[target]}; fi\n"
+        f"#!/bin/sh\ncase \"$*\" in *'{args}'*)\n"
+        f"  if [ ! -e '{marker}' ]; then : > '{marker}'; {SIGNAL_TARGETS[target]}; fi ;;\nesac\n"
         f"exec '{real}' \"$@\"\n")
     (shim / command).chmod(0o755)
     return {**g["env"], "PATH": f"{shim}{os.pathsep}{g['env']['PATH']}"}
@@ -469,6 +473,50 @@ def test_a_signal_while_publishing_lets_the_copy_and_the_stamp_land_together(gat
     stamp = Path(f"{artifact}.stamp").read_text()
     assert f"sha256={hashlib.sha256(report.encode()).hexdigest()}\n" in stamp
     assert retained(gate["repo"]) == [retained_path_from(result.stderr)]
+    cleanup(gate, Path(line_value(written.stderr, "CHECKOUT: ")))
+
+
+@pytest.mark.parametrize("target", sorted(SIGNAL_TARGETS))
+def test_a_signal_after_the_stamp_lands_keeps_the_phase_accepted(gate, target):
+    ready_for_arbitration(gate, "dossier")
+    written = run_script("dossier", "arbitrate", *common(gate), env=gate["env"])
+    assert written.returncode == 0, written.stdout + written.stderr
+    artifact = artifact_paths(gate)["arbitrate"]
+    artifact.write_bytes(f"REVIEW-RAN: yes\n{REPORT_BODY}".encode())
+    # This `rm` clears the transaction files after the copy and the stamp have both landed.
+    shimmed = signalling_shim(gate, "rm", target, args="arbitrate-original.")
+    result = record_arbitration_in_own_session(gate, shimmed)
+    assert (gate["home"] / "signalled-rm").exists()
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "it stays accepted" in result.stderr
+    report = artifact.read_text()
+    assert report == expected_report(AGENT_NAME, MODEL_ID, head_sha(gate))
+    stamp = Path(f"{artifact}.stamp").read_text()
+    assert f"sha256={hashlib.sha256(report.encode()).hexdigest()}\n" in stamp
+    assert retained(gate["repo"]) == [retained_path_from(result.stderr)]
+    cleanup(gate, Path(line_value(written.stderr, "CHECKOUT: ")))
+
+
+def test_a_stamp_that_cannot_land_removes_the_copy_published_for_it(gate):
+    ready_for_arbitration(gate, "dossier")
+    written = run_script("dossier", "arbitrate", *common(gate), env=gate["env"])
+    assert written.returncode == 0, written.stdout + written.stderr
+    artifact = artifact_paths(gate)["arbitrate"]
+    report = f"REVIEW-RAN: yes\n{REPORT_BODY}".encode()
+    artifact.write_bytes(report)
+    # A directory at the stamp path: the stamp cannot be put in place there.
+    blocker = Path(f"{artifact}.stamp")
+    blocker.mkdir()
+    failed = record_arbitration_in_own_session(gate, gate["env"])
+    assert failed.returncode == 21, failed.stdout + failed.stderr
+    assert "Retained arbitration report" not in failed.stderr
+    assert blocker.is_dir() and list(blocker.iterdir()) == []
+    assert artifact.read_bytes() == report
+    assert retained(gate["repo"]) == []
+    blocker.rmdir()
+    retry = record_arbitration_in_own_session(gate, gate["env"])
+    assert retry.returncode == 0, retry.stdout + retry.stderr
+    assert retained(gate["repo"]) == [retained_path_from(retry.stderr)]
     cleanup(gate, Path(line_value(written.stderr, "CHECKOUT: ")))
 
 
