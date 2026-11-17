@@ -1162,6 +1162,10 @@ METRICS_LINES = [
     "- Resolve `metrics` before step 0 creates the todo list; it sets no model or effort.",
     "- " + OFF_PATH,
     "- " + METRICS_LINE_SENTENCE + " (the step 5 report, or the report made at any stop, including one before step 0).",
+    # SKL-265 AC9: the closing report writes the metrics value as the bare line the todo-enforce report gate reads.
+    "- In every closing report, write the metrics value as a bare line on its own, exactly `metrics: on` or "
+    "`metrics: off`, with no list marker, emphasis or backticks and nothing else on that line; the todo-enforce "
+    "hook (`scripts/todo-enforce.py`) recognises a closing report by that line.",
     "## Metrics",
     METRICS_OPENING + " right after step 0 creates the todo list: it is the single home for what a `story-to-done` run "
     "collects and reports, and this file does not restate it.",

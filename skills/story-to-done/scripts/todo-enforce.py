@@ -4,9 +4,9 @@
 
   python3 todo-enforce.py < <hook payload JSON>
 
-Register it in settings.json for UserPromptSubmit, PreToolUse (matcher "*"), TaskCreated and
-TaskCompleted; the README gives the exact block. It reads the event from the payload's
-hook_event_name and, per session_id:
+Register it in settings.json for UserPromptSubmit, PreToolUse (matcher "*"), TaskCreated,
+TaskCompleted and Stop (no matcher); the README gives the exact block. It reads the event from the
+payload's hook_event_name and, per session_id:
 
 - arms the session when the main thread loads either skill: a PreToolUse Skill call naming it,
   or a UserPromptSubmit prompt that starts with its slash command;
@@ -18,7 +18,16 @@ hook_event_name and, per session_id:
 - in an armed session that has the task tools, refuses (exit 2) a main-owned task's completion
   (a task with no owner record counts as main-owned when the main thread completes it)
   from a subagent, or from the main thread unless its task file still says in_progress
-  (TaskCompleted fires before the status is written) or when that file is unreadable.
+  (TaskCompleted fires before the status is written) or when that file is unreadable;
+- report gate: in an armed session that has the task tools, blocks a Stop (stdout
+  {"decision": "block", ...}, exit 0) whose last_assistant_message has a line matching
+  ^metrics: (on|off)\\s*$ while a main-owned task whose file reads pending or in_progress is not
+  named on a line containing "not done" and its #<id>; a Stop without that line, or carrying
+  agent_id, is allowed, and a missing or non-string last_assistant_message or an unreadable task
+  file allows it with a stderr warning;
+- loop guard: the report gate blocks at most REPORT_BLOCK_LIMIT consecutive times, then allows with
+  a stderr line; the count lives in the state directory and resets on any Stop the gate allows and
+  on a main-thread UserPromptSubmit, and stop_hook_active is not used.
 
 A session has the task tools when the transcript at transcript_path lists TaskCreate in its
 deferred_tools_delta attachments. Subagent tool calls (agent_id set) are never denied.
@@ -59,6 +68,14 @@ UNREADABLE = (
 NOT_IN_PROGRESS = (
     "todo-enforce: task {task} was not completed because it is {status}, not in_progress. "
     "Mark it in_progress with TaskUpdate when you start the work, then complete it when done."
+)
+REPORT_BLOCK_LIMIT = 3
+REPORT_SIGNAL = re.compile(r"^metrics: (on|off)\s*$")
+OPEN = ("pending", "in_progress")
+OPEN_ITEMS = (
+    "todo-enforce: this final report was held back because these tasks you created are still open: {items}. "
+    "Complete each one with TaskUpdate, or name it on a line with \"not done\", its #<id> and the reason, "
+    "then report again."
 )
 
 
@@ -145,12 +162,16 @@ def owners_writable(session):
     return True
 
 
-def task_status(session, task):
+def task_file(session, task):
     with open(os.path.join(tasks_dir(session), task + ".json")) as fh:
         data = json.load(fh)
     if not isinstance(data, dict):
         raise ValueError("task file is not a JSON object")
-    return data.get("status")
+    return data
+
+
+def task_status(session, task):
+    return task_file(session, task).get("status")
 
 
 def main_task_in_progress(session):
@@ -263,10 +284,117 @@ def refuse(reason):
     return 2
 
 
+def block(reason):
+    json.dump({"decision": "block", "reason": reason}, sys.stdout)
+    return 0
+
+
+def report_blocks_path(session):
+    return os.path.join(state_dir(session), "report-blocks")
+
+
+def reset_report_blocks(session):
+    try:
+        os.remove(report_blocks_path(session))
+    except FileNotFoundError:
+        pass
+    except OSError as exc:
+        log("report block count not reset: %s: %s" % (type(exc).__name__, exc))
+
+
+def count_report_block(session):
+    """The number of consecutive report blocks before this one, after recording this one."""
+    path = report_blocks_path(session)
+    try:
+        with open(path) as fh:
+            count = int(fh.read())
+    except FileNotFoundError:
+        count = 0
+    if count >= REPORT_BLOCK_LIMIT:
+        return count
+    tmp = "%s.%d" % (path, os.getpid())
+    with open(tmp, "w") as fh:
+        fh.write(str(count + 1))
+    os.replace(tmp, path)
+    return count
+
+
+def open_main_items(session):
+    """[(id, subject)] of the main-owned tasks whose task file reads pending or in_progress;
+    an unreadable task file raises."""
+    try:
+        tasks = os.listdir(os.path.join(state_dir(session), "owners"))
+    except FileNotFoundError:
+        tasks = []
+    items = []
+    for task in tasks:
+        if not task.startswith(".") and owner_of(session, task) == MAIN:
+            try:
+                data = task_file(session, task)
+            except FileNotFoundError:
+                continue
+            except (OSError, ValueError) as exc:
+                raise ValueError("task %s file unreadable: %s: %s" % (task, type(exc).__name__, exc))
+            if data.get("status") in OPEN:
+                subject = data.get("subject")
+                items.append((task, subject if isinstance(subject, str) else ""))
+    return sorted(items, key=lambda item: (len(item[0]), item[0]))
+
+
+def named_not_done(task, lines):
+    mention = re.compile(r"(?<!\w)#%s(?!\d)" % re.escape(task))
+    return any("not done" in line.lower() and mention.search(line) for line in lines)
+
+
+def report_gate(payload, session):
+    """The block reason for a final report that leaves an open item unnamed, else None."""
+    if agent_of(payload) is not None or not is_armed(session):
+        return None
+    text = payload.get("last_assistant_message")
+    if not isinstance(text, str):
+        log("allowing the stop: last_assistant_message is missing or not a string")
+        return None
+    lines = text.splitlines()
+    if not any(REPORT_SIGNAL.match(line) for line in lines):
+        return None
+    if not has_task_tools(session, payload.get("transcript_path")):
+        return None
+    try:
+        items = open_main_items(session)
+    except ValueError as exc:
+        log("allowing the report: %s" % exc)
+        return None
+    unnamed = ["#%s %s" % item for item in items if not named_not_done(item[0], lines)]
+    if not unnamed:
+        return None
+    return OPEN_ITEMS.format(items="; ".join(unnamed))
+
+
+def on_stop(payload, session):
+    reason = report_gate(payload, session)
+    if reason is None:
+        reset_report_blocks(session)
+        return 0
+    try:
+        count = count_report_block(session)
+    except (OSError, ValueError) as exc:
+        log("allowing the report, the report gate state is unreadable or unwritable: %s: %s"
+            % (type(exc).__name__, exc))
+        return 0
+    if count >= REPORT_BLOCK_LIMIT:
+        log("allowing the report: the report gate already blocked %d consecutive times "
+            "(REPORT_BLOCK_LIMIT = %d)" % (count, REPORT_BLOCK_LIMIT))
+        reset_report_blocks(session)
+        return 0
+    return block(reason)
+
+
 def on_user_prompt(payload, session):
     prompt = payload.get("prompt")
-    if agent_of(payload) is None and isinstance(prompt, str) and SLASH.match(prompt):
-        arm(session)
+    if agent_of(payload) is None:
+        reset_report_blocks(session)
+        if isinstance(prompt, str) and SLASH.match(prompt):
+            arm(session)
     return 0
 
 
@@ -337,6 +465,7 @@ HANDLERS = {
     "PreToolUse": on_pre_tool_use,
     "TaskCreated": on_task_created,
     "TaskCompleted": on_task_completed,
+    "Stop": on_stop,
 }
 
 

@@ -3,6 +3,8 @@
 The payloads and transcript lines in tests/fixtures/todo_enforce/ are copied from the SKL-246 AC2
 probe sessions; payloads.json records the Claude Code version they came from. Each test runs the
 enforcer as Claude Code does, one process per event, against temporary state and task directories.
+SKL-265 adds the Stop report gate; its payloads are in stop-payloads.json, which records the Claude Code
+version of its AC1 probe and marks each payload as copied from that probe or synthesized.
 """
 
 import copy
@@ -21,7 +23,8 @@ ROOT = Path(__file__).resolve().parent.parent
 SOURCE = ROOT / "shared" / "todo-enforce.py"
 FIXTURES = ROOT / "tests" / "fixtures" / "todo_enforce"
 FIXTURE = json.loads((FIXTURES / "payloads.json").read_text())
-PAYLOADS = FIXTURE["payloads"]
+STOP_FIXTURE = json.loads((FIXTURES / "stop-payloads.json").read_text())
+PAYLOADS = {**FIXTURE["payloads"], **STOP_FIXTURE["payloads"]}
 SKILLS = ("story-to-done", "story-refinement")
 EXEMPT = ("TaskCreate", "TaskUpdate", "TaskList", "TaskGet", "ToolSearch", "Skill", "AskUserQuestion")
 SESSION = "test-session"
@@ -77,11 +80,11 @@ class Rig:
     def send(self, name, **changes):
         return self.raw(json.dumps(self.payload(name, **changes)))
 
-    def task(self, task_id, status):
+    def task(self, task_id, status, subject="s"):
         folder = self.config / "tasks" / SESSION
         folder.mkdir(parents=True, exist_ok=True)
         (folder / f"{task_id}.json").write_text(json.dumps({
-            "id": task_id, "subject": "s", "description": "d", "status": status, "blocks": [], "blockedBy": [],
+            "id": task_id, "subject": subject, "description": "d", "status": status, "blocks": [], "blockedBy": [],
         }))
 
     def arm(self):
@@ -92,9 +95,14 @@ class Rig:
             return self.send("main_pre_tool_use_bash", **changes)
         return self.send("main_pre_tool_use_bash", tool_name=tool_name, tool_input={}, **changes)
 
-    def main_task(self, task_id, status):
+    def main_task(self, task_id, status, subject="s"):
         assert_allowed(self.send("main_task_created", task_id=task_id))
-        self.task(task_id, status)
+        self.task(task_id, status, subject)
+
+    def report(self, text=None, name="stop_final_report", **changes):
+        if text is not None:
+            changes["last_assistant_message"] = text
+        return self.send(name, **changes)
 
     def subagent_task(self, task_id, status):
         assert_allowed(self.send("subagent_task_created", task_id=task_id))
@@ -547,6 +555,227 @@ def test_a_tilde_in_the_state_root_is_expanded(tmp_path):
     assert (rig.home / "state" / "agent-skills" / "todo-enforce" / SESSION / "armed").is_file()
 
 
+# --- SKL-265: the Stop report gate --------------------------------------------------------------
+
+REPORT = "Final report.\nmetrics: on"
+
+
+def test_the_stop_fixtures_record_their_version_and_origin():
+    assert STOP_FIXTURE["claude_code_version"] == "2.1.326"
+    origins = {name: entry["origin"] for name, entry in STOP_FIXTURE["payloads"].items()}
+    assert set(origins.values()) == {"copied", "synthesized"}
+    for entry in STOP_FIXTURE["payloads"].values():
+        assert entry["payload"]["hook_event_name"] == "Stop"
+
+
+def is_blocked(res):
+    if res.returncode != 0 or not res.stdout:
+        return False
+    return json.loads(res.stdout)["decision"] == "block"
+
+
+def assert_blocked(res, *items):
+    assert is_blocked(res), res
+    reason = json.loads(res.stdout)["reason"]
+    for item in items:
+        assert item in reason, (item, reason)
+    return reason
+
+
+def block_a_report_with_an_open_item(rig):
+    rig.arm()
+    rig.main_task("1", "pending")
+    return is_blocked(rig.report())
+
+
+# (a)
+def test_a_report_with_an_open_item_not_named_as_not_done_is_blocked(rig):
+    rig.arm()
+    rig.main_task("1", "pending", "Write the tests")
+    rig.main_task("2", "in_progress", "Open the PR")
+    rig.main_task("3", "completed", "Read the story")
+    rig.subagent_task("4", "pending")
+    reason = assert_blocked(rig.report(), "#1 Write the tests", "#2 Open the PR", "not done")
+    assert "#3" not in reason and "#4" not in reason
+
+
+# (b)
+def test_a_report_naming_every_open_item_as_not_done_is_allowed(rig):
+    rig.arm()
+    rig.main_task("1", "pending")
+    rig.main_task("2", "in_progress")
+    rig.main_task("3", "completed")
+    assert_blocked(rig.report("#1 not done: the owner runs it.\n" + REPORT), "#2 s")
+    assert_allowed(rig.report("- #1 not done: the owner runs it.\n- Task #2 is NOT DONE, CI is red.\n" + REPORT))
+
+
+# (c)
+@pytest.mark.parametrize("text", [
+    None, "Settings: metrics: off, qa-round-cap: 3", "- metrics: on", "`metrics: off`", "metrics: onward",
+], ids=["copied-report", "inline", "list-marker", "backticks", "longer-word"])
+def test_a_stop_without_the_report_signal_is_allowed(rig, text):
+    rig.arm()
+    rig.main_task("1", "pending")
+    if text is None:
+        for name in ("stop_pause_on_background_work", "stop_question_to_the_owner"):
+            assert_allowed(rig.send(name))
+        assert_blocked(rig.report(), "#1")
+    else:
+        assert_allowed(rig.report("Final report.\n" + text))
+
+
+def test_the_report_signal_allows_trailing_whitespace(rig):
+    rig.arm()
+    rig.main_task("1", "pending")
+    assert_blocked(rig.report("Final report.\nmetrics: off  \n"), "#1")
+
+
+# (d)
+def test_the_gate_blocks_at_most_three_consecutive_times(rig):
+    rig.arm()
+    rig.main_task("1", "pending")
+    for _ in range(3):
+        assert_blocked(rig.report(), "#1")
+    res = rig.report()
+    assert_allowed(res)
+    assert "REPORT_BLOCK_LIMIT" in res.stderr and "3" in res.stderr
+    assert_blocked(rig.report(), "#1")
+
+
+def test_an_allowed_stop_resets_the_block_count(rig):
+    rig.arm()
+    rig.main_task("1", "pending")
+    assert_blocked(rig.report())
+    assert_blocked(rig.report())
+    assert_allowed(rig.send("stop_question_to_the_owner"))
+    for _ in range(3):
+        assert_blocked(rig.report())
+    assert_allowed(rig.report())
+
+
+def test_a_main_thread_prompt_resets_the_block_count(rig):
+    rig.arm()
+    rig.main_task("1", "pending")
+    assert_blocked(rig.report())
+    assert_blocked(rig.report())
+    assert_allowed(rig.send("user_prompt_plain"))
+    for _ in range(3):
+        assert_blocked(rig.report())
+    assert_allowed(rig.report())
+
+
+def test_a_subagent_prompt_does_not_reset_the_block_count(rig):
+    rig.arm()
+    rig.main_task("1", "pending")
+    for _ in range(3):
+        assert_blocked(rig.report())
+    assert_allowed(rig.send("user_prompt_plain", agent_id="sub-1"))
+    assert_allowed(rig.report())
+
+
+# (e)
+def test_a_stop_carrying_agent_id_is_allowed(rig):
+    rig.arm()
+    rig.main_task("1", "pending")
+    assert_allowed(rig.send("stop_with_agent_id"))
+
+
+# (f)
+def test_an_unarmed_session_is_never_blocked(rig):
+    rig.main_task("1", "pending")
+    assert_allowed(rig.report())
+    assert not (rig.state / "agent-skills" / "todo-enforce" / SESSION / "armed").exists()
+
+
+def test_an_armed_session_without_the_task_tools_is_never_blocked(rig):
+    rig.use_transcript("without-task-tools")
+    rig.arm()
+    rig.main_task("1", "pending")
+    assert_allowed(rig.report())
+
+
+# (g)
+@pytest.mark.parametrize("change", [
+    {"last_assistant_message": None}, {"last_assistant_message": 7}, {"agent_id": ""}, {"session_id": "../x"},
+], ids=["missing-text", "number-text", "empty-agent", "path-session"])
+def test_a_malformed_stop_payload_is_allowed_with_a_stderr_line(rig, change):
+    rig.arm()
+    rig.main_task("1", "pending")
+    payload = rig.payload("stop_final_report", **change)
+    if change.get("last_assistant_message", "") is None:
+        del payload["last_assistant_message"]
+    res = rig.raw(json.dumps(payload))
+    assert_allowed(res)
+    assert "todo-enforce" in res.stderr
+
+
+@pytest.mark.parametrize("content", ["{broken", "[]"], ids=["not-json", "not-an-object"])
+def test_an_unreadable_main_task_file_allows_the_report_with_a_stderr_line(rig, content):
+    rig.arm()
+    rig.main_task("1", "pending")
+    rig.main_task("2", "pending")
+    (rig.config / "tasks" / SESSION / "1.json").write_text(content)
+    res = rig.report()
+    assert_allowed(res)
+    assert "task 1 file unreadable" in res.stderr
+
+
+@pytest.mark.parametrize("content", ["three", "{}"])
+def test_unreadable_gate_state_allows_the_report_with_a_stderr_line(rig, content):
+    rig.arm()
+    rig.main_task("1", "pending")
+    (rig.state / "agent-skills" / "todo-enforce" / SESSION / "report-blocks").write_text(content)
+    res = rig.report()
+    assert_allowed(res)
+    assert "todo-enforce" in res.stderr
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root ignores directory permissions")
+def test_unwritable_gate_state_allows_the_report_with_a_stderr_line(rig):
+    rig.arm()
+    rig.main_task("1", "pending")
+    state = rig.state / "agent-skills" / "todo-enforce" / SESSION
+    state.chmod(0o500)
+    try:
+        res = rig.report()
+        assert_allowed(res)
+        assert "todo-enforce" in res.stderr
+    finally:
+        state.chmod(0o700)
+
+
+# (h)
+def test_a_not_done_line_names_only_the_exact_task_id(rig):
+    rig.arm()
+    rig.main_task("1", "completed")
+    rig.main_task("12", "pending", "Twelfth")
+    assert_blocked(rig.report("#1 not done\n" + REPORT), "#12 Twelfth")
+    assert_allowed(rig.report("#12 not done\n" + REPORT))
+
+
+def test_a_bare_task_id_without_not_done_does_not_name_it(rig):
+    rig.arm()
+    rig.main_task("1", "pending")
+    assert_blocked(rig.report("Task #1 is waiting on the owner, see PR #1.\n" + REPORT), "#1 s")
+    assert_blocked(rig.report("x#1 not done\n" + REPORT), "#1 s")
+
+
+# (i)
+def test_a_main_task_with_no_task_file_is_not_open(rig):
+    rig.arm()
+    assert_allowed(rig.send("main_task_created", task_id="7"))
+    assert_allowed(rig.report())
+
+
+# (j)
+def test_stop_hook_active_does_not_suppress_a_block(rig):
+    rig.arm()
+    rig.main_task("1", "pending")
+    for _ in range(3):
+        assert_blocked(rig.send("stop_after_a_block"), "#1")
+    assert_allowed(rig.send("stop_after_a_block"))
+
+
 # --- mutation proof: removing each deny or refuse branch fails its test ---------------------------
 
 BRANCHES = {
@@ -570,6 +799,10 @@ BRANCHES = {
         "        return refuse(UNREADABLE.format(task=task, error=error))\n",
         [refuse_main_completion_of_an_unreadable_task],
     ),
+    "block a report with an open item not named as not done": (
+        "    return block(reason)\n",
+        [block_a_report_with_an_open_item],
+    ),
 }
 NEUTRAL = {
     "    return deny(reason)\n": "    return 0\n",
@@ -577,6 +810,7 @@ NEUTRAL = {
     "        return refuse(SUBAGENT_COMPLETES_MAIN.format(task=task))\n": "        pass\n",
     "        return refuse(NOT_IN_PROGRESS.format(task=task, status=status))\n": "        return 0\n",
     "        return refuse(UNREADABLE.format(task=task, error=error))\n": "        return 0\n",
+    "    return block(reason)\n": "    return 0\n",
 }
 
 
@@ -669,16 +903,37 @@ def test_no_skill_frontmatter_has_a_hooks_key():
         assert "hooks" not in yaml.safe_load(front), skill_md
 
 
+# --- SKL-265 AC9: both skills write the report signal as a bare line ----------------------------
+
+BARE_LINE = {
+    "story-to-done": (
+        "- In every closing report, write the metrics value as a bare line on its own, exactly `metrics: on` or "
+        "`metrics: off`, with no list marker, emphasis or backticks and nothing else on that line;"
+    ),
+    "story-refinement": (
+        "That line is bare and on its own, exactly `metrics: on` or `metrics: off`, with no list marker, "
+        "emphasis or backticks and nothing else on that line;"
+    ),
+}
+
+
+@pytest.mark.parametrize("skill", SKILLS)
+def test_each_skill_requires_the_bare_metrics_line_in_its_closing_report(skill):
+    lines = (ROOT / "skills" / skill / "SKILL.md").read_text().splitlines()
+    assert any(line.startswith(BARE_LINE[skill]) for line in lines), skill
+
+
 # --- the README settings block (AC10) ----------------------------------------------------------
 
 
-def test_the_readme_block_registers_the_enforcer_for_the_four_events():
+def test_the_readme_block_registers_the_enforcer_for_the_five_events():
     readme = (ROOT / "README.md").read_text()
     section = readme.split("### Todo enforcer hook (Claude Code)", 1)[1].split("\n## ", 1)[0]
     block = json.loads(section.split("```json\n", 1)[1].split("\n```", 1)[0])
     hooks = block["hooks"]
-    assert set(hooks) == {"UserPromptSubmit", "PreToolUse", "TaskCreated", "TaskCompleted"}
+    assert set(hooks) == {"UserPromptSubmit", "PreToolUse", "TaskCreated", "TaskCompleted", "Stop"}
     assert hooks["PreToolUse"][0]["matcher"] == "*"
+    assert "matcher" not in hooks["Stop"][0]
     for event, entries in hooks.items():
         (entry,) = entries
         (hook,) = entry["hooks"]

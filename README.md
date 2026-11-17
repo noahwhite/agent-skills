@@ -81,8 +81,8 @@ The root interactive TUI does not accept those agent/model flags; configure fres
 ### Todo enforcer hook (Claude Code)
 
 `story-to-done` and `story-refinement` ship a Claude Code hook, `scripts/todo-enforce.py`, that keeps the main thread working from its task list.
-It was built and tested against Claude Code v2.1.322.
-Register one copy for all four events in `~/.claude/settings.json`, merging the `hooks` key into any you already have:
+It was built and tested against Claude Code v2.1.322; the `Stop` report gate against v2.1.326.
+Register one copy for all five events in `~/.claude/settings.json`, merging the `hooks` key into any you already have:
 
 ```json
 {
@@ -98,6 +98,9 @@ Register one copy for all four events in `~/.claude/settings.json`, merging the 
     ],
     "TaskCompleted": [
       {"hooks": [{"type": "command", "command": "python3 ~/.claude/skills/story-to-done/scripts/todo-enforce.py"}]}
+    ],
+    "Stop": [
+      {"hooks": [{"type": "command", "command": "python3 ~/.claude/skills/story-to-done/scripts/todo-enforce.py"}]}
     ]
   }
 }
@@ -105,21 +108,28 @@ Register one copy for all four events in `~/.claude/settings.json`, merging the 
 
 The path assumes the install link above; point it at wherever `skills/story-to-done` lives.
 The hook acts only in a session whose main thread loaded `story-to-done` or `story-refinement`, either by its slash command or by the model loading the skill, and only when that session has the task tools (`TaskCreate` and its siblings).
-In such a session it enforces two things on the main thread:
+In such a session it enforces three things on the main thread:
 
 - A tool call runs only while a task the main thread created is `in_progress`; otherwise it is denied with a reason telling the model to mark one in progress.
   `TaskCreate`, `TaskUpdate`, `TaskList`, `TaskGet`, the tool Claude Code uses to load them, `Skill` and `AskUserQuestion` are always allowed; every other tool, `TaskStop` included, is checked.
 - A main-thread task completes only if it was `in_progress` first, and a subagent cannot complete a main-thread task; otherwise the completion is refused with a reason.
+- A final report is held back while a task the main thread created is still open (`pending` or `in_progress`) and not named as not done.
+  A turn is a final report when its last text block has a line matching `^metrics: (on|off)\s*$`, the bare line both skills write in every closing report.
+  A task is named as not done by a line of that text containing `not done` (any case) and its `#<id>`, not preceded by a letter, digit or underscore and not followed by a digit, so `#1` never names task 12.
+  The block lists each such task as `#<id> <subject>` and tells the model to complete it or name it, then report again.
+  The gate checks the naming, not whether the stated reason is adequate.
+  A question to the owner or a pause on background work has no such line and is never blocked.
+  The gate blocks at most `REPORT_BLOCK_LIMIT` (3) consecutive times, then allows the report with a stderr line; the count resets on any stop the gate allows and on each main-thread prompt.
 
-It never denies a subagent's tool calls, a session that loaded neither skill, or a session without the task tools.
+It never denies a subagent's tool calls, never gates a subagent's stop, and never acts in a session that loaded neither skill or a session without the task tools.
 In Claude Code v2.1.322 the task tools exist only in background (job) sessions, sessions started with `CLAUDE_CODE_ENABLE_TODO_TOOLS=1`, and sessions on some older models.
 A default interactive session or `claude -p` run has none, so the hook stays inert there; start the session with `CLAUDE_CODE_ENABLE_TODO_TOOLS=1` to have it enforce.
 After a denial or refusal the session continues, and the model can fix the task list and retry.
-It fails open on its own faults: a malformed payload, unwritable state or an internal error is logged to stderr and the call is allowed.
-A missing `TaskCreated` entry is not such a fault: the hook then never learns which tasks the main thread created, so an armed session denies every checked call, with a reason saying the `TaskCreated` hook may not be registered; register all four entries.
-An unreadable main-thread task file is logged too: tool calls are allowed, and that task's completion is refused until it is marked `in_progress` again.
+It fails open on its own faults: a malformed payload, unreadable or unwritable state or an internal error is logged to stderr and the call or stop is allowed.
+A missing `TaskCreated` entry is not such a fault: the hook then never learns which tasks the main thread created, so an armed session denies every checked call, with a reason saying the `TaskCreated` hook may not be registered; register all five entries.
+An unreadable main-thread task file is logged too: tool calls and final reports are allowed, and that task's completion is refused until it is marked `in_progress` again.
 Its state lives under `${XDG_STATE_HOME:-~/.local/state}/agent-skills/todo-enforce/`, one directory per session, and it reads task files from `${CLAUDE_CONFIG_DIR:-~/.claude}/tasks/`.
-To remove it, delete those four entries from `settings.json`; you may also delete its state directory.
+To remove it, delete those five entries from `settings.json`; you may also delete its state directory.
 
 ## Profile
 

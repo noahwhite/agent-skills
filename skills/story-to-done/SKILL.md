@@ -42,6 +42,7 @@ Six arguments are optional, given as `key=value` or in plain words ("QA on <mode
 - Ask the user about an invalid value and about any other phrasing about the cap; never guess.
 - Resolve `qa-round-cap` before step 0 creates the todo list; it sets no model or effort.
 - Write the four resolved model and effort values, the `metrics: on|off` line, and the `qa-round-cap: <n>` line at the top of your todo list and in the closing report of every end state (the step 5 report, or the report made at any stop, including one before step 0).
+- In every closing report, write the metrics value as a bare line on its own, exactly `metrics: on` or `metrics: off`, with no list marker, emphasis or backticks and nothing else on that line; the todo-enforce hook (`scripts/todo-enforce.py`) recognises a closing report by that line.
 - Write the `path: <value>` line step 1 selects in the same two places, as `path: unresolved` until step 1 selects it, including in the end-state report of a run that stops before then.
 
 ### Seat resolution
