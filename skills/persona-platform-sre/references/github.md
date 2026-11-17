@@ -19,9 +19,9 @@ Branch names, merge method, promotion model, signing, and attribution come from 
 
 ## Read repo facts from the remote
 
-- Presume a persistent local clone or checkout stale: before citing a repo fact, run `git fetch origin` and read `git show origin/<branch>:<path>`, never the working tree.
+- Presume a persistent local clone or checkout stale: before citing a repo fact, run `git fetch origin +refs/heads/<branch>:refs/remotes/origin/<branch>` and read `git show origin/<branch>:<path>`, never the working tree. The explicit refspec also refreshes a branch outside the clone's configured fetch refspec, which a bare `git fetch origin` leaves stale without an error.
 - `<branch>` is `profile.git.integration_branch`; `profile.git.release_branch` for a path that exists only there; or, for an environment's declared state, the branch that deploys that environment (`profile.environments[].branch`).
-- The exceptions are your own uncommitted or unpushed change in your story worktree, and a task bound to an explicitly named commit or PR head (a review or a verification at that SHA), which reads that commit, in a checkout made at it or with `git show <sha>:<path>`.
+- The exceptions are your own uncommitted or unpushed change in your story worktree, and a task bound to an explicitly named commit or PR head (a review or a verification at that SHA), which reads that commit, with `git show <sha>:<path>` or in a checkout made at it that has no local changes.
 - When the fetch or the read fails, report the limitation and never present stale content as current.
 - Related rules, not restated here: the fetch rule in "Branching and worktrees" below; "Verify running state from the primary source" in the `infra-deploy` capability file; and "Base the run on `origin/<integration branch>` after a fetch" in "Automated pre-PR gates" of the `code-review` capability file.
 
