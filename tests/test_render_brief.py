@@ -341,10 +341,18 @@ def pin(text: str, scratch: str) -> str:
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
+# SKL-357 re-pinned both QA digests for the waiting-handback bullet in brief-qa.md, and added the engineer pin.
 # Fixed inputs: story ABC-123, round 1, environment `dev`.
 DEPLOYED_QA_SHA256 = "e014ba2c8f79c83455b632bff598a92baffdafd605cc816d3a227eccb08c8277"
 # Fixed inputs: story ABC-123, round 1, the two LINKS above.
 SPIKE_QA_SHA256 = "c54650b59adf54cc751e5437942bfe235c71187da28cf9ca360f794efa4d47a3"
+# Fixed inputs: story ABC-123, path `deployed`.
+DEPLOYED_ENGINEER_SHA256 = "875dfaac2a9b7eedb6ed20bbb9aa7a4e9605921bbc7e1c397f8e7b585e84cd48"
+
+
+def test_deployed_engineer_render_is_pinned(scratch):
+    _, text = engineer(scratch, "deployed")
+    assert pin(text, scratch) == DEPLOYED_ENGINEER_SHA256
 
 
 def test_deployed_qa_render_is_pinned(scratch):

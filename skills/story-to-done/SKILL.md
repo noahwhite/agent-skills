@@ -115,6 +115,7 @@ Seed it with at least: read the story state, spawn the senior engineer, each che
 With `metrics` on, seed two more items: collect the metrics figures; then post the metrics summary on the story and read it back before giving the summary in the closing report.
 Add an item for each new round as it starts; mark each done once its outcome is observed.
 An interim handback from the senior engineer or a QA agent is classified first, before the checklist read-back below, under [references/interim-handbacks.md](references/interim-handbacks.md).
+So is an unnamed waiting handback as that reference defines it, which never reaches the read-back or spends its resume cap.
 Every subagent brief requires a checklist file in that subagent's own subdirectory of the scratch directory; read it from there and mirror it into your list whenever you check on the subagent.
 When a senior engineer or QA agent hands back, read that subagent's checklist file before acting on the result; a missing or unreadable checklist counts as open items.
 If items remain open with no stated blocker, resume that subagent with "Your checklist still has open items. Continue with them; if one is blocked, say what blocks it", at most twice per subagent, and then record the remaining items in your report and continue with this skill's existing step logic.
@@ -205,7 +206,7 @@ No path adds a waiver, an admin override, or a change to the expected-head condi
 ## 3. QA agent: verify the deployed story
 
 Spawn a new clean, neutral subagent on qa-model at qa-effort for every new QA round; never resume an agent from an earlier round, since it carries that round's conclusions.
-Continuation of the current round under step 4, and the step 0 checklist read-back resume or the resume under the handback reference this step points to of the current round's QA agent, are the only exceptions to that sentence.
+Continuation of the current round under step 4, and the step 0 checklist read-back resume or the resumes under the handback reference this step points to of the current round's QA agent, are the only exceptions to that sentence.
 A stop for an owner action ends the round: once the owner clears it, that round's work starts over as a new round under this step with a new QA agent, and a fix/deploy cycle or an amended acceptance basis likewise starts a new round.
 Brief it as a QA agent, with only:
 

@@ -325,7 +325,7 @@ QA_ROUND_SENTENCE = (
     "agent from an earlier round, since it carries that round's conclusions."
 )
 QA_ROUND_EXCEPTION = (
-    "Continuation of the current round under step 4, and the step 0 checklist read-back resume or the resume "
+    "Continuation of the current round under step 4, and the step 0 checklist read-back resume or the resumes "
     "under the handback reference this step points to of the current round's QA agent, are the only exceptions "
     "to that sentence."
 )
@@ -968,7 +968,8 @@ METRICS_USAGE = (
 METRICS_TIMED_LAUNCHES = (
     "- **Timed launches:** time each senior engineer launch and each QA launch row, meaning each QA round's "
     "spawn in step 3, each continuation of that round in step 4, each checklist read-back resume of a QA "
-    "agent under step 0, and each interim-deadline resume of a QA agent, taking the start immediately before that "
+    "agent under step 0, and each interim-deadline resume, naming resume and stale-checklist resume of a QA agent, "
+    "taking the start immediately before that "
     "launch and the end when it returns, and record it as one row in launch order under a "
     "label unique within the invocation, with its runtime, model, effort, duration, tokens, and tool "
     "calls as `references/metrics.md` defines; `not "
@@ -977,11 +978,13 @@ METRICS_TIMED_LAUNCHES = (
 )
 METRICS_LAUNCH_POINTS = (
     "The senior engineer's timed launches are the first launch in step 2, each checklist read-back resume "
-    "of the senior engineer under step 0, each interim-deadline resume of the senior engineer under "
+    "of the senior engineer under step 0, each interim-deadline resume, naming resume and stale-checklist resume "
+    "of the senior engineer under "
     "`references/interim-handbacks.md`, and each resume or re-spawn in step 4; each QA round is a launch "
     "row in step 3, a continuation of that round under step 4 is a further launch row within the same "
     "round, each checklist read-back resume of a QA agent is a launch row of its own within that QA agent's "
-    "round, and so is each interim-deadline resume of a QA agent under `references/interim-handbacks.md`."
+    "round, and so is each interim-deadline resume, naming resume and stale-checklist resume of a QA agent under "
+    "`references/interim-handbacks.md`."
 )
 METRICS_EXTRAS = (
     "- **Extras:** take each `story-to-done` extra at the step that observes it: **Start** from the step 1 "
@@ -2958,8 +2961,8 @@ INTERIM_LIMITS = (
     "This rule changes no step logic for final or blocked handbacks, and leaves step 2's stop clause, step 4's "
     "continuation content limits, mixed-owner stop, owner-action stop, and new-round rules, and the no-write and "
     "no-verdict constraints unchanged; it only comes before step 0's read-back, step 2's check and step 4's "
-    "classification, and adds only its own checklist reads, its own resumes (the deadline resume, the naming resume "
-    "and the stale-checklist resume) and its own stops."
+    "classification, and adds only the handback classes it defines, its own checklist reads, its own resumes and "
+    "its own stops."
 )
 
 
@@ -3286,6 +3289,7 @@ RENDER_CASES = {
     "engineer-spike": ("--role", "engineer", "--path", "spike"),
     "qa-deployed": ("--role", "qa", "--path", "deployed", "--round", "1", "--environment", "dev"),
     "qa-deployed-default": ("--role", "qa", "--path", "deployed", "--round", "1"),
+    "qa-deployed-round-2": ("--role", "qa", "--path", "deployed", "--round", "2", "--environment", "dev"),
     "qa-no-deployment": ("--role", "qa", "--path", "no-deployment", "--round", "1", "--commit", "0" * 40),
     "qa-spike": ("--role", "qa", "--path", "spike", "--round", "1", "--link", "https://example.com/spike"),
 }
@@ -3295,7 +3299,25 @@ UNNAMED_DEFINITION = (
 )
 UNNAMED_QA_EXCLUSION = (
     "A QA agent's handback that names a failed item, or an outstanding item owned by anyone other than that QA "
-    "agent, is not an unnamed waiting handback; it goes to step 0's checklist read-back and step 4 as usual."
+    "agent (an awaited item of its own background work counts as its own), is not an unnamed waiting handback; it "
+    "goes to step 0's checklist read-back and step 4 as usual."
+)
+DELEGATION = (
+    "A senior-engineer delegation is one senior-engineer subagent from its spawn until the coordinator spawns "
+    "another one for the story; a resume of the same subagent stays within the delegation."
+)
+UNNAMED_KEEPS_DEADLINE = (
+    "An unnamed waiting handback does not clear a live deadline or reset the miss count of an item already awaited "
+    "from that role."
+)
+UNNAMED_MISS_RECORD = (
+    "The coordinator records that miss on the todo list against the role, not against any awaited item, and "
+    "increments no awaited item's miss count."
+)
+CHECKLIST_READ_FIRST = "The read comes before any resume sent on the same handback."
+CHECKLIST_READ_SAVED = (
+    "The coordinator saves the contents of each read in its own scratch for the invocation and compares them byte "
+    "for byte with the contents saved at the previous such read."
 )
 UNNAMED_STALL = "An unnamed waiting handback is a stall, never an interim handback."
 UNNAMED_ORDER = (
@@ -3361,12 +3383,16 @@ UNNAMED_SENTENCES = (
     UNNAMED_DEFINITION, UNNAMED_QA_EXCLUSION, UNNAMED_STALL, INTERIM_STATED_BLOCKER, UNNAMED_ORDER, UNNAMED_RESUME,
     UNNAMED_RESUME_COUNTS, UNNAMED_ANSWER, UNNAMED_SECOND, UNNAMED_NO_RESUME_STOP, CHECKLIST_READ,
     CHECKLIST_READ_SILENT, STALE_DEFINITION, STALE_RESUME, STALE_BOUND, STALE_COUNTS, STALE_NO_RESUME_STOP,
+    DELEGATION, UNNAMED_KEEPS_DEADLINE, UNNAMED_MISS_RECORD, CHECKLIST_READ_FIRST, CHECKLIST_READ_SAVED,
 )
 
 
 def rendered_brief(tmp_path: Path, case: tuple[str, ...]) -> str:
     scratch = Path(os.path.realpath(tmp_path))
-    role_dir = scratch / ("senior-engineer" if case[1] == "engineer" else "qa-agent-round-1")
+    if case[1] == "engineer":
+        role_dir = scratch / "senior-engineer"
+    else:
+        role_dir = scratch / f"qa-agent-round-{case[case.index('--round') + 1]}"
     role_dir.mkdir(exist_ok=True)
     result = subprocess.run(
         [sys.executable, str(RENDER_BRIEF), *case, "--story", "ABC-123", "--scratch", str(scratch)],
@@ -3378,12 +3404,12 @@ def rendered_brief(tmp_path: Path, case: tuple[str, ...]) -> str:
 
 @pytest.mark.parametrize("name", ["brief-engineer.md", "brief-qa.md"])
 def test_each_base_brief_requires_a_waiting_handback_to_name_its_awaited_item(name: str) -> None:
-    assert (ASSETS / name).read_text().splitlines().count(WAITING_BULLET) == 1
+    assert visible((ASSETS / name).read_text()).splitlines().count(WAITING_BULLET) == 1
 
 
 @pytest.mark.parametrize("case", sorted(RENDER_CASES))
 def test_every_rendered_brief_carries_the_waiting_handback_bullet(case: str, tmp_path: Path) -> None:
-    assert rendered_brief(tmp_path, RENDER_CASES[case]).splitlines().count(WAITING_BULLET) == 1
+    assert visible(rendered_brief(tmp_path, RENDER_CASES[case])).splitlines().count(WAITING_BULLET) == 1
 
 
 def test_the_unnamed_waiting_handback_is_defined_with_its_qa_exclusion_and_is_a_stall() -> None:
@@ -3445,6 +3471,45 @@ def test_steps_2_and_3_send_an_unnamed_waiting_handback_to_the_reference() -> No
     assert step_3.index(INTERIM_STEP_3_POINTER) < step_3.index(STEP_3_UNNAMED_MIRROR) < step_3.index(
         STEP_3_READ_BACK_FIRST
     )
+
+
+STEP_0_UNNAMED_MIRROR = (
+    "So is an unnamed waiting handback as that reference defines it, which never reaches the read-back or spends "
+    "its resume cap."
+)
+
+
+def test_step_0_classifies_an_unnamed_waiting_handback_before_the_read_back() -> None:
+    step_0 = " ".join(section(visible(SKILL.read_text()), "0. Track everything on a todo list").split())
+    assert step_0.index(INTERIM_STEP_0_POINTER) < step_0.index(STEP_0_UNNAMED_MIRROR) < step_0.index(
+        STEP_0_CHECKLIST_READ
+    )
+
+
+def test_the_unnamed_section_scopes_the_delegation_and_keeps_a_live_deadline() -> None:
+    text = interim_text()
+    order = (INTERIM_QA_CONCLUDED, DELEGATION, UNNAMED_KEEPS_DEADLINE, UNNAMED_RESUME)
+    positions = [text.index(sentence) for sentence in order]
+    assert positions == sorted(positions)
+
+
+def test_a_second_unnamed_waiting_handback_is_a_miss_of_the_role_not_of_an_item() -> None:
+    text = interim_text()
+    assert text.index(UNNAMED_SECOND) < text.index(UNNAMED_MISS_RECORD) < text.index(UNNAMED_NO_RESUME_STOP)
+
+
+def test_the_checklist_read_precedes_any_resume_and_compares_saved_bytes() -> None:
+    text = interim_text()
+    order = (CHECKLIST_READ_SILENT, CHECKLIST_READ_FIRST, CHECKLIST_READ_SAVED, STALE_DEFINITION)
+    positions = [text.index(sentence) for sentence in order]
+    assert positions == sorted(positions)
+
+
+def test_only_the_stale_bound_relates_the_naming_and_stale_checklist_resumes() -> None:
+    body = " ".join(line for line in visible(INTERIM.read_text()).splitlines() if not line.startswith("#"))
+    sentences = re.split(r"(?<=\.)\s+", " ".join(body.split()))
+    both = [s for s in sentences if "naming resume" in s and "stale-checklist resume" in s]
+    assert both == [STALE_BOUND]
 
 
 def test_each_unnamed_and_checklist_contract_appears_exactly_once() -> None:
@@ -3724,7 +3789,8 @@ def test_the_record_shape_pattern_matches_the_record_and_not_the_bare_word_readi
 # digest only together with a reviewed change to the text it covers.
 STEP_3_HEADING = "3. QA agent: verify the deployed story"
 # SKL-278 re-baselined this digest for the step 3 `path:` brief line and the path's verification target.
-STEP_3_SHA256 = "34b61d3d8350a12694af99d208da9cdca8ef8a337ff747f80bc49b5dc8e376f6"
+# SKL-357 re-pinned it for the step 3 unnamed-waiting-handback pointer and the plural "resumes" exception.
+STEP_3_SHA256 = "f497869e83b78f8a746e036e03d388a171e39249d7094e9a2bccfc914e4be313"
 # SKL-284 re-pinned IN_PROGRESS_SHA256: the cap sentences now call qa-round-cap.py and carry no pending item.
 IN_PROGRESS_SHA256 = "9dbeb7719d9105b33029d7a6bf043a26bc348a3e3ec18894ec7b5cb43e0c6115"
 IN_DEPLOYMENT_REVIEW_SHA256 = "36da368bed892519776e5be61064d2fad186151ca58ae90aff897e9a1ffaa968"

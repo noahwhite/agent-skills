@@ -7,7 +7,7 @@ Naming the awaited item does not make it a blocked handback or a stated blocker.
 A QA agent's handback that names an awaited item of its own background work (for example its evidence PR's review-of-record gate or CI run) and is neither a final handback nor blocked is an interim handback too.
 A QA agent's handback that also names a failed item, or an outstanding item owned by anyone other than that QA agent (an awaited item of its own background work counts as its own), is not an interim handback; it goes to step 0's checklist read-back and step 4 as usual.
 An unnamed waiting handback is a handback from the senior engineer or a QA agent that is neither a final handback nor blocked, says it waits on the role's own background work, and names no awaited item.
-A QA agent's handback that names a failed item, or an outstanding item owned by anyone other than that QA agent, is not an unnamed waiting handback; it goes to step 0's checklist read-back and step 4 as usual.
+A QA agent's handback that names a failed item, or an outstanding item owned by anyone other than that QA agent (an awaited item of its own background work counts as its own), is not an unnamed waiting handback; it goes to step 0's checklist read-back and step 4 as usual.
 An unnamed waiting handback is a stall, never an interim handback.
 Step 0's stated-blocker sentence covers only the other handbacks, since neither an interim handback nor an unnamed waiting handback reaches the read-back.
 The coordinator classifies an interim handback before step 0's checklist read-back and before step 2's deployment-review check and stop.
@@ -49,16 +49,21 @@ With `metrics` on, each QA deadline resume is its own launch row within that rou
 
 ## Unnamed waiting handbacks
 
+A senior-engineer delegation is one senior-engineer subagent from its spawn until the coordinator spawns another one for the story; a resume of the same subagent stays within the delegation.
+An unnamed waiting handback does not clear a live deadline or reset the miss count of an item already awaited from that role.
 On an unnamed waiting handback the coordinator resumes that role once, asking only for the awaited item, its primary source and its expected duration.
 The naming resume carries no conclusion or verdict, does not count against step 0's read-back resume cap, does not increment a QA round count or consume step 4's continuation allowance, and with `metrics` on is its own launch row.
 If the answer is an interim handback as defined above, the deadline rule above applies from receipt of the answer.
 A second unnamed waiting handback from the same role after that resume, within the same senior-engineer delegation or, for a QA agent, the same QA round, counts as a missed deadline and stops the coordinator as at a second miss under the two-miss stop above; the stop report names the role and both unnamed waiting handbacks.
+The coordinator records that miss on the todo list against the role, not against any awaited item, and increments no awaited item's miss count.
 If the runtime cannot resume the role for the naming resume, the coordinator reports the limitation and stops, and spawns no new subagent.
 
 ## Checklist reads
 
 At each interim handback and each unnamed waiting handback the coordinator reads the role's checklist file and records on the todo list the item marked `(in progress)`, or else the first `- [ ]` item, or `none` when every item is checked, or `missing or unreadable`, and whether the contents are identical to the contents read at the previous such handback from that role (`no previous read` at the first).
 The read sends nothing to the role, is separate from step 0's checklist read-back, and does not count against its resume cap.
+The read comes before any resume sent on the same handback.
+The coordinator saves the contents of each read in its own scratch for the invocation and compares them byte for byte with the contents saved at the previous such read.
 
 A checklist file is stale when its contents are identical, or it is missing or unreadable, at two consecutive interim or unnamed waiting handbacks from the same role within the same senior-engineer delegation or QA round.
 The coordinator then sends that role one stale-checklist resume asking it to update the checklist and name what blocks it.
@@ -68,4 +73,4 @@ If the runtime cannot resume the role for the stale-checklist resume, the coordi
 
 ## Limits
 
-This rule changes no step logic for final or blocked handbacks, and leaves step 2's stop clause, step 4's continuation content limits, mixed-owner stop, owner-action stop, and new-round rules, and the no-write and no-verdict constraints unchanged; it only comes before step 0's read-back, step 2's check and step 4's classification, and adds only its own checklist reads, its own resumes (the deadline resume, the naming resume and the stale-checklist resume) and its own stops.
+This rule changes no step logic for final or blocked handbacks, and leaves step 2's stop clause, step 4's continuation content limits, mixed-owner stop, owner-action stop, and new-round rules, and the no-write and no-verdict constraints unchanged; it only comes before step 0's read-back, step 2's check and step 4's classification, and adds only the handback classes it defines, its own checklist reads, its own resumes and its own stops.
