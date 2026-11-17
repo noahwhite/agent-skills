@@ -1,11 +1,14 @@
 """SKL-233: five working rules moved from agent memory into the shared capability files.
 
-Each rule is pinned verbatim, as rendered text, at its home section and position, its home section
-carries no raw HTML, and its anchor occurs only once across `shared/` and every
-`skills/*/SKILL.md`, so a later edit that drops, weakens, hides, moves or duplicates it fails here.
+Each rule is pinned verbatim, as rendered text, at its home section and position, and its anchor
+occurs only once across `shared/` and every `skills/*/SKILL.md`, so a later edit that drops,
+weakens, hides, moves or duplicates it fails here.
 A cross-referenced target is checked for presence only, not pinned: its text belongs to other rules.
 Rendered text is the text of the CommonMark parse: inline markup, link targets and titles, HTML
-tags and image alt text do not count, and a code span keeps its backticks.
+and image alt text do not count, and a code span keeps its backticks.
+Every file these tests read a rule or a cross-reference from carries no raw HTML that could hide
+text: no HTML block, comment, closing tag or attribute anywhere in the file, only bare placeholder
+tags such as `<name>`.
 """
 
 import re
@@ -20,6 +23,9 @@ ROOT = Path(__file__).resolve().parent.parent
 SHARED = ROOT / "shared"
 MARKDOWN = MarkdownIt("commonmark")
 EM_DASH = chr(0x2014)
+# Placeholders written as tags in the files these tests read. None is an HTML element or carries an
+# attribute that hides content, so each hides nothing; a new one is added here after that check.
+PLACEHOLDER_TAGS = {"<model>", "<n>", "<name>", "<retained state>", "<type>"}
 
 
 def collapse(text: str) -> str:
@@ -45,8 +51,9 @@ class Doc:
     headings: list[str] = field(default_factory=list)
     lists: dict[str, list[list[str]]] = field(default_factory=dict)
     paragraphs: dict[str, list[str]] = field(default_factory=dict)
-    html: dict[str, bool] = field(default_factory=dict)
-    # Every heading, paragraph and HTML block in document order, for counting anchors.
+    # Raw HTML other than a placeholder tag, anywhere in the file.
+    html: list[str] = field(default_factory=list)
+    # Every heading and paragraph in document order, for counting anchors.
     flow: list[str] = field(default_factory=list)
 
     def section(self, heading: str) -> list[list[str]]:
@@ -58,13 +65,6 @@ class Doc:
 
     def bullets(self, heading: str) -> list[str]:
         return [item for group in self.section(heading) for item in group]
-
-    def home(self, heading: str) -> list[str]:
-        """The bullets of a rule's home section, which must carry no raw HTML that could hide text."""
-        items = self.bullets(heading)
-        if self.html[heading]:
-            raise AssertionError(f"{self.path}: section {heading!r} carries raw HTML")
-        return items
 
     def text(self) -> str:
         return collapse(" ".join(self.flow))
@@ -80,15 +80,18 @@ def parse(path: Path) -> Doc:
     not. A bullet item's text is its own paragraphs only, not a nested list or quote inside it.
     Content before the first heading belongs to the PREAMBLE section.
     """
-    doc = Doc(path=path, lists={PREAMBLE: []}, paragraphs={PREAMBLE: []}, html={PREAMBLE: False})
+    doc = Doc(path=path, lists={PREAMBLE: []}, paragraphs={PREAMBLE: []})
     current, opened, item, in_bullets = PREAMBLE, None, None, False
     for token in MARKDOWN.parse(path.read_text(encoding="utf-8")):
         if token.type == "html_block":
-            doc.html[current] = True
-            doc.flow.append(token.content)
+            doc.html.append(token.content.strip())
         elif token.type in ("heading_open", "paragraph_open"):
             opened = token
         elif token.type == "inline" and opened is not None:
+            doc.html.extend(
+                child.content for child in token.children or []
+                if child.type == "html_inline" and child.content not in PLACEHOLDER_TAGS
+            )
             text = rendered(token)
             doc.flow.append(text)
             if opened.type == "heading_open" and opened.level == 0:
@@ -96,15 +99,11 @@ def parse(path: Path) -> Doc:
                 doc.headings.append(current)
                 doc.lists.setdefault(current, [])
                 doc.paragraphs.setdefault(current, [])
-                doc.html.setdefault(current, False)
-            else:
-                if any(child.type == "html_inline" for child in token.children or []):
-                    doc.html[current] = True
-                if opened.type == "paragraph_open":
-                    doc.paragraphs[current].append(text)
-                    if item is not None and opened.level == 2:
-                        group = doc.lists[current][-1]
-                        group[item] = f"{group[item]} {text}".strip()
+            elif opened.type == "paragraph_open":
+                doc.paragraphs[current].append(text)
+                if item is not None and opened.level == 2:
+                    group = doc.lists[current][-1]
+                    group[item] = f"{group[item]} {text}".strip()
             opened = None
         elif token.type == "bullet_list_open" and token.level == 0:
             doc.lists[current].append([])
@@ -114,6 +113,13 @@ def parse(path: Path) -> Doc:
             item = len(doc.lists[current][-1]) - 1
         elif token.type == "bullet_list_close" and token.level == 0:
             item, in_bullets = None, False
+    return doc
+
+
+def read(path: Path) -> Doc:
+    """Parse a file a rule or a cross-reference is read from; it must carry no raw HTML."""
+    doc = parse(path)
+    assert not doc.html, f"{path}: raw HTML that could hide text: {doc.html}"
     return doc
 
 
@@ -139,7 +145,6 @@ def assert_once(anchor: str) -> None:
     assert hits == 1, f"{anchor!r} occurs {hits} times in shared/ and skills/*/SKILL.md"
 
 
-
 # --- K1 and K2: shared/engineering-practice.md --------------------------------------------------
 
 K1 = (
@@ -162,7 +167,7 @@ K2 = (
 
 
 def test_k1_over_reading_follows_the_search_bullet() -> None:
-    items = parse(SHARED / "engineering-practice.md").home("Reuse and study existing code")
+    items = read(SHARED / "engineering-practice.md").bullets("Reuse and study existing code")
     assert items[0].startswith("Before writing code for an operation"), "the search bullet must stay first"
     assert_rule(items[1], K1)
     assert any(item.startswith("When porting") for item in items[2:]), "the porting bullet must stay below K1"
@@ -170,12 +175,12 @@ def test_k1_over_reading_follows_the_search_bullet() -> None:
 
 
 def test_k1_cross_reference_resolves() -> None:
-    items = parse(SHARED / "engineering-practice.md").bullets("Fix the whole class, not the first instance")
+    items = read(SHARED / "engineering-practice.md").bullets("Fix the whole class, not the first instance")
     index_of(items, "When mirroring a proven handler")
 
 
 def test_k2_why_is_x_needed_follows_change_exactly_what_was_asked() -> None:
-    items = parse(SHARED / "engineering-practice.md").home("Make minimal, durable changes")
+    items = read(SHARED / "engineering-practice.md").bullets("Make minimal, durable changes")
     asked = index_of(items, "Change exactly what was asked")
     assert_rule(items[asked + 1], K2)
     assert_once(K2[:80])
@@ -195,9 +200,7 @@ K3 = (
 
 
 def test_k3_delegation_sits_in_the_clean_and_neutral_block() -> None:
-    doc = parse(SHARED / "code-review.md")
-    doc.home("Review of record")
-    block = doc.section("Review of record")[0]
+    block = read(SHARED / "code-review.md").section("Review of record")[0]
     assert block[0].startswith("Clean:")
     assert block[1].startswith("Neutral:")
     assert_rule(block[2], K3)
@@ -205,15 +208,17 @@ def test_k3_delegation_sits_in_the_clean_and_neutral_block() -> None:
 
 
 def test_k3_cross_references_resolve() -> None:
-    gates = parse(SHARED / "code-review.md").bullets("Automated pre-PR gates")
+    gates = read(SHARED / "code-review.md").bullets("Automated pre-PR gates")
     assert any("fixer" in b and "commits" in b for b in gates)
-    story_to_done = parse(ROOT / "skills" / "story-to-done" / "SKILL.md")
+    story_to_done = read(ROOT / "skills" / "story-to-done" / "SKILL.md")
     story_to_done.section("2. Senior engineer: implement to deployment review")
     step2 = " ".join(story_to_done.paragraphs["2. Senior engineer: implement to deployment review"])
     assert "for every PR it merged, read the PR yourself" in step2
 
 
 # --- K4: shared/linear.md ---------------------------------------------------------------------
+
+STORY_ID_SKILLS = ("persona-staff-devops", "persona-staff-engineer", "story-refinement", "story-to-done")
 
 K4 = [
     "An issue key the owner names explicitly is acted on as written, also when it appears inside an "
@@ -227,9 +232,9 @@ K4 = [
 
 
 def test_k4_named_story_keys_follows_team_resolution() -> None:
-    doc = parse(SHARED / "linear.md")
+    doc = read(SHARED / "linear.md")
     doc.section("Team resolution")
-    items = doc.home("Named story keys")
+    items = doc.bullets("Named story keys")
     assert doc.headings[doc.headings.index("Team resolution") + 1] == "Named story keys", (
         f"{doc.path}: \"Named story keys\" must directly follow \"Team resolution\""
     )
@@ -240,20 +245,25 @@ def test_k4_named_story_keys_follows_team_resolution() -> None:
 
 
 def test_k4_cross_reference_resolves() -> None:
-    """Every skill that mentions `STORY_ID` has exactly one `STORY_ID` argument rule, and it carries
-    the "never guess" line K4 points to."""
-    declaration = re.compile(r"(This skill takes one argument, `STORY_ID`:|`STORY_ID` is required:)")
+    """Every skill that takes a `STORY_ID` has exactly one `STORY_ID` argument rule, and it carries
+    the "never guess" line K4 points to. The skills that take one today are named, so deleting a
+    whole argument rule cannot drop a skill from the check."""
+    declaration = re.compile(r"This skill takes one argument, `STORY_ID`:|`STORY_ID` is required:")
     never_guess = re.compile(
         r" If none was given, ask the (user|owner) for one before doing anything else; "
         r"never guess (a story number|an issue key)\."
     )
-    skills = [md for md in sorted(ROOT.glob("skills/*/SKILL.md")) if "STORY_ID" in md.read_text(encoding="utf-8")]
-    assert skills, "no skill mentions `STORY_ID`"
+    skills = sorted(
+        {ROOT / "skills" / name / "SKILL.md" for name in STORY_ID_SKILLS}
+        | {md for md in ROOT.glob("skills/*/SKILL.md") if "STORY_ID" in md.read_text(encoding="utf-8")}
+    )
     problems = []
     for md in skills:
-        rules = [p for ps in parse(md).paragraphs.values() for p in ps if declaration.match(p)]
-        if len(rules) != 1:
-            problems.append(f"{md.parent.name}: {len(rules)} `STORY_ID` argument rules")
+        doc = read(md)
+        declared = len(declaration.findall(doc.text()))
+        rules = [p for ps in doc.paragraphs.values() for p in ps if declaration.search(p)]
+        if declared != 1:
+            problems.append(f"{md.parent.name}: {declared} `STORY_ID` argument declarations")
         elif not never_guess.search(rules[0]):
             problems.append(f"{md.parent.name}: argument rule without the never-guess line")
     assert not problems, problems
@@ -280,8 +290,8 @@ K5 = [
 
 
 def test_k5_read_repo_facts_sits_between_tooling_and_branching() -> None:
-    doc = parse(SHARED / "github.md")
-    items = doc.home("Read repo facts from the remote")
+    doc = read(SHARED / "github.md")
+    items = doc.bullets("Read repo facts from the remote")
     at = doc.headings.index("Read repo facts from the remote")
     assert doc.headings[at - 1 : at + 2] == ["Tooling", "Read repo facts from the remote", "Branching and worktrees"], (
         f"{doc.path}: \"Read repo facts from the remote\" must sit between \"Tooling\" and \"Branching and worktrees\""
@@ -293,6 +303,6 @@ def test_k5_read_repo_facts_sits_between_tooling_and_branching() -> None:
 
 
 def test_k5_cross_references_resolve() -> None:
-    parse(SHARED / "infra-deploy.md").section("Verify running state from the primary source")
-    gates = parse(SHARED / "code-review.md").bullets("Automated pre-PR gates")
+    read(SHARED / "infra-deploy.md").section("Verify running state from the primary source")
+    gates = read(SHARED / "code-review.md").bullets("Automated pre-PR gates")
     assert any(b.startswith("Base the run on `origin/<integration branch>` after a fetch") for b in gates)
