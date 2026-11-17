@@ -19,7 +19,7 @@ You run the loop; you do not write the code or run the QA yourself.
 Its team prefix is the team for every read and write this skill performs on or for that issue, and it need not equal `profile.tracker.team_key`.
 If none was given, ask the user for one before doing anything else; never guess a story number.
 
-Six arguments are optional, given as `key=value` or in plain words ("QA on <model> at max" sets `qa-model` and `qa-effort`):
+Seven arguments are optional, given as `key=value` or in plain words ("QA on <model> at max" sets `qa-model` and `qa-effort`):
 
 | Argument | Sets | Default |
 |---|---|---|
@@ -29,6 +29,7 @@ Six arguments are optional, given as `key=value` or in plain words ("QA on <mode
 | `qa-effort` | the QA agent's reasoning effort | seat effort (default high) |
 | `metrics` | whether the run collects and reports run metrics | `off` |
 | `qa-round-cap` | the number of counted QA rounds after which the loop stops and asks the user | `3` |
+| `nested` | whether the spawner started this run as a subagent | `no` |
 
 - An argument left out takes its default.
 - Effort is one of `low`, `medium`, `high`, `xhigh`, or `max`.
@@ -41,7 +42,15 @@ Six arguments are optional, given as `key=value` or in plain words ("QA on <mode
 - `qa-round-cap` is given as `qa-round-cap=<n>` or in plain words about capping QA rounds ("cap QA at <n> rounds" and "stop after <n> failed QA rounds" mean <n>); `python3 <skill dir>/scripts/qa-round-cap.py validate qa-round-cap=<n>` exits 2 unless <n> is a positive integer; run step 4's `arm` once, before the first step 3.
 - Ask the user about an invalid value and about any other phrasing about the cap; never guess.
 - Resolve `qa-round-cap` before step 0 creates the todo list; it sets no model or effort.
-- Write the four resolved model and effort values, the `metrics: on|off` line, and the `qa-round-cap: <n>` line at the top of your todo list and in the closing report of every end state (the step 5 report, or the report made at any stop, including one before step 0).
+- `nested` is given as `nested=yes` or `nested=no`, or in plain words: "you are running as a subagent" means yes, "you are the top-level session" and "you are not running as a subagent" mean no; ask the user about any other phrasing about nesting, "not nested" and "non-nested" included; never guess, and if nobody can answer, stop and report.
+- Resolve `nested` before step 0 creates the todo list; it sets no model or effort.
+- Never infer nesting from the environment, the tool list, or a failed handback.
+- The spawner states `nested=yes` because a background role launched by a subagent may report to the root session instead of the launcher.
+- With `nested=yes`, every other launch or resume of a role you make, such as step 0's read-back resume, step 4's continuation of the QA agent, and a resume under `references/interim-handbacks.md`, is also made in the foreground.
+- With `nested=yes`, once seat resolution has decided each seat's launch, stop and report before any role is launched when a seat launches as a subagent and `references/runtimes.md` gives a nested coordinator no foreground subagent launch on that runtime; a `command` or `codex` seat is a process you wait on and never needs one.
+- `nested` sets only the launch mode, or that stop: briefs, role rows, and metrics rules are identical with `nested=yes` and `nested=no`.
+- Write the four resolved model and effort values, the `metrics: on|off` line, the `qa-round-cap: <n>` line, and the `nested: yes|no` line at the top of your todo list and in the closing report of every end state (the step 5 report, or the report made at any stop, including one before step 0).
+- The one exception: a stop while an ambiguous `nested` value is unanswered reports `nested: unresolved` in place of `nested: yes|no`.
 - End a report that ends the job (the step 5 report, or a failed or terminal stop) with `report: final` as a bare line on its own, with no list marker, emphasis or backticks and nothing else on that line; a `needs input` stop or any other question or pause to the owner never carries that line, and neither does any other message; the todo-enforce hook (`scripts/todo-enforce.py`) recognises a final report by that line.
 - In that report, name each todo item left open on a line with `not done`, its `#<id>` and the reason (for example `#4 not done: the owner runs AC7`), in the same text block as the `report: final` line, which closes the message with nothing after it; the hook reads only that last text block and holds the report back while an open item is not named that way.
 - Write the `path: <value>` line step 1 selects in the same two places, as `path: unresolved` until step 1 selects it, including in the end-state report of a run that stops before then.
@@ -157,6 +166,7 @@ Do not triage the story yourself; `engineering-workflow` does, including the Def
 ## 2. Senior engineer: implement to deployment review
 
 Spawn a clean, neutral subagent on `engineer-model` at `engineer-effort`, and brief it as a senior engineer working this story.
+With `nested=yes`, make this launch in the foreground, so the call returns the engineer's handback to you; with `nested=no`, make it in the runtime's default mode.
 It spawns reviewers of its own, and so does the QA agent in step 3, so check the nesting rule in `references/runtimes.md` first.
 Where nesting is restricted, give both delegated agents nesting per that runtime map, or launch their review roles as shell commands (`runtime: command`, `codex` or `opencode`).
 The nesting rule's primary-session option does not fit this skill, since each role finishes its own gates first.
@@ -204,6 +214,7 @@ No path adds a waiver, an admin override, or a change to the expected-head condi
 ## 3. QA agent: verify the deployed story
 
 Spawn a new clean, neutral subagent on qa-model at qa-effort for every new QA round; never resume an agent from an earlier round, since it carries that round's conclusions.
+With `nested=yes`, make each QA launch in the foreground, so the call returns the QA agent's handback to you; with `nested=no`, make it in the runtime's default mode.
 Continuation of the current round under step 4, and the step 0 checklist read-back resume or the resume under the handback reference this step points to of the current round's QA agent, are the only exceptions to that sentence.
 A stop for an owner action ends the round: once the owner clears it, that round's work starts over as a new round under this step with a new QA agent, and a fix/deploy cycle or an amended acceptance basis likewise starts a new round.
 Brief it as a QA agent, with only:
@@ -256,6 +267,7 @@ For a waived PR, compare the merged PR's `headRefOid` with the SHA recorded when
   On "stop", end the invocation with the story left in the state QA left it: `profile.tracker.states.in_progress`, failed items outstanding, the owner deciding next.
   In either case the coordinator writes nothing to the tracker beyond what the Boundaries permit, rules on no item, and relays no verdict of its own.
   Hand them back to the senior engineer: resume the same subagent if the runtime can, else spawn a new clean, neutral one on the same seat with the step 2 brief.
+  With `nested=yes`, make each resume or re-spawn of the senior engineer in the foreground, so the call returns its handback to you; with `nested=no`, make it in the runtime's default mode.
   Either way, add to the hand-back brief each failed item as QA recorded it on the story (the item, its verdict, and the evidence it cites), and instruct the engineer to fix them through `engineering-workflow` on this story and take it back to `profile.tracker.states.in_deployment_review`.
   Leave out of every hand-back brief each item still `pending owner ruling` in QA's latest record, including one carried from an earlier failed round.
   Confirm that state as step 2 does, then run step 3 again with a new QA agent.
@@ -286,7 +298,7 @@ After each round, tell the user its number, the failed items, and the outcome.
 ## 5. Close out
 
 Read the story back and confirm it is in `profile.tracker.states.done` with the completion record step 4 checks, then finish your todo list.
-Report the story identifier, its final state, the four resolved model and effort values and the `metrics: on|off` line, the `qa-round-cap: <n>` line, the `path: <value>` line, each PR, the number of QA rounds with the items fixed in each, where QA recorded its evidence, and any incidental defects left open.
+Report the story identifier, its final state, the four resolved model and effort values and the `metrics: on|off` line, the `qa-round-cap: <n>` line, the `nested: yes|no` line, the `path: <value>` line, each PR, the number of QA rounds with the items fixed in each, where QA recorded its evidence, and any incidental defects left open.
 End the report with the bare `report: final` line, as [Arguments](#arguments) states.
 
 ## Boundaries
