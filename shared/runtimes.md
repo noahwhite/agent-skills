@@ -67,6 +67,24 @@ If your runtime is not listed, map each capability to its closest equivalent and
   Alternatively the primary session can run review roles after the delegated agent hands back its PR, only when the calling skill permits that handback boundary.
   V1 legacy guidance: raise top-level `subagent_depth` to 2 and grant `permission: { task: allow }` to the child.
   Both versions also need skill loading available; V2 uses the `skill` permission action, while V1 uses `permission.skill` / `tools.skill`.
+  A coordinator started as a subagent cannot tell that it is one: the runtime documentation read for this rule gives no in-agent signal that identifies a subagent in every mode.
+  A signal observed on one runtime or mode is recorded with its version and date and is not relied on; for example, a nested coordinator called the `SubagentHandback` tool in the SKL-95 run (`docs/qa-evidence/SKL-95/raw-output-round-2.txt`).
+  So a spawner that starts a coordinator as a subagent states so in the brief, and a nested coordinator whose skill takes that input (for `story-to-done`, `nested=yes`) launches its roles in the foreground, so each call returns the role's handback to it; where this map gives it no foreground subagent launch, it stops and reports rather than launching a role as a subagent.
+  A role launched by the shell-launched agents rule below (`runtime: command` or `runtime: codex`) is a process the coordinator waits on, so it needs no foreground subagent launch and that stop never applies to it.
+  Claude Code: the fork-mode gate decides whether a nested coordinator can launch in the foreground.
+  `CLAUDE_CODE_FORK_SUBAGENT` is on by default (from v2.1.302; interactive terminal from v2.1.232); set it to `0` to turn it off.
+  While it is on, the main conversation cannot wait for a subagent in interactive terminal, VS Code or desktop sessions; in `claude -p` and the Agent SDK it can.
+  So with fork mode on in an interactive terminal, VS Code or desktop session, a nested coordinator has no foreground subagent launch.
+  The docs also say that in an interactive terminal a spawning subagent waits for its background nested subagents, and that under `claude -p` and the Agent SDK a background nested subagent may report to the main conversation if it outlasts the spawning subagent.
+  `SubagentHandback` is documented as a delivery tool, provided only in auto mode to local non-fork subagents (v2.1.271 or later), not as a way to detect being a subagent.
+  Sources, read 2026-10-30: [sub-agents](https://code.claude.com/docs/en/sub-agents.md), [env-vars](https://code.claude.com/docs/en/env-vars.md), [tools-reference](https://code.claude.com/docs/en/tools-reference.md).
+  Observed on Claude Code v2.1.312, 2026-10-30: with fork mode on, a nested launch with no background flag returned asynchronously, and the `Agent` tool schema had no `run_in_background` parameter.
+  Observed in SKL-94 QA round 1 Run 1 (`docs/qa-evidence/SKL-94/README.md`): a nested Claude Code coordinator launched QA in the background, its turn ended before QA handed back, and QA's handback never reached it; one run, recorded, not a general rule.
+  OpenCode V2: [Tools](https://opencode.ai/v2/docs/tools) (read 2026-11-17, with the CLI at the version in `.opencode-version`; the page names no version) documents no foreground form of the `subagent` call: "Subagents always run in the background", and the parent receives a `<subagent>` message when the child goes idle.
+  So a nested coordinator on OpenCode V2 has no foreground subagent launch.
+  OpenCode V2 depth: [Config](https://opencode.ai/v2/docs/config) says `subagent_depth` "Defaults to `1`, so a subagent cannot start another subagent", so each hop below the primary session takes one level.
+  A top-level spawner -> coordinator -> role -> reviewer chain needs `experimental.subagent_depth: 3`; when the spawner is itself a subagent, add one level per hop above it (4 when the spawner is a direct child of the primary session).
+  The depth-2 example below stays for its use: a top-level coordinator whose delegated agent runs reviewers.
 - **Delegated working directory.** A delegated agent (a subagent) starts in the working directory of the session that spawns it, and no runtime in the map lets the delegating session set that directory to a chosen path.
   The delegating session therefore creates the per-story worktree itself before the spawn and names its absolute path in the brief, and the delegated agent addresses every file and git command to that path, by absolute path or `git -C <path>`.
   A runtime's own worktree isolation does not replace the per-story worktree, because it chooses its own branch, base and lifetime.
@@ -228,3 +246,4 @@ Authoritative V2 references:
 - [V1 migration](https://opencode.ai/v2/docs/migrate-v1): supported translation versus ignored fields.
 - [CLI](https://opencode.ai/v2/docs/cli): automation and private-server startup.
 - [Skills](https://opencode.ai/v2/docs/skills): skill loading and discovery.
+- [Tools](https://opencode.ai/v2/docs/tools): the `subagent` call and its launch mode.
