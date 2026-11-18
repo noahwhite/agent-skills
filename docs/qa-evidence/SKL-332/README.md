@@ -22,7 +22,7 @@ The raw output is attached to SKL-332 as "SKL-332 QA round 1 assertions"; there 
 | SC5 (refined 5): totals and runtime estimate | Verified | The totals tables match the entries. The per-entry estimates were recomputed from the baseline log and match: delete 0.285 s, merge 0.200 s, total 0.485 s of 333.67 s. The 173.62 s, 230.72 s and 242.00 s figures were also reproduced. |
 | Refined 6: rankings, habits, SKL-333 | Verified | Modules are ranked by count and by runtime. The habit counts add up to 36, each habit has an example, and SKL-333 is named. |
 | Refined 7: one comment with table, records, commands and Go/No-Go | Verified | One comment holds every section. The three follow-up slices give their node ids and overlap no sleep, skip or prose pin. |
-| Refined 8: no tracked change, no dependency, no leftover worktrees | Verified | There is no SKL-332 commit, remote branch or PR, and the spike branch is 0 commits ahead with a clean status. `pyproject.toml` and `uv.lock` are unchanged. |
+| Refined 8: no tracked change, no dependency, no leftover worktrees | Verified | The spike made no commit, remote branch or PR of its own, and this evidence PR is the only SKL-332 PR. The spike branch is 0 commits ahead with a clean status. `pyproject.toml` and `uv.lock` are unchanged. |
 | Deliverable 1: the test list on SKL-332 | Verified | Comment `113e8e24`. |
 | Deliverable 2: Go names follow-up stories with slices | Verified | Section 10, follow-ups 1 to 3. |
 | Deliverable 3: if No-Go, why and the alternative | Verified | No-Go for speed, with SKL-339 as the alternative. |
@@ -33,4 +33,5 @@ The raw output is attached to SKL-332 as "SKL-332 QA round 1 assertions"; there 
 
 Pending owner rulings: none.
 
-Closing decision: In Deployment Review until this evidence merges; the evidence PR's CI test run waits on the owner's decision.
+Closing decision: Done once this evidence merges.
+The owner allowed this evidence PR's CI test run; QA itself still executed no test.
