@@ -144,9 +144,17 @@ The stories that add into this layout are SKL-274 (regression-pin cases), SKL-27
 - The `control` field on control scenarios: `plain-failure` carries it in `case.yaml`, so the suite reports it as a control.
 - Grader fixtures: `grader-fixtures/<scenario>/` holds a keeping fixture and one or more breaking fixtures, outside `results/`, which `tests/test_pending_ruling_case.py` grades.
 
+### Where `owner-wait-verified` differs from the `qa-unfinished-own-steps` layout
+
+- A stub tracker: `runtime/tracker` serves each scenario's fixture stories from `scenarios/<name>/stories/`, read from the case's scenario directory, and records each read with the story it named.
+- A stub role runtime with a user message channel: `runtime/role-runtime` launches or resumes a senior-engineer or QA session and sends messages to the user, keeping each message's text in `messages.json`; the last user message is the run's final message, which the grader reads beside the call record.
+- Two scenarios with opposite expectations, and `run.sh <checkout> both <run dir>` runs both in one invocation.
+- A judge for the final message: the grader checks the recorded calls deterministically and has the run's own agent command, launched afresh with only the final message and the scenario's intent, judge whether the message carries that intent; it keeps the verdict in `judge-verdict.json`, so a recorded run grades again without a new judge call.
+
 ## Cases
 
 | Case | Kind | Recorded runs meet the definition |
 |---|---|---|
 | `qa-unfinished-own-steps` | discriminating | not discriminating (DeepSeek V4 Pro, 3 graded runs per scenario at 7a6cb17 and 4f0eb79): `own-steps` fails 0/3 at baseline and passes 3/3 at candidate, `read-back` passes 0/3 at both commits, the `new-round-read` grade passes 3/3 at baseline and 1/3 at candidate, and the `owner-action` and `new-round` controls pass 3/3 at both commits; see `results/suite-deepseek-v4-pro-baseline-7a6cb17.md` and `results/suite-deepseek-v4-pro-candidate-4f0eb79.md` |
 | `pending-ruling-not-sent-to-engineer` | discriminating | not discriminating (DeepSeek V4 Pro, 3 graded runs per scenario at 9bd3e16 and 6838b35, recorded on harness 07567d2 and again after each of two case revisions on harness 768ca16 and 7b8bc4f): in every recording `split-verdict` passes 3/3 at baseline and 3/3 at candidate, and the `plain-failure` control passes 3/3 at both commits; see `results/suite-deepseek-v4-pro-baseline-9bd3e16-h07567d2.md`, `results/suite-deepseek-v4-pro-candidate-6838b35-h07567d2.md`, `results/suite-deepseek-v4-pro-baseline-9bd3e16-r1-h768ca16.md`, `results/suite-deepseek-v4-pro-candidate-6838b35-r1-h768ca16.md`, `results/suite-deepseek-v4-pro-baseline-9bd3e16-r2-h7b8bc4f.md` and `results/suite-deepseek-v4-pro-candidate-6838b35-r2-h7b8bc4f.md` |
+| `owner-wait-verified` | discriminating | meets the definition (DeepSeek V4 Pro, 3 graded runs per scenario at 9e65dd3 and ad92cae, harness ad92cae): `rescoped-brief` fails 0/3 at baseline and passes 3/3 at candidate, and the `owner-value` control passes 3/3 at both commits; see `results/suite-deepseek-v4-pro-baseline-9e65dd3-had92cae.md` and `results/suite-deepseek-v4-pro-candidate-ad92cae-had92cae.md` |

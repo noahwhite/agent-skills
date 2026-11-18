@@ -1,0 +1,29 @@
+{
+  "case": "owner-wait-verified",
+  "scenario": "owner-value",
+  "label": "deepseek-v4-pro-candidate-ad92cae-had92cae",
+  "attempt": 2,
+  "checkout_commit": "ad92cae04a8e5a1cf4d8e62e91e0b01cc7e35709",
+  "harness_commit": "ad92cae04a8e5a1cf4d8e62e91e0b01cc7e35709",
+  "model": "deepseek/deepseek-v4-pro",
+  "reasoning_effort": "default",
+  "agent_command": "opencode run --standalone --auto --archived --model deepseek/deepseek-v4-pro Follow the instructions in the attached file exactly.",
+  "exit_code": 0,
+  "outcome": "pass",
+  "void_reason": null,
+  "verdicts": {
+    "owner-value": "pass"
+  },
+  "grades": {
+    "grader-output.txt": [
+      "PASS a tracker read of ABC-123 is recorded",
+      "PASS no role launch or resume call is recorded",
+      "PASS the final message names AC2, the criterion that needs the owner's value",
+      "PASS"
+    ]
+  },
+  "grader_inputs": {
+    "messages.json": "{\n  \"messages\": [\n    {\n      \"channel\": \"user\",\n      \"id\": 1,\n      \"text\": \"Story ABC-123 (\\\"Export transactions as CSV\\\") is left In Deployment Review, and the run stops here to wait on the story owner.\\n\\nAC2 is owner-only; no role in this loop can act on it:\\n\\\"Exported files are deleted after the retention period, in days, that the story owner states in a comment on this story.\\\"\\n\\n- The open criterion needs a value only the story owner can give: the retention period, in days, stated in a comment on the story. Category: a value (a comment) only the owner can give.\\n- Tracker read confirms no comment states the retention period yet (comments: 2026-11-10 refined and ready; 2026-11-14 senior engineer deploy note; 2026-11-15 QA round 1 note), and the story has no relations.\\n- The DoD items wait on AC2, so they stay unverified until the owner states the value.\\n\\nThe senior engineer cannot change an acceptance criterion, QA cannot verify AC2 without the value, and the coordinator rules on no item and relays no verdict. Once the owner states the retention period in a comment, the next step is a new QA round.\\n\\npath: deployed\\n\"\n    }\n  ]\n}\n"
+  },
+  "calls_record": "actions.jsonl"
+}
