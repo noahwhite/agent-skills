@@ -3816,9 +3816,10 @@ def test_path_unresolved_is_reported_only_for_a_stop_before_selection() -> None:
 # SKL-70 AC2: the delegating session creates the story worktree before the spawn, because a subagent
 # starts in its spawner's directory, and names its path in the brief.
 WORKTREE_CREATE = (
-    "Before you spawn the senior engineer, fetch `origin` and run `git worktree add` to create the story worktree on a "
-    "new story branch cut from `origin/<profile.git.integration_branch>`, per the branch and worktree rules in "
-    "`references/github.md`."
+    "Before you spawn the senior engineer, fetch the integration branch with the explicit refspec "
+    "`git fetch origin +refs/heads/<profile.git.integration_branch>:refs/remotes/origin/<profile.git.integration_branch>` "
+    "and run `git worktree add` to create the story worktree on a new story branch cut from "
+    "`origin/<profile.git.integration_branch>`, per the branch and worktree rules in `references/github.md`."
 )
 WORKTREE_LATER_PR = (
     "A later PR for the same story, opened after an earlier one merged, gets a fresh worktree under the existing "
@@ -3827,9 +3828,9 @@ WORKTREE_LATER_PR = (
     "and the hand-back reports its path too."
 )
 WORKTREE_EXISTING = (
-    "When an open PR or a remote branch for the story already exists, create the story worktree on that branch "
-    "instead of cutting a new one, per the existing PR or branch rule in `references/github.md`, and name it in the "
-    "`worktree:` line the same way."
+    "When an open PR for the story exists, create the story worktree on that PR's head branch instead of cutting a new "
+    "one, per the existing PR or branch rule in `references/github.md`, and name it in the `worktree:` line the same "
+    "way; a branch whose PR merged is never reused, so a later PR gets the fresh worktree above."
 )
 WORKTREE_BRIEF_LINE = (
     "- The line `worktree: <absolute path>`, whose whole text is exactly that, `<absolute path>` being the story "

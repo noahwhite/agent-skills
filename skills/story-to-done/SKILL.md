@@ -165,9 +165,9 @@ Do not triage the story yourself; `engineering-workflow` does, including the Def
 
 ## 2. Senior engineer: implement to deployment review
 
-Before you spawn the senior engineer, fetch `origin` and run `git worktree add` to create the story worktree on a new story branch cut from `origin/<profile.git.integration_branch>`, per the branch and worktree rules in `references/github.md`.
+Before you spawn the senior engineer, fetch the integration branch with the explicit refspec `git fetch origin +refs/heads/<profile.git.integration_branch>:refs/remotes/origin/<profile.git.integration_branch>` and run `git worktree add` to create the story worktree on a new story branch cut from `origin/<profile.git.integration_branch>`, per the branch and worktree rules in `references/github.md`.
 A later PR for the same story, opened after an earlier one merged, gets a fresh worktree under the existing worktree rule in `references/github.md`, which you create the same way and name in the `worktree:` line of every later brief, including the brief or message with which step 4 resumes or relaunches the senior engineer, and the hand-back reports its path too.
-When an open PR or a remote branch for the story already exists, create the story worktree on that branch instead of cutting a new one, per the existing PR or branch rule in `references/github.md`, and name it in the `worktree:` line the same way.
+When an open PR for the story exists, create the story worktree on that PR's head branch instead of cutting a new one, per the existing PR or branch rule in `references/github.md`, and name it in the `worktree:` line the same way; a branch whose PR merged is never reused, so a later PR gets the fresh worktree above.
 
 Spawn a clean, neutral subagent on `engineer-model` at `engineer-effort`, and brief it as a senior engineer working this story.
 With `nested=yes`, make this launch in the foreground, so the call returns the engineer's handback to you; with `nested=no`, make it in the runtime's default mode.
