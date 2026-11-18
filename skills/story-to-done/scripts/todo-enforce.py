@@ -448,13 +448,13 @@ def reset_cadence(session):
 
 def check_cadence(session, tool):
     """Denies the call once CADENCE_LIMIT calls were allowed since the last list update, else
-    counts it; reading, comparing and incrementing run in one critical section."""
+    counts it; reading, comparing and incrementing run in one critical section. At the limit the
+    count is rewritten unchanged, so an unwritable count fails open there too."""
     try:
         with cadence_lock(session):
             count = read_cadence(session)
             exceeded = count >= CADENCE_LIMIT
-            if not exceeded:
-                write_cadence(session, count + 1)
+            write_cadence(session, count if exceeded else count + 1)
     except (OSError, ValueError) as exc:
         log("allowing %s, the update cadence count is unreadable, unwritable or locked: %s: %s"
             % (tool, type(exc).__name__, exc))

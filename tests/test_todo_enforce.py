@@ -1164,10 +1164,11 @@ def test_an_unreadable_count_allows_with_a_stderr_line_and_is_left_unchanged(rig
 
 
 @pytest.mark.skipif(os.geteuid() == 0, reason="root ignores directory permissions")
-def test_an_unwritable_count_allows_with_a_stderr_line_and_is_left_unchanged(rig):
+@pytest.mark.parametrize("stored", [5, CADENCE_LIMIT])
+def test_an_unwritable_count_allows_with_a_stderr_line_and_is_left_unchanged(rig, stored):
     armed_with_a_task_in_progress(rig)
     assert_allowed(read_call(rig))
-    set_cadence(rig, 5)
+    set_cadence(rig, stored)
     state = cadence_file(rig).parent
     state.chmod(0o500)
     try:
@@ -1176,7 +1177,7 @@ def test_an_unwritable_count_allows_with_a_stderr_line_and_is_left_unchanged(rig
         assert "update cadence count" in res.stderr
     finally:
         state.chmod(0o700)
-    assert cadence_count(rig) == 5
+    assert cadence_count(rig) == stored
 
 
 def test_a_lock_not_acquired_within_two_seconds_allows_with_a_stderr_line(rig):
@@ -1314,7 +1315,7 @@ BRANCHES = {
         [deny_call_16_after_15_allowed],
     ),
     "each allowed call is counted": (
-        "                write_cadence(session, count + 1)\n",
+        "            write_cadence(session, count if exceeded else count + 1)\n",
         [deny_call_16_after_15_allowed],
     ),
     "a main-thread list update resets the count": (
@@ -1335,7 +1336,7 @@ NEUTRAL = {
     "#%s(?![0-9A-Za-z_-])\"": "#%s\"",
     "    if agent_of(payload) is not None or not is_armed(session):\n": "    if not is_armed(session):\n",
     "        return deny(CADENCE_EXCEEDED.format(tool=tool, limit=CADENCE_LIMIT))\n": "        return 0\n",
-    "                write_cadence(session, count + 1)\n": "                pass\n",
+    "            write_cadence(session, count if exceeded else count + 1)\n": "            write_cadence(session, count)\n",
     "            reset_cadence(session)\n": "            pass\n",
 }
 
