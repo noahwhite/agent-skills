@@ -52,9 +52,12 @@ NEGATION = re.compile(r"\b(?:not|no longer|never|nothing|none|no|isn't|aren't|do
                       re.IGNORECASE)
 SENTENCE = re.compile(r"(?<=[.!?])\s+|\n")
 CLAUSE = re.compile(r";|,|:\s|\s(?:and|but|while|whereas|so)\s", re.IGNORECASE)
-# Where a clause turns to another item: just before the next item id, so each piece speaks of one item,
-# and an id in parentheses ("the retention period (AC2) remains open") stays with its predicate.
-ITEM = re.compile(r"(?=(?<![A-Za-z0-9_])(?:AC|DoD)\d+(?![A-Za-z0-9_]))")
+# A parenthesis that only labels the item beside it, by id or by the owner criterion's subject:
+# "the retention period (AC2) remains open" speaks of one item, so the label is unwrapped in place.
+LABEL = re.compile(rf"\(\s*((?:AC|DoD)\d+|(?:the\s+)?{OWNER_CRITERION_SUBJECT})\s*\)", re.IGNORECASE)
+# Where a clause turns to another item: any other parenthesis, which carries its own predicate, or
+# just before the next item id, so each piece speaks of one item.
+ITEM = re.compile(r"[()]|(?=(?<![A-Za-z0-9_])(?:AC|DoD)\d+(?![A-Za-z0-9_]))")
 # A phrase that names an item as still open, so naming AC2 as complete is not naming it as outstanding.
 OUTSTANDING = re.compile(r"\b(?:outstanding|open|unresolved|unmet|missing|pending|needs?|requires?|awaiting|"
                          r"wait(?:s|ing)?|blocked|stop(?:s|ped|ping)?|remains?|no comment)\b", re.IGNORECASE)
@@ -103,7 +106,7 @@ def names_outstanding(text: str) -> bool:
     names it with an open-item phrase."""
     for sentence in SENTENCE.split(text):
         for clause in CLAUSE.split(sentence):
-            for piece in ITEM.split(clause):
+            for piece in ITEM.split(LABEL.sub(r" \1 ", clause)):
                 if names(OWNER_CRITERION, piece) or OWNER_CRITERION_SUBJECT in piece.lower():
                     if NOT_YET.search(piece) or affirms(piece, [OUTSTANDING, *WAIT_ON_OWNER]):
                         return True
