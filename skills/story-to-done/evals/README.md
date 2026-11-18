@@ -149,6 +149,7 @@ The stories that add into this layout are SKL-274 (regression-pin cases), SKL-27
 - A stub tracker: `runtime/tracker` serves each scenario's fixture stories from `scenarios/<name>/stories/`, read from the case's scenario directory, and records each read with the story it named.
 - A stub role runtime with a user message channel: `runtime/role-runtime` launches or resumes a senior-engineer or QA session and sends messages to the user, keeping each message's text in `messages.json`; the last user message is the run's final message, which the grader reads beside the call record.
 - Two scenarios with opposite expectations, and `run.sh <checkout> both <run dir>` runs both in one invocation.
+- A judge for the final message: the grader checks the recorded calls deterministically and has the run's own agent command, launched afresh with only the final message and the scenario's intent, judge whether the message carries that intent; it keeps the verdict in `judge-verdict.json`, so a recorded run grades again without a new judge call.
 
 ## Cases
 

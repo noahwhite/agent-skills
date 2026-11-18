@@ -19,7 +19,8 @@
 #
 # Exit codes: 0 the run was graded and passed, 1 the run was graded and failed, 2 the run itself
 # is void (bad arguments, a run directory already in use, an agent command that failed or timed
-# out, a checkout the agent changed, or a record the grader cannot grade), and in that case
+# out, a checkout the agent changed, a record the grader cannot grade, or a judge that gave no
+# verdict), and in that case
 # nothing is graded.
 set -euo pipefail
 
@@ -136,9 +137,10 @@ if [ "$(state "$checkout_real")" != "$state_before" ]; then
 fi
 
 # The grader's own exit code is the run's: written to the file first, so a failed write is a
-# harness error, never a graded failure.
+# harness error, never a graded failure. The grader's judge is the agent command this run used,
+# so the model that wrote the final message is the model that judges it.
 : > "$run/grader-output.txt" 2>/dev/null || { echo "HARNESS: cannot write $run/grader-output.txt" >&2; exit 2; }
 graded=0
-python3 "$case_dir/grader.py" --run-dir "$run" --expectation "$scenario" > "$run/grader-output.txt" || graded=$?
+python3 "$case_dir/grader.py" --run-dir "$run" --expectation "$scenario" --judge "${agent[@]}" > "$run/grader-output.txt" || graded=$?
 cat "$run/grader-output.txt"
 exit "$graded"

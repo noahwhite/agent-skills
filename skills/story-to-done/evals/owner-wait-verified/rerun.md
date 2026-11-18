@@ -11,6 +11,10 @@ The agent never reaches a real tracker, user, senior engineer or QA agent.
 `tracker` serves the scenario's fixture stories from `scenarios/<name>/stories/`, read from the case's scenario directory, and records each read.
 `role-runtime` records each launch, resume, read and user message, and keeps each message's text.
 `grader.py` grades only that record, `actions.jsonl` in the run directory, and the message texts kept in `messages.json` beside it; the final message is the last message the run sent to the user.
+The recorded calls are checked deterministically.
+Whether the final message carries the scenario's intent is decided by a judge: `run.sh` passes its own agent command to `grader.py` after `--judge`, and the grader launches that command afresh in an empty directory with only the final message and the intent, so the model that wrote the message judges it in a clean context.
+The judge's `VERDICT: yes` is the pass; a judge that exits non-zero or gives no verdict voids the run.
+The grader keeps the verdict, with the message and intent it was given, in `judge-verdict.json` in the run directory.
 The record sits outside the agent's `workspace/` but is not sandboxed from it, so an agent that writes outside its directory could forge it.
 
 ## Baseline and candidate
@@ -36,8 +40,10 @@ bash skills/story-to-done/evals/owner-wait-verified/run.sh <checkout> both "$(mk
 
 ## Grading a recorded run again
 
-Each run record keeps `messages.json` under `grader_inputs`, and its `-calls.jsonl` file is the run's `actions.jsonl`.
-Write both into an empty directory under those names and run `python3 grader.py --run-dir <dir> --expectation <scenario>`; its verdict is the record's `outcome`.
+Each run record keeps `messages.json` (and, for a run recorded with the judge, `judge-verdict.json`) under `grader_inputs`, and its `-calls.jsonl` file is the run's `actions.jsonl`.
+Write them into an empty directory under those names and run `python3 grader.py --run-dir <dir> --expectation <scenario>`; its verdict is the record's `outcome`.
+A kept `judge-verdict.json` for the same message and intent is reused, so no judge is launched.
+Without one, the grader launches the case's recorded agent command as the judge, or the command given after `--judge`.
 
 ## Configuration
 
@@ -51,7 +57,7 @@ Write both into an empty directory under those names and run `python3 grader.py 
 
 - `0` the run was graded and passed.
 - `1` the run was graded and failed.
-- `2` the run is void and nothing was graded: bad arguments, a run directory already in use, an agent command that failed or hit `EVAL_TIMEOUT`, a checkout the agent changed, or a call record or `messages.json` the stubs could not have written.
+- `2` the run is void and nothing was graded: bad arguments, a run directory already in use, an agent command that failed or hit `EVAL_TIMEOUT`, a checkout the agent changed, a call record or `messages.json` the stubs could not have written, or a judge that gave no verdict.
   A run that makes no call is graded on its empty record, never voided.
 
 ## What the case shows
