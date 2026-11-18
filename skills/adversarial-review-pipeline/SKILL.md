@@ -209,7 +209,7 @@ Its dossier asks for both jobs and demands execution rather than reasoning:
 - A hunter whose sandbox could not start reads nothing yet may exit 0.
   A sandbox or permission error on the agent's stderr, or a report whose first line is not `REVIEW-RAN: yes`, is a failed phase, never a clean one (the script exits 17).
   The report itself may quote such error text; only stderr is searched for it.
-  That stderr also carries text the agent echoes from files it reads, so a bubblewrap marker counts only as bubblewrap's own diagnostic line, one that begins with the marker after optional indentation or colour codes; the same marker quoted mid-line does not fail the phase.
+  That stderr also carries text the agent echoes from files, specs and diffs it reads, so a marker counts only where the sandbox wrapper or CLI emits it: at the start of a line, after optional indentation or colour codes and at most one `<word>: ` tool prefix such as `codex: `; the same marker quoted anywhere else does not fail the phase.
 - If the reviewer's own sandbox cannot start on this host (for Codex, its bwrap sandbox), that reviewer is unavailable: stop and say so.
   The one exception is an operator who confirms an outer sandbox, such as a disposable container or VM; only then may it run with `-s danger-full-access`.
   The throwaway worktree is not a sandbox and never justifies that flag.

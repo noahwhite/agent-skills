@@ -272,53 +272,90 @@ def test_an_agent_that_changes_the_primary_checkout_still_exits_18(gate):
 
 
 # --- SKL-127: only the sandbox's own error marks a phase blind, not text the agent echoes ----------
-# The marker texts below are assembled by printf so this file's source never carries them whole:
-# a gate reviewing this file echoes its source on the agent's stderr.
+# A marker counts only where the wrapper or CLI emits it: at line start, after optional whitespace or
+# colour codes and at most one `<word>: ` tool prefix. Every line below that carries a marker is a
+# quoted Python string, so this file's own source stays acceptable when a gate agent echoes it.
 
 RUNTIMES_DOC = ROOT / "shared" / "runtimes.md"
 
+ECHOED_LINES = {
+    "runtimes-doc": (
+        "  Codex's `read-only` and `workspace-write` sandboxes need bubblewrap on Linux; where it "
+        "cannot start, every command fails with a `bwrap:` error and the review comes back empty."
+    ),
+    "removed-detector-line": (
+        "-  if [ -n \"$2\" ] && [ -f \"$2\" ] && grep -qiE "
+        "'bwrap:|sandbox (failed|denied|could not)|Failed to make .* Permission denied' -- \"$2\"; then"
+    ),
+    "ac-line-listing-markers": (
+        "- The other markers (`sandbox failed`, `sandbox denied`, `sandbox could not`, "
+        "`Failed to make ... Permission denied`) still trip on real failures"
+    ),
+    "skill-doc-grep-hit": (
+        "./skills/adversarial-review-pipeline/SKILL.md:209:- A hunter whose sandbox could not start "
+        "reads nothing yet may exit 0."
+    ),
+    "diff-line-sandbox-failed": "+  the reviewer notes that the sandbox failed once on another host",
+    "comment-sandbox-denied": "  # an older run where the sandbox denied a write",
+    "prose-failed-to-make": "If you see Failed to make /newroot: Permission denied, check the host.",
+}
 
-def test_bubblewrap_text_echoed_from_a_file_the_agent_read_does_not_mark_the_phase_blind(gate):
+
+def stderr_lines_agent(tmp_path: Path, lines: list[str]) -> str:
+    """An agent command that writes the given lines to its stderr, then a valid report."""
+    fixture = tmp_path / "agent-stderr.txt"
+    fixture.write_text("\n".join(lines) + "\n")
+    return f"cat {shlex.quote(str(fixture))} >&2; {SWEEP_AGENT}"
+
+
+def test_echoing_a_whole_doc_that_mentions_the_markers_does_not_mark_the_phase_blind(gate):
     """The SKL-95, SKL-182 and SKL-218 false alarms: the agent echoed runtimes.md on its stderr."""
     repo, scratch, env = gate
     doc = shlex.quote(str(RUNTIMES_DOC))
-    agent = (
-        f"cat {doc} >&2; sed 's/^/+  /' {doc} >&2; grep -n bwrap {doc} >&2; {SWEEP_AGENT}"
-    )
+    agent = f"cat {doc} >&2; sed 's/^/+  /' {doc} >&2; grep -n bwrap {doc} >&2; {SWEEP_AGENT}"
     result = run_sweep(repo, scratch, env, "--model", "deepseek/deepseek-flash", agent=agent)
     assert result.returncode == 0, result.stdout + result.stderr
-    errlog = next((repo / ".git").rglob("sweep-agent.err")).read_text()
-    assert "bwrap:" in errlog, f"the fixture no longer echoes the bubblewrap text: {errlog[:500]}"
+    errlog = next((repo / ".git").rglob("sweep-agent.err"), None)
+    assert errlog is not None and "bwrap:" in errlog.read_text(), "the fixture no longer echoes the doc"
     assert Path(f"{artifacts(repo, env)['sweep']}.stamp").exists(), "the echoing phase was not accepted"
 
 
-@pytest.mark.parametrize("prefix", ["", "  ", "\\033[31m", "\\033[0m  "])
-def test_a_real_bubblewrap_error_line_still_marks_the_phase_blind(gate, prefix):
+@pytest.mark.parametrize("name", sorted(ECHOED_LINES))
+def test_echoed_content_carrying_a_marker_does_not_mark_the_phase_blind(gate, tmp_path, name):
     repo, scratch, env = gate
-    agent = (
-        f"printf '{prefix}%s: %s\\n' bwrap "
-        "\"Can't mount proc on /newroot/proc: Operation not permitted\" >&2; "
-        f"{SWEEP_AGENT}"
-    )
+    agent = stderr_lines_agent(tmp_path, [ECHOED_LINES[name]])
+    result = run_sweep(repo, scratch, env, "--model", "deepseek/deepseek-flash", agent=agent)
+    assert result.returncode == 0, (name, result.stdout + result.stderr)
+    assert Path(f"{artifacts(repo, env)['sweep']}.stamp").exists(), f"{name}: the phase was not accepted"
+
+
+REAL_ERRORS = {
+    "bwrap": "bwrap: Can't mount proc on /newroot/proc: Operation not permitted",
+    "sandbox-failed": "sandbox failed to start",
+    "sandbox-denied": "sandbox denied the read of /repo",
+    "sandbox-could-not": "sandbox could not start: no user namespaces",
+    "failed-to-make": "Failed to make /newroot/proc: Permission denied",
+}
+
+LINE_PREFIXES = {
+    "bare": "",
+    "indented": "    ",
+    "coloured": "\x1b[31m",
+    "tool": "codex: ",
+    "indented-coloured-tool": "  \x1b[0mcodex: ",
+}
+
+
+@pytest.mark.parametrize("prefix", sorted(LINE_PREFIXES))
+@pytest.mark.parametrize("marker", sorted(REAL_ERRORS))
+def test_a_real_sandbox_error_line_still_marks_the_phase_blind(gate, tmp_path, marker, prefix):
+    repo, scratch, env = gate
+    line = LINE_PREFIXES[prefix] + REAL_ERRORS[marker]
+    agent = stderr_lines_agent(tmp_path, ["Reading the diff", line, "review done"])
     result = run_sweep(repo, scratch, env, "--model", "gpt-6.1-sol", agent=agent)
-    assert result.returncode == 17, (prefix, result.stdout + result.stderr)
+    assert result.returncode == 17, (marker, prefix, result.stdout + result.stderr)
     assert "ran blind" in result.stderr, result.stderr
     assert "exit=17" in result.stderr, result.stderr
-    assert_not_stamped(artifacts(repo, env), "sweep")
-
-
-@pytest.mark.parametrize("marker", [
-    "printf 'codex: sandbox %s to start\\n' failed",
-    "printf 'error: sandbox %s the read\\n' denied",
-    "printf 'the sandbox %s start\\n' 'could not'",
-    "printf 'Failed to make %s: Permission %s\\n' /newroot/proc denied",
-])
-def test_the_other_sandbox_markers_still_mark_the_phase_blind(gate, marker):
-    repo, scratch, env = gate
-    agent = f"{marker} >&2; {SWEEP_AGENT}"
-    result = run_sweep(repo, scratch, env, "--model", "gpt-6.1-sol", agent=agent)
-    assert result.returncode == 17, (marker, result.stdout + result.stderr)
-    assert "ran blind" in result.stderr, result.stderr
     assert_not_stamped(artifacts(repo, env), "sweep")
 
 

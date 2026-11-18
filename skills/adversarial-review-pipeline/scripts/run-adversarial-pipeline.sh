@@ -592,16 +592,15 @@ primary_state() {
 }
 
 # Does an agent's stderr log ($1) show a sandbox start-up error? The log also carries whatever the
-# agent echoes while it reads files (SKL-127), and the skills' own text mentions bubblewrap's error
-# prefix, so that prefix counts only as bubblewrap's own diagnostic line: it begins the line, after
-# optional indentation or terminal colour codes. A line that merely quotes it mid-line is not a
-# sandbox failure. The other markers match anywhere on a line, as before; "[ ]denied" matches the
-# same text as a plain space, and keeps this file's own source from matching the pattern when an
-# agent echoes it.
+# agent echoes while it reads files, specs and diffs (SKL-127), and the skills' own text quotes these
+# markers, so a marker counts only where the wrapper or CLI itself emits it: at the start of a line,
+# after optional whitespace or terminal colour codes and at most one `<word>: ` tool prefix (so a
+# CLI that prefixes its own name still trips it). A line that quotes a marker anywhere else is not
+# a sandbox failure. The colour-code bracket is written as [[] because \[ is undefined in POSIX ERE.
 sandbox_error_in() {
   local esc=$'\e'
-  grep -qiE "^([[:space:]]|${esc}\[[0-9;]*m)*bwrap: " -- "$1" \
-    || grep -qiE 'sandbox (failed|denied|could not)|Failed to make .* Permission[ ]denied' -- "$1"
+  local lead="^([[:space:]]|${esc}[[][0-9;]*m)*([[:alnum:]_.-]+: )?"
+  grep -qiE "${lead}(bwrap: |sandbox (failed|denied|could not)|Failed to make .* Permission denied)" -- "$1"
 }
 
 accept_phase() {  # $1 = phase, $2 = stderr log or "": validate a freshly written artifact, then stamp it
