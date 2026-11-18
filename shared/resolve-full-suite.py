@@ -221,6 +221,11 @@ def resolve(doc: dict, path: str, story_key: str | None) -> str:
     else:
         tracker = doc.get("tracker")
         team = tracker.get("team_key") if isinstance(tracker, dict) else None
+        if team is not None and not isinstance(team, str):
+            # An unquoted OFF reads as a boolean, so the team's spelling is lost: fail closed, never fall to default.
+            raise Unresolved(
+                f"profile.tracker.team_key in {path} is {team!r}, not a string; quote it, for example team_key: \"OFF\""
+            )
     teams = node.get("teams", {})
     if isinstance(team, str) and team in teams:
         return teams[team]

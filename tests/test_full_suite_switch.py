@@ -106,6 +106,15 @@ def test_a_profile_value_outside_the_schema_fails_closed(tmp_path, body):
     assert result.stdout == ""
 
 
+def test_an_unquoted_tracker_team_key_fails_closed(tmp_path):
+    # YAML reads an unquoted OFF as the boolean false, so the team is lost; resolving the default instead would
+    # silently turn off a suite the team set on.
+    profile = 'tracker:\n  team_key: OFF\nfull_suite:\n  default: "off"\n  teams:\n    "OFF": "on"\n'
+    result = resolve(tmp_path, profile)
+    assert result.returncode == 16, result.stdout + result.stderr
+    assert "quote it" in result.stderr
+
+
 @pytest.mark.parametrize("args", [["--value", "yes"], ["--story-key", "skl-1"]])
 def test_a_malformed_command_line_exits_2(tmp_path, args):
     assert resolve(tmp_path, None, *args).returncode == 2
@@ -228,6 +237,16 @@ def test_preflight_rejects_an_invalid_full_suite_value_with_usage(setup):
     assert not (tmp_path / "suite-ran").exists()
 
 
+def test_full_suite_on_a_command_other_than_preflight_is_refused(setup):
+    tmp_path, repo, env = setup
+    result = subprocess.run(
+        ["bash", str(PIPELINE), "paths", "--repo", str(repo), "--base", "HEAD", "--full-suite", "on"],
+        capture_output=True, text=True, env=env, timeout=60,
+    )
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "--full-suite is a preflight option" in result.stderr
+
+
 def test_preflight_with_full_suite_off_still_fails_a_dirty_tree(setup):
     tmp_path, repo, env = setup
     (repo / "untracked.txt").write_text("dirty\n")
@@ -246,6 +265,8 @@ def phase0_section() -> str:
 
 
 def test_the_skill_preflight_command_passes_full_suite():
-    commands = [line for line in phase0_section().splitlines() if '"$PIPELINE" preflight ' in line]
-    assert commands, "the Phase 0 section has no preflight command"
-    assert all(re.search(r"\s--full-suite\s", line) for line in commands), commands
+    blocks = re.findall(r"^```bash\n(.*?)^```", phase0_section(), re.S | re.M)
+    commands = [line for block in blocks for line in block.splitlines()
+                if re.match(r'\s*"\$PIPELINE" preflight ', line)]
+    assert len(commands) == 1, commands
+    assert re.search(r'\s--full-suite "<on or off>"\s', commands[0]), commands[0]

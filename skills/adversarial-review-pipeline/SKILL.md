@@ -1,8 +1,8 @@
 ---
 name: adversarial-review-pipeline
 description: >-
-  Run the pre-PR adversarial code-review gate: a deterministic preflight (clean tree, suite green in a
-  detached worktree at HEAD), a cheap sweep over the diff, an empirical verify-and-hunt pass that
+  Run the pre-PR adversarial code-review gate: a deterministic preflight (clean tree, and suite green in a
+  detached worktree at HEAD when the full-suite option is on), a cheap sweep over the diff, an empirical verify-and-hunt pass that
   mutates and runs code in a throwaway worktree, one bounded arbitration by a strong reviewer, then
   fix and one bounded re-verify. Use on every pre-PR review, and when asked to run the adversarial
   gate, the pre-PR pipeline, or the sweep, hunt and arbitrate review. The two-lens loop in
@@ -84,7 +84,8 @@ Common inputs:
 - `--spec <file>`: the story text and acceptance criteria, so reviewers can reject out-of-scope work as a category.
   Write it to the session's scratch directory (`references/runtimes.md`, Scratch files), never the profile's base directory.
   A `--spec` naming a missing file is an error; only omitting it gives the "judge scope from the diff alone" fallback.
-- `--test-cmd`: `profile.project.test_command`; `--test-dir` when the suite must run from a subdirectory.
+- `--test-cmd`: `profile.project.test_command`; `--test-dir` when the suite must run from a subdirectory; the preflight runs it only when `--full-suite` is `on`.
+- `--full-suite on|off`: the full-suite option, read by `preflight` only (Phase 0 below).
 - `--scratch <dir>`: the absolute path of the session's scratch directory (`references/runtimes.md`, Scratch files), passed to every command so the dossiers and throwaway checkouts stay in it; the script gives each run its own directory inside it and hands the session directory to the phase agent as `ADVERSARIAL_SESSION_SCRATCH`.
   Never pass the profile's base directory; omitted, the script creates a standalone directory per invocation, so two commands no longer share one.
   The script keeps its own run state (accepted phases, logs, stamps) under the repository's git dir (`git rev-parse --git-path adversarial-pipeline`), keyed by base and head: that is the script's state, not a session scratch artifact.
@@ -168,7 +169,7 @@ SPEC="$scratch/spec.md"                                      # the story text an
 ```
 
 ```bash
-"$PIPELINE" preflight --base "$BASE" --full-suite <on|off> --test-cmd "<profile.project.test_command>" --scratch "$scratch"
+"$PIPELINE" preflight --base "$BASE" --full-suite "<on or off>" --test-cmd "<profile.project.test_command>" --scratch "$scratch"
 ```
 
 `--full-suite` is the full-suite option, `on` or `off`.

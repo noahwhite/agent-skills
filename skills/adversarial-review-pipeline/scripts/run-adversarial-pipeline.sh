@@ -353,6 +353,7 @@ if [ "$FULL_SUITE_SET" -eq 1 ]; then
     on|off) ;;
     *) printf 'ERROR: --full-suite must be on or off, not %q\n' "$FULL_SUITE" >&2; usage ;;
   esac
+  [ "$cmd" = "preflight" ] || { echo "ERROR: --full-suite is a preflight option; $cmd does not read it" >&2; usage; }
 fi
 
 # A named spec that is missing is an error; only an omitted spec gets the "no spec" fallback.
@@ -1685,14 +1686,16 @@ case "$cmd" in
         status=1
       fi
       echo
-      echo "## 2. The suite, run in a clean checkout of HEAD"
       if [ "$FULL_SUITE" = "off" ]; then
+        echo "## 2. The suite (full-suite: off, not run)"
         echo "full-suite: off - the suite was not run; pass --full-suite on to run it."
         printf 'full-suite: off\n' > "$SUITE_LOG"
         echo "Suite log: $SUITE_LOG"
       elif [ -z "${TEST_CMD//[[:space:]]/}" ]; then
+        echo "## 2. The suite, run in a clean checkout of HEAD"
         echo "SKIPPED - no test command, so NOTHING exercised the committed tree. This is INCOMPLETE, not a pass."
       else
+        echo "## 2. The suite, run in a clean checkout of HEAD"
         # A detached worktree, not an archive export: it keeps git metadata, so tests that shell out to
         # git (ls-files, rev-parse) still work.
         if [ -n "$SCRATCH" ]; then
@@ -1751,7 +1754,7 @@ case "$cmd" in
       elif [ "$suite_ran" -eq 1 ]; then
         echo "PASS - proceed to the sweep and the hunt."
       elif [ "$FULL_SUITE" = "off" ]; then
-        echo "PASS - proceed to the sweep and the hunt (full-suite: off, the suite was not run)."
+        echo "PASS (full-suite: off, the suite was not run) - proceed to the sweep and the hunt."
       else
         echo "INCOMPLETE - the tree is clean but the suite did not run. Re-run with a test command."
       fi

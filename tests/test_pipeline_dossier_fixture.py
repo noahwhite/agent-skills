@@ -34,7 +34,7 @@ PINNED_FILE_SIZES = {
     "phase2-hunt.txt": 7797,
     "source-base.txt": 1250,
     "source-head.txt": 3254,
-    "dossier_fixture.py": 9373,
+    "dossier_fixture.py": 9395,
     "capture_baseline.py": 2302,
     "baseline-arbitrate.txt": 139645,
 }

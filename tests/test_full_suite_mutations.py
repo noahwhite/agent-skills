@@ -23,13 +23,13 @@ SKILL_MD = "skills/adversarial-review-pipeline/SKILL.md"
 SOURCES = ("pyproject.toml", "profile/schema.json", RESOLVER, "skills/adversarial-review-pipeline", TEST_FILE)
 
 RESOLVE_CALL = 'FULL_SUITE="$(python3 "$SCRIPT_DIR/resolve-full-suite.py" < /dev/null)"'
-OFF_BRANCH = '      if [ "$FULL_SUITE" = "off" ]; then\n        echo "full-suite: off'
+OFF_BRANCH = '      if [ "$FULL_SUITE" = "off" ]; then\n        echo "## 2. The suite (full-suite: off'
 
 # (mutation name, file, original text, replacement, test it must break)
 MUTATIONS = [
     ("teams-ignored", RESOLVER, "if isinstance(team, str) and team in teams:", "if False:",
      "test_an_off_key_with_teams_off_on_resolves_on"),
-    ("teams-ignored", RESOLVER, "if isinstance(team, str) and team in teams:", "if False:",
+    ("teams-ignored-for-skl", RESOLVER, "if isinstance(team, str) and team in teams:", "if False:",
      "test_an_skl_key_resolves_off_from_its_team"),
     ("default-ignored", RESOLVER, 'return node.get("default", "off")', 'return "off"',
      "test_a_team_missing_from_teams_falls_to_a_default_of_on"),
@@ -45,6 +45,10 @@ MUTATIONS = [
      "test_no_profile_anywhere_resolves_off"),
     ("profile-validation-skipped", RESOLVER, "    node = full_suite(doc, path)\n", '    node = doc.get("full_suite") or {}\n',
      "test_a_profile_value_outside_the_schema_fails_closed"),
+    ("tracker-team-key-type-unchecked", RESOLVER, "        if team is not None and not isinstance(team, str):\n", "        if False:\n",
+     "test_an_unquoted_tracker_team_key_fails_closed"),
+    ("flag-accepted-on-every-command", PIPELINE, '  [ "$cmd" = "preflight" ] ||', "  true ||",
+     "test_full_suite_on_a_command_other_than_preflight_is_refused"),
     ("value-choices-dropped", RESOLVER, 'parser.add_argument("--value", choices=VALUES,', 'parser.add_argument("--value",',
      "test_a_malformed_command_line_exits_2"),
     ("preflight-off-ignored", PIPELINE, OFF_BRANCH, OFF_BRANCH.replace('[ "$FULL_SUITE" = "off" ]', "false"),
@@ -57,7 +61,7 @@ MUTATIONS = [
      "test_preflight_without_the_flag_reads_the_repository_profile"),
     ("invalid-value-accepted", PIPELINE, "    on|off) ;;\n", "    *) ;;\n",
      "test_preflight_rejects_an_invalid_full_suite_value_with_usage"),
-    ("skill-command-drops-flag", SKILL_MD, "--full-suite <on|off> ", "",
+    ("skill-command-drops-flag", SKILL_MD, '--full-suite "<on or off>" ', "",
      "test_the_skill_preflight_command_passes_full_suite"),
 ]
 
