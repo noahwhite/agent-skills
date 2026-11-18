@@ -6,7 +6,7 @@ Date: 2026-11-18 UTC, independent QA round 1.
 Path: `no-deployment`, from the recorded `path: no-deployment` line, so no environment or build SHA applies.
 Target: merged commit `4e1c67f836f641134a896c92de9e784ef3cfbcc5` on `main`, the squash of PR #347 head `cd12783313760265b6253cfe74624a2bb14a5fb5`; both commits have tree `80b796343661f6bbf2e9f1aef1b46974c87e18f6`, confirmed an ancestor of `origin/main`.
 Fixtures: detached worktrees at the target and at the base `bf288ae3891fd4495ec0768bcf911bf8dd459c7e`, the PR #347 description, its review of record, and CI run 44334921047.
-The node-id lists were produced at each revision by `uv run --locked pytest --collect-only -q -p no:cacheprovider | sed '/tests collected/d' | LC_ALL=C sort > <revision>-nodeids.txt`.
+The node-id lists were produced at each revision in two steps: `uv run --locked pytest --collect-only -q -p no:cacheprovider > <revision>-collect.txt` checked to exit 0, then `sed '/tests collected/d' <revision>-collect.txt | LC_ALL=C sort > <revision>-nodeids.txt`.
 There is no visual surface, so no screenshot applies; the collection node ids were captured to sorted lists and compared with `comm`, as the AC Collection row records.
 
 | Item | Verdict | Evidence |
