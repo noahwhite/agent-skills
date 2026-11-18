@@ -138,9 +138,20 @@ fi
 
 # The grader's own exit code is the run's: written to the file first, so a failed write is a
 # harness error, never a graded failure. The grader's judge is the agent command this run used,
-# so the model that wrote the final message is the model that judges it.
+# so the model that wrote the final message is the model that judges it. The agent ran from the
+# checkout and the judge runs from an empty directory, so a relative path in the command is
+# resolved against the checkout first: a word that is not absolute, has a "/", and names a file
+# or directory there. A word such as the model id deepseek/deepseek-v4-pro names none and is kept.
+judge=()
+for word in "${agent[@]}"; do
+  case "$word" in
+    /*) judge+=("$word") ;;
+    */*) if [ -e "$checkout_real/$word" ]; then judge+=("$checkout_real/$word"); else judge+=("$word"); fi ;;
+    *) judge+=("$word") ;;
+  esac
+done
 : > "$run/grader-output.txt" 2>/dev/null || { echo "HARNESS: cannot write $run/grader-output.txt" >&2; exit 2; }
 graded=0
-python3 "$case_dir/grader.py" --run-dir "$run" --expectation "$scenario" --judge "${agent[@]}" > "$run/grader-output.txt" || graded=$?
+python3 "$case_dir/grader.py" --run-dir "$run" --expectation "$scenario" --judge "${judge[@]}" > "$run/grader-output.txt" || graded=$?
 cat "$run/grader-output.txt"
 exit "$graded"

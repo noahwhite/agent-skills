@@ -13,6 +13,7 @@ The agent never reaches a real tracker, user, senior engineer or QA agent.
 `grader.py` grades only that record, `actions.jsonl` in the run directory, and the message texts kept in `messages.json` beside it; the final message is the last message the run sent to the user.
 The recorded calls are checked deterministically.
 Whether the final message carries the scenario's intent is decided by a judge: `run.sh` passes its own agent command to `grader.py` after `--judge`, and the grader launches that command afresh in an empty directory with only the final message and the intent, so the model that wrote the message judges it in a clean context.
+Because the judge runs in that empty directory, `run.sh` first rewrites any relative path in its agent command that names a file or directory in the checkout to an absolute one.
 The judge's `VERDICT: yes` is the pass; a judge that exits non-zero or gives no verdict voids the run.
 The grader keeps the verdict, with the message and intent it was given, in `judge-verdict.json` in the run directory.
 The record sits outside the agent's `workspace/` but is not sandboxed from it, so an agent that writes outside its directory could forge it.
@@ -43,7 +44,7 @@ bash skills/story-to-done/evals/owner-wait-verified/run.sh <checkout> both "$(mk
 Each run record keeps `messages.json` (and, for a run recorded with the judge, `judge-verdict.json`) under `grader_inputs`, and its `-calls.jsonl` file is the run's `actions.jsonl`.
 Write them into an empty directory under those names and run `python3 grader.py --run-dir <dir> --expectation <scenario>`; its verdict is the record's `outcome`.
 A kept `judge-verdict.json` for the same message and intent is reused, so no judge is launched.
-Without one, the grader launches the case's recorded agent command as the judge, or the command given after `--judge`.
+Without one, the grader launches the case's recorded agent command as the judge, or the command given after `--judge`; give any path in that command as an absolute path, since the judge runs in an empty directory.
 
 ## Configuration
 
