@@ -209,8 +209,10 @@ Its dossier asks for both jobs and demands execution rather than reasoning:
 - A hunter whose sandbox could not start reads nothing yet may exit 0.
   A sandbox or permission error on the agent's stderr, or a report whose first line is not `REVIEW-RAN: yes`, is a failed phase, never a clean one (the script exits 17).
   The report itself may quote such error text; only stderr is searched for it.
-  That stderr also carries text the agent echoes from files, specs and diffs it reads, so a marker counts only in the shape the sandbox wrapper or CLI emits it: at the start of a line, after optional indentation or terminal control codes and at most one `<word>: ` tool prefix such as `codex: `; the same marker quoted mid-line does not fail the phase.
-  The rule reads a line's shape, not its source: echoed text that has that shape still fails the phase, and a real error wrapped in more than one prefix does not.
+  That stderr also carries text the agent echoes from files, specs and diffs it reads, so the check is a line-shape heuristic, not a source identifier.
+  A marker counts only at the start of a line or right after a carriage return (a progress line rewritten in place), after optional whitespace and terminal escape sequences (CSI, colour included, and OSC), optionally followed by one `<word>: ` tool prefix such as `codex: ` and more whitespace or escape sequences; the same marker quoted mid-line does not fail the phase.
+  Two limits of the line shape are accepted: (a) a real error wrapped in more than one prefix (a timestamp, a log level, `[pid] `, `error: ...: `) is missed; (b) echoed text already in the shape (an indented error example, a `Note: ` line, a diff context line) still fails the phase, which fails safe: rerun it.
+  A real wrapper form seen in the wild gets its own bug and fixture rather than a wider rule.
 - If the reviewer's own sandbox cannot start on this host (for Codex, its bwrap sandbox), that reviewer is unavailable: stop and say so.
   The one exception is an operator who confirms an outer sandbox, such as a disposable container or VM; only then may it run with `-s danger-full-access`.
   The throwaway worktree is not a sandbox and never justifies that flag.

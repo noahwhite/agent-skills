@@ -593,17 +593,23 @@ primary_state() {
 
 # Does an agent's stderr log ($1) show a sandbox start-up error? The log also carries whatever the
 # agent echoes while it reads files, specs and diffs (SKL-127), and the skills' own text quotes these
-# markers, so a marker counts only in the shape the wrapper or CLI emits it: at the start of a line
-# (or after a carriage return), after optional whitespace or terminal control sequences and at most
-# one `<word>: ` tool prefix, so a CLI that prefixes its own name still trips it. This is a line-shape
-# rule, not proof of where a line came from: a marker quoted mid-line passes, but echoed text that
-# itself has this shape (an indented example, a `Note: ` line) still trips it, and a real error
-# wrapped in more than one prefix (a timestamp, a log level) does not.
-# The control-sequence bracket is written as [[] because \[ is undefined in POSIX ERE.
+# markers, so this is a line-shape heuristic, not a source identifier. A marker counts only at the
+# start of a line or right after a carriage return (a progress line rewritten in place), after
+# optional whitespace and terminal escape sequences (CSI, colour included, and OSC), optionally
+# followed by one `<word>: ` tool prefix and more whitespace or escape sequences, so `codex: bwrap: `
+# trips with or without colour. A marker quoted mid-line does not trip it. Two accepted limits of
+# the line shape: (a) a real error wrapped in more than one prefix (a timestamp, a log level,
+# `[pid] `, `error: ...: `) is missed; (b) echoed text already in the shape (an indented error
+# example, a `Note: ` line, a diff context line) still marks the phase blind, which fails safe:
+# the phase is retried. A real wrapper form seen in the wild gets its own bug and fixture.
+# Brackets are written as [[] and [\] because \[ and \\ are undefined inside POSIX ERE brackets;
+# LC_ALL=C keeps the byte ranges of the CSI grammar locale-independent.
 sandbox_error_in() {
-  local esc=$'\e' cr=$'\r'
-  local lead="(^|${cr})([[:space:]]|${esc}[[][0-9;?]*[[:alpha:]])*([[:alnum:]_.-]+:[[:space:]]+)?"
-  grep -qiE "${lead}(bwrap: |sandbox (failed|denied|could not)|Failed to make .* Permission denied)" -- "$1"
+  local esc=$'\e' cr=$'\r' bel=$'\a'
+  local escseq="(${esc}[[][0-?]*[ -/]*[@-~]|${esc}][^${bel}${esc}]*(${bel}|${esc}[\\]))"
+  local gap="([[:space:]]|${escseq})*"
+  local lead="(^|${cr})${gap}([[:alnum:]_.-]+:[[:space:]]${gap})?"
+  LC_ALL=C grep -qiE "${lead}(bwrap: |sandbox (failed|denied|could not)|Failed to make .* Permission denied)" -- "$1"
 }
 
 accept_phase() {  # $1 = phase, $2 = stderr log or "": validate a freshly written artifact, then stamp it
