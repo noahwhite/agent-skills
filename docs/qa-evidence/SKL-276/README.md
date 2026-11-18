@@ -89,7 +89,7 @@ The session's tool list carries the task tools, its first task create succeeded,
 The session loaded story-to-done from the installed path, found SKL-50 Done, and ended in the skill's nothing-to-do report with the bare `report: final` line; the run exited 0.
 The scan reads 32 main-thread tool calls once each by tool use id, with the enforcer's exempt set, a reset on each main-thread task create or task update, and denials found by the enforcer's reason text.
 Its longest run of allowed non-exempt calls between list updates is 15.
-It finds one cadence denial, `toolu_01S4K16K8XezfELcQoRToZq4` at `2026-11-18T04:18:52.709Z`, followed by the task update `toolu_01WSSdzTovYCtQzbUa6d11N4` and 7 further main-thread calls, the first non-exempt one the retried read, which was allowed.
+It finds one cadence denial, `toolu_01S4K16K8XezfELcQoRToZq4` at `2026-11-18T04:18:52.709Z`, followed by the task update `toolu_01WSSdzTovYCtQzbUa6d11N4` and 6 more main-thread calls (the scan's "7 further main-thread calls" counts that update), the first non-exempt one the retried read, which was allowed.
 The denial was provoked: the run prompt asked for 16 consecutive reads with no list update, and the 16th read is the denied call; no other denial occurred.
 The scan docstring says counting starts at the first task create, while the code counts from the first transcript line; the session armed before any tool call, so the result is the same.
 The attached transcript keeps all 121 tool use and tool result blocks of the original; account ids, UUIDs, the email address, home and run-directory paths and the container hostname are replaced by placeholders.
