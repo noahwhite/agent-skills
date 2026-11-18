@@ -326,6 +326,15 @@ DEPLOYED_NOTE = (
     "exactly `path: deployed`."
 )
 DEPLOYED_NOTE_BEFORE_SKL_270 = "2. Add a concise implementation and deployment note."
+# SKL-346 adds two lines to the Verify stage of step 4's Escalation section. The digest above is kept the
+# same way: those lines are pinned here and cut out before hashing, so every other byte still has to match.
+VERIFIER_LINES = (
+    "   It writes, each on its own line of its report, `VERIFIED-HEAD: <full head SHA>` for the head it verified "
+    "and `VERIFIER: <agent name> <model id>` for itself, and the caller saves that report to a file and cites its "
+    "absolute path, or the `https://` URL where it is published.\n"
+    "   The optional accelerator below writes neither line and saves no report, so a round whose report must be "
+    "cited runs this stage by hand.\n"
+)
 
 
 def steps_two_to_twelve() -> str:
@@ -350,6 +359,8 @@ def test_steps_two_to_twelve_outside_the_handoff_blocks_are_unchanged() -> None:
         text = text.replace(block, "", 1)
     assert text.count(f"\n{DEPLOYED_NOTE}\n") == 1, "step 12 must carry the `path: deployed` note line once"
     text = text.replace(f"\n{DEPLOYED_NOTE}\n", f"\n{DEPLOYED_NOTE_BEFORE_SKL_270}\n", 1)
+    assert text.count(VERIFIER_LINES) == 1, "the Verify stage must carry the SKL-346 verifier line once"
+    text = text.replace(VERIFIER_LINES, "", 1)
     assert hashlib.sha256(text.encode()).hexdigest() == STEPS_TWO_TO_TWELVE_SHA256
 
 
