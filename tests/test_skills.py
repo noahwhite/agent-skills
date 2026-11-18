@@ -266,13 +266,24 @@ def test_clean_and_neutral_use_the_canonical_phrase():
     assert not offenders, "\n".join(offenders)
 
 
+def deref(node: dict) -> dict:
+    # A `$ref`, or an `allOf` of exactly one `$ref` (how `required_agent` extends `agent`), names
+    # the definition that holds the node's properties.
+    while True:
+        if "$ref" in node:
+            node = SCHEMA["$defs"][node["$ref"].split("/")[-1]]
+        elif "properties" not in node and [list(s) for s in node.get("allOf", [])] == [["$ref"]]:
+            node = node["allOf"][0]
+        else:
+            return node
+
+
 def schema_node(path: str) -> dict | None:
     node = SCHEMA
     for part in path.split("."):
         is_array = part.endswith("[]")
         key = part.removesuffix("[]")
-        if "$ref" in node:
-            node = SCHEMA["$defs"][node["$ref"].split("/")[-1]]
+        node = deref(node)
         props = node.get("properties", {})
         if key in props:
             node = props[key]
@@ -284,8 +295,7 @@ def schema_node(path: str) -> dict | None:
             if node.get("type") != "array":
                 return None
             node = node["items"]
-        if "$ref" in node:
-            node = SCHEMA["$defs"][node["$ref"].split("/")[-1]]
+        node = deref(node)
     return node
 
 

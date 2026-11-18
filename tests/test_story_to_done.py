@@ -3842,7 +3842,8 @@ STEP_3_HEADING = "3. QA agent: verify the deployed story"
 # SKL-357 re-pinned it for the step 3 unnamed-waiting-handback pointer and the plural "resumes" exception.
 STEP_3_SHA256 = "2c57b85346ce7030aab1edc8e0fad3769538a4d38b2aff6dfd673adfb10fa330"
 # SKL-138 re-pinned IN_PROGRESS_SHA256 for the step 4 nested launch line (NESTED_STEP_4), which carries no pending item.
-IN_PROGRESS_SHA256 = "4e8e9242319fe952b90429a32214ec0de742e348a4de360808b88f052c63fb0c"
+# SKL-346 re-pinned IN_PROGRESS_SHA256 for the arbitration ledger hand-back lines, which carry no pending item.
+IN_PROGRESS_SHA256 = "9927fc55667b28df6ca5b9e57bed9fcad7ee0a02d8cfb641d5a1a74cc93fe6d9"
 IN_DEPLOYMENT_REVIEW_SHA256 = "36da368bed892519776e5be61064d2fad186151ca58ae90aff897e9a1ffaa968"
 # The only lines of a state bullet that may state the pending owner ruling record.
 IN_DEPLOYMENT_REVIEW_RECORD_LINES = ("  " + STEP4_OTHER_OWNER, PENDING_REPORT, PENDING_NO_RULING)
@@ -4318,3 +4319,110 @@ def test_readme_row_names_nested_and_its_default_before_the_metrics_clause() -> 
     row = readme_row()
     assert README_NESTED_CLAUSE in row
     assert row.index(README_NESTED_CLAUSE) < row.index(README_POSTED)
+
+
+# SKL-346: the step 2 and step 4 handbacks carry a per-PR arbitration ledger, the brief templates and
+# both steps of the skill document it, the escalation verifier names the head and itself, and the step 2
+# brief passes the arbiter's model verbatim to `--model`.
+LEDGER_HEADING = "`## Arbitration ledger`"
+LEDGER_HEADER_ROW = "`| round | kind | head | engineer | reviewer agent | reviewer model | report |`"
+LEDGER_COLUMNS = ("round", "kind", "head", "engineer", "reviewer agent", "reviewer model", "report")
+LEDGER_EMPTY = "`No rounds yet.`"
+LEDGER_KINDS = ("`arbitration`", "`escalation-verification`")
+LEDGER_MISSING_STOP = (
+    "When you hold no ledger for a PR that has earlier rounds, stop and report the missing ledger before you "
+    "launch the engineer again."
+)
+ARBITER_MODEL_FLAG = "passes `profile.review.pre_pr.arbiter.model` verbatim to `--model`"
+VERIFIED_HEAD_LINE = "`VERIFIED-HEAD: <full head SHA>`"
+VERIFIER_LINE = "`VERIFIER: <agent name> <model id>`"
+ENGINEER_PATH_TEMPLATES = ("brief-engineer-deployed.md", "brief-engineer-no-deployment.md", "brief-engineer-spike.md")
+WORKFLOW_SKILL = ROOT / "skills" / "engineering-workflow" / "SKILL.md"
+
+
+def ledger_sources() -> dict[str, str]:
+    """Every place AC 4 names for the ledger clause, flattened to one line each."""
+    skill = visible(SKILL.read_text())
+    sources = {
+        "SKILL.md step 2": section(skill, STEP_2),
+        "SKILL.md step 4": section(skill, "4. Act on the QA outcome"),
+    }
+    for name in ENGINEER_PATH_TEMPLATES:
+        sources[name] = visible((ASSETS / name).read_text())
+    return {name: " ".join(text.split()) for name, text in sources.items()}
+
+
+@pytest.mark.parametrize("name", ["SKILL.md step 2", *ENGINEER_PATH_TEMPLATES])
+def test_the_brief_carries_the_ledger_heading_columns_and_empty_line(name: str) -> None:
+    text = ledger_sources()[name]
+    assert LEDGER_HEADING in text
+    assert LEDGER_HEADER_ROW in text
+    header = LEDGER_HEADER_ROW.strip("`").strip("|").split("|")
+    assert tuple(cell.strip() for cell in header) == LEDGER_COLUMNS
+    assert LEDGER_EMPTY in text
+    for kind in LEDGER_KINDS:
+        assert kind in text, kind
+
+
+@pytest.mark.parametrize("name", ["SKILL.md step 2", *ENGINEER_PATH_TEMPLATES])
+def test_the_brief_defines_rounds_provenance_reports_and_numbering(name: str) -> None:
+    text = ledger_sources()[name]
+    for phrase in (
+        "a re-run at an unchanged head is a new round",
+        "a step 4 fix, a rebase, a merge or a force-push",
+        "numbered contiguously from 1 per PR",
+        "the absolute path of the retained per-round report",
+        "the absolute path or `https://` URL of the verifier's report",
+        "`ARBITER-AGENT:` and `ARBITER-MODEL:` lines",
+        "the `VERIFIER:` line of the verifier's report",
+        "never from your text",
+        "the absolute directory that holds the retained per-round reports",
+        "return its entries unchanged",
+        "no new-head review or verification is waived",
+    ):
+        assert phrase in text, phrase
+
+
+@pytest.mark.parametrize("name", ["SKILL.md step 2", *ENGINEER_PATH_TEMPLATES])
+def test_the_step_2_brief_passes_the_arbiter_model_verbatim(name: str) -> None:
+    assert ARBITER_MODEL_FLAG in ledger_sources()[name]
+
+
+def test_step_2_has_the_coordinator_fill_the_identity_cells_from_the_seat_and_the_reports() -> None:
+    text = ledger_sources()["SKILL.md step 2"]
+    for phrase in (
+        "the seat you launched it on",
+        "copying the `ARBITER-AGENT:` and `ARBITER-MODEL:` lines of the retained report",
+        "the `VERIFIER:` line of the verifier's report",
+        "never from the engineer's text",
+    ):
+        assert phrase in text, phrase
+
+
+def test_step_4_puts_the_ledger_in_every_hand_back_and_stops_without_one() -> None:
+    text = ledger_sources()["SKILL.md step 4"]
+    assert LEDGER_HEADING in text
+    assert LEDGER_MISSING_STOP in text
+    assert in_order(
+        in_progress_bullet(),
+        "Hand them back to the senior engineer",
+        LEDGER_HEADING,
+        LEDGER_MISSING_STOP,
+        "Confirm that state as step 2 does",
+    )
+
+
+@pytest.mark.parametrize("case", ["engineer-deployed", "engineer-no-deployment", "engineer-spike"])
+def test_every_rendered_engineer_brief_carries_the_ledger_clause(case: str, tmp_path: Path) -> None:
+    text = " ".join(rendered_brief(tmp_path, RENDER_CASES[case]).split())
+    for anchor in (LEDGER_HEADING, LEDGER_HEADER_ROW, LEDGER_EMPTY, ARBITER_MODEL_FLAG):
+        assert text.count(anchor) == 1, anchor
+
+
+def test_the_escalation_verify_stage_has_the_verifier_name_the_head_and_itself() -> None:
+    escalation = section(WORKFLOW_SKILL.read_text(), "4. Pre-PR adversarial gate (required)")
+    verify = next(line for line in escalation.splitlines() if line.startswith("2. **Verify.**"))
+    stage = escalation[escalation.index(verify):escalation.index("3. **Fix.**")]
+    assert VERIFIED_HEAD_LINE in stage
+    assert VERIFIER_LINE in stage
+    assert "each on its own line of its report" in stage
