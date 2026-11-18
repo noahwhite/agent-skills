@@ -3828,9 +3828,11 @@ WORKTREE_LATER_PR = (
     "and the hand-back reports its path too."
 )
 WORKTREE_EXISTING = (
-    "When an open PR for the story exists, create the story worktree on that PR's head branch instead of cutting a new "
-    "one, per the existing PR or branch rule in `references/github.md`, and name it in the `worktree:` line the same "
-    "way; a branch whose PR merged is never reused, so a later PR gets the fresh worktree above."
+    "When the story already has an unmerged story worktree or an open PR, reuse it instead of cutting a new branch, "
+    "per the existing PR or branch rule in `references/github.md`: name an existing story worktree whose branch has not "
+    "merged in the `worktree:` line and create nothing, and when only the open PR's head branch exists, create the "
+    "story worktree on that branch; a branch whose PR merged is never reused, so a later PR gets the fresh worktree "
+    "above."
 )
 WORKTREE_BRIEF_LINE = (
     "- The line `worktree: <absolute path>`, whose whole text is exactly that, `<absolute path>` being the story "
