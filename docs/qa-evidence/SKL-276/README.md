@@ -6,7 +6,7 @@ Date: 2026-11-18 UTC, independent QA round 1.
 Path: `no-deployment`, selected by `select-path.py` with the story's title, its two labels and the recorded `path: no-deployment` line, so no environment or build SHA applies.
 Target: merged commit `6a132adced154b02cb57485b4d339ec0c027f8a1` on `main`, the squash merge of PR 333, whose reviewed head is `382a29ec3c5d1484ead0a8dcff10a5b31548ed92`.
 `git merge-base --is-ancestor` confirmed the target on `origin/main`, and `git diff 382a29ec 6a132ad` touches only `docs/qa-evidence/SKL-363/README.md`, so every file of the PR is the reviewed file.
-Owner constraint for this round: no test suite was run; the evidence is the merged code, direct invocations of the installed hook copy on hand-made payloads in a temporary state, config and home directory, `scripts/vendor_shared.py`, and the CI runs that ran automatically.
+Owner constraint for this round: no test suite was run; the evidence is the merged code, direct invocations of the vendored hook copy at the target (not a copy installed under `~/.claude/skills/`) on hand-made payloads in a temporary state, config and home directory, `scripts/vendor_shared.py`, and the CI runs that ran automatically.
 Fixtures: a throwaway worktree at the target, and the committed transcript fixtures `transcript-with-task-tools.jsonl` and `transcript-without-task-tools.jsonl` as session transcripts.
 The raw output is attached to SKL-276 as "SKL-276 QA round 1 AC1 hook probe output" and "SKL-276 QA round 1 repository, vendoring and CI evidence"; there is no visual surface, so no screenshot applies.
 
@@ -35,7 +35,7 @@ Call 17 got the same reason, and a `Bash` call was denied naming `Bash`.
 `TaskList`, `TaskGet`, `ToolSearch`, `AskUserQuestion` and `Skill` were allowed at the limit and left the count at 15.
 A subagent `Read` and a subagent `TaskUpdate` were allowed at the limit, left the count at 15, and the next main-thread call was still denied.
 A main-thread `TaskUpdate` and a main-thread `TaskCreate` each removed the count, and the next call was allowed with the count at 1.
-With the only main task completed, the rule-4 reason was returned at counts 3 and 15 and the count did not change.
+With the only main task completed, the rule-4 reason was returned and the count did not change, both below the limit and at count 15.
 With the main task file unreadable, so the rule-4 check does not deny, 15 calls were allowed and call 16 was denied by the cadence.
 An unarmed session allowed 20 calls with no count file, and an armed session whose transcript lacks the task tools allowed calls at count 15 and left it unchanged.
 The counts `abc`, empty, `-2` and `1.5`, an unreadable count, an unwritable state directory at counts 5 and 15, an empty `agent_id`, a missing `tool_name` and non-JSON stdin each allowed the call with a `todo-enforce` stderr line and left the count unchanged.
