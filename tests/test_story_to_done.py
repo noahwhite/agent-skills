@@ -4413,6 +4413,13 @@ def test_step_4_puts_the_ledger_in_every_hand_back_and_stops_without_one() -> No
     )
 
 
+def test_step_2_puts_the_held_ledger_in_the_brief_and_stops_without_one() -> None:
+    text = ledger_sources()["SKILL.md step 2"]
+    stop = text.index(LEDGER_MISSING_STOP)
+    assert text.index("put the `## Arbitration ledger` you hold for each of its PRs into the brief") < stop
+    assert stop < text.index("Spawn a clean, neutral subagent")
+
+
 @pytest.mark.parametrize("case", ["engineer-deployed", "engineer-no-deployment", "engineer-spike"])
 def test_every_rendered_engineer_brief_carries_the_ledger_clause(case: str, tmp_path: Path) -> None:
     text = " ".join(rendered_brief(tmp_path, RENDER_CASES[case]).split())

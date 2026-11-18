@@ -326,8 +326,8 @@ DEPLOYED_NOTE = (
     "exactly `path: deployed`."
 )
 DEPLOYED_NOTE_BEFORE_SKL_270 = "2. Add a concise implementation and deployment note."
-# SKL-346 adds one line to the Verify stage of step 4's Escalation section. The digest above is kept the
-# same way: that line is pinned here and cut out before hashing, so every other byte still has to match.
+# SKL-346 adds two lines to the Verify stage of step 4's Escalation section. The digest above is kept the
+# same way: those lines are pinned here and cut out before hashing, so every other byte still has to match.
 VERIFIER_LINES = (
     "   It writes, each on its own line of its report, `VERIFIED-HEAD: <full head SHA>` for the head it verified "
     "and `VERIFIER: <agent name> <model id>` for itself, and the caller saves that report to a file and cites its "
