@@ -67,3 +67,33 @@ DoD, independently reviewed: PR 333 carries a round 1 review of record on `25556
 Pending owner rulings: none.
 
 Closing decision: the story stays in In Deployment Review until the owner's AC5 session run is on the story and verified.
+
+## QA round 2
+
+Date: 2026-11-18 UTC, independent QA round 2, verifying AC5 only, as amended on 2026-11-18 by the product owner.
+Path: `no-deployment`, selected by `select-path.py` with the recorded `path: no-deployment` line; target merged commit `6a132adced154b02cb57485b4d339ec0c027f8a1`, confirmed on `origin/main` with `git merge-base --is-ancestor`.
+Owner constraint for this round: no test suite was run.
+The session run is the coordinating agent's, under the amendment: one non-interactive `claude -p` session with `CLAUDE_CODE_ENABLE_TODO_TOOLS=1`, in an isolated HOME carrying the installed skills and the README hooks block, on story SKL-50, chosen by that agent.
+The raw evidence is attached to SKL-276 as "SKL-276 AC5 session transcript (redacted)", "SKL-276 AC5 scan command and output" and "SKL-276 QA round 2 AC5 checks"; there is no visual surface, so no screenshot applies.
+
+| Item | Verdict | Evidence |
+|---|---|---|
+| AC5: session run | Verified | Installed skills at `59a8a3caae33233c14604a4f256147e410fb4501`, which contains the target; the scan passes both bullets on the session transcript; the provoked denial is recorded on the story. |
+| DoD: all acceptance criteria met | Verified | AC1 to AC4 and AC6 verified in round 1, AC5 in this round. |
+
+AC5 evidence:
+The installed skills are a clean clone at `59a8a3caae33233c14604a4f256147e410fb4501`, linked into the isolated HOME's skills directory, and `git merge-base --is-ancestor 6a132ad HEAD` exits 0 there.
+`git diff 6a132ad 59a8a3c` is empty for `shared/todo-enforce.py`, `skills/story-to-done/scripts/todo-enforce.py` and `README.md`, and the installed copy sets `CADENCE_LIMIT = 15`.
+The session's settings file is byte-identical to the README hooks block (`cmp` exits 0), and the transcript's Stop summary shows the one enforcer hook running.
+The session's tool list carries the task tools, its first task create succeeded, and the enforcer's state directory holds the armed marker from the slash-command prompt, written before any tool call.
+The session loaded story-to-done from the installed path, found SKL-50 Done, and ended in the skill's nothing-to-do report with the bare `report: final` line; the run exited 0.
+The scan reads 32 main-thread tool calls once each by tool use id, with the enforcer's exempt set, a reset on each main-thread task create or task update, and denials found by the enforcer's reason text.
+Its longest run of allowed non-exempt calls between list updates is 15.
+It finds one cadence denial, `toolu_01S4K16K8XezfELcQoRToZq4` at `2026-11-18T04:18:52.709Z`, followed by the task update `toolu_01WSSdzTovYCtQzbUa6d11N4` and 6 more main-thread calls (the scan's "7 further main-thread calls" counts that update), the first non-exempt one the retried read, which was allowed.
+The denial was provoked: the run prompt asked for 16 consecutive reads with no list update, and the 16th read is the denied call; no other denial occurred.
+The scan docstring says counting starts at the first task create, while the code counts from the first transcript line; the session armed before any tool call, so the result is the same.
+The attached transcript keeps all 121 tool use and tool result blocks of the original; account ids, UUIDs, the email address, home and run-directory paths and the container hostname are replaced by placeholders.
+
+Pending owner rulings: none.
+
+Closing decision: every acceptance criterion and Definition of Done item is verified, so the story moves to Done once this record merges.
