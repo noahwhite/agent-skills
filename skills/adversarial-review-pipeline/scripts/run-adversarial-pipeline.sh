@@ -591,6 +591,19 @@ primary_state() {
   done
 }
 
+# Does an agent's stderr log ($1) show that its sandbox failed? The log also carries whatever the
+# agent echoes while it reads files (SKL-127), and the skills' own text mentions bubblewrap's error
+# prefix, so that prefix counts only as bubblewrap's own diagnostic line: it begins the line, after
+# optional indentation or terminal colour codes. A line that merely quotes it mid-line is not a
+# sandbox failure. The other markers match anywhere on a line, as before; "[ ]denied" matches the
+# same text as a plain space, and keeps this file's own source from matching the pattern when an
+# agent echoes it.
+sandbox_error_in() {
+  local esc=$'\e'
+  grep -qiE "^([[:space:]]|${esc}\[[0-9;]*m)*bwrap: " -- "$1" \
+    || grep -qiE 'sandbox (failed|denied|could not)|Failed to make .* Permission[ ]denied' -- "$1"
+}
+
 accept_phase() {  # $1 = phase, $2 = stderr log or "": validate a freshly written artifact, then stamp it
   local art; art="$(artifact_for "$1")"
   [ -f "$RUN_DIR/$1.launch" ] && [ -f "$RUN_DIR/$1.binding" ] && [ -f "$RUN_DIR/$1.primary" ] \
@@ -604,7 +617,7 @@ accept_phase() {  # $1 = phase, $2 = stderr log or "": validate a freshly writte
   fi
   # A reviewer whose sandbox could not start reads nothing yet may still exit 0: never a false clean.
   # Sandbox errors are looked for only in the agent's own stderr; the report may quote such text.
-  if [ -n "$2" ] && [ -f "$2" ] && grep -qiE 'bwrap:|sandbox (failed|denied|could not)|Failed to make .* Permission denied' -- "$2"; then
+  if [ -n "$2" ] && [ -f "$2" ] && sandbox_error_in "$2"; then
     die 17 "the $1 agent ran blind (sandbox error on its stderr, see $2); treat this phase as failed, not clean."
   fi
   # The report must positively attest that the review ran.

@@ -271,6 +271,57 @@ def test_an_agent_that_changes_the_primary_checkout_still_exits_18(gate):
     assert_not_stamped(artifacts(repo, env), "sweep")
 
 
+# --- SKL-127: only the sandbox's own error marks a phase blind, not text the agent echoes ----------
+# The marker texts below are assembled by printf so this file's source never carries them whole:
+# a gate reviewing this file echoes its source on the agent's stderr.
+
+RUNTIMES_DOC = ROOT / "shared" / "runtimes.md"
+
+
+def test_bubblewrap_text_echoed_from_a_file_the_agent_read_does_not_mark_the_phase_blind(gate):
+    """The SKL-95, SKL-182 and SKL-218 false alarms: the agent echoed runtimes.md on its stderr."""
+    repo, scratch, env = gate
+    doc = shlex.quote(str(RUNTIMES_DOC))
+    agent = (
+        f"cat {doc} >&2; sed 's/^/+  /' {doc} >&2; grep -n bwrap {doc} >&2; {SWEEP_AGENT}"
+    )
+    result = run_sweep(repo, scratch, env, "--model", "deepseek/deepseek-flash", agent=agent)
+    assert result.returncode == 0, result.stdout + result.stderr
+    errlog = next((repo / ".git").rglob("sweep-agent.err")).read_text()
+    assert "bwrap:" in errlog, f"the fixture no longer echoes the bubblewrap text: {errlog[:500]}"
+    assert Path(f"{artifacts(repo, env)['sweep']}.stamp").exists(), "the echoing phase was not accepted"
+
+
+@pytest.mark.parametrize("prefix", ["", "  ", "\\033[31m", "\\033[0m  "])
+def test_a_real_bubblewrap_error_line_still_marks_the_phase_blind(gate, prefix):
+    repo, scratch, env = gate
+    agent = (
+        f"printf '{prefix}%s: %s\\n' bwrap "
+        "\"Can't mount proc on /newroot/proc: Operation not permitted\" >&2; "
+        f"{SWEEP_AGENT}"
+    )
+    result = run_sweep(repo, scratch, env, "--model", "gpt-6.1-sol", agent=agent)
+    assert result.returncode == 17, (prefix, result.stdout + result.stderr)
+    assert "ran blind" in result.stderr, result.stderr
+    assert "exit=17" in result.stderr, result.stderr
+    assert_not_stamped(artifacts(repo, env), "sweep")
+
+
+@pytest.mark.parametrize("marker", [
+    "printf 'codex: sandbox %s to start\\n' failed",
+    "printf 'error: sandbox %s the read\\n' denied",
+    "printf 'the sandbox %s start\\n' 'could not'",
+    "printf 'Failed to make %s: Permission %s\\n' /newroot/proc denied",
+])
+def test_the_other_sandbox_markers_still_mark_the_phase_blind(gate, marker):
+    repo, scratch, env = gate
+    agent = f"{marker} >&2; {SWEEP_AGENT}"
+    result = run_sweep(repo, scratch, env, "--model", "gpt-6.1-sol", agent=agent)
+    assert result.returncode == 17, (marker, result.stdout + result.stderr)
+    assert "ran blind" in result.stderr, result.stderr
+    assert_not_stamped(artifacts(repo, env), "sweep")
+
+
 # --- AC3: a phase cannot outlive its timeout, and a timeout kill is its own exit code -------------
 
 def test_a_hung_agent_is_killed_with_its_process_group_and_exits_19(gate, tmp_path):
