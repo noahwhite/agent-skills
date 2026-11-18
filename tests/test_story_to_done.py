@@ -3843,7 +3843,7 @@ STEP_3_HEADING = "3. QA agent: verify the deployed story"
 STEP_3_SHA256 = "2c57b85346ce7030aab1edc8e0fad3769538a4d38b2aff6dfd673adfb10fa330"
 # SKL-138 re-pinned IN_PROGRESS_SHA256 for the step 4 nested launch line (NESTED_STEP_4), which carries no pending item.
 # SKL-346 re-pinned IN_PROGRESS_SHA256 for the arbitration ledger hand-back lines, which carry no pending item.
-IN_PROGRESS_SHA256 = "9927fc55667b28df6ca5b9e57bed9fcad7ee0a02d8cfb641d5a1a74cc93fe6d9"
+IN_PROGRESS_SHA256 = "40f0ab4f13d839dfa464e93be4b26b108ce82ec862e6e16bac48cae91ce2281c"
 IN_DEPLOYMENT_REVIEW_SHA256 = "36da368bed892519776e5be61064d2fad186151ca58ae90aff897e9a1ffaa968"
 # The only lines of a state bullet that may state the pending owner ruling record.
 IN_DEPLOYMENT_REVIEW_RECORD_LINES = ("  " + STEP4_OTHER_OWNER, PENDING_REPORT, PENDING_NO_RULING)
@@ -4345,20 +4345,21 @@ def ledger_sources() -> dict[str, str]:
     skill = visible(SKILL.read_text())
     sources = {
         "SKILL.md step 2": section(skill, STEP_2),
-        "SKILL.md step 4": section(skill, "4. Act on the QA outcome"),
+        "SKILL.md step 4": section(skill, STEP_4_HEADING),
     }
     for name in ENGINEER_PATH_TEMPLATES:
         sources[name] = visible((ASSETS / name).read_text())
     return {name: " ".join(text.split()) for name, text in sources.items()}
 
 
-@pytest.mark.parametrize("name", ["SKILL.md step 2", *ENGINEER_PATH_TEMPLATES])
+@pytest.mark.parametrize("name", ["SKILL.md step 2", "SKILL.md step 4", *ENGINEER_PATH_TEMPLATES])
 def test_the_brief_carries_the_ledger_heading_columns_and_empty_line(name: str) -> None:
     text = ledger_sources()[name]
     assert LEDGER_HEADING in text
     assert LEDGER_HEADER_ROW in text
-    header = LEDGER_HEADER_ROW.strip("`").strip("|").split("|")
-    assert tuple(cell.strip() for cell in header) == LEDGER_COLUMNS
+    row = re.search(r"`\|( round \|[^`]*)\|`", text)
+    assert row, "no ledger header row in the text"
+    assert tuple(cell.strip() for cell in row.group(1).split("|")) == LEDGER_COLUMNS
     assert LEDGER_EMPTY in text
     for kind in LEDGER_KINDS:
         assert kind in text, kind

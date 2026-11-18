@@ -330,7 +330,10 @@ DEPLOYED_NOTE_BEFORE_SKL_270 = "2. Add a concise implementation and deployment n
 # same way: that line is pinned here and cut out before hashing, so every other byte still has to match.
 VERIFIER_LINES = (
     "   It writes, each on its own line of its report, `VERIFIED-HEAD: <full head SHA>` for the head it verified "
-    "and `VERIFIER: <agent name> <model id>` for itself.\n"
+    "and `VERIFIER: <agent name> <model id>` for itself, and the caller saves that report to a file and cites its "
+    "absolute path, or the `https://` URL where it is published.\n"
+    "   The optional accelerator below writes neither line and saves no report, so a round whose report must be "
+    "cited runs this stage by hand.\n"
 )
 
 
