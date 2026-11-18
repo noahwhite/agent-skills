@@ -15,14 +15,17 @@ The record sits outside the agent's `workspace/` but is not sandboxed from it, s
 
 ## Baseline and candidate
 
-The baseline is the skill on `main` immediately before SKL-356, `9e65dd3`; the candidate is SKL-356's commit that adds the owner-wait verification rule, named in each candidate run record.
+The baseline is the skill on `main` immediately before SKL-356, `9e65dd3`; the candidate is SKL-356's commit that adds the owner-wait verification rule, `ad92cae`.
+Run the candidate from its own detached checkout too: a checkout that is also the harness tree changes whenever another suite run writes a record into it, which voids the attempt.
 Record each through the suite runner from the repository root, as `../README.md` states, with `EVAL_AGENT_CMD` set as it shows:
 
 ```sh
 git worktree add --detach <scratch>/skill-9e65dd3 9e65dd3
 uv run --locked bash skills/story-to-done/evals/run-suite.sh --runs 3 <scratch>/skill-9e65dd3 deepseek-v4-pro-baseline-9e65dd3 owner-wait-verified
 git worktree remove <scratch>/skill-9e65dd3
-uv run --locked bash skills/story-to-done/evals/run-suite.sh --runs 3 <checkout> deepseek-v4-pro-candidate-<sha> owner-wait-verified
+git worktree add --detach <scratch>/skill-ad92cae ad92cae
+uv run --locked bash skills/story-to-done/evals/run-suite.sh --runs 3 <scratch>/skill-ad92cae deepseek-v4-pro-candidate-ad92cae owner-wait-verified
+git worktree remove <scratch>/skill-ad92cae
 ```
 
 One run without the suite:

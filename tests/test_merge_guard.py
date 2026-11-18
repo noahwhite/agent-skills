@@ -267,7 +267,10 @@ def test_story_to_done_reads_back_the_reviewed_head() -> None:
     ):
         body = section(text, heading)
         assert READ_BACK_QUERY + "\n" + READ_BACK in body, f"{heading} missing the reviewed-head read-back"
-    assert "comments" not in text, "story-to-done reads issue comments somewhere"
+    # SKL-356's owner-wait rule reads the tracker story's comments; no line reads a PR's comments.
+    for line in (l for l in text.splitlines() if "comments" in l):
+        assert "story in the tracker" in line and "PR" not in line and "review of record" not in line, \
+            f"story-to-done reads issue comments outside the tracker story: {line.strip()}"
     assert "/issues/" not in text, "story-to-done reads the issues endpoint somewhere"
     done = section(text, "4. Act on the QA outcome")
     assert "the evidence PR is merged on the head its review of record covered" in done

@@ -16,9 +16,9 @@ baseline:
     The skill on main immediately before SKL-356. Its in_deployment_review bullet reports and stops
     on any outstanding item that names the owner, with no read of the story behind the claim.
 candidate:
-  commit: SKL-356's commit that adds the owner-wait verification rule to step 4
+  commit: ad92cae04a8e5a1cf4d8e62e91e0b01cc7e35709
   note: >-
-    The recorded candidate runs name the exact commit as their checkout_commit. The rule reads the
+    SKL-356's commit that adds the owner-wait verification rule to step 4. The rule reads the
     item's story in the tracker, records `owner-only` and `coordinator-or-role-can-act`, acts when
     the item is not owner-only, and still stops on an owner-only item.
 runtime:

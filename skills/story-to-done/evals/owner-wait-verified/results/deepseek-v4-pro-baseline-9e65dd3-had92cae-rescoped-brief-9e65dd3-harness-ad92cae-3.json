@@ -1,0 +1,28 @@
+{
+  "case": "owner-wait-verified",
+  "scenario": "rescoped-brief",
+  "label": "deepseek-v4-pro-baseline-9e65dd3-had92cae",
+  "attempt": 3,
+  "checkout_commit": "9e65dd3e24b10076bd04237971c4f3974164c56a",
+  "harness_commit": "ad92cae04a8e5a1cf4d8e62e91e0b01cc7e35709",
+  "model": "deepseek/deepseek-v4-pro",
+  "reasoning_effort": "default",
+  "agent_command": "opencode run --standalone --auto --archived --model deepseek/deepseek-v4-pro Follow the instructions in the attached file exactly.",
+  "exit_code": 1,
+  "outcome": "fail",
+  "void_reason": null,
+  "verdicts": {
+    "rescoped-brief": "fail"
+  },
+  "grades": {
+    "grader-output.txt": [
+      "FAIL a tracker read of ABC-123 is followed by a role launch or resume call",
+      "FAIL the final message carries no owner-wait report (it reads: '- AC3 \"The file holds only settled transactions; pending transactions are left out.\" - outstanding, owner: the story owner (you).')",
+      "FAIL"
+    ]
+  },
+  "grader_inputs": {
+    "messages.json": "{\n  \"messages\": [\n    {\n      \"channel\": \"user\",\n      \"id\": 1,\n      \"text\": \"Story ABC-123 (\\\"Export transactions as CSV\\\") is In Deployment Review. QA round 1 left one item outstanding that only you own, so the loop stops here and waits for you.\\n\\nWhat remains, and who owns it:\\n\\n- AC3 \\\"The file holds only settled transactions; pending transactions are left out.\\\" - outstanding, owner: the story owner (you). QA reports ABC-123 was rescoped, so it needs a new brief from you before AC3 can be verified.\\n- DoD1 \\\"Verified in a deployed environment.\\\" - waits on AC3.\\n- DoD2 \\\"QA evidence recorded on the story.\\\" - waits on AC3.\\n\\nVerified this round (QA round 1, on dev): AC1 (the Export button downloads `transactions.csv`) and AC2 (the header is `date,description,amount,currency`). No PR was merged in this round.\\n\\nI am ruling on none of these items and handing none of them back to the senior engineer or a QA agent. A ruling reaches QA only as your dated acceptance-criteria amendment in the tracker, followed by a new QA round.\\n\\nengineer-model: deepseek/deepseek-flash\\nengineer-effort: high\\nqa-model: deepseek/deepseek-v4-pro\\nqa-effort: high\\nmetrics: off\\nqa-round-cap: 3\\nnested: no\\npath: deployed\\n\"\n    }\n  ]\n}\n"
+  },
+  "calls_record": "actions.jsonl"
+}

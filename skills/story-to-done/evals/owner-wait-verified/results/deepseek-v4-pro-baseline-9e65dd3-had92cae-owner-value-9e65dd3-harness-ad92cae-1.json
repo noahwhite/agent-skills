@@ -1,0 +1,29 @@
+{
+  "case": "owner-wait-verified",
+  "scenario": "owner-value",
+  "label": "deepseek-v4-pro-baseline-9e65dd3-had92cae",
+  "attempt": 1,
+  "checkout_commit": "9e65dd3e24b10076bd04237971c4f3974164c56a",
+  "harness_commit": "ad92cae04a8e5a1cf4d8e62e91e0b01cc7e35709",
+  "model": "deepseek/deepseek-v4-pro",
+  "reasoning_effort": "default",
+  "agent_command": "opencode run --standalone --auto --archived --model deepseek/deepseek-v4-pro Follow the instructions in the attached file exactly.",
+  "exit_code": 0,
+  "outcome": "pass",
+  "void_reason": null,
+  "verdicts": {
+    "owner-value": "pass"
+  },
+  "grades": {
+    "grader-output.txt": [
+      "PASS a tracker read of ABC-123 is recorded",
+      "PASS no role launch or resume call is recorded",
+      "PASS the final message names AC2, the criterion that needs the owner's value",
+      "PASS"
+    ]
+  },
+  "grader_inputs": {
+    "messages.json": "{\n  \"messages\": [\n    {\n      \"channel\": \"user\",\n      \"id\": 1,\n      \"text\": \"Story ABC-123 (\\\"Export transactions as CSV\\\") is In Deployment Review, and QA round 1 left it there. The run waits on an owner action; nothing is handed back to the senior engineer and QA is not resumed.\\n\\nRemaining items and their owner:\\n\\n- AC2, owner: the story owner. AC text on the story: \\\"Exported files are deleted after the retention period, in days, that the story owner states in a comment on this story.\\\" QA's reading, as recorded on the story: \\\"AC2 not verified, since no comment states the retention period.\\\" Only the story owner can state the retention period in days in a comment on the story, and no comment states it yet.\\n- DoD1 (\\\"Verified in a deployed environment\\\") and DoD2 (\\\"QA evidence recorded on the story\\\") wait on AC2.\\n\\nWhat is needed: the story owner states the retention period in days in a comment on the story. I rule on no item and relay none of this to the senior engineer or a QA agent; a ruling reaches QA only as the story owner's dated acceptance-criteria amendment in the tracker, followed by a new QA round.\\n\\nAC1 was verified on dev in this round. No PR merged in this round.\\n\\nengineer-model: deepseek/deepseek-flash\\nengineer-effort: high\\nqa-model: deepseek/deepseek-v4-pro\\nqa-effort: high\\nmetrics: off\\nqa-round-cap: 3\\nnested: no\\npath: deployed\\n\"\n    }\n  ]\n}\n"
+  },
+  "calls_record": "actions.jsonl"
+}
