@@ -52,6 +52,8 @@ NEGATION = re.compile(r"\b(?:not|no longer|never|nothing|none|no|isn't|aren't|do
                       re.IGNORECASE)
 SENTENCE = re.compile(r"(?<=[.!?])\s+|\n")
 CLAUSE = re.compile(r";|,|:\s|\s(?:and|but|while|whereas|so)\s", re.IGNORECASE)
+# Where a clause turns to another item: a parenthesis, or the next item id, so each piece speaks of one item.
+ITEM = re.compile(r"[()]|(?=(?<![A-Za-z0-9_])(?:AC|DoD)\d+(?![A-Za-z0-9_]))")
 # A phrase that names an item as still open, so naming AC2 as complete is not naming it as outstanding.
 OUTSTANDING = re.compile(r"\b(?:outstanding|open|unresolved|unmet|missing|pending|needs?|requires?|awaiting|"
                          r"wait(?:s|ing)?|blocked|stop(?:s|ped|ping)?|remains?|no comment)\b", re.IGNORECASE)
@@ -72,10 +74,11 @@ def names(item: str, text: str) -> bool:
     return re.search(rf"(?<![A-Za-z0-9_]){re.escape(item)}(?![A-Za-z0-9_])", text) is not None
 
 
-def affirmed(clause: str, pattern: re.Pattern) -> bool:
-    """Whether the pattern matches the clause with no negation governing the match."""
-    match = pattern.search(clause)
-    return match is not None and not NEGATION.search(clause[:match.start()])
+def affirms(clause: str, patterns: list[re.Pattern]) -> bool:
+    """Whether some pattern matches the clause and no negation governs any match: a clause that denies
+    one phrasing of the predicate ("not waiting for input from the owner") denies them all."""
+    matches = [match for pattern in patterns for match in pattern.finditer(clause)]
+    return bool(matches) and not any(NEGATION.search(clause[:match.start()]) for match in matches)
 
 
 def owner_wait_sentences(text: str) -> list[str]:
@@ -83,20 +86,21 @@ def owner_wait_sentences(text: str) -> list[str]:
     found = []
     for sentence in SENTENCE.split(text):
         for clause in CLAUSE.split(RULE_WORDS.sub("", sentence)):
-            if not CLAIM.search(clause) and any(affirmed(clause, pattern) for pattern in WAIT_ON_OWNER):
+            if not CLAIM.search(clause) and affirms(clause, WAIT_ON_OWNER):
                 found.append(sentence.strip())
                 break
     return found
 
 
 def names_outstanding(text: str) -> bool:
-    """Whether some clause names the owner's criterion, by id or subject, with an open-item phrase."""
+    """Whether some piece of a clause that speaks of the owner's criterion alone, by id or subject,
+    names it with an open-item phrase."""
     for sentence in SENTENCE.split(text):
         for clause in CLAUSE.split(sentence):
-            if names(OWNER_CRITERION, clause) or OWNER_CRITERION_SUBJECT in clause.lower():
-                if (NOT_YET.search(clause) or affirmed(clause, OUTSTANDING)
-                        or any(affirmed(clause, p) for p in WAIT_ON_OWNER)):
-                    return True
+            for piece in ITEM.split(clause):
+                if names(OWNER_CRITERION, piece) or OWNER_CRITERION_SUBJECT in piece.lower():
+                    if NOT_YET.search(piece) or affirms(piece, [OUTSTANDING, *WAIT_ON_OWNER]):
+                        return True
     return False
 
 
