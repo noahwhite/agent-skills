@@ -5,6 +5,8 @@ probe sessions; payloads.json records the Claude Code version they came from. Ea
 enforcer as Claude Code does, one process per event, against temporary state and task directories.
 SKL-265 adds the Stop report gate; its payloads are in stop-payloads.json, which records the Claude Code
 version of its AC1 probe and marks each payload as copied from that probe or synthesized.
+SKL-276 adds the update cadence; its payloads are in cadence-payloads.json, synthesized from the same
+normalized PreToolUse schema, with the Claude Code version that schema came from.
 """
 
 import copy
@@ -14,6 +16,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -24,7 +27,8 @@ SOURCE = ROOT / "shared" / "todo-enforce.py"
 FIXTURES = ROOT / "tests" / "fixtures" / "todo_enforce"
 FIXTURE = json.loads((FIXTURES / "payloads.json").read_text())
 STOP_FIXTURE = json.loads((FIXTURES / "stop-payloads.json").read_text())
-PAYLOADS = {**FIXTURE["payloads"], **STOP_FIXTURE["payloads"]}
+CADENCE_FIXTURE = json.loads((FIXTURES / "cadence-payloads.json").read_text())
+PAYLOADS = {**FIXTURE["payloads"], **STOP_FIXTURE["payloads"], **CADENCE_FIXTURE["payloads"]}
 SKILLS = ("story-to-done", "story-refinement")
 EXEMPT = ("TaskCreate", "TaskUpdate", "TaskList", "TaskGet", "ToolSearch", "Skill", "AskUserQuestion")
 SESSION = "test-session"
@@ -973,6 +977,292 @@ def test_stop_hook_active_does_not_suppress_a_block(rig):
     assert_allowed(rig.report(name="stop_after_a_block"))
 
 
+# --- SKL-276: the update cadence -----------------------------------------------------------------
+
+CADENCE_LIMIT = 15
+
+
+def test_the_cadence_fixtures_record_their_version_origin_and_placeholders():
+    assert CADENCE_FIXTURE["claude_code_version"] == FIXTURE["claude_code_version"]
+    assert not set(CADENCE_FIXTURE["payloads"]) & (set(FIXTURE["payloads"]) | set(STOP_FIXTURE["payloads"]))
+    for entry in CADENCE_FIXTURE["payloads"].values():
+        assert entry["origin"] in ("copied", "synthesized")
+        payload = entry["payload"]
+        assert payload["hook_event_name"] == "PreToolUse"
+        assert (payload["session_id"], payload["prompt_id"], payload["tool_use_id"]) == (
+            "<session-id>", "<prompt-id>", "<tool-use-id>")
+
+
+def cadence_file(rig):
+    return rig.state / "agent-skills" / "todo-enforce" / SESSION / "cadence"
+
+
+def cadence_count(rig):
+    path = cadence_file(rig)
+    return int(path.read_text()) if path.exists() else 0
+
+
+def set_cadence(rig, text):
+    cadence_file(rig).write_text(str(text))
+
+
+def read_call(rig, **changes):
+    return rig.send("cadence_main_pre_tool_use_read", **changes)
+
+
+def cadence_reason(res):
+    """The deny reason when res is an update cadence denial, else None."""
+    if not is_denied(res):
+        return None
+    reason = json.loads(res.stdout)["hookSpecificOutput"]["permissionDecisionReason"]
+    return reason if "CADENCE_LIMIT" in reason else None
+
+
+def assert_cadence_denied(res, tool="Read"):
+    reason = cadence_reason(res)
+    assert reason is not None, res
+    assert tool in reason and str(CADENCE_LIMIT) in reason
+    assert "TaskUpdate" in reason and "then retry" in reason
+    return reason
+
+
+def armed_with_a_task_in_progress(rig):
+    rig.arm()
+    rig.main_task("1", "in_progress")
+
+
+def run_in_parallel(rig, *payloads):
+    """Starts one hook process per payload while the count's lock is held, then releases it so
+    they contend for it; returns their (returncode, stdout, stderr)."""
+    fcntl = pytest.importorskip("fcntl")
+    procs = []
+    with open(str(cadence_file(rig)) + ".lock", "a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        for payload in payloads:
+            proc = subprocess.Popen(
+                [sys.executable, "-I", str(rig.script)], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE, env=rig.env(), text=True,
+            )
+            proc.stdin.write(json.dumps(payload))
+            proc.stdin.close()
+            procs.append(proc)
+        with pytest.raises(subprocess.TimeoutExpired):
+            procs[-1].wait(timeout=0.5)
+    return [(proc.wait(timeout=30), proc.stdout.read(), proc.stderr.read()) for proc in procs]
+
+
+# (a)
+def test_the_cadence_allows_call_15_and_denies_call_16(rig):
+    armed_with_a_task_in_progress(rig)
+    for call in range(1, CADENCE_LIMIT + 1):
+        assert_allowed(read_call(rig))
+        assert cadence_count(rig) == call
+    assert_cadence_denied(read_call(rig))
+    assert cadence_count(rig) == CADENCE_LIMIT
+
+
+def deny_call_16_after_15_allowed(rig):
+    armed_with_a_task_in_progress(rig)
+    allowed = [not is_denied(read_call(rig)) for _ in range(CADENCE_LIMIT)]
+    return all(allowed) and cadence_reason(read_call(rig)) is not None
+
+
+# (b)
+@pytest.mark.parametrize("update", ["cadence_main_pre_tool_use_task_update", "cadence_main_pre_tool_use_task_create"])
+def test_a_main_thread_list_update_resets_the_count(rig, update):
+    armed_with_a_task_in_progress(rig)
+    set_cadence(rig, CADENCE_LIMIT)
+    assert_cadence_denied(read_call(rig))
+    assert_allowed(rig.send(update))
+    assert cadence_count(rig) == 0
+    assert_allowed(read_call(rig))
+    assert cadence_count(rig) == 1
+
+
+def allow_after_a_list_update_resets_the_cadence(rig):
+    armed_with_a_task_in_progress(rig)
+    set_cadence(rig, CADENCE_LIMIT)
+    assert_allowed(rig.send("cadence_main_pre_tool_use_task_update"))
+    return not is_denied(read_call(rig))
+
+
+# (c)
+def test_another_exempt_tool_neither_counts_nor_resets(rig):
+    armed_with_a_task_in_progress(rig)
+    set_cadence(rig, 3)
+    assert_allowed(rig.send("cadence_main_pre_tool_use_task_list"))
+    assert_allowed(rig.send("main_pre_tool_use_tool_search"))
+    assert cadence_count(rig) == 3
+    set_cadence(rig, CADENCE_LIMIT)
+    assert_allowed(rig.send("cadence_main_pre_tool_use_task_list"))
+    assert cadence_count(rig) == CADENCE_LIMIT
+    assert_cadence_denied(read_call(rig))
+
+
+# (d)
+def test_a_subagent_call_neither_counts_resets_nor_is_denied(rig):
+    armed_with_a_task_in_progress(rig)
+    set_cadence(rig, 3)
+    assert_allowed(rig.send("cadence_subagent_pre_tool_use_read"))
+    assert cadence_count(rig) == 3
+    set_cadence(rig, CADENCE_LIMIT)
+    assert_allowed(rig.send("cadence_subagent_pre_tool_use_read"))
+    assert_allowed(rig.send("cadence_subagent_pre_tool_use_task_update"))
+    assert cadence_count(rig) == CADENCE_LIMIT
+    assert_cadence_denied(read_call(rig))
+
+
+# (e)
+def test_an_unarmed_session_is_never_denied_by_the_cadence(rig):
+    rig.main_task("1", "in_progress")
+    for _ in range(CADENCE_LIMIT + 1):
+        assert_allowed(read_call(rig))
+    assert not cadence_file(rig).exists()
+
+
+def test_an_armed_session_without_the_task_tools_is_never_denied_by_the_cadence(rig):
+    rig.use_transcript("without-task-tools")
+    armed_with_a_task_in_progress(rig)
+    set_cadence(rig, CADENCE_LIMIT)
+    assert_allowed(read_call(rig))
+    assert cadence_count(rig) == CADENCE_LIMIT
+
+
+# (f)
+@pytest.mark.parametrize("change", [{"agent_id": ""}, {"tool_name": None}], ids=["empty-agent", "no-tool"])
+def test_a_malformed_payload_leaves_the_count_unchanged(rig, change):
+    armed_with_a_task_in_progress(rig)
+    set_cadence(rig, CADENCE_LIMIT)
+    res = read_call(rig, **change)
+    assert_allowed(res)
+    assert "todo-enforce" in res.stderr
+    assert cadence_count(rig) == CADENCE_LIMIT
+
+
+@pytest.mark.parametrize("stored", ["five", "", "-1", "1.5"])
+def test_an_unparseable_count_allows_with_a_stderr_line_and_is_left_unchanged(rig, stored):
+    armed_with_a_task_in_progress(rig)
+    set_cadence(rig, stored)
+    res = read_call(rig)
+    assert_allowed(res)
+    assert "update cadence count" in res.stderr
+    assert cadence_file(rig).read_text() == stored
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root ignores file permissions")
+def test_an_unreadable_count_allows_with_a_stderr_line_and_is_left_unchanged(rig):
+    armed_with_a_task_in_progress(rig)
+    set_cadence(rig, CADENCE_LIMIT)
+    cadence_file(rig).chmod(0o000)
+    try:
+        res = read_call(rig)
+        assert_allowed(res)
+        assert "update cadence count" in res.stderr
+    finally:
+        cadence_file(rig).chmod(0o600)
+    assert cadence_count(rig) == CADENCE_LIMIT
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root ignores directory permissions")
+@pytest.mark.parametrize("stored", [5, CADENCE_LIMIT])
+def test_an_unwritable_count_allows_with_a_stderr_line_and_is_left_unchanged(rig, stored):
+    armed_with_a_task_in_progress(rig)
+    assert_allowed(read_call(rig))
+    set_cadence(rig, stored)
+    state = cadence_file(rig).parent
+    state.chmod(0o500)
+    try:
+        res = read_call(rig)
+        assert_allowed(res)
+        assert "update cadence count" in res.stderr
+    finally:
+        state.chmod(0o700)
+    assert cadence_count(rig) == stored
+
+
+def test_a_lock_not_acquired_within_two_seconds_allows_with_a_stderr_line(rig):
+    fcntl = pytest.importorskip("fcntl")
+    armed_with_a_task_in_progress(rig)
+    set_cadence(rig, CADENCE_LIMIT)
+    with open(str(cadence_file(rig)) + ".lock", "a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        started = time.monotonic()
+        res = read_call(rig)
+        waited = time.monotonic() - started
+    assert_allowed(res)
+    assert "lock not acquired within 2" in res.stderr
+    assert 2 <= waited < 20
+    assert cadence_count(rig) == CADENCE_LIMIT
+
+
+# (g)
+def test_a_call_the_in_progress_check_denies_is_not_counted_and_gets_its_reason(rig):
+    rig.arm()
+    rig.main_task("1", "pending")
+    set_cadence(rig, 3)
+    res = read_call(rig)
+    assert_denied(res, "Read")
+    assert cadence_reason(res) is None
+    assert cadence_count(rig) == 3
+    set_cadence(rig, CADENCE_LIMIT)
+    res = read_call(rig)
+    assert_denied(res, "Read")
+    assert cadence_reason(res) is None
+
+
+# (h)
+def test_calls_before_arming_are_not_counted(rig):
+    rig.main_task("1", "in_progress")
+    for _ in range(CADENCE_LIMIT + 1):
+        assert_allowed(read_call(rig))
+    rig.arm()
+    assert cadence_count(rig) == 0
+    for _ in range(CADENCE_LIMIT):
+        assert_allowed(read_call(rig))
+    assert_cadence_denied(read_call(rig))
+
+
+# (i)
+def test_two_concurrent_calls_at_count_0_both_count(rig):
+    armed_with_a_task_in_progress(rig)
+    results = run_in_parallel(rig, *[rig.payload("cadence_main_pre_tool_use_read")] * 2)
+    assert [(code, out) for code, out, _ in results] == [(0, "")] * 2
+    assert cadence_count(rig) == 2
+
+
+def test_two_concurrent_calls_at_count_14_take_the_last_slot_once(rig):
+    armed_with_a_task_in_progress(rig)
+    set_cadence(rig, CADENCE_LIMIT - 1)
+    results = run_in_parallel(rig, *[rig.payload("cadence_main_pre_tool_use_read")] * 2)
+    assert all(code == 0 for code, _, _ in results)
+    outs = sorted(out for _, out, _ in results)
+    assert outs[0] == ""
+    assert "CADENCE_LIMIT" in json.loads(outs[1])["hookSpecificOutput"]["permissionDecisionReason"]
+    assert cadence_count(rig) == CADENCE_LIMIT
+
+
+# (j)
+def test_the_denial_persists_until_a_main_thread_task_update(rig):
+    armed_with_a_task_in_progress(rig)
+    set_cadence(rig, CADENCE_LIMIT)
+    first = assert_cadence_denied(read_call(rig))
+    assert assert_cadence_denied(read_call(rig)) == first
+    assert_allowed(rig.send("cadence_subagent_pre_tool_use_task_update"))
+    assert assert_cadence_denied(read_call(rig)) == first
+    assert_allowed(rig.send("cadence_main_pre_tool_use_task_update"))
+    assert_allowed(read_call(rig))
+
+
+# (k)
+def test_with_no_task_in_progress_and_no_in_progress_denial_call_16_is_denied_by_the_cadence(rig):
+    rig.arm()
+    rig.main_task("1", "pending")
+    (rig.config / "tasks" / SESSION / "1.json").write_text("{broken")
+    for _ in range(CADENCE_LIMIT):
+        assert_allowed(read_call(rig))
+    assert_cadence_denied(read_call(rig))
+
+
 # --- mutation proof: removing each deny or refuse branch fails its test ---------------------------
 
 BRANCHES = {
@@ -1020,6 +1310,18 @@ BRANCHES = {
         "    if agent_of(payload) is not None or not is_armed(session):\n",
         [allow_a_report_stop_carrying_agent_id],
     ),
+    "deny once CADENCE_LIMIT calls were allowed since the last list update": (
+        "        return deny(CADENCE_EXCEEDED.format(tool=tool, limit=CADENCE_LIMIT))\n",
+        [deny_call_16_after_15_allowed],
+    ),
+    "each allowed call is counted": (
+        "            write_cadence(session, count if exceeded else count + 1)\n",
+        [deny_call_16_after_15_allowed],
+    ),
+    "a main-thread list update resets the count": (
+        "            reset_cadence(session)\n",
+        [allow_after_a_list_update_resets_the_cadence],
+    ),
 }
 NEUTRAL = {
     "    return deny(reason)\n": "    return 0\n",
@@ -1033,6 +1335,9 @@ NEUTRAL = {
     "    return any(\"not done\" in line.lower() and mention.search(line) for line in lines)\n": "    return False\n",
     "#%s(?![0-9A-Za-z_-])\"": "#%s\"",
     "    if agent_of(payload) is not None or not is_armed(session):\n": "    if not is_armed(session):\n",
+    "        return deny(CADENCE_EXCEEDED.format(tool=tool, limit=CADENCE_LIMIT))\n": "        return 0\n",
+    "            write_cadence(session, count if exceeded else count + 1)\n": "            write_cadence(session, count)\n",
+    "            reset_cadence(session)\n": "            pass\n",
 }
 
 

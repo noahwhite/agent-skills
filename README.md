@@ -108,10 +108,19 @@ Register one copy for all five events in `~/.claude/settings.json`, merging the 
 
 The path assumes the install link above; point it at wherever `skills/story-to-done` lives.
 The hook acts only in a session whose main thread loaded `story-to-done` or `story-refinement`, either by its slash command or by the model loading the skill, and only when that session has the task tools (`TaskCreate` and its siblings).
-In such a session it enforces three things on the main thread:
+In such a session it enforces four things on the main thread:
 
 - A tool call runs only while a task the main thread created is `in_progress`; otherwise it is denied with a reason telling the model to mark one in progress.
   `TaskCreate`, `TaskUpdate`, `TaskList`, `TaskGet`, the tool Claude Code uses to load them, `Skill` and `AskUserQuestion` are always allowed; every other tool, `TaskStop` included, is checked.
+- Update cadence, which acts only in an armed session that has the task tools: once `CADENCE_LIMIT` (15) checked tool calls have been allowed since the last list update, the next one is denied, and so is every one after it until the list is updated.
+  `CADENCE_LIMIT` is a module constant in `scripts/todo-enforce.py`, with no user setting.
+  The count starts at 0 when the session arms, and a main-thread `TaskCreate` or `TaskUpdate` resets it to 0, including one whose execution fails after the hook allows it.
+  The other always-allowed tools, calls the hook denies, and subagent calls, including a subagent's `TaskCreate` or `TaskUpdate`, are not counted and do not reset it.
+  The cadence applies whether or not a task is in progress; when the `in_progress` check above also denies a call, its reason is the one given.
+  The expected response to a denial, including one during a polling or waiting loop, is a `TaskUpdate` that brings the list up to date: complete the finished item and mark the current step `in_progress`, then retry.
+  When no list change is due, a `TaskUpdate` that reasserts the current item's status counts as an update.
+  The cadence bounds the number of tool calls between list updates; it does not enforce the todo rule that the list is updated as soon as a step finishes.
+  It fails open: a malformed payload, an unreadable, unwritable or unparseable count, or a lock on the count not acquired within 2 seconds allows the call and writes a stderr line.
 - A main-thread task completes only if it was `in_progress` first, and a subagent cannot complete a main-thread task; otherwise the completion is refused with a reason.
 - A final report is held back while a task the main thread created is still open (`pending` or `in_progress`) and not named as not done.
   A turn is a final report when the Stop payload's `last_assistant_message`, which in v2.1.326 holds the turn's last text block, has a line matching `^report: final\s*$`.
@@ -130,7 +139,7 @@ After a denial or refusal the session continues, and the model can fix the task 
 It fails open on its own faults: a malformed payload, unreadable or unwritable state or an internal error is logged to stderr and the call or stop is allowed.
 A missing `TaskCreated` entry is not such a fault: the hook then never learns which tasks the main thread created, so an armed session denies every checked call, with a reason saying the `TaskCreated` hook may not be registered; register all five entries.
 A final report in a session with no recorded main-thread task is allowed with a stderr line saying so.
-An unreadable main-thread task file is logged too: tool calls and final reports are allowed, and that task's completion is refused until it is marked `in_progress` again.
+An unreadable main-thread task file is logged too: tool calls and final reports are allowed, unless the update cadence above has reached its limit, and that task's completion is refused until it is marked `in_progress` again.
 Its state lives under `${XDG_STATE_HOME:-~/.local/state}/agent-skills/todo-enforce/`, one directory per session, and it reads task files from `${CLAUDE_CONFIG_DIR:-~/.claude}/tasks/`.
 To remove it, delete those five entries from `settings.json`; you may also delete its state directory.
 
