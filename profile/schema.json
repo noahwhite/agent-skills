@@ -34,7 +34,7 @@
         },
         "test_command": {
           "type": "string",
-          "description": "Command that runs the repository's test suite from the repository root; the pre-PR preflight runs it in a detached worktree at HEAD."
+          "description": "Command that runs the repository's test suite from the repository root; the pre-PR preflight runs it in a detached worktree at HEAD when the full-suite option (`full_suite`) is `on`."
         }
       }
     },
@@ -542,6 +542,33 @@
               ]
             }
           }
+        }
+      }
+    },
+    "full_suite": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The full-suite option: whether a run executes the repository's full test suite. A run resolves it in this order: the explicit argument, then `teams` for the run's team, then `default`, then `off`. The team is the prefix of the story key (`ABC` for `ABC-123`), which need not equal `profile.tracker.team_key`; with no story key it is `profile.tracker.team_key`. Optional; when it is absent the option resolves `off`.",
+      "properties": {
+        "default": {
+          "enum": ["on", "off"],
+          "default": "off",
+          "description": "The value for a team not listed in `teams`. Quote it in YAML: an unquoted on or off is a boolean."
+        },
+        "teams": {
+          "type": "object",
+          "description": "The value per team key, overriding `default` for that team. Quote each key and value in YAML (`\"OFF\": \"on\"`): an unquoted OFF, ON, YES or NO key is a boolean. A key holding a line feed is refused, because `$` in the key pattern also matches before a trailing line feed.",
+          "propertyNames": {
+            "not": {
+              "pattern": "\\n"
+            }
+          },
+          "patternProperties": {
+            "^[A-Z][A-Z0-9]*$": {
+              "enum": ["on", "off"]
+            }
+          },
+          "additionalProperties": false
         }
       }
     },

@@ -62,7 +62,7 @@ def test_gate_artifacts_stay_inside_the_supplied_session_directory(tmp_path):
     env = clean_env({"TMPDIR": str(runtime_tmp)})
 
     preflight = run_script(
-        "preflight", "--repo", str(repo), "--base", "HEAD",
+        "preflight", "--full-suite", "on", "--repo", str(repo), "--base", "HEAD",
         "--test-cmd", f"pwd > {shlex.quote(str(marker))}", "--scratch", str(scratch), env=env,
     )
     assert preflight.returncode == 0, preflight.stdout + preflight.stderr
@@ -109,7 +109,7 @@ def test_without_scratch_the_run_stays_out_of_the_checkout(tmp_path):
     env = clean_env({"TMPDIR": str(runtime_tmp)})
 
     preflight = run_script(
-        "preflight", "--repo", str(repo), "--base", "HEAD", "--test-cmd", "true", env=env,
+        "preflight", "--full-suite", "on", "--repo", str(repo), "--base", "HEAD", "--test-cmd", "true", env=env,
     )
     assert preflight.returncode == 0, preflight.stdout + preflight.stderr
 
@@ -127,7 +127,7 @@ def test_a_relative_scratch_path_is_refused_before_any_phase_runs(tmp_path):
     env = clean_env({"TMPDIR": str(tmp_path / "runtime-tmp")})
     (tmp_path / "runtime-tmp").mkdir()
     result = run_script(
-        "preflight", "--repo", str(repo), "--base", "HEAD", "--test-cmd", "true",
+        "preflight", "--full-suite", "on", "--repo", str(repo), "--base", "HEAD", "--test-cmd", "true",
         "--scratch", "relative-scratch", env=env,
     )
     assert result.returncode == 2, result.stdout + result.stderr
@@ -142,7 +142,7 @@ def test_a_scratch_path_that_is_a_file_is_refused_without_clobbering_the_phase_r
     scratch = tmp_path / "session-scratch"
     scratch.mkdir()
     first = run_script(
-        "preflight", "--repo", str(repo), "--base", "HEAD", "--test-cmd", "true",
+        "preflight", "--full-suite", "on", "--repo", str(repo), "--base", "HEAD", "--test-cmd", "true",
         "--scratch", str(scratch), env=env,
     )
     assert first.returncode == 0, first.stdout + first.stderr
@@ -152,7 +152,7 @@ def test_a_scratch_path_that_is_a_file_is_refused_without_clobbering_the_phase_r
     unusable = tmp_path / "not-a-directory"
     unusable.write_text("x\n")
     rejected = run_script(
-        "preflight", "--repo", str(repo), "--base", "HEAD", "--test-cmd", "true",
+        "preflight", "--full-suite", "on", "--repo", str(repo), "--base", "HEAD", "--test-cmd", "true",
         "--scratch", str(unusable), env=env,
     )
     assert rejected.returncode == 2, rejected.stdout + rejected.stderr
@@ -167,7 +167,7 @@ def test_the_phase_agent_receives_the_session_scratch_directory(tmp_path):
     env = clean_env({"TMPDIR": str(tmp_path / "runtime-tmp")})
     (tmp_path / "runtime-tmp").mkdir()
     preflight = run_script(
-        "preflight", "--repo", str(repo), "--base", "HEAD", "--test-cmd", "true",
+        "preflight", "--full-suite", "on", "--repo", str(repo), "--base", "HEAD", "--test-cmd", "true",
         "--scratch", str(scratch), env=env,
     )
     assert preflight.returncode == 0, preflight.stdout + preflight.stderr
@@ -206,7 +206,7 @@ def test_a_scratch_directory_inside_the_repository_is_refused(tmp_path):
     (tmp_path / "runtime-tmp").mkdir()
     inside = repo / "scratch"
     result = run_script(
-        "preflight", "--repo", str(repo), "--base", "HEAD", "--test-cmd", "true",
+        "preflight", "--full-suite", "on", "--repo", str(repo), "--base", "HEAD", "--test-cmd", "true",
         "--scratch", str(inside), env=env,
     )
     assert result.returncode == 2, result.stdout + result.stderr
@@ -222,7 +222,7 @@ def test_read_only_scratch_is_refused_before_any_phase_report_is_written(tmp_pat
     scratch = tmp_path / "session-scratch"
     scratch.mkdir()
     first = run_script(
-        "preflight", "--repo", str(repo), "--base", "HEAD", "--test-cmd", "true",
+        "preflight", "--full-suite", "on", "--repo", str(repo), "--base", "HEAD", "--test-cmd", "true",
         "--scratch", str(scratch), env=env,
     )
     assert first.returncode == 0, first.stdout + first.stderr
@@ -230,7 +230,7 @@ def test_read_only_scratch_is_refused_before_any_phase_report_is_written(tmp_pat
     scratch.chmod(0o500)
     try:
         rejected = run_script(
-            "preflight", "--repo", str(repo), "--base", "HEAD", "--test-cmd", "true",
+            "preflight", "--full-suite", "on", "--repo", str(repo), "--base", "HEAD", "--test-cmd", "true",
             "--scratch", str(scratch), env=env,
         )
     finally:
@@ -245,7 +245,7 @@ def test_an_empty_scratch_value_is_refused(tmp_path):
     env = clean_env({"TMPDIR": str(tmp_path / "runtime-tmp")})
     (tmp_path / "runtime-tmp").mkdir()
     result = run_script(
-        "preflight", "--repo", str(repo), "--base", "HEAD", "--test-cmd", "true",
+        "preflight", "--full-suite", "on", "--repo", str(repo), "--base", "HEAD", "--test-cmd", "true",
         "--scratch", "", env=env,
     )
     assert result.returncode == 2, result.stdout + result.stderr
@@ -259,7 +259,7 @@ def test_a_refused_dossier_keeps_the_accepted_phase_report(tmp_path):
     env = clean_env({"TMPDIR": str(tmp_path / "runtime-tmp")})
     (tmp_path / "runtime-tmp").mkdir()
     preflight = run_script(
-        "preflight", "--repo", str(repo), "--base", "HEAD", "--test-cmd", "true",
+        "preflight", "--full-suite", "on", "--repo", str(repo), "--base", "HEAD", "--test-cmd", "true",
         "--scratch", str(scratch), env=env,
     )
     assert preflight.returncode == 0, preflight.stdout + preflight.stderr
@@ -286,7 +286,7 @@ def test_an_ambient_adversarial_scratch_cannot_redirect_the_run(tmp_path, monkey
     env = clean_env({"TMPDIR": str(runtime_tmp)})
 
     preflight = run_script(
-        "preflight", "--repo", str(repo), "--base", "HEAD", "--test-cmd", "true",
+        "preflight", "--full-suite", "on", "--repo", str(repo), "--base", "HEAD", "--test-cmd", "true",
         "--scratch", str(scratch), env=env,
     )
     assert preflight.returncode == 0, preflight.stdout + preflight.stderr

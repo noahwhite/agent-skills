@@ -348,11 +348,11 @@ DEPLOYED_QA_SHA256 = "e014ba2c8f79c83455b632bff598a92baffdafd605cc816d3a227eccb0
 SPIKE_QA_SHA256 = "c54650b59adf54cc751e5437942bfe235c71187da28cf9ca360f794efa4d47a3"
 # Fixed inputs: story ABC-123, round 1, commit SHA above.
 NO_DEPLOYMENT_QA_SHA256 = "5ce1b9bca9d508934d526a615f754aceec4b93f3530c0266606c3a39eb068c3e"
-# Fixed inputs: story ABC-123, one engineer render per path.
+# Fixed inputs: story ABC-123, one engineer render per path. SKL-346 re-pinned all three for the arbitration ledger.
 ENGINEER_SHA256 = {
-    "deployed": "875dfaac2a9b7eedb6ed20bbb9aa7a4e9605921bbc7e1c397f8e7b585e84cd48",
-    "no-deployment": "ef4ce1315b607a1485871828b6d75b159914f21ded1ab534aef94f9c36fd7c90",
-    "spike": "ec3a4e3c20f7670f3c53ac40f4416cb1369de50eb72f4937374a4d0e69a64aad",
+    "deployed": "a4ce47a63b64c8637a027f5596d372c886f68d9a00baea5e96a03c9f41ff3f3f",
+    "no-deployment": "4f8ff97431c64742412df63f7356b3569d3889c04b3b1d9b786f1c5bf63b0a13",
+    "spike": "68a4f6cb3a276beb95596cc8b00dbb15b62ae9c0212c4c7f6ca30433cced8277",
 }
 
 
