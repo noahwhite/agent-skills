@@ -607,7 +607,7 @@ def test_the_docs_state_the_identity_and_retention_contract(doc):
     text = " ".join((SKILL_MD.read_text() if doc == "skill" else header_text()).replace("#", " ").split())
     for needle in ("ARBITER-AGENT: <name>", "ARBITER-MODEL: <model id", "ARBITER-HEAD: <full HEAD SHA>",
                    "not-supplied", "adversarial-pipeline/arbitration-rounds",
-                   "git rev-parse --git-common-dir",
+                   "git rev-parse --path-format=absolute --git-common-dir",
                    "round-<UTC timestamp>-<full HEAD SHA>-<first 12 hex of the report sha256>-<n>.md",
                    "Retained arbitration report -> <path>", "--agent NAME", "ADVERSARIAL_AGENT"):
         assert needle in text, needle

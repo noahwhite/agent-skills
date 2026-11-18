@@ -133,7 +133,7 @@
 # or a CR included) fails (exit 17) and writes and retains nothing. The report with its identity
 # lines is retained, before it is stamped, as an immutable (read-only) copy in
 #   <git common dir>/adversarial-pipeline/arbitration-rounds
-# where <git common dir> is the absolute `git rev-parse --git-common-dir`, so every worktree of the
+# where <git common dir> is the output of `git rev-parse --path-format=absolute --git-common-dir`, so every worktree of the
 # clone resolves the same directory, independent of the run directory, --scratch and the worktree:
 #   round-<UTC timestamp>-<full HEAD SHA>-<first 12 hex of the report sha256>-<n>.md
 # The timestamp is `date -u +%Y%m%dT%H%M%SZ`. The copy is written to a temporary file in that
