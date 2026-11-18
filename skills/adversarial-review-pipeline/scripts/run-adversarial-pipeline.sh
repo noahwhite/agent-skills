@@ -591,7 +591,7 @@ primary_state() {
   done
 }
 
-# Does an agent's stderr log ($1) show that its sandbox failed? The log also carries whatever the
+# Does an agent's stderr log ($1) show a sandbox start-up error? The log also carries whatever the
 # agent echoes while it reads files (SKL-127), and the skills' own text mentions bubblewrap's error
 # prefix, so that prefix counts only as bubblewrap's own diagnostic line: it begins the line, after
 # optional indentation or terminal colour codes. A line that merely quotes it mid-line is not a
