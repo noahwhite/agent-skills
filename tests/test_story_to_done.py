@@ -158,7 +158,7 @@ def test_skill_names_no_model_id() -> None:
 
 def test_model_name_guard_catches_the_removed_defaults() -> None:
     for removed in ("Sonnet 5.5 (`claude-sonnet-5-5`)", "QA on Opus 5.5 at max", "`claude-opus-5-5`",
-                    "deepseek/deepseek-flash", "openai/gpt-6.1-sol", "mistral-large-4-0"):
+                    "deepseek/deepseek-flash", "openai/gpt-6.2-sol", "mistral-large-4-0"):
         assert MODEL_NAME.search(removed), removed
     for allowed in ("runtime `claude-code`", "`opencode` seat", "QA on <model> at max"):
         assert not MODEL_NAME.search(allowed), allowed
