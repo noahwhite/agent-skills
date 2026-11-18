@@ -302,6 +302,7 @@ An item is owner-only when it is an open acceptance criterion that needs input o
 An owner-approval gate written into a criterion for the story's own outcome (the owner approving or signing off on what the story delivered) is not owner-only and does not stop this skill, because the operator's request for the story is the approval for that outcome; a maintainer's approval stays owner-only.
 When the entries are `owner-only: no` and `coordinator-or-role-can-act: yes`, do the next step this skill defines for the story's current state, or launch or resume the role that step dispatches, writing its brief from the story's acceptance criteria, and do not report the item as waiting on the owner, in step 5's report included.
 The at-most-once continuation and stall rules still apply: when the role hands back the same owner claim with no observed progress, report the stall, naming the tracker read it rests on, and stop.
+When the entries are `owner-only: no` and `coordinator-or-role-can-act: no`, report the item and who can act on it, and stop.
 When the entries are `owner-only: yes`, report the item and stop; the report names the story id, the exact criterion text, comment or relation read, and which owner-only category applies.
 
 If the senior engineer disputes a failed verdict or an adjudicator's ruling, do not relay its argument to a QA agent and do not rule on it yourself.

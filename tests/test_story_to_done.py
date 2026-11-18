@@ -598,6 +598,8 @@ OWNER_WAIT_RULE = [
     "5's report included.",
     "The at-most-once continuation and stall rules still apply: when the role hands back the same owner claim "
     "with no observed progress, report the stall, naming the tracker read it rests on, and stop.",
+    "When the entries are `owner-only: no` and `coordinator-or-role-can-act: no`, report the item and who can "
+    "act on it, and stop.",
     "When the entries are `owner-only: yes`, report the item and stop; the report names the story id, the "
     "exact criterion text, comment or relation read, and which owner-only category applies.",
 ]
