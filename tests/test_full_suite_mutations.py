@@ -8,6 +8,7 @@ schema-shape and dirty-tree tests are exempt.
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import sys
@@ -35,7 +36,7 @@ MUTATIONS = [
      "test_a_team_missing_from_teams_falls_to_a_default_of_on"),
     ("story-key-ignored", RESOLVER, "if story_key is not None:", "if False:",
      "test_a_team_missing_from_teams_falls_to_a_default_of_off"),
-    ("team-key-ignored", RESOLVER, 'team = tracker.get("team_key") if isinstance(tracker, dict) else None', "team = None",
+    ("team-key-ignored", RESOLVER, 'team = tracker.get("team_key") if tracker is not None else None', "team = None",
      "test_without_a_story_key_the_team_is_the_tracker_team_key"),
     ("final-fallback-on", RESOLVER, 'return node.get("default", "off")', 'return node.get("default", "on")',
      "test_a_profile_without_full_suite_resolves_off"),
@@ -45,8 +46,15 @@ MUTATIONS = [
      "test_no_profile_anywhere_resolves_off"),
     ("profile-validation-skipped", RESOLVER, "    node = full_suite(doc, path)\n", '    node = doc.get("full_suite") or {}\n',
      "test_a_profile_value_outside_the_schema_fails_closed"),
-    ("tracker-team-key-type-unchecked", RESOLVER, "        if team is not None and not isinstance(team, str):\n", "        if False:\n",
-     "test_an_unquoted_tracker_team_key_fails_closed"),
+    ("tracker-team-key-unchecked", RESOLVER, "        if team is not None and not (isinstance(team, str) and TEAM.fullmatch(team)):\n",
+     "        if False:\n", "test_an_unusable_tracker_team_key_fails_closed"),
+    ("pipeline-teams-ignored", "skills/adversarial-review-pipeline/scripts/resolve-full-suite.py",
+     "if isinstance(team, str) and team in teams:", "if False:",
+     "test_preflight_without_the_flag_reads_the_tracker_team_from_the_profile"),
+    ("stamp-kept-on-failed-resolution", PIPELINE,
+     '    rm -f -- "$PHASE0.stamp"\n    invalidate_downstream preflight\n    if [ "$FULL_SUITE_SET" -eq 0 ]; then\n',
+     '    if [ "$FULL_SUITE_SET" -eq 0 ]; then\n',
+     "test_a_failed_resolution_discards_the_previous_preflight_acceptance"),
     ("flag-accepted-on-every-command", PIPELINE, '  [ "$cmd" = "preflight" ] ||', "  true ||",
      "test_full_suite_on_a_command_other_than_preflight_is_refused"),
     ("value-choices-dropped", RESOLVER, 'parser.add_argument("--value", choices=VALUES,', 'parser.add_argument("--value",',
@@ -59,7 +67,7 @@ MUTATIONS = [
      "test_preflight_without_the_flag_and_without_a_profile_resolves_off"),
     ("omitted-flag-ignores-profile", PIPELINE, RESOLVE_CALL, 'FULL_SUITE="off"',
      "test_preflight_without_the_flag_reads_the_repository_profile"),
-    ("invalid-value-accepted", PIPELINE, "    on|off) ;;\n", "    *) ;;\n",
+    ("invalid-value-accepted", PIPELINE, '  case "$FULL_SUITE" in\n    on|off) ;;\n', '  case "$FULL_SUITE" in\n    *) ;;\n',
      "test_preflight_rejects_an_invalid_full_suite_value_with_usage"),
     ("skill-command-drops-flag", SKILL_MD, '--full-suite "<on or off>" ', "",
      "test_the_skill_preflight_command_passes_full_suite"),
@@ -78,9 +86,11 @@ def copy_sources(dest: Path) -> Path:
 
 
 def run_test(copy: Path, test: str) -> subprocess.CompletedProcess:
+    # The outer session's PYTEST_ADDOPTS (a -k filter, say) must not decide the nested run.
+    env = {k: v for k, v in os.environ.items() if k not in ("PYTEST_ADDOPTS", "PYTEST_PLUGINS")}
     return subprocess.run(
         [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", f"{TEST_FILE}::{test}"],
-        cwd=copy, capture_output=True, text=True, timeout=600,
+        cwd=copy, capture_output=True, text=True, timeout=600, env=env,
     )
 
 

@@ -557,7 +557,7 @@
         },
         "teams": {
           "type": "object",
-          "description": "The value per team key, overriding `default` for that team. Quote each key and value in YAML (`\"OFF\": \"on\"`): an unquoted OFF, ON, YES, NO, Y or N key is a boolean.",
+          "description": "The value per team key, overriding `default` for that team. Quote each key and value in YAML (`\"OFF\": \"on\"`): an unquoted OFF, ON, YES or NO key is a boolean.",
           "patternProperties": {
             "^[A-Z][A-Z0-9]*$": {
               "enum": ["on", "off"]

@@ -245,7 +245,7 @@ set -euo pipefail
 
 DIFF_CAP_BYTES=4096   # bytes of unified-diff text per file in an embedded diff (see "Embedded diff" above)
 
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")"   # the real directory, through any symlink
 
 usage() { awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0" >&2; exit 2; }
 die() { local code="$1"; shift; echo "ERROR: $*" >&2; exit "$code"; }
@@ -1651,13 +1651,17 @@ case "$cmd" in
   preflight)
     # Omitted, the option resolves from the profile the skills load (no story key, so the team is
     # profile.tracker.team_key), and off when no profile exists. A profile that cannot be read stops
-    # the run before anything is discarded.
+    # the run after the previous acceptance is discarded, so a failed resolution never leaves it standing.
+    rm -f -- "$PHASE0.stamp"
+    invalidate_downstream preflight
     if [ "$FULL_SUITE_SET" -eq 0 ]; then
       FULL_SUITE="$(python3 "$SCRIPT_DIR/resolve-full-suite.py" < /dev/null)" \
         || die 2 "--full-suite was omitted and could not be resolved from the profile (see above); pass --full-suite on|off or fix the profile."
+      case "$FULL_SUITE" in
+        on|off) ;;
+        *) die 2 "--full-suite was omitted and the resolver printed $(printf '%q' "$FULL_SUITE"), not on or off." ;;
+      esac
     fi
-    rm -f -- "$PHASE0.stamp"
-    invalidate_downstream preflight
     status=0
     suite_ran=0
     EXPORT_ROOT=""

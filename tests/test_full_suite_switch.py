@@ -106,13 +106,15 @@ def test_a_profile_value_outside_the_schema_fails_closed(tmp_path, body):
     assert result.stdout == ""
 
 
-def test_an_unquoted_tracker_team_key_fails_closed(tmp_path):
-    # YAML reads an unquoted OFF as the boolean false, so the team is lost; resolving the default instead would
-    # silently turn off a suite the team set on.
-    profile = 'tracker:\n  team_key: OFF\nfull_suite:\n  default: "off"\n  teams:\n    "OFF": "on"\n'
+@pytest.mark.parametrize("tracker", ["tracker:\n  team_key: OFF\n", "tracker:\n  team_key: off\n",
+                                     'tracker:\n  team_key: "skl"\n', "tracker: []\n"])
+def test_an_unusable_tracker_team_key_fails_closed(tmp_path, tracker):
+    # An unquoted OFF reads as a boolean and a lower-case key never matches a teams key; resolving the default
+    # instead would silently turn off a suite the team set on.
+    profile = tracker + 'full_suite:\n  default: "off"\n  teams:\n    "OFF": "on"\n    SKL: "on"\n'
     result = resolve(tmp_path, profile)
     assert result.returncode == 16, result.stdout + result.stderr
-    assert "quote it" in result.stderr
+    assert result.stdout == ""
 
 
 @pytest.mark.parametrize("args", [["--value", "yes"], ["--story-key", "skl-1"]])
@@ -226,6 +228,30 @@ def test_preflight_without_the_flag_reads_the_repository_profile(setup):
     result = preflight(tmp_path, repo, env)
     assert result.returncode == 0, result.stdout + result.stderr
     assert (tmp_path / "suite-ran").exists(), "an omitted flag ignored the repository profile's on"
+
+
+def test_preflight_without_the_flag_reads_the_tracker_team_from_the_profile(setup):
+    tmp_path, repo, env = setup
+    commit_profile(repo, env, 'tracker:\n  team_key: SKL\nfull_suite:\n  default: "off"\n  teams:\n    SKL: "on"\n')
+    result = preflight(tmp_path, repo, env)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (tmp_path / "suite-ran").exists(), "an omitted flag ignored teams[tracker.team_key]"
+
+
+def test_a_failed_resolution_discards_the_previous_preflight_acceptance(setup):
+    tmp_path, repo, env = setup
+    profile = tmp_path / "selected.yaml"
+    profile.write_text('full_suite:\n  default: "off"\n')
+    env = {**env, "AGENT_SKILLS_PROFILE": str(profile)}
+    assert preflight(tmp_path, repo, env).returncode == 0
+    out = subprocess.run(["bash", str(PIPELINE), "paths", "--repo", str(repo), "--base", "HEAD"],
+                         capture_output=True, text=True, env=env, timeout=60, check=True).stdout
+    stamp = Path(next(line.split(" ", 1)[1] for line in out.splitlines() if line.startswith("preflight ")) + ".stamp")
+    assert stamp.exists(), "a passing preflight left no stamp"
+    profile.write_text("full_suite:\n  default: on\n")
+    result = preflight(tmp_path, repo, env)
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert not stamp.exists(), "a failed resolution left the previous preflight accepted"
 
 
 def test_preflight_rejects_an_invalid_full_suite_value_with_usage(setup):

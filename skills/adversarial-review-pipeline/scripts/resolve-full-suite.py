@@ -204,7 +204,7 @@ def full_suite(doc: dict, path: str) -> dict:
         raise Unresolved(f"profile.full_suite.teams in {path} must be a mapping")
     for team, value in teams.items():
         if isinstance(team, bool):
-            # YAML 1.1 reads an unquoted OFF, ON, YES, NO, Y or N key as a boolean, so its spelling is lost.
+            # YAML 1.1 reads an unquoted OFF, ON, YES or NO key as a boolean, so its spelling is lost.
             raise Unresolved(
                 f"profile.full_suite.teams in {path} has a key YAML read as the boolean {str(team).lower()}; "
                 "quote the team key, for example \"OFF\": \"on\""
@@ -221,11 +221,15 @@ def resolve(doc: dict, path: str, story_key: str | None) -> str:
         team = STORY_KEY.fullmatch(story_key).group(1)
     else:
         tracker = doc.get("tracker")
-        team = tracker.get("team_key") if isinstance(tracker, dict) else None
-        if team is not None and not isinstance(team, str):
-            # An unquoted OFF reads as a boolean, so the team's spelling is lost: fail closed, never fall to default.
+        if tracker is not None and not isinstance(tracker, dict):
+            raise Unresolved(f"profile.tracker in {path} must be a mapping")
+        team = tracker.get("team_key") if tracker is not None else None
+        if team is not None and not (isinstance(team, str) and TEAM.fullmatch(team)):
+            # An unquoted OFF reads as a boolean and a lower-case key never matches a teams key: fail closed,
+            # never fall to the default.
             raise Unresolved(
-                f"profile.tracker.team_key in {path} is {team!r}, not a string; quote it, for example team_key: \"OFF\""
+                f"profile.tracker.team_key in {path} is {team!r}, not an upper-case team key string; "
+                "quote it, for example team_key: \"OFF\""
             )
     teams = node.get("teams", {})
     if isinstance(team, str) and team in teams:
