@@ -1,0 +1,30 @@
+{
+  "claude_code_version": "2.1.322",
+  "source": "SKL-276 update cadence PreToolUse payloads (normalized); each entry is synthesized from the normalized PreToolUse schema of the SKL-246 AC2 probe payloads, whose Claude Code version is recorded here",
+  "payloads": {
+    "cadence_main_pre_tool_use_read": {
+      "origin": "synthesized",
+      "payload": {"session_id": "<session-id>", "transcript_path": "~/.claude/projects/-workspace/<session-id>.jsonl", "cwd": "/workspace", "prompt_id": "<prompt-id>", "permission_mode": "auto", "effort": {"level": "medium"}, "hook_event_name": "PreToolUse", "tool_name": "Read", "tool_input": {"file_path": "/workspace/README.md"}, "tool_use_id": "<tool-use-id>"}
+    },
+    "cadence_main_pre_tool_use_task_update": {
+      "origin": "synthesized",
+      "payload": {"session_id": "<session-id>", "transcript_path": "~/.claude/projects/-workspace/<session-id>.jsonl", "cwd": "/workspace", "prompt_id": "<prompt-id>", "permission_mode": "auto", "effort": {"level": "medium"}, "hook_event_name": "PreToolUse", "tool_name": "TaskUpdate", "tool_input": {"taskId": "1", "status": "completed"}, "tool_use_id": "<tool-use-id>"}
+    },
+    "cadence_main_pre_tool_use_task_create": {
+      "origin": "synthesized",
+      "payload": {"session_id": "<session-id>", "transcript_path": "~/.claude/projects/-workspace/<session-id>.jsonl", "cwd": "/workspace", "prompt_id": "<prompt-id>", "permission_mode": "auto", "effort": {"level": "medium"}, "hook_event_name": "PreToolUse", "tool_name": "TaskCreate", "tool_input": {"subject": "Next step", "description": "The next step of the story"}, "tool_use_id": "<tool-use-id>"}
+    },
+    "cadence_main_pre_tool_use_task_list": {
+      "origin": "synthesized",
+      "payload": {"session_id": "<session-id>", "transcript_path": "~/.claude/projects/-workspace/<session-id>.jsonl", "cwd": "/workspace", "prompt_id": "<prompt-id>", "permission_mode": "auto", "effort": {"level": "medium"}, "hook_event_name": "PreToolUse", "tool_name": "TaskList", "tool_input": {}, "tool_use_id": "<tool-use-id>"}
+    },
+    "cadence_subagent_pre_tool_use_task_update": {
+      "origin": "synthesized",
+      "payload": {"session_id": "<session-id>", "transcript_path": "~/.claude/projects/-workspace/<session-id>.jsonl", "cwd": "/workspace", "prompt_id": "<prompt-id>", "permission_mode": "auto", "agent_id": "<agent-id>", "agent_type": "general-purpose", "effort": {"level": "medium"}, "hook_event_name": "PreToolUse", "tool_name": "TaskUpdate", "tool_input": {"taskId": "2", "status": "in_progress"}, "tool_use_id": "<tool-use-id>"}
+    },
+    "cadence_subagent_pre_tool_use_read": {
+      "origin": "synthesized",
+      "payload": {"session_id": "<session-id>", "transcript_path": "~/.claude/projects/-workspace/<session-id>.jsonl", "cwd": "/workspace", "prompt_id": "<prompt-id>", "permission_mode": "auto", "agent_id": "<agent-id>", "agent_type": "general-purpose", "effort": {"level": "medium"}, "hook_event_name": "PreToolUse", "tool_name": "Read", "tool_input": {"file_path": "/workspace/README.md"}, "tool_use_id": "<tool-use-id>"}
+    }
+  }
+}
