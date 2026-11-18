@@ -587,7 +587,7 @@ OWNER_WAIT_RULE = [
     "verified.",
     "An item is owner-only when it is an open acceptance criterion that needs input only the owner can give (a "
     "comment, a value, a credential, an access grant), a decision on what an acceptance criterion means, a "
-    "maintainer's approval, a human merge, or an external deploy.",
+    "maintainer's approval or access grant, a human merge, or an external deploy.",
     "An owner-approval gate written into a criterion for the story's own outcome (the owner approving or "
     "signing off on what the story delivered) is not owner-only and does not stop this skill, because the "
     "operator's request for the story is the approval for that outcome; a maintainer's approval stays "

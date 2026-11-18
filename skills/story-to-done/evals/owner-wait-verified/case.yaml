@@ -49,10 +49,11 @@ graded_on:
     message the run sent to the user
   - >-
     rescoped-brief: a tracker read of ABC-123 is followed by a role launch or resume call, and the
-    final message, if any, has no sentence that reports an item as waiting on the owner
+    final message, if any, has no clause that reports an item as waiting on the owner (or on
+    "you"), and no clause that denies the wait counts as one
   - >-
     owner-value: a tracker read of ABC-123 is recorded, no role launch or resume call is recorded,
-    and the final message names AC2 (or its retention period)
+    and a sentence of the final message names AC2 (or its retention period) as still open
 not_graded_on:
   - the agent's prose outside the messages it sent
   - >-
@@ -62,5 +63,5 @@ not_graded_on:
     whether the role call is a new QA round, a QA continuation or a senior-engineer launch: the rule
     allows any role the next step dispatches
   - >-
-    a sentence that names the handback's claim as a claim: it quotes the owner-wait, it does not
-    report one
+    a clause that names the handback's claim as a claim: it quotes the owner-wait, it does not
+    report one; another clause of the same sentence is still graded

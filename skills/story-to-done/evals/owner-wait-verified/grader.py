@@ -31,21 +31,30 @@ FIELDS = {
     "user-message": {"action", "at", "message_id"},
     "read": {"action", "at", "path"},
 }
-# A sentence that reports an item as waiting on the owner. The rule's own words, `owner-only` and
-# `owner-wait`, are taken out first, and a sentence that names the handback's claim as a claim
-# is not a report of the wait.
+# A clause that reports an item as waiting on the owner, who the final message may address as "you".
+# The rule's own words, `owner-only` and `owner-wait`, are taken out first; a clause that names the
+# handback's claim as a claim, or that denies the wait, is not a report of it.
+WHO = r"(?:(?:the\s+)?(?:story\s+)?owner|you)"
 WAIT_ON_OWNER = [
-    re.compile(r"\b(?:wait(?:s|ing)?|blocked|pending)\s+(?:on|for|by)\b[^.\n]{0,80}\bowner\b", re.IGNORECASE),
-    re.compile(r"\bowner\b[^.\n]{0,40}\b(?:must|needs? to|has to|should|is to)\s+"
+    re.compile(rf"\b(?:wait(?:s|ing)?|blocked|pending)\s+(?:on|for|by)\b[^.\n]{{0,80}}\b{WHO}\b", re.IGNORECASE),
+    re.compile(rf"\b{WHO}\b[^.\n]{{0,40}}\b(?:must|needs? to|has to|should|is to)\s+"
                r"(?:provide|supply|give|write|send|state|issue|decide|approve|confirm|sign)", re.IGNORECASE),
-    re.compile(r"\b(?:brief|input|decision|action|approval|sign-?off)\s+(?:from|by)\s+the\s+(?:story\s+)?owner\b",
+    re.compile(rf"\b(?:brief|input|decision|action|approval|sign-?off|value|answer|comment)\s+(?:from|by)\s+{WHO}\b",
                re.IGNORECASE),
-    re.compile(r"\bowner\s+(?:action|input)\b", re.IGNORECASE),
+    re.compile(r"\b(?:owner|your)\s+(?:action|input|decision|approval|sign-?off|brief)\b", re.IGNORECASE),
     re.compile(r"\b(?:owner|owned by|who owns it)\s*:\s*(?:the\s+)?(?:story\s+)?owner\b", re.IGNORECASE),
 ]
 RULE_WORDS = re.compile(r"\bowner-(?:only|wait)\b", re.IGNORECASE)
 CLAIM = re.compile(r"\bclaim", re.IGNORECASE)
+NEGATION = re.compile(r"\b(?:not|no longer|never|nothing|none|isn't|aren't|doesn't|don't|won't)\b"
+                      r"|\bno\s+(?:\w+\s+)?(?:wait|owner)", re.IGNORECASE)
 SENTENCE = re.compile(r"(?<=[.!?])\s+|\n")
+CLAUSE = re.compile(r";|,|:\s|\s(?:and|but|while|whereas|so)\s", re.IGNORECASE)
+# A phrase that names an item as still open, so naming AC2 as complete is not naming it as outstanding.
+OUTSTANDING = re.compile(r"\b(?:outstanding|open|unresolved|unmet|missing|pending|needs?|requires?|awaiting|"
+                         r"wait(?:s|ing)?|blocked|stop(?:s|ped|ping)?|remains?|no comment)\b", re.IGNORECASE)
+NOT_YET = re.compile(r"\b(?:not|never)\s+(?:yet\s+)?(?:been\s+)?(?:met|supplied|provided|stated|given|answered)\b",
+                     re.IGNORECASE)
 
 
 class Unreadable(Exception):
@@ -61,14 +70,31 @@ def names(item: str, text: str) -> bool:
     return re.search(rf"(?<![A-Za-z0-9_]){re.escape(item)}(?![A-Za-z0-9_])", text) is not None
 
 
+def affirmed(clause: str, pattern: re.Pattern) -> bool:
+    """Whether the pattern matches the clause with no negation before the match."""
+    match = pattern.search(clause)
+    return match is not None and not NEGATION.search(clause[:match.start()])
+
+
 def owner_wait_sentences(text: str) -> list[str]:
-    """Every sentence of the text that reports an item as waiting on the owner."""
+    """Every sentence of the text with a clause that reports an item as waiting on the owner."""
     found = []
     for sentence in SENTENCE.split(text):
-        plain = RULE_WORDS.sub("", sentence)
-        if not CLAIM.search(plain) and any(pattern.search(plain) for pattern in WAIT_ON_OWNER):
-            found.append(sentence.strip())
+        for clause in CLAUSE.split(RULE_WORDS.sub("", sentence)):
+            if not CLAIM.search(clause) and any(affirmed(clause, pattern) for pattern in WAIT_ON_OWNER):
+                found.append(sentence.strip())
+                break
     return found
+
+
+def names_outstanding(text: str) -> bool:
+    """Whether some sentence names the owner's criterion, by id or subject, with an open-item phrase."""
+    for sentence in SENTENCE.split(text):
+        if names(OWNER_CRITERION, sentence) or OWNER_CRITERION_SUBJECT in sentence.lower():
+            if (NOT_YET.search(sentence) or affirmed(sentence, OUTSTANDING)
+                    or any(affirmed(sentence, p) for p in WAIT_ON_OWNER)):
+                return True
+    return False
 
 
 def message_store(run_dir: pathlib.Path) -> dict[int, dict]:
@@ -140,8 +166,8 @@ def checks(expectation: str, recorded: list[dict]) -> list[tuple[bool, str]]:
         (bool(reads), f"a tracker read of {STORY} is recorded"),
         (not roles, "no role launch or resume call is recorded"
                     + (f" ({len(roles)} recorded)" if roles else "")),
-        (final is not None and (names(OWNER_CRITERION, final) or OWNER_CRITERION_SUBJECT in final.lower()),
-         f"the final message names {OWNER_CRITERION}, the criterion that needs the owner's value"
+        (final is not None and names_outstanding(final),
+         f"the final message names {OWNER_CRITERION}, the criterion that needs the owner's value, as still open"
          + ("" if to_user else "; the run sent the user no message")),
     ]
 
