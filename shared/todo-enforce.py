@@ -13,7 +13,7 @@ payload's hook_event_name and, per session_id:
 - in an armed session that has the task tools, denies a main-thread tool call outside
   TaskCreate, TaskUpdate, TaskList, TaskGet, ToolSearch, Skill and AskUserQuestion unless a
   main-owned task is in_progress, and allows it with a stderr warning when a main-owned task
-  file that exists is unreadable;
+  file that exists is unreadable, unless the update cadence below denies it;
 - update cadence: in an armed session that has the task tools, denies a main-thread tool call
   outside those exempt tools once CADENCE_LIMIT such calls have been allowed since the last
   main-thread TaskCreate or TaskUpdate PreToolUse, which resets the count; a call the in_progress
@@ -567,7 +567,7 @@ def on_pre_tool_use(payload, session):
         return 0
     progress, owned = main_task_in_progress(session)
     if progress is None:
-        log("not denying %s for want of an in_progress task: a main-created task's state is unknown" % tool)
+        log("the in_progress check does not deny %s: a main-created task's state is unknown" % tool)
     elif not progress and owners_writable(session):
         reason = NO_TASK_IN_PROGRESS.format(tool=tool)
         if not owned:

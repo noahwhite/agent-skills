@@ -139,7 +139,7 @@ After a denial or refusal the session continues, and the model can fix the task 
 It fails open on its own faults: a malformed payload, unreadable or unwritable state or an internal error is logged to stderr and the call or stop is allowed.
 A missing `TaskCreated` entry is not such a fault: the hook then never learns which tasks the main thread created, so an armed session denies every checked call, with a reason saying the `TaskCreated` hook may not be registered; register all five entries.
 A final report in a session with no recorded main-thread task is allowed with a stderr line saying so.
-An unreadable main-thread task file is logged too: tool calls and final reports are allowed, and that task's completion is refused until it is marked `in_progress` again.
+An unreadable main-thread task file is logged too: tool calls and final reports are allowed, unless the update cadence above has reached its limit, and that task's completion is refused until it is marked `in_progress` again.
 Its state lives under `${XDG_STATE_HOME:-~/.local/state}/agent-skills/todo-enforce/`, one directory per session, and it reads task files from `${CLAUDE_CONFIG_DIR:-~/.claude}/tasks/`.
 To remove it, delete those five entries from `settings.json`; you may also delete its state directory.
 
