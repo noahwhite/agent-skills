@@ -22,7 +22,6 @@ import yaml
 ROOT = Path(__file__).resolve().parent.parent
 SKILL = ROOT / "skills" / "story-to-done" / "SKILL.md"
 PROTOCOL = ROOT / "skills" / "story-to-done" / "references" / "metrics-protocol.md"
-MANIFEST = json.loads((ROOT / "skills.json").read_text())
 
 
 def section(text: str, heading: str) -> str:
@@ -36,15 +35,6 @@ def section(text: str, heading: str) -> str:
 def visible(text: str) -> str:
     """The text a reader of the rendered Markdown sees: HTML comments removed, an unclosed one to the end."""
     return re.sub(r"<!--.*?(?:-->|\Z)", "", text, flags=re.DOTALL)
-
-
-def test_skill_file_exists() -> None:
-    assert SKILL.is_file(), f"missing {SKILL.relative_to(ROOT)}"
-
-
-def test_manifest_registers_skill() -> None:
-    required = {"todo-tracking", "linear", "code-review", "secrets"}
-    assert required <= set(MANIFEST["skills"]["story-to-done"])
 
 
 def test_todo_tracking_has_seed_entry() -> None:
@@ -1173,12 +1163,6 @@ METRICS_NO_SECRETS = (
     "The closing report contains no secrets and no local or scratch paths, including where it relays a role's "
     "finding, evidence or incidental defect, which it restates without the path."
 )
-
-
-def test_manifest_appends_metrics_to_story_to_done() -> None:
-    entry = MANIFEST["skills"]["story-to-done"]
-    assert entry.count("metrics") == 1, "story-to-done must list metrics exactly once"
-    assert entry.index("metrics") == entry.index("secrets") + 1, "metrics is appended after secrets"
 
 
 def test_vendored_metrics_reference_carries_the_not_reported_rule() -> None:

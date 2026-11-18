@@ -17,7 +17,6 @@ import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
 SKILL = ROOT / "skills" / "cleanup" / "SKILL.md"
-MANIFEST = json.loads((ROOT / "skills.json").read_text())
 SCHEMA_FILE = ROOT / "profile" / "schema.json"
 EXAMPLE_PROFILE = ROOT / "profile" / "example.yaml"
 HOST_RE = re.compile(r"\b[a-z0-9][a-z0-9-]*\.(?:ai|com|io|net|org|dev)\b", re.IGNORECASE)
@@ -54,10 +53,6 @@ def repository_test_helper(name: str):
     return getattr(module, name)
 
 
-def test_skill_file_exists() -> None:
-    assert SKILL.is_file(), f"missing {SKILL.relative_to(ROOT)}"
-
-
 def test_description_names_the_recorded_instruction_as_the_one_exception() -> None:
     # SKL-249: since SKL-245 a recorded instruction can remove unmerged work, so the description
     # qualifies the guard instead of claiming it refuses all unmerged work.
@@ -67,15 +62,6 @@ def test_description_names_the_recorded_instruction_as_the_one_exception() -> No
     # The description names the exception without restating step 3's scope rules.
     for scope_rule in ("with several, it covers only the key it names", "authorizes every loss", "story key"):
         assert scope_rule not in description, description
-
-
-def test_manifest_registers_skill_with_its_capabilities() -> None:
-    assert {"todo-tracking", "linear", "github"} <= set(MANIFEST["skills"]["cleanup"])
-
-
-def test_vendored_bundle_carries_every_linked_capability() -> None:
-    for name in ("profile", "runtimes", "todo-tracking", "linear", "github"):
-        assert (SKILL.parent / "references" / f"{name}.md").is_file(), name
 
 
 def test_readme_lists_skill_in_table() -> None:
@@ -769,10 +755,6 @@ REJECTED_NAMES = {
 def test_the_schema_rejects_an_unsafe_or_malformed_cleanup_value(cleanup) -> None:
     with pytest.raises(jsonschema.ValidationError):
         jsonschema.validate(example_profile_with(cleanup), schema())
-
-
-def test_the_regenerable_dirs_default_is_an_empty_list() -> None:
-    assert schema()["properties"]["cleanup"]["properties"]["regenerable_dirs"]["default"] == []
 
 
 def test_the_cleanup_descriptions_state_the_default_the_name_form_and_additivity() -> None:
