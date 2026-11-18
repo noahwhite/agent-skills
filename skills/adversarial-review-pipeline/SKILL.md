@@ -251,7 +251,7 @@ ARBITER-HEAD: <full HEAD SHA>
 - `ARBITER-HEAD` is the HEAD when the script runs, so `record arbitrate` must run at the reviewed head: never record a report after moving the branch.
 - A report whose first line is not exactly `REVIEW-RAN: yes` (trailing whitespace or a CR included) fails (exit 17) and writes and retains nothing.
 
-Every accepted arbitration is retained, before its stamp is written, as an immutable, read-only copy of the report with its identity lines in `<git common dir>/adversarial-pipeline/arbitration-rounds`, where `<git common dir>` is the absolute output of `git rev-parse --git-common-dir`.
+Every accepted arbitration is retained, before its stamp is written, as an immutable, read-only copy of the report with its identity lines in `<git common dir>/adversarial-pipeline/arbitration-rounds`, where `<git common dir>` is the output of `git rev-parse --path-format=absolute --git-common-dir`.
 That directory belongs to the clone, not to the run directory, `--scratch` or the worktree, so every worktree of the clone resolves the same directory and removing a worktree loses nothing; a linked worktree's own `git rev-parse --git-path adversarial-pipeline` is under that worktree's git directory, which is why the run state is not used.
 The copy is named `round-<UTC timestamp>-<full HEAD SHA>-<first 12 hex of the report sha256>-<n>.md`, with the timestamp as `date -u +%Y%m%dT%H%M%SZ`.
 It is written to a temporary file in that directory and published with a no-clobber hard link; when the name exists the next `<n>` is tried, so two byte-identical arbitrations at one head leave two files and nothing is overwritten.
