@@ -143,7 +143,11 @@ def test_the_schema_accepts_teams_off_on():
     jsonschema.validate(minimal_profile({"teams": {"OFF": "on"}}), SCHEMA)
 
 
-@pytest.mark.parametrize("full_suite", [{"teams": {"off": "on"}}, {"teams": {"OFF": "yes"}}, {"default": "maybe"}])
+@pytest.mark.parametrize(
+    "full_suite",
+    # "OFF\n": `$` in the key pattern also matches before a trailing line feed, which the resolver refuses.
+    [{"teams": {"off": "on"}}, {"teams": {"OFF": "yes"}}, {"default": "maybe"}, {"teams": {"OFF\n": "on"}}],
+)
 def test_the_schema_rejects_a_lowercase_team_key_or_a_non_enum_value(full_suite):
     with pytest.raises(jsonschema.ValidationError):
         jsonschema.validate(minimal_profile(full_suite), SCHEMA)
