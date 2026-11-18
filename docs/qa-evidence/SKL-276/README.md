@@ -6,7 +6,7 @@ Date: 2026-11-18 UTC, independent QA round 1.
 Path: `no-deployment`, selected by `select-path.py` with the story's title, its two labels and the recorded `path: no-deployment` line, so no environment or build SHA applies.
 Target: merged commit `6a132adced154b02cb57485b4d339ec0c027f8a1` on `main`, the squash merge of PR 333, whose reviewed head is `382a29ec3c5d1484ead0a8dcff10a5b31548ed92`.
 `git merge-base --is-ancestor` confirmed the target on `origin/main`, and `git diff 382a29ec 6a132ad` touches only `docs/qa-evidence/SKL-363/README.md`, so every file of the PR is the reviewed file.
-Owner constraint for this round: no test suite was run; the evidence is the merged code, direct invocations of the vendored hook copy at the target (not a copy installed under `~/.claude/skills/`) on hand-made payloads in a temporary state, config and home directory, `scripts/vendor_shared.py`, and the CI runs that ran automatically.
+Owner constraint for this round: no test suite was run; the evidence is the merged code, direct invocations of the vendored hook copy at the target (not a copy installed in the user's skills directory) on hand-made payloads in a temporary state, config and home directory, `scripts/vendor_shared.py`, and the CI runs that ran automatically.
 Fixtures: a throwaway worktree at the target, and the committed transcript fixtures `transcript-with-task-tools.jsonl` and `transcript-without-task-tools.jsonl` as session transcripts.
 The raw output is attached to SKL-276 as "SKL-276 QA round 1 AC1 hook probe output" and "SKL-276 QA round 1 repository, vendoring and CI evidence"; there is no visual surface, so no screenshot applies.
 
@@ -30,21 +30,21 @@ The raw output is attached to SKL-276 as "SKL-276 QA round 1 AC1 hook probe outp
 AC1: the probe drove `skills/story-to-done/scripts/todo-enforce.py` at the target, one process per hook event, with `XDG_STATE_HOME`, `CLAUDE_CONFIG_DIR` and `HOME` set to a temporary directory.
 `CADENCE_LIMIT = 15` is one module constant.
 Twenty calls before arming were allowed and left no count file, and the count was absent right after arming.
-Calls 1 to 15 were allowed with the count reading 1 to 15, and call 16 was denied with "todo-enforce: Read was not run because 15 tool calls (CADENCE_LIMIT) have run since your last todo-list update. Bring the list up to date with TaskUpdate: complete the finished item and mark the current step in_progress, then retry."
+Calls 1 to 15 were allowed with the count reading 1 to 15, and call 16 was denied with a reason that names `Read`, 15 and `CADENCE_LIMIT` and tells the agent to bring the list up to date with the task-update tool (complete the finished item, mark the current step in progress) and then retry; the attached probe output quotes it in full.
 Call 17 got the same reason, and a `Bash` call was denied naming `Bash`.
-`TaskList`, `TaskGet`, `ToolSearch`, `AskUserQuestion` and `Skill` were allowed at the limit and left the count at 15.
-A subagent `Read` and a subagent `TaskUpdate` were allowed at the limit, left the count at 15, and the next main-thread call was still denied.
-A main-thread `TaskUpdate` and a main-thread `TaskCreate` each removed the count, and the next call was allowed with the count at 1.
+`TaskList`, `TaskGet`, `ToolSearch`, the ask-the-user tool and `Skill` were allowed at the limit and left the count at 15.
+A subagent `Read` and a subagent task update were allowed at the limit, left the count at 15, and the next main-thread call was still denied.
+A main-thread task update and a main-thread task create each removed the count, and the next call was allowed with the count at 1.
 With the only main task completed, the rule-4 reason was returned and the count did not change, both below the limit and at count 15.
 With the main task file unreadable, so the rule-4 check does not deny, 15 calls were allowed and call 16 was denied by the cadence.
 An unarmed session allowed 20 calls with no count file, and an armed session whose transcript lacks the task tools allowed calls at count 15 and left it unchanged.
 The counts `abc`, empty, `-2` and `1.5`, an unreadable count, an unwritable state directory at counts 5 and 15, an empty `agent_id`, a missing `tool_name` and non-JSON stdin each allowed the call with a `todo-enforce` stderr line and left the count unchanged.
-With the lock held elsewhere, a call was allowed after 2.02 s with "lock not acquired within 2.0 seconds", and a `TaskUpdate` logged "not reset" and left the count at 15.
+With the lock held elsewhere, a call was allowed after 2.02 s with "lock not acquired within 2.0 seconds", and a task update logged "not reset" and left the count at 15.
 Concurrent hook processes released together gave: 2 at count 0, both allowed and count 2; 2 at count 14, one allowed, one denied and count 15; 12 at count 0, all allowed and count 12; 10 at count 10, five allowed, five denied and count 15.
 
-AC2: `tests/test_todo_enforce.py` adds one test per case (a) to (k), with (b) parametrized over `TaskUpdate` and `TaskCreate`, and (f) covering a malformed payload, an unparseable, unreadable and unwritable count and a lock timeout.
+AC2: `tests/test_todo_enforce.py` adds one test per case (a) to (k), with (b) parametrized over the task-update and task-create tools, and (f) covering a malformed payload, an unparseable, unreadable and unwritable count and a lock timeout.
 `tests/fixtures/todo_enforce/cadence-payloads.json` records Claude Code version 2.1.322, marks each of its six payloads `synthesized`, uses `<session-id>`, `<prompt-id>`, `<tool-use-id>` and `<agent-id>` placeholders, and carries no `/home/` path, username, email address or hostname.
-`BRANCHES` gains the cadence deny, the count increment and the list-update reset, each with a `NEUTRAL` mutant.
+`BRANCHES` gains the cadence deny, the count increment and the list-update reset, each with its no-op replacement in the mutation table.
 The cases passed in CI; this round ran no suite.
 
 AC3: the test diff removes one line, `PAYLOADS = {...}`, and replaces it with the same mapping plus the cadence payloads; no existing assertion, scenario or mutation row changes.
@@ -52,7 +52,7 @@ AC3: the test diff removes one line, `PAYLOADS = {...}`, and replaces it with th
 Both `skills/story-refinement/scripts/todo-enforce.py` and `skills/story-to-done/scripts/todo-enforce.py` are the generated header line plus the source byte for byte, and neither is executable.
 The module docstring lists the update cadence.
 
-AC4: the README section states `CADENCE_LIMIT` (15) as a module constant with no user setting, the armed task-enabled scope, the reset including a failed `TaskCreate` or `TaskUpdate`, what is not counted, the `TaskUpdate` response including during polling, the reasserting `TaskUpdate`, that the cadence does not enforce rule 3's immediacy, and the fail-open modes.
+AC4: the README section states `CADENCE_LIMIT` (15) as a module constant with no user setting, the armed task-enabled scope, the reset including a failed task create or task update, what is not counted, the task-update response including during polling, the reasserting task update, that the cadence does not enforce rule 3's immediacy, and the fail-open modes.
 The README diff has two prose hunks and no change to the hooks block or the removal instructions.
 
 AC5: not covered in this round.
