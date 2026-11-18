@@ -46,8 +46,10 @@ WAIT_ON_OWNER = [
 ]
 RULE_WORDS = re.compile(r"\bowner-(?:only|wait)\b", re.IGNORECASE)
 CLAIM = re.compile(r"\bclaim", re.IGNORECASE)
-NEGATION = re.compile(r"\b(?:not|no longer|never|nothing|none|isn't|aren't|doesn't|don't|won't)\b"
-                      r"|\bno\s+(?:\w+\s+)?(?:wait|owner)", re.IGNORECASE)
+# A negation that governs the matched predicate: it ends the text before the match, at most one word
+# away, so "not waiting on the owner" is denied and "not verified pending input from the owner" is not.
+NEGATION = re.compile(r"\b(?:not|no longer|never|nothing|none|no|isn't|aren't|doesn't|don't|won't)\s+(?:\w+\s+)?$",
+                      re.IGNORECASE)
 SENTENCE = re.compile(r"(?<=[.!?])\s+|\n")
 CLAUSE = re.compile(r";|,|:\s|\s(?:and|but|while|whereas|so)\s", re.IGNORECASE)
 # A phrase that names an item as still open, so naming AC2 as complete is not naming it as outstanding.
@@ -71,7 +73,7 @@ def names(item: str, text: str) -> bool:
 
 
 def affirmed(clause: str, pattern: re.Pattern) -> bool:
-    """Whether the pattern matches the clause with no negation before the match."""
+    """Whether the pattern matches the clause with no negation governing the match."""
     match = pattern.search(clause)
     return match is not None and not NEGATION.search(clause[:match.start()])
 
@@ -88,12 +90,13 @@ def owner_wait_sentences(text: str) -> list[str]:
 
 
 def names_outstanding(text: str) -> bool:
-    """Whether some sentence names the owner's criterion, by id or subject, with an open-item phrase."""
+    """Whether some clause names the owner's criterion, by id or subject, with an open-item phrase."""
     for sentence in SENTENCE.split(text):
-        if names(OWNER_CRITERION, sentence) or OWNER_CRITERION_SUBJECT in sentence.lower():
-            if (NOT_YET.search(sentence) or affirmed(sentence, OUTSTANDING)
-                    or any(affirmed(sentence, p) for p in WAIT_ON_OWNER)):
-                return True
+        for clause in CLAUSE.split(sentence):
+            if names(OWNER_CRITERION, clause) or OWNER_CRITERION_SUBJECT in clause.lower():
+                if (NOT_YET.search(clause) or affirmed(clause, OUTSTANDING)
+                        or any(affirmed(clause, p) for p in WAIT_ON_OWNER)):
+                    return True
     return False
 
 
