@@ -144,6 +144,12 @@ The stories that add into this layout are SKL-274 (regression-pin cases), SKL-27
 - The `control` field on control scenarios: `plain-failure` carries it in `case.yaml`, so the suite reports it as a control.
 - Grader fixtures: `grader-fixtures/<scenario>/` holds a keeping fixture and one or more breaking fixtures, outside `results/`, which `tests/test_pending_ruling_case.py` grades.
 
+### Where `owner-wait-verified` differs from the `qa-unfinished-own-steps` layout
+
+- A stub tracker: `runtime/tracker` serves each scenario's fixture stories from `scenarios/<name>/stories/`, read from the case's scenario directory, and records each read with the story it named.
+- A stub role runtime with a user message channel: `runtime/role-runtime` launches or resumes a senior-engineer or QA session and sends messages to the user, keeping each message's text in `messages.json`; the last user message is the run's final message, which the grader reads beside the call record.
+- Two scenarios with opposite expectations, and `run.sh <checkout> both <run dir>` runs both in one invocation.
+
 ## Cases
 
 | Case | Kind | Recorded runs meet the definition |

@@ -570,6 +570,52 @@ def test_any_other_owner_stops_even_when_qa_work_remains() -> None:
     ), "a runtime that cannot resume must stop without a substitute agent, and a stall must be reported"
 
 
+OWNER_WAIT_DEFER = (
+    "That stop and its mixed-remainder sentence defer to the owner-wait verification rule below: they apply "
+    "only to a remainder that contains an item verified `owner-only: yes`."
+)
+OWNER_WAIT_RULE = [
+    "**Owner-wait verification.** This rule binds every place the coordinator reports an item as waiting on "
+    "the owner: an item relayed from a handback, one from its own reading, one on step 0's resume path, one at "
+    "any stop, and one in step 5's report.",
+    "Before reporting it, read the item's story in the tracker yourself - its current state, its acceptance "
+    "criteria, its comments, and its relations with each blocker's state - and never rely on the handback's "
+    "own claim.",
+    "Record two entries on your todo list, each followed by the field or relation that supports it: "
+    "`owner-only: yes|no` and `coordinator-or-role-can-act: yes|no`.",
+    "If the tracker read fails or is inconclusive, report the failed read and do not present the owner-wait as "
+    "verified.",
+    "An item is owner-only when it is an open acceptance criterion that needs input only the owner can give (a "
+    "comment, a value, a credential, an access grant), a decision on what an acceptance criterion means, a "
+    "maintainer's approval, a human merge, or an external deploy.",
+    "An owner-approval gate written into a criterion for the story's own outcome (the owner approving or "
+    "signing off on what the story delivered) is not owner-only and does not stop this skill, because the "
+    "operator's request for the story is the approval for that outcome; a maintainer's approval stays "
+    "owner-only.",
+    "When the entries are `owner-only: no` and `coordinator-or-role-can-act: yes`, do the next step this skill "
+    "defines for the story's current state, or launch or resume the role that step dispatches, writing its "
+    "brief from the story's acceptance criteria, and do not report the item as waiting on the owner, in step "
+    "5's report included.",
+    "The at-most-once continuation and stall rules still apply: when the role hands back the same owner claim "
+    "with no observed progress, report the stall, naming the tracker read it rests on, and stop.",
+    "When the entries are `owner-only: yes`, report the item and stop; the report names the story id, the "
+    "exact criterion text, comment or relation read, and which owner-only category applies.",
+]
+DISPUTE_RULE = (
+    "If the senior engineer disputes a failed verdict or an adjudicator's ruling, do not relay its argument to "
+    "a QA agent and do not rule on it yourself. Stop and put the item, its evidence, and the engineer's "
+    "evidence to the user, since what an AC means is the product owner's decision."
+)
+
+
+def test_an_owner_wait_is_verified_against_the_tracker_before_it_is_reported() -> None:
+    step4 = " ".join(section(SKILL.read_text(), "4. Act on the QA outcome").split())
+    assert in_order(step4, *OWNER_WAIT_RULE, DISPUTE_RULE), "the owner-wait rule must sit in step 4 before the unchanged dispute rule"
+    assert in_order(in_deployment_review_branch(), STEP4_OTHER_OWNER, OWNER_WAIT_DEFER, STEP4_NO_RUNTIME), (
+        "the owner-action stop and the mixed-remainder sentence must defer to the owner-wait rule"
+    )
+
+
 def test_done_branch_checks_the_completion_record() -> None:
     done = state_bullets(section(SKILL.read_text(), "4. Act on the QA outcome"))[
         "`profile.tracker.states.done`"
@@ -2181,7 +2227,8 @@ def test_only_the_on_path_lines_tell_the_coordinator_to_post_or_comment() -> Non
     for line, heading in on_path.items():
         home = metrics_section() if heading == "Metrics" else section(text, heading)
         assert line in home.splitlines(), f"an on-path post line left its section: {line}"
-    allowed = {"- " + OFF_PATH, METRICS_POINTER, *on_path}
+    # The owner-wait rule reads the story's comments and names a comment as owner input; it posts none.
+    allowed = {"- " + OFF_PATH, METRICS_POINTER, *on_path, *OWNER_WAIT_RULE}
     merge_rule = "needs a delta review posted before merging"
     for line in [*body.splitlines(), *PROTOCOL.read_text().splitlines()]:
         if line in allowed:
@@ -3843,7 +3890,8 @@ STEP_3_HEADING = "3. QA agent: verify the deployed story"
 STEP_3_SHA256 = "2c57b85346ce7030aab1edc8e0fad3769538a4d38b2aff6dfd673adfb10fa330"
 # SKL-138 re-pinned IN_PROGRESS_SHA256 for the step 4 nested launch line (NESTED_STEP_4), which carries no pending item.
 IN_PROGRESS_SHA256 = "4e8e9242319fe952b90429a32214ec0de742e348a4de360808b88f052c63fb0c"
-IN_DEPLOYMENT_REVIEW_SHA256 = "36da368bed892519776e5be61064d2fad186151ca58ae90aff897e9a1ffaa968"
+# SKL-356 re-pinned IN_DEPLOYMENT_REVIEW_SHA256 for the owner-wait deferral line (OWNER_WAIT_DEFER), which carries no pending item.
+IN_DEPLOYMENT_REVIEW_SHA256 = "6ed2ebf62b1e00190b69f18eb7e619a5c1e973ce3b7ff64b76e6daf2b50e7955"
 # The only lines of a state bullet that may state the pending owner ruling record.
 IN_DEPLOYMENT_REVIEW_RECORD_LINES = ("  " + STEP4_OTHER_OWNER, PENDING_REPORT, PENDING_NO_RULING)
 IN_PROGRESS_RECORD_LINES = (PENDING_IN_PROGRESS, PENDING_CAP_REPORT, PENDING_HAND_BACK_OMITTED)
