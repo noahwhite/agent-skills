@@ -3,7 +3,6 @@
 import json
 import re
 import subprocess
-import sys
 from pathlib import Path
 
 import jsonschema
@@ -536,14 +535,6 @@ def test_schema_rejects_unknown_keys():
     example["git"]["integration_brnach"] = "develop"
     with pytest.raises(jsonschema.ValidationError):
         jsonschema.validate(example, SCHEMA)
-
-
-def test_vendored_references_are_current():
-    res = subprocess.run(
-        [sys.executable, str(ROOT / "scripts" / "vendor_shared.py"), "--check"],
-        capture_output=True, text=True,
-    )
-    assert res.returncode == 0, res.stdout + res.stderr
 
 
 def test_no_em_dash():

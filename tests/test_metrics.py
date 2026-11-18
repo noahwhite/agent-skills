@@ -282,10 +282,6 @@ def test_run_totals_gives_elapsed_no_other_time_source():
         assert source not in rest, f"Run totals names another elapsed source: {source}"
 
 
-def test_metrics_reference_exists():
-    assert METRICS.is_file()
-
-
 def test_one_row_per_launch_the_poster_spawns():
     assert_states(metrics_prose(), ROW_SCOPE)
 

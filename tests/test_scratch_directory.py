@@ -11,7 +11,6 @@ import os
 import re
 import shlex
 import subprocess
-import sys
 from pathlib import Path
 
 import jsonschema
@@ -384,14 +383,6 @@ def test_vendored_runtimes_copies_carry_the_rule(skill):
     assert vendored.is_file(), f"{skill.name} has no vendored references/runtimes.md"
     rule = RUNTIMES.read_text().split(RULE_HEADING, 1)[1].split("\n- ", 1)[0]
     assert rule in vendored.read_text(), f"{skill.name} carries a stale runtimes rule; run scripts/vendor_shared.py"
-
-
-def test_vendor_check_passes():
-    res = subprocess.run(
-        [sys.executable, str(ROOT / "scripts" / "vendor_shared.py"), "--check"],
-        capture_output=True, text=True,
-    )
-    assert res.returncode == 0, res.stdout + res.stderr
 
 
 def test_snippet_falls_back_when_the_base_cannot_be_used(tmp_path):

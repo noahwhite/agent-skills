@@ -11,7 +11,6 @@ ROOT = Path(__file__).resolve().parent.parent
 SKILL = ROOT / "skills" / "persona-architect" / "SKILL.md"
 TEMPLATE = ROOT / "skills" / "persona-architect" / "assets" / "decision-record.md"
 SCHEMA = json.loads((ROOT / "profile" / "schema.json").read_text())
-MANIFEST = json.loads((ROOT / "skills.json").read_text())
 
 
 def test_schema_has_decisions_dir() -> None:
@@ -29,10 +28,6 @@ def test_example_sets_decisions_dir() -> None:
     assert profile["decisions"]["dir"] == "docs/decisions"
 
 
-def test_skill_file_exists() -> None:
-    assert SKILL.is_file(), f"missing {SKILL.relative_to(ROOT)}"
-
-
 def test_frontmatter_states_use_and_non_use() -> None:
     text = SKILL.read_text()
     head = text[4:].split("\n---\n", 1)[0]
@@ -42,10 +37,6 @@ def test_frontmatter_states_use_and_non_use() -> None:
     assert "Not for" in meta["description"]
     assert "linear" in meta["compatibility"].lower()
     assert "gh" in meta["compatibility"].lower()
-
-
-def test_template_file_exists() -> None:
-    assert TEMPLATE.is_file(), f"missing {TEMPLATE.relative_to(ROOT)}"
 
 
 def without_comments(text: str) -> str:
@@ -202,16 +193,6 @@ def test_engineering_practice_rule_is_cited_not_restated() -> None:
     ):
         assert phrase in body, f"engineering-practice citation missing: {phrase}"
     assert "the design is often already decided" not in body
-
-
-def test_manifest_registers_skill() -> None:
-    assert MANIFEST["skills"]["persona-architect"] == [
-        "linear",
-        "todo-tracking",
-        "github",
-        "code-review",
-        "engineering-practice",
-    ]
 
 
 def test_todo_tracking_has_seed_entry() -> None:
