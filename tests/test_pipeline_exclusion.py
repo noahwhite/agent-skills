@@ -99,7 +99,7 @@ def gate_dossiers(tmp_path: Path, repo: Path, extra_env: dict[str, str] | None =
     spec = tmp_path / "spec.md"
     spec.write_text("Story SKL-88.\n")
     common = ["--repo", str(repo), "--base", BASE_REF, "--scratch", str(scratch)]
-    preflight = run_script("preflight", *common, "--test-cmd", "true", env=env)
+    preflight = run_script("preflight", "--full-suite", "on", *common, "--test-cmd", "true", env=env)
     assert preflight.returncode == 0, preflight.stdout + preflight.stderr
     seen = {}
     for phase in ("sweep", "hunt", "arbitrate"):
@@ -453,7 +453,7 @@ def test_a_bulk_change_stays_within_the_exec_argument_limit(tmp_path):
     spec.write_text("Story SKL-88.\n")
     common = ["--repo", str(repo), "--base", BASE_REF, "--scratch", str(scratch)]
     for phase in ("preflight", "sweep"):
-        extra = ["--test-cmd", "true"] if phase == "preflight" else ["--spec", str(spec), "--agent-cmd", AGENT]
+        extra = ["--full-suite", "on", "--test-cmd", "true"] if phase == "preflight" else ["--spec", str(spec), "--agent-cmd", AGENT]
         verb = [phase] if phase == "preflight" else ["run", phase]
         result = subprocess.run(
             ["bash", "-c", f'{stack} "$@"', "bash", str(SCRIPT), *verb, *common, *extra],

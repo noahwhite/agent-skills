@@ -60,7 +60,7 @@ def gate(tmp_path):
     runtime_tmp.mkdir()
     env = clean_env({"TMPDIR": str(runtime_tmp)})
     preflight = run_script(
-        "preflight", "--repo", str(repo), "--base", "HEAD", "--test-cmd", "true",
+        "preflight", "--full-suite", "on", "--repo", str(repo), "--base", "HEAD", "--test-cmd", "true",
         "--scratch", str(scratch), env=env,
     )
     assert preflight.returncode == 0, preflight.stdout + preflight.stderr
@@ -817,7 +817,7 @@ def test_a_stale_invalid_model_in_the_environment_does_not_refuse_other_commands
     repo, scratch, env = gate
     env = {**env, "ADVERSARIAL_MODEL": "provider/model with space"}
     preflight = run_script(
-        "preflight", "--repo", str(repo), "--base", "HEAD", "--test-cmd", "true",
+        "preflight", "--full-suite", "on", "--repo", str(repo), "--base", "HEAD", "--test-cmd", "true",
         "--scratch", str(scratch), env=env,
     )
     assert preflight.returncode == 0, preflight.stdout + preflight.stderr
@@ -896,7 +896,7 @@ def test_probe_validation_belongs_to_run_only(gate):
     paths = run_script("paths", "--repo", str(repo), "--base", "HEAD", env=env)
     assert paths.returncode == 0, paths.stdout + paths.stderr
     preflight = run_script(
-        "preflight", "--repo", str(repo), "--base", "HEAD", "--test-cmd", "true",
+        "preflight", "--full-suite", "on", "--repo", str(repo), "--base", "HEAD", "--test-cmd", "true",
         "--scratch", str(scratch), env=env,
     )
     assert preflight.returncode == 0, preflight.stdout + preflight.stderr

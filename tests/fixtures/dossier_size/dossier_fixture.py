@@ -150,7 +150,7 @@ def arbitrate_dossier(script: Path, tmp: Path) -> dict:
     spec = tmp / "spec.txt"
     spec.write_bytes(SPEC.read_bytes())
     common = ["--repo", str(repo), "--base", BASE_REF, "--spec", str(spec), "--scratch", str(scratch)]
-    _checked(run_script(script, env, "preflight", "--repo", str(repo), "--base", BASE_REF,
+    _checked(run_script(script, env, "preflight", "--full-suite", "on", "--repo", str(repo), "--base", BASE_REF,
                         "--test-cmd", "true", "--scratch", str(scratch)), "preflight")
     paths = artifact_paths(script, env, repo)
     for phase, report in (("sweep", PHASE1_REPORT), ("hunt", PHASE2_REPORT)):

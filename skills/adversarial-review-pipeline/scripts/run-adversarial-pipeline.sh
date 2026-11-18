@@ -8,7 +8,9 @@
 # location, and the skills repository itself is refused unless --repo names it explicitly.
 #
 # Usage:
-#   run-adversarial-pipeline.sh preflight --base REF [--test-cmd CMD] [--test-dir DIR] [--scratch DIR]
+#   run-adversarial-pipeline.sh preflight --base REF [--full-suite on|off] [--test-cmd CMD] [--test-dir DIR] [--scratch DIR]
+#                               # --full-suite off: no suite run, 'full-suite: off' logged in its place;
+#                               # omitted: resolve-full-suite.py resolves it from the profile (off when none)
 #   run-adversarial-pipeline.sh run <sweep|hunt|arbitrate> --base REF --agent-cmd TEMPLATE
 #                               [--model ID] [--agent NAME] [--probe-cmd TEMPLATE] [--probe-timeout SECONDS]
 #                               [--spec FILE] [--no-sweep] [--scratch DIR] [--timeout SECONDS]
@@ -243,6 +245,8 @@ set -euo pipefail
 
 DIFF_CAP_BYTES=4096   # bytes of unified-diff text per file in an embedded diff (see "Embedded diff" above)
 
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+
 usage() { awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0" >&2; exit 2; }
 die() { local code="$1"; shift; echo "ERROR: $*" >&2; exit "$code"; }
 
@@ -318,11 +322,14 @@ PROBE_TIMEOUT="${ADVERSARIAL_PROBE_TIMEOUT:-30}"
 PROBE_SET=0
 NO_SWEEP=0
 SCRATCH_SET=0
+FULL_SUITE=""
+FULL_SUITE_SET=0
 while [ $# -gt 0 ]; do
   case "$1" in
-    --repo|--base|--spec|--test-cmd|--test-dir|--scratch|--agent-cmd|--agent|--timeout|--model|--probe-cmd|--probe-timeout)
+    --repo|--base|--spec|--test-cmd|--test-dir|--scratch|--agent-cmd|--agent|--timeout|--model|--probe-cmd|--probe-timeout|--full-suite)
       [ $# -ge 2 ] || die 2 "$1 needs a value"
       case "$1" in
+        --full-suite) FULL_SUITE="$2"; FULL_SUITE_SET=1 ;;
         --repo) REPO="$2" ;;
         --base) BASE="$2" ;;
         --spec) SPEC_FILE="$2" ;;
@@ -341,6 +348,12 @@ while [ $# -gt 0 ]; do
     *) echo "ERROR: unknown option $1" >&2; usage ;;
   esac
 done
+if [ "$FULL_SUITE_SET" -eq 1 ]; then
+  case "$FULL_SUITE" in
+    on|off) ;;
+    *) printf 'ERROR: --full-suite must be on or off, not %q\n' "$FULL_SUITE" >&2; usage ;;
+  esac
+fi
 
 # A named spec that is missing is an error; only an omitted spec gets the "no spec" fallback.
 if [ -n "$SPEC_FILE" ]; then
@@ -1635,6 +1648,13 @@ make_checkout() {  # prints the path of a registered throwaway detached worktree
 
 case "$cmd" in
   preflight)
+    # Omitted, the option resolves from the profile the skills load (no story key, so the team is
+    # profile.tracker.team_key), and off when no profile exists. A profile that cannot be read stops
+    # the run before anything is discarded.
+    if [ "$FULL_SUITE_SET" -eq 0 ]; then
+      FULL_SUITE="$(python3 "$SCRIPT_DIR/resolve-full-suite.py" < /dev/null)" \
+        || die 2 "--full-suite was omitted and could not be resolved from the profile (see above); pass --full-suite on|off or fix the profile."
+    fi
     rm -f -- "$PHASE0.stamp"
     invalidate_downstream preflight
     status=0
@@ -1666,7 +1686,11 @@ case "$cmd" in
       fi
       echo
       echo "## 2. The suite, run in a clean checkout of HEAD"
-      if [ -z "${TEST_CMD//[[:space:]]/}" ]; then
+      if [ "$FULL_SUITE" = "off" ]; then
+        echo "full-suite: off - the suite was not run; pass --full-suite on to run it."
+        printf 'full-suite: off\n' > "$SUITE_LOG"
+        echo "Suite log: $SUITE_LOG"
+      elif [ -z "${TEST_CMD//[[:space:]]/}" ]; then
         echo "SKIPPED - no test command, so NOTHING exercised the committed tree. This is INCOMPLETE, not a pass."
       else
         # A detached worktree, not an archive export: it keeps git metadata, so tests that shell out to
@@ -1726,6 +1750,8 @@ case "$cmd" in
         echo "FAIL - fix this before spending any model budget."
       elif [ "$suite_ran" -eq 1 ]; then
         echo "PASS - proceed to the sweep and the hunt."
+      elif [ "$FULL_SUITE" = "off" ]; then
+        echo "PASS - proceed to the sweep and the hunt (full-suite: off, the suite was not run)."
       else
         echo "INCOMPLETE - the tree is clean but the suite did not run. Re-run with a test command."
       fi
@@ -1733,7 +1759,7 @@ case "$cmd" in
     cat -- "$PHASE0"
     echo "Phase 0 (preflight) -> $PHASE0" >&2
     if [ "$status" -ne 0 ]; then exit 1; fi
-    if [ "$suite_ran" -eq 0 ]; then exit 3; fi
+    if [ "$suite_ran" -eq 0 ] && [ "$FULL_SUITE" != "off" ]; then exit 3; fi
     stamp preflight
     exit 0
     ;;

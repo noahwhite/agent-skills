@@ -88,7 +88,7 @@ def make_gate(tmp_path: Path, repo: Path, name: str = "gate") -> dict:
     spec = home / "spec.md"
     spec.write_text("Story SKL-178: arbiter identity header and retained arbitration reports.\n")
     g = {"repo": repo, "scratch": scratch, "env": env, "spec": spec, "home": home}
-    preflight = run_script("preflight", "--repo", str(repo), "--base", BASE_REF, "--test-cmd", "true",
+    preflight = run_script("preflight", "--full-suite", "on", "--repo", str(repo), "--base", BASE_REF, "--test-cmd", "true",
                            "--scratch", str(scratch), env=env)
     assert preflight.returncode == 0, preflight.stdout + preflight.stderr
     return g
