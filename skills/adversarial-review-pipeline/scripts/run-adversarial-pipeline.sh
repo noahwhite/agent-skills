@@ -593,13 +593,16 @@ primary_state() {
 
 # Does an agent's stderr log ($1) show a sandbox start-up error? The log also carries whatever the
 # agent echoes while it reads files, specs and diffs (SKL-127), and the skills' own text quotes these
-# markers, so a marker counts only where the wrapper or CLI itself emits it: at the start of a line,
-# after optional whitespace or terminal colour codes and at most one `<word>: ` tool prefix (so a
-# CLI that prefixes its own name still trips it). A line that quotes a marker anywhere else is not
-# a sandbox failure. The colour-code bracket is written as [[] because \[ is undefined in POSIX ERE.
+# markers, so a marker counts only in the shape the wrapper or CLI emits it: at the start of a line
+# (or after a carriage return), after optional whitespace or terminal control sequences and at most
+# one `<word>: ` tool prefix, so a CLI that prefixes its own name still trips it. This is a line-shape
+# rule, not proof of where a line came from: a marker quoted mid-line passes, but echoed text that
+# itself has this shape (an indented example, a `Note: ` line) still trips it, and a real error
+# wrapped in more than one prefix (a timestamp, a log level) does not.
+# The control-sequence bracket is written as [[] because \[ is undefined in POSIX ERE.
 sandbox_error_in() {
-  local esc=$'\e'
-  local lead="^([[:space:]]|${esc}[[][0-9;]*m)*([[:alnum:]_.-]+: )?"
+  local esc=$'\e' cr=$'\r'
+  local lead="(^|${cr})([[:space:]]|${esc}[[][0-9;?]*[[:alpha:]])*([[:alnum:]_.-]+:[[:space:]]+)?"
   grep -qiE "${lead}(bwrap: |sandbox (failed|denied|could not)|Failed to make .* Permission denied)" -- "$1"
 }
 

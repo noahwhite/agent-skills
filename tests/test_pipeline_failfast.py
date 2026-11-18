@@ -272,11 +272,13 @@ def test_an_agent_that_changes_the_primary_checkout_still_exits_18(gate):
 
 
 # --- SKL-127: only the sandbox's own error marks a phase blind, not text the agent echoes ----------
-# A marker counts only where the wrapper or CLI emits it: at line start, after optional whitespace or
-# colour codes and at most one `<word>: ` tool prefix. Every line below that carries a marker is a
-# quoted Python string, so this file's own source stays acceptable when a gate agent echoes it.
+# A marker counts only in the shape the wrapper or CLI emits it: at line start (or after a carriage
+# return), after optional whitespace or terminal control codes and at most one `<word>: ` tool prefix.
+# Every line below that carries a marker is a quoted Python string, so this file's own source stays
+# acceptable when a gate agent echoes it.
 
 RUNTIMES_DOC = ROOT / "shared" / "runtimes.md"
+RUNTIMES_COPIES = [RUNTIMES_DOC, *sorted(ROOT.glob("skills/*/references/runtimes.md"))]
 
 ECHOED_LINES = {
     "runtimes-doc": (
@@ -320,6 +322,15 @@ def test_echoing_a_whole_doc_that_mentions_the_markers_does_not_mark_the_phase_b
     assert Path(f"{artifacts(repo, env)['sweep']}.stamp").exists(), "the echoing phase was not accepted"
 
 
+@pytest.mark.parametrize("doc", RUNTIMES_COPIES, ids=lambda p: str(p.relative_to(ROOT)))
+def test_echoing_any_vendored_runtimes_copy_does_not_mark_the_phase_blind(gate, doc):
+    """The SKL-95 and SKL-182 agents echoed the vendored copies, not only the shared source."""
+    repo, scratch, env = gate
+    agent = f"cat {shlex.quote(str(doc))} >&2; {SWEEP_AGENT}"
+    result = run_sweep(repo, scratch, env, "--model", "deepseek/deepseek-flash", agent=agent)
+    assert result.returncode == 0, (str(doc), result.stdout + result.stderr)
+
+
 @pytest.mark.parametrize("name", sorted(ECHOED_LINES))
 def test_echoed_content_carrying_a_marker_does_not_mark_the_phase_blind(gate, tmp_path, name):
     repo, scratch, env = gate
@@ -343,6 +354,9 @@ LINE_PREFIXES = {
     "coloured": "\x1b[31m",
     "tool": "codex: ",
     "indented-coloured-tool": "  \x1b[0mcodex: ",
+    "erase-line": "\x1b[2K",
+    "tool-wide-gap": "codex:   ",
+    "after-carriage-return": "progress 40%\r",
 }
 
 
