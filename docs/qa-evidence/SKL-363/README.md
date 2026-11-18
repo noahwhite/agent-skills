@@ -10,7 +10,7 @@ The raw output is attached to SKL-363 as "SKL-363 QA round 1 assertions"; there 
 
 | Item | Verdict | Evidence |
 |---|---|---|
-| C1: at `origin/main`, the frontmatter of `skills/story-to-done/SKILL.md` contains the line `license: Apache-2.0` | Verified | `git merge-base --is-ancestor 9e65dd3e24b10076bd04237971c4f3974164c56a origin/main` exits 0 and `git rev-parse origin/main` equals that commit. `git show origin/main:skills/story-to-done/SKILL.md | grep -n '^license:'` returns exactly `8:license: Apache-2.0`, and line 8 sits between the opening and closing `---` of the frontmatter. |
+| C1: at `origin/main`, the frontmatter of `skills/story-to-done/SKILL.md` contains the line `license: Apache-2.0` | Verified | `git merge-base --is-ancestor 9e65dd3e24b10076bd04237971c4f3974164c56a origin/main` exits 0 and `git rev-parse origin/main` equals that commit. `git show origin/main:skills/story-to-done/SKILL.md \| grep -n '^license:'` returns exactly `8:license: Apache-2.0`, and line 8 sits between the opening and closing `---` of the frontmatter. |
 | DoD: all acceptance criteria met | Verified | C1 above. |
 
 Pending owner rulings: none.
