@@ -108,7 +108,8 @@
   },
   "executables": {
     "adversarial-review-pipeline": [
-      "check-signing-key.sh"
+      "check-signing-key.sh",
+      "resolve-full-suite.py"
     ],
     "cleanup": [
       "check-signing-key.sh"

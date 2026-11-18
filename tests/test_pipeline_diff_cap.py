@@ -109,7 +109,7 @@ def make_gate(tmp_path: Path, base: dict[str, bytes], head: dict[str, bytes | No
     spec = tmp_path / "spec.md"
     spec.write_text("Story SKL-87: cap the embedded diff.\n")
     g = {"repo": repo, "scratch": scratch, "env": env, "spec": spec, "tmp": tmp_path}
-    preflight = run_script("preflight", "--repo", str(repo), "--base", BASE_REF,
+    preflight = run_script("preflight", "--full-suite", "on", "--repo", str(repo), "--base", BASE_REF,
                            "--test-cmd", "true", "--scratch", str(scratch), env=env)
     assert preflight.returncode == 0, preflight.stdout + preflight.stderr
     return g
@@ -681,7 +681,7 @@ def test_the_preflight_fails_when_python3_cannot_run(tmp_path):
     (fakebin / "python3").write_text("#!/bin/sh\nexit 127\n")
     (fakebin / "python3").chmod(0o755)
     env = {**g["env"], "PATH": f"{fakebin}:{g['env']['PATH']}"}
-    result = run_script("preflight", "--repo", str(g["repo"]), "--base", BASE_REF,
+    result = run_script("preflight", "--full-suite", "on", "--repo", str(g["repo"]), "--base", BASE_REF,
                         "--test-cmd", "true", "--scratch", str(g["scratch"]), env=env)
     assert result.returncode == 1, result.stdout + result.stderr
     assert "FAIL - python3 is not runnable here" in result.stdout, result.stdout
