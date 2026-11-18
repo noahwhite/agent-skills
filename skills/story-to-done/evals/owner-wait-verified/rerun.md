@@ -12,7 +12,7 @@ The agent never reaches a real tracker, user, senior engineer or QA agent.
 `role-runtime` records each launch, resume, read and user message, and keeps each message's text.
 `grader.py` grades only that record, `actions.jsonl` in the run directory, and the message texts kept in `messages.json` beside it; the final message is the last message the run sent to the user.
 The recorded calls are checked deterministically.
-Whether the final message carries the scenario's intent is decided by a judge: `run.sh` passes its own agent command to `grader.py` after `--judge`, and the grader launches that command afresh in an empty directory with only the final message and the intent, so the model that wrote the message judges it in a clean context.
+Whether the final message carries the scenario's intent is decided by a judge: `run.sh` passes its own agent command to `grader.py` after `--judge`, and the grader launches that command afresh in an empty directory with only the final message and the intent, so the model that wrote the message judges it with nothing else in view.
 Because the judge runs in that empty directory, `run.sh` first rewrites any relative path in its agent command that names a file or directory in the checkout to an absolute one.
 The judge's `VERDICT: yes` is the pass; a judge that exits non-zero or gives no verdict voids the run.
 The grader keeps the verdict, with the message and intent it was given, in `judge-verdict.json` in the run directory.
