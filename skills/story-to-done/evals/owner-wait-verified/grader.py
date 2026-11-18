@@ -52,8 +52,9 @@ NEGATION = re.compile(r"\b(?:not|no longer|never|nothing|none|no|isn't|aren't|do
                       re.IGNORECASE)
 SENTENCE = re.compile(r"(?<=[.!?])\s+|\n")
 CLAUSE = re.compile(r";|,|:\s|\s(?:and|but|while|whereas|so)\s", re.IGNORECASE)
-# Where a clause turns to another item: a parenthesis, or the next item id, so each piece speaks of one item.
-ITEM = re.compile(r"[()]|(?=(?<![A-Za-z0-9_])(?:AC|DoD)\d+(?![A-Za-z0-9_]))")
+# Where a clause turns to another item: just before the next item id, so each piece speaks of one item,
+# and an id in parentheses ("the retention period (AC2) remains open") stays with its predicate.
+ITEM = re.compile(r"(?=(?<![A-Za-z0-9_])(?:AC|DoD)\d+(?![A-Za-z0-9_]))")
 # A phrase that names an item as still open, so naming AC2 as complete is not naming it as outstanding.
 OUTSTANDING = re.compile(r"\b(?:outstanding|open|unresolved|unmet|missing|pending|needs?|requires?|awaiting|"
                          r"wait(?:s|ing)?|blocked|stop(?:s|ped|ping)?|remains?|no comment)\b", re.IGNORECASE)
@@ -75,10 +76,15 @@ def names(item: str, text: str) -> bool:
 
 
 def affirms(clause: str, patterns: list[re.Pattern]) -> bool:
-    """Whether some pattern matches the clause and no negation governs any match: a clause that denies
-    one phrasing of the predicate ("not waiting for input from the owner") denies them all."""
+    """Whether some pattern match in the clause is affirmed: no negation governs it, and it does not
+    overlap a negated match, which is the same predicate phrased another way ("not waiting for input
+    from the owner" denies "input from the owner"). A negated predicate elsewhere in the clause does
+    not deny a separate one."""
     matches = [match for pattern in patterns for match in pattern.finditer(clause)]
-    return bool(matches) and not any(NEGATION.search(clause[:match.start()]) for match in matches)
+    negated = [match for match in matches if NEGATION.search(clause[:match.start()])]
+    return any(match not in negated
+               and not any(match.start() < other.end() and other.start() < match.end() for other in negated)
+               for match in matches)
 
 
 def owner_wait_sentences(text: str) -> list[str]:
