@@ -170,10 +170,11 @@ def test_a_missing_checklist_prints_nothing_and_exits_0(tmp_path):
 
 VENDORING_ITEM = (
     "Generated copies stay in step with shared/ and skills.json: `python3 scripts/vendor_shared.py --check`"
-    " passes at the head, and no file that is a generated copy at the base or the head (its first line says"
-    ' "GENERATED from shared/", or scripts/vendor_shared.py writes it) is edited by hand, except'
-    " deleting an orphaned copy or dropping its header once it should stand alone; the edit goes in"
-    " shared/ or skills.json, then scripts/vendor_shared.py is rerun.\n"
+    " passes at the head, and a file that is a generated copy at the base or the head (its first line says"
+    ' "GENERATED from shared/", or scripts/vendor_shared.py writes it) changes only by rerunning'
+    " scripts/vendor_shared.py after a change to shared/, skills.json or the generator; the one hand edit"
+    " allowed is the delete or header drop that the generator's \"delete it or drop the header by hand\""
+    " message names for an orphaned executable.\n"
 )
 
 
