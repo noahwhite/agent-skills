@@ -147,7 +147,7 @@ def test_retro_proposes_checklist_items_from_repeated_misses() -> None:
     bullet = bullets[0]
     for phrase in (
         "since the previous retro",
-        "`Review of record <sha>`",
+        "each PR's latest review marked `Review of record <sha>`",
         "arbiter reports in PR bodies",
         "`profile.git.host`",
         "once per distinct PR",
@@ -163,7 +163,9 @@ def test_retro_proposes_checklist_items_from_repeated_misses() -> None:
 
 def test_retro_checklist_items_need_owner_approval() -> None:
     body = section(SKILL.read_text(), "Retro")
-    bullet = next(b for b in body.split("\n- ") if "review-checklist.txt" in b)
+    bullets = [b for b in body.split("\n- ") if "review-checklist.txt" in b]
+    assert len(bullets) == 1, "no single Retro bullet names review-checklist.txt"
+    bullet = bullets[0]
     for phrase in (
         "enters the checklist only through an engineer PR that links the owner's approval comment on the retro issue",
         "never adds the item itself",

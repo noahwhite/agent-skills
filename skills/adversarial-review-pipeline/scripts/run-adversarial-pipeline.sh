@@ -78,12 +78,16 @@
 # exclusions.
 #
 # Review checklist: `.agent-skills/review-checklist.txt` in the repository under review, read from the
-# head, holds one `<bash glob> | <review item>` per line; blank lines and lines whose first non-space
-# character is '#' are ignored, and a line without ' | ' is skipped. A glob matches a changed path
-# (repo-relative, rename detection off, so both sides of a rename count) with the same bash `[[ == ]]`
-# semantics as the exclusion list. `checklist` prints each matching item once, in file order; a
-# missing file or no match prints nothing and exits 0. The sweep dossier ends with the same items
-# under a '===== Review checklist' heading, and has no such heading when none matches.
+# base commit (so a change cannot rewrite the checklist its own review uses), holds one
+# `<bash glob> | <review item>` per line; blank lines and lines whose first non-space character is
+# '#' are ignored, and any other line without ' | ' is skipped with a warning on stderr. The glob is
+# the text before the first ' | ' and is matched unquoted with bash `[[ path == glob ]]` against each
+# changed path as git prints it (repo-relative, no leading './', rename detection off, so both sides
+# of a rename count): '*' crosses '/', and '**/x' does not match a top-level 'x'. `checklist` prints
+# each matching item once (keyed on its text), in file order; a file absent at the base or no match
+# prints nothing and exits 0, and a git failure exits 22. The sweep dossier ends with the same items,
+# each prefixed '- ' and capped at CHECKLIST_CAP_CHARS, under a '===== Review checklist' heading, and
+# has no such heading when none matches. With the sweep skipped (--no-sweep), no phase shows them.
 #
 # Embedded diff: the sweep and hunt dossiers embed `git diff --no-ext-diff --unified=1` of the run's
 # range, and DIFF_CAP_BYTES (4096, in bytes of unified-diff text, per file and not a bound on the whole
@@ -246,7 +250,8 @@
 # or wrote no fresh report, 17 agent ran blind (sandbox error on its stderr, or no `REVIEW-RAN: yes`
 # first line), 18 the agent changed the primary checkout, 19 the phase was killed by --timeout,
 # 20 the phase's availability check failed before any agent ran, 21 the arbitrate phase could not
-# write its identity lines or retain its accepted report (not accepted). An accepted arbitration report that
+# write its identity lines or retain its accepted report (not accepted), 22 the review checklist or
+# the changed paths could not be read (checklist, dossier sweep). An accepted arbitration report that
 # cannot be written to stdout still exits 1, as it did before the completion-line work; the message
 # names the stamped artifact so a driver does not re-run the model call.
 # A checkout that cannot be created exits with git's own status, which is what that path did before
@@ -254,6 +259,7 @@
 set -euo pipefail
 
 DIFF_CAP_BYTES=4096   # bytes of unified-diff text per file in an embedded diff (see "Embedded diff" above)
+CHECKLIST_CAP_CHARS=8192   # characters of matched items in the sweep dossier (see "Review checklist" above)
 
 SCRIPT_DIR="$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")"   # the real directory, through any symlink
 
@@ -424,7 +430,7 @@ cd "$ROOT"
 validate_scratch() {
   local resolved_scratch resolved_root
   case "$cmd" in
-    preflight|dossier|run|checkout) ;;
+    preflight|dossier|run|checkout|checklist) ;;
     *) return 0 ;;
   esac
   if [ "$SCRATCH_SET" -eq 1 ] && [ -z "$SCRATCH" ]; then
@@ -1543,22 +1549,37 @@ classify_exclusions() {
 
 # The review checklist items for this run's changed paths (see "Review checklist" in the header).
 checklist_items() {
-  local file=".agent-skills/review-checklist.txt" tmp line glob item path
+  local file=".agent-skills/review-checklist.txt" entry tmp line glob item path n=0
   local -a changed=()
   local -A seen=()
-  if [ "$(git cat-file -t "${HEAD_SHA}:${file}" 2>/dev/null)" != "blob" ]; then return 0; fi
+  # Read from the base, so a change cannot rewrite the checklist its own review runs against.
+  entry="$(git ls-tree "$BASE_SHA" -- "$file")" \
+    || die 22 "could not look up $file at the base $BASE_SHA."
+  case "$entry" in
+    "") return 0 ;;
+    "100644 blob "* | "100755 blob "*) ;;
+    *) die 22 "$file at the base $BASE_SHA is not a regular file." ;;
+  esac
   tmp="$(mktemp -p "$RUN_DIR" checklist.XXXXXX)"
-  git diff --no-renames --name-only -z "$BASE_SHA"..."$HEAD_SHA" > "$tmp"
+  if ! git diff --no-renames --name-only -z "$BASE_SHA"..."$HEAD_SHA" > "$tmp"; then
+    rm -f -- "$tmp"; die 22 "could not list the paths changed in $BASE_SHA...$HEAD_SHA."
+  fi
   while IFS= read -r -d '' path; do changed+=("$path"); done < "$tmp"
-  git cat-file blob "${HEAD_SHA}:${file}" > "$tmp"
+  if ! git cat-file blob "${BASE_SHA}:${file}" > "$tmp"; then
+    rm -f -- "$tmp"; die 22 "could not read $file at the base $BASE_SHA."
+  fi
   while IFS= read -r line || [ -n "$line" ]; do
+    n=$(( n + 1 ))
     line="${line#"${line%%[![:space:]]*}"}"
     line="${line%"${line##*[![:space:]]}"}"
     if [ -z "$line" ] || [ "${line:0:1}" = "#" ]; then continue; fi
-    case "$line" in *" | "*) ;; *) continue ;; esac
     glob="${line%% | *}"; glob="${glob%"${glob##*[![:space:]]}"}"
     item="${line#* | }"; item="${item#"${item%%[![:space:]]*}"}"
-    if [ -z "$glob" ] || [ -z "$item" ] || [ -n "${seen[$item]:-}" ]; then continue; fi
+    case "$line" in *" | "*) ;; *) glob="" ;; esac
+    if [ -z "$glob" ] || [ -z "$item" ]; then
+      echo "WARNING: $file line $n is not '<bash glob> | <review item>'; skipped." >&2; continue
+    fi
+    if [ -n "${seen[$item]:-}" ]; then continue; fi
     for path in "${changed[@]}"; do
       if [[ "$path" == $glob ]]; then printf '%s\n' "$item"; seen[$item]=1; break; fi
     done
@@ -1590,8 +1611,13 @@ write_dossier() {  # $1 = phase, $2 = dossier path, $3 = the phase's checkout (e
         emit_context "$co" 1
         if [ -n "$items" ]; then
           echo
-          echo "===== Review checklist (items for the paths this diff changes: check each one, report a miss as a candidate) ====="
-          printf '%s\n' "$items"
+          echo "===== Review checklist (owner-approved items read from the base, for the paths this diff changes: check each one, report a miss as a candidate) ====="
+          if [ "${#items}" -gt "$CHECKLIST_CAP_CHARS" ]; then
+            printf '%s\n' "${items:0:$CHECKLIST_CAP_CHARS}" | sed 's/^/- /'
+            echo "[checklist truncated at $CHECKLIST_CAP_CHARS characters; 'checklist --base $BASE_SHA' prints every item]"
+          else
+            printf '%s\n' "$items" | sed 's/^/- /'
+          fi
         fi
       } > "$out"
       ;;
