@@ -226,7 +226,7 @@ def compare_steps(base_steps, head_steps, where: str, allowed=()) -> list[str]:
         return [] if same(base_steps, head_steps) else [f"{where}: steps changed"]
     head_steps, head_positions = without_allowed(base_steps, head_steps, allowed)
     problems = []
-    exception = ("; only a step in ALLOWED_BEFORE_BASE, matching it in every key, may come before them"
+    exception = ("; only one copy of a step in ALLOWED_BEFORE_BASE, matching it in every key, may come before them"
                  if any(not in_base(entry, base_steps) for entry in allowed) else "")
     head_bodies = [step_body(step) for step in head_steps]
     base_names = [step_name(step) for step in base_steps]

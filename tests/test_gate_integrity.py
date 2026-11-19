@@ -156,7 +156,17 @@ def test_a_step_that_differs_from_the_allowed_one_still_fails_before_a_base_step
     result = judge(tmp_path, head_with(lambda ci: steps(ci).insert(2, step)))
     assert result.returncode != 0, result.stdout
     assert "'Repository tests' is out of order" in result.stdout
-    assert "only a step in ALLOWED_BEFORE_BASE, matching it in every key, may come before them" in result.stdout
+    assert "only one copy of a step in ALLOWED_BEFORE_BASE, matching it in every key, may come before them" in result.stdout
+
+
+def test_a_second_copy_of_the_allowed_step_before_a_base_step_fails_and_names_the_one_copy_limit(tmp_path):
+    def add(ci):
+        steps(ci)[2:2] = [dict(LINT), dict(LINT)]
+
+    result = judge(tmp_path, head_with(add))
+    assert result.returncode != 0, result.stdout
+    assert "'Repository tests' is out of order" in result.stdout
+    assert "only one copy of a step in ALLOWED_BEFORE_BASE" in result.stdout
 
 
 APPENDED_COPIES = {
