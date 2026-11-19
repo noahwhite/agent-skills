@@ -748,9 +748,11 @@ BASE_SHA = "1" * 40
 
 
 def run_report_step(tmp_path, log_text, gh_failures, marker="status=completed", live_ref="main",
-                    live_tip=BASE_SHA):
+                    live_tip=BASE_SHA, base_ref="main", ref_path=None):
     """Run the step posting `marker` with a stub gh that fails gh_failures times and serves the
-    PR's live base as live_ref at live_tip; it records each post and the posted summary."""
+    PR's live base as live_ref, whose tip at ref_path is live_tip; it records each post and the
+    posted summary."""
+    ref_path = live_ref if ref_path is None else ref_path
     [report] = [s for s in all_steps(gate_workflow()) if marker in s.get("run", "")]
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
@@ -759,8 +761,9 @@ def run_report_step(tmp_path, log_text, gh_failures, marker="status=completed", 
         "#!/bin/sh\n"
         f"n=$(cat {tmp_path}/calls 2>/dev/null || echo 0); n=$((n + 1)); echo $n > {tmp_path}/calls\n"
         f"[ $n -le {gh_failures} ] && exit 1\n"
-        f"case \"$*\" in *repos/o/r/pulls/7*) echo {live_ref}; exit 0;;"
-        f" *repos/o/r/git/ref/heads/{live_ref}*) echo {live_tip}; exit 0;; esac\n"
+        f"case \"$*\" in *repos/o/r/pulls/7*) echo '{live_ref}'; exit 0;;"
+        f" *'repos/o/r/git/ref/heads/{ref_path} '*) echo {live_tip}; exit 0;;"
+        " *repos/o/r/git/ref/*) exit 1;; esac\n"
         f"echo post >> {tmp_path}/posts\n"
         f"for a in \"$@\"; do case $a in 'output[summary]=@'*) cp \"${{a#*@}}\" {tmp_path}/posted;; esac; done\n")
     for tool in ("sleep", "gh"):
@@ -768,7 +771,7 @@ def run_report_step(tmp_path, log_text, gh_failures, marker="status=completed", 
     (tmp_path / "gate.log").write_text(log_text)
     (tmp_path / "step.sh").write_text(report["run"])
     env = {"PATH": f"{bin_dir}:/usr/bin:/bin", "RUNNER_TEMP": str(tmp_path), "OUTCOME": "failure",
-           "REPO": "o/r", "HEAD_SHA": "0" * 40, "PR_NUMBER": "7", "BASE_REF": "main", "BASE_SHA": BASE_SHA}
+           "REPO": "o/r", "HEAD_SHA": "0" * 40, "PR_NUMBER": "7", "BASE_REF": base_ref, "BASE_SHA": BASE_SHA}
     return subprocess.run([*RUNNER_SHELLS[report.get("shell")], str(tmp_path / "step.sh")],
                           capture_output=True, text=True, timeout=30, env=env)
 
@@ -830,6 +833,16 @@ def test_a_run_for_the_current_base_posts_once(tmp_path, marker):
 
 
 @pytest.mark.parametrize("marker", ["status=in_progress", "status=completed"])
+@pytest.mark.parametrize("branch, path", [("release#1", "release%231"), ("a?b%c", "a%3Fb%25c"),
+                                          ("release/1.0", "release/1.0")])
+def test_a_base_branch_name_with_url_syntax_is_looked_up_whole(tmp_path, marker, branch, path):
+    result = run_report_step(tmp_path, "gate-base: PASS\n", 0, marker=marker, live_ref=branch,
+                             base_ref=branch, ref_path=path)
+    assert result.returncode == 0, result.stderr
+    assert (tmp_path / "posts").read_text() == "post\n"
+
+
+@pytest.mark.parametrize("marker", ["status=in_progress", "status=completed"])
 def test_the_base_check_reads_the_run_s_own_base(marker):
     [step] = [s for s in all_steps(gate_workflow()) if marker in s.get("run", "")]
     assert step["env"]["PR_NUMBER"] == "${{ github.event.pull_request.number }}"
@@ -839,7 +852,8 @@ def test_the_base_check_reads_the_run_s_own_base(marker):
 
 def test_the_check_run_gate_base_is_created_on_the_pr_head_sha():
     [report] = [s for s in all_steps(gate_workflow()) if "status=completed" in s.get("run", "")]
-    assert report["if"] == "always()"
+    # It reports a failed judge too, but a cancelled run, whose judge did not finish, posts nothing.
+    assert report["if"] == "${{ !cancelled() }}"
     assert "name=gate-base" in report["run"]
     assert '"head_sha=$HEAD_SHA"' in report["run"]
     assert report["env"]["HEAD_SHA"] == "${{ github.event.pull_request.head.sha }}"
