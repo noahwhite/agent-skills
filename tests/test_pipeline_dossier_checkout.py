@@ -237,6 +237,17 @@ def test_the_arbitration_report_layout_is_unchanged(gate):
     assert layout in arbitrate, "the arbitration report's Markdown layout changed"
 
 
+def test_the_arbitrate_dossier_carries_the_pre_existing_tag_line(gate):
+    # SKL-343: one line, outside the three-heading layout, cites the code-review.md rule.
+    for phase in ("hunt", "arbitrate"):
+        assert run_phase(gate, phase, "--no-sweep").returncode == 0
+    arbitrate = (gate["scratch"] / "seen-arbitrate" / "dossier.md").read_text()
+    lines = [line for line in arbitrate.splitlines() if "'pre-existing'" in line]
+    assert len(lines) == 1, lines
+    assert "code-review.md" in lines[0] and "base SHA" in lines[0], lines[0]
+    assert arbitrate.index(lines[0]) < arbitrate.index("### Critical vulnerabilities and breaking bugs")
+
+
 # --- CHECKOUT: and BASE: in every dossier, on both flows --------------------------------------------
 
 def test_every_run_dossier_names_its_checkout_and_base(gate):

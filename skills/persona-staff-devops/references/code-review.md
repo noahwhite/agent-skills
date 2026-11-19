@@ -14,6 +14,7 @@ Reviewer and adjudicator models, launchers, and the merge owner come from `profi
   Without it, hold and say so.
 - ⛔ Never merge before every finding is resolved in that same PR.
   Fold fixes into the PR's branch; never merge first and file follow-up PRs for findings.
+  The only finding filed rather than fixed in the PR is a confirmed `pre-existing` one (Handling findings).
 - ⛔ Never attempt a merge until the review of record is posted on the PR as a PR review, except under the explicit per-PR review waiver in The gate.
   Posting is a step you take and confirm, before the merge call; once posted, it is sufficient evidence to proceed, with no further confirmation layer.
 - Promotion PRs get the same gate over their whole cumulative diff; never skip them as already-reviewed commits.
@@ -29,6 +30,7 @@ Every agent that judges work or takes delegated work (reviewer, adjudicator, sha
 - **Clean:** a fresh agent in its own context, never a fork of the current conversation.
 - **Neutral:** its prompt carries only the facts the task needs and never a steer toward an outcome.
   A judging agent gets the repo, head SHA, diff reference, the findings, evidence, or AC to verify, and the gate's own review criteria, never the author's intent or rationale, QA verdicts, or conclusions from earlier rounds or other gates.
+  Its only exception is a delta round's reviewer brief, which carries the prior review of record (Rounds).
   A delegated engineer gets the story, plan, and constraints, plus the findings or QA gaps ruled valid that it must fix, never the delegator's expectations about the outcome.
 - **Scoped sub-task:** a scoped sub-task goes to a clean, neutral agent whose self-contained prompt names the files, areas and systems it must not touch and the point where it stops, never to a `fork`, because a fork inherits the whole conversation.
   Before acting on a subagent's self-report, the delegator verifies it against ground truth (git history and refs, the PR list, run conclusions), and it reads the code the subagent wrote before merging it.
@@ -66,6 +68,9 @@ If the runtime cannot run a configured model, stop and say so; never substitute 
 
 - Round 1 asks for an exhaustive list of findings over the whole diff.
 - Later rounds review the delta since the last reviewed head, plus any regressions that delta introduced.
+  A delta round's reviewer brief carries the prior `Review of record <sha>` PR review, its findings and per-finding verdicts, labelled as historical context that does not decide the current verdict.
+  The reviewer raises a finding already adjudicated there only when the delta changes the code it concerns or newly calls, imports or exercises that code.
+- The adjudicator brief, and any shadow-adjudicator brief, never carries the prior review of record; both stay clean, neutral.
 
 ### Different pairs
 
@@ -127,10 +132,15 @@ Green CI, a docs-only diff, a base-only merge commit, or a sibling waiting to me
 
 ## Handling findings
 
-- Fix or resolve every finding with a stated reason; none is left untouched.
+- Fix or resolve every finding with a stated reason; none is left untouched, and a confirmed `pre-existing` finding is resolved by filing it (below).
 - Verify each finding against the real code before acting (confirm SHAs, check that referenced APIs exist); never copy a suggested fix blindly.
 - A finding that names more locations of the same defect is fixed at every location.
-- Valid findings are fixed in the PR, never filed as follow-ups.
+- Valid findings are fixed in the PR, never filed as follow-ups, except a confirmed `pre-existing` finding.
+- `pre-existing` tag: the defect is present at the base SHA in code the diff neither changes nor newly calls, imports or exercises.
+  The adjudicator confirms the tag against the base SHA; an unconfirmed tag is handled as any other finding.
+  A confirmed `pre-existing` finding is listed in the review of record and does not block the merge; the engineer files it as a tracker issue before merge and links that issue in the review-of-record thread.
+  It is the only finding filed rather than fixed in the PR.
+  A Medium or Low finding accepted with a reason in the pre-PR arbiter report does not thereby gain `pre-existing` status.
 - Human review threads: reply, then resolve with the `resolveReviewThread` GraphQL mutation (`gh api graphql`), before merging.
   ⛔ Never resolve an unaddressed thread.
 
