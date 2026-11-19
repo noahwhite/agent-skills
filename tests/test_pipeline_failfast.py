@@ -522,11 +522,20 @@ def echoed_file_agent(*lines: str) -> str:
     return f"cat {shlex.quote(str(ECHOED_REVIEWED_FILE))} >&2{extra}; {SWEEP_AGENT}"
 
 
+def records(text: str) -> list[str]:
+    """Split text into the records `grep` reads: LF-delimited, carriage returns and other breaks kept."""
+    return text.split("\n")
+
+
+def fixture_records() -> list[str]:
+    return records(ECHOED_REVIEWED_FILE.read_bytes().decode())
+
+
 def echoed_lines_by_kind() -> dict[str, list[str]]:
     """The fixture's lines per context kind; each line must have its kind's own shape."""
     kinds: dict[str, list[str]] = {kind: [] for kind in CONTEXT_KINDS.values()}
     kind = None
-    for line in ECHOED_REVIEWED_FILE.read_text().splitlines():
+    for line in fixture_records():
         if line in CONTEXT_KINDS:
             kind = CONTEXT_KINDS[line]
         elif line and kind:
@@ -537,18 +546,19 @@ def echoed_lines_by_kind() -> dict[str, list[str]]:
 
 # The detector's documented runtime line shape: at a line start or after a carriage return, a gap of
 # whitespace or CSI/OSC escapes, at most one `<word>: ` tool prefix and another gap, then a marker,
-# where the `bwrap` marker carries its trailing space.
+# where the `bwrap` marker carries its trailing space. The detector runs `grep` under LC_ALL=C, one
+# LF-delimited record at a time, so the model is ASCII-only and matched per record.
 ESCAPE_SEQUENCE = r"(?:\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\))"
 GAP = rf"(?:\s|{ESCAPE_SEQUENCE})*"
 DETECTOR_MARKERS = ("bwrap: ", "sandbox (?:failed|denied|could not)", "Failed to make .* Permission denied")
 RUNTIME_LINE_SHAPE = re.compile(
-    rf"(?:^|\r){GAP}(?:[A-Za-z0-9][\w.-]*:\s{GAP})?(?:{'|'.join(DETECTOR_MARKERS)})", re.I | re.M
+    rf"(?:^|\r){GAP}(?:[A-Za-z0-9][\w.-]*:\s{GAP})?(?:{'|'.join(DETECTOR_MARKERS)})", re.I | re.ASCII
 )
 
 
-def starts_with_marker(line: str) -> bool:
-    """The line is in the runtime line shape, so a marker in it is not mid-line."""
-    return bool(RUNTIME_LINE_SHAPE.search(line))
+def starts_with_marker(text: str) -> bool:
+    """A record of the text is in the runtime line shape, so a marker in it is not mid-line."""
+    return any(RUNTIME_LINE_SHAPE.search(record) for record in records(text))
 
 
 def sweep_exit(tmp_path: Path, label: str, agent: str) -> int:
@@ -659,7 +669,7 @@ def test_echoing_the_whole_reviewed_file_is_accepted(gate, tmp_path):
     for name, alternative in OLD_CHECK_ALTERNATIVES.items():
         assert re.search(alternative, text, re.I), f"the fixture no longer quotes {name}"
     assert "fails with a `bwrap:` error" in text, "the fixture lost the SKL-70 sentence"
-    opening = [ln for ln in text.splitlines() if starts_with_marker(ln)]
+    opening = [ln for ln in fixture_records() if starts_with_marker(ln)]
     assert not opening, f"these fixture lines open with a marker, so it is not mid-line: {opening}"
     repo, scratch, env = gate
     result = run_sweep(repo, scratch, env, "--model", "deepseek/deepseek-flash", agent=echoed_file_agent())
@@ -668,9 +678,14 @@ def test_echoing_the_whole_reviewed_file_is_accepted(gate, tmp_path):
 
 
 # A line the mid-line check calls opening must be one the phase rejects, and one it calls mid-line one
-# the phase accepts: a bare `bwrap:` after a prefix, and a coloured runtime line.
+# the phase accepts: a bare `bwrap:` after a prefix, non-ASCII space and prefix characters, a vertical
+# tab, an OSC sequence broken by a line feed, and a coloured runtime line.
 @pytest.mark.parametrize("line, opens", [
     ("Note: bwrap:status is an example.", False),
+    ("Note: bwrap: example.", False),
+    ("Noé: bwrap: example.", False),
+    ("Context\x0b bwrap: example.", False),
+    ("\x1b]0;x\n\x07bwrap: example.", False),
     ("\x1b[31mbwrap: Can't mount proc on /newroot/proc: Operation not permitted\x1b[0m", True),
 ])
 def test_the_reviewed_file_mid_line_check_agrees_with_the_phase_result(tmp_path, line, opens):
