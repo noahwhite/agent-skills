@@ -1081,9 +1081,9 @@ METRICS_COMMAND_ROWS = (
     "figures recorded under `references/metrics.md` and `not reported` for any usage the runtime does not return."
 )
 METRICS_WRAPPER_INTRO = (
-    # SKL-98: a role's return-notice timestamp is not wrapped.
-    "Launch every later command other than the end form below, the summary post, its read-back, and a role's "
-    "return-notice `date -u +%s.%N` below in this wrapper, with the command in place of "
+    # SKL-98: a role launch and a role's return-notice timestamp are not wrapped.
+    "Launch every later command other than a role launch, which gets a role row below, the end form below, the "
+    "summary post, its read-back, and a role's return-notice `date -u +%s.%N` below in this wrapper, with the command in place of "
     "`<command>`, a label unique within the invocation, other than the reserved `start` and `end`, without a "
     "single quote and naming no path, in place of `<row label>`, and "
     "the absolute path of that `metrics.txt` in place of `<metrics file>`:"
@@ -1127,7 +1127,9 @@ METRICS_ROLE_END_BEFORE_USAGE = (
     "returned, the coordinator's next command is `date -u +%s.%N`, which is not a launch and gets no row, then "
     "the usage read runs in the wrapper above, and the end command carries the printed timestamp in place of "
     "`$(date -u +%s.%N)` and the figures the usage read printed, without their `tokens: ` and `tool calls: ` "
-    "labels, in place of `<tokens>` and `<tool calls>`."
+    "labels, in place of `<tokens>` and `<tool calls>`; when no usage read runs, as after a launch that did not "
+    "exit successfully, the end command still carries the printed timestamp, with `not reported` for each figure "
+    "not read."
 )
 METRICS_EXTRA_WRITE = "f='<metrics file>'; printf 'extra %s\\t%s\\n' '<slug>' '<value>' >> \"$f\""
 METRICS_EXTRAS_RECORD = (
