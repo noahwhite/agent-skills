@@ -159,14 +159,21 @@ def test_a_step_that_differs_from_the_allowed_one_still_fails_before_a_base_step
     assert "only a step in ALLOWED_BEFORE_BASE, matching it in every key, may come before them" in result.stdout
 
 
-def test_a_second_copy_of_the_allowed_step_appended_still_fails(tmp_path):
+APPENDED_COPIES = {
+    "one before the base steps, one appended": (0, 1),
+    "two appended": (None, 2),
+}
+
+
+@pytest.mark.parametrize("before, appended", APPENDED_COPIES.values(), ids=APPENDED_COPIES.keys())
+def test_appended_copies_of_the_allowed_step_pass_as_any_appended_step_does(tmp_path, before, appended):
     def add(ci):
-        steps(ci).insert(0, dict(LINT))
-        steps(ci).append(dict(LINT))
+        if before is not None:
+            steps(ci).insert(before, dict(LINT))
+        steps(ci).extend(dict(LINT) for _ in range(appended))
 
     result = judge(tmp_path, head_with(add))
-    assert result.returncode != 0, result.stdout
-    assert "allowed step 'Lint' appears 2 times; ALLOWED_BEFORE_BASE admits one copy" in result.stdout
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 def test_an_invalid_appended_step_is_numbered_by_its_head_position(tmp_path):
