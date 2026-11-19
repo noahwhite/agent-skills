@@ -535,11 +535,20 @@ def echoed_lines_by_kind() -> dict[str, list[str]]:
     return kinds
 
 
+# The detector's documented runtime line shape: at a line start or after a carriage return, a gap of
+# whitespace or CSI/OSC escapes, at most one `<word>: ` tool prefix and another gap, then a marker,
+# where the `bwrap` marker carries its trailing space.
+ESCAPE_SEQUENCE = r"(?:\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\))"
+GAP = rf"(?:\s|{ESCAPE_SEQUENCE})*"
+DETECTOR_MARKERS = ("bwrap: ", "sandbox (?:failed|denied|could not)", "Failed to make .* Permission denied")
+RUNTIME_LINE_SHAPE = re.compile(
+    rf"(?:^|\r){GAP}(?:[A-Za-z0-9][\w.-]*:\s{GAP})?(?:{'|'.join(DETECTOR_MARKERS)})", re.I | re.M
+)
+
+
 def starts_with_marker(line: str) -> bool:
-    """The line opens with a marker, after whitespace and at most one `<word>: ` tool prefix: the
-    shape a runtime's own error line has, so a marker there is not mid-line."""
-    markers = "|".join(OLD_CHECK_ALTERNATIVES.values())
-    return bool(re.match(rf"\s*([A-Za-z0-9][\w.-]*:\s+)?({markers})", line, re.I))
+    """The line is in the runtime line shape, so a marker in it is not mid-line."""
+    return bool(RUNTIME_LINE_SHAPE.search(line))
 
 
 def sweep_exit(tmp_path: Path, label: str, agent: str) -> int:
@@ -656,6 +665,18 @@ def test_echoing_the_whole_reviewed_file_is_accepted(gate, tmp_path):
     result = run_sweep(repo, scratch, env, "--model", "deepseek/deepseek-flash", agent=echoed_file_agent())
     assert result.returncode == 0, result.stdout + result.stderr
     assert text in sweep_agent_stderr(repo), "the agent's stderr lost the echoed file"
+
+
+# A line the mid-line check calls opening must be one the phase rejects, and one it calls mid-line one
+# the phase accepts: a bare `bwrap:` after a prefix, and a coloured runtime line.
+@pytest.mark.parametrize("line, opens", [
+    ("Note: bwrap:status is an example.", False),
+    ("\x1b[31mbwrap: Can't mount proc on /newroot/proc: Operation not permitted\x1b[0m", True),
+])
+def test_the_reviewed_file_mid_line_check_agrees_with_the_phase_result(tmp_path, line, opens):
+    assert starts_with_marker(line) == opens, line
+    expected = 17 if opens else 0
+    assert sweep_exit(tmp_path, "edge", stderr_lines_agent(tmp_path, [line])) == expected, line
 
 
 @pytest.mark.parametrize("name", sorted(RUNTIME_ERROR_LINES))
