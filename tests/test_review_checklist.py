@@ -270,9 +270,11 @@ def test_the_sweep_dossier_caps_the_checklist(tmp_path):
     dossier = sweep_dossier(tmp_path, ["src/app.py"], text=text)
     heading = HEADING.search(dossier)
     assert heading, dossier
-    block = dossier[heading.end():]
-    assert "[checklist truncated at 8192 characters;" in block
-    assert "Item 0199" not in block
+    block = dossier[heading.end():].strip("\n").splitlines()
+    assert block[-1].startswith("[checklist truncated at 8192 characters;"), block[-1]
+    items = [line[2:] for line in block[:-1]]
+    # Only whole items, as many as fit in the cap: each is 100 characters plus its newline.
+    assert items == [f"Item {n:04d} {'x' * 90}" for n in range(8192 // 101)]
 
 
 def test_an_unreadable_checklist_fails_the_sweep_dossier(tmp_path):

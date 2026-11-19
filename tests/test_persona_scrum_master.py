@@ -142,10 +142,10 @@ def test_retro_section_files_only_action_items() -> None:
 
 def test_retro_proposes_checklist_items_from_repeated_misses() -> None:
     body = section(SKILL.read_text(), "Retro")
-    assert "\n- Propose review checklist items from repeated misses:" in body, "not its own Retro bullet"
-    bullets = [b for b in body.split("\n- ") if "review-checklist.txt" in b]
-    assert len(bullets) == 1, bullets
+    bullets = [b for b in body.split("\n- ") if b.startswith("Propose review checklist items from repeated misses:")]
+    assert len(bullets) == 1, "no single top-level Retro bullet proposes review checklist items"
     bullet = bullets[0]
+    assert "review-checklist.txt" in bullet
     for phrase in (
         "since the previous retro",
         "every PR review marked `Review of record <sha>`, delta reviews included",
@@ -165,8 +165,8 @@ def test_retro_proposes_checklist_items_from_repeated_misses() -> None:
 
 def test_retro_checklist_items_need_owner_approval() -> None:
     body = section(SKILL.read_text(), "Retro")
-    bullets = [b for b in body.split("\n- ") if "review-checklist.txt" in b]
-    assert len(bullets) == 1, "no single Retro bullet names review-checklist.txt"
+    bullets = [b for b in body.split("\n- ") if b.startswith("Propose review checklist items from repeated misses:")]
+    assert len(bullets) == 1, "no single top-level Retro bullet proposes review checklist items"
     bullet = bullets[0]
     for phrase in (
         "enters the checklist only through an engineer PR that links the owner's approval comment on the retro issue",

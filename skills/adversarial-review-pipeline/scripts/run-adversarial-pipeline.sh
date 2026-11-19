@@ -1593,7 +1593,7 @@ emit_prior() {  # $1 = phase, $2 = text when that phase is intentionally absent 
 }
 
 write_dossier() {  # $1 = phase, $2 = dossier path, $3 = the phase's checkout (exists already)
-  local p="$1" out="$2" co="$3" items
+  local p="$1" out="$2" co="$3" items cut
   case "$p" in
     sweep)
       items="$(checklist_items)"
@@ -1614,7 +1614,11 @@ write_dossier() {  # $1 = phase, $2 = dossier path, $3 = the phase's checkout (e
           echo
           echo "===== Review checklist (owner-approved items read from the base, for the paths this diff changes: check each one, report a miss as a candidate) ====="
           if [ "${#items}" -gt "$CHECKLIST_CAP_CHARS" ]; then
-            printf '%s\n' "${items:0:$CHECKLIST_CAP_CHARS}" | sed 's/^/- /'
+            cut="${items:0:$CHECKLIST_CAP_CHARS}"
+            if [ "${items:$CHECKLIST_CAP_CHARS:1}" != $'\n' ]; then   # drop the item the cap splits
+              case "$cut" in *$'\n'*) cut="${cut%$'\n'*}" ;; *) cut="" ;; esac
+            fi
+            if [ -n "$cut" ]; then printf '%s\n' "$cut" | sed 's/^/- /'; fi
             echo "[checklist truncated at $CHECKLIST_CAP_CHARS characters; 'checklist --base $BASE_SHA' prints every item]"
           else
             printf '%s\n' "$items" | sed 's/^/- /'
