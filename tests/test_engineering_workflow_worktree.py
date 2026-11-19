@@ -19,8 +19,7 @@ WORKTREE_CLAUSE = (
 )
 NO_RECUT_CLAUSE = (
     "That confirmation is the base hard gate in `references/github.md`, which a branch that is only behind its "
-    "base still passes; bring such a branch, including one that heads an open PR, up to date with its base by a "
-    "merge, never by a rebase, a rewrite or a force-push."
+    "base still passes, so such a branch, including one that heads an open PR, is never recut."
 )
 
 
@@ -41,8 +40,8 @@ def test_step_2_works_in_the_briefed_worktree_and_otherwise_cuts_one() -> None:
     assert SKILL.read_text(encoding="utf-8").count(WORKTREE_CLAUSE) == 1, "the clause is stated once"
 
 
-def test_step_2_updates_a_behind_branch_by_merge_not_recut() -> None:
+def test_step_2_never_recuts_a_branch_only_behind_its_base() -> None:
     lines = step_2_lines()
-    assert NO_RECUT_CLAUSE in lines, "step 2 must update a branch only behind its base by a merge, not a recut"
+    assert NO_RECUT_CLAUSE in lines, "step 2 must not recut a branch that is only behind its base"
     assert lines.index(NO_RECUT_CLAUSE) == lines.index(WORKTREE_CLAUSE) + 1, "it follows the worktree clause"
     assert SKILL.read_text(encoding="utf-8").count(NO_RECUT_CLAUSE) == 1, "the clause is stated once"

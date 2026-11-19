@@ -326,8 +326,9 @@ DEPLOYED_NOTE = (
     "exactly `path: deployed`."
 )
 DEPLOYED_NOTE_BEFORE_SKL_270 = "2. Add a concise implementation and deployment note."
-# SKL-70 adds one step 2 line that accepts a worktree the brief names. The digest above is kept: the
-# line is pinned here (and in tests/test_engineering_workflow_worktree.py) and cut out before hashing.
+# SKL-70 adds two step 2 lines: one accepts a worktree the brief names, one keeps a branch only behind its
+# base from a recut. The digest above is kept: both lines are pinned here (and in
+# tests/test_engineering_workflow_worktree.py) and cut out before hashing.
 WORKTREE_CLAUSE = (
     "When the brief names a `worktree:` path, work in that worktree and cut no other story worktree, after "
     "confirming that its branch is based on the base the branch rule in `references/github.md` selects "
@@ -337,8 +338,7 @@ WORKTREE_CLAUSE = (
 )
 NO_RECUT_CLAUSE = (
     "That confirmation is the base hard gate in `references/github.md`, which a branch that is only behind its "
-    "base still passes; bring such a branch, including one that heads an open PR, up to date with its base by a "
-    "merge, never by a rebase, a rewrite or a force-push."
+    "base still passes, so such a branch, including one that heads an open PR, is never recut."
 )
 # SKL-346 adds two lines to the Verify stage of step 4's Escalation section. The digest above is kept the
 # same way: those lines are pinned here and cut out before hashing, so every other byte still has to match.

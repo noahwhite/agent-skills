@@ -4160,7 +4160,8 @@ WORKTREE_CREATE = (
     "(`<profile.git.integration_branch>` by default) with the explicit refspec `git fetch origin "
     "+refs/heads/<base>:refs/remotes/origin/<base>` and, when the story has no unmerged story worktree and no "
     "open PR, run `git worktree add -b <branch> <absolute path> origin/<base>` to create the story worktree on "
-    "a new story branch cut from that base, per the branch and worktree rules in `references/github.md`."
+    "a new story branch cut from that base, `<branch>` being a name the branch-naming rule gives that no local "
+    "or remote branch already carries, per the branch and worktree rules in `references/github.md`."
 )
 WORKTREE_LATER_PR = (
     "A later PR for the same story, opened after an earlier one merged, gets a fresh worktree under the existing "
