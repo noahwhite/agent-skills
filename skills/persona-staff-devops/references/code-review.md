@@ -49,9 +49,9 @@ Every agent that judges work or takes delegated work (reviewer, adjudicator, sha
    Run the reviewer and the adjudicator clean and neutral, as defined above.
    Every prompt tells the agent never to write secrets to files or argv.
 4. **Act on the adjudication.**
-   Fix every finding ruled valid in the same PR.
+   Fix every finding ruled valid in the same PR, except a confirmed `pre-existing` finding, which is filed instead (Handling findings).
    Post the review of record as one PR review with the comment event, at the reviewed head, never as an issue comment: on GitHub, `gh pr review <n> --comment --body-file <file>`, with the body file in the scratch directory, never in the checkout.
-   The body's first line is `Review of record <full 40-character head SHA>`, followed by the reviewer and adjudicator names and models, the reviewer's findings, the verdict per finding, and the fix commit for each valid one.
+   The body's first line is `Review of record <full 40-character head SHA>`, followed by the reviewer and adjudicator names and models, the reviewer's findings, the verdict per finding, and the fix commit for each valid one, or the tracker issue link for a confirmed `pre-existing` one.
    Each delta round posts a new review; never edit an earlier one.
    If the host denies the post, do not fall back to an issue comment: report the exact command and the denial, and stop.
    Post it, confirm it landed, and only then move to merging.
@@ -70,7 +70,7 @@ If the runtime cannot run a configured model, stop and say so; never substitute 
 - Later rounds review the delta since the last reviewed head, plus any regressions that delta introduced.
   A delta round's reviewer brief carries the prior `Review of record <sha>` PR review, its findings and per-finding verdicts, labelled as historical context that does not decide the current verdict.
   The reviewer raises a finding already adjudicated there only when the delta changes the code it concerns or newly calls, imports or exercises that code.
-- The adjudicator brief, and any shadow-adjudicator brief, never carries the prior review of record; both stay clean, neutral.
+- The adjudicator brief, and any shadow-adjudicator brief, never carry the prior review of record; both stay clean, neutral.
 
 ### Different pairs
 
@@ -136,9 +136,9 @@ Green CI, a docs-only diff, a base-only merge commit, or a sibling waiting to me
 - Verify each finding against the real code before acting (confirm SHAs, check that referenced APIs exist); never copy a suggested fix blindly.
 - A finding that names more locations of the same defect is fixed at every location.
 - Valid findings are fixed in the PR, never filed as follow-ups, except a confirmed `pre-existing` finding.
-- `pre-existing` tag: the defect is present at the base SHA in code the diff neither changes nor newly calls, imports or exercises.
+- `pre-existing` tag: the defect is present at the base SHA (the merge base of the reviewed head and the integration branch) in code the diff neither changes nor newly calls, imports or exercises.
   The adjudicator confirms the tag against the base SHA; an unconfirmed tag is handled as any other finding.
-  A confirmed `pre-existing` finding is listed in the review of record and does not block the merge; the engineer files it as a tracker issue before merge and links that issue in the review-of-record thread.
+  A confirmed `pre-existing` finding is listed in the review of record and does not block the merge; before merge, the engineer files it as a tracker issue and links that issue in the review-of-record thread.
   It is the only finding filed rather than fixed in the PR.
   A Medium or Low finding accepted with a reason in the pre-PR arbiter report does not thereby gain `pre-existing` status.
 - Human review threads: reply, then resolve with the `resolveReviewThread` GraphQL mutation (`gh api graphql`), before merging.
