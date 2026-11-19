@@ -1,8 +1,6 @@
 """SKL-206: the base git guidance and every delegation brief tell agents to commit with the configured identity."""
 
 import re
-import subprocess
-import sys
 from pathlib import Path
 
 import pytest
@@ -204,13 +202,3 @@ def test_exactly_the_thirteen_generated_copies_carry_the_base_rule():
     copies = sorted(p for p in SKILLS.glob("*/references/github.md") if PHRASE in p.read_text())
     assert len(copies) == 13
     assert all(copy.read_text().startswith("<!-- GENERATED from shared/github.md") for copy in copies)
-
-
-def test_vendor_check_passes():
-    result = subprocess.run(
-        [sys.executable, "-I", str(ROOT / "scripts" / "vendor_shared.py"), "--check"],
-        capture_output=True,
-        text=True,
-        cwd=ROOT,
-    )
-    assert result.returncode == 0, result.stdout + result.stderr

@@ -1,0 +1,3 @@
+{"action": "tracker-read", "at": "2026-11-18T00:27:06Z", "found": true, "story": "ABC-123"}
+{"action": "read", "at": "2026-11-18T00:27:06Z", "path": "qa-agent-round-1/qa-agent-round-1-todo.md"}
+{"action": "resume", "at": "2026-11-18T00:27:10Z", "message_id": 1, "role": "qa", "session": "qa-round-1-session"}

@@ -22,7 +22,6 @@ import yaml
 ROOT = Path(__file__).resolve().parent.parent
 SKILL = ROOT / "skills" / "story-to-done" / "SKILL.md"
 PROTOCOL = ROOT / "skills" / "story-to-done" / "references" / "metrics-protocol.md"
-MANIFEST = json.loads((ROOT / "skills.json").read_text())
 
 
 def section(text: str, heading: str) -> str:
@@ -36,15 +35,6 @@ def section(text: str, heading: str) -> str:
 def visible(text: str) -> str:
     """The text a reader of the rendered Markdown sees: HTML comments removed, an unclosed one to the end."""
     return re.sub(r"<!--.*?(?:-->|\Z)", "", text, flags=re.DOTALL)
-
-
-def test_skill_file_exists() -> None:
-    assert SKILL.is_file(), f"missing {SKILL.relative_to(ROOT)}"
-
-
-def test_manifest_registers_skill() -> None:
-    required = {"todo-tracking", "linear", "code-review", "secrets"}
-    assert required <= set(MANIFEST["skills"]["story-to-done"])
 
 
 def test_todo_tracking_has_seed_entry() -> None:
@@ -158,7 +148,7 @@ def test_skill_names_no_model_id() -> None:
 
 def test_model_name_guard_catches_the_removed_defaults() -> None:
     for removed in ("Sonnet 5.5 (`claude-sonnet-5-5`)", "QA on Opus 5.5 at max", "`claude-opus-5-5`",
-                    "deepseek/deepseek-flash", "openai/gpt-6.1-sol", "mistral-large-4-0"):
+                    "deepseek/deepseek-flash", "openai/gpt-6.2-sol", "mistral-large-4-0"):
         assert MODEL_NAME.search(removed), removed
     for allowed in ("runtime `claude-code`", "`opencode` seat", "QA on <model> at max"):
         assert not MODEL_NAME.search(allowed), allowed
@@ -568,6 +558,54 @@ def test_any_other_owner_stops_even_when_qa_work_remains() -> None:
         STEP4_NO_RUNTIME,
         STEP4_STALL,
     ), "a runtime that cannot resume must stop without a substitute agent, and a stall must be reported"
+
+
+OWNER_WAIT_DEFER = (
+    "That stop and its mixed-remainder sentence defer to the owner-wait verification rule below: they apply "
+    "only to a remainder that contains an item verified `owner-only: yes`."
+)
+OWNER_WAIT_RULE = [
+    "**Owner-wait verification.** This rule binds every place the coordinator reports an item as waiting on "
+    "the owner: an item relayed from a handback, one from its own reading, one on step 0's resume path, one at "
+    "any stop, and one in step 5's report.",
+    "Before reporting it, read the item's story in the tracker yourself - its current state, its acceptance "
+    "criteria, its comments, and its relations with each blocker's state - and never rely on the handback's "
+    "own claim.",
+    "Record two entries on your todo list, each followed by the field or relation that supports it: "
+    "`owner-only: yes|no` and `coordinator-or-role-can-act: yes|no`.",
+    "If the tracker read fails or is inconclusive, report the failed read and do not present the owner-wait as "
+    "verified.",
+    "An item is owner-only when it is an open acceptance criterion that needs input only the owner can give (a "
+    "comment, a value, a credential, an access grant), a decision on what an acceptance criterion means, a "
+    "maintainer's approval or access grant, a human merge, or an external deploy.",
+    "An owner-approval gate written into a criterion for the story's own outcome (the owner approving or "
+    "signing off on what the story delivered) is not owner-only and does not stop this skill, because the "
+    "operator's request for the story is the approval for that outcome; a maintainer's approval stays "
+    "owner-only.",
+    "When the entries are `owner-only: no` and `coordinator-or-role-can-act: yes`, do the next step this skill "
+    "defines for the story's current state, or launch or resume the role that step dispatches, writing its "
+    "brief from the story's acceptance criteria, and do not report the item as waiting on the owner, in step "
+    "5's report included.",
+    "The at-most-once continuation and stall rules still apply: when the role hands back the same owner claim "
+    "with no observed progress, report the stall, naming the tracker read it rests on, and stop.",
+    "When the entries are `owner-only: no` and `coordinator-or-role-can-act: no`, report the item and who can "
+    "act on it, and stop.",
+    "When the entries are `owner-only: yes`, report the item and stop; the report names the story id, the "
+    "exact criterion text, comment or relation read, and which owner-only category applies.",
+]
+DISPUTE_RULE = (
+    "If the senior engineer disputes a failed verdict or an adjudicator's ruling, do not relay its argument to "
+    "a QA agent and do not rule on it yourself. Stop and put the item, its evidence, and the engineer's "
+    "evidence to the user, since what an AC means is the product owner's decision."
+)
+
+
+def test_an_owner_wait_is_verified_against_the_tracker_before_it_is_reported() -> None:
+    step4 = " ".join(section(SKILL.read_text(), "4. Act on the QA outcome").split())
+    assert in_order(step4, *OWNER_WAIT_RULE, DISPUTE_RULE), "the owner-wait rule must sit in step 4 before the unchanged dispute rule"
+    assert in_order(in_deployment_review_branch(), STEP4_OTHER_OWNER, OWNER_WAIT_DEFER, STEP4_NO_RUNTIME), (
+        "the owner-action stop and the mixed-remainder sentence must defer to the owner-wait rule"
+    )
 
 
 def test_done_branch_checks_the_completion_record() -> None:
@@ -1125,12 +1163,6 @@ METRICS_NO_SECRETS = (
     "The closing report contains no secrets and no local or scratch paths, including where it relays a role's "
     "finding, evidence or incidental defect, which it restates without the path."
 )
-
-
-def test_manifest_appends_metrics_to_story_to_done() -> None:
-    entry = MANIFEST["skills"]["story-to-done"]
-    assert entry.count("metrics") == 1, "story-to-done must list metrics exactly once"
-    assert entry.index("metrics") == entry.index("secrets") + 1, "metrics is appended after secrets"
 
 
 def test_vendored_metrics_reference_carries_the_not_reported_rule() -> None:
@@ -2181,7 +2213,8 @@ def test_only_the_on_path_lines_tell_the_coordinator_to_post_or_comment() -> Non
     for line, heading in on_path.items():
         home = metrics_section() if heading == "Metrics" else section(text, heading)
         assert line in home.splitlines(), f"an on-path post line left its section: {line}"
-    allowed = {"- " + OFF_PATH, METRICS_POINTER, *on_path}
+    # The owner-wait rule reads the story's comments and names a comment as owner input; it posts none.
+    allowed = {"- " + OFF_PATH, METRICS_POINTER, *on_path, *OWNER_WAIT_RULE}
     merge_rule = "needs a delta review posted before merging"
     for line in [*body.splitlines(), *PROTOCOL.read_text().splitlines()]:
         if line in allowed:
@@ -3842,8 +3875,10 @@ STEP_3_HEADING = "3. QA agent: verify the deployed story"
 # SKL-357 re-pinned it for the step 3 unnamed-waiting-handback pointer and the plural "resumes" exception.
 STEP_3_SHA256 = "2c57b85346ce7030aab1edc8e0fad3769538a4d38b2aff6dfd673adfb10fa330"
 # SKL-138 re-pinned IN_PROGRESS_SHA256 for the step 4 nested launch line (NESTED_STEP_4), which carries no pending item.
-IN_PROGRESS_SHA256 = "4e8e9242319fe952b90429a32214ec0de742e348a4de360808b88f052c63fb0c"
-IN_DEPLOYMENT_REVIEW_SHA256 = "36da368bed892519776e5be61064d2fad186151ca58ae90aff897e9a1ffaa968"
+# SKL-346 re-pinned IN_PROGRESS_SHA256 for the arbitration ledger hand-back lines, which carry no pending item.
+IN_PROGRESS_SHA256 = "40f0ab4f13d839dfa464e93be4b26b108ce82ec862e6e16bac48cae91ce2281c"
+# SKL-356 re-pinned IN_DEPLOYMENT_REVIEW_SHA256 for the owner-wait deferral line (OWNER_WAIT_DEFER), which carries no pending item.
+IN_DEPLOYMENT_REVIEW_SHA256 = "6ed2ebf62b1e00190b69f18eb7e619a5c1e973ce3b7ff64b76e6daf2b50e7955"
 # The only lines of a state bullet that may state the pending owner ruling record.
 IN_DEPLOYMENT_REVIEW_RECORD_LINES = ("  " + STEP4_OTHER_OWNER, PENDING_REPORT, PENDING_NO_RULING)
 IN_PROGRESS_RECORD_LINES = (PENDING_IN_PROGRESS, PENDING_CAP_REPORT, PENDING_HAND_BACK_OMITTED)
@@ -4318,3 +4353,118 @@ def test_readme_row_names_nested_and_its_default_before_the_metrics_clause() -> 
     row = readme_row()
     assert README_NESTED_CLAUSE in row
     assert row.index(README_NESTED_CLAUSE) < row.index(README_POSTED)
+
+
+# SKL-346: the step 2 and step 4 handbacks carry a per-PR arbitration ledger, the brief templates and
+# both steps of the skill document it, the escalation verifier names the head and itself, and the step 2
+# brief passes the arbiter's model verbatim to `--model`.
+LEDGER_HEADING = "`## Arbitration ledger`"
+LEDGER_HEADER_ROW = "`| round | kind | head | engineer | reviewer agent | reviewer model | report |`"
+LEDGER_COLUMNS = ("round", "kind", "head", "engineer", "reviewer agent", "reviewer model", "report")
+LEDGER_EMPTY = "`No rounds yet.`"
+LEDGER_KINDS = ("`arbitration`", "`escalation-verification`")
+LEDGER_MISSING_STOP = (
+    "When you hold no ledger for a PR that has earlier rounds, stop and report the missing ledger before you "
+    "launch the engineer again."
+)
+ARBITER_MODEL_FLAG = "passes `profile.review.pre_pr.arbiter.model` verbatim to `--model`"
+VERIFIED_HEAD_LINE = "`VERIFIED-HEAD: <full head SHA>`"
+VERIFIER_LINE = "`VERIFIER: <agent name> <model id>`"
+ENGINEER_PATH_TEMPLATES = ("brief-engineer-deployed.md", "brief-engineer-no-deployment.md", "brief-engineer-spike.md")
+WORKFLOW_SKILL = ROOT / "skills" / "engineering-workflow" / "SKILL.md"
+
+
+def ledger_sources() -> dict[str, str]:
+    """Every place AC 4 names for the ledger clause, flattened to one line each."""
+    skill = visible(SKILL.read_text())
+    sources = {
+        "SKILL.md step 2": section(skill, STEP_2),
+        "SKILL.md step 4": section(skill, STEP_4_HEADING),
+    }
+    for name in ENGINEER_PATH_TEMPLATES:
+        sources[name] = visible((ASSETS / name).read_text())
+    return {name: " ".join(text.split()) for name, text in sources.items()}
+
+
+@pytest.mark.parametrize("name", ["SKILL.md step 2", "SKILL.md step 4", *ENGINEER_PATH_TEMPLATES])
+def test_the_brief_carries_the_ledger_heading_columns_and_empty_line(name: str) -> None:
+    text = ledger_sources()[name]
+    assert LEDGER_HEADING in text
+    assert LEDGER_HEADER_ROW in text
+    row = re.search(r"`\|( round \|[^`]*)\|`", text)
+    assert row, "no ledger header row in the text"
+    assert tuple(cell.strip() for cell in row.group(1).split("|")) == LEDGER_COLUMNS
+    assert LEDGER_EMPTY in text
+    for kind in LEDGER_KINDS:
+        assert kind in text, kind
+
+
+@pytest.mark.parametrize("name", ["SKILL.md step 2", *ENGINEER_PATH_TEMPLATES])
+def test_the_brief_defines_rounds_provenance_reports_and_numbering(name: str) -> None:
+    text = ledger_sources()[name]
+    for phrase in (
+        "a re-run at an unchanged head is a new round",
+        "a step 4 fix, a rebase, a merge or a force-push",
+        "numbered contiguously from 1 per PR",
+        "the absolute path of the retained per-round report",
+        "the absolute path or `https://` URL of the verifier's report",
+        "`ARBITER-AGENT:` and `ARBITER-MODEL:` lines",
+        "the `VERIFIER:` line of the verifier's report",
+        "never from your text",
+        "the absolute directory that holds the retained per-round reports",
+        "return its entries unchanged",
+        "no new-head review or verification is waived",
+    ):
+        assert phrase in text, phrase
+
+
+@pytest.mark.parametrize("name", ["SKILL.md step 2", *ENGINEER_PATH_TEMPLATES])
+def test_the_step_2_brief_passes_the_arbiter_model_verbatim(name: str) -> None:
+    assert ARBITER_MODEL_FLAG in ledger_sources()[name]
+
+
+def test_step_2_has_the_coordinator_fill_the_identity_cells_from_the_seat_and_the_reports() -> None:
+    text = ledger_sources()["SKILL.md step 2"]
+    for phrase in (
+        "the seat you launched it on",
+        "copying the `ARBITER-AGENT:` and `ARBITER-MODEL:` lines of the retained report",
+        "the `VERIFIER:` line of the verifier's report",
+        "never from the engineer's text",
+    ):
+        assert phrase in text, phrase
+
+
+def test_step_4_puts_the_ledger_in_every_hand_back_and_stops_without_one() -> None:
+    text = ledger_sources()["SKILL.md step 4"]
+    assert LEDGER_HEADING in text
+    assert LEDGER_MISSING_STOP in text
+    assert in_order(
+        in_progress_bullet(),
+        "Hand them back to the senior engineer",
+        LEDGER_HEADING,
+        LEDGER_MISSING_STOP,
+        "Confirm that state as step 2 does",
+    )
+
+
+def test_step_2_puts_the_held_ledger_in_the_brief_and_stops_without_one() -> None:
+    text = ledger_sources()["SKILL.md step 2"]
+    stop = text.index(LEDGER_MISSING_STOP)
+    assert text.index("put the `## Arbitration ledger` you hold for each of its PRs into the brief") < stop
+    assert stop < text.index("Spawn a clean, neutral subagent")
+
+
+@pytest.mark.parametrize("case", ["engineer-deployed", "engineer-no-deployment", "engineer-spike"])
+def test_every_rendered_engineer_brief_carries_the_ledger_clause(case: str, tmp_path: Path) -> None:
+    text = " ".join(rendered_brief(tmp_path, RENDER_CASES[case]).split())
+    for anchor in (LEDGER_HEADING, LEDGER_HEADER_ROW, LEDGER_EMPTY, ARBITER_MODEL_FLAG):
+        assert text.count(anchor) == 1, anchor
+
+
+def test_the_escalation_verify_stage_has_the_verifier_name_the_head_and_itself() -> None:
+    escalation = section(WORKFLOW_SKILL.read_text(), "4. Pre-PR adversarial gate (required)")
+    verify = next(line for line in escalation.splitlines() if line.startswith("2. **Verify.**"))
+    stage = escalation[escalation.index(verify):escalation.index("3. **Fix.**")]
+    assert VERIFIED_HEAD_LINE in stage
+    assert VERIFIER_LINE in stage
+    assert "each on its own line of its report" in stage

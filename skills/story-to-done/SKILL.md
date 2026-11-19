@@ -166,6 +166,8 @@ Do not triage the story yourself; `engineering-workflow` does, including the Def
 
 ## 2. Senior engineer: implement to deployment review
 
+When the story already has a PR, put the `## Arbitration ledger` you hold for each of its PRs into the brief.
+When you hold no ledger for a PR that has earlier rounds, stop and report the missing ledger before you launch the engineer again.
 Spawn a clean, neutral subagent on `engineer-model` at `engineer-effort`, and brief it as a senior engineer working this story.
 With `nested=yes`, make this launch in the foreground, so the call returns the engineer's handback to you; with `nested=no`, make it in the runtime's default mode.
 It spawns reviewers of its own, and so does the QA agent in step 3, so check the nesting rule in `references/runtimes.md` first.
@@ -179,6 +181,12 @@ It must include:
 - The line `path: <value>`, whose whole text is exactly that, `<value>` being the path step 1 selected, so the role never reselects the path.
 - An instruction to load and follow `engineering-workflow` for the whole story, from triage, the pre-PR gate and the PR to `profile.git.integration_branch` to the merge per `profile.review.merge_owner`, the deploy, and the move to `profile.tracker.states.in_deployment_review`.
 - What to hand back: the story state, each PR link, the head SHA each PR's review of record covered, the merged commit, and the environment and deployed build it verified; or, if it stops, that it is blocked and why, including when no arbiter can launch; a missing arbitration is never clean or converged.
+- The arbitration ledger: the handback, and every later handback including each fix handback, carries for each PR a section headed `## Arbitration ledger` that holds a Markdown table whose header row is `| round | kind | head | engineer | reviewer agent | reviewer model | report |`, or the single line `No rounds yet.` when the PR has no round or the handback has no PR.
+- A round is one arbitration (the `adversarial-review-pipeline` arbitrate phase accepted by the script) or one escalation verification (the verifier pass of the gated two-lens loop in the Escalation section of `engineering-workflow`, run on `profile.review.pre_pr.arbiter`) of one head; a re-run at an unchanged head is a new round, and any changed head, whether from a step 4 fix, a rebase, a merge or a force-push, starts a new round. The ledger has one entry for every round run on that PR, including every QA-triggered fix round, with a `kind` of `arbitration` or `escalation-verification`, and its rounds are numbered contiguously from 1 per PR.
+- Each new entry gives the round number, the kind, the full head SHA, and the report as exactly one value: for `arbitration`, the absolute path of the retained per-round report the pipeline script printed; for `escalation-verification`, the absolute path or `https://` URL of the verifier's report. Write `-` in its engineer, reviewer agent and reviewer model cells: the coordinator fills them, the engineer from the seat it launched and the reviewer agent and model from the `ARBITER-AGENT:` and `ARBITER-MODEL:` lines of the retained report or the `VERIFIER:` line of the verifier's report, never from your text.
+- The handback names, per PR, the absolute directory that holds the retained per-round reports (`<git common dir>/adversarial-pipeline/arbitration-rounds`, where `<git common dir>` is the output of `git rev-parse --path-format=absolute --git-common-dir`).
+- When the brief carries a ledger, return its entries unchanged and number new rounds on from its last round. Every changed head still gets its pre-PR arbitration or escalation verification in a separate clean, neutral arbiter, recorded as the next entry, so no new-head review or verification is waived.
+- The launch that runs the arbitrate phase passes `profile.review.pre_pr.arbiter.model` verbatim to `--model`, and the entry's name to `--agent`.
 - Keep working until everything the brief asks for is done, and only stop to ask when you can't go on without the coordinator or before a risky step. The stop this brief already defines still holds: if you must stop, hand back blocked and say why.
 - The real-check rule: report a change done only with the output of a real check that exercises it (tests, type-checker, build, the changed command, or for infrastructure a plan or dry run against the target); a syntax-only check, or a check that failed to start, does not count. Install declared dependencies only with the project's own package manager and lockfile, never with sudo or the system package manager. If no real check can run, the report names the check not run and why.
 - When the work in the brief is done, stop and report. Don't add features, tests, files, docs or refactors the brief or the story's acceptance criteria don't call for. The tests the real-check rule needs are called for by this brief.
@@ -204,6 +212,7 @@ The engineer never does pre-PR arbitration (`adversarial-review-pipeline` Phase 
 An interim handback goes to [references/interim-handbacks.md](references/interim-handbacks.md) before the step 0 checklist read-back and every check below; any other handback continues here.
 An unnamed waiting handback, as that reference defines it, goes there too and does not continue here.
 When it hands back, do the step 0 checklist read-back first, then read the story yourself and confirm it is in `profile.tracker.states.in_deployment_review`; a handback is a claim, the tracker is the record.
+Record the `## Arbitration ledger` of every handback for each PR and keep it for step 4: fill each new entry's engineer cell with the seat you launched it on, and its reviewer agent and reviewer model cells by copying the `ARBITER-AGENT:` and `ARBITER-MODEL:` lines of the retained report its report cell names, for an `arbitration` entry, or the `VERIFIER:` line of the verifier's report, for an `escalation-verification` entry, never from the engineer's text.
 If it handed back blocked or the story is not in deployment review, stop and report why.
 Then, for every PR it merged, read the PR yourself with `gh pr view <n> --json headRefOid,mergeCommit` and `gh api --paginate repos/<owner>/<repo>/pulls/<n>/reviews`.
 Select the review of record as the merge guard in `references/code-review.md` does (the `COMMENTED` review whose body begins with `Review of record` and has the greatest `submitted_at`).
@@ -275,6 +284,8 @@ For a waived PR, compare the merged PR's `headRefOid` with the SHA recorded when
   With `nested=yes`, make each resume or re-spawn of the senior engineer in the foreground, so the call returns its handback to you; with `nested=no`, make it in the runtime's default mode.
   Either way, add to the hand-back brief each failed item as QA recorded it on the story (the item, its verdict, and the evidence it cites), and instruct the engineer to fix them through `engineering-workflow` on this story and take it back to `profile.tracker.states.in_deployment_review`.
   Leave out of every hand-back brief each item still `pending owner ruling` in QA's latest record, including one carried from an earlier failed round.
+  Put into every hand-back brief, on a resume and a new launch alike, the `## Arbitration ledger` you hold for each PR of this story, as step 2 records it: the table whose header row is `| round | kind | head | engineer | reviewer agent | reviewer model | report |`, each entry of kind `arbitration` or `escalation-verification`, or the single line `No rounds yet.` when the PR has no round; the engineer returns those entries unchanged, numbers its new rounds on from the last one, and carries the ledger in every handback, each fix handback included.
+  When you hold no ledger for a PR that has earlier rounds, stop and report the missing ledger before you launch the engineer again.
   Confirm that state as step 2 does, then run step 3 again with a new QA agent.
 - **`profile.tracker.states.in_deployment_review`:** QA is not finished: one or more items in its handback are outstanding.
   Classify each outstanding item by its owner.
@@ -286,12 +297,24 @@ For a waived PR, compare the merged PR's `headRefOid` with the SHA recorded when
   If any outstanding item names any other owner - the owner, a maintainer's approval or access grant, a human merge, an external deploy, a pending acceptance-basis ruling (an item QA recorded as `pending owner ruling`) - report exactly what remains and who owns it, and stop, even when QA-owned work also remains; a mixed remainder containing both an owner action and QA's own steps is reported and stopped, never resumed.
   For each item QA recorded as `pending owner ruling`, that report puts the item to the user with the AC or DoD text QA quoted and each reading with its verdict, as QA recorded them in the tracker.
   The coordinator rules on none of those items and relays none of them to the senior engineer or a QA agent; a ruling reaches QA only as the product owner's dated AC amendment in the tracker, followed by a new QA round.
+  That stop and its mixed-remainder sentence defer to the owner-wait verification rule below: they apply only to a remainder that contains an item verified `owner-only: yes`.
   If the runtime cannot resume that QA session, report the limitation and stop; never substitute a new clean, neutral subagent for it as a continuation of that round.
   A `command` or `codex` QA seat is never resumed, so its continuation is a new launch on the same seat whose prompt file is the step 3 brief followed by that continuation message; it is still the same round's continuation under every rule in this bullet.
   Because the new process carries none of the earlier one's working state, its prompt file also tells it to read that round's existing checklist in the named subdirectory and the story's open evidence PR, if any, before acting, and to continue from the first unfinished item, never rewriting the checklist or opening a second evidence PR.
   A continuation is made at most once per observed change to the remainder: when a resumed handback leaves the same remaining items with no observed progress, report the stall and stop.
 - **`profile.tracker.states.blocked`:** report the blocking story and stop.
 - **Any other state:** report it and stop.
+
+**Owner-wait verification.** This rule binds every place the coordinator reports an item as waiting on the owner: an item relayed from a handback, one from its own reading, one on step 0's resume path, one at any stop, and one in step 5's report.
+Before reporting it, read the item's story in the tracker yourself - its current state, its acceptance criteria, its comments, and its relations with each blocker's state - and never rely on the handback's own claim.
+Record two entries on your todo list, each followed by the field or relation that supports it: `owner-only: yes|no` and `coordinator-or-role-can-act: yes|no`.
+If the tracker read fails or is inconclusive, report the failed read and do not present the owner-wait as verified.
+An item is owner-only when it is an open acceptance criterion that needs input only the owner can give (a comment, a value, a credential, an access grant), a decision on what an acceptance criterion means, a maintainer's approval or access grant, a human merge, or an external deploy.
+An owner-approval gate written into a criterion for the story's own outcome (the owner approving or signing off on what the story delivered) is not owner-only and does not stop this skill, because the operator's request for the story is the approval for that outcome; a maintainer's approval stays owner-only.
+When the entries are `owner-only: no` and `coordinator-or-role-can-act: yes`, do the next step this skill defines for the story's current state, or launch or resume the role that step dispatches, writing its brief from the story's acceptance criteria, and do not report the item as waiting on the owner, in step 5's report included.
+The at-most-once continuation and stall rules still apply: when the role hands back the same owner claim with no observed progress, report the stall, naming the tracker read it rests on, and stop.
+When the entries are `owner-only: no` and `coordinator-or-role-can-act: no`, report the item and who can act on it, and stop.
+When the entries are `owner-only: yes`, report the item and stop; the report names the story id, the exact criterion text, comment or relation read, and which owner-only category applies.
 
 If the senior engineer disputes a failed verdict or an adjudicator's ruling, do not relay its argument to a QA agent and do not rule on it yourself.
 Stop and put the item, its evidence, and the engineer's evidence to the user, since what an AC means is the product owner's decision.

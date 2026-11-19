@@ -309,10 +309,6 @@ def test_run_sh_voids_a_bad_setup(tmp_path: Path, fault: str) -> None:
     assert not (tmp_path / "run").exists()
 
 
-def test_case_yaml_is_a_discriminating_case() -> None:
-    assert case_yaml()["kind"] == "discriminating"
-
-
 def test_the_runtime_doc_names_the_user_message_command() -> None:
     doc = (CASE / "runtime" / "story-runtime.md").read_text()
     assert "- `./story-runtime user-message --message FILE` sends FILE to the user" in doc

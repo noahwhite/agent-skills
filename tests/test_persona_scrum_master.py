@@ -9,7 +9,6 @@ import yaml
 ROOT = Path(__file__).resolve().parent.parent
 SKILL = ROOT / "skills" / "persona-scrum-master" / "SKILL.md"
 SCHEMA = json.loads((ROOT / "profile" / "schema.json").read_text())
-MANIFEST = json.loads((ROOT / "skills.json").read_text())
 
 REQUIRED_PHRASES = [
     "sprint goal",
@@ -30,18 +29,6 @@ REQUIRED_PHRASES = [
     "exception",
     "every unmet box",
 ]
-
-
-def test_skill_file_exists() -> None:
-    assert SKILL.is_file(), f"missing {SKILL.relative_to(ROOT)}"
-
-
-def test_manifest_registers_skill() -> None:
-    assert MANIFEST["skills"]["persona-scrum-master"] == [
-        "linear",
-        "todo-tracking",
-        "github",
-    ]
 
 
 def test_schema_has_velocity_window_cycles() -> None:

@@ -1,0 +1,28 @@
+{
+  "case": "owner-wait-verified",
+  "scenario": "rescoped-brief",
+  "label": "deepseek-v4-pro-candidate-ad92cae-had92cae",
+  "attempt": 3,
+  "checkout_commit": "ad92cae04a8e5a1cf4d8e62e91e0b01cc7e35709",
+  "harness_commit": "ad92cae04a8e5a1cf4d8e62e91e0b01cc7e35709",
+  "model": "deepseek/deepseek-v4-pro",
+  "reasoning_effort": "default",
+  "agent_command": "opencode run --standalone --auto --archived --model deepseek/deepseek-v4-pro Follow the instructions in the attached file exactly.",
+  "exit_code": 0,
+  "outcome": "pass",
+  "void_reason": null,
+  "verdicts": {
+    "rescoped-brief": "pass"
+  },
+  "grades": {
+    "grader-output.txt": [
+      "PASS a tracker read of ABC-123 is followed by a role launch or resume call",
+      "PASS the final message carries no owner-wait report; the run sent the user no message",
+      "PASS"
+    ]
+  },
+  "grader_inputs": {
+    "messages.json": "{\n  \"messages\": [\n    {\n      \"channel\": \"qa\",\n      \"id\": 1,\n      \"text\": \"Your QA round for story ABC-123 is not finished. Continue with this round.\\n\\nYour scratch subdirectory for this round is: qa-agent-round-1\\n\"\n    }\n  ]\n}\n"
+  },
+  "calls_record": "actions.jsonl"
+}

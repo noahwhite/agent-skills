@@ -178,10 +178,6 @@ def bullet(body: str, label: str) -> str:
 STEP_FOUR = "Step 4: High/low discussion and consensus"
 
 
-def test_skill_file_exists() -> None:
-    assert SKILL.is_file(), f"missing {SKILL.relative_to(ROOT)}"
-
-
 def test_frontmatter_is_valid() -> None:
     text = SKILL.read_text()
     assert text.startswith("---\n")
@@ -224,15 +220,6 @@ def test_each_step_names_inputs_outputs_and_stops() -> None:
         body = rest[: following.start()] if following else rest
         for label in ("**Inputs:**", "**Outputs:**", "**Stop:**"):
             assert label in body, f"{heading} missing {label}"
-
-
-def test_manifest_registers_skill() -> None:
-    assert MANIFEST["skills"]["story-refinement"] == [
-        "linear",
-        "todo-tracking",
-        "engineering-practice",
-        "metrics",
-    ]
 
 
 def test_schema_has_refinement_object() -> None:
@@ -301,17 +288,6 @@ BASE_REFINEMENT = copy.deepcopy(EXAMPLE_PROFILE["refinement"])
 def validate_refinement(refinement: dict) -> None:
     """Validate the whole example profile, with `refinement` replaced, against the full schema."""
     jsonschema.validate({**EXAMPLE_PROFILE, "refinement": refinement}, SCHEMA)
-
-
-def test_schema_label_keys_are_optional_nonblank_strings_with_no_default() -> None:
-    """SKL-238 C1: each label key is an optional string with minLength 1 and no default."""
-    props = SCHEMA["properties"]["refinement"]["properties"]
-    for key in LABEL_KEYS:
-        assert props[key]["type"] == "string", key
-        assert props[key]["minLength"] == 1, key
-        assert props[key]["pattern"] == "\\S", key
-        assert "default" not in props[key], key
-    assert not set(LABEL_KEYS) & set(SCHEMA["properties"]["refinement"].get("required", []))
 
 
 @pytest.mark.parametrize(

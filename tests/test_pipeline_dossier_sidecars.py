@@ -78,7 +78,7 @@ def make_gate(tmp_path: Path, repo: Path) -> dict:
     spec = tmp_path / "spec.md"
     spec.write_text("Story SKL-89: size sidecars.\n")
     g = {"repo": repo, "scratch": scratch, "env": env, "spec": spec, "tmp": tmp_path}
-    preflight = run_script("preflight", "--repo", str(repo), "--base", BASE_REF, "--test-cmd", "true",
+    preflight = run_script("preflight", "--full-suite", "on", "--repo", str(repo), "--base", BASE_REF, "--test-cmd", "true",
                            "--scratch", str(scratch), env=env)
     assert preflight.returncode == 0, preflight.stdout + preflight.stderr
     return g

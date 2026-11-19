@@ -75,7 +75,7 @@ def gate(tmp_path):
     spec = tmp_path / "spec.md"
     spec.write_text("Story SKL-86: the total ignores negative items.\n")
     preflight = run_script(
-        "preflight", "--repo", str(repo), "--base", BASE_REF, "--test-cmd", "true",
+        "preflight", "--full-suite", "on", "--repo", str(repo), "--base", BASE_REF, "--test-cmd", "true",
         "--scratch", str(scratch), env=env,
     )
     assert preflight.returncode == 0, preflight.stdout + preflight.stderr

@@ -1,0 +1,155 @@
+#!/usr/bin/env python3
+"""Stand in for the runtime's roles and the user channel in one run of the owner-wait-verified case.
+
+The coordinator under test starts or continues every senior-engineer or QA session, and sends
+every message to the user, through this script. Nothing is launched: a launch starts a session
+that has not handed back, and a resume continues one this run knows, seeded from QA round 1's
+launch record `qa-round-1.json`. A user message is delivered to no one; the last one a run sends
+is its final message. `read` prints a file in this directory. Every FILE is a file in this
+directory, and a relative one is read from it.
+
+This script sits in the agent's directory, the run directory's `workspace/`. Every accepted call
+appends one line to `actions.jsonl` in the run directory, the parent of this one, and every
+message's text is kept in `messages.json` there under the id its line names, so the grader reads
+the calls and what each one carried, never the coordinator's prose. A rejected call records
+nothing. Calls run one at a time under a lock in the run directory, shared with the tracker stub.
+
+  role-runtime launch --role qa|engineer --label LABEL --message FILE
+  role-runtime resume --session SESSION --message FILE
+  role-runtime user-message --message FILE
+  role-runtime read --path FILE
+"""
+
+import argparse
+import datetime
+import fcntl
+import json
+import pathlib
+import re
+import sys
+
+WORK = pathlib.Path(__file__).resolve().parent
+RECORD = WORK.parent
+ACTIONS = RECORD / "actions.jsonl"
+MESSAGES = RECORD / "messages.json"
+SESSIONS = RECORD / "sessions.json"
+LOCK = RECORD / "runtime.lock"
+ROUND_ONE = WORK / "qa-round-1.json"
+LABEL = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
+
+
+def stamp() -> str:
+    now = datetime.datetime.now(datetime.timezone.utc)
+    return now.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def load(path: pathlib.Path, default: object) -> object:
+    return json.loads(path.read_text()) if path.is_file() else default
+
+
+def sessions() -> dict:
+    """The sessions this run knows, seeded from QA round 1's launch record."""
+    if SESSIONS.is_file():
+        return load(SESSIONS, {})
+    record = load(ROUND_ONE, None)
+    if record is None:
+        sys.exit(f"role-runtime: harness error, there is no {ROUND_ONE}; nothing was recorded")
+    return {record["session"]: {"role": "qa", "label": record["label"]}}
+
+
+def record(entry: dict) -> None:
+    with ACTIONS.open("a") as handle:
+        handle.write(json.dumps({**entry, "at": stamp()}, sort_keys=True) + "\n")
+
+
+def work_file(path: str) -> tuple[pathlib.Path, str]:
+    """The file a FILE argument names and its text; it must be in this directory."""
+    file = pathlib.Path(path)
+    resolved = (file if file.is_absolute() else WORK / file).resolve()
+    if not resolved.is_relative_to(WORK):
+        sys.exit(f"role-runtime: {path} is not in {WORK}")
+    if not resolved.is_file():
+        sys.exit(f"role-runtime: there is no file at {path}")
+    try:
+        return resolved, resolved.read_text()
+    except (OSError, UnicodeDecodeError) as error:
+        sys.exit(f"role-runtime: cannot read the file {path}: {error}")
+
+
+def keep_message(text: str, channel: str) -> int:
+    """Keep the message text under a new id, one above every id already kept."""
+    kept = load(MESSAGES, {"messages": []})
+    number = max((message["id"] for message in kept["messages"]), default=0) + 1
+    kept["messages"].append({"id": number, "channel": channel, "text": text})
+    MESSAGES.write_text(json.dumps(kept, indent=2, sort_keys=True) + "\n")
+    return number
+
+
+def launch(args: argparse.Namespace) -> str:
+    if not LABEL.fullmatch(args.label):
+        sys.exit(f"role-runtime: the label {args.label!r} must match {LABEL.pattern}")
+    known = sessions()
+    session = f"{args.label}-session"
+    if session in known:
+        sys.exit(f"role-runtime: a session {session} already exists; resume it or pick a new label")
+    _, text = work_file(args.message)
+    known[session] = {"role": args.role, "label": args.label}
+    SESSIONS.write_text(json.dumps(known, indent=2, sort_keys=True) + "\n")
+    number = keep_message(text, args.role)
+    record({"action": "launch", "role": args.role, "label": args.label, "session": session, "message_id": number})
+    return f"Started {session}. The session is working and has not handed back."
+
+
+def resume(args: argparse.Namespace) -> str:
+    known = sessions()
+    if args.session not in known:
+        sys.exit(f"role-runtime: this run knows no session {args.session}")
+    _, text = work_file(args.message)
+    SESSIONS.write_text(json.dumps(known, indent=2, sort_keys=True) + "\n")
+    role = known[args.session]["role"]
+    number = keep_message(text, role)
+    record({"action": "resume", "role": role, "session": args.session, "message_id": number})
+    return f"Resumed {args.session}. The session is working and has not handed back."
+
+
+def user_message(args: argparse.Namespace) -> str:
+    _, text = work_file(args.message)
+    record({"action": "user-message", "message_id": keep_message(text, "user")})
+    return "Delivered to the user."
+
+
+def read_file(args: argparse.Namespace) -> str:
+    file, content = work_file(args.path)
+    record({"action": "read", "path": str(file.relative_to(WORK))})
+    return content
+
+
+def parsed() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Start or continue a role session, message the user, or read a file.")
+    commands = parser.add_subparsers(dest="command", required=True)
+    start = commands.add_parser("launch", help="start a new senior-engineer or QA session")
+    start.add_argument("--role", required=True, choices=("qa", "engineer"))
+    start.add_argument("--label", required=True)
+    start.add_argument("--message", required=True)
+    again = commands.add_parser("resume", help="continue a session this run knows")
+    again.add_argument("--session", required=True)
+    again.add_argument("--message", required=True)
+    user = commands.add_parser("user-message", help="send a message to the user")
+    user.add_argument("--message", required=True)
+    read_parser = commands.add_parser("read", help="print a file in this directory")
+    read_parser.add_argument("--path", required=True)
+    return parser.parse_args()
+
+
+def main() -> int:
+    args = parsed()
+    act = {"launch": launch, "resume": resume, "user-message": user_message, "read": read_file}[args.command]
+    # One call at a time: concurrent calls would share a message id or a session record.
+    with LOCK.open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        print(act(args))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
