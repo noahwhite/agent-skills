@@ -106,13 +106,14 @@ class Broken(Exception):
 
 
 def git(repo: Path, *args: str, strip: bool = True) -> str:
-    # A path git prints may hold bytes that are not UTF-8; surrogateescape keeps them, as the
-    # file system's own encoding does, so os.fsencode gives back the bytes on disk.
-    result = subprocess.run(["git", "-C", str(repo), *args], capture_output=True,
-                            encoding="utf-8", errors="surrogateescape")
+    # Read as bytes and decode as the file system does: a path git prints may hold bytes that are
+    # not UTF-8, which os.fsdecode keeps so os.fsencode gives them back, or a carriage return,
+    # which text mode would turn into a newline.
+    result = subprocess.run(["git", "-C", str(repo), *args], capture_output=True)
     if result.returncode != 0:
-        raise Refused(f"git {' '.join(args)} failed in {repo}: {result.stderr.strip()}")
-    return result.stdout.strip() if strip else result.stdout
+        raise Refused(f"git {' '.join(args)} failed in {repo}: {os.fsdecode(result.stderr).strip()}")
+    stdout = os.fsdecode(result.stdout)
+    return stdout.strip() if strip else stdout
 
 
 def is_evals(parts: tuple[str, ...]) -> bool:

@@ -597,8 +597,12 @@ def test_a_record_with_bytes_that_are_not_utf8_is_still_written(suite) -> None:
     suite["recommit"]("bad-bytes")
     result = suite["run"]("--runs", "1", str(suite["checkout"]), "lab-1")
     assert result.returncode == 1, "the stub grader cannot parse the bad line, a graded fail\n" + result.stderr
-    calls = next((suite["evals"] / "stub" / "results").glob("*-bad-bytes-*-calls.jsonl")).read_text(encoding="utf-8")
+    assert "Traceback" not in result.stderr, result.stderr
+    results = suite["evals"] / "stub" / "results"
+    calls = next(results.glob("*-bad-bytes-*-calls.jsonl")).read_text(encoding="utf-8")
     assert "�" in calls
+    assert list(results.glob("lab-1-bad-bytes-*-1.json")), "the attempt record is written"
+    assert (suite["evals"] / "results" / "suite-lab-1.md").is_file(), "the suite writes its summary"
 
 
 def test_a_scenario_graded_twice_reports_each_grade(suite) -> None:
@@ -896,7 +900,7 @@ def test_evals_of_another_checkout_than_the_runners_is_refused(suite) -> None:
     assert not (foreign / "results").exists(), "nothing written"
 
 
-@pytest.mark.parametrize("skill", ["other-skill", "café"])
+@pytest.mark.parametrize("skill", ["other-skill", "café", "odd\rskill"])
 def test_the_runner_runs_a_second_skills_suite_twice(suite, skill: str) -> None:
     evals = suite["harness"] / "skills" / skill / "evals"
     stub_case(evals / "stub", scenarios=("pass",))
@@ -1293,6 +1297,10 @@ def contract_errors(case_dir: Path, tracked_mode) -> list[str]:
         # The runner takes only names that match NAME, so a name like ../results is no fixture.
         if not SUITE.NAME.fullmatch(str(name or "")) or not (case_dir / "scenarios" / name).is_dir():
             errors.append(f"no fixtures for scenario {name!r}")
+    named = [scenario.get("name") for scenario in scenarios if isinstance(scenario, dict)] \
+        if isinstance(scenarios, list) else []
+    if len(set(map(str, named))) != len(named):
+        errors.append("case.yaml names a scenario more than once")
     names = SUITE.grader_names(case_dir / "grader.py") if (case_dir / "grader.py").is_file() else set()
     if not any("actions.jsonl" in name for name in names):
         errors.append("the grader does not read the tool-call record actions.jsonl")
@@ -1347,6 +1355,7 @@ def test_a_case_of_any_skill_missing_its_grader_fails_the_contract(tmp_path: Pat
     "no-kind", "bad-kind", "no-prompt", "no-grader", "no-run", "run-not-executable",
     "no-results", "no-fixture", "prose-grader", "prose-beside-calls", "missing-field", "no-scenarios",
     "prose-stdout", "prose-log", "prose-response", "prose-redirected", "scenario-outside-scenarios",
+    "duplicate-scenario",
 ])
 def test_the_contract_check_catches_each_breakage(tmp_path: Path, breakage: str) -> None:
     case_dir = tmp_path / "case"
@@ -1376,6 +1385,8 @@ def test_the_contract_check_catches_each_breakage(tmp_path: Path, breakage: str)
     elif breakage == "scenario-outside-scenarios":
         # scenarios/../results is the case's results/ directory, so it exists but is no fixture.
         case["scenarios"][0]["name"] = "../results"
+    elif breakage == "duplicate-scenario":
+        case["scenarios"].append(dict(case["scenarios"][0]))
     elif breakage == "prose-grader":
         (case_dir / "grader.py").write_text("open('agent-output.txt').read()\n")
     elif breakage == "prose-beside-calls":
