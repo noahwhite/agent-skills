@@ -4159,9 +4159,10 @@ WORKTREE_CREATE = (
     "Before you spawn the senior engineer, fetch the base the branch rule in `references/github.md` selects "
     "(`<profile.git.integration_branch>` by default) with the explicit refspec `git fetch origin "
     "+refs/heads/<base>:refs/remotes/origin/<base>` and, when the story has no unmerged story worktree and no "
-    "open PR, run `git worktree add -b <branch> <absolute path> origin/<base>` to create the story worktree on "
-    "a new story branch cut from that base, `<branch>` being a name the branch-naming rule gives that no local "
-    "or remote branch already carries, per the branch and worktree rules in `references/github.md`."
+    "open PR, run `git worktree add --no-track -b <branch> <absolute path> origin/<base>` to create the story "
+    "worktree on a new story branch cut from that base, `<branch>` being a name the branch-naming rule gives "
+    "that no local or remote branch already carries, per the branch and worktree rules in "
+    "`references/github.md`; the branch has no upstream until its first push, `git push -u origin <branch>`."
 )
 WORKTREE_LATER_PR = (
     "A later PR for the same story, opened after an earlier one merged, gets a fresh worktree under the existing "
@@ -4173,8 +4174,10 @@ WORKTREE_EXISTING = (
     "A story with an existing unmerged story worktree or an open PR reuses that worktree or its branch and "
     "names it in the `worktree:` line, per the existing PR or branch rule in `references/github.md`: name an "
     "existing story worktree whose branch has not merged and create nothing, and when only the open PR's head "
-    "branch exists, run `git worktree add <absolute path> <branch>` after a fetch to create the story worktree "
-    "on that branch; a branch whose PR merged is never reused, so a later PR gets the fresh worktree above."
+    "branch exists, fetch it with `git fetch origin +refs/heads/<branch>:refs/remotes/origin/<branch>` and run "
+    "`git worktree add --no-track -b <branch> <absolute path> origin/<branch>`, or `git worktree add <absolute "
+    "path> <branch>` when a local branch of that name exists, to create the story worktree on that branch; a "
+    "branch whose PR merged is never reused, so a later PR gets the fresh worktree above."
 )
 WORKTREE_BRIEF_LINE = (
     "- The line `worktree: <absolute path>`, whose whole text is exactly that, `<absolute path>` being the story "
