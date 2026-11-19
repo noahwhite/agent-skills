@@ -9,7 +9,7 @@ purpose: >-
 split: >-
   SKL-356 owns this case: its prompt, case.yaml, grader, scenarios, the stub tracker and role
   runtime, rerun instructions and recorded runs, and its row in the case list of ../README.md. The
-  suite harness (../run-suite.sh, ../suite.py) stays SKL-164's, and no file of another case changes.
+  suite harness (scripts/run-suite.sh, scripts/eval_suite.py at the repository root since SKL-338) stays SKL-164's, and no file of another case changes.
 baseline:
   commit: 9e65dd3e24b10076bd04237971c4f3974164c56a
   note: >-
@@ -26,7 +26,7 @@ runtime:
   model: deepseek/deepseek-v4-pro
   reasoning_effort: default
   record: >-
-    SKL-356 records three graded runs per scenario at each commit through ../run-suite.sh. A run with
+    SKL-356 records three graded runs per scenario at each commit through the suite runner. A run with
     a different model records its own result files and names the model it used.
 scenarios:
   - name: rescoped-brief

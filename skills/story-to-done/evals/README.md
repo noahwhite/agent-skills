@@ -1,6 +1,7 @@
 # story-to-done eval suite
 
-Executed eval cases for the story-to-done skill, and the suite runner that repeats them.
+Executed eval cases for the story-to-done skill.
+The suite runner that repeats them is shared by every skill's `evals/`: `scripts/run-suite.sh` at the repository root, which takes the skill's `evals/` directory as its first argument.
 Each case runs a real agent against a fixed scenario and grades the tool calls it recorded, never its prose.
 
 ## Prerequisites
@@ -45,24 +46,30 @@ bash skills/story-to-done/evals/qa-unfinished-own-steps/run.sh <checkout> own-st
 One case, with 3 graded runs per scenario:
 
 ```sh
-uv run --locked bash skills/story-to-done/evals/run-suite.sh --runs 3 <checkout> <label> qa-unfinished-own-steps
+uv run --locked bash scripts/run-suite.sh skills/story-to-done/evals --runs 3 <checkout> <label> qa-unfinished-own-steps
 ```
 
 The whole suite, every case directory holding a `case.yaml`:
 
 ```sh
-uv run --locked bash skills/story-to-done/evals/run-suite.sh <checkout> <label>
+uv run --locked bash scripts/run-suite.sh skills/story-to-done/evals <checkout> <label>
 ```
 
 A baseline and a candidate are two suite runs, one per commit, each from its own detached checkout:
 
 ```sh
 git worktree add --detach <scratch>/skill-7a6cb17 7a6cb17
-uv run --locked bash skills/story-to-done/evals/run-suite.sh <scratch>/skill-7a6cb17 <model>-baseline-7a6cb17 qa-unfinished-own-steps
+uv run --locked bash scripts/run-suite.sh skills/story-to-done/evals <scratch>/skill-7a6cb17 <model>-baseline-7a6cb17 qa-unfinished-own-steps
 git worktree remove <scratch>/skill-7a6cb17
 ```
 
-The runner lists cases from the harness checkout, never from `<checkout>`, so a baseline commit that predates a case still runs it.
+The case names, with nothing run:
+
+```sh
+uv run --locked bash scripts/run-suite.sh skills/story-to-done/evals --list
+```
+
+The runner lists cases from the harness checkout's `evals/` directory, never from `<checkout>`, so a baseline commit that predates a case still runs it.
 It refuses a harness or skill checkout with any uncommitted change, tracked or untracked, because the commit it records would not describe the run; only the suite's own records under a `results/` directory are allowed, untracked or with an unstaged modification; a record staged, deleted, renamed or unmerged is refused.
 
 A run that stopped before writing its summary is continued with `--resume` and the same arguments and environment: each attempt that already has both records is counted from them instead of running again.
@@ -80,7 +87,8 @@ A run without `--resume` refuses a label that already has records, and no run wr
 - Any other exit status, further grades without the scenario's own `grader-output.txt`, further grade files that contradict the status, or grades that differ from an earlier graded attempt's of the same scenario mean the case or the machine is broken: the attempt is recorded with outcome `error` and the suite stops with exit 1, writing no summary.
 - Before each attempt and before the summary, the runner checks that both checkouts are still clean and at their commits, with every committed record as it was when the run started; a checkout an attempt changed, a committed record included, stops the suite with exit 1.
 - A case that names a scenario twice is refused.
-- The runner exits 0 when every scenario has N graded runs, 1 when any has fewer or it stopped on a broken attempt, and 2 when it refuses to start or would overwrite a file.
+- The runner exits 0 when every scenario has N graded runs and every graded run of every grade passed, 1 when any scenario has fewer, any graded run failed (the summary is still written, and stderr names each failing grade) or it stopped on a broken attempt, and 2 when it refuses to start or would overwrite a file.
+  A baseline run of a discriminating case therefore exits 1 by design.
 
 ## Results layout and naming
 
