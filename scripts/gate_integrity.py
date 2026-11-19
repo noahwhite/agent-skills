@@ -21,7 +21,10 @@ job or step. Everything else must stay as the base has it:
   An added step runs only after every base step, so it cannot change their execution
   (through $GITHUB_ENV, for example);
 - added jobs and steps in a base workflow are ones GitHub accepts (known keys, one of
-  `runs-on` or `uses`, one of `run` or `uses`), since an invalid one stops the file.
+  `run` or `uses`, string names), since an invalid one stops the file. An added job
+  there is a `runs-on` job, since the gate does not load a reusable workflow's file,
+  and a step added to a base job is a `run` step, since an action's pre hook would run
+  before the base steps. A changed display name must be a string.
 
 Values compare by type as well as value, so `true` does not match `1`.
 
@@ -203,9 +206,25 @@ def compare_steps(base_steps, head_steps, where: str) -> list[str]:
                             " step runs before it; added steps go after the base steps)")
         else:
             problems.append(f"{where}: {describe(position, base_step)} was removed or changed")
+    for position, base_step in enumerate(base_steps[:len(head_steps)], start=1):
+        problems += name_problems(base_step, head_steps[position - 1], f"{where}: {describe(position, base_step)}")
     for position, step in enumerate(head_steps[len(base_steps):], start=len(base_steps) + 1):
-        problems += invalid_step(step, f"{where}: added step {position}")
+        added = f"{where}: added step {position}"
+        problems += invalid_step(step, added)
+        if isinstance(step, dict) and "uses" in step:
+            # An action's pre hook runs at job start, before every base step.
+            problems.append(f"{added} uses an action, whose pre hook would run before the base steps;"
+                            " a step added to a base job must be a run step")
     return problems
+
+
+def name_problems(base, head, where: str) -> list[str]:
+    """A changed display name must be a string, or GitHub rejects the file."""
+    if not isinstance(base, dict) or not isinstance(head, dict) or "name" not in head:
+        return []
+    if base.get("name") == head["name"] or isinstance(head["name"], str):
+        return []
+    return [f"{where}: its new name is not a string"]
 
 
 def steps_of(job) -> list:
@@ -226,7 +245,7 @@ def invalid_step(step, where: str) -> list[str]:
         return [f"{where} has keys GitHub rejects: {', '.join(unknown)}"]
     if ("run" in step) == ("uses" in step):
         return [f"{where} needs exactly one of run and uses"]
-    return []
+    return name_problems({}, step, where)
 
 
 def invalid_job(job, where: str) -> list[str]:
@@ -236,19 +255,21 @@ def invalid_job(job, where: str) -> list[str]:
     unknown = sorted(str(key) for key in job if key not in JOB_KEYS)
     if unknown:
         return [f"{where} has keys GitHub rejects: {', '.join(unknown)}"]
-    if ("runs-on" in job) == ("uses" in job):
-        return [f"{where} needs exactly one of runs-on and uses"]
     if "uses" in job:
-        return [f"{where} has steps, which a reusable workflow call cannot"] if "steps" in job else []
+        # GitHub rejects the caller when the called file is missing or invalid, which this judge does not load.
+        return [f"{where} calls a reusable workflow, which the gate cannot check; call it from a new workflow file"]
+    if "runs-on" not in job:
+        return [f"{where} needs runs-on"]
+    problems = name_problems({}, job, where)
     steps = job.get("steps")
     if not isinstance(steps, list) or not steps:
-        return [f"{where} needs a list of steps"]
-    return [problem for position, step in enumerate(steps, start=1)
-            for problem in invalid_step(step, f"{where} step {position}")]
+        return problems + [f"{where} needs a list of steps"]
+    return problems + [problem for position, step in enumerate(steps, start=1)
+                       for problem in invalid_step(step, f"{where} step {position}")]
 
 
 def compare_workflow(name: str, base: dict, head: dict) -> list[str]:
-    problems = compare_fields(base, head, ("name", "jobs"), name)
+    problems = compare_fields(base, head, ("name", "jobs"), name) + name_problems(base, head, name)
     base_jobs, head_jobs = base.get("jobs") or {}, head.get("jobs") or {}
     if not isinstance(base_jobs, dict) or not isinstance(head_jobs, dict):
         return problems + ([] if same(base_jobs, head_jobs) else [f"{name}: jobs changed"])
@@ -274,6 +295,7 @@ def compare_workflow(name: str, base: dict, head: dict) -> list[str]:
                 problems.append(f"{where} changed")
             continue
         problems += compare_fields(base_job, head_job, ("name", "steps"), where)
+        problems += name_problems(base_job, head_job, where)
         problems += compare_steps(base_job.get("steps"), head_job.get("steps"), where)
     return problems + broken_needs(name, head_jobs)
 
@@ -432,8 +454,9 @@ def main(argv=None) -> int:
     except (RecursionError, MemoryError, OSError) as error:
         problems = [f"could not judge: {error.__class__.__name__}"]
     for problem in problems:
-        # Head-controlled names are escaped onto one line, so none can start a runner workflow command.
-        print("gate-base: " + problem.encode("unicode_escape").decode("ascii"))
+        # Head-controlled names are escaped onto one line, so none can start a runner workflow
+        # command, and `##[` is broken up, since the runner's legacy parser finds it anywhere.
+        print("gate-base: " + problem.encode("unicode_escape").decode("ascii").replace("##[", "#\\#["))
     if problems:
         print(f"gate-base: FAIL, {len(problems)} violation(s)")
         return 1

@@ -18,6 +18,16 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
+      # A new in-progress gate-base run replaces any earlier verdict on this head SHA,
+      # so a success judged against an earlier base does not stand while this run judges.
+      - name: Mark gate-base in progress on the PR head
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: >-
+          gh api --method POST "repos/$REPO/check-runs"
+          -f name=gate-base -f "head_sha=$HEAD_SHA" -f status=in_progress
       - name: Check out the base commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

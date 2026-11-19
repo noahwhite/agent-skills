@@ -186,10 +186,41 @@ def test_an_added_job_that_needs_a_base_job_passes(tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
 
 
-def test_an_added_reusable_workflow_job_passes(tmp_path):
+def test_an_added_reusable_workflow_job_in_a_base_workflow_fails(tmp_path):
+    # GitHub rejects the caller when the called file is missing or invalid; the gate does not load it.
     result = judge(tmp_path, head_with(lambda ci: ci["jobs"].update(
         reuse={"uses": "./.github/workflows/reusable.yml", "with": {"x": 1}})))
-    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.returncode != 0, result.stdout
+    assert "reusable workflow" in result.stdout
+
+
+def test_an_appended_run_step_passes(tmp_path):
+    result = judge(tmp_path, head_with(lambda ci: steps(ci).append({"name": "More", "run": "true"})))
+    assert result.returncode == 0, result.stdout
+
+
+# A display name GitHub rejects stops the whole file, gate-base.yml included.
+NON_STRING_NAMES = {
+    "workflow": lambda ci: ci.update(name={"display": "CI"}),
+    "base step": lambda ci: steps(ci)[0].update(name={"display": "x"}),
+    "added step": lambda ci: steps(ci).append({"name": ["x"], "run": "true"}),
+    "added job": lambda ci: ci["jobs"].update(
+        lint={"name": {"x": 1}, "runs-on": "ubuntu-24.04", "steps": [{"run": "true"}]}),
+}
+
+
+@pytest.mark.parametrize("change", NON_STRING_NAMES.values(), ids=NON_STRING_NAMES)
+def test_a_name_that_is_not_a_string_fails(tmp_path, change):
+    result = judge(tmp_path, head_with(change))
+    assert result.returncode != 0, result.stdout
+
+
+def test_a_gate_workflow_step_name_that_is_not_a_string_fails(tmp_path):
+    gate = copy.deepcopy(GATE)
+    gate["jobs"]["gate"]["steps"][0]["name"] = {"display": "Judge"}
+    result = judge(tmp_path, {"ci.yml": copy.deepcopy(CI), "gate-base.yml": gate})
+    assert result.returncode != 0, result.stdout
+    assert "not a string" in result.stdout
 
 
 # GitHub rejects a whole workflow file with an invalid job or step, so an addition like
@@ -207,6 +238,8 @@ INVALID_ADDITIONS = {
     "appended step with run and uses": lambda ci: steps(ci).append({"run": "true", "uses": "x/y@v1"}),
     "appended step with an unknown key": lambda ci: steps(ci).append({"run": "true", "runs": "x"}),
     "appended step that is not a mapping": lambda ci: steps(ci).append("echo hi"),
+    # An action's pre hook runs at job start, before every base step.
+    "appended uses step": lambda ci: steps(ci).append({"uses": "o/a@0123456789abcdef0123456789abcdef01234567"}),
 }
 
 
@@ -517,6 +550,14 @@ def test_a_multiline_head_name_cannot_start_a_runner_command(tmp_path):
     assert all(line.startswith("gate-base: ") for line in result.stdout.splitlines()), result.stdout
 
 
+@pytest.mark.parametrize("key", ["##[error]forged", "###[warning]forged", "x ##[notice]forged"])
+def test_a_head_name_cannot_carry_a_legacy_runner_command(tmp_path, key):
+    # The runner's legacy parser finds `##[` anywhere in a line.
+    result = judge(tmp_path, head_with(lambda ci: ci.update({key: 1})))
+    assert result.returncode != 0
+    assert "##[" not in result.stdout, result.stdout
+
+
 def test_the_two_directory_interface_judges_the_base_checkouts_script(tmp_path):
     base = write_tree(tmp_path / "base", {"ci.yml": CI, "gate-base.yml": GATE})
     head = write_tree(tmp_path / "head", head_with(lambda ci: None), script="print('weaker')\n")
@@ -688,7 +729,7 @@ def test_a_failing_judge_fails_the_judge_step(tmp_path, judge_exit):
 
 def run_report_step(tmp_path, log_text, gh_failures):
     """Run the report step with a stub gh that fails gh_failures times, then records its summary."""
-    [report] = [s for s in all_steps(gate_workflow()) if "check-runs" in s.get("run", "")]
+    [report] = [s for s in all_steps(gate_workflow()) if "status=completed" in s.get("run", "")]
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     (bin_dir / "sleep").write_text("#!/bin/sh\nexit 0\n")
@@ -727,8 +768,18 @@ def test_the_judge_step_times_out_before_the_job():
     assert judge_step["timeout-minutes"] < workflow["jobs"]["gate"]["timeout-minutes"]
 
 
+def test_an_in_progress_gate_base_run_replaces_an_earlier_verdict_before_the_judge_runs():
+    # After a retarget the head SHA is unchanged, so its earlier success would otherwise stand
+    # until this run reports.
+    first = all_steps(gate_workflow())[0]
+    assert "name=gate-base" in first["run"] and "status=in_progress" in first["run"]
+    assert '"head_sha=$HEAD_SHA"' in first["run"]
+    assert first["env"]["HEAD_SHA"] == "${{ github.event.pull_request.head.sha }}"
+    assert "if" not in first and "continue-on-error" not in first
+
+
 def test_the_check_run_gate_base_is_created_on_the_pr_head_sha():
-    [report] = [s for s in all_steps(gate_workflow()) if "check-runs" in s.get("run", "")]
+    [report] = [s for s in all_steps(gate_workflow()) if "status=completed" in s.get("run", "")]
     assert report["if"] == "always()"
     assert "name=gate-base" in report["run"]
     assert '"head_sha=$HEAD_SHA"' in report["run"]
