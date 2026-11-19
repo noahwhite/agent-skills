@@ -140,6 +140,42 @@ def test_retro_section_files_only_action_items() -> None:
         assert phrase in body, f"retro missing: {phrase}"
 
 
+def test_retro_proposes_checklist_items_from_repeated_misses() -> None:
+    body = section(SKILL.read_text(), "Retro")
+    bullets = [b for b in body.split("\n- ") if b.startswith("Propose review checklist items from repeated misses:")]
+    assert len(bullets) == 1, "no single top-level Retro bullet proposes review checklist items"
+    bullet = bullets[0]
+    assert "review-checklist.txt" in bullet
+    for phrase in (
+        "since the previous retro",
+        "every PR review marked `Review of record <sha>`, delta reviews included",
+        "a miss its verdict ruled valid once per distinct PR, except a confirmed `pre-existing` finding",
+        "arbiter reports in PR bodies",
+        "`profile.git.host`",
+        "once per distinct PR",
+        "two or more PRs",
+        "count only a review or PR body whose author has write access to the repository",
+        "exclude scratch arbiter reports",
+        "on the retro issue",
+        "`<bash glob> | <review item>`",
+        "citing the review links",
+        "edits no file",
+    ):
+        assert phrase in bullet, f"retro checklist step missing: {phrase}"
+
+
+def test_retro_checklist_items_need_owner_approval() -> None:
+    body = section(SKILL.read_text(), "Retro")
+    bullets = [b for b in body.split("\n- ") if b.startswith("Propose review checklist items from repeated misses:")]
+    assert len(bullets) == 1, "no single top-level Retro bullet proposes review checklist items"
+    bullet = bullets[0]
+    for phrase in (
+        "enters the checklist only through an engineer PR that links the owner's approval comment on the retro issue",
+        "never adds the item itself",
+    ):
+        assert phrase in bullet, f"retro owner approval missing: {phrase}"
+
+
 def pruning_bullet() -> str:
     """Return the Retro list item that starts the pruning routine, continuation lines included."""
     lines = section(SKILL.read_text(), "Retro").splitlines()

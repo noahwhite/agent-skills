@@ -201,6 +201,10 @@ Fix a FAIL before spending any model budget.
 The sweeper returns a structured candidate list, each entry with `file:line`, a severity, a one-line claim and a concrete failure scenario.
 Expect false positives; Phase 2 exists to remove them.
 
+The sweep dossier ends with a `Review checklist` section: each item of `.agent-skills/review-checklist.txt`, read from the base, whose glob matches a changed path (`*` crosses `/`); `checklist --base "$BASE"` prints them.
+The file holds one `<bash glob> | <review item>` per line; `#` comments and blank lines are ignored.
+`--no-sweep` skips them.
+
 ## Phase 2: verify and hunt
 
 ```bash
