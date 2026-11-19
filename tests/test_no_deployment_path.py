@@ -621,7 +621,8 @@ def test_qa_added_blocks_appear_once_in_order() -> None:
 
 
 # The `deployed` text is unchanged: with the four SKL-269 blocks cut out, qa-verification's
-# SKILL.md is byte for byte the file at the base commit f9b6659.
+# SKILL.md hashes to QA_BASE_SHA256, which was first the file at the base commit f9b6659 and is
+# since the file as each re-baselining story below left it, with these blocks cut out.
 # A later story that changes qa-verification's SKILL.md outside these blocks re-baselines this hash
 # to the sha256 of the file at its own base with these blocks cut out, and says so in its PR.
 # SKL-270 re-baselined it for its one change outside the blocks: the `compatibility:` line now names
@@ -629,9 +630,10 @@ def test_qa_added_blocks_appear_once_in_order() -> None:
 # pins and cut out as before).
 # SKL-284 re-baselined it for its one change outside the blocks: the QA evidence comment's first line is
 # exactly `## QA evidence` (section 4, item 5), which story-to-done's qa-round-cap.py counts rounds by.
-# SKL-182 re-baselined it for its one change outside the blocks: the "Await the gate" bullet in section 5,
-# which tests/test_qa_await_gate.py pins.
-QA_BASE_SHA256 = "2053613a2d9cea5a38835d6b6efbb63b650a066db6a85ce57cf835d5e44b7c1e"
+# SKL-182 re-baselined it for its changes outside the blocks: the "Await the gate" bullet in section 5,
+# the incomplete line in the completion summary and the todo-tracking index line, which
+# tests/test_qa_await_gate.py pins.
+QA_BASE_SHA256 = "3e59399ecfc5f5e3b361172b9f0630d6614ceca538cfc44bac36d418484137b7"
 
 
 def test_qa_text_outside_the_added_blocks_is_unchanged() -> None:
