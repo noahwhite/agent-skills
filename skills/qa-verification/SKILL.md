@@ -24,7 +24,7 @@ A delegated QA agent's brief may also state the run's path, and on the `no-deplo
 
 - [references/profile.md](references/profile.md) - find the profile and this skill's overlay before anything else.
   The overlay supplies the QA runner or workstation, each lane's access path and credentials source, fixture accounts, and any runbooks.
-- [references/todo-tracking.md](references/todo-tracking.md) - required before step 1: one item per AC and per DoD box (verify, capture evidence), each lane setup, the evidence PR, and the status decision.
+- [references/todo-tracking.md](references/todo-tracking.md) - required before step 1: one item per AC and per DoD box (verify, capture evidence), each lane setup, the evidence PR and each of its gate steps, and the status decision.
 - [references/linear.md](references/linear.md) - steps 1, 4, and 6: status lifecycle, checkbox completion, never done on merge, and a failed deployment review reopening the story.
 - [references/secrets.md](references/secrets.md) - every credential a lane uses.
 - [references/code-review.md](references/code-review.md) and [references/github.md](references/github.md) - step 5: the evidence PR's review of record, signing, and merge.
@@ -144,6 +144,14 @@ If `profile.qa.evidence_dir` is unset, the project does not keep in-repo evidenc
   The review of record is `profile.review.reviewer`, then a separate clean, neutral `profile.review.adjudicator`, as `references/code-review.md` defines.
   Never hand the reviewer or the adjudicator your QA verdicts.
   A docs-only diff, green checks, a long wait, or user frustration do not waive the gate; if you cannot get a review, hold and say so.
+- **Await the gate.**
+  Launch the reviewer and the adjudicator in the foreground where the runtime supports it, so each stays awaitable until it exits.
+  These two launches are the gate commands; shadow adjudicators and optional reviewers stay non-blocking, as `references/code-review.md` defines.
+  A gate command the runtime moves to the background is still running: wait for it to exit and read its report before the run continues.
+  Launch each gate command with its report going to a named scratch file, and wait by short foreground checks that each return at once, of the command's exit status and that file (or of the runtime's completion notification for a background subagent), repeated until the command exits; a command killed after its timeout has exited and takes the incomplete stop below.
+  A run never ends while a gate step it launched is still outstanding, and no stop is lawful while a gate command it launched is still running, so a closing message that the review or the adjudication is still running never ends a run.
+  Once every gate command has exited, the run reads each report and carries on to the bullets below - fixing what the adjudicator rules valid, posting the review of record, the merge guard and the merge - and then to the closing decision in step 6.
+  When a gate command has exited or could not be launched, and the gate still cannot finish - the command exited unsuccessfully, was killed after exceeding a timeout, or left a missing or empty report, or the gate needs an owner action or an access grant the run cannot supply itself - the run stops and reports itself incomplete with the completion summary's incomplete line: it names the unfinished gate step, the reason, and who owns the next action, and never claims successful completion.
 - Fix what the adjudicator rules valid, and post the review of record on the PR as a `--comment` PR review before the merge, never after.
 - Merge only on the exact final head with CI finished, never by an admin override over pending checks, and per `profile.review.merge_owner` (hand the merge to the user when it is `human`): run the merge guard in `references/code-review.md` and merge with the reviewed full head SHA as the expected-head condition (on GitHub, `gh pr merge <n> --match-head-commit <full reviewed SHA>`); if the merge command cannot carry it, stop and report the merge blocked.
   An update-branch after the review is a new head that needs a delta review first, even for a docs-only PR.
@@ -178,3 +186,4 @@ If `profile.qa.evidence_dir` is unset, the project does not keep in-repo evidenc
 ## Completion summary
 
 Report: the story and its final state; each AC and DoD verdict with its evidence; the fixtures and build SHA used; the evidence attached to the story; the evidence page link if one was published (for the user, not the tracker); the evidence PR; and any item left outstanding with its owning story.
+A run that stops with a gate step still unfinished (the incomplete stop or a blocked merge in step 5) opens its report with the incomplete line `QA incomplete: <unfinished gate step> - <reason> - next action: <owner>`, so it never reads as a finished round.
