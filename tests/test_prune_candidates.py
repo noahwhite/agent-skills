@@ -567,6 +567,17 @@ def test_a_citation_ends_at_a_delimiter(repo: Path) -> None:
     assert lines[1].startswith("- shared/orphan.md")
 
 
+def test_a_closing_backtick_or_bracket_ends_a_citation_before_prose(repo: Path) -> None:
+    write(
+        repo, "skills/alpha/SKILL.md",
+        "Follow `references/cited.md`’s merge rules and [the rules](references/rules.md)'s list.\n",
+    )
+    commit(repo, NEW, "citations followed by a possessive")
+    lines = category(repo, REFERENCES)
+    assert lines[0] == f"{REFERENCES}: 1"
+    assert lines[1].startswith("- shared/orphan.md")
+
+
 def test_a_rule_in_the_shared_readme_is_a_rule(repo: Path) -> None:
     append(repo, "shared/README.md", "\n- ⛔ Never vendor a shared source by hand into a skill directory.\n")
     commit(repo, OLD, "a rule in the README")
@@ -703,7 +714,7 @@ def test_punctuation_inside_a_file_name_ends_no_citation(repo: Path) -> None:
         "Read references/cited.md, then (references/rules.md).\n"
         "Not citations: references/orphan.md:backup.md, references/orphan.md,v2 and references/orphan.md!x.\n"
         "Nor: references/orphan.md::backup.md, archive/old.references/orphan.md and x:references/orphan.md.\n"
-        "Nor: `references/orphan.md(backup).md`, (references/orphan.md)x and references/orphan.md'v2.\n",
+        "Nor: `references/orphan.md(backup).md` and references/orphan.md'v2.\n",
     )
     commit(repo, NEW, "punctuation inside names")
     lines = category(repo, REFERENCES)

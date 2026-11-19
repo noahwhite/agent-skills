@@ -32,7 +32,8 @@ Submodules and other non-file tree entries are skipped, and a control character 
   Proposal: keep, since the file still runs in the suite on every CI run; retire it only on a finding that it adds no value (the test-quality review owns that judgement for the current suite).
 - **Reference files uncited at this commit.**
   A `shared/` capability source (`shared/*.md`, except `README.md`) that no `skills/*/SKILL.md` cites as `references/<name>` at the evaluated commit.
-  A citation is the whole path, optionally written `./references/<name>`, at the start of a line or after whitespace, a quote or an opening bracket; the rest of its word (up to whitespace or the line end) may hold only a `#anchor` and then closing quotes, closing brackets and punctuation, such as a sentence-final period.
+  A citation is the whole path, optionally written `./references/<name>`, at the start of a line or after whitespace, a quote or an opening bracket, optionally followed by a `#anchor`.
+  A backtick, a double quote or a closing bracket after it ends the citation whatever follows, as in `` `references/<name>`'s ``; otherwise the rest of its word (up to whitespace or the line end) may hold only a single quote, `*`, `|` and punctuation, such as a sentence-final period.
   `references/<name>` inside a longer path or name, such as `../other/references/<name>`, `old.references/<name>`, `references/<name>/x`, `references/<name>.bak`, `references/<name>:x.md`, `references/<name>(old).md` or `references/<name>+old`, does not count.
   Only `skills/*/SKILL.md` files are searched, so a citation in a vendored reference file does not count.
   Vendored copies under `skills/*/references/` are not counted.

@@ -37,7 +37,8 @@ FENCE = re.compile(r"^(\s*)(`{3,}|~{3,})(.*)$")
 BLOCK_START = re.compile(r"^\s*(?:#{1,6}(?:\s|$)|>|\||```|~~~|---|\*\*\*|___)")
 ESCAPED = re.compile(r"[\\\x00-\x1f\x7f\udc80-\udcff]")
 CITE_OPEN = r"\s`'\"(\[{<*|"  # may precede a citation
-CITE_CLOSE = r"`'\")\]}>*|.,;:!?"  # may follow a citation up to the end of its word
+CITE_END = r"`\")\]}>"  # ends a citation outright: a code span, a quote or a bracket closes
+CITE_CLOSE = r"'*|.,;:!?"  # may follow a citation only up to the end of its word
 
 # Every call is pinned to the repository root, takes paths literally, prints them unquoted, takes
 # no optional locks, and overrides the configuration that would change what it reads, so the
@@ -157,14 +158,16 @@ def cites(cite: str, text: str) -> bool:
     """True when text names cite as a whole relative path (optionally ./-prefixed).
 
     A cite starts at the start of a line or after whitespace, a quote or an opening bracket. After
-    the cite, the rest of its whitespace-delimited word may hold only a #anchor and then closing
-    quotes, closing brackets and punctuation. A cite inside a longer path or name, such as
-    ../other/references/x.md, old.references/x.md, references/x.md/y, references/x.md.bak,
-    references/x.md:y.md, references/x.md(old).md or references/x.md+old, does not count.
+    the cite and an optional #anchor comes a backtick, a double quote or a closing bracket, which
+    ends it whatever follows (as in `references/x.md`'s), or else the rest of its
+    whitespace-delimited word holds only a single quote, * or | and punctuation. A cite inside a
+    longer path or name, such as ../other/references/x.md, old.references/x.md,
+    references/x.md/y, references/x.md.bak, references/x.md:y.md, references/x.md(old).md or
+    references/x.md+old, does not count.
     """
     pattern = (
         rf"(?:^|(?<=[{CITE_OPEN}]))(?:\./)?{re.escape(cite)}"
-        rf"(?=(?:#\S*)?[{CITE_CLOSE}]*(?:\s|$))"
+        rf"(?=(?:#[^\s{CITE_END}]*)?(?:[{CITE_END}]|[{CITE_CLOSE}]*(?:\s|$)))"
     )
     return re.search(pattern, text, re.MULTILINE) is not None
 
