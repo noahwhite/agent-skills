@@ -32,9 +32,10 @@ The story description carries four acceptance criteria, and the accepted round 3
 | DoD: verified in a deployed environment (if needed) | Correct by design | Not needed on the `no-deployment` path. |
 | DoD: no critical bugs or regressions | Verified | None found. |
 
-Known limit outside the acceptance criteria: the Retro section still allows the cycle record to live only in a project document, while the new bullet posts proposals and the owner's approval on the retro issue, so a document-only retro has nowhere to post either.
+Known limit outside the acceptance criteria: the Retro section still allows the cycle record to live only in a project document, while the new bullet has the persona post proposals on the retro issue and has the engineer's PR link the owner's approval comment there, so a document-only retro has nowhere for either comment.
 The description AC and refined AC6 both name the retro issue, so AC5 and AC6 are met as written, and the two tests pin only the bullet's wording.
-PR #361's review of record (finding 3, Medium, non-blocking) and its PR body already record this as a refinement proposal, not an AC; no tracker issue carries it yet, and its owner is the product owner.
+PR #361's review of record (finding 3, Medium, non-blocking) and its PR body record this as a refinement proposal, not an AC.
+At this QA round no SKL-342 comment and no other SKL issue carries the proposal, so it goes to the product owner to file or decline.
 
 Pending owner rulings: none.
 
