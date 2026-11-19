@@ -491,8 +491,8 @@ def label_records(evals: Path, label: str) -> set[Path]:
     for path in evals.glob(f"*/results/{label}-*.json"):
         try:
             named = json.loads(read(path)).get("label")
-        except (ValueError, AttributeError):
-            named = label  # an unreadable record is never silently left out
+        except (ValueError, AttributeError, OSError):
+            named = label  # an unreadable record, or a directory, is never silently left out
         if named == label:
             found.add(path)
     return found

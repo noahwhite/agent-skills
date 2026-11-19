@@ -1254,6 +1254,14 @@ def test_a_case_yaml_that_does_not_parse_is_refused(suite) -> None:
     assert not (suite["state"] / "pass").exists(), "nothing ran"
 
 
+def test_a_directory_named_like_a_record_of_the_label_is_refused(suite) -> None:
+    (suite["evals"] / "stub" / "results" / "lab-scratch.json").mkdir(parents=True)
+    result = suite["run"]("--runs", "1", str(suite["checkout"]), "lab")
+    assert result.returncode == 2 and "a record of lab" in result.stderr, result.stderr
+    assert "Traceback" not in result.stderr
+    assert not (suite["state"] / "pass").exists(), "nothing ran"
+
+
 def test_a_git_ignored_results_directory_does_not_block_the_next_run(suite) -> None:
     """git lists a wholly ignored results/ as one directory entry; it holds only the suite's records."""
     (suite["harness"] / ".gitignore").write_text("results/\n", encoding="utf-8")
