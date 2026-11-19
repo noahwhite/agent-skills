@@ -284,7 +284,7 @@ def rule_text(item: str) -> str:
 def cited_rules(texts: list[str], haystack: str) -> set[int]:
     """Return the indexes of the texts that share a WINDOW-character run with the haystack.
 
-    A text no longer than WINDOW counts as cited only when the haystack holds all of it with no
+    A text shorter than WINDOW, which has no WINDOW-character run, counts as cited only when the haystack holds all of it with no
     letter or digit on either side. An empty text is never cited.
     """
     found = set()
@@ -292,7 +292,7 @@ def cited_rules(texts: list[str], haystack: str) -> set[int]:
     for n, text in enumerate(texts):
         if not text:
             continue
-        if len(text) <= WINDOW:
+        if len(text) < WINDOW:
             if re.search(rf"(?<![^\W_]){re.escape(text)}(?![^\W_])", haystack):
                 found.add(n)
             continue

@@ -485,15 +485,17 @@ def test_a_nested_rule_under_a_plain_parent_is_its_own_rule(repo: Path) -> None:
     assert any(line.startswith("- shared/rules.md:") and "| \"Never open the nested" in line for line in lines[1:])
 
 
-def test_a_forty_character_rule_needs_a_whole_match(repo: Path) -> None:
-    rule = "Exactly forty characters in this rule!!."
-    assert len(rule) == 40
-    append(repo, "shared/rules.md", f"\n- ⛔ {rule}\n- ⛔ Oil it.\n")
-    write(repo, "tests/test_forty.py", f"A = 'x{rule}x'\nB = '_oil it._'\n")
+def test_only_a_rule_shorter_than_the_window_needs_a_whole_match(repo: Path) -> None:
+    forty = "Exactly forty characters in this rule!!."
+    short = "Only thirty-nine characters in a rule!."
+    assert (len(forty), len(short)) == (40, 39)
+    append(repo, "shared/rules.md", f"\n- ⛔ {forty}\n- ⛔ {short}\n")
+    write(repo, "tests/test_forty.py", f"A = 'x{forty}x'\nB = 'x{short}x'\n")
     commit(repo, OLD, "boundary rules")
     lines = category(repo, RULES)
-    assert lines[0] == f"{RULES}: 2"
-    assert any('"Exactly forty' in line for line in lines[1:])
+    assert lines[0] == f"{RULES}: 2"  # the 40-character rule is a 40-character run of the test
+    assert not any('"Exactly forty' in line for line in lines[1:])
+    assert any('"Only thirty-nine' in line for line in lines[1:])
 
 
 def test_since_is_required_and_accepts_year_one(repo: Path) -> None:

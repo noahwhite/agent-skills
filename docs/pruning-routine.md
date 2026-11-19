@@ -41,7 +41,7 @@ Submodules and other non-file tree entries are skipped, and a control character 
   A nested item that carries the marker is also a rule of its own; a list item inside a fenced code block is not a rule, and a fence closes only on its own delimiter character, at least as long, or when the list item that holds it ends.
   Line numbers count LF line breaks only, as git does.
   It is a candidate when no file under `tests/` and no `skills/*/SKILL.md` contains any 40-character run of its text (markers removed, whitespace collapsed, case ignored), and every line of it was last changed before D per `git blame`.
-  A rule of 40 characters or fewer counts as cited only when its whole text appears with no letter or digit on either side; a marker with no text is never cited.
+  A rule shorter than 40 characters, which has no 40-character run, counts as cited only when its whole text appears with no letter or digit on either side; a marker with no text is never cited.
   The evidence quotes the whole rule.
   Proposal: retire, since no test pins it and nobody has touched it since D; keep it if the retro finds it still applies, ideally with a pin.
 
