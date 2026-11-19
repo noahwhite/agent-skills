@@ -913,14 +913,29 @@ def test_list_skips_a_case_yaml_that_is_not_a_file(suite) -> None:
     assert (result.returncode, result.stdout) == (0, "stub\n"), result.stderr
 
 
-def test_an_evals_directory_with_no_case_is_refused_and_writes_nothing(suite) -> None:
+@pytest.mark.parametrize("mode", ["list", "run"])
+def test_an_evals_directory_with_no_case_is_refused_and_writes_nothing(suite, mode: str) -> None:
     empty = suite["harness"] / "skills" / "empty" / "evals"
     empty.mkdir(parents=True)
     (empty / "README.md").write_text("no case yet\n", encoding="utf-8")
     commit_all(suite["harness"])
-    result = suite["run_at"](empty, "--runs", "1", str(suite["checkout"]), "lab")
+    args = ["--list"] if mode == "list" else ["--runs", "1", str(suite["checkout"]), "lab"]
+    result = suite["run_at"](empty, *args)
     assert result.returncode == 2 and "no case" in result.stderr, result.stderr
+    assert result.stdout == "", "an empty suite lists nothing"
     assert not (empty / "results").exists(), "an empty suite writes no summary"
+
+
+@pytest.mark.parametrize("mode", ["list", "run"])
+def test_a_case_directory_the_runner_cannot_run_is_refused_before_listing(suite, mode: str) -> None:
+    """--list and a run refuse the same case names, so a listed case is one the suite can run."""
+    stub_case(suite["evals"] / "case with spaces")
+    commit_all(suite["harness"])
+    args = ["--list"] if mode == "list" else ["--runs", "1", str(suite["checkout"]), "lab"]
+    result = suite["run"](*args)
+    assert result.returncode == 2 and "case with spaces" in result.stderr, result.stderr
+    assert result.stdout == "", "nothing is listed"
+    assert not (suite["state"] / "pass").exists(), "nothing ran"
 
 
 @pytest.mark.parametrize("where", ["harness", "checkout"])
@@ -1192,11 +1207,16 @@ def test_list_takes_no_run_arguments(suite, args) -> None:
     assert result.returncode == 2, result.stderr
 
 
+# The cases story-to-done ships; a case removed or added changes this list on purpose.
+STORY_TO_DONE_CASES = ["owner-wait-verified", "pending-ruling-not-sent-to-engineer", "qa-unfinished-own-steps"]
+
+
 def test_the_story_to_done_evals_list_every_case_through_the_shared_runner() -> None:
-    result = subprocess.run(["bash", str(ROOT / "scripts" / "run-suite.sh"), str(EVALS), "--list"],
-                            capture_output=True, text=True)
+    """The documented command, run from the repository root with the relative EVALS path."""
+    result = subprocess.run(["bash", "scripts/run-suite.sh", "skills/story-to-done/evals", "--list"],
+                            cwd=ROOT, capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
-    assert result.stdout.splitlines() == [path.name for path in CASES if path.parent == EVALS]
+    assert result.stdout.splitlines() == STORY_TO_DONE_CASES
 
 
 def test_the_runner_lives_once_under_scripts() -> None:
@@ -1219,6 +1239,8 @@ REDIRECT = re.compile(r'>\s*"?\$\{?run\}?/([^"\s;|&]+)')
 def contract_errors(case_dir: Path, tracked_mode) -> list[str]:
     """Every way a case directory breaks the contract SKL-164 AC3 states."""
     errors = []
+    if not SUITE.NAME.fullmatch(case_dir.name):
+        errors.append(f"case directory {case_dir.name!r} does not match the runner's {SUITE.NAME.pattern}")
     try:
         case = yaml.safe_load((case_dir / "case.yaml").read_text(encoding="utf-8"))
     except (OSError, yaml.YAMLError) as error:
@@ -1340,6 +1362,12 @@ def test_the_contract_check_catches_each_breakage(tmp_path: Path, breakage: str)
             run_sh.write('echo said > "$run/said.md"\n')
     (case_dir / "case.yaml").write_text(yaml.safe_dump(case, sort_keys=False))
     assert contract_errors(case_dir, file_mode) != []
+
+
+def test_a_case_directory_name_the_runner_refuses_fails_the_contract(tmp_path: Path) -> None:
+    case_dir = tmp_path / "case with spaces"
+    stub_case(case_dir)
+    assert any("case directory" in error for error in contract_errors(case_dir, file_mode))
 
 
 def test_a_grader_docstring_is_not_a_file_it_reads(tmp_path: Path) -> None:

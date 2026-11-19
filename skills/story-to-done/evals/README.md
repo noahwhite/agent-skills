@@ -2,7 +2,7 @@
 
 Executed eval cases for the story-to-done skill.
 The suite runner that repeats them is shared by every skill's `evals/`: `scripts/run-suite.sh` at the repository root, which takes the skill's `evals/` directory as its first argument.
-That directory must be `skills/<skill>/evals` in the checkout holding the runner, so the harness commit a record names is the runner that ran; the runner refuses any other directory, and an `evals/` directory with no case.
+That directory must be `skills/<skill>/evals` in the checkout holding the runner, so the harness commit a record names is the runner that ran; the runner refuses any other directory, an `evals/` directory with no case, and a case directory whose name the suite cannot run, both for a run and for `--list`.
 Each case runs a real agent against a fixed scenario and grades the tool calls it recorded, never its prose.
 
 ## Prerequisites
@@ -92,6 +92,7 @@ A run without `--resume` refuses a label that already has records, and no run wr
 - A case that names a scenario twice is refused.
 - The runner exits 0 when every scenario has N graded runs and every graded run of every grade passed, 1 when any scenario has fewer, any graded run failed (the summary is still written, and stderr names each failing grade) or it stopped on a broken attempt, and 2 when it refuses to start or would overwrite a file.
   A baseline run of a discriminating case therefore exits 1 by design.
+  Exit 1 alone does not say which: a run whose graded runs failed or fell short wrote `results/suite-<label>.md` and its stderr names them (`run-suite: failing graded runs for:` or `run-suite: fewer than N graded runs for:`), while a run that stopped on a broken attempt or a changed checkout wrote no summary.
 
 ## Results layout and naming
 

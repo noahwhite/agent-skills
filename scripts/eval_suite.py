@@ -196,8 +196,16 @@ def held_by(name: bytes, mode: int) -> bytes:
 
 
 def case_names(evals: Path) -> list[str]:
-    """Every case directory of EVALS that holds a case.yaml file, by name."""
-    return sorted(path.parent.name for path in evals.glob("*/case.yaml") if path.is_file())
+    """Every case directory of EVALS that holds a case.yaml file, by name. EVALS with no case, or
+    with a case directory whose name the suite cannot run, is refused, so --list shows exactly
+    the cases a run would run."""
+    names = sorted(path.parent.name for path in evals.glob("*/case.yaml") if path.is_file())
+    if not names:
+        raise Refused(f"EVALS {evals} holds no case, so the suite would run nothing")
+    for name in names:
+        if not NAME.fullmatch(name):
+            raise Refused(f"case directory {name!r} must match {NAME.pattern}")
+    return names
 
 
 def parse(argv: list[str]) -> argparse.Namespace:
@@ -625,8 +633,9 @@ def main(argv: list[str]) -> int:
     parts = evals.relative_to(runner_root).parts
     if not is_evals(parts):
         raise Refused(f"EVALS {evals} is not a skills/<skill>/evals directory of its checkout")
+    names = case_names(evals)
     if args.list:
-        for case in case_names(evals):
+        for case in names:
             print(case)
         return 0
     summary_path = evals / "results" / f"suite-{args.label}.md"
@@ -636,16 +645,12 @@ def main(argv: list[str]) -> int:
     if existing and not args.resume:
         raise Refused(f"{min(existing)} exists, a record of {args.label}; start a new LABEL, "
                       "or --resume with the arguments that run started with")
-    cases = args.cases or case_names(evals)
-    if not cases:
-        raise Refused(f"EVALS {evals} holds no case, so the suite would run nothing")
+    cases = args.cases or names
     harness, harness_commit, harness_short = commit_of(evals, "harness", parts)
     checkout, checkout_commit, checkout_short = commit_of(args.checkout, "skill", parts)
     committed = {harness: committed_records(harness, parts), checkout: committed_records(checkout, parts)}
     specs = {}
     for case in cases:
-        if not NAME.fullmatch(case):
-            raise Refused(f"case directory {case!r} must match {NAME.pattern}")
         spec = yaml.safe_load(read(evals / case / "case.yaml"))
         scenarios = spec.get("scenarios") if isinstance(spec, dict) else None
         if not scenarios or not all(isinstance(s, dict) and NAME.fullmatch(str(s.get("name", ""))) for s in scenarios):
