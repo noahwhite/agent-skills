@@ -938,6 +938,32 @@ def test_a_case_directory_the_runner_cannot_run_is_refused_before_listing(suite,
     assert not (suite["state"] / "pass").exists(), "nothing ran"
 
 
+@pytest.mark.parametrize("sibling", ["case with spaces", "results"])
+def test_a_named_case_runs_beside_a_sibling_the_runner_cannot_run(suite, sibling: str) -> None:
+    """Naming the cases checks only those, so a bad sibling does not block a named run."""
+    suite["recommit"]("pass")
+    stub_case(suite["evals"] / sibling)
+    commit_all(suite["harness"])
+    result = suite["run"]("--runs", "1", str(suite["checkout"]), "lab", "stub")
+    assert result.returncode == 0, result.stderr
+
+
+def test_a_case_directory_named_results_is_refused(suite) -> None:
+    """evals/results/ holds the suite's summaries, so a case there would read as records."""
+    stub_case(suite["evals"] / "results")
+    commit_all(suite["harness"])
+    result = suite["run"]("--list")
+    assert result.returncode == 2 and "'results'" in result.stderr, result.stderr
+
+
+def test_the_runner_wrapper_works_through_a_symlink(suite, tmp_path: Path) -> None:
+    link = tmp_path / "linked-run-suite.sh"
+    link.symlink_to(suite["harness"] / "scripts" / "run-suite.sh")
+    result = subprocess.run(["bash", str(link), str(suite["evals"]), "--list"], capture_output=True, text=True,
+                            env=suite["env"])
+    assert (result.returncode, result.stdout) == (0, "stub\n"), result.stderr
+
+
 @pytest.mark.parametrize("where", ["harness", "checkout"])
 def test_another_skills_uncommitted_record_is_a_change_like_any_other(suite, where: str) -> None:
     suite["recommit"]("pass")
@@ -1239,8 +1265,8 @@ REDIRECT = re.compile(r'>\s*"?\$\{?run\}?/([^"\s;|&]+)')
 def contract_errors(case_dir: Path, tracked_mode) -> list[str]:
     """Every way a case directory breaks the contract SKL-164 AC3 states."""
     errors = []
-    if not SUITE.NAME.fullmatch(case_dir.name):
-        errors.append(f"case directory {case_dir.name!r} does not match the runner's {SUITE.NAME.pattern}")
+    if not SUITE.is_case_name(case_dir.name):
+        errors.append(f"case directory {case_dir.name!r} is not a name the runner runs")
     try:
         case = yaml.safe_load((case_dir / "case.yaml").read_text(encoding="utf-8"))
     except (OSError, yaml.YAMLError) as error:
@@ -1364,8 +1390,9 @@ def test_the_contract_check_catches_each_breakage(tmp_path: Path, breakage: str)
     assert contract_errors(case_dir, file_mode) != []
 
 
-def test_a_case_directory_name_the_runner_refuses_fails_the_contract(tmp_path: Path) -> None:
-    case_dir = tmp_path / "case with spaces"
+@pytest.mark.parametrize("name", ["case with spaces", "results"])
+def test_a_case_directory_name_the_runner_refuses_fails_the_contract(tmp_path: Path, name: str) -> None:
+    case_dir = tmp_path / name
     stub_case(case_dir)
     assert any("case directory" in error for error in contract_errors(case_dir, file_mode))
 

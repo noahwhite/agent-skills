@@ -17,4 +17,5 @@ if ! python3 -c 'import yaml' 2> /dev/null; then
   echo "run-suite: python3 cannot import yaml; run this script through 'uv run --locked bash ...' from the repository root" >&2
   exit 2
 fi
-exec python3 "$(dirname "$0")/eval_suite.py" "$@"
+# The runner sits beside this script's real file, so a symlink to the script still finds it.
+exec python3 "$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")/eval_suite.py" "$@"

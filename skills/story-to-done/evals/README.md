@@ -2,7 +2,8 @@
 
 Executed eval cases for the story-to-done skill.
 The suite runner that repeats them is shared by every skill's `evals/`: `scripts/run-suite.sh` at the repository root, which takes the skill's `evals/` directory as its first argument.
-That directory must be `skills/<skill>/evals` in the checkout holding the runner, so the harness commit a record names is the runner that ran; the runner refuses any other directory, an `evals/` directory with no case, and a case directory whose name the suite cannot run, both for a run and for `--list`.
+That directory must be `skills/<skill>/evals` in the checkout holding the runner, so the harness commit a record names is the checkout that held the runner as well as the cases; the runner refuses any other directory and an `evals/` directory with no case.
+A whole-suite run and `--list` also refuse a case directory whose name the suite cannot run (one that does not match `[A-Za-z0-9][A-Za-z0-9._-]*`, or `results`); a run that names its cases checks only those.
 Each case runs a real agent against a fixed scenario and grades the tool calls it recorded, never its prose.
 
 ## Prerequisites

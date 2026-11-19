@@ -195,16 +195,22 @@ def held_by(name: bytes, mode: int) -> bytes:
         return handle.read()
 
 
+def is_case_name(name: str) -> bool:
+    """True for a case directory name the suite can run: it matches NAME and is not results,
+    the directory that holds the suite's summaries, whose files read as records."""
+    return bool(NAME.fullmatch(name)) and name != "results"
+
+
 def case_names(evals: Path) -> list[str]:
     """Every case directory of EVALS that holds a case.yaml file, by name. EVALS with no case, or
     with a case directory whose name the suite cannot run, is refused, so --list shows exactly
-    the cases a run would run."""
+    the cases a whole-suite run would run."""
     names = sorted(path.parent.name for path in evals.glob("*/case.yaml") if path.is_file())
     if not names:
         raise Refused(f"EVALS {evals} holds no case, so the suite would run nothing")
     for name in names:
-        if not NAME.fullmatch(name):
-            raise Refused(f"case directory {name!r} must match {NAME.pattern}")
+        if not is_case_name(name):
+            raise Refused(f"case directory {name!r} must match {NAME.pattern} and not be 'results'")
     return names
 
 
@@ -239,7 +245,7 @@ def parse(argv: list[str]) -> argparse.Namespace:
     if len(set(args.cases)) != len(args.cases):
         parser.error("a CASE is named more than once")
     for case in args.cases:
-        if not NAME.fullmatch(case) or not (args.evals / case / "case.yaml").is_file():
+        if not is_case_name(case) or not (args.evals / case / "case.yaml").is_file():
             parser.error(f"no case {case!r} in the harness checkout")
     return args
 
@@ -625,17 +631,19 @@ def main(argv: list[str]) -> int:
     args = parse(argv)
     evals = args.evals
     # The harness is the checkout holding this runner, so the harness commit a record names is
-    # the code that ran; EVALS must be one of its skills' evals/ directories, whose path from the
-    # root names the records in both checkouts.
+    # the checkout that held both the runner and the cases; EVALS must be one of its skills'
+    # evals/ directories, whose path from the root names the records in both checkouts.
     runner_root = Path(git(SCRIPTS, "rev-parse", "--show-toplevel")).resolve()
     if Path(git(evals, "rev-parse", "--show-toplevel")).resolve() != runner_root:
         raise Refused(f"EVALS {evals} is not in the checkout holding this runner ({runner_root})")
     parts = evals.relative_to(runner_root).parts
     if not is_evals(parts):
         raise Refused(f"EVALS {evals} is not a skills/<skill>/evals directory of its checkout")
-    names = case_names(evals)
+    # Named cases were checked one by one in parse, so only a listing or a whole-suite run reads
+    # every case directory, and a sibling the suite cannot run does not block a named case.
+    cases = args.cases or case_names(evals)
     if args.list:
-        for case in names:
+        for case in cases:
             print(case)
         return 0
     summary_path = evals / "results" / f"suite-{args.label}.md"
@@ -645,7 +653,6 @@ def main(argv: list[str]) -> int:
     if existing and not args.resume:
         raise Refused(f"{min(existing)} exists, a record of {args.label}; start a new LABEL, "
                       "or --resume with the arguments that run started with")
-    cases = args.cases or names
     harness, harness_commit, harness_short = commit_of(evals, "harness", parts)
     checkout, checkout_commit, checkout_short = commit_of(args.checkout, "skill", parts)
     committed = {harness: committed_records(harness, parts), checkout: committed_records(checkout, parts)}
