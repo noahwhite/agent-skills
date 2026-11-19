@@ -978,6 +978,13 @@ def test_a_harness_root_ending_in_whitespace_lists_its_cases(suite, tmp_path: Pa
     assert (result.returncode, result.stdout) == (0, "stub\n"), result.stderr
 
 
+def test_the_runner_wrapper_ignores_cdpath(suite, tmp_path: Path) -> None:
+    """With CDPATH exported, cd prints the directory it enters; the wrapper must not capture it."""
+    result = subprocess.run(["bash", "scripts/run-suite.sh", str(suite["evals"]), "--list"], capture_output=True,
+                            text=True, env={**suite["env"], "CDPATH": str(suite["harness"])}, cwd=suite["harness"])
+    assert (result.returncode, result.stdout) == (0, "stub\n"), result.stderr
+
+
 def test_the_runner_wrapper_needs_no_readlink_f(suite, tmp_path: Path) -> None:
     """A readlink without -f, as on BSD, still follows a chain of relative links to the runner."""
     shims = tmp_path / "shims"
