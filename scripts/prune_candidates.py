@@ -34,10 +34,10 @@ WINDOW = 40
 ITEM = re.compile(r"^(\s*)(?:[-*+]|\d+[.)])(?: {1,4}|\s)")
 MARKERS = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s", re.MULTILINE)
 FENCE = re.compile(r"^(\s*)(`{3,}|~{3,})(.*)$")
-BLOCK_START = re.compile(r"^\s*(?:#|>|\||```|~~~|---|\*\*\*|___)")
-CONTROL = re.compile(r"[\x00-\x1f\x7f\udc80-\udcff]")
-CITE_EDGE = r"\s`'\"()\[\]{}<>*|"  # delimits a citation on either side
-CITE_PUNCT = r".,;:!?"  # ends a citation only when a delimiter or the end of the text follows it
+BLOCK_START = re.compile(r"^\s*(?:#{1,6}(?:\s|$)|>|\||```|~~~|---|\*\*\*|___)")
+ESCAPED = re.compile(r"[\\\x00-\x1f\x7f\udc80-\udcff]")
+CITE_OPEN = r"\s`'\"(\[{<*|"  # may precede a citation
+CITE_CLOSE = r"`'\")\]}>*|.,;:!?"  # may follow a citation up to the end of its word
 
 # Every call is pinned to the repository root, takes paths literally, prints them unquoted, takes
 # no optional locks, and overrides the configuration that would change what it reads, so the
@@ -94,10 +94,11 @@ def git(*args: str) -> str:
 def shown(path: str) -> str:
     """A path as one report field.
 
-    Control characters are escaped so a row stays one line, and each byte that is not UTF-8 (held
-    as a surrogate escape) is escaped as that byte, so two such paths never print alike.
+    Control characters are escaped so a row stays one line, each byte that is not UTF-8 (held as a
+    surrogate escape) is escaped as that byte, and a backslash is doubled, so the escaping is
+    reversible and two paths never print alike.
     """
-    return CONTROL.sub(lambda m: f"\\x{ord(m.group()) & 0xff:02x}", path)
+    return ESCAPED.sub(lambda m: "\\\\" if m.group() == "\\" else f"\\x{ord(m.group()) & 0xff:02x}", path)
 
 
 def day(epoch: int) -> str:
@@ -155,15 +156,15 @@ def skill_texts(head: str, files: list[str]) -> list[str]:
 def cites(cite: str, text: str) -> bool:
     """True when text names cite as a whole relative path (optionally ./-prefixed).
 
-    A cite counts only between delimiters (whitespace, quotes, brackets), optionally followed by a
-    #anchor. Punctuation after the cite ends it only when a delimiter or the end of the line follows
-    the punctuation. A cite inside a longer path or name, such as ../other/references/x.md,
-    old.references/x.md, references/x.md/y, references/x.md.bak, references/x.md:y.md,
-    references/x.md::y.md or references/x.md+old, does not count.
+    A cite starts at the start of a line or after whitespace, a quote or an opening bracket. After
+    the cite, the rest of its whitespace-delimited word may hold only a #anchor and then closing
+    quotes, closing brackets and punctuation. A cite inside a longer path or name, such as
+    ../other/references/x.md, old.references/x.md, references/x.md/y, references/x.md.bak,
+    references/x.md:y.md, references/x.md(old).md or references/x.md+old, does not count.
     """
     pattern = (
-        rf"(?:^|(?<=[{CITE_EDGE}]))(?:\./)?{re.escape(cite)}"
-        rf"(?=$|[{CITE_EDGE}#]|[{CITE_PUNCT}]+(?:$|[{CITE_EDGE}]))"
+        rf"(?:^|(?<=[{CITE_OPEN}]))(?:\./)?{re.escape(cite)}"
+        rf"(?=(?:#\S*)?[{CITE_CLOSE}]*(?:\s|$))"
     )
     return re.search(pattern, text, re.MULTILINE) is not None
 
@@ -293,20 +294,29 @@ def rule_text(item: str) -> str:
     return collapse(MARKERS.sub("", item).replace(STOP, ""))
 
 
+def fold(text: str) -> str:
+    """Lowercase text one character at a time, keeping a character whose lowercase is longer.
+
+    Every character keeps its position, so a WINDOW-character run of the folded text is a
+    WINDOW-character run of the original.
+    """
+    if text.isascii():
+        return text.lower()
+    return "".join(low if len(low := ch.lower()) == 1 else ch for ch in text)
+
+
 def cited_rules(texts: list[str], haystack: str) -> set[int]:
     """Return the indexes of the texts that share a WINDOW-character run with the haystack.
 
-    Matching ignores case. A text shorter than WINDOW, the empty text included, has no
-    WINDOW-character run and is never cited, even when lowercasing lengthens it.
+    Matching ignores case through fold(), which keeps every length, so a text shorter than WINDOW,
+    the empty text included, has no WINDOW-character run and is never cited.
     """
     found = set()
     index: dict[str, list[int]] = {}
-    for n, text in enumerate(texts):
-        if len(text) < WINDOW:
-            continue
-        text = text.lower()
+    for n, text in enumerate(map(fold, texts)):
         for k in range(len(text) - WINDOW + 1):
             index.setdefault(text[k : k + WINDOW], []).append(n)
+    haystack = fold(haystack)
     for k in range(len(haystack) - WINDOW + 1):
         hit = index.get(haystack[k : k + WINDOW])
         if hit:
@@ -317,7 +327,7 @@ def cited_rules(texts: list[str], haystack: str) -> set[int]:
 def last_change(head: str, path: str, first: int, last: int) -> int:
     # An empty --ignore-revs-file clears blame.ignoreRevsFile, so every line keeps its real commit.
     blame = git(
-        "blame", "--line-porcelain", "--ignore-revs-file", "", "-L", f"{first},{last}", head, "--", path
+        "blame", "--line-porcelain", "--no-textconv", "--ignore-revs-file", "", "-L", f"{first},{last}", head, "--", path
     )
     return max(int(line.split()[1]) for line in blame.split("\n") if line.startswith("committer-time "))
 
@@ -336,7 +346,7 @@ def blobs(head: str) -> list[str]:
 
 def rule_candidates(head: str, files: list[str], skills: list[str], cutoff: int) -> list[str]:
     tests = [show(head, f) for f in files if f.startswith("tests/")]
-    haystack = "\n".join(collapse(t).lower() for t in tests + skills)
+    haystack = "\n".join(collapse(t) for t in tests + skills)
     rules = [
         (path, first, last, rule_text(body))
         for path in rule_sources(files)

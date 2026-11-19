@@ -627,10 +627,12 @@ def test_distinct_non_utf8_paths_print_distinctly(repo: Path) -> None:
     os.makedirs(repo / "tests", exist_ok=True)
     (repo / os.fsdecode(b"tests/test_\xff.py")).write_text("def test_ff():\n    assert True\n")
     (repo / os.fsdecode(b"tests/test_\xfe.py")).write_text("def test_fe():\n    assert True\n")
-    commit(repo, OLD, "two test names that are not UTF-8")
+    (repo / "tests" / "test_\\xff.py").write_text("def test_backslash():\n    assert True\n")
+    commit(repo, OLD, "two test names that are not UTF-8 and one with a backslash")
     lines = category(repo, TESTS)
     assert any(line.startswith("- tests/test_\\xff.py |") for line in lines[1:])
     assert any(line.startswith("- tests/test_\\xfe.py |") for line in lines[1:])
+    assert any(line.startswith("- tests/test_\\\\xff.py |") for line in lines[1:])
 
 
 def test_a_rule_that_lowercases_to_forty_characters_is_still_short(repo: Path) -> None:
@@ -642,6 +644,46 @@ def test_a_rule_that_lowercases_to_forty_characters_is_still_short(repo: Path) -
     lines = category(repo, RULES)
     assert lines[0] == f"{RULES}: 2"
     assert any(short in line for line in lines[1:])
+
+
+def test_lowercasing_never_lengthens_a_window(repo: Path) -> None:
+    rule = "İ" * 20 + "X" * 20
+    append(repo, "shared/rules.md", f"\n- ⛔ {rule}\n")
+    write(repo, "tests/test_dotted.py", f"A = {'İ' * 20!r}\n")
+    commit(repo, OLD, "a dotted rule of forty characters")
+    lines = category(repo, RULES)
+    assert lines[0] == f"{RULES}: 2"
+    assert any(rule in line for line in lines[1:])
+
+    write(repo, "tests/test_dotted.py", f"A = {'İ' * 20 + 'x' * 20!r}\n")
+    commit(repo, OLD, "quote it whole, the letters that keep their length in lower case")
+    assert category(repo, RULES)[0] == f"{RULES}: 1"
+
+
+def test_a_textconv_driver_does_not_run(repo: Path, tmp_path: Path) -> None:
+    marker = tmp_path / "textconv-ran"
+    driver = tmp_path / "strip-first-line.sh"
+    driver.write_text(f"#!/bin/sh\ntouch {marker}\nsed 1d \"$1\"\n")
+    driver.chmod(0o755)
+    write(repo, ".gitattributes", "*.md diff=strip\n")
+    commit(repo, OLD, "a textconv attribute")
+    git(repo, "config", "diff.strip.textconv", str(driver))
+    git(repo, "config", "diff.strip.cachetextconv", "true")
+    result = run(repo, "--since", SINCE)
+    assert result.returncode == 0, result.stderr
+    assert not marker.exists()
+    assert git(repo, "for-each-ref", "refs/notes") == ""
+    assert any(line.startswith("- shared/rules.md:3 |") for line in category(repo, RULES)[1:])
+
+
+def test_a_hash_without_a_space_is_a_continuation_not_a_heading(repo: Path) -> None:
+    append(repo, "shared/rules.md", "\n- ⛔ Never deploy the gearbox firmware without a signed release tag.\n#ops owns it\n")
+    commit(repo, OLD, "a rule with a hash continuation")
+    assert category(repo, RULES)[0] == f"{RULES}: 2"
+    text = (repo / "shared/rules.md").read_text(encoding="utf-8")
+    write(repo, "shared/rules.md", text.replace("#ops owns it", "#platform owns it"))
+    commit(repo, NEW, "change the continuation")
+    assert category(repo, RULES)[0] == f"{RULES}: 1"
 
 
 def test_a_carriage_return_is_kept_in_paths_and_text(repo: Path) -> None:
@@ -660,7 +702,8 @@ def test_punctuation_inside_a_file_name_ends_no_citation(repo: Path) -> None:
         repo, "skills/alpha/SKILL.md",
         "Read references/cited.md, then (references/rules.md).\n"
         "Not citations: references/orphan.md:backup.md, references/orphan.md,v2 and references/orphan.md!x.\n"
-        "Nor: references/orphan.md::backup.md, archive/old.references/orphan.md and x:references/orphan.md.\n",
+        "Nor: references/orphan.md::backup.md, archive/old.references/orphan.md and x:references/orphan.md.\n"
+        "Nor: `references/orphan.md(backup).md`, (references/orphan.md)x and references/orphan.md'v2.\n",
     )
     commit(repo, NEW, "punctuation inside names")
     lines = category(repo, REFERENCES)
