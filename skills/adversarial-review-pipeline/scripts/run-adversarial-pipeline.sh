@@ -22,6 +22,8 @@
 #   run-adversarial-pipeline.sh cleanup <checkout-path>               # removes a checkout this script made
 #   run-adversarial-pipeline.sh paths --base REF                      # prints this run's artifact paths,
 #                               # then a final 'dossier_sizes <path>' line naming the size log
+#   run-adversarial-pipeline.sh checklist --base REF                  # prints the review checklist items
+#                               # for the paths changed in REF...HEAD (see "Review checklist")
 # Every command also takes --repo DIR.
 #
 # Runs: artifacts live in a run directory keyed by the base and head commit SHAs, under
@@ -74,6 +76,14 @@
 # side's reason. Test modules get no automatic exclusion. The kept diff takes the same pinned options
 # and per-file cap as the embedded diff below. The arbitrate dossier embeds no diff, so it lists no
 # exclusions.
+#
+# Review checklist: `.agent-skills/review-checklist.txt` in the repository under review, read from the
+# head, holds one `<bash glob> | <review item>` per line; blank lines and lines whose first non-space
+# character is '#' are ignored, and a line without ' | ' is skipped. A glob matches a changed path
+# (repo-relative, rename detection off, so both sides of a rename count) with the same bash `[[ == ]]`
+# semantics as the exclusion list. `checklist` prints each matching item once, in file order; a
+# missing file or no match prints nothing and exits 0. The sweep dossier ends with the same items
+# under a '===== Review checklist' heading, and has no such heading when none matches.
 #
 # Embedded diff: the sweep and hunt dossiers embed `git diff --no-ext-diff --unified=1` of the run's
 # range, and DIFF_CAP_BYTES (4096, in bytes of unified-diff text, per file and not a bound on the whole
@@ -301,7 +311,7 @@ phase=""; target=""
 case "$cmd" in
   dossier|run|record) phase="${1:-}"; [ -n "$phase" ] || usage; shift ;;
   cleanup) target="${1:-}"; [ -n "$target" ] || usage; shift; target="$(abspath "$target")" ;;
-  preflight|checkout|paths) ;;
+  preflight|checkout|paths|checklist) ;;
   -h|--help|help) usage ;;
   *) echo "ERROR: unknown command '$cmd'" >&2; usage ;;
 esac
@@ -1531,14 +1541,40 @@ classify_exclusions() {
   done
 }
 
+# The review checklist items for this run's changed paths (see "Review checklist" in the header).
+checklist_items() {
+  local file=".agent-skills/review-checklist.txt" tmp line glob item path
+  local -a changed=()
+  local -A seen=()
+  if [ "$(git cat-file -t "${HEAD_SHA}:${file}" 2>/dev/null)" != "blob" ]; then return 0; fi
+  tmp="$(mktemp -p "$RUN_DIR" checklist.XXXXXX)"
+  git diff --no-renames --name-only -z "$BASE_SHA"..."$HEAD_SHA" > "$tmp"
+  while IFS= read -r -d '' path; do changed+=("$path"); done < "$tmp"
+  git cat-file blob "${HEAD_SHA}:${file}" > "$tmp"
+  while IFS= read -r line || [ -n "$line" ]; do
+    line="${line#"${line%%[![:space:]]*}"}"
+    line="${line%"${line##*[![:space:]]}"}"
+    if [ -z "$line" ] || [ "${line:0:1}" = "#" ]; then continue; fi
+    case "$line" in *" | "*) ;; *) continue ;; esac
+    glob="${line%% | *}"; glob="${glob%"${glob##*[![:space:]]}"}"
+    item="${line#* | }"; item="${item#"${item%%[![:space:]]*}"}"
+    if [ -z "$glob" ] || [ -z "$item" ] || [ -n "${seen[$item]:-}" ]; then continue; fi
+    for path in "${changed[@]}"; do
+      if [[ "$path" == $glob ]]; then printf '%s\n' "$item"; seen[$item]=1; break; fi
+    done
+  done < "$tmp"
+  rm -f -- "$tmp"
+}
+
 emit_prior() {  # $1 = phase, $2 = text when that phase is intentionally absent (--no-sweep)
   if accepted "$1"; then cat -- "$(artifact_for "$1")"; else echo "$2"; fi
 }
 
 write_dossier() {  # $1 = phase, $2 = dossier path, $3 = the phase's checkout (exists already)
-  local p="$1" out="$2" co="$3"
+  local p="$1" out="$2" co="$3" items
   case "$p" in
     sweep)
+      items="$(checklist_items)"
       {
         echo "You are a high-volume adversarial code reviewer doing a FAST FIRST-PASS SWEEP."
         echo "Output ONLY a structured candidate list - no prose, no fixes, no plan. One entry per candidate:"
@@ -1552,6 +1588,11 @@ write_dossier() {  # $1 = phase, $2 = dossier path, $3 = the phase's checkout (e
         echo "make it 'REVIEW-RAN: no - <reason>'. A report without that line is treated as a review that did not run."
         echo
         emit_context "$co" 1
+        if [ -n "$items" ]; then
+          echo
+          echo "===== Review checklist (items for the paths this diff changes: check each one, report a miss as a candidate) ====="
+          printf '%s\n' "$items"
+        fi
       } > "$out"
       ;;
     hunt)
@@ -1975,6 +2016,7 @@ case "$cmd" in
     ;;
 
   checkout) make_checkout || die 2 "could not create the throwaway checkout" ;;
+  checklist) checklist_items ;;
   paths)
     printf 'run %s\npreflight %s\nsuite_log %s\nsweep %s\nhunt %s\narbitrate %s\ndossier_sizes %s\n' \
       "$RUN_DIR" "$PHASE0" "$SUITE_LOG" "$PHASE1" "$PHASE2" "$PHASE3" "$RUN_DIR/dossier-sizes.md"

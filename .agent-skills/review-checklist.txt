@@ -1,0 +1,6 @@
+# Review checklist: one `<bash glob> | <review item>` per line; '#' comments and blank lines are ignored.
+# The adversarial-review-pipeline sweep lists each item whose glob matches a path the diff changes.
+# An item is added only by an engineer PR that links the owner's approval on the retro issue
+# (persona-scrum-master "Retro").
+
+shared/* | Every vendored copy of a changed shared/ file is regenerated with scripts/vendor_shared.py in the same PR, and no copy under skills/*/references/ is edited by hand.

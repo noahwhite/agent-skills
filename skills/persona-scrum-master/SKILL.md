@@ -90,6 +90,9 @@ Make no state changes while preparing or posting the report.
 - Put the owner in the body of each action item, and leave the assignee at `profile.tracker.assignee`.
 - Label each action item with `profile.tracker.labels.improvement`.
 - File no issue for a went-well or a did-not-go-well entry.
+- Propose review checklist items from repeated misses: for the period since the previous retro, read the PR reviews marked `Review of record <sha>` and the arbiter reports in PR bodies through `profile.git.host`, counting a miss once per distinct PR; scratch arbiter reports are excluded.
+  For each miss found in two or more PRs, post on the retro issue one proposed line in the `<bash glob> | <review item>` format of `.agent-skills/review-checklist.txt`, citing the review links.
+  A proposed item enters the checklist only through an engineer PR that links the owner's approval comment on the retro issue; this persona never adds the item itself and edits no file.
 
 ## Velocity and burnup
 

@@ -140,6 +140,37 @@ def test_retro_section_files_only_action_items() -> None:
         assert phrase in body, f"retro missing: {phrase}"
 
 
+def test_retro_proposes_checklist_items_from_repeated_misses() -> None:
+    body = section(SKILL.read_text(), "Retro")
+    bullets = [b for b in body.split("\n- ") if "review-checklist.txt" in b]
+    assert len(bullets) == 1, bullets
+    bullet = bullets[0]
+    for phrase in (
+        "since the previous retro",
+        "`Review of record <sha>`",
+        "arbiter reports in PR bodies",
+        "`profile.git.host`",
+        "once per distinct PR",
+        "two or more PRs",
+        "scratch arbiter reports are excluded",
+        "on the retro issue",
+        "`<bash glob> | <review item>`",
+        "citing the review links",
+        "edits no file",
+    ):
+        assert phrase in bullet, f"retro checklist step missing: {phrase}"
+
+
+def test_retro_checklist_items_need_owner_approval() -> None:
+    body = section(SKILL.read_text(), "Retro")
+    bullet = next(b for b in body.split("\n- ") if "review-checklist.txt" in b)
+    for phrase in (
+        "enters the checklist only through an engineer PR that links the owner's approval comment on the retro issue",
+        "never adds the item itself",
+    ):
+        assert phrase in bullet, f"retro owner approval missing: {phrase}"
+
+
 def test_velocity_and_burnup_section_covers_flow_metrics() -> None:
     body = section(SKILL.read_text(), "Velocity and burnup").lower()
     for phrase in (
