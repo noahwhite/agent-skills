@@ -54,4 +54,4 @@ The raw output is attached to SKL-335 as "SKL-335 QA round 2 assertion output"; 
 
 Pending owner rulings: none.
 
-Closing decision: Done.
+Closing decision: Done, once this evidence merges.
