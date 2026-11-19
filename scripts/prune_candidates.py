@@ -11,7 +11,7 @@ proposal; the owner decides at the retro (docs/pruning-routine.md). The three ca
   in the history of HEAD that changed that path (side branches of merges included), is before D.
 - reference files uncited at this commit: a shared/*.md source other than README.md that no
   skills/*/SKILL.md cites as references/<name>.
-- rules uncited at this commit, unchanged since D: a list item in a shared/*.md source whose own
+- rules uncited at this commit, unchanged since D: a list item in any shared/*.md file whose own
   lines carry the stop sign, whose text (continuation lines and nested items included, whitespace
   collapsed, case ignored) shares no 40-character run with any file under tests/ or any
   skills/*/SKILL.md, and whose lines were all last changed before D per git blame.
@@ -31,22 +31,40 @@ from datetime import datetime, timezone
 
 STOP = "⛔"
 WINDOW = 40
-ITEM = re.compile(r"^(\s*)(?:[-*+]|\d+[.)])\s")
+ITEM = re.compile(r"^(\s*)(?:[-*+]|\d+[.)])(?: {1,4}|\s)")
 MARKERS = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s", re.MULTILINE)
-FENCE = re.compile(r"^\s*(`{3,}|~{3,})(.*)$")
+FENCE = re.compile(r"^(\s*)(`{3,}|~{3,})(.*)$")
 BLOCK_START = re.compile(r"^\s*(?:#|>|\||```|~~~|---|\*\*\*|___)")
 CONTROL = re.compile(r"[\x00-\x1f\x7f]")
+CITE_EDGE = r"\s`'\"()\[\]{}<>,;:!?*|"
 
 # Every call is pinned to the repository root, takes paths literally, prints them unquoted, takes
 # no optional locks, and overrides the configuration that would change what it reads, so the
 # report does not depend on the caller's directory or on local git configuration. Git never
 # prompts and never fetches a missing object.
 GIT = [
-    "git", "--literal-pathspecs", "--no-optional-locks",
+    "git", "--literal-pathspecs", "--no-optional-locks", "--no-replace-objects",
     "-c", "core.quotePath=false", "-c", "log.showSignature=false",
 ]
-ENV = dict(os.environ, GIT_TERMINAL_PROMPT="0", GIT_NO_LAZY_FETCH="1")
 root = "."
+
+
+def clean_env() -> dict[str, str]:
+    """The caller's environment without the variables that select another repository or history.
+
+    Git lists its repository-local variables (GIT_DIR, GIT_WORK_TREE, GIT_INDEX_FILE and the
+    like); without them the repository is always the one the caller's directory is in. Replace
+    refs and grafts never substitute history.
+    """
+    local = subprocess.run(
+        ["git", "rev-parse", "--local-env-vars"], stdin=subprocess.DEVNULL, capture_output=True, text=True
+    ).stdout.split()
+    env = {k: v for k, v in os.environ.items() if k not in local and k != "GIT_NAMESPACE"}
+    env.update(GIT_TERMINAL_PROMPT="0", GIT_NO_LAZY_FETCH="1", GIT_GRAFT_FILE=os.devnull)
+    return env
+
+
+ENV = clean_env()
 
 
 def probe(*args: str) -> subprocess.CompletedProcess:
@@ -110,8 +128,13 @@ def test_candidates(head: str, files: list[str], cutoff: int) -> list[str]:
     return out
 
 
+def rule_sources(files: list[str]) -> list[str]:
+    return [f for f in files if re.fullmatch(r"shared/[^/]*\.md", f)]
+
+
 def sources(files: list[str]) -> list[str]:
-    return [f for f in files if re.fullmatch(r"shared/[^/]*\.md", f) and f != "shared/README.md"]
+    """The reference-file sources: every shared/*.md but the README, which is no reference file."""
+    return [f for f in rule_sources(files) if f != "shared/README.md"]
 
 
 def skill_texts(head: str, files: list[str]) -> list[str]:
@@ -121,10 +144,15 @@ def skill_texts(head: str, files: list[str]) -> list[str]:
 def cites(cite: str, text: str) -> bool:
     """True when text names cite as a whole relative path (optionally ./-prefixed).
 
-    A cite inside a longer path or name, such as ../other/references/x.md, references/x.md/y or
-    references/x.md.bak, does not count; trailing sentence punctuation does.
+    A cite counts only between delimiters (whitespace, quotes, brackets, punctuation), optionally
+    followed by a #anchor or a sentence-final period. A cite inside a longer path or name, such as
+    ../other/references/x.md, references/x.md/y, references/x.md.bak or references/x.md+old,
+    does not count.
     """
-    pattern = rf"(?:^|[^\w./-])(?:\./)?{re.escape(cite)}(?![\w/-]|\.\w)"
+    pattern = (
+        rf"(?:^|(?<=[{CITE_EDGE}]))(?:\./)?{re.escape(cite)}"
+        rf"(?=$|[{CITE_EDGE}#]|\.(?![^{CITE_EDGE}]))"
+    )
     return re.search(pattern, text, re.MULTILINE) is not None
 
 
@@ -145,23 +173,37 @@ def fenced_lines(lines: list[str]) -> list[bool]:
     """Mark each line inside a fenced code block, fences included.
 
     A fence closes only on the same character repeated at least as many times with nothing after
-    it, so a ``` line inside a ~~~ block (or a shorter fence) stays inside the block.
+    it, so a ``` line inside a ~~~ block (or a shorter fence) stays inside the block. A fence
+    belongs to its container: it opens at most 3 columns right of the content column of the list
+    item it sits in (column 0 outside a list), and a fence left open ends with that item, at the
+    first non-blank line indented left of that content column.
     """
     marks = []
     opener: str | None = None
+    floor = 0
+    items: list[tuple[int, int]] = []  # (marker indent, content column) of the enclosing list items
     for line in lines:
+        if opener is not None and line.strip() and indent(line) < floor:
+            opener = None  # the item that holds the fence has ended
         match = FENCE.match(line)
         if opener is None:
-            if match:
-                opener = match.group(1)
+            item = ITEM.match(line)
+            if line.strip():
+                while items and indent(line) < items[-1][1] and not (item and indent(line) > items[-1][0]):
+                    items.pop()
+            if item:
+                items.append((len(item.group(1)), item.end()))
+            container = items[-1][1] if items and not item else 0
+            if match and len(match.group(1)) - container <= 3:
+                opener, floor = match.group(2), container
             marks.append(opener is not None)
             continue
         marks.append(True)
         if (
             match
-            and match.group(1)[0] == opener[0]
-            and len(match.group(1)) >= len(opener)
-            and not match.group(2).strip()
+            and match.group(2)[0] == opener[0]
+            and len(match.group(2)) >= len(opener)
+            and not match.group(3).strip()
         ):
             opener = None
     return marks
@@ -222,7 +264,7 @@ def rule_items(text: str) -> list[tuple[int, int, str]]:
     carries the stop sign is also its own item. List markers inside fenced code blocks are not
     items.
     """
-    lines = text.splitlines()
+    lines = text.split("\n")  # git counts lines by LF alone, so blame line numbers match
     fenced = fenced_lines(lines)
     items = []
     for i in range(len(lines)):
@@ -268,7 +310,7 @@ def last_change(head: str, path: str, first: int, last: int) -> int:
     blame = git(
         "blame", "--line-porcelain", "--ignore-revs-file", "", "-L", f"{first},{last}", head, "--", path
     )
-    return max(int(line.split()[1]) for line in blame.splitlines() if line.startswith("committer-time "))
+    return max(int(line.split()[1]) for line in blame.split("\n") if line.startswith("committer-time "))
 
 
 def blobs(head: str) -> list[str]:
@@ -288,7 +330,7 @@ def rule_candidates(head: str, files: list[str], skills: list[str], cutoff: int)
     haystack = "\n".join(collapse(t).lower() for t in tests + skills)
     rules = [
         (path, first, last, rule_text(body))
-        for path in sources(files)
+        for path in rule_sources(files)
         for first, last, body in rule_items(show(head, path))
     ]
     pinned = cited_rules([rule[3].lower() for rule in rules], haystack)
@@ -315,7 +357,17 @@ def partial_clone() -> bool:
         return True
     # --type=bool makes git apply its own boolean parsing, so yes, on and 1 all read as true.
     promisors = probe("config", "--type=bool", "--get-regexp", r"^remote\..*\.promisor$").stdout
-    return any(line.rsplit(" ", 1)[-1] == "true" for line in promisors.splitlines())
+    return any(line.rsplit(" ", 1)[-1] == "true" for line in promisors.split("\n"))
+
+
+def missing_ignore_revs() -> list[str]:
+    """Configured blame.ignoreRevsFile values that name no file.
+
+    The empty --ignore-revs-file clears every configured file, but git still opens each one first
+    and fails on a missing one, so such a configuration is refused before the report starts.
+    """
+    values = probe("config", "--type=path", "--get-all", "blame.ignoreRevsFile").stdout.split("\n")
+    return [v for v in values if v and not os.path.isfile(os.path.join(root, v))]
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -333,6 +385,13 @@ def main(argv: list[str] | None = None) -> int:
     if partial_clone():
         return refusal(
             "partial clone, whose missing objects would be fetched into it; use a full clone"
+        )
+
+    missing = missing_ignore_revs()
+    if missing:
+        return refusal(
+            f"repository whose blame.ignoreRevsFile names a missing file ({', '.join(map(shown, missing))}); "
+            "create it or unset blame.ignoreRevsFile"
         )
 
     head = git("rev-parse", "--verify", "HEAD^{commit}").strip()

@@ -503,3 +503,88 @@ def test_since_is_required_and_accepts_year_one(repo: Path) -> None:
     early = run(repo, "--since", "0001-01-01")
     assert early.returncode == 0, early.stderr
     assert "since: 0001-01-01" in early.stdout
+
+
+def test_an_outer_git_environment_does_not_redirect_the_run(repo: Path, tmp_path: Path) -> None:
+    other = tmp_path / "other"
+    other.mkdir()
+    git(other, "init", "-q", "--template=")
+    write(other, "tests/test_wrong.py", "def test_wrong():\n    assert True\n")
+    git(other, "add", "-A")
+    git(other, "-c", "user.name=o", "-c", "user.email=o@example.com", "commit", "-qm", "other", date=OLD)
+    expected = run(repo, "--since", SINCE).stdout
+    env = dict(
+        ENV, GIT_DIR=str(other / ".git"), GIT_WORK_TREE=str(other), GIT_INDEX_FILE=str(other / ".git" / "index")
+    )
+    result = run(repo, "--since", SINCE, env=env)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == expected
+
+
+def test_a_unicode_line_separator_does_not_shift_line_numbers(repo: Path) -> None:
+    append(
+        repo, "shared/rules.md",
+        "\n- ⛔ A rule with a line separator inside it, written long ago.\n- ⛔ The rule after it.\n",
+    )
+    commit(repo, OLD, "a rule with a line separator")
+    lines = category(repo, RULES)
+    assert lines[0] == f"{RULES}: 3"
+    assert any(line.startswith("- shared/rules.md:10 |") and "The rule after it." in line for line in lines[1:])
+
+
+def test_replaced_and_grafted_history_is_ignored(repo: Path) -> None:
+    expected = run(repo, "--since", SINCE).stdout
+    head = git(repo, "rev-parse", "HEAD").strip()
+    tree = git(repo, "rev-parse", "HEAD~1^{tree}").strip()
+    substitute = git(repo, "commit-tree", tree, "-m", "substitute", date=OLD).strip()
+    git(repo, "replace", head, substitute)
+    result = run(repo, "--since", SINCE)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == expected
+    git(repo, "replace", "-d", head)
+
+    (repo / ".git" / "info").mkdir(exist_ok=True)
+    (repo / ".git" / "info" / "grafts").write_text(f"{head}\n")
+    result = run(repo, "--since", SINCE)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == expected
+
+
+def test_a_citation_ends_at_a_delimiter(repo: Path) -> None:
+    write(
+        repo, "skills/alpha/SKILL.md",
+        "Read references/cited.md: and references/rules.md#rules.\n"
+        "Not citations: references/orphan.md+backup, references/orphan.md~, x+references/orphan.md.\n",
+    )
+    commit(repo, NEW, "delimited citations")
+    lines = category(repo, REFERENCES)
+    assert lines[0] == f"{REFERENCES}: 1"
+    assert lines[1].startswith("- shared/orphan.md")
+
+
+def test_a_rule_in_the_shared_readme_is_a_rule(repo: Path) -> None:
+    append(repo, "shared/README.md", "\n- ⛔ Never vendor a shared source by hand into a skill directory.\n")
+    commit(repo, OLD, "a rule in the README")
+    lines = category(repo, RULES)
+    assert lines[0] == f"{RULES}: 2"
+    assert any(line.startswith("- shared/README.md:3 |") for line in lines[1:])
+    assert category(repo, REFERENCES)[0] == f"{REFERENCES}: 1"  # the README is still no reference file
+
+
+def test_an_unclosed_fence_ends_with_its_list_item(repo: Path) -> None:
+    append(
+        repo, "shared/rules.md",
+        "\n- A plain item with code:\n\n    ```\n    unclosed\n\n- ⛔ A top-level rule after the item that holds the fence.\n",
+    )
+    commit(repo, OLD, "an unclosed fence in an item")
+    lines = category(repo, RULES)
+    assert lines[0] == f"{RULES}: 2"
+    assert any("A top-level rule after the item" in line for line in lines[1:])
+
+
+def test_a_missing_ignore_revs_file_is_refused_before_the_report(repo: Path) -> None:
+    git(repo, "config", "blame.ignoreRevsFile", "missing-ignore-revs.txt")
+    result = run(repo, "--since", SINCE)
+    assert result.returncode == 2
+    assert "blame.ignoreRevsFile" in result.stderr and "missing-ignore-revs.txt" in result.stderr
+    assert result.stdout == ""

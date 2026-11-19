@@ -154,19 +154,21 @@ def pruning_bullet() -> str:
     return " ".join(" ".join(lines[starts[0] : end]).split())
 
 
+PRUNING_CONDITION = (
+    "- If the repository provides a pruning-candidates script, run it with `--since` set to "
+    "the previous retro's date, and record each candidate in the retro record with its "
+    "retire or keep proposal. Each retire proposal becomes an action item under these Retro rules"
+)
+PRUNING_APPROVAL = ", and nothing is removed until the owner approves it in a comment on the retro issue."
+
+
 def test_retro_runs_the_pruning_routine_only_when_the_repository_provides_it() -> None:
-    bullet = pruning_bullet()
-    assert bullet.startswith(
-        "- If the repository provides a pruning-candidates script, run it with `--since` set to "
-        "the previous retro's date, and record each candidate in the retro record with its "
-        "retire or keep proposal. Each retire proposal becomes an action item under these Retro rules"
-    )
+    assert pruning_bullet().startswith(PRUNING_CONDITION)
 
 
 def test_retro_pruning_removes_nothing_without_owner_approval() -> None:
-    assert pruning_bullet().endswith(
-        ", and nothing is removed until the owner approves it in a comment on the retro issue."
-    )
+    # The whole bullet is pinned, so nothing can be inserted between the condition and the approval.
+    assert pruning_bullet() == PRUNING_CONDITION + PRUNING_APPROVAL
 
 
 def test_velocity_and_burnup_section_covers_flow_metrics() -> None:
