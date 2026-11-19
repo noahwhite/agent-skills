@@ -31,5 +31,5 @@ while [ -L "$source" ]; do
   esac
 done
 # CDPATH unset, or cd would print the directory into $here.
-here=$(CDPATH='' cd -P -- "$(dirname -- "$source")" && pwd)
+here=$(CDPATH='' cd -P -- "$(dirname -- "$source")" && pwd) || exit 2
 exec python3 "$here/eval_suite.py" "$@"

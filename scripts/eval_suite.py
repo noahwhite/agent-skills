@@ -165,7 +165,10 @@ def commit_of(repo: Path, role: str, evals_parts: tuple[str, ...]) -> tuple[Path
         if status == "!!":
             parts = Path(path).parts
             under = parts[:len(evals_parts)] == evals_parts or evals_parts[:len(parts)] == parts
-            if under and not is_record(path, evals_parts):
+            # git lists a wholly ignored results/ directory as one entry, which holds only records.
+            rest = parts[len(evals_parts):]
+            results_dir = rest == ("results",) or (len(rest) == 2 and rest[1] == "results")
+            if under and not results_dir and not is_record(path, evals_parts):
                 changed.append(path)
         elif not (status in ("??", " M") and is_record(path, evals_parts)):
             changed.append(path)
@@ -679,7 +682,7 @@ def main(argv: list[str]) -> int:
         except yaml.YAMLError as error:
             raise Refused(f"case {case} case.yaml does not parse: {error}") from None
         scenarios = spec.get("scenarios") if isinstance(spec, dict) else None
-        if not scenarios or not all(isinstance(s, dict) and isinstance(s.get("name"), str) and NAME.fullmatch(s["name"])
+        if not isinstance(scenarios, list) or not scenarios or not all(isinstance(s, dict) and isinstance(s.get("name"), str) and NAME.fullmatch(s["name"])
                                      for s in scenarios):
             raise Refused(f"case {case} names no scenarios, or a scenario without a valid name")
         if len({s["name"] for s in scenarios}) != len(scenarios):

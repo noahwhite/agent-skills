@@ -1231,7 +1231,7 @@ def test_a_run_directory_inside_a_checkout_is_refused(suite) -> None:
     assert not (suite["state"] / "pass").exists(), "nothing ran"
 
 
-@pytest.mark.parametrize("scenarios", [None, []])
+@pytest.mark.parametrize("scenarios", [None, [], 7, True, "pass"])
 def test_a_case_without_scenarios_is_refused(suite, scenarios) -> None:
     case_file = suite["evals"] / "stub" / "case.yaml"
     case = yaml.safe_load(case_file.read_text(encoding="utf-8"))
@@ -1252,6 +1252,16 @@ def test_a_case_yaml_that_does_not_parse_is_refused(suite) -> None:
     assert result.returncode == 2 and "case.yaml does not parse" in result.stderr, result.stderr
     assert "Traceback" not in result.stderr
     assert not (suite["state"] / "pass").exists(), "nothing ran"
+
+
+def test_a_git_ignored_results_directory_does_not_block_the_next_run(suite) -> None:
+    """git lists a wholly ignored results/ as one directory entry; it holds only the suite's records."""
+    (suite["harness"] / ".gitignore").write_text("results/\n", encoding="utf-8")
+    suite["recommit"]("pass")
+    first = suite["run"]("--runs", "1", str(suite["checkout"]), "first")
+    assert first.returncode == 0, first.stderr
+    second = suite["run"]("--runs", "1", str(suite["checkout"]), "second")
+    assert second.returncode == 0, second.stderr
 
 
 def test_a_git_ignored_evals_directory_is_refused(suite) -> None:
