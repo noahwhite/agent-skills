@@ -163,7 +163,7 @@ def test_a_delta_round_brief_carries_the_prior_review_and_the_adjudicator_brief_
     # SKL-343
     rounds = section(CODE_REVIEW.read_text(), "Rounds", "###")
     lines = (
-        "A delta round's reviewer brief carries the prior `Review of record <sha>` PR review, its findings and "
+        "A delta round's reviewer brief carries every earlier `Review of record <sha>` PR review on the PR, their findings and "
         "per-finding verdicts, labelled as historical context that does not decide the current verdict.",
         "The reviewer raises a finding already adjudicated there only when the delta changes the code it concerns "
         "or newly calls, imports or exercises that code.",
@@ -182,7 +182,8 @@ def test_the_pre_existing_tag_is_defined_once_under_handling_findings() -> None:
     body = section(text, "Handling findings")
     lines = (
         "- `pre-existing` tag: the defect is present at the base SHA (the merge base of the reviewed head and the "
-        "integration branch) in code the diff neither changes nor newly calls, imports or exercises.",
+        "integration branch) in code the PR's cumulative diff (base SHA to head, in every round) neither changes "
+        "nor newly calls, imports or exercises.",
         "The adjudicator confirms the tag against the base SHA; an unconfirmed tag is handled as any other finding.",
         "A confirmed `pre-existing` finding is listed in the review of record and does not block the merge; "
         "before merge, the engineer files it as a tracker issue and links that issue in the review-of-record thread.",

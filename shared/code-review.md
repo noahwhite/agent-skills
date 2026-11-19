@@ -66,7 +66,7 @@ If the runtime cannot run a configured model, stop and say so; never substitute 
 
 - Round 1 asks for an exhaustive list of findings over the whole diff.
 - Later rounds review the delta since the last reviewed head, plus any regressions that delta introduced.
-  A delta round's reviewer brief carries the prior `Review of record <sha>` PR review, its findings and per-finding verdicts, labelled as historical context that does not decide the current verdict.
+  A delta round's reviewer brief carries every earlier `Review of record <sha>` PR review on the PR, their findings and per-finding verdicts, labelled as historical context that does not decide the current verdict.
   The reviewer raises a finding already adjudicated there only when the delta changes the code it concerns or newly calls, imports or exercises that code.
 - The adjudicator brief, and any shadow-adjudicator brief, never carry the prior review of record; both stay clean, neutral.
 
@@ -134,7 +134,7 @@ Green CI, a docs-only diff, a base-only merge commit, or a sibling waiting to me
 - Verify each finding against the real code before acting (confirm SHAs, check that referenced APIs exist); never copy a suggested fix blindly.
 - A finding that names more locations of the same defect is fixed at every location.
 - Valid findings are fixed in the PR, never filed as follow-ups, except a confirmed `pre-existing` finding.
-- `pre-existing` tag: the defect is present at the base SHA (the merge base of the reviewed head and the integration branch) in code the diff neither changes nor newly calls, imports or exercises.
+- `pre-existing` tag: the defect is present at the base SHA (the merge base of the reviewed head and the integration branch) in code the PR's cumulative diff (base SHA to head, in every round) neither changes nor newly calls, imports or exercises.
   The adjudicator confirms the tag against the base SHA; an unconfirmed tag is handled as any other finding.
   A confirmed `pre-existing` finding is listed in the review of record and does not block the merge; before merge, the engineer files it as a tracker issue and links that issue in the review-of-record thread.
   It is the only finding filed rather than fixed in the PR.
