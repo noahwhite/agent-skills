@@ -415,9 +415,10 @@ def test_the_documented_residual_edges_of_the_line_shape_hold(gate, tmp_path, na
 # the pre-SKL-127 check, that an error line at line start still fails the phase and that the same
 # marker echoed mid-line from a reviewed file other than shared/runtimes.md does not. Each runtime
 # line states its own origin: only the `bwrap` line was captured from a live runtime; the
-# `failed-to-make` and `sandbox-denied` lines are built from runtime binary strings, and the
-# `sandbox-failed` and `sandbox-could-not` lines are line shape only, since no installed runtime
-# emits those markers.
+# `sandbox-denied` line is built from a runtime binary string, and the `failed-to-make`,
+# `sandbox-failed` and `sandbox-could-not` lines are line shape only. No runtime installed here was
+# found to emit `sandbox failed` or `sandbox could not`; bubblewrap's own `Failed to make` line
+# carries its `bwrap: ` prefix, so it is pinned separately (BUBBLEWRAP_FAILED_TO_MAKE).
 
 # The pre-SKL-127 check, verbatim from run-adversarial-pipeline.sh at b59674261bbb (385718b^).
 HISTORICAL_CHECK = r"bwrap:|sandbox (failed|denied|could not)|Failed to make .* Permission denied"
@@ -449,11 +450,12 @@ RUNTIME_ERROR_LINES = {
         "bwrap: Can't mount proc on /newroot/proc: Operation not permitted",
     ),
     "failed-to-make": (
-        "Codex (bubblewrap), message without its program-name prefix",
-        "built from a runtime binary string",
-        "'Failed to make / slave' is a message string of Codex's bundled bubblewrap binary, followed "
-        "by EACCES's text; written without bubblewrap's 'bwrap: ' prefix so the line trips only this "
-        "alternative (the prefixed form is the bwrap case's format); not observed live here",
+        LINE_SHAPE_ONLY,
+        "line shape only",
+        "'Failed to make / slave' is a message string of Codex's bundled bubblewrap binary, but "
+        "bubblewrap prints it after its 'bwrap: ' prefix, which trips the bwrap alternative first; "
+        "this bare form, at line start with no prefix, is the detector's line shape and trips only "
+        "this alternative. The prefixed runtime form is BUBBLEWRAP_FAILED_TO_MAKE",
         "Failed to make / slave: Permission denied",
     ),
     "sandbox-denied": (
@@ -479,6 +481,11 @@ RUNTIME_ERROR_LINES = {
     ),
 }
 
+# bubblewrap's own format for the `Failed to make` message: the binary string after its program-name
+# prefix, as the bwrap fixture's captured line shows bubblewrap prints every error. Built from a
+# runtime binary string; not observed live here.
+BUBBLEWRAP_FAILED_TO_MAKE = "bwrap: Failed to make / slave: Permission denied"
+
 
 # The reviewed-file fixture's section headers, each naming the context its lines quote markers in.
 CONTEXT_KINDS = {
@@ -487,6 +494,15 @@ CONTEXT_KINDS = {
     "A line listing the markers:": "marker list",
     "Grep hits, as a reviewer pastes them (illustrative paths, not captured output):": "grep hit",
     "Diff lines:": "+/- diff line",
+}
+
+# The shape a line must have to count as its context kind, so a section cannot hold an impostor.
+CONTEXT_SHAPES = {
+    "prose": re.compile(r"[A-Z][^\n]*\.$"),
+    "removed detector line": re.compile(r"-  .*grep -qiE '[^']*'.*|\+  \S.*"),
+    "marker list": re.compile(r"- The markers are (`[^`]+`(, | and |\.$))+"),
+    "grep hit": re.compile(r"\./[\w./-]+:\d+:\S.*"),
+    "+/- diff line": re.compile(r"[+-]  \S.*"),
 }
 
 # The gate's own diagnostic, which the echoed fixture's "reviewer ran blind" line cannot satisfy.
@@ -500,14 +516,28 @@ def echoed_file_agent(*lines: str) -> str:
 
 
 def echoed_lines_by_kind() -> dict[str, list[str]]:
+    """The fixture's lines per context kind; each line must have its kind's own shape."""
     kinds: dict[str, list[str]] = {kind: [] for kind in CONTEXT_KINDS.values()}
     kind = None
     for line in ECHOED_REVIEWED_FILE.read_text().splitlines():
         if line in CONTEXT_KINDS:
             kind = CONTEXT_KINDS[line]
         elif line and kind:
+            assert CONTEXT_SHAPES[kind].fullmatch(line), f"not a {kind}: {line!r}"
             kinds[kind].append(line)
     return kinds
+
+
+def detector_trips(text: str, tmp_path: Path) -> bool:
+    """Run the script's own sandbox_error_in over text: does any line have a runtime error's shape?"""
+    body = re.search(r"^sandbox_error_in\(\) \{\n.*?^\}\n", SCRIPT.read_text(), re.S | re.M)
+    assert body, "run-adversarial-pipeline.sh no longer defines sandbox_error_in"
+    log = tmp_path / "detector-input.log"
+    log.write_text(text)
+    result = subprocess.run(["bash", "-c", body[0] + 'sandbox_error_in "$1"', "_", str(log)],
+                            capture_output=True, text=True)
+    assert result.returncode in (0, 1), result.stderr
+    return result.returncode == 0
 
 
 def sweep_agent_stderr(repo: Path) -> str:
@@ -570,6 +600,18 @@ def test_a_runtime_error_line_for_each_old_alternative_marks_the_phase_blind(gat
     assert_not_stamped(artifacts(repo, env), "sweep")
 
 
+def test_bubblewraps_own_failed_to_make_line_marks_the_phase_blind(gate, tmp_path):
+    line = BUBBLEWRAP_FAILED_TO_MAKE
+    assert re.search(OLD_CHECK_ALTERNATIVES["failed-to-make"], line, re.I), "the line lost its marker"
+    assert line.startswith("bwrap: "), "the line lost bubblewrap's program-name prefix"
+    repo, scratch, env = gate
+    agent = stderr_lines_agent(tmp_path, ["Reading the diff", line, "review done"])
+    result = run_sweep(repo, scratch, env, "--model", "gpt-6.1-sol", agent=agent)
+    assert result.returncode == 17, result.stdout + result.stderr
+    assert BLIND_MESSAGE in result.stderr, result.stderr
+    assert_not_stamped(artifacts(repo, env), "sweep")
+
+
 def test_the_echoed_file_is_not_shared_runtimes_md():
     assert ECHOED_REVIEWED_FILE.resolve() not in {p.resolve() for p in RUNTIMES_COPIES}
 
@@ -581,6 +623,9 @@ def test_a_reviewed_file_quoting_each_alternative_mid_line_is_accepted(gate, tmp
         hits = [ln for ln in lines if quotes_alternative(ln, name)]
         assert hits, f"{name}: the reviewed-file fixture no longer quotes this alternative in a {kind}"
         quoting += hits
+    assert not detector_trips("\n".join(quoting) + "\n", tmp_path), (
+        f"{name}: a quoting line has the shape of a runtime error line, so its marker is not mid-line"
+    )
     repo, scratch, env = gate
     agent = stderr_lines_agent(tmp_path, quoting)
     result = run_sweep(repo, scratch, env, "--model", "deepseek/deepseek-flash", agent=agent)
@@ -591,11 +636,12 @@ def test_a_reviewed_file_quoting_each_alternative_mid_line_is_accepted(gate, tmp
     assert all(ln in echoed for ln in quoting), f"{name}: the agent's stderr lost the quoting lines"
 
 
-def test_echoing_the_whole_reviewed_file_is_accepted(gate):
+def test_echoing_the_whole_reviewed_file_is_accepted(gate, tmp_path):
     text = ECHOED_REVIEWED_FILE.read_text()
     for name, alternative in OLD_CHECK_ALTERNATIVES.items():
         assert re.search(alternative, text, re.I), f"the fixture no longer quotes {name}"
     assert "fails with a `bwrap:` error" in text, "the fixture lost the SKL-70 sentence"
+    assert not detector_trips(text, tmp_path), "a fixture line has the shape of a runtime error line"
     repo, scratch, env = gate
     result = run_sweep(repo, scratch, env, "--model", "deepseek/deepseek-flash", agent=echoed_file_agent())
     assert result.returncode == 0, result.stdout + result.stderr
@@ -603,8 +649,11 @@ def test_echoing_the_whole_reviewed_file_is_accepted(gate):
 
 
 @pytest.mark.parametrize("name", sorted(RUNTIME_ERROR_LINES))
-def test_an_echoed_file_plus_a_runtime_error_line_still_marks_the_phase_blind(gate, name):
+def test_an_echoed_file_plus_a_runtime_error_line_still_marks_the_phase_blind(gate, tmp_path, name):
     line = RUNTIME_ERROR_LINES[name][3]
+    # Attribute the rejection: the runtime line alone has the error shape, the echoed file alone not.
+    assert detector_trips(line + "\n", tmp_path), f"{name}: the runtime line alone does not trip"
+    assert not detector_trips(ECHOED_REVIEWED_FILE.read_text(), tmp_path), "the echoed file trips"
     repo, scratch, env = gate
     result = run_sweep(repo, scratch, env, "--model", "gpt-6.1-sol", agent=echoed_file_agent(line))
     assert result.returncode == 17, (name, result.stdout + result.stderr)
