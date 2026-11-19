@@ -233,6 +233,8 @@ Review roles run as subagents or as shell-launched CLIs (for example `codex exec
   The request explicitly selects the fixture directory because the managed service starts in its home directory.
   A stop is attempted after every fixture, success or failure: a failed stop is appended to any discovery error, and if discovery succeeded, a failed stop still fails the layout.
   Only npm/registry access is needed for installation.
+- `uv run --locked bash scripts/run-suite.sh skills/<skill>/evals ...`, from the repository root, is the one executed-eval suite runner for every skill's `evals/` directory; `--list` prints a suite's cases, and `skills/story-to-done/evals/README.md` states the case contract and how to run it.
+  A real case runs a model agent, which needs its credentials, so CI does not run the suite; `tests/test_eval_suite.py` checks the runner with a credential-free stub agent and every case against the contract.
 - Markdown puts one sentence per line.
 
 ### Workflow files are judged by the base copy

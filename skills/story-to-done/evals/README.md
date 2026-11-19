@@ -1,6 +1,9 @@
 # story-to-done eval suite
 
-Executed eval cases for the story-to-done skill, and the suite runner that repeats them.
+Executed eval cases for the story-to-done skill.
+The suite runner that repeats them is shared by every skill's `evals/`: `scripts/run-suite.sh` at the repository root, which takes the skill's `evals/` directory as its first argument.
+That directory must be `skills/<skill>/evals` in the checkout holding the runner, so the harness commit a record names is the checkout that held the runner as well as the cases; the runner refuses any other directory and an `evals/` directory with no case.
+A whole-suite run and `--list` also refuse a case directory whose name the suite cannot run (one that does not match `[A-Za-z0-9][A-Za-z0-9._-]*`, or `results`); a run that names its cases checks only those.
 Each case runs a real agent against a fixed scenario and grades the tool calls it recorded, never its prose.
 
 ## Prerequisites
@@ -45,25 +48,33 @@ bash skills/story-to-done/evals/qa-unfinished-own-steps/run.sh <checkout> own-st
 One case, with 3 graded runs per scenario:
 
 ```sh
-uv run --locked bash skills/story-to-done/evals/run-suite.sh --runs 3 <checkout> <label> qa-unfinished-own-steps
+uv run --locked bash scripts/run-suite.sh skills/story-to-done/evals --runs 3 <checkout> <label> qa-unfinished-own-steps
 ```
 
 The whole suite, every case directory holding a `case.yaml`:
 
 ```sh
-uv run --locked bash skills/story-to-done/evals/run-suite.sh <checkout> <label>
+uv run --locked bash scripts/run-suite.sh skills/story-to-done/evals <checkout> <label>
 ```
 
-A baseline and a candidate are two suite runs, one per commit, each from its own detached checkout:
+A baseline and a candidate are two suite runs, one per commit, each from its own detached checkout.
+A baseline run of a discriminating case exits 1 by design, so run the commands one at a time, not in a shell that stops on the first non-zero status, or the cleanup is skipped:
 
 ```sh
 git worktree add --detach <scratch>/skill-7a6cb17 7a6cb17
-uv run --locked bash skills/story-to-done/evals/run-suite.sh <scratch>/skill-7a6cb17 <model>-baseline-7a6cb17 qa-unfinished-own-steps
+uv run --locked bash scripts/run-suite.sh skills/story-to-done/evals <scratch>/skill-7a6cb17 <model>-baseline-7a6cb17 qa-unfinished-own-steps
 git worktree remove <scratch>/skill-7a6cb17
 ```
 
-The runner lists cases from the harness checkout, never from `<checkout>`, so a baseline commit that predates a case still runs it.
-It refuses a harness or skill checkout with any uncommitted change, tracked or untracked, because the commit it records would not describe the run; only the suite's own records under a `results/` directory are allowed, untracked or with an unstaged modification; a record staged, deleted, renamed or unmerged is refused.
+The case names, with nothing run:
+
+```sh
+uv run --locked bash scripts/run-suite.sh skills/story-to-done/evals --list
+```
+
+The runner lists cases from the harness checkout's `skills/<skill>/evals/` directory, never from `<checkout>`, so a baseline commit that predates a case still runs it.
+It refuses a harness or skill checkout with any uncommitted change, tracked or untracked, because the commit it records would not describe the run; only the suite's own records under a `results/` directory of this `evals/` directory are allowed, untracked or with an unstaged modification; a record staged, deleted, renamed or unmerged is refused.
+Another skill's uncommitted records are changes like any other, so commit or remove them before running a different skill's suite in the same checkout.
 
 A run that stopped before writing its summary is continued with `--resume` and the same arguments and environment: each attempt that already has both records is counted from them instead of running again.
 Resume refuses a record whose label, commits, model, reasoning effort or agent command differ from this run's, a record whose outcome or verdicts are not the ones its exit code and grades give (a verdict line that redaction rewrote keeps the recorded verdict), and a record of a broken attempt.
@@ -80,7 +91,9 @@ A run without `--resume` refuses a label that already has records, and no run wr
 - Any other exit status, further grades without the scenario's own `grader-output.txt`, further grade files that contradict the status, or grades that differ from an earlier graded attempt's of the same scenario mean the case or the machine is broken: the attempt is recorded with outcome `error` and the suite stops with exit 1, writing no summary.
 - Before each attempt and before the summary, the runner checks that both checkouts are still clean and at their commits, with every committed record as it was when the run started; a checkout an attempt changed, a committed record included, stops the suite with exit 1.
 - A case that names a scenario twice is refused.
-- The runner exits 0 when every scenario has N graded runs, 1 when any has fewer or it stopped on a broken attempt, and 2 when it refuses to start or would overwrite a file.
+- The runner exits 0 when every scenario has N graded runs and every graded run of every grade passed, 1 when any scenario has fewer, any graded run failed (the summary is still written, and stderr names each failing grade) or it stopped on a broken attempt, and 2 when it refuses to start or would overwrite a file.
+  A baseline run of a discriminating case therefore exits 1 by design.
+  Exit 1 alone does not say which: a run whose graded runs failed or fell short wrote `results/suite-<label>.md` and its stderr names them (`run-suite: failing graded runs for:` or `run-suite: fewer than N graded runs for:`), while a run that stopped on a broken attempt or a changed checkout wrote no summary.
 
 ## Results layout and naming
 
