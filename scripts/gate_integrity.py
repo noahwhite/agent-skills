@@ -19,7 +19,9 @@ job or step. Everything else must stay as the base has it:
 - a base job's head steps start with its base steps, in order and unchanged in
   every field other than `name`, and no renamed step takes another base step's name.
   An added step runs only after every base step, so it cannot change their execution
-  (through $GITHUB_ENV, for example);
+  (through $GITHUB_ENV, for example). The one exception is a step in
+  ALLOWED_BEFORE_BASE, which may come anywhere in its job when its whole body,
+  name included, matches the entry exactly;
 - added jobs and steps in a base workflow are ones GitHub accepts (known keys, one of
   `run` or `uses`, string names), since an invalid one stops the file. An added job
   there is a `runs-on` job, since the gate does not load a reusable workflow's file,
@@ -67,6 +69,13 @@ JOB_KEYS = {"name", "permissions", "needs", "if", "runs-on", "environment", "con
             "uses", "with", "secrets", "snapshot"}
 STEP_KEYS = {"id", "if", "name", "uses", "run", "working-directory", "shell", "with", "env", "continue-on-error",
              "timeout-minutes"}
+# Steps a pull request may add before a base job's steps, keyed by (workflow file, job id) and
+# matched by their whole body, every key included. Each entry admits one head step, and only
+# while the base job lacks it. SKL-340: Lint runs first in ci.yml `checks`; once Lint is a base
+# step there, the entry no longer applies and can be removed.
+ALLOWED_BEFORE_BASE = {
+    ("ci.yml", "checks"): ({"name": "Lint", "run": "uv run --locked ruff check ."},),
+}
 
 
 class UniqueKeyLoader(yaml.SafeLoader):
@@ -188,10 +197,25 @@ def compare_fields(base: dict, head: dict, ignored: tuple, where: str) -> list[s
     return problems
 
 
-def compare_steps(base_steps, head_steps, where: str) -> list[str]:
-    """The head steps must start with the base steps, names aside; added steps follow them."""
+def without_allowed(base_steps: list, head_steps: list, allowed) -> list:
+    """Drop the first head step that exactly matches each allowed entry the base job lacks."""
+    kept = list(head_steps)
+    for entry in allowed:
+        if any(same(step, entry) for step in base_steps):
+            continue
+        for index, step in enumerate(kept):
+            if same(step, entry):
+                del kept[index]
+                break
+    return kept
+
+
+def compare_steps(base_steps, head_steps, where: str, allowed=()) -> list[str]:
+    """The head steps must start with the base steps, names aside; added steps follow them,
+    except an exact ALLOWED_BEFORE_BASE entry, which may come anywhere."""
     if not isinstance(base_steps, list) or not isinstance(head_steps, list):
         return [] if same(base_steps, head_steps) else [f"{where}: steps changed"]
+    head_steps = without_allowed(base_steps, head_steps, allowed)
     problems = []
     head_bodies = [step_body(step) for step in head_steps]
     base_names = [step_name(step) for step in base_steps]
@@ -305,7 +329,8 @@ def compare_workflow(name: str, base: dict, head: dict) -> list[str]:
             continue
         problems += compare_fields(base_job, head_job, ("name", "steps"), where)
         problems += name_problems(base_job, head_job, where)
-        problems += compare_steps(base_job.get("steps"), head_job.get("steps"), where)
+        problems += compare_steps(base_job.get("steps"), head_job.get("steps"), where,
+                                  ALLOWED_BEFORE_BASE.get((name, job_id), ()))
     return problems + broken_needs(name, head_jobs)
 
 
