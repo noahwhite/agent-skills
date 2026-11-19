@@ -117,45 +117,53 @@ def is_evals(parts: tuple[str, ...]) -> bool:
     return len(parts) == 3 and parts[0] == "skills" and parts[2] == "evals"
 
 
-def is_record(path: str) -> bool:
-    """True for a file the suite writes: directly in a suite's results/ or in a case's, under any
-    skill's evals/ directory, so one skill's records never block a run of another's."""
+def is_record(path: str, evals_parts: tuple[str, ...]) -> bool:
+    """True for a file the suite writes: directly in the suite's results/ or in a case's, under
+    the evals/ directory whose path from the checkout root is evals_parts."""
     parts = Path(path).parts
-    if not is_evals(parts[:3]):
+    if not is_evals(evals_parts) or parts[:3] != evals_parts:
         return False
     rest = parts[3:]
     return (len(rest) == 2 and rest[0] == "results") or (len(rest) == 3 and rest[1] == "results")
 
 
-def commit_of(repo: Path, role: str) -> tuple[Path, str, str]:
+def commit_of(repo: Path, role: str, evals_parts: tuple[str, ...]) -> tuple[Path, str, str]:
     """The checkout's root, full and short HEAD. A checkout with tracked or untracked changes is
-    refused, because its commit would not describe what ran; only the suite's own records under a
-    results/ directory, untracked or with an unstaged modification, are allowed, since they are
-    outputs, not code."""
+    refused, because its commit would not describe what ran; only this suite's own records under
+    a results/ directory, untracked or with an unstaged modification, are allowed, since they are
+    outputs, not code. Another skill's records are changes like any other."""
     root = Path(git(repo, "rev-parse", "--show-toplevel")).resolve()
-    # Unstripped: each porcelain line is two status columns, a space and the path, and the first
-    # line's index column is a space for an unstaged change, so stripping would cut the path.
-    status = [line for line in git(root, "status", "--porcelain", "--untracked-files=all", strip=False).splitlines()
-              if line]
-    # A record is allowed only untracked or with an unstaged modification: any other state on a
-    # record (staged, deleted, unmerged, or a rename whose " -> " joins a record to another path)
-    # is a change the commit would not describe.
-    changed = [line[3:] for line in status
-               if not (line[:2] in ("??", " M") and is_record(line[3:]))]
+    # NUL-separated, so a path reaches is_record as its bytes, never quoted; each entry is two
+    # status columns, a space and the path, and a rename or copy is followed by its source path.
+    entries = git(root, "status", "--porcelain", "-z", "--untracked-files=all", strip=False).split("\0")
+    changed, index = [], 0
+    while index < len(entries):
+        entry = entries[index]
+        index += 1
+        if not entry:
+            continue
+        status, path = entry[:2], entry[3:]
+        if "R" in status or "C" in status:
+            path = f"{entries[index]} -> {path}"
+            index += 1
+        # A record is allowed only untracked or with an unstaged modification: any other state on
+        # a record (staged, deleted, unmerged, renamed) is a change the commit would not describe.
+        if not (status in ("??", " M") and is_record(path, evals_parts)):
+            changed.append(path)
     if changed:
         raise Refused(f"the {role} checkout {root} has uncommitted changes ({', '.join(changed[:5])}), "
                       "so its commit would not describe the run")
     return root, git(root, "rev-parse", "HEAD"), git(root, "rev-parse", "--short=7", "HEAD")
 
 
-def committed_records(root: Path) -> dict[str, tuple[int, str]]:
+def committed_records(root: Path, evals_parts: tuple[str, ...]) -> dict[str, tuple[int, str]]:
     """Each committed record, by path, as its file mode and a hash of what it holds: a symlink's
     target text, a regular file's content, nothing for any other kind of file, so no read follows
     a link or blocks. The suite only ever writes new records, so a change to this during a run is
     a change an attempt made, not the suite's own output."""
     records = {}
     for path in git(root, "ls-files", "-z", strip=False).split("\0"):
-        if not path or not is_record(path):
+        if not path or not is_record(path, evals_parts):
             continue
         name = os.fsencode(root / path)
         try:
@@ -185,8 +193,8 @@ def held_by(name: bytes, mode: int) -> bytes:
 
 
 def case_names(evals: Path) -> list[str]:
-    """Every case directory of EVALS that holds a case.yaml, by name."""
-    return sorted(path.parent.name for path in evals.glob("*/case.yaml"))
+    """Every case directory of EVALS that holds a case.yaml file, by name."""
+    return sorted(path.parent.name for path in evals.glob("*/case.yaml") if path.is_file())
 
 
 def parse(argv: list[str]) -> argparse.Namespace:
@@ -605,6 +613,15 @@ def seconds(name: str, default: int) -> int:
 def main(argv: list[str]) -> int:
     args = parse(argv)
     evals = args.evals
+    # The harness is the checkout holding this runner, so the harness commit a record names is
+    # the code that ran; EVALS must be one of its skills' evals/ directories, whose path from the
+    # root names the records in both checkouts.
+    runner_root = Path(git(SCRIPTS, "rev-parse", "--show-toplevel")).resolve()
+    if Path(git(evals, "rev-parse", "--show-toplevel")).resolve() != runner_root:
+        raise Refused(f"EVALS {evals} is not in the checkout holding this runner ({runner_root})")
+    parts = evals.relative_to(runner_root).parts
+    if not is_evals(parts):
+        raise Refused(f"EVALS {evals} is not a skills/<skill>/evals directory of its checkout")
     if args.list:
         for case in case_names(evals):
             print(case)
@@ -616,15 +633,12 @@ def main(argv: list[str]) -> int:
     if existing and not args.resume:
         raise Refused(f"{min(existing)} exists, a record of {args.label}; start a new LABEL, "
                       "or --resume with the arguments that run started with")
-    # Records are named by the evals/ path from the harness root, so only a skill's evals/ runs.
-    if not is_evals(evals.relative_to(Path(git(evals, "rev-parse", "--show-toplevel")).resolve()).parts):
-        raise Refused(f"EVALS {evals} is not a skills/<skill>/evals directory of its checkout")
     cases = args.cases or case_names(evals)
     if not cases:
         raise Refused(f"EVALS {evals} holds no case, so the suite would run nothing")
-    harness, harness_commit, harness_short = commit_of(evals, "harness")
-    checkout, checkout_commit, checkout_short = commit_of(args.checkout, "skill")
-    committed = {harness: committed_records(harness), checkout: committed_records(checkout)}
+    harness, harness_commit, harness_short = commit_of(evals, "harness", parts)
+    checkout, checkout_commit, checkout_short = commit_of(args.checkout, "skill", parts)
+    committed = {harness: committed_records(harness, parts), checkout: committed_records(checkout, parts)}
     specs = {}
     for case in cases:
         if not NAME.fullmatch(case):
@@ -650,12 +664,12 @@ def main(argv: list[str]) -> int:
         an attempt that changed either stops the suite."""
         for repo, role, commit in ((harness, "harness", harness_commit), (checkout, "skill", checkout_commit)):
             try:
-                now = commit_of(repo, role)[1]
+                now = commit_of(repo, role, parts)[1]
             except Refused as error:
                 raise Broken(f"{error}, after an attempt of this run changed it") from None
             if now != commit:
                 raise Broken(f"the {role} checkout moved from {commit} to {now} during the run")
-            records = committed_records(repo)
+            records = committed_records(repo, parts)
             if records != committed[repo]:
                 paths = sorted(path for path in records.keys() | committed[repo].keys()
                                if records.get(path) != committed[repo].get(path))
