@@ -433,11 +433,16 @@ OLD_CHECK_ALTERNATIVES = {
 
 ECHOED_REVIEWED_FILE = ROOT / "tests" / "fixtures" / "sandbox_echo" / "echoed-reviewed-file.txt"
 
-# name -> (runtime whose error format the line uses, how the line's origin is established, the line).
-# The lines are quoted strings, so this file stays acceptable when a gate agent echoes it.
+# How a fixture line's origin is established; a line no runtime emits is labelled line shape only.
+ORIGIN_KINDS = ("captured live", "built from a runtime binary string", "line shape only")
+LINE_SHAPE_ONLY = "none (line shape only)"
+
+# name -> (runtime whose error format the line uses, origin kind, how the origin is established, the
+# line). The lines are quoted strings, so this file stays acceptable when a gate agent echoes it.
 RUNTIME_ERROR_LINES = {
     "bwrap": (
         "Codex (bubblewrap)",
+        "captured live",
         "captured verbatim from the stderr of the bubblewrap that Codex bundles "
         "(codex-resources/bwrap) on 2026-11-19, run where /proc could not be mounted; bubblewrap "
         "starts each of its own error lines with its program name",
@@ -445,6 +450,7 @@ RUNTIME_ERROR_LINES = {
     ),
     "failed-to-make": (
         "Codex (bubblewrap), message without its program-name prefix",
+        "built from a runtime binary string",
         "'Failed to make / slave' is a message string of Codex's bundled bubblewrap binary, followed "
         "by EACCES's text; written without bubblewrap's 'bwrap: ' prefix so the line trips only this "
         "alternative (the prefixed form is the bwrap case's format); not observed live here",
@@ -452,20 +458,23 @@ RUNTIME_ERROR_LINES = {
     ),
     "sandbox-denied": (
         "Codex",
+        "built from a runtime binary string",
         "'sandbox denied exec error, exit code: ' is a message string of the Codex binary, placed at "
         "line start as a runtime's own error line; not observed on a live Codex stderr here",
         "sandbox denied exec error, exit code: 1",
     ),
     "sandbox-failed": (
-        "none: line shape only (codex: tool prefix)",
+        LINE_SHAPE_ONLY,
+        "line shape only",
         "no runtime installed here (codex, its bundled bwrap, opencode) emits this marker; the line "
-        "is in the shape the detector attributes to a runtime: line start, one tool prefix",
+        "is in the shape the detector attributes to a runtime: line start, one `codex: ` tool prefix",
         "codex: sandbox failed to start",
     ),
     "sandbox-could-not": (
-        "none: line shape only (codex: tool prefix)",
+        LINE_SHAPE_ONLY,
+        "line shape only",
         "no runtime installed here (codex, its bundled bwrap, opencode) emits this marker; the line "
-        "is in the shape the detector attributes to a runtime: line start, one tool prefix",
+        "is in the shape the detector attributes to a runtime: line start, one `codex: ` tool prefix",
         "codex: sandbox could not start: no user namespaces",
     ),
 }
@@ -543,7 +552,11 @@ def test_every_alternative_of_the_historical_check_has_a_runtime_error_fixture()
 
 @pytest.mark.parametrize("name", sorted(RUNTIME_ERROR_LINES))
 def test_a_runtime_error_line_for_each_old_alternative_marks_the_phase_blind(gate, tmp_path, name):
-    runtime, origin, line = RUNTIME_ERROR_LINES[name]
+    runtime, kind, origin, line = RUNTIME_ERROR_LINES[name]
+    assert kind in ORIGIN_KINDS, f"{name}: the origin kind {kind!r} is not one of {ORIGIN_KINDS}"
+    assert (kind == "line shape only") == (runtime == LINE_SHAPE_ONLY), (
+        f"{name}: only a line-shape-only fixture may name no runtime, and it must be labelled so"
+    )
     assert runtime and origin, f"{name}: the fixture must name its runtime format and its origin"
     assert re.search(OLD_CHECK_ALTERNATIVES[name], line, re.I), f"{name}: the line lost its marker"
     others = [other for other in OLD_CHECK_ALTERNATIVES if other != name
@@ -591,7 +604,7 @@ def test_echoing_the_whole_reviewed_file_is_accepted(gate):
 
 @pytest.mark.parametrize("name", sorted(RUNTIME_ERROR_LINES))
 def test_an_echoed_file_plus_a_runtime_error_line_still_marks_the_phase_blind(gate, name):
-    line = RUNTIME_ERROR_LINES[name][2]
+    line = RUNTIME_ERROR_LINES[name][3]
     repo, scratch, env = gate
     result = run_sweep(repo, scratch, env, "--model", "gpt-6.1-sol", agent=echoed_file_agent(line))
     assert result.returncode == 17, (name, result.stdout + result.stderr)
