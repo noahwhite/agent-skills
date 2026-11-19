@@ -238,11 +238,13 @@ def test_the_arbitration_report_layout_is_unchanged(gate):
 
 
 # The whole line is pinned: the base is the merge base of BASE and HEAD, never BASE itself (the
-# integration tip), and the adjudicator confirms the tag.
+# integration tip), and the arbiter confirms the tag itself, since the pre-PR gate has no adjudicator.
 PRE_EXISTING_LINE = (
     "4. Prefix a finding with 'pre-existing' only when the defect is present at the merge base of BASE and HEAD "
-    "(not at BASE itself) in code the diff neither changes nor newly calls, imports or exercises, and the "
-    "adjudicator confirms the tag, per the pre-existing rule in references/code-review.md (Handling findings)."
+    "(not at BASE itself) in code the diff neither changes nor newly calls, imports or exercises; this pre-PR "
+    "gate has no review-of-record adjudicator yet, so you are the confirming seat here: confirm the tag yourself "
+    "against the merge base, per the pre-existing rule in references/code-review.md (Handling findings), whose "
+    "adjudicator re-confirms any such tag at the PR review of record."
 )
 
 
