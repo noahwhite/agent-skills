@@ -24,7 +24,8 @@ job or step. Everything else must stay as the base has it:
   `run` or `uses`, string names), since an invalid one stops the file. An added job
   there is a `runs-on` job, since the gate does not load a reusable workflow's file,
   and a step added to a base job is a `run` step, since an action's pre hook would run
-  before the base steps. A changed display name must be a string with no expression.
+  before the base steps. A changed display name must be a string whose only expressions are plain context
+  references such as `${{ github.sha }}`.
 
 Values compare by type as well as value, so `true` does not match `1`.
 
@@ -60,6 +61,7 @@ GATE_SUFFIX = ".yml"
 WORKFLOW_SUFFIXES = (".yml", ".yaml")
 # Fail closed at 500,000 bytes, below either reading of GitHub's 500 KB limit.
 MAX_WORKFLOW_BYTES = 500_000
+SIMPLE_EXPRESSION = re.compile(r"\$\{\{\s*[A-Za-z_][A-Za-z0-9_-]*(\.[A-Za-z_][A-Za-z0-9_-]*)*\s*\}\}")
 JOB_KEYS = {"name", "permissions", "needs", "if", "runs-on", "environment", "concurrency", "outputs", "env",
             "defaults", "steps", "timeout-minutes", "strategy", "continue-on-error", "container", "services",
             "uses", "with", "secrets", "snapshot"}
@@ -219,15 +221,18 @@ def compare_steps(base_steps, head_steps, where: str) -> list[str]:
 
 
 def name_problems(base, head, where: str) -> list[str]:
-    """A changed display name must be a plain string; a non-string or bad expression stops the file."""
+    """A changed display name GitHub may reject (a non-string, or an expression beyond a plain
+    context reference) stops the whole file."""
     if not isinstance(base, dict) or not isinstance(head, dict) or "name" not in head:
         return []
     if base.get("name") == head["name"]:
         return []
     if not isinstance(head["name"], str):
         return [f"{where}: its new name is not a string"]
-    if "${{" in head["name"]:
-        return [f"{where}: its new name is an expression, which GitHub may reject"]
+    # A plain context reference such as `${{ github.sha }}` parses; anything else might not.
+    if "${{" in SIMPLE_EXPRESSION.sub("", head["name"]):
+        return [f"{where}: its new name has an expression other than a plain context reference,"
+                " which GitHub may reject"]
     return []
 
 

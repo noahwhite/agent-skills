@@ -223,14 +223,21 @@ def test_a_gate_workflow_step_name_that_is_not_a_string_fails(tmp_path):
     assert "not a string" in result.stdout
 
 
-@pytest.mark.parametrize("name", ["${{ }}", "Judge ${{ github.sha }}"])
-def test_a_step_renamed_to_an_expression_fails(tmp_path, name):
+@pytest.mark.parametrize("name", ["${{ }}", "${{ github.sha", "${{ format('{0}', github.sha) }}",
+                                  "${{ github.sha }} ${{ ( }}"])
+def test_a_step_renamed_to_an_expression_beyond_a_context_reference_fails(tmp_path, name):
     # GitHub rejects a malformed expression, which would stop the whole file.
     gate = copy.deepcopy(GATE)
     gate["jobs"]["gate"]["steps"][0]["name"] = name
     result = judge(tmp_path, {"ci.yml": copy.deepcopy(CI), "gate-base.yml": gate})
     assert result.returncode != 0, result.stdout
     assert "expression" in result.stdout
+
+
+@pytest.mark.parametrize("name", ["Judge ${{ github.sha }}", "${{github.event.pull_request.number}} judge"])
+def test_a_step_renamed_with_a_context_reference_passes(tmp_path, name):
+    result = judge(tmp_path, head_with(lambda ci: steps(ci)[3].update(name=name)))
+    assert result.returncode == 0, result.stdout
 
 
 # GitHub rejects a whole workflow file with an invalid job or step, so an addition like
@@ -737,8 +744,13 @@ def test_a_failing_judge_fails_the_judge_step(tmp_path, judge_exit):
     assert "gate-base: FAIL" in (tmp_path / "gate.log").read_text()
 
 
-def run_report_step(tmp_path, log_text, gh_failures, marker="status=completed"):
-    """Run the step posting `marker` with a stub gh that fails gh_failures times, then records its summary."""
+BASE_SHA = "1" * 40
+
+
+def run_report_step(tmp_path, log_text, gh_failures, marker="status=completed", live_ref="main",
+                    live_tip=BASE_SHA):
+    """Run the step posting `marker` with a stub gh that fails gh_failures times and serves the
+    PR's live base as live_ref at live_tip; it records each post and the posted summary."""
     [report] = [s for s in all_steps(gate_workflow()) if marker in s.get("run", "")]
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
@@ -747,13 +759,16 @@ def run_report_step(tmp_path, log_text, gh_failures, marker="status=completed"):
         "#!/bin/sh\n"
         f"n=$(cat {tmp_path}/calls 2>/dev/null || echo 0); n=$((n + 1)); echo $n > {tmp_path}/calls\n"
         f"[ $n -le {gh_failures} ] && exit 1\n"
+        f"case \"$*\" in *repos/o/r/pulls/7*) echo {live_ref}; exit 0;;"
+        f" *repos/o/r/git/ref/heads/{live_ref}*) echo {live_tip}; exit 0;; esac\n"
+        f"echo post >> {tmp_path}/posts\n"
         f"for a in \"$@\"; do case $a in 'output[summary]=@'*) cp \"${{a#*@}}\" {tmp_path}/posted;; esac; done\n")
     for tool in ("sleep", "gh"):
         (bin_dir / tool).chmod(0o755)
     (tmp_path / "gate.log").write_text(log_text)
     (tmp_path / "step.sh").write_text(report["run"])
     env = {"PATH": f"{bin_dir}:/usr/bin:/bin", "RUNNER_TEMP": str(tmp_path), "OUTCOME": "failure",
-           "REPO": "o/r", "HEAD_SHA": "0" * 40}
+           "REPO": "o/r", "HEAD_SHA": "0" * 40, "PR_NUMBER": "7", "BASE_REF": "main", "BASE_SHA": BASE_SHA}
     return subprocess.run([*RUNNER_SHELLS[report.get("shell")], str(tmp_path / "step.sh")],
                           capture_output=True, text=True, timeout=30, env=env)
 
@@ -794,17 +809,37 @@ def test_the_in_progress_step_retries_and_fails_closed(tmp_path, gh_failures, ok
     assert (result.returncode == 0) is ok, result.stderr
 
 
-def test_a_newer_run_for_the_pr_cancels_the_older_before_it_reports():
-    # A verdict judged against an earlier base must not land after the current one.
-    workflow = gate_workflow()
-    assert workflow["concurrency"] == {"group": "gate-base-${{ github.event.pull_request.number }}",
-                                       "cancel-in-progress": True}
+# A run for a base the PR no longer has (a retarget, a later push to the base branch, or a
+# re-run of an old event) must post nothing, so its verdict cannot land after the current one.
+STALE_BASES = {"retargeted": ("release", BASE_SHA), "base branch moved": ("main", "2" * 40)}
+
+
+@pytest.mark.parametrize("marker", ["status=in_progress", "status=completed"])
+@pytest.mark.parametrize("live_ref, live_tip", STALE_BASES.values(), ids=STALE_BASES)
+def test_a_run_for_a_stale_base_posts_nothing(tmp_path, marker, live_ref, live_tip):
+    result = run_report_step(tmp_path, "gate-base: PASS\n", 0, marker=marker, live_ref=live_ref, live_tip=live_tip)
+    assert result.returncode != 0
+    assert not (tmp_path / "posts").exists()
+
+
+@pytest.mark.parametrize("marker", ["status=in_progress", "status=completed"])
+def test_a_run_for_the_current_base_posts_once(tmp_path, marker):
+    result = run_report_step(tmp_path, "gate-base: PASS\n", 0, marker=marker)
+    assert result.returncode == 0, result.stderr
+    assert (tmp_path / "posts").read_text() == "post\n"
+
+
+@pytest.mark.parametrize("marker", ["status=in_progress", "status=completed"])
+def test_the_base_check_reads_the_run_s_own_base(marker):
+    [step] = [s for s in all_steps(gate_workflow()) if marker in s.get("run", "")]
+    assert step["env"]["PR_NUMBER"] == "${{ github.event.pull_request.number }}"
+    assert step["env"]["BASE_REF"] == "${{ github.event.pull_request.base.ref }}"
+    assert step["env"]["BASE_SHA"] == "${{ github.sha }}"
 
 
 def test_the_check_run_gate_base_is_created_on_the_pr_head_sha():
     [report] = [s for s in all_steps(gate_workflow()) if "status=completed" in s.get("run", "")]
-    # It reports a failed judge too, but not from a run a newer one cancelled.
-    assert report["if"] == "${{ !cancelled() }}"
+    assert report["if"] == "always()"
     assert "name=gate-base" in report["run"]
     assert '"head_sha=$HEAD_SHA"' in report["run"]
     assert report["env"]["HEAD_SHA"] == "${{ github.event.pull_request.head.sha }}"

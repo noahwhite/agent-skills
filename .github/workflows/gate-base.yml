@@ -13,12 +13,6 @@ permissions:
   contents: read
   checks: write
 
-# A newer event for the same PR (a push or a retarget) cancels the older run before it
-# reports, so a verdict against an earlier base cannot land after the current one.
-concurrency:
-  group: gate-base-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
-
 jobs:
   gate:
     runs-on: ubuntu-24.04
@@ -26,16 +20,34 @@ jobs:
     steps:
       # A new in-progress gate-base run replaces any earlier verdict on this head SHA,
       # so a success judged against an earlier base does not stand while this run judges.
+      # A run whose base is no longer the PR's current base (a retarget, a later push to
+      # the base branch, or a re-run of an old event) posts nothing: only a run for the
+      # current base may speak for the head.
       - name: Mark gate-base in progress on the PR head
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          BASE_SHA: ${{ github.sha }}
         shell: bash
         run: |
+          current() {
+            live_ref=$(gh api "repos/$REPO/pulls/$PR_NUMBER" --jq .base.ref) &&
+              live_tip=$(gh api "repos/$REPO/git/ref/heads/$live_ref" --jq .object.sha) || return 2
+            [ "$live_ref" = "$BASE_REF" ] && [ "$live_tip" = "$BASE_SHA" ]
+          }
           for attempt in 1 2 3; do
-            gh api --method POST "repos/$REPO/check-runs" \
-              -f name=gate-base -f "head_sha=$HEAD_SHA" -f status=in_progress && exit 0
+            if current; then state=0; else state=$?; fi
+            if [ "$state" = 1 ]; then
+              echo "::error::the PR's base is no longer $BASE_REF at $BASE_SHA; a run for the current base judges it"
+              exit 1
+            fi
+            if [ "$state" = 0 ] && gh api --method POST "repos/$REPO/check-runs" \
+              -f name=gate-base -f "head_sha=$HEAD_SHA" -f status=in_progress; then
+              exit 0
+            fi
             sleep $((attempt * 10))
           done
           exit 1
@@ -76,15 +88,23 @@ jobs:
       # A pull_request_target job's own check run attaches to the base commit, so the
       # required gate-base check is created on the PR head SHA through the Checks API.
       - name: Report gate-base on the PR head
-        # Runs after a failed judge too; a cancelled run leaves the verdict to its successor.
-        if: ${{ !cancelled() }}
+        if: always()
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           OUTCOME: ${{ steps.judge.outcome }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          BASE_SHA: ${{ github.sha }}
         shell: bash
         run: |
+          # Checked again just before each post: the base may have moved while the judge ran.
+          current() {
+            live_ref=$(gh api "repos/$REPO/pulls/$PR_NUMBER" --jq .base.ref) &&
+              live_tip=$(gh api "repos/$REPO/git/ref/heads/$live_ref" --jq .object.sha) || return 2
+            [ "$live_ref" = "$BASE_REF" ] && [ "$live_tip" = "$BASE_SHA" ]
+          }
           if [ "$OUTCOME" = success ]; then conclusion=success; else conclusion=failure; fi
           log="$RUNNER_TEMP/gate.log"
           summary="$RUNNER_TEMP/summary.md"
@@ -93,9 +113,16 @@ jobs:
           # backtick, so head-controlled text in the log cannot close the code fence.
           { echo '```text'; head -c 60000 "$log" | sed 's/``*/`/g'; echo; echo '```'; } > "$summary"
           for attempt in 1 2 3; do
-            gh api --method POST "repos/$REPO/check-runs" \
+            if current; then state=0; else state=$?; fi
+            if [ "$state" = 1 ]; then
+              echo "::error::the PR's base is no longer $BASE_REF at $BASE_SHA, so this verdict is not posted"
+              exit 1
+            fi
+            if [ "$state" = 0 ] && gh api --method POST "repos/$REPO/check-runs" \
               -f name=gate-base -f "head_sha=$HEAD_SHA" -f status=completed -f "conclusion=$conclusion" \
-              -f "output[title]=gate-base: $conclusion" -F "output[summary]=@$summary" && exit 0
+              -f "output[title]=gate-base: $conclusion" -F "output[summary]=@$summary"; then
+              exit 0
+            fi
             sleep $((attempt * 10))
           done
           echo "::error::could not create the gate-base check run on $HEAD_SHA"
