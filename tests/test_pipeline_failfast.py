@@ -50,8 +50,7 @@ def run_script(*args: str, env: dict[str, str], timeout: int = 120) -> subproces
     )
 
 
-@pytest.fixture
-def gate(tmp_path):
+def new_gate(tmp_path: Path) -> tuple[Path, Path, dict[str, str]]:
     """A throwaway repository with an accepted preflight, plus the session scratch directory."""
     repo = make_repo(tmp_path)
     scratch = tmp_path / "session-scratch"
@@ -65,6 +64,11 @@ def gate(tmp_path):
     )
     assert preflight.returncode == 0, preflight.stdout + preflight.stderr
     return repo, scratch, env
+
+
+@pytest.fixture
+def gate(tmp_path):
+    return new_gate(tmp_path)
 
 
 def artifacts(repo: Path, env: dict[str, str]) -> dict[str, Path]:
@@ -461,9 +465,12 @@ RUNTIME_ERROR_LINES = {
     "sandbox-denied": (
         "Codex",
         "built from a runtime binary string",
-        "'sandbox denied exec error, exit code: ' is a message string of the Codex binary, placed at "
-        "line start as a runtime's own error line; not observed on a live Codex stderr here",
-        "sandbox denied exec error, exit code: 1",
+        "Codex's SandboxErr::Denied formatter (codex-rs/protocol/src/error.rs) writes 'sandbox denied "
+        "exec error, exit code: {}, stdout: {}, stderr: {}', and the Codex binary carries those "
+        "strings; filled in with a denied write, placed at line start as a runtime's own error "
+        "line; not observed on a live Codex stderr here",
+        "sandbox denied exec error, exit code: 1, stdout: , stderr: touch: cannot touch 'out': "
+        "Read-only file system",
     ),
     "sandbox-failed": (
         LINE_SHAPE_ONLY,
@@ -528,16 +535,19 @@ def echoed_lines_by_kind() -> dict[str, list[str]]:
     return kinds
 
 
-def detector_trips(text: str, tmp_path: Path) -> bool:
-    """Run the script's own sandbox_error_in over text: does any line have a runtime error's shape?"""
-    body = re.search(r"^sandbox_error_in\(\) \{\n.*?^\}\n", SCRIPT.read_text(), re.S | re.M)
-    assert body, "run-adversarial-pipeline.sh no longer defines sandbox_error_in"
-    log = tmp_path / "detector-input.log"
-    log.write_text(text)
-    result = subprocess.run(["bash", "-c", body[0] + 'sandbox_error_in "$1"', "_", str(log)],
-                            capture_output=True, text=True)
-    assert result.returncode in (0, 1), result.stderr
-    return result.returncode == 0
+def starts_with_marker(line: str) -> bool:
+    """The line opens with a marker, after whitespace and at most one `<word>: ` tool prefix: the
+    shape a runtime's own error line has, so a marker there is not mid-line."""
+    markers = "|".join(OLD_CHECK_ALTERNATIVES.values())
+    return bool(re.match(rf"\s*([A-Za-z0-9][\w.-]*:\s+)?({markers})", line, re.I))
+
+
+def sweep_exit(tmp_path: Path, label: str, agent: str) -> int:
+    """Run one sweep through the production path in its own fresh gate; return the phase exit."""
+    base = tmp_path / label
+    base.mkdir()
+    repo, scratch, env = new_gate(base)
+    return run_sweep(repo, scratch, env, "--model", "gpt-6.1-sol", agent=agent).returncode
 
 
 def sweep_agent_stderr(repo: Path) -> str:
@@ -623,9 +633,8 @@ def test_a_reviewed_file_quoting_each_alternative_mid_line_is_accepted(gate, tmp
         hits = [ln for ln in lines if quotes_alternative(ln, name)]
         assert hits, f"{name}: the reviewed-file fixture no longer quotes this alternative in a {kind}"
         quoting += hits
-    assert not detector_trips("\n".join(quoting) + "\n", tmp_path), (
-        f"{name}: a quoting line has the shape of a runtime error line, so its marker is not mid-line"
-    )
+    opening = [ln for ln in quoting if starts_with_marker(ln)]
+    assert not opening, f"{name}: these lines open with a marker, so it is not mid-line: {opening}"
     repo, scratch, env = gate
     agent = stderr_lines_agent(tmp_path, quoting)
     result = run_sweep(repo, scratch, env, "--model", "deepseek/deepseek-flash", agent=agent)
@@ -641,7 +650,8 @@ def test_echoing_the_whole_reviewed_file_is_accepted(gate, tmp_path):
     for name, alternative in OLD_CHECK_ALTERNATIVES.items():
         assert re.search(alternative, text, re.I), f"the fixture no longer quotes {name}"
     assert "fails with a `bwrap:` error" in text, "the fixture lost the SKL-70 sentence"
-    assert not detector_trips(text, tmp_path), "a fixture line has the shape of a runtime error line"
+    opening = [ln for ln in text.splitlines() if starts_with_marker(ln)]
+    assert not opening, f"these fixture lines open with a marker, so it is not mid-line: {opening}"
     repo, scratch, env = gate
     result = run_sweep(repo, scratch, env, "--model", "deepseek/deepseek-flash", agent=echoed_file_agent())
     assert result.returncode == 0, result.stdout + result.stderr
@@ -651,9 +661,11 @@ def test_echoing_the_whole_reviewed_file_is_accepted(gate, tmp_path):
 @pytest.mark.parametrize("name", sorted(RUNTIME_ERROR_LINES))
 def test_an_echoed_file_plus_a_runtime_error_line_still_marks_the_phase_blind(gate, tmp_path, name):
     line = RUNTIME_ERROR_LINES[name][3]
-    # Attribute the rejection: the runtime line alone has the error shape, the echoed file alone not.
-    assert detector_trips(line + "\n", tmp_path), f"{name}: the runtime line alone does not trip"
-    assert not detector_trips(ECHOED_REVIEWED_FILE.read_text(), tmp_path), "the echoed file trips"
+    # Attribute the rejection through the same entry point: the echoed file alone is accepted and the
+    # runtime line alone is rejected, so the mixed rejection comes from the runtime line.
+    assert sweep_exit(tmp_path, "echo-only", echoed_file_agent()) == 0, f"{name}: the echo alone is rejected"
+    runtime_only = stderr_lines_agent(tmp_path, [line])
+    assert sweep_exit(tmp_path, "runtime-only", runtime_only) == 17, f"{name}: the line alone is accepted"
     repo, scratch, env = gate
     result = run_sweep(repo, scratch, env, "--model", "gpt-6.1-sol", agent=echoed_file_agent(line))
     assert result.returncode == 17, (name, result.stdout + result.stderr)
