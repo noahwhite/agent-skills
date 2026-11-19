@@ -86,7 +86,8 @@ review:
       runtime: opencode
       model: example/family-b
   merge_owner: human
-  # Optional: the login expected to post the review of record. Default: the authenticated
+  # Optional: the login expected to post the review of record; a GitHub App's login carries
+  # its literal `[bot]` suffix (for example `my-app[bot]`). Default: the authenticated
   # account (`gh api user --jq .login`); except under the explicit per-PR review waiver in
   # The gate, the guard and read-backs fail closed when no login resolves.
   # record_author: example-user

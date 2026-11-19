@@ -342,7 +342,7 @@
           "type": "string",
           "maxLength": 45,
           "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\\[bot\\])?$",
-          "description": "GitHub user or App bot login expected to post the review of record. Default: the login of the authenticated account (`gh api user --jq .login`). Except under the explicit per-PR review waiver in The gate, the merge guard and the story-to-done read-backs fail closed when no login resolves."
+          "description": "GitHub user or App bot login expected to post the review of record; an App's login carries its literal `[bot]` suffix. Default: the login of the authenticated account (`gh api user --jq .login`). Except under the explicit per-PR review waiver in The gate, the merge guard and the story-to-done read-backs fail closed when no login resolves."
         },
         "pre_pr": {
           "type": "object",
