@@ -834,6 +834,7 @@ def test_a_run_for_the_current_base_posts_once(tmp_path, marker):
 
 @pytest.mark.parametrize("marker", ["status=in_progress", "status=completed"])
 @pytest.mark.parametrize("branch, path", [("release#1", "release%231"), ("a?b%c", "a%3Fb%25c"),
+                                          ("release/{repo}", "release/%7Brepo%7D"),
                                           ("release/1.0", "release/1.0")])
 def test_a_base_branch_name_with_url_syntax_is_looked_up_whole(tmp_path, marker, branch, path):
     result = run_report_step(tmp_path, "gate-base: PASS\n", 0, marker=marker, live_ref=branch,

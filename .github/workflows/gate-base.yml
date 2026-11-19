@@ -35,8 +35,10 @@ jobs:
         run: |
           current() {
             live_ref=$(gh api "repos/$REPO/pulls/$PR_NUMBER" --jq .base.ref) || return 2
-            # A branch name may hold URL syntax (#, ?, %), which must not cut the path short.
+            # A branch name may hold URL syntax (#, ?, %), which must not cut the path short, or
+            # braces, which gh would read as {owner}, {repo} or {branch} placeholders.
             path=${live_ref//%/%25}; path=${path//#/%23}; path=${path//\?/%3F}
+            path=${path//\{/%7B}; path=${path//\}/%7D}
             live_tip=$(gh api "repos/$REPO/git/ref/heads/$path" --jq .object.sha) || return 2
             [ "$live_ref" = "$BASE_REF" ] && [ "$live_tip" = "$BASE_SHA" ]
           }
@@ -105,8 +107,10 @@ jobs:
           # Checked again just before each post: the base may have moved while the judge ran.
           current() {
             live_ref=$(gh api "repos/$REPO/pulls/$PR_NUMBER" --jq .base.ref) || return 2
-            # A branch name may hold URL syntax (#, ?, %), which must not cut the path short.
+            # A branch name may hold URL syntax (#, ?, %), which must not cut the path short, or
+            # braces, which gh would read as {owner}, {repo} or {branch} placeholders.
             path=${live_ref//%/%25}; path=${path//#/%23}; path=${path//\?/%3F}
+            path=${path//\{/%7B}; path=${path//\}/%7D}
             live_tip=$(gh api "repos/$REPO/git/ref/heads/$path" --jq .object.sha) || return 2
             [ "$live_ref" = "$BASE_REF" ] && [ "$live_tip" = "$BASE_SHA" ]
           }
