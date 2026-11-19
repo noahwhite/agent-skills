@@ -412,8 +412,15 @@ def test_the_documented_residual_edges_of_the_line_shape_hold(gate, tmp_path, na
 # --- SKL-365: a sweep that echoes a reviewed file quoting sandbox errors is still accepted ----------
 # The SKL-70 sweep (opencode) failed with exit 17 because opencode echoes the files it reads onto its
 # stderr, and the reviewed diff quoted a `bwrap:` error. These fixtures pin, for every alternative of
-# the pre-SKL-127 check, that a runtime's own error line still fails the phase and that the same
-# marker echoed mid-line from a reviewed file other than shared/runtimes.md does not.
+# the pre-SKL-127 check, that an error line at line start still fails the phase and that the same
+# marker echoed mid-line from a reviewed file other than shared/runtimes.md does not. Each runtime
+# line states its own origin: only the `bwrap` line was captured from a live runtime; the
+# `failed-to-make` and `sandbox-denied` lines are built from runtime binary strings, and the
+# `sandbox-failed` and `sandbox-could-not` lines are line shape only, since no installed runtime
+# emits those markers.
+
+# The pre-SKL-127 check, verbatim from run-adversarial-pipeline.sh at b59674261bbb (385718b^).
+HISTORICAL_CHECK = r"bwrap:|sandbox (failed|denied|could not)|Failed to make .* Permission denied"
 
 # One pattern per alternative of the pre-SKL-127 check, none dropped.
 OLD_CHECK_ALTERNATIVES = {
@@ -437,10 +444,11 @@ RUNTIME_ERROR_LINES = {
         "bwrap: Can't mount proc on /newroot/proc: Operation not permitted",
     ),
     "failed-to-make": (
-        "Codex (bubblewrap)",
-        "'Failed to make / slave' is a message string of Codex's bundled bubblewrap binary, written "
-        "in the 'bwrap: <message>: <error>' form the captured bwrap line shows, with EACCES's text",
-        "bwrap: Failed to make / slave: Permission denied",
+        "Codex (bubblewrap), message without its program-name prefix",
+        "'Failed to make / slave' is a message string of Codex's bundled bubblewrap binary, followed "
+        "by EACCES's text; written without bubblewrap's 'bwrap: ' prefix so the line trips only this "
+        "alternative (the prefixed form is the bwrap case's format); not observed live here",
+        "Failed to make / slave: Permission denied",
     ),
     "sandbox-denied": (
         "Codex",
@@ -463,14 +471,74 @@ RUNTIME_ERROR_LINES = {
 }
 
 
+# The reviewed-file fixture's section headers, each naming the context its lines quote markers in.
+CONTEXT_KINDS = {
+    "Prose:": "prose",
+    "A removed detector line and its replacement, as a diff:": "removed detector line",
+    "A line listing the markers:": "marker list",
+    "Grep hits, as a reviewer pastes them (illustrative paths, not captured output):": "grep hit",
+    "Diff lines:": "+/- diff line",
+}
+
+# The gate's own diagnostic, which the echoed fixture's "reviewer ran blind" line cannot satisfy.
+BLIND_MESSAGE = "the sweep agent ran blind"
+
+
 def echoed_file_agent(*lines: str) -> str:
     """An agent that echoes the reviewed file onto its stderr, then any extra lines, then a report."""
     extra = "".join(f"; printf '%s\\n' {shlex.quote(line)} >&2" for line in lines)
     return f"cat {shlex.quote(str(ECHOED_REVIEWED_FILE))} >&2{extra}; {SWEEP_AGENT}"
 
 
-def test_every_alternative_has_a_runtime_error_fixture():
+def echoed_lines_by_kind() -> dict[str, list[str]]:
+    kinds: dict[str, list[str]] = {kind: [] for kind in CONTEXT_KINDS.values()}
+    kind = None
+    for line in ECHOED_REVIEWED_FILE.read_text().splitlines():
+        if line in CONTEXT_KINDS:
+            kind = CONTEXT_KINDS[line]
+        elif line and kind:
+            kinds[kind].append(line)
+    return kinds
+
+
+def sweep_agent_stderr(repo: Path) -> str:
+    errlog = next((repo / ".git").rglob("sweep-agent.err"), None)
+    assert errlog is not None, "the sweep kept no sweep-agent.err"
+    return errlog.read_text()
+
+
+def historical_alternatives(regex: str) -> list[str]:
+    """Split an ERE at its top-level `|`, then expand one `(a|b)` group per alternative."""
+    tops, depth, current = [], 0, ""
+    for ch in regex:
+        if ch == "|" and depth == 0:
+            tops.append(current)
+            current = ""
+            continue
+        depth += (ch == "(") - (ch == ")")
+        current += ch
+    tops.append(current)
+    expanded = []
+    for alt in tops:
+        group = re.fullmatch(r"([^()]*)\(([^()]*)\)([^()]*)", alt)
+        expanded += [group[1] + o + group[3] for o in group[2].split("|")] if group else [alt]
+    return expanded
+
+
+def quotes_alternative(line: str, name: str) -> bool:
+    """The line carries the marker as text, or as an alternative of a quoted `grep -qiE` regex."""
+    if re.search(OLD_CHECK_ALTERNATIVES[name], line, re.I):
+        return True
+    quoted = re.search(r"grep -qiE '([^']*)'", line)
+    return bool(quoted) and OLD_CHECK_ALTERNATIVES[name] in historical_alternatives(quoted[1])
+
+
+def test_every_alternative_of_the_historical_check_has_a_runtime_error_fixture():
+    assert sorted(historical_alternatives(HISTORICAL_CHECK)) == sorted(OLD_CHECK_ALTERNATIVES.values())
     assert sorted(RUNTIME_ERROR_LINES) == sorted(OLD_CHECK_ALTERNATIVES)
+    assert f"grep -qiE '{HISTORICAL_CHECK}'" in ECHOED_REVIEWED_FILE.read_text(), (
+        "the fixture's removed detector line no longer quotes the historical check"
+    )
 
 
 @pytest.mark.parametrize("name", sorted(RUNTIME_ERROR_LINES))
@@ -478,11 +546,14 @@ def test_a_runtime_error_line_for_each_old_alternative_marks_the_phase_blind(gat
     runtime, origin, line = RUNTIME_ERROR_LINES[name]
     assert runtime and origin, f"{name}: the fixture must name its runtime format and its origin"
     assert re.search(OLD_CHECK_ALTERNATIVES[name], line, re.I), f"{name}: the line lost its marker"
+    others = [other for other in OLD_CHECK_ALTERNATIVES if other != name
+              and re.search(OLD_CHECK_ALTERNATIVES[other], line, re.I)]
+    assert not others, f"{name}: the line also trips {others}, so it cannot pin its own alternative"
     repo, scratch, env = gate
     agent = stderr_lines_agent(tmp_path, ["Reading the diff", line, "review done"])
     result = run_sweep(repo, scratch, env, "--model", "gpt-6.1-sol", agent=agent)
     assert result.returncode == 17, (name, result.stdout + result.stderr)
-    assert "ran blind" in result.stderr, result.stderr
+    assert BLIND_MESSAGE in result.stderr, result.stderr
     assert_not_stamped(artifacts(repo, env), "sweep")
 
 
@@ -492,26 +563,30 @@ def test_the_echoed_file_is_not_shared_runtimes_md():
 
 @pytest.mark.parametrize("name", sorted(OLD_CHECK_ALTERNATIVES))
 def test_a_reviewed_file_quoting_each_alternative_mid_line_is_accepted(gate, tmp_path, name):
-    pattern = re.compile(OLD_CHECK_ALTERNATIVES[name], re.I)
-    quoting = [ln for ln in ECHOED_REVIEWED_FILE.read_text().splitlines() if pattern.search(ln)]
-    assert quoting, f"{name}: the reviewed-file fixture no longer quotes this alternative"
+    quoting = []
+    for kind, lines in echoed_lines_by_kind().items():
+        hits = [ln for ln in lines if quotes_alternative(ln, name)]
+        assert hits, f"{name}: the reviewed-file fixture no longer quotes this alternative in a {kind}"
+        quoting += hits
     repo, scratch, env = gate
     agent = stderr_lines_agent(tmp_path, quoting)
     result = run_sweep(repo, scratch, env, "--model", "deepseek/deepseek-flash", agent=agent)
     assert result.returncode == 0, (name, result.stdout + result.stderr)
     assert "ran blind" not in result.stderr, result.stderr
     assert Path(f"{artifacts(repo, env)['sweep']}.stamp").exists(), f"{name}: the phase was not accepted"
+    echoed = sweep_agent_stderr(repo)
+    assert all(ln in echoed for ln in quoting), f"{name}: the agent's stderr lost the quoting lines"
 
 
 def test_echoing_the_whole_reviewed_file_is_accepted(gate):
     text = ECHOED_REVIEWED_FILE.read_text()
     for name, alternative in OLD_CHECK_ALTERNATIVES.items():
         assert re.search(alternative, text, re.I), f"the fixture no longer quotes {name}"
+    assert "fails with a `bwrap:` error" in text, "the fixture lost the SKL-70 sentence"
     repo, scratch, env = gate
     result = run_sweep(repo, scratch, env, "--model", "deepseek/deepseek-flash", agent=echoed_file_agent())
     assert result.returncode == 0, result.stdout + result.stderr
-    errlog = next((repo / ".git").rglob("sweep-agent.err"), None)
-    assert errlog is not None and text in errlog.read_text(), "the agent's stderr lost the echoed file"
+    assert text in sweep_agent_stderr(repo), "the agent's stderr lost the echoed file"
 
 
 @pytest.mark.parametrize("name", sorted(RUNTIME_ERROR_LINES))
@@ -520,8 +595,12 @@ def test_an_echoed_file_plus_a_runtime_error_line_still_marks_the_phase_blind(ga
     repo, scratch, env = gate
     result = run_sweep(repo, scratch, env, "--model", "gpt-6.1-sol", agent=echoed_file_agent(line))
     assert result.returncode == 17, (name, result.stdout + result.stderr)
-    assert "ran blind" in result.stderr, result.stderr
+    assert BLIND_MESSAGE in result.stderr, result.stderr
     assert_not_stamped(artifacts(repo, env), "sweep")
+    echoed = sweep_agent_stderr(repo)
+    assert ECHOED_REVIEWED_FILE.read_text() in echoed and line in echoed, (
+        f"{name}: the agent's stderr lost the echoed file or the runtime line"
+    )
 
 
 # --- AC3: a phase cannot outlive its timeout, and a timeout kill is its own exit code -------------
