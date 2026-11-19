@@ -20,8 +20,9 @@ job or step. Everything else must stay as the base has it:
   every field other than `name`, and no renamed step takes another base step's name.
   An added step runs only after every base step, so it cannot change their execution
   (through $GITHUB_ENV, for example). The one exception is a step in
-  ALLOWED_BEFORE_BASE, which may come anywhere in its job when its whole body,
-  name included, matches the entry exactly;
+  ALLOWED_BEFORE_BASE: one copy may come anywhere in its job, and so run before the
+  base steps, when its whole body, name included, matches the entry exactly and no
+  base step of the job has the entry's name or command;
 - added jobs and steps in a base workflow are ones GitHub accepts (known keys, one of
   `run` or `uses`, string names), since an invalid one stops the file. An added job
   there is a `runs-on` job, since the gate does not load a reusable workflow's file,
@@ -71,8 +72,8 @@ STEP_KEYS = {"id", "if", "name", "uses", "run", "working-directory", "shell", "w
              "timeout-minutes"}
 # Steps a pull request may add before a base job's steps, keyed by (workflow file, job id) and
 # matched by their whole body, every key included. Each entry admits one head step, and only
-# while the base job lacks it. SKL-340: Lint runs first in ci.yml `checks`; once Lint is a base
-# step there, the entry no longer applies and can be removed.
+# while no base step of the job has the entry's name or command. SKL-340: Lint runs first in
+# ci.yml `checks`; once Lint is a base step there, the entry no longer applies and can be removed.
 ALLOWED_BEFORE_BASE = {
     ("ci.yml", "checks"): ({"name": "Lint", "run": "uv run --locked ruff check ."},),
 }
@@ -197,26 +198,38 @@ def compare_fields(base: dict, head: dict, ignored: tuple, where: str) -> list[s
     return problems
 
 
-def without_allowed(base_steps: list, head_steps: list, allowed) -> list:
-    """Drop the first head step that exactly matches each allowed entry the base job lacks."""
-    kept = list(head_steps)
+def in_base(entry: dict, base_steps: list) -> bool:
+    """A base step with the entry's name or command means the exception no longer applies."""
+    return any(isinstance(step, dict) and (step.get("name") == entry["name"] or step.get("run") == entry["run"])
+               for step in base_steps)
+
+
+def without_allowed(base_steps: list, head_steps: list, allowed, where: str):
+    """Set aside one head step that exactly matches each allowed entry, while the base job has no
+    step with that entry's name or command. Return the remaining steps, their head positions, and
+    a problem for each entry matched more than once, since an entry admits one copy."""
+    indexed = list(enumerate(head_steps, start=1))
+    problems = []
     for entry in allowed:
-        if any(same(step, entry) for step in base_steps):
+        if in_base(entry, base_steps):
             continue
-        for index, step in enumerate(kept):
-            if same(step, entry):
-                del kept[index]
-                break
-    return kept
+        matches = [index for index, (_, step) in enumerate(indexed) if same(step, entry)]
+        if len(matches) > 1:
+            problems.append(f"{where}: allowed step '{entry['name']}' appears {len(matches)} times;"
+                            " ALLOWED_BEFORE_BASE admits one copy")
+        if matches:
+            del indexed[matches[0]]
+    return [step for _, step in indexed], [position for position, _ in indexed], problems
 
 
 def compare_steps(base_steps, head_steps, where: str, allowed=()) -> list[str]:
     """The head steps must start with the base steps, names aside; added steps follow them,
-    except an exact ALLOWED_BEFORE_BASE entry, which may come anywhere."""
+    except one exact copy of an ALLOWED_BEFORE_BASE entry, which may come anywhere."""
     if not isinstance(base_steps, list) or not isinstance(head_steps, list):
         return [] if same(base_steps, head_steps) else [f"{where}: steps changed"]
-    head_steps = without_allowed(base_steps, head_steps, allowed)
-    problems = []
+    head_steps, head_positions, problems = without_allowed(base_steps, head_steps, allowed, where)
+    exception = ("; only a step in ALLOWED_BEFORE_BASE, matching it in every key, may come before them"
+                 if any(not in_base(entry, base_steps) for entry in allowed) else "")
     head_bodies = [step_body(step) for step in head_steps]
     base_names = [step_name(step) for step in base_steps]
     for position, base_step in enumerate(base_steps, start=1):
@@ -229,12 +242,12 @@ def compare_steps(base_steps, head_steps, where: str, allowed=()) -> list[str]:
             continue
         if any(same(head_body, body) for head_body in head_bodies):
             problems.append(f"{where}: {describe(position, base_step)} is out of order (moved, or an added"
-                            " step runs before it; added steps go after the base steps)")
+                            f" step runs before it; added steps go after the base steps{exception})")
         else:
             problems.append(f"{where}: {describe(position, base_step)} was removed or changed")
     for position, base_step in enumerate(base_steps[:len(head_steps)], start=1):
         problems += name_problems(base_step, head_steps[position - 1], f"{where}: {describe(position, base_step)}")
-    for position, step in enumerate(head_steps[len(base_steps):], start=len(base_steps) + 1):
+    for position, step in zip(head_positions[len(base_steps):], head_steps[len(base_steps):]):
         added = f"{where}: added step {position}"
         problems += invalid_step(step, added)
         if isinstance(step, dict) and "uses" in step:

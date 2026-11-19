@@ -122,17 +122,28 @@ LINT = {"name": "Lint", "run": "uv run --locked ruff check ."}
 def judge_trees(tmp_path, base_workflows, head_workflows):
     base = write_tree(tmp_path / "base", base_workflows)
     head = write_tree(tmp_path / "head", head_workflows)
-    return run_dirs(base / ".github/workflows", head / ".github/workflows")
+    return subprocess.run(
+        [sys.executable, str(SCRIPT),
+         "--base", str(base / ".github/workflows"), "--head", str(head / ".github/workflows"),
+         "--base-script", str(base / "scripts/gate_integrity.py"),
+         "--head-script", str(head / "scripts/gate_integrity.py")],
+        capture_output=True, text=True, timeout=30,
+    )
 
 
-@pytest.mark.parametrize("where", [0, 2, 4], ids=["first", "before-repository-tests", "last"])
-def test_the_allowed_lint_step_passes_anywhere_in_checks(tmp_path, where):
+# Every position before the last base step; an appended step passes without the exception.
+@pytest.mark.parametrize("where", [0, 1, 2, 3], ids=["first", "between-unnamed", "before-repository-tests",
+                                                     "before-last"])
+def test_the_allowed_lint_step_passes_before_any_base_step_in_checks(tmp_path, where):
     result = judge(tmp_path, head_with(lambda ci: steps(ci).insert(where, dict(LINT))))
     assert result.returncode == 0, result.stdout + result.stderr
 
 
 NOT_THE_ALLOWED_STEP = {
     "changed run": {"name": "Lint", "run": "uv run --locked ruff check . --exit-zero"},
+    "run without the dot": {"name": "Lint", "run": "uv run --locked ruff check"},
+    "run with a trailing newline": {"name": "Lint", "run": "uv run --locked ruff check .\n"},
+    "run with a trailing space": {"name": "Lint", "run": "uv run --locked ruff check . "},
     "changed name": {"name": "lint", "run": "uv run --locked ruff check ."},
     "no name": {"run": "uv run --locked ruff check ."},
     "extra key": {**LINT, "env": {"RUFF_NO_CACHE": "true"}},
@@ -145,6 +156,46 @@ def test_a_step_that_differs_from_the_allowed_one_still_fails_before_a_base_step
     result = judge(tmp_path, head_with(lambda ci: steps(ci).insert(2, step)))
     assert result.returncode != 0, result.stdout
     assert "'Repository tests' is out of order" in result.stdout
+    assert "only a step in ALLOWED_BEFORE_BASE, matching it in every key, may come before them" in result.stdout
+
+
+def test_a_second_copy_of_the_allowed_step_appended_still_fails(tmp_path):
+    def add(ci):
+        steps(ci).insert(0, dict(LINT))
+        steps(ci).append(dict(LINT))
+
+    result = judge(tmp_path, head_with(add))
+    assert result.returncode != 0, result.stdout
+    assert "allowed step 'Lint' appears 2 times; ALLOWED_BEFORE_BASE admits one copy" in result.stdout
+
+
+def test_an_invalid_appended_step_is_numbered_by_its_head_position(tmp_path):
+    def add(ci):
+        steps(ci).insert(0, dict(LINT))
+        steps(ci).append({"run": "echo added", "bogus": True})
+
+    result = judge(tmp_path, head_with(add))
+    assert result.returncode != 0, result.stdout
+    assert "ci.yml job 'checks': added step 6 has keys GitHub rejects: bogus" in result.stdout
+
+
+BASE_LINT_VARIANTS = {
+    "with an extra key": {**LINT, "id": "lint"},
+    "unnamed with the same command": {"run": "uv run --locked ruff check ."},
+    "same name, another command": {"name": "Lint", "run": "uv run --locked ruff check scripts"},
+}
+
+
+@pytest.mark.parametrize("base_lint", BASE_LINT_VARIANTS.values(), ids=BASE_LINT_VARIANTS.keys())
+def test_the_exception_stops_once_the_base_job_has_a_lint_step(tmp_path, base_lint):
+    ci = copy.deepcopy(CI)
+    steps(ci).insert(2, base_lint)
+    head = copy.deepcopy(ci)
+    steps(head).insert(0, dict(LINT))
+    result = judge_trees(tmp_path, {"ci.yml": ci, "gate-base.yml": GATE}, {"ci.yml": head, "gate-base.yml": GATE})
+    assert result.returncode != 0, result.stdout
+    assert "ci.yml job 'checks': step 1 is out of order" in result.stdout
+    assert "ALLOWED_BEFORE_BASE" not in result.stdout
 
 
 EXTRA_BEFORE_BASE = {
