@@ -148,7 +148,8 @@ def test_retro_proposes_checklist_items_from_repeated_misses() -> None:
     bullet = bullets[0]
     for phrase in (
         "since the previous retro",
-        "each PR's latest review marked `Review of record <sha>`",
+        "every PR review marked `Review of record <sha>`, delta reviews included",
+        "a miss its verdict ruled valid once per distinct PR",
         "arbiter reports in PR bodies",
         "`profile.git.host`",
         "once per distinct PR",
