@@ -1081,8 +1081,9 @@ METRICS_COMMAND_ROWS = (
     "figures recorded under `references/metrics.md` and `not reported` for any usage the runtime does not return."
 )
 METRICS_WRAPPER_INTRO = (
-    "Launch every later command other than the end form below, the summary post, and its read-back in this "
-    "wrapper, with the command in place of "
+    # SKL-98: a role's return-notice timestamp is not wrapped.
+    "Launch every later command other than the end form below, the summary post, its read-back, and a role's "
+    "return-notice `date -u +%s.%N` below in this wrapper, with the command in place of "
     "`<command>`, a label unique within the invocation, other than the reserved `start` and `end`, without a "
     "single quote and naming no path, in place of `<row label>`, and "
     "the absolute path of that `metrics.txt` in place of `<metrics file>`:"
@@ -1112,7 +1113,9 @@ METRICS_ROLE_END = (
 METRICS_ROLE_ROW = (
     "Record a role row with two commands that are not launches, so neither runs in the wrapper above and "
     f"neither gets a row of its own: immediately before the launch, `{METRICS_ROLE_START}`, and when it "
-    f"returns, `{METRICS_ROLE_END}`, where `<tokens>` and `<tool calls>` are written exactly as the summary's "
+    # SKL-98: a usage-after-exit role's end line is written where the next sentence sets.
+    "returns, or, for a role whose usage is read only after it exits, at the point the next sentence sets, "
+    f"`{METRICS_ROLE_END}`, where `<tokens>` and `<tool calls>` are written exactly as the summary's "
     "cells read: the number, `not reported`, or the number followed by ` cumulative`; a row label is unique, "
     "is neither `start` nor `end`, and no value these commands carry contains a single quote."
 )
@@ -1123,7 +1126,8 @@ METRICS_ROLE_END_BEFORE_USAGE = (
     "after it, and its end timestamp is taken before the usage read: on the runtime's notice that the role "
     "returned, the coordinator's next command is `date -u +%s.%N`, which is not a launch and gets no row, then "
     "the usage read runs in the wrapper above, and the end command carries the printed timestamp in place of "
-    "`$(date -u +%s.%N)` and the figures the usage read printed in place of `<tokens>` and `<tool calls>`."
+    "`$(date -u +%s.%N)` and the figures the usage read printed, without their `tokens: ` and `tool calls: ` "
+    "labels, in place of `<tokens>` and `<tool calls>`."
 )
 METRICS_EXTRA_WRITE = "f='<metrics file>'; printf 'extra %s\\t%s\\n' '<slug>' '<value>' >> \"$f\""
 METRICS_EXTRAS_RECORD = (
