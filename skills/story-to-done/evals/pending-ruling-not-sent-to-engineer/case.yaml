@@ -9,7 +9,7 @@ purpose: >-
 split: >-
   SKL-275 owns this case's content: its prompt, case.yaml, grader, scenarios, stub runtime and
   rerun instructions. SKL-310 owns this case's row in the case list of ../README.md and its
-  recorded runs; the suite harness (../run-suite.sh, ../suite.py) stays SKL-164's.
+  recorded runs; the suite harness (scripts/run-suite.sh, scripts/eval_suite.py at the repository root since SKL-338) stays SKL-164's.
 baseline:
   commit: 9bd3e1666c5ba17aa560424e0d402710aa765c75
   note: >-

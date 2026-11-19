@@ -1,4 +1,4 @@
-"""SKL-164: the story-to-done eval suite runner and the case contract."""
+"""SKL-164, SKL-338: the shared eval suite runner (scripts/run-suite.sh) and the case contract."""
 
 import importlib.util
 import json
@@ -14,12 +14,15 @@ import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
 EVALS = ROOT / "skills" / "story-to-done" / "evals"
+EVALS_PARTS = ("skills", "story-to-done", "evals")
 REFERENCE_CASE = EVALS / "qa-unfinished-own-steps"
+# The one shared runner: its shell entry point and the module behind it.
+RUNNER_FILES = ("scripts/run-suite.sh", "scripts/eval_suite.py")
 # The repository files the runner needs besides its own: it normalises records against the
 # leak scan's patterns.
 SUPPORT_FILES = ("scripts/leak_scan.py", "scripts/leak-patterns.txt")
 
-_spec = importlib.util.spec_from_file_location("eval_suite", EVALS / "suite.py")
+_spec = importlib.util.spec_from_file_location("eval_suite", ROOT / "scripts" / "eval_suite.py")
 SUITE = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(SUITE)
 
@@ -178,9 +181,7 @@ def suite(tmp_path: Path):
     evals = harness / "skills" / "story-to-done" / "evals"
     evals.mkdir(parents=True)
     init_repo(harness)
-    for path in [*EVALS.glob("*.py"), *EVALS.glob("*.sh")]:
-        shutil.copy2(path, evals / path.name)
-    for name in SUPPORT_FILES:
+    for name in (*RUNNER_FILES, *SUPPORT_FILES):
         (harness / name).parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(ROOT / name, harness / name)
     stub_case(evals / "stub")
@@ -204,7 +205,8 @@ def suite(tmp_path: Path):
         env.pop(name, None)
 
     def run(*args: str, **extra: str) -> subprocess.CompletedProcess[str]:
-        return subprocess.run(["bash", str(evals / "run-suite.sh"), *args], capture_output=True, text=True,
+        return subprocess.run(["bash", str(harness / "scripts" / "run-suite.sh"), str(evals), *args],
+                              capture_output=True, text=True,
                               env={**env, **extra})
 
     def recommit(*scenarios: str) -> str:
@@ -591,7 +593,7 @@ def test_only_an_ascii_word_character_before_a_known_root_keeps_it(text: str, ex
 def test_a_record_with_bytes_that_are_not_utf8_is_still_written(suite) -> None:
     suite["recommit"]("bad-bytes")
     result = suite["run"]("--runs", "1", str(suite["checkout"]), "lab-1")
-    assert result.returncode == 0, result.stderr
+    assert result.returncode == 1, "the stub grader cannot parse the bad line, a graded fail\n" + result.stderr
     calls = next((suite["evals"] / "stub" / "results").glob("*-bad-bytes-*-calls.jsonl")).read_text(encoding="utf-8")
     assert "�" in calls
 
@@ -599,7 +601,7 @@ def test_a_record_with_bytes_that_are_not_utf8_is_still_written(suite) -> None:
 def test_a_scenario_graded_twice_reports_each_grade(suite) -> None:
     suite["recommit"]("two-grades")
     result = suite["run"]("--runs", "2", str(suite["checkout"]), "lab-1")
-    assert result.returncode == 0, result.stderr
+    assert result.returncode == 1, "a failing further grade fails the suite\n" + result.stderr
     summary = (suite["evals"] / "results" / "suite-lab-1.md").read_text(encoding="utf-8")
     rows, at = summary_rows(summary), columns(summary)
     assert rows["two-grades"][at["k"]] == "2", "the scenario's own grade counts its own verdict"
@@ -618,7 +620,7 @@ def test_a_further_grade_without_the_scenarios_own_grade_stops_the_suite(suite) 
 def test_a_single_grade_follows_the_exit_status(suite) -> None:
     suite["recommit"]("late-fail")
     result = suite["run"]("--runs", "1", str(suite["checkout"]), "lab-1")
-    assert result.returncode == 0, result.stderr
+    assert result.returncode == 1, "a graded fail fails the suite\n" + result.stderr
     summary = (suite["evals"] / "results" / "suite-lab-1.md").read_text(encoding="utf-8")
     rows, at = summary_rows(summary), columns(summary)
     assert rows["late-fail"][at["n"]] == "1" and rows["late-fail"][at["k"]] == "0"
@@ -856,10 +858,15 @@ def test_resume_refuses_records_it_cannot_count(suite, change: str) -> None:
     ["CHECKOUT", "lab", "checkout-only"],
     ["CHECKOUT", "lab", "stub", "stub"],
     ["NOT-A-DIR", "lab"],
+    ["EVALS=NOT-A-DIR", "CHECKOUT", "lab"],
 ])
 def test_the_runner_refuses_bad_arguments(suite, args) -> None:
     args = [str(suite["checkout"]) if arg == "CHECKOUT" else arg for arg in args]
-    result = suite["run"](*args)
+    if args[0].startswith("EVALS="):
+        result = subprocess.run(["bash", str(suite["harness"] / "scripts" / "run-suite.sh"), args[0][6:], *args[1:]],
+                                capture_output=True, text=True, env=suite["env"])
+    else:
+        result = suite["run"](*args)
     assert result.returncode == 2, result.stderr
     assert not (suite["state"] / "pass").exists(), "nothing ran"
 
@@ -893,7 +900,7 @@ def test_a_case_naming_a_scenario_twice_is_refused(suite) -> None:
     ("results/a.md", False),
 ])
 def test_only_the_suites_own_outputs_count_as_records(path: str, expected: bool) -> None:
-    assert SUITE.is_record(path) is expected
+    assert SUITE.is_record(path, EVALS_PARTS) is expected
 
 
 @pytest.mark.parametrize("change", ["tracked", "untracked"])
@@ -1065,10 +1072,52 @@ def test_a_case_without_scenarios_is_refused(suite, scenarios) -> None:
     assert result.returncode == 2 and "names no scenarios" in result.stderr, result.stderr
 
 
-def test_a_run_with_every_scenario_graded_exits_0(suite) -> None:
-    suite["recommit"]("pass", "fail", "void-once")
+def test_a_run_with_every_scenario_graded_and_passing_exits_0(suite) -> None:
+    suite["recommit"]("pass", "void-once")
     result = suite["run"]("--runs", "3", str(suite["checkout"]), "lab-3", "stub")
     assert result.returncode == 0, result.stderr
+
+
+def test_a_failing_case_exits_non_zero_and_still_writes_its_summary(suite) -> None:
+    """SKL-338 AC3: every scenario reaches N graded runs, but one case fails a run, so the
+    suite exits 1; the summary is still written, and stderr names the failing scenario."""
+    suite["recommit"]("pass", "fail")
+    result = suite["run"]("--runs", "2", str(suite["checkout"]), "lab-1", "stub")
+    assert result.returncode == 1, result.stderr
+    assert "failing graded runs for: stub fail" in result.stderr, result.stderr
+    rows = summary_rows((suite["evals"] / "results" / "suite-lab-1.md").read_text(encoding="utf-8"))
+    assert rows["fail"][6:8] == ["2", "0"] and rows["pass"][6:8] == ["2", "2"]
+
+
+def test_list_prints_the_cases_of_the_evals_directory_and_runs_nothing(suite) -> None:
+    suite["recommit"]("pass")
+    other = suite["evals"] / "other"
+    stub_case(other, scenarios=("pass",))
+    commit_all(suite["harness"])
+    result = suite["run"]("--list")
+    assert (result.returncode, result.stdout) == (0, "other\nstub\n"), result.stderr
+    assert not (suite["state"] / "pass").exists(), "nothing ran"
+
+
+@pytest.mark.parametrize("args", [["--list", "CHECKOUT"], ["--list", "--runs", "2"], ["--list", "--resume"]])
+def test_list_takes_no_run_arguments(suite, args) -> None:
+    args = [str(suite["checkout"]) if arg == "CHECKOUT" else arg for arg in args]
+    result = suite["run"](*args)
+    assert result.returncode == 2, result.stderr
+
+
+def test_the_story_to_done_evals_list_every_case_through_the_shared_runner() -> None:
+    result = subprocess.run(["bash", str(ROOT / "scripts" / "run-suite.sh"), str(EVALS), "--list"],
+                            capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.splitlines() == [path.name for path in CASES if path.parent == EVALS]
+
+
+def test_the_runner_lives_once_under_scripts() -> None:
+    copies = sorted(str(path.relative_to(ROOT)) for name in ("run-suite.sh", "suite.py", "eval_suite.py")
+                    for path in (ROOT / "skills").rglob(name))
+    assert copies == [], "no skill keeps its own copy of the suite runner"
+    assert all((ROOT / name).is_file() for name in RUNNER_FILES)
 
 
 # --- AC3: the case contract -------------------------------------------------------------------
@@ -1130,16 +1179,33 @@ def file_mode(path: Path) -> str:
     return "100755" if path.stat().st_mode & stat.S_IXUSR else "100644"
 
 
-CASES = sorted(path.parent for path in EVALS.glob("*/case.yaml"))
+def discover_cases(root: Path) -> list[Path]:
+    """Every case directory of every skill: skills/*/evals/*/case.yaml (SKL-338 AC4)."""
+    return sorted(path.parent for path in root.glob("skills/*/evals/*/case.yaml"))
+
+
+CASES = discover_cases(ROOT)
 
 
 def test_the_suite_has_cases() -> None:
     assert REFERENCE_CASE in CASES
 
 
-@pytest.mark.parametrize("case_dir", CASES, ids=lambda path: path.name)
+@pytest.mark.parametrize("case_dir", CASES, ids=lambda path: str(path.relative_to(ROOT / "skills")))
 def test_every_case_directory_keeps_the_contract(case_dir: Path) -> None:
     assert contract_errors(case_dir, git_mode) == []
+
+
+def test_a_case_of_any_skill_missing_its_grader_fails_the_contract(tmp_path: Path) -> None:
+    """A case under another skill's evals/ is discovered, and one missing grader.py fails."""
+    kept = tmp_path / "skills" / "some-skill" / "evals" / "kept-case"
+    broken = tmp_path / "skills" / "other-skill" / "evals" / "broken-case"
+    stub_case(kept)
+    stub_case(broken)
+    (broken / "grader.py").unlink()
+    assert discover_cases(tmp_path) == [broken, kept]
+    assert contract_errors(kept, file_mode) == []
+    assert "no grader.py" in contract_errors(broken, file_mode)
 
 
 @pytest.mark.parametrize("breakage", [

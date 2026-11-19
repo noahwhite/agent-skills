@@ -27,10 +27,10 @@ Record each through the suite runner from the repository root, as `../README.md`
 
 ```sh
 git worktree add --detach <scratch>/skill-9e65dd3 9e65dd3
-uv run --locked bash skills/story-to-done/evals/run-suite.sh --runs 3 <scratch>/skill-9e65dd3 deepseek-v4-pro-baseline-9e65dd3 owner-wait-verified
+uv run --locked bash scripts/run-suite.sh skills/story-to-done/evals --runs 3 <scratch>/skill-9e65dd3 deepseek-v4-pro-baseline-9e65dd3 owner-wait-verified
 git worktree remove <scratch>/skill-9e65dd3
 git worktree add --detach <scratch>/skill-ad92cae ad92cae
-uv run --locked bash skills/story-to-done/evals/run-suite.sh --runs 3 <scratch>/skill-ad92cae deepseek-v4-pro-candidate-ad92cae owner-wait-verified
+uv run --locked bash scripts/run-suite.sh skills/story-to-done/evals --runs 3 <scratch>/skill-ad92cae deepseek-v4-pro-candidate-ad92cae owner-wait-verified
 git worktree remove <scratch>/skill-ad92cae
 ```
 
