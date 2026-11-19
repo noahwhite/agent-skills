@@ -86,6 +86,10 @@ review:
       runtime: opencode
       model: example/family-b
   merge_owner: human
+  # Optional: the login expected to post the review of record. Default: the authenticated
+  # account (`gh api user --jq .login`); except under the explicit per-PR review waiver in
+  # The gate, the guard and read-backs fail closed when no login resolves.
+  # record_author: example-user
   # The pre-PR adversarial gate (skills/adversarial-review-pipeline/SKILL.md).
   # hunter and arbiter are required: the gate is blocked while either is unset.
   pre_pr:

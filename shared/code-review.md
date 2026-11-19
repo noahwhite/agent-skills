@@ -114,8 +114,12 @@ Every merge, by any role, runs this guard immediately before the merge command.
 That covers the autonomous merge, a merge the agent performs for a human owner, and a manager-approved merge alike.
 
 1. Read the live PR head SHA (`gh pr view <n> --json headRefOid`).
-2. Read the PR's reviews with `gh api --paginate repos/<owner>/<repo>/pulls/<n>/reviews`, select the latest submitted review in state `COMMENTED` whose body begins with `Review of record`, and take both its `commit_id` and the full head SHA on its first line.
+2. Resolve the expected author as `profile.review.record_author` when set, otherwise the login of the authenticated account (`gh api user --jq .login`).
+   Except under the explicit per-PR review waiver in The gate, if neither yields a login, the guard does not merge and reports the failing command (the command and its exit status or empty output).
+   Read the PR's reviews with `gh api --paginate repos/<owner>/<repo>/pulls/<n>/reviews`.
+   Among the reviews in state `COMMENTED` whose body begins with `Review of record`, keep only those whose `user.login` equals the expected author (case-insensitive), and select the one with the greatest `submitted_at`; the guard's output lists each marker review it excluded, with its `user.login`, `html_url` and `commit_id`.
    The latest review is the one with the greatest `submitted_at`, not the last in the list.
+   Take both its `commit_id` and the full head SHA on its first line.
 3. Except under the explicit per-PR review waiver in The gate, if no such review exists, either SHA is missing, or either differs from the live head, do not merge: review the delta since the reviewed head (Rounds), post that review of record, and start again at step 1.
    Under that waiver, use the head SHA recorded when the user gave the instruction, as the paragraph below specifies.
 4. Merge with the reviewed full head SHA as the expected-head condition, so the host refuses the merge if the head moved after step 1: on GitHub, `gh pr merge <n> --match-head-commit <full reviewed SHA>`.
