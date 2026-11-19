@@ -187,6 +187,8 @@ def test_the_pre_existing_tag_is_defined_once_under_handling_findings() -> None:
         "A confirmed `pre-existing` finding is listed in the review of record and does not block the merge; "
         "before merge, the engineer files it as a tracker issue and links that issue in the review-of-record thread.",
         "It is the only finding filed rather than fixed in the PR.",
+        "A Medium or Low finding accepted with a reason in the pre-PR arbiter report does not thereby gain "
+        "`pre-existing` status.",
     )
     positions = [body.find(line) for line in lines]
     assert -1 not in positions, f"pre-existing rule line missing: {lines[positions.index(-1)]}"

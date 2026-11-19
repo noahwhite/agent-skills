@@ -238,7 +238,7 @@ def test_the_arbitration_report_layout_is_unchanged(gate):
 
 
 PRE_EXISTING_CLAUSE = (
-    "only when the defect is present at the base SHA in code the diff neither changes nor newly calls, "
+    "4. Prefix a finding with 'pre-existing' only when the defect is present at the base SHA in code the diff neither changes nor newly calls, "
     "imports or exercises"
 )
 
@@ -255,7 +255,7 @@ def test_only_the_arbitrate_preamble_carries_the_pre_existing_tag_line(gate):
     lines = [line for line in arbitrate.splitlines() if "pre-existing" in line]
     assert len(lines) == 1, lines
     line = lines[0]
-    assert PRE_EXISTING_CLAUSE in line, line
+    assert line.startswith(PRE_EXISTING_CLAUSE), line
     assert "references/code-review.md (Handling findings)" in line, line
     before = arbitrate[: arbitrate.index(line)]
     assert "### Critical vulnerabilities and breaking bugs" not in before
