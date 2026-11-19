@@ -39,8 +39,8 @@ def load_private() -> list[re.Pattern]:
     path = os.environ.get("LEAK_DENYLIST_FILE")
     if path:
         raw += "\n" + Path(path).read_text()
-    lines = [l.strip() for l in raw.splitlines()]
-    return [re.compile(l) for l in lines if l and not l.startswith("#")]
+    lines = [ln.strip() for ln in raw.splitlines()]
+    return [re.compile(ln) for ln in lines if ln and not ln.startswith("#")]
 
 
 def files() -> list[str]:

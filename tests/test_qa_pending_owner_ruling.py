@@ -131,8 +131,8 @@ def test_step_6_pending_only_line_sits_in_the_not_finished_bullet() -> None:
 
 def test_step_6_mixed_outcome_lines_sit_in_the_in_progress_bullet() -> None:
     lines = lines_of(STEP_6)
-    in_progress = next(i for i, l in enumerate(lines) if l.startswith("  - **`profile.tracker.states.in_progress`**"))
-    blocked = next(i for i, l in enumerate(lines) if l.startswith("  - **`profile.tracker.states.blocked`**"))
+    in_progress = next(i for i, ln in enumerate(lines) if ln.startswith("  - **`profile.tracker.states.in_progress`**"))
+    blocked = next(i for i, ln in enumerate(lines) if ln.startswith("  - **`profile.tracker.states.blocked`**"))
     for pin in STEP_6_ROUTING_LINES[2:]:
         assert in_progress < lines.index(pin) < blocked, f"not in the in_progress bullet: {pin}"
 
@@ -145,8 +145,8 @@ def test_step_6_pins_the_ruling_path_and_the_done_guard() -> None:
 
 def test_step_6_done_guard_sits_in_the_done_bullet() -> None:
     lines = lines_of(STEP_6)
-    done = next(i for i, l in enumerate(lines) if l.startswith("  - **`profile.tracker.states.done`**"))
-    in_progress = next(i for i, l in enumerate(lines) if l.startswith("  - **`profile.tracker.states.in_progress`**"))
+    done = next(i for i, ln in enumerate(lines) if ln.startswith("  - **`profile.tracker.states.done`**"))
+    in_progress = next(i for i, ln in enumerate(lines) if ln.startswith("  - **`profile.tracker.states.in_progress`**"))
     assert done < lines.index(STEP_6_RULING_LINES[2]) < in_progress
 
 

@@ -230,18 +230,18 @@ def test_shared_files_no_longer_call_the_review_of_record_a_comment() -> None:
 
 def test_engineering_workflow_merge_uses_the_guard() -> None:
     body = section(skill("engineering-workflow"), "10. Merge")
-    autonomous = next(l for l in body.splitlines() if l.startswith("- If `profile.review.merge_owner` is `agent`:"))
+    autonomous = next(ln for ln in body.splitlines() if ln.startswith("- If `profile.review.merge_owner` is `agent`:"))
     assert GUARD in autonomous
     assert EXPECTED_HEAD in autonomous
     assert MATCH_HEAD in autonomous
-    approved = next(l for l in body.splitlines() if l.startswith("4. Re-read the live PR,"))
+    approved = next(ln for ln in body.splitlines() if ln.startswith("4. Re-read the live PR,"))
     assert "run the merge guard in `references/code-review.md`" in approved
     assert UNGUARDED_STOP + " instead of merging unguarded" in approved
 
 
 def test_qa_evidence_merge_uses_the_guard() -> None:
     text = skill("qa-verification")
-    line = next(l for l in text.splitlines() if "Merge only on the exact final head" in l)
+    line = next(ln for ln in text.splitlines() if "Merge only on the exact final head" in ln)
     assert GUARD in line
     assert EXPECTED_HEAD in line
     assert MATCH_HEAD in line
@@ -268,7 +268,7 @@ def test_story_to_done_reads_back_the_reviewed_head() -> None:
         body = section(text, heading)
         assert READ_BACK_QUERY + "\n" + READ_BACK in body, f"{heading} missing the reviewed-head read-back"
     # SKL-356's owner-wait rule reads the tracker story's comments; no line reads a PR's comments.
-    for line in (l for l in text.splitlines() if "comments" in l):
+    for line in (ln for ln in text.splitlines() if "comments" in ln):
         assert "story in the tracker" in line and "PR" not in line and "review of record" not in line, \
             f"story-to-done reads issue comments outside the tracker story: {line.strip()}"
     assert "/issues/" not in text, "story-to-done reads the issues endpoint somewhere"
@@ -324,9 +324,9 @@ def test_skills_name_the_comment_pr_review() -> None:
 
 def test_review_policy_says_the_review_of_record_is_a_pr_review() -> None:
     for name in ("linear-user-story", "linear-bug"):
-        block = [l for l in skill(name).splitlines() if l.startswith("> ")]
+        block = [ln for ln in skill(name).splitlines() if ln.startswith("> ")]
         assert REVIEW_POLICY_SENTENCE in block, f"{name} Review Policy missing the format sentence"
-        policy = block.index(next(l for l in block if l.startswith("> **Review Policy**")))
+        policy = block.index(next(ln for ln in block if ln.startswith("> **Review Policy**")))
         assert block.index(REVIEW_POLICY_SENTENCE) == policy + 2, f"{name} sentence not in the Review Policy block"
 
 
