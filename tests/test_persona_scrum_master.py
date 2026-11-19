@@ -140,6 +140,18 @@ def test_retro_section_files_only_action_items() -> None:
         assert phrase in body, f"retro missing: {phrase}"
 
 
+def test_retro_runs_the_pruning_routine_only_when_the_repository_provides_it() -> None:
+    body = " ".join(section(SKILL.read_text(), "Retro").split())
+    assert "If the repository provides a pruning-candidates script, run it with `--since` set to the previous retro's date" in body
+    assert "record each candidate in the retro record with its retire or keep proposal" in body
+    assert "Each retire proposal becomes an action item under these Retro rules" in body
+
+
+def test_retro_pruning_removes_nothing_without_owner_approval() -> None:
+    body = " ".join(section(SKILL.read_text(), "Retro").split())
+    assert "nothing is removed until the owner approves it in a comment on the retro issue" in body
+
+
 def test_velocity_and_burnup_section_covers_flow_metrics() -> None:
     body = section(SKILL.read_text(), "Velocity and burnup").lower()
     for phrase in (
