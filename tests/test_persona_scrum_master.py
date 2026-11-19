@@ -176,6 +176,37 @@ def test_retro_checklist_items_need_owner_approval() -> None:
         assert phrase in bullet, f"retro owner approval missing: {phrase}"
 
 
+def pruning_bullet() -> str:
+    """Return the Retro list item that starts the pruning routine, continuation lines included."""
+    lines = section(SKILL.read_text(), "Retro").splitlines()
+    starts = [
+        n for n, line in enumerate(lines)
+        if line.startswith("- If the repository provides a pruning-candidates script")
+    ]
+    assert len(starts) == 1, "the pruning routine must be one separate Retro bullet"
+    end = starts[0] + 1
+    while end < len(lines) and lines[end].startswith("  ") and lines[end].strip():
+        end += 1
+    return " ".join(" ".join(lines[starts[0] : end]).split())
+
+
+PRUNING_CONDITION = (
+    "- If the repository provides a pruning-candidates script, run it with `--since` set to "
+    "the previous retro's date, and record each candidate in the retro record with its "
+    "retire or keep proposal. Each retire proposal becomes an action item under these Retro rules"
+)
+PRUNING_APPROVAL = ", and nothing is removed until the owner approves it in a comment on the retro issue."
+
+
+def test_retro_runs_the_pruning_routine_only_when_the_repository_provides_it() -> None:
+    assert pruning_bullet().startswith(PRUNING_CONDITION)
+
+
+def test_retro_pruning_removes_nothing_without_owner_approval() -> None:
+    # The whole bullet is pinned, so nothing can be inserted between the condition and the approval.
+    assert pruning_bullet() == PRUNING_CONDITION + PRUNING_APPROVAL
+
+
 def test_velocity_and_burnup_section_covers_flow_metrics() -> None:
     body = section(SKILL.read_text(), "Velocity and burnup").lower()
     for phrase in (
