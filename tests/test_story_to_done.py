@@ -1117,7 +1117,9 @@ METRICS_ROLE_ROW = (
     "returns, or, for a role whose usage is read only after it exits, at the point the next sentence sets, "
     f"`{METRICS_ROLE_END}`, where `<tokens>` and `<tool calls>` are written exactly as the summary's "
     "cells read: the number, `not reported`, or the number followed by ` cumulative`; a row label is unique, "
-    "is neither `start` nor `end`, and no value these commands carry contains a single quote."
+    "is neither `start` nor `end`, and no value these commands carry contains a single quote; a role row has "
+    "exactly one end line, this one, even when the launch was killed, so the recovery for a killed wrapped "
+    "command above never applies to a role launch."
 )
 # SKL-98: a role whose usage is read after it exits keeps its end timestamp at its return.
 METRICS_ROLE_END_BEFORE_USAGE = (
@@ -1129,8 +1131,7 @@ METRICS_ROLE_END_BEFORE_USAGE = (
     "`$(date -u +%s.%N)` and the figures the usage read printed, without their `tokens: ` and `tool calls: ` "
     "labels, in place of `<tokens>` and `<tool calls>`; when no usage read runs, as after a launch that did not "
     "exit successfully, the end command still carries the printed timestamp, with `not reported` for each figure "
-    "not read; this end command is the role row's only end line, even when the launch was killed, so the recovery "
-    "for a killed command above never applies to a role launch."
+    "not read."
 )
 METRICS_EXTRA_WRITE = "f='<metrics file>'; printf 'extra %s\\t%s\\n' '<slug>' '<value>' >> \"$f\""
 METRICS_EXTRAS_RECORD = (
@@ -1156,7 +1157,9 @@ METRICS_END_VERBATIM = (
     "converted."
 )
 METRICS_KILLED = (
-    "If a command is killed before it writes its `end` line, the coordinator's very next launch, made as "
+    # SKL-98: the killed-command recovery covers wrapped commands only.
+    "If a wrapped command is killed before its wrapper writes its `end` line, the coordinator's very next "
+    "launch, made as "
     "soon as the kill is reported, is a wrapped command whose `<command>` is `printf 'end %s %s\\n' "
     "\"$(date -u +%s.%N)\" '<killed row label>' >> '<metrics file>'`, and the recovery command gets a row "
     "of its own."
