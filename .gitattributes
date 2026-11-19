@@ -1,3 +1,5 @@
 .opencode-version text eol=lf
 # SKL-242 dossier-size fixture: byte sizes are pinned, so no line-ending conversion.
 tests/fixtures/dossier_size/** -text
+# SKL-365 echoed-file fixture: read as LF records, so it stays LF on every checkout.
+tests/fixtures/sandbox_echo/** text eol=lf
