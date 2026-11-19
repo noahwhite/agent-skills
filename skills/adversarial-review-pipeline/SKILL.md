@@ -293,6 +293,8 @@ Fix only what this diff's own behaviour depends on, and write the rest down in t
 
 ## Final report format (the arbiter's output)
 
+The arbiter prefixes a finding with `pre-existing` only when it meets the `pre-existing` rule in `references/code-review.md` (Handling findings), as the first words of its **The bug:** text (`pre-existing: ...`).
+
 ### Critical vulnerabilities and breaking bugs
 
 Only items validated by Phase-2 execution or confirmed by the arbiter's reasoning.

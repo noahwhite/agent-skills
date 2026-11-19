@@ -139,7 +139,8 @@ def test_review_of_record_is_posted_as_a_comment_pr_review() -> None:
         "Post the review of record as one PR review with the comment event, at the reviewed head, never as an issue comment: "
         "on GitHub, `gh pr review <n> --comment --body-file <file>`, with the body file in the scratch directory, never in the checkout.",
         "The body's first line is `Review of record <full 40-character head SHA>`, followed by the reviewer and adjudicator names and models, "
-        "the reviewer's findings, the verdict per finding, and the fix commit for each valid one.",
+        "the reviewer's findings, the verdict per finding, and the fix commit for each valid one, "
+        "or the tracker issue link for a confirmed `pre-existing` one.",
         "Each delta round posts a new review; never edit an earlier one.",
         "If the host denies the post, do not fall back to an issue comment: report the exact command and the denial, and stop.",
         "Post it, confirm it landed, and only then move to merging.",
@@ -148,6 +149,61 @@ def test_review_of_record_is_posted_as_a_comment_pr_review() -> None:
     assert -1 not in positions, f"review of record step 4 missing: {lines[positions.index(-1)]}"
     assert positions == sorted(positions), "review of record step 4 out of order"
     assert "Post the review of record as one PR comment" not in body
+
+
+def test_review_of_record_step_4_carves_out_only_a_confirmed_pre_existing_finding() -> None:
+    body = section(CODE_REVIEW.read_text(), "Review of record")
+    assert (
+        "Fix every finding ruled valid in the same PR, except a confirmed `pre-existing` finding, "
+        "which is filed instead (Handling findings)."
+    ) in body
+
+
+def test_the_adjudicator_gets_the_cumulative_diff_in_every_round() -> None:
+    # SKL-343: the pre-existing rule is judged against the PR's cumulative diff, so a delta-round
+    # adjudicator gets that range as well as the delta.
+    body = section(CODE_REVIEW.read_text(), "Review of record")
+    assert (
+        "Give it the diff reference (the PR's cumulative `origin/<base>...HEAD` in every round, and in a later "
+        "round also the delta since the last reviewed head) and the reviewer's findings"
+    ) in body
+
+
+def test_a_delta_round_brief_carries_the_prior_review_and_the_adjudicator_brief_never_does() -> None:
+    # SKL-343
+    rounds = section(CODE_REVIEW.read_text(), "Rounds", "###")
+    lines = (
+        "A delta round's reviewer brief carries every earlier `Review of record <sha>` PR review on the PR, their findings and "
+        "per-finding verdicts, labelled as historical context that does not decide the current verdict.",
+        "The reviewer raises a finding already adjudicated there only when the delta changes the code it concerns "
+        "or newly calls, imports or exercises that code.",
+        "- The adjudicator brief, and any shadow-adjudicator brief, never carry the prior review of record; "
+        "both stay clean, neutral.",
+    )
+    positions = [rounds.find(line) for line in lines]
+    assert -1 not in positions, f"Rounds line missing: {lines[positions.index(-1)]}"
+    assert positions == sorted(positions), "Rounds lines out of order"
+
+
+def test_the_pre_existing_tag_is_defined_once_under_handling_findings() -> None:
+    # SKL-343
+    text = CODE_REVIEW.read_text()
+    assert text.count("`pre-existing` tag:") == 1
+    body = section(text, "Handling findings")
+    lines = (
+        "- `pre-existing` tag: the defect is present at the base SHA (the merge base of the reviewed head and the "
+        "integration branch) in code the PR's cumulative diff (base SHA to head, in every round) neither changes "
+        "nor newly calls, imports or exercises.",
+        "The adjudicator confirms the tag against the base SHA; an unconfirmed tag is handled as any other finding.",
+        "A confirmed `pre-existing` finding is listed in the review of record and does not block the merge; "
+        "before merge, the engineer files it as a tracker issue and links that issue in the review-of-record thread.",
+        "It is the only finding filed rather than fixed in the PR.",
+        "A Medium or Low finding accepted with a reason in the pre-PR arbiter report does not thereby gain "
+        "`pre-existing` status.",
+    )
+    positions = [body.find(line) for line in lines]
+    assert -1 not in positions, f"pre-existing rule line missing: {lines[positions.index(-1)]}"
+    assert positions == sorted(positions), "pre-existing rule lines out of order"
 
 
 def test_gate_requires_the_review_of_record_as_a_pr_review() -> None:
