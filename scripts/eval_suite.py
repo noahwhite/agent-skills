@@ -141,11 +141,15 @@ def commit_of(repo: Path, role: str, evals_parts: tuple[str, ...]) -> tuple[Path
     """The checkout's root, full and short HEAD. A checkout with tracked or untracked changes is
     refused, because its commit would not describe what ran; only this suite's own records under
     a results/ directory, untracked or with an unstaged modification, are allowed, since they are
-    outputs, not code. Another skill's records are changes like any other."""
+    outputs, not code. Another skill's records are changes like any other, and so is a git-ignored
+    path in or holding this suite's evals/ directory."""
     root = toplevel(repo)
     # NUL-separated, so a path reaches is_record as its bytes, never quoted; each entry is two
     # status columns, a space and the path, and a rename or copy is followed by its source path.
-    entries = git(root, "status", "--porcelain", "-z", "--untracked-files=all", strip=False).split("\0")
+    # Ignored entries (!!) are listed too: a git-ignored evals/ directory, or an ignored file in
+    # it, is not in the commit either, while ignored files elsewhere (.venv/) do not bear on the run.
+    entries = git(root, "status", "--porcelain", "-z", "--untracked-files=all", "--ignored=matching",
+                  strip=False).split("\0")
     changed, index = [], 0
     while index < len(entries):
         entry = entries[index]
@@ -158,7 +162,11 @@ def commit_of(repo: Path, role: str, evals_parts: tuple[str, ...]) -> tuple[Path
             index += 1
         # A record is allowed only untracked or with an unstaged modification: any other state on
         # a record (staged, deleted, unmerged, renamed) is a change the commit would not describe.
-        if not (status in ("??", " M") and is_record(path, evals_parts)):
+        if status == "!!":
+            parts = Path(path).parts
+            if parts[:len(evals_parts)] == evals_parts or evals_parts[:len(parts)] == parts:
+                changed.append(path)
+        elif not (status in ("??", " M") and is_record(path, evals_parts)):
             changed.append(path)
     if changed:
         raise Refused(f"the {role} checkout {root} has uncommitted changes ({', '.join(changed[:5])}), "
@@ -665,7 +673,10 @@ def main(argv: list[str]) -> int:
     committed = {harness: committed_records(harness, parts), checkout: committed_records(checkout, parts)}
     specs = {}
     for case in cases:
-        spec = yaml.safe_load(read(evals / case / "case.yaml"))
+        try:
+            spec = yaml.safe_load(read(evals / case / "case.yaml"))
+        except yaml.YAMLError as error:
+            raise Refused(f"case {case} case.yaml does not parse: {error}") from None
         scenarios = spec.get("scenarios") if isinstance(spec, dict) else None
         if not scenarios or not all(isinstance(s, dict) and isinstance(s.get("name"), str) and NAME.fullmatch(s["name"])
                                      for s in scenarios):

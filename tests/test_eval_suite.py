@@ -1237,6 +1237,44 @@ def test_a_case_without_scenarios_is_refused(suite, scenarios) -> None:
     assert result.returncode == 2 and "names no scenarios" in result.stderr, result.stderr
 
 
+def test_a_case_yaml_that_does_not_parse_is_refused(suite) -> None:
+    (suite["evals"] / "stub" / "case.yaml").write_text("scenarios: [\n", encoding="utf-8")
+    commit_all(suite["harness"])
+    result = suite["run"]("--runs", "1", str(suite["checkout"]), "lab")
+    assert result.returncode == 2 and "case.yaml does not parse" in result.stderr, result.stderr
+    assert "Traceback" not in result.stderr
+    assert not (suite["state"] / "pass").exists(), "nothing ran"
+
+
+def test_a_git_ignored_evals_directory_is_refused(suite) -> None:
+    """A suite whose evals/ directory git ignores is in no commit, so no commit describes it."""
+    harness = suite["harness"]
+    (harness / ".gitignore").write_text("skills/ignored-skill/\n", encoding="utf-8")
+    commit_all(harness)
+    evals = harness / "skills" / "ignored-skill" / "evals"
+    stub_case(evals / "stub", scenarios=("pass",))
+    result = suite["run_at"](evals, "--runs", "1", str(suite["checkout"]), "lab")
+    assert result.returncode == 2, result.stderr
+    assert refused_paths(result.stderr) == "skills/ignored-skill/"
+    assert not (suite["state"] / "pass").exists(), "nothing ran"
+
+
+@pytest.mark.parametrize("ignored, refused", [("skills/story-to-done/evals/stub/notes.local", True),
+                                              (".venv/lib.py", False)])
+def test_an_ignored_file_is_a_change_only_in_the_suites_evals(suite, ignored: str, refused: bool) -> None:
+    harness = suite["harness"]
+    (harness / ".gitignore").write_text("*.local\n.venv/\n", encoding="utf-8")
+    suite["recommit"]("pass")
+    (harness / ignored).parent.mkdir(parents=True, exist_ok=True)
+    (harness / ignored).write_text("ignored\n", encoding="utf-8")
+    result = suite["run"]("--runs", "1", str(suite["checkout"]), "lab")
+    if refused:
+        assert result.returncode == 2, result.stderr
+        assert refused_paths(result.stderr) == ignored
+    else:
+        assert result.returncode == 0, result.stderr
+
+
 def test_a_scenario_name_that_is_not_a_string_is_refused(suite) -> None:
     """An unquoted 2026 in case.yaml loads as an int, which the runner refuses instead of crashing."""
     case_file = suite["evals"] / "stub" / "case.yaml"
