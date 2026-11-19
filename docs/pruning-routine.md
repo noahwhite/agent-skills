@@ -20,10 +20,10 @@ The script resolves `HEAD` once and evaluates that commit, reads only git object
 It refuses a shallow clone, because a shallow history cannot show when a file last changed, and a partial clone, because reading its missing objects would fetch them into the repository.
 It also refuses a repository whose `blame.ignoreRevsFile` names a missing file, because `git blame` fails on it even when the setting is cleared.
 A refusal exits 2 with a message on stderr that names the cause, and prints nothing on stdout.
-The repository is always the one the working directory is in: git's repository-local environment variables (`GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE` and the like) are dropped for the run.
-The `GIT_TRACE*` variables are dropped too, so the run writes no trace file.
+The repository is always the one the working directory is in: git's repository-local environment variables (`GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE` and the like) and `GIT_CEILING_DIRECTORIES` are dropped for the run.
+Tracing is turned off, `GIT_TRACE*` variables and `trace2` configuration alike, so the run writes no trace file.
 Paths are taken literally, rename history is not followed, signatures are not shown, replace refs and grafts are ignored, and `blame.ignoreRevsFile` is cleared for the run, so otherwise the result for a commit does not depend on local git configuration.
-Submodules and other non-file tree entries are skipped, and a control character in a path is printed escaped, so each candidate stays on one line.
+Submodules and other non-file tree entries are skipped, and a control character or a byte that is not UTF-8 in a path is printed escaped as `\xNN`, so each candidate stays on one line and two paths never print alike.
 
 ## Categories
 
@@ -32,8 +32,8 @@ Submodules and other non-file tree entries are skipped, and a control character 
   Proposal: keep, since the file still runs in the suite on every CI run; retire it only on a finding that it adds no value (the test-quality review owns that judgement for the current suite).
 - **Reference files uncited at this commit.**
   A `shared/` capability source (`shared/*.md`, except `README.md`) that no `skills/*/SKILL.md` cites as `references/<name>` at the evaluated commit.
-  A citation is the whole path, optionally written `./references/<name>`, between delimiters (whitespace, quotes, brackets or punctuation) and optionally followed by a `#anchor`; punctuation after it ends the citation only when a delimiter or the end of the text follows.
-  `references/<name>` inside a longer path or name, such as `../other/references/<name>`, `references/<name>/x`, `references/<name>.bak`, `references/<name>:x.md` or `references/<name>+old`, does not count.
+  A citation is the whole path, optionally written `./references/<name>`, between delimiters (whitespace, quotes or brackets, or the start or end of a line) and optionally followed by a `#anchor`; punctuation after it, such as a sentence-final period, ends the citation only when a delimiter or the end of the line follows the punctuation.
+  `references/<name>` inside a longer path or name, such as `../other/references/<name>`, `old.references/<name>`, `references/<name>/x`, `references/<name>.bak`, `references/<name>:x.md`, `references/<name>::x.md` or `references/<name>+old`, does not count.
   Only `skills/*/SKILL.md` files are searched, so a citation in a vendored reference file does not count.
   Vendored copies under `skills/*/references/` are not counted.
   Proposal: retire, since no skill entry point links it.
@@ -42,7 +42,7 @@ Submodules and other non-file tree entries are skipped, and a control character 
   A nested item that carries the marker is also a rule of its own; a list item inside a fenced code block is not a rule, and a fence closes only on its own delimiter character, at least as long, or when the list item that holds it ends.
   Line numbers count LF line breaks only, as git does, so a carriage return neither starts a line nor changes a path.
   It is a candidate when no file under `tests/` and no `skills/*/SKILL.md` contains any 40-character run of its text (markers removed, whitespace collapsed, case ignored), and every line of it was last changed before D per `git blame`.
-  A rule shorter than 40 characters, a marker with no text included, has no 40-character run and is never cited.
+  A rule shorter than 40 characters, a marker with no text included, has no 40-character run and is never cited, even when lowercasing lengthens it.
   The evidence quotes the whole rule.
   Proposal: retire, since no test pins it and nobody has touched it since D; keep it if the retro finds it still applies, ideally with a pin.
 

@@ -35,9 +35,9 @@ ITEM = re.compile(r"^(\s*)(?:[-*+]|\d+[.)])(?: {1,4}|\s)")
 MARKERS = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s", re.MULTILINE)
 FENCE = re.compile(r"^(\s*)(`{3,}|~{3,})(.*)$")
 BLOCK_START = re.compile(r"^\s*(?:#|>|\||```|~~~|---|\*\*\*|___)")
-CONTROL = re.compile(r"[\x00-\x1f\x7f]")
+CONTROL = re.compile(r"[\x00-\x1f\x7f\udc80-\udcff]")
+CITE_EDGE = r"\s`'\"()\[\]{}<>*|"  # delimits a citation on either side
 CITE_PUNCT = r".,;:!?"  # ends a citation only when a delimiter or the end of the text follows it
-CITE_EDGE = r"\s`'\"()\[\]{}<>*|" + CITE_PUNCT
 
 # Every call is pinned to the repository root, takes paths literally, prints them unquoted, takes
 # no optional locks, and overrides the configuration that would change what it reads, so the
@@ -55,14 +55,17 @@ def clean_env() -> dict[str, str]:
 
     Git lists its repository-local variables (GIT_DIR, GIT_WORK_TREE, GIT_INDEX_FILE and the
     like); without them the repository is always the one the caller's directory is in. Replace
-    refs and grafts never substitute history. The GIT_TRACE* variables are dropped first, so no
-    git call, this one included, writes a trace file.
+    refs and grafts never substitute history, and no ceiling directory stops the search for the
+    repository. Tracing is turned off first, the trace2 targets of git's configuration included, so
+    no git call, this one included, writes a trace file.
     """
     env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_TRACE")}
+    env.update(GIT_TRACE2="0", GIT_TRACE2_EVENT="0", GIT_TRACE2_PERF="0")
     local = subprocess.run(
         ["git", "rev-parse", "--local-env-vars"], stdin=subprocess.DEVNULL, capture_output=True, text=True, env=env
     ).stdout.split()
-    env = {k: v for k, v in env.items() if k not in local and k != "GIT_NAMESPACE"}
+    dropped = {*local, "GIT_NAMESPACE", "GIT_CEILING_DIRECTORIES"}
+    env = {k: v for k, v in env.items() if k not in dropped}
     env.update(GIT_TERMINAL_PROMPT="0", GIT_NO_LAZY_FETCH="1", GIT_GRAFT_FILE=os.devnull)
     return env
 
@@ -89,8 +92,12 @@ def git(*args: str) -> str:
 
 
 def shown(path: str) -> str:
-    """A path as one report field: control characters are escaped so a row stays one line."""
-    return CONTROL.sub(lambda m: f"\\x{ord(m.group()):02x}", path)
+    """A path as one report field.
+
+    Control characters are escaped so a row stays one line, and each byte that is not UTF-8 (held
+    as a surrogate escape) is escaped as that byte, so two such paths never print alike.
+    """
+    return CONTROL.sub(lambda m: f"\\x{ord(m.group()) & 0xff:02x}", path)
 
 
 def day(epoch: int) -> str:
@@ -148,16 +155,15 @@ def skill_texts(head: str, files: list[str]) -> list[str]:
 def cites(cite: str, text: str) -> bool:
     """True when text names cite as a whole relative path (optionally ./-prefixed).
 
-    A cite counts only between delimiters (whitespace, quotes, brackets, punctuation), optionally
-    followed by a #anchor. Punctuation after the cite ends it only when a delimiter or the end of
-    the text follows. A cite inside a longer path or name, such as ../other/references/x.md,
-    references/x.md/y, references/x.md.bak, references/x.md:y.md or references/x.md+old, does not
-    count.
+    A cite counts only between delimiters (whitespace, quotes, brackets), optionally followed by a
+    #anchor. Punctuation after the cite ends it only when a delimiter or the end of the line follows
+    the punctuation. A cite inside a longer path or name, such as ../other/references/x.md,
+    old.references/x.md, references/x.md/y, references/x.md.bak, references/x.md:y.md,
+    references/x.md::y.md or references/x.md+old, does not count.
     """
-    close = CITE_EDGE.removesuffix(CITE_PUNCT)
     pattern = (
         rf"(?:^|(?<=[{CITE_EDGE}]))(?:\./)?{re.escape(cite)}"
-        rf"(?=$|[{close}#]|[{CITE_PUNCT}](?![^{CITE_EDGE}]))"
+        rf"(?=$|[{CITE_EDGE}#]|[{CITE_PUNCT}]+(?:$|[{CITE_EDGE}]))"
     )
     return re.search(pattern, text, re.MULTILINE) is not None
 
@@ -290,12 +296,15 @@ def rule_text(item: str) -> str:
 def cited_rules(texts: list[str], haystack: str) -> set[int]:
     """Return the indexes of the texts that share a WINDOW-character run with the haystack.
 
-    A text shorter than WINDOW, the empty text included, has no WINDOW-character run and is never
-    cited.
+    Matching ignores case. A text shorter than WINDOW, the empty text included, has no
+    WINDOW-character run and is never cited, even when lowercasing lengthens it.
     """
     found = set()
     index: dict[str, list[int]] = {}
     for n, text in enumerate(texts):
+        if len(text) < WINDOW:
+            continue
+        text = text.lower()
         for k in range(len(text) - WINDOW + 1):
             index.setdefault(text[k : k + WINDOW], []).append(n)
     for k in range(len(haystack) - WINDOW + 1):
@@ -333,7 +342,7 @@ def rule_candidates(head: str, files: list[str], skills: list[str], cutoff: int)
         for path in rule_sources(files)
         for first, last, body in rule_items(show(head, path))
     ]
-    pinned = cited_rules([rule[3].lower() for rule in rules], haystack)
+    pinned = cited_rules([rule[3] for rule in rules], haystack)
     out = []
     for n, (path, first, last, text) in enumerate(rules):
         if n in pinned:

@@ -606,6 +606,43 @@ def test_git_trace_settings_write_no_file(repo: Path, tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
     assert list(traces.iterdir()) == []
 
+    config = tmp_path / "trace-config"
+    config.write_text(
+        f"[trace2]\n\teventTarget = {traces / 'event'}\n\tnormalTarget = {traces / 'normal'}\n"
+        f"\tperfTarget = {traces / 'perf'}\n"
+    )
+    result = run(repo, "--since", SINCE, env=dict(ENV, GIT_CONFIG_GLOBAL=str(config)))
+    assert result.returncode == 0, result.stderr
+    assert list(traces.iterdir()) == []
+
+
+def test_a_ceiling_directory_does_not_stop_a_run_from_a_subdirectory(repo: Path) -> None:
+    expected = run(repo, "--since", SINCE).stdout
+    result = run(repo / "tests", "--since", SINCE, env=dict(ENV, GIT_CEILING_DIRECTORIES=str(repo)))
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == expected
+
+
+def test_distinct_non_utf8_paths_print_distinctly(repo: Path) -> None:
+    os.makedirs(repo / "tests", exist_ok=True)
+    (repo / os.fsdecode(b"tests/test_\xff.py")).write_text("def test_ff():\n    assert True\n")
+    (repo / os.fsdecode(b"tests/test_\xfe.py")).write_text("def test_fe():\n    assert True\n")
+    commit(repo, OLD, "two test names that are not UTF-8")
+    lines = category(repo, TESTS)
+    assert any(line.startswith("- tests/test_\\xff.py |") for line in lines[1:])
+    assert any(line.startswith("- tests/test_\\xfe.py |") for line in lines[1:])
+
+
+def test_a_rule_that_lowercases_to_forty_characters_is_still_short(repo: Path) -> None:
+    short = "İ" * 20
+    assert len(short.lower()) == 40
+    append(repo, "shared/rules.md", f"\n- ⛔ {short}\n")
+    write(repo, "tests/test_dotted.py", f"A = {short!r}\n")
+    commit(repo, OLD, "a dotted rule")
+    lines = category(repo, RULES)
+    assert lines[0] == f"{RULES}: 2"
+    assert any(short in line for line in lines[1:])
+
 
 def test_a_carriage_return_is_kept_in_paths_and_text(repo: Path) -> None:
     write(repo, "tests/test_a\r.py", "def test_cr():\n    assert True\n")
@@ -622,7 +659,8 @@ def test_punctuation_inside_a_file_name_ends_no_citation(repo: Path) -> None:
     write(
         repo, "skills/alpha/SKILL.md",
         "Read references/cited.md, then (references/rules.md).\n"
-        "Not citations: references/orphan.md:backup.md, references/orphan.md,v2 and references/orphan.md!x.\n",
+        "Not citations: references/orphan.md:backup.md, references/orphan.md,v2 and references/orphan.md!x.\n"
+        "Nor: references/orphan.md::backup.md, archive/old.references/orphan.md and x:references/orphan.md.\n",
     )
     commit(repo, NEW, "punctuation inside names")
     lines = category(repo, REFERENCES)
