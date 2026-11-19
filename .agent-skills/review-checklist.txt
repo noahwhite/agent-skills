@@ -4,3 +4,4 @@
 # (persona-scrum-master "Retro").
 
 shared/* | Every vendored copy of a changed shared/ file is regenerated with scripts/vendor_shared.py in the same PR, and no copy under skills/*/references/ is edited by hand.
+skills/*/references/* | Every vendored copy of a changed shared/ file is regenerated with scripts/vendor_shared.py in the same PR, and no copy under skills/*/references/ is edited by hand.

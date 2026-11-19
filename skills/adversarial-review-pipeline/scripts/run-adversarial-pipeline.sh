@@ -80,14 +80,16 @@
 # Review checklist: `.agent-skills/review-checklist.txt` in the repository under review, read from the
 # base commit (so a change cannot rewrite the checklist its own review uses), holds one
 # `<bash glob> | <review item>` per line; blank lines and lines whose first non-space character is
-# '#' are ignored, and any other line without ' | ' is skipped with a warning on stderr. The glob is
-# the text before the first ' | ' and is matched unquoted with bash `[[ path == glob ]]` against each
-# changed path as git prints it (repo-relative, no leading './', rename detection off, so both sides
-# of a rename count): '*' crosses '/', and '**/x' does not match a top-level 'x'. `checklist` prints
-# each matching item once (keyed on its text), in file order; a file absent at the base or no match
-# prints nothing and exits 0, and a git failure exits 22. The sweep dossier ends with the same items,
-# each prefixed '- ' and capped at CHECKLIST_CAP_CHARS, under a '===== Review checklist' heading, and
-# has no such heading when none matches. With the sweep skipped (--no-sweep), no phase shows them.
+# '#' are ignored, and any other line without ' | ', or holding a NUL or \001 byte, is skipped with
+# a warning on stderr. The glob is the text before the first ' | ' and is matched unquoted with bash
+# `[[ path == glob ]]` against each changed path as git prints it (repo-relative, no leading './',
+# rename detection off, so both sides of a rename count): '*' crosses '/', and '**/x' does not match
+# a top-level 'x'. `checklist` prints each matching item once (keyed on its text), in file order; a
+# file absent at the base or no match prints nothing and exits 0, and a git failure exits 22. The
+# sweep dossier ends with the same items, each prefixed '- ', under a '===== Review checklist'
+# heading: every whole item that fits in CHECKLIST_CAP_CHARS, in order, then a truncation notice if
+# any was left out. It has no such heading when none matches. With the sweep skipped (--no-sweep),
+# no phase shows them.
 #
 # Embedded diff: the sweep and hunt dossiers embed `git diff --no-ext-diff --unified=1` of the run's
 # range, and DIFF_CAP_BYTES (4096, in bytes of unified-diff text, per file and not a bound on the whole
@@ -1566,11 +1568,15 @@ checklist_items() {
     rm -f -- "$tmp"; die 22 "could not list the paths changed in $BASE_SHA...$HEAD_SHA."
   fi
   while IFS= read -r -d '' path; do changed+=("$path"); done < "$tmp"
-  if ! git cat-file blob "${BASE_SHA}:${file}" > "$tmp"; then
+  # NUL becomes \001, which bash `read` keeps (it drops NUL silently), so the line can be skipped
+  # with a warning; pipefail makes a failing `git cat-file` fail the pipeline.
+  if ! git cat-file blob "${BASE_SHA}:${file}" | tr '\000' '\001' > "$tmp"; then
     rm -f -- "$tmp"; die 22 "could not read $file at the base $BASE_SHA."
   fi
   while IFS= read -r line || [ -n "$line" ]; do
     n=$(( n + 1 ))
+    case "$line" in *$'\001'*)
+      echo "WARNING: $file line $n holds a NUL or \\001 byte; skipped." >&2; continue ;; esac
     line="${line#"${line%%[![:space:]]*}"}"
     line="${line%"${line##*[![:space:]]}"}"
     if [ -z "$line" ] || [ "${line:0:1}" = "#" ]; then continue; fi
@@ -1593,7 +1599,7 @@ emit_prior() {  # $1 = phase, $2 = text when that phase is intentionally absent 
 }
 
 write_dossier() {  # $1 = phase, $2 = dossier path, $3 = the phase's checkout (exists already)
-  local p="$1" out="$2" co="$3" items cut
+  local p="$1" out="$2" co="$3" items item kept dropped
   case "$p" in
     sweep)
       items="$(checklist_items)"
@@ -1613,15 +1619,17 @@ write_dossier() {  # $1 = phase, $2 = dossier path, $3 = the phase's checkout (e
         if [ -n "$items" ]; then
           echo
           echo "===== Review checklist (owner-approved items read from the base, for the paths this diff changes: check each one, report a miss as a candidate) ====="
-          if [ "${#items}" -gt "$CHECKLIST_CAP_CHARS" ]; then
-            cut="${items:0:$CHECKLIST_CAP_CHARS}"
-            if [ "${items:$CHECKLIST_CAP_CHARS:1}" != $'\n' ]; then   # drop the item the cap splits
-              case "$cut" in *$'\n'*) cut="${cut%$'\n'*}" ;; *) cut="" ;; esac
+          kept="" dropped=0   # every whole item that fits, in order; one that does not is left out
+          while IFS= read -r item; do
+            if [ $(( ${#kept} + ${#item} + 1 )) -le "$CHECKLIST_CAP_CHARS" ]; then
+              kept+="$item"$'\n'
+            else
+              dropped=1
             fi
-            if [ -n "$cut" ]; then printf '%s\n' "$cut" | sed 's/^/- /'; fi
+          done <<< "$items"
+          if [ -n "$kept" ]; then printf '%s' "$kept" | sed 's/^/- /'; fi
+          if [ "$dropped" -eq 1 ]; then
             echo "[checklist truncated at $CHECKLIST_CAP_CHARS characters; 'checklist --base $BASE_SHA' prints every item]"
-          else
-            printf '%s\n' "$items" | sed 's/^/- /'
           fi
         fi
       } > "$out"

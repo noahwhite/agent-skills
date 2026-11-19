@@ -139,6 +139,13 @@ def test_two_paths_matching_one_item_print_it_once(tmp_path):
     assert result.stdout == "Check every changed doc link resolves.\n"
 
 
+def test_two_rules_with_the_same_item_print_it_once(tmp_path):
+    text = "src/*.py | Same item.\ndocs/* | Same item.\n"
+    result = checklist(tmp_path, ["src/app.py", "docs/guide.md"], text=text)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == "Same item.\n"
+
+
 def test_one_path_matching_two_items_prints_them_in_file_order(tmp_path):
     result = checklist(tmp_path, ["src/app.py"])
     assert result.returncode == 0, result.stderr
@@ -164,6 +171,13 @@ def test_the_committed_checklist_maps_a_shared_change_to_its_item(tmp_path):
     result = checklist(tmp_path, ["shared/runtimes.md"], text=committed)
     assert result.returncode == 0, result.stderr
     assert result.stderr == "", "a committed line is not '<bash glob> | <review item>'"
+    assert result.stdout.startswith("Every vendored copy of a changed shared/ file"), result.stdout
+
+
+def test_the_committed_checklist_maps_a_hand_edited_vendored_copy_to_its_item(tmp_path):
+    committed = CHECKLIST.read_text()
+    result = checklist(tmp_path, ["skills/persona-scrum-master/references/github.md"], text=committed)
+    assert result.returncode == 0, result.stderr
     assert result.stdout.startswith("Every vendored copy of a changed shared/ file"), result.stdout
 
 
@@ -208,6 +222,14 @@ def test_a_malformed_line_is_skipped_with_a_warning(tmp_path):
     assert result.returncode == 0, result.stderr
     assert result.stdout == "Check every changed doc link resolves.\n"
     assert "line 7 is not '<bash glob> | <review item>'" in result.stderr, result.stderr
+
+
+def test_a_line_with_a_nul_byte_is_skipped_with_a_warning(tmp_path):
+    text = FIXTURE_CHECKLIST + "docs/\0* | NUL inside the glob.\n"
+    result = checklist(tmp_path, ["docs/guide.md"], text=text)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == "Check every changed doc link resolves.\n"
+    assert "line 7 holds a NUL" in result.stderr, result.stderr
 
 
 def test_the_reader_runs_from_the_repository_without_repo(tmp_path):
@@ -275,6 +297,17 @@ def test_the_sweep_dossier_caps_the_checklist(tmp_path):
     items = [line[2:] for line in block[:-1]]
     # Only whole items, as many as fit in the cap: each is 100 characters plus its newline.
     assert items == [f"Item {n:04d} {'x' * 90}" for n in range(8192 // 101)]
+
+
+def test_an_oversized_item_does_not_hide_a_later_item_that_fits(tmp_path):
+    text = f"src/*.py | Huge {'x' * 9000}\nsrc/*.py | Short item.\n"
+    dossier = sweep_dossier(tmp_path, ["src/app.py"], text=text)
+    heading = HEADING.search(dossier)
+    assert heading, dossier
+    block = dossier[heading.end():].strip("\n").splitlines()
+    assert block[0] == "- Short item.", block
+    assert block[1].startswith("[checklist truncated at 8192 characters;"), block
+    assert len(block) == 2, block
 
 
 def test_an_unreadable_checklist_fails_the_sweep_dossier(tmp_path):
