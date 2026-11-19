@@ -968,6 +968,25 @@ def test_the_runner_wrapper_works_through_a_symlink(suite, tmp_path: Path) -> No
     assert (result.returncode, result.stdout) == (0, "stub\n"), result.stderr
 
 
+def test_the_runner_wrapper_needs_no_readlink_f(suite, tmp_path: Path) -> None:
+    """A readlink without -f, as on BSD, still follows a chain of relative links to the runner."""
+    shims = tmp_path / "shims"
+    shims.mkdir()
+    real = shutil.which("readlink")
+    shim = shims / "readlink"
+    shim.write_text(f'#!/bin/sh\nfor arg; do [ "$arg" = -f ] && {{ echo "readlink: illegal option -- f" >&2; exit 1; }}; done\n'
+                    f'exec {real} "$@"\n')
+    shim.chmod(0o755)
+    links = tmp_path / "links"
+    links.mkdir()
+    (links / "inner.sh").symlink_to(os.path.relpath(suite["harness"] / "scripts" / "run-suite.sh", links))
+    (tmp_path / "outer.sh").symlink_to("links/inner.sh")
+    env = {**suite["env"], "PATH": f"{shims}{os.pathsep}{suite['env']['PATH']}"}
+    result = subprocess.run(["bash", str(tmp_path / "outer.sh"), str(suite["evals"]), "--list"], capture_output=True,
+                            text=True, env=env)
+    assert (result.returncode, result.stdout) == (0, "stub\n"), result.stderr
+
+
 @pytest.mark.parametrize("where", ["harness", "checkout"])
 def test_another_skills_uncommitted_record_is_a_change_like_any_other(suite, where: str) -> None:
     suite["recommit"]("pass")
@@ -1258,7 +1277,11 @@ def test_the_runner_lives_once_under_scripts() -> None:
 
 # --- AC3: the case contract -------------------------------------------------------------------
 
-REQUIRED_FIELDS = set(yaml.safe_load((REFERENCE_CASE / "case.yaml").read_text(encoding="utf-8"))) | {"kind"}
+# Fixed here, not read from a case under test, so dropping a field from any case.yaml fails.
+REQUIRED_FIELDS = {
+    "baseline", "candidate", "case", "graded_on", "kind", "not_graded_on", "purpose", "runtime",
+    "scenarios", "skill", "split",
+}
 # File names that hold the agent's prose rather than its tool calls: named for agent output, a
 # transcript, a stream or a response, or a plain-text or log file, which no call record is.
 PROSE = re.compile(r"(?i)agent[-_]?output|transcript|stdout|stderr|response|\.(?:txt|log)$")

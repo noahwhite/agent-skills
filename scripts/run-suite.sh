@@ -18,4 +18,14 @@ if ! python3 -c 'import yaml' 2> /dev/null; then
   exit 2
 fi
 # The runner sits beside this script's real file, so a symlink to the script still finds it.
-exec python3 "$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")/eval_suite.py" "$@"
+# Plain readlink, one link at a time, because readlink -f is not on every system.
+source=${BASH_SOURCE[0]}
+while [ -L "$source" ]; do
+  link=$(readlink -- "$source")
+  case $link in
+    /*) source=$link ;;
+    *) source=$(dirname -- "$source")/$link ;;
+  esac
+done
+here=$(cd -P -- "$(dirname -- "$source")" && pwd)
+exec python3 "$here/eval_suite.py" "$@"
