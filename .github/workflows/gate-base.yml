@@ -38,11 +38,13 @@ jobs:
           enable-cache: false
       - name: Judge the head workflows with the base gate
         id: judge
+        # shell: bash adds pipefail, so the judge's exit, not tee's, sets the step outcome.
+        shell: bash
         run: >-
           uv run --locked --project base python base/scripts/gate_integrity.py
           --base base/.github/workflows --head head/.github/workflows
           --base-script base/scripts/gate_integrity.py --head-script head/scripts/gate_integrity.py
-          | tee "$RUNNER_TEMP/gate.log"
+          2>&1 | tee "$RUNNER_TEMP/gate.log"
       # A pull_request_target job's own check run attaches to the base commit, so the
       # required gate-base check is created on the PR head SHA through the Checks API.
       - name: Report gate-base on the PR head

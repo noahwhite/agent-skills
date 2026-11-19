@@ -107,25 +107,86 @@ def test_a_workflow_added_passes(tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+@pytest.mark.parametrize("where", [0, 1, 2, 4], ids=["first", "between-unnamed", "after-unnamed", "last"])
+def test_an_unnamed_step_added_passes(tmp_path, where):
+    result = judge(tmp_path, head_with(lambda ci: steps(ci).insert(where, {"run": "echo hi"})))
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_a_same_named_step_added_before_the_original_passes(tmp_path):
+    result = judge(tmp_path, head_with(
+        lambda ci: steps(ci).insert(2, {"name": "Repository tests", "run": "echo more"})))
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_a_renamed_step_passes(tmp_path):
+    result = judge(tmp_path, head_with(lambda ci: steps(ci)[3].update(name="Validate the skills")))
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_an_unnamed_step_given_a_name_passes(tmp_path):
+    result = judge(tmp_path, head_with(lambda ci: steps(ci)[0].update(name="Checkout")))
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_a_renamed_job_passes(tmp_path):
+    result = judge(tmp_path, head_with(lambda ci: ci["jobs"]["checks"].update(name="Checks")))
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def run_dirs(base, head, *extra):
+    return subprocess.run(
+        [sys.executable, str(SCRIPT), "--base", str(base), "--head", str(head), *map(str, extra)],
+        capture_output=True, text=True, timeout=30)
+
+
+def test_a_quoted_on_key_matches_a_bare_on_key(tmp_path):
+    for side, key in (("base", "on"), ("head", "'on'")):
+        directory = tmp_path / side
+        directory.mkdir()
+        (directory / "ci.yml").write_text(f"{key}:\n  pull_request:\n  push:\n    branches: [main]\n"
+                                          "jobs:\n  checks:\n    steps:\n      - run: 'true'\n")
+    result = run_dirs(tmp_path / "base", tmp_path / "head")
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize("head_on", ["{pull_request: {}}", "[pull_request]", "pull_request"])
+def test_equivalent_trigger_spellings_match(tmp_path, head_on):
+    for side, on in (("base", "{pull_request: null}"), ("head", head_on)):
+        directory = tmp_path / side
+        directory.mkdir()
+        (directory / "ci.yml").write_text(f"on: {on}\njobs:\n  checks:\n    steps:\n      - run: 'true'\n")
+    result = run_dirs(tmp_path / "base", tmp_path / "head")
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_a_trigger_types_filter_added_fails(tmp_path):
+    result = judge(tmp_path, head_with(lambda ci: ci["on"].update(pull_request={"types": ["opened"]})))
+    assert result.returncode != 0
+    assert "trigger" in result.stdout
+
+
 def drop_named(name):
     return lambda ci: steps(ci).remove(next(s for s in steps(ci) if s.get("name") == name))
 
 
 VIOLATIONS = {
     "step removed": (drop_named("Validate skills"), "Validate skills"),
-    "unnamed step removed": (lambda ci: steps(ci).pop(0), "unnamed step 1"),
+    "unnamed step removed": (lambda ci: steps(ci).pop(0), "step 1"),
     "step text changed": (lambda ci: steps(ci)[2].update(run="true"), "Repository tests"),
     "if false on a base step": (lambda ci: steps(ci)[3].update({"if": False}), "Validate skills"),
     "continue-on-error on a base step": (
         lambda ci: steps(ci)[2].update({"continue-on-error": True}), "Repository tests"),
     "with changed on an unnamed step": (
-        lambda ci: steps(ci)[1]["with"].update({"enable-cache": True}), "unnamed step 2"),
+        lambda ci: steps(ci)[1]["with"].update({"enable-cache": True}), "step 2"),
+    "step renamed and changed": (
+        lambda ci: steps(ci)[2].update(name="Tests", run="true"), "Repository tests"),
     "env added to a base step": (
         lambda ci: steps(ci)[2].update(env={"PYTEST_ADDOPTS": "-k nothing"}), "Repository tests"),
     "base steps reordered": (
         lambda ci: steps(ci).insert(2, steps(ci).pop(3)), "order"),
     "unnamed base steps reordered": (
-        lambda ci: steps(ci).insert(0, steps(ci).pop(1)), "unnamed step"),
+        lambda ci: steps(ci).insert(0, steps(ci).pop(1)), "order"),
     "trigger narrowed": (lambda ci: ci["on"].pop("push"), "trigger"),
     "push branches narrowed": (
         lambda ci: ci["on"]["push"].update(branches=["release"]), "trigger"),
@@ -160,6 +221,72 @@ def test_gate_base_trigger_changed_fails(tmp_path):
     result = judge(tmp_path, {"ci.yml": copy.deepcopy(CI), "gate-base.yml": gate})
     assert result.returncode != 0
     assert "trigger" in result.stdout + result.stderr
+
+
+GATE_CHANGES = {
+    "step added": lambda gate: gate["jobs"]["gate"]["steps"].insert(0, {"run": "echo tamper"}),
+    "job added": lambda gate: gate["jobs"].update(evil={"runs-on": "ubuntu-24.04", "steps": [{"run": "true"}]}),
+    "job renamed": lambda gate: gate["jobs"]["gate"].update(name="gate-base"),
+}
+
+
+@pytest.mark.parametrize("change", GATE_CHANGES.values(), ids=GATE_CHANGES.keys())
+def test_any_change_to_the_gate_workflow_jobs_fails(tmp_path, change):
+    gate = copy.deepcopy(GATE)
+    change(gate)
+    result = judge(tmp_path, {"ci.yml": copy.deepcopy(CI), "gate-base.yml": gate})
+    assert result.returncode != 0, result.stdout
+    assert "gate-base.yml" in result.stdout
+
+
+@pytest.mark.parametrize("job", [{"gate-base": {"steps": [{"run": "true"}]}},
+                                 {"lint": {"name": "gate-base", "steps": [{"run": "true"}]}}],
+                         ids=["job-id", "job-name"])
+def test_a_head_job_that_reports_as_gate_base_fails(tmp_path, job):
+    workflows = head_with(lambda ci: None)
+    workflows["lint.yml"] = {"on": {"pull_request": None}, "jobs": job}
+    result = judge(tmp_path, workflows)
+    assert result.returncode != 0, result.stdout
+    assert "lint.yml" in result.stdout
+
+
+def test_a_symlinked_head_workflow_directory_fails(tmp_path):
+    base = write_tree(tmp_path / "base", {"ci.yml": CI, "gate-base.yml": GATE})
+    (tmp_path / "head/.github").mkdir(parents=True)
+    (tmp_path / "head/.github/workflows").symlink_to(base / ".github/workflows")
+    result = run_dirs(base / ".github/workflows", tmp_path / "head/.github/workflows")
+    assert result.returncode != 0, result.stdout
+    assert "symlink" in result.stdout
+
+
+def test_a_missing_base_script_is_a_usage_error(tmp_path):
+    base = write_tree(tmp_path / "base", {"ci.yml": CI, "gate-base.yml": GATE})
+    head = write_tree(tmp_path / "head", {"ci.yml": CI, "gate-base.yml": GATE}, script="print('pass')\n")
+    result = run_dirs(base / ".github/workflows", head / ".github/workflows",
+                      "--base-script", tmp_path / "missing.py",
+                      "--head-script", head / "scripts/gate_integrity.py")
+    assert result.returncode == 2, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize("base_text,head_text", [("jobs: [a, b]\n", "jobs: [a]\n"),
+                                                ("on: &a [*a]\njobs: {}\n", "on: &a [*a]\njobs: {}\n")],
+                         ids=["jobs-list", "recursive"])
+def test_a_malformed_base_still_yields_a_verdict(tmp_path, base_text, head_text):
+    for side, text in (("base", base_text), ("head", head_text)):
+        (tmp_path / side).mkdir()
+        (tmp_path / side / "ci.yml").write_text(text)
+    result = run_dirs(tmp_path / "base", tmp_path / "head")
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "gate-base: FAIL" in result.stdout
+
+
+def test_an_uppercase_extension_is_judged(tmp_path):
+    (tmp_path / "base").mkdir()
+    (tmp_path / "head").mkdir()
+    (tmp_path / "base/ci.YML").write_text("on: push\njobs: {}\n")
+    result = run_dirs(tmp_path / "base", tmp_path / "head")
+    assert result.returncode != 0
+    assert "ci.YML" in result.stdout
 
 
 def test_ci_workflow_removed_fails(tmp_path):
@@ -221,10 +348,10 @@ def all_steps(workflow):
 
 def test_gate_base_triggers_only_on_pull_request_target_without_a_paths_filter():
     workflow = gate_workflow()
-    # yaml.safe_load reads the bare key `on` as the boolean True.
-    assert "on" not in workflow
-    assert list(workflow[True]) == ["pull_request_target"]
-    trigger = workflow[True]["pull_request_target"] or {}
+    # yaml.safe_load reads the bare key `on` as the boolean True, and a quoted 'on' as a string.
+    [on] = [workflow[key] for key in (True, "on") if key in workflow]
+    assert list(on) == ["pull_request_target"]
+    trigger = on["pull_request_target"] or {}
     assert "paths" not in trigger and "paths-ignore" not in trigger
 
 
@@ -293,6 +420,26 @@ def test_the_base_gate_script_judges_the_head_workflows():
     assert "--head head/.github/workflows" in run
     assert "--base-script base/scripts/gate_integrity.py" in run
     assert "--head-script head/scripts/gate_integrity.py" in run
+
+
+# GitHub runs a `run` step with no `shell` key as `bash -e {0}`, and `shell: bash` as
+# `bash --noprofile --norc -eo pipefail {0}`.
+RUNNER_SHELLS = {None: ["bash", "-e"], "bash": ["bash", "--noprofile", "--norc", "-eo", "pipefail"]}
+
+
+@pytest.mark.parametrize("judge_exit", [1, 2])
+def test_a_failing_judge_fails_the_judge_step(tmp_path, judge_exit):
+    """The step outcome sets the check-run conclusion, so the judge's exit must survive the log pipe."""
+    [judge_step] = [s for s in all_steps(gate_workflow()) if s.get("id") == "judge"]
+    shell = RUNNER_SHELLS[judge_step.get("shell")]
+    (tmp_path / "uv").write_text(f"#!/bin/sh\necho 'gate-base: FAIL' >&2\nexit {judge_exit}\n")
+    (tmp_path / "uv").chmod(0o755)
+    script = tmp_path / "step.sh"
+    script.write_text(judge_step["run"])
+    result = subprocess.run([*shell, str(script)], capture_output=True, text=True, timeout=30,
+                            env={"PATH": f"{tmp_path}:/usr/bin:/bin", "RUNNER_TEMP": str(tmp_path)})
+    assert result.returncode != 0
+    assert "gate-base: FAIL" in (tmp_path / "gate.log").read_text()
 
 
 def test_the_check_run_gate_base_is_created_on_the_pr_head_sha():
