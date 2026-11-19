@@ -191,6 +191,17 @@ def test_an_uncommitted_checklist_edit_is_ignored(tmp_path):
     assert result.stdout == "Check every changed doc link resolves.\n"
 
 
+def test_a_changed_submodule_matches_despite_diff_ignore_submodules(tmp_path):
+    env = clean_env(tmp_path)
+    repo = make_repo(tmp_path, ["other.txt"], "vendor/* | Review the dependency update.\n")
+    git(repo, env, "update-index", "--add", "--cacheinfo", f"160000,{'1' * 40},vendor/lib")
+    git(repo, env, "commit", "-qm", "add a gitlink")
+    git(repo, env, "config", "diff.ignoreSubmodules", "all")
+    result = run_script("checklist", "--repo", str(repo), "--base", BASE_REF, env=env)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == "Review the dependency update.\n"
+
+
 def test_a_malformed_line_is_skipped_with_a_warning(tmp_path):
     text = FIXTURE_CHECKLIST + "docs/*|No spaces around the bar.\n"
     result = checklist(tmp_path, ["docs/guide.md"], text=text)

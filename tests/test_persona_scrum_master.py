@@ -142,6 +142,7 @@ def test_retro_section_files_only_action_items() -> None:
 
 def test_retro_proposes_checklist_items_from_repeated_misses() -> None:
     body = section(SKILL.read_text(), "Retro")
+    assert "\n- Propose review checklist items from repeated misses:" in body, "not its own Retro bullet"
     bullets = [b for b in body.split("\n- ") if "review-checklist.txt" in b]
     assert len(bullets) == 1, bullets
     bullet = bullets[0]

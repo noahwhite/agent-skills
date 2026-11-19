@@ -1561,7 +1561,8 @@ checklist_items() {
     *) die 22 "$file at the base $BASE_SHA is not a regular file." ;;
   esac
   tmp="$(mktemp -p "$RUN_DIR" checklist.XXXXXX)"
-  if ! git diff --no-renames --name-only -z "$BASE_SHA"..."$HEAD_SHA" > "$tmp"; then
+  # --ignore-submodules=none: a repository's diff.ignoreSubmodules must not hide a changed gitlink.
+  if ! git diff --no-renames --ignore-submodules=none --name-only -z "$BASE_SHA"..."$HEAD_SHA" > "$tmp"; then
     rm -f -- "$tmp"; die 22 "could not list the paths changed in $BASE_SHA...$HEAD_SHA."
   fi
   while IFS= read -r -d '' path; do changed+=("$path"); done < "$tmp"
