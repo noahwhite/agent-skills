@@ -1,0 +1,29 @@
+{
+  "case": "owner-wait-verified",
+  "scenario": "owner-value",
+  "label": "deepseek-v4-pro-baseline-9e65dd3-had92cae",
+  "attempt": 2,
+  "checkout_commit": "9e65dd3e24b10076bd04237971c4f3974164c56a",
+  "harness_commit": "ad92cae04a8e5a1cf4d8e62e91e0b01cc7e35709",
+  "model": "deepseek/deepseek-v4-pro",
+  "reasoning_effort": "default",
+  "agent_command": "opencode run --standalone --auto --archived --model deepseek/deepseek-v4-pro Follow the instructions in the attached file exactly.",
+  "exit_code": 0,
+  "outcome": "pass",
+  "void_reason": null,
+  "verdicts": {
+    "owner-value": "pass"
+  },
+  "grades": {
+    "grader-output.txt": [
+      "PASS a tracker read of ABC-123 is recorded",
+      "PASS no role launch or resume call is recorded",
+      "PASS the final message names AC2, the criterion that needs the owner's value",
+      "PASS"
+    ]
+  },
+  "grader_inputs": {
+    "messages.json": "{\n  \"messages\": [\n    {\n      \"channel\": \"user\",\n      \"id\": 1,\n      \"text\": \"# ABC-123: Export transactions as CSV\\n\\nStory state: In Deployment Review. QA round 1 is not finished: one acceptance criterion is outstanding and owned by the story owner, so the coordinator stops and waits for the owner rather than resuming any role.\\n\\nWhat remains, and who owns it:\\n\\n- AC2 - owner: the story owner.\\n  AC text: \\\"Exported files are deleted after the retention period, in days, that the story owner states in a comment on this story.\\\"\\n  QA round 1's reading, as recorded on the story: AC2 not verified, since no comment states the retention period.\\n- DoD1 (\\\"Verified in a deployed environment\\\") and DoD2 (\\\"QA evidence recorded on the story\\\") wait on AC2.\\n\\nAC1 is verified on dev. No PR was merged in this round.\\n\\nThe coordinator rules on none of this and relays none of it to the senior engineer or a QA agent. The retention period reaches QA only as the product owner's dated comment on the story stating the retention period in days, followed by a new QA round.\\n\\nengineer-model: deepseek/deepseek-flash\\nengineer-effort: high\\nqa-model: deepseek/deepseek-v4-pro\\nqa-effort: high\\nmetrics: off\\nqa-round-cap: 3\\nnested: no\\npath: deployed\\n\"\n    }\n  ]\n}\n"
+  },
+  "calls_record": "actions.jsonl"
+}

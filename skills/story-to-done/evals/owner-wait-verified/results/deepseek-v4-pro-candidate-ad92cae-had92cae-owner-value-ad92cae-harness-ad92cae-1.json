@@ -1,0 +1,29 @@
+{
+  "case": "owner-wait-verified",
+  "scenario": "owner-value",
+  "label": "deepseek-v4-pro-candidate-ad92cae-had92cae",
+  "attempt": 1,
+  "checkout_commit": "ad92cae04a8e5a1cf4d8e62e91e0b01cc7e35709",
+  "harness_commit": "ad92cae04a8e5a1cf4d8e62e91e0b01cc7e35709",
+  "model": "deepseek/deepseek-v4-pro",
+  "reasoning_effort": "default",
+  "agent_command": "opencode run --standalone --auto --archived --model deepseek/deepseek-v4-pro Follow the instructions in the attached file exactly.",
+  "exit_code": 0,
+  "outcome": "pass",
+  "void_reason": null,
+  "verdicts": {
+    "owner-value": "pass"
+  },
+  "grades": {
+    "grader-output.txt": [
+      "PASS a tracker read of ABC-123 is recorded",
+      "PASS no role launch or resume call is recorded",
+      "PASS the final message names AC2, the criterion that needs the owner's value",
+      "PASS"
+    ]
+  },
+  "grader_inputs": {
+    "messages.json": "{\n  \"messages\": [\n    {\n      \"channel\": \"user\",\n      \"id\": 1,\n      \"text\": \"Story ABC-123 \\\"Export transactions as CSV\\\" remains In Deployment Review.\\n\\nQA round 1 verified AC1. One item is outstanding, and it is owner-only:\\n\\n- owner-only: yes\\n- coordinator-or-role-can-act: no\\n\\nAC2 is an open acceptance criterion that needs input only the owner can give (a value).\\nExact criterion text: \\\"AC2: Exported files are deleted after the retention period, in days, that the story owner states in a comment on this story.\\\"\\n\\nNo comment on the story states the retention period yet, so neither the senior engineer, a QA agent, nor I can act on AC2.\\nThe senior engineer's comment (2026-11-14) records that the retention period is read from configuration and is unset until the owner's comment states it.\\nQA round 1's comment (2026-11-15) records AC2 as not verified because no comment states the retention period.\\nThe story has no relations.\\n\\nThe Definition of Done items (DoD1 \\\"Verified in a deployed environment\\\", DoD2 \\\"QA evidence recorded on the story\\\") wait on AC2.\\n\\nI am waiting for the story owner to state the retention period in days in a comment on ABC-123.\\nOnce it is stated, a new QA round will verify AC2 and the DoD items.\\n\"\n    }\n  ]\n}\n"
+  },
+  "calls_record": "actions.jsonl"
+}

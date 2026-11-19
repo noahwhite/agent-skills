@@ -2,7 +2,8 @@
 //
 // This file targets a runtime that runs workflow scripts with the globals `args`, `agent(prompt, opts)`,
 // `parallel([...])` and `log(msg)`. On any other runtime, follow the manual procedure in
-// engineering-workflow SKILL.md ("Escalation: the gated two-lens loop"); the two are equivalent.
+// engineering-workflow SKILL.md ("Escalation: the gated two-lens loop"); the two are equivalent, except
+// that this script saves no verifier report, so a round whose report must be cited runs by hand.
 //
 // The default pre-PR gate is the adversarial-review-pipeline skill. Escalate to this loop only when
 // that gate cannot close the diff. Never run both over the same head.

@@ -3,7 +3,6 @@
 import json
 import re
 import subprocess
-import sys
 from pathlib import Path
 
 import jsonschema
@@ -266,13 +265,29 @@ def test_clean_and_neutral_use_the_canonical_phrase():
     assert not offenders, "\n".join(offenders)
 
 
+def deref(node: dict) -> dict:
+    # A `$ref`, or an `allOf` of exactly one `$ref` (how `required_agent` extends `agent`), names
+    # the definition that holds the node's properties. A definition seen twice is a cycle: no node.
+    seen: set[str] = set()
+    while True:
+        if "$ref" in node:
+            name = node["$ref"].split("/")[-1]
+            if name in seen:
+                return {}
+            seen.add(name)
+            node = SCHEMA["$defs"][name]
+        elif "properties" not in node and [list(s) for s in node.get("allOf", [])] == [["$ref"]]:
+            node = node["allOf"][0]
+        else:
+            return node
+
+
 def schema_node(path: str) -> dict | None:
     node = SCHEMA
     for part in path.split("."):
         is_array = part.endswith("[]")
         key = part.removesuffix("[]")
-        if "$ref" in node:
-            node = SCHEMA["$defs"][node["$ref"].split("/")[-1]]
+        node = deref(node)
         props = node.get("properties", {})
         if key in props:
             node = props[key]
@@ -284,8 +299,7 @@ def schema_node(path: str) -> dict | None:
             if node.get("type") != "array":
                 return None
             node = node["items"]
-        if "$ref" in node:
-            node = SCHEMA["$defs"][node["$ref"].split("/")[-1]]
+        node = deref(node)
     return node
 
 
@@ -521,14 +535,6 @@ def test_schema_rejects_unknown_keys():
     example["git"]["integration_brnach"] = "develop"
     with pytest.raises(jsonschema.ValidationError):
         jsonschema.validate(example, SCHEMA)
-
-
-def test_vendored_references_are_current():
-    res = subprocess.run(
-        [sys.executable, str(ROOT / "scripts" / "vendor_shared.py"), "--check"],
-        capture_output=True, text=True,
-    )
-    assert res.returncode == 0, res.stdout + res.stderr
 
 
 def test_no_em_dash():

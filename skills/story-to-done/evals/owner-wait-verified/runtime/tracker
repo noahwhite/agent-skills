@@ -1,0 +1,69 @@
+#!/usr/bin/env python3
+"""Stand in for the tracker in one run of the owner-wait-verified case.
+
+The coordinator under test reads every story through this script. It serves the fixture story
+the scenario holds under `stories/<ID>.md` in the case's scenario directory, which run.sh names in
+the run directory's `scenario-path`, so the fixture is never in the agent's directory. A story the
+scenario does not hold prints that the tracker has no such story. Nothing is written to a tracker.
+
+This script sits in the agent's directory, the run directory's `workspace/`. Every read appends one
+line to `actions.jsonl` in the run directory, the parent of this one, naming the story read and
+whether the tracker held it, so the grader reads the calls, never the coordinator's prose. Calls
+run one at a time under the lock the role runtime shares.
+
+  tracker view --story ID
+"""
+
+import argparse
+import datetime
+import fcntl
+import json
+import pathlib
+import re
+import sys
+
+WORK = pathlib.Path(__file__).resolve().parent
+RECORD = WORK.parent
+ACTIONS = RECORD / "actions.jsonl"
+SCENARIO_PATH = RECORD / "scenario-path"
+LOCK = RECORD / "runtime.lock"
+STORY = re.compile(r"[A-Z][A-Z0-9]*-[0-9]+")
+
+
+def stamp() -> str:
+    now = datetime.datetime.now(datetime.timezone.utc)
+    return now.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def stories() -> pathlib.Path:
+    """The scenario's fixture stories, in the case directory run.sh names."""
+    if not SCENARIO_PATH.is_file():
+        sys.exit(f"tracker: harness error, there is no {SCENARIO_PATH}; nothing was recorded")
+    return pathlib.Path(SCENARIO_PATH.read_text().rstrip("\n")) / "stories"
+
+
+def view(story: str) -> str:
+    if not STORY.fullmatch(story):
+        sys.exit(f"tracker: {story!r} is not a story id such as ABC-123")
+    fixture = stories() / f"{story}.md"
+    found = fixture.is_file()
+    with ACTIONS.open("a") as handle:
+        handle.write(json.dumps({"action": "tracker-read", "at": stamp(), "story": story, "found": found},
+                                sort_keys=True) + "\n")
+    return fixture.read_text() if found else f"The tracker has no story {story}."
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Read a story on the tracker.")
+    commands = parser.add_subparsers(dest="command", required=True)
+    read = commands.add_parser("view", help="print a story: state, acceptance criteria, comments, relations")
+    read.add_argument("--story", required=True)
+    args = parser.parse_args()
+    with LOCK.open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        print(view(args.story))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

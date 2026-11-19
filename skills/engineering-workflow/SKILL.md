@@ -143,6 +143,8 @@ One round has three stages:
    A reviewer output showing a sandbox or permission error, or a lens that cannot show it read the diff and the changed files, is a failed review, never a clean one.
 2. **Verify.** A clean, neutral verifier tries to refute each blocking finding against the code and drops the unconfirmed.
    It must return exactly one verdict per candidate; a missing or partial verification leaves the gate unresolved, never clean.
+   It writes, each on its own line of its report, `VERIFIED-HEAD: <full head SHA>` for the head it verified and `VERIFIER: <agent name> <model id>` for itself, and the caller saves that report to a file and cites its absolute path, or the `https://` URL where it is published.
+   The optional accelerator below writes neither line and saves no report, so a round whose report must be cited runs this stage by hand.
 3. **Fix.** The fixer fixes the verified findings it agrees with, rejects the rest with a reason, runs the focused tests and commits.
    A fix whose tests did not pass is not a fix: the gate is unresolved.
    It must not add modules, tables or migrations, persistence or abstractions; a finding that needs them is escalated to a human.

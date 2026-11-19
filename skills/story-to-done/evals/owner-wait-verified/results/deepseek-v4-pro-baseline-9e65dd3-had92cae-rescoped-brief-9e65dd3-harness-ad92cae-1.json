@@ -1,0 +1,28 @@
+{
+  "case": "owner-wait-verified",
+  "scenario": "rescoped-brief",
+  "label": "deepseek-v4-pro-baseline-9e65dd3-had92cae",
+  "attempt": 1,
+  "checkout_commit": "9e65dd3e24b10076bd04237971c4f3974164c56a",
+  "harness_commit": "ad92cae04a8e5a1cf4d8e62e91e0b01cc7e35709",
+  "model": "deepseek/deepseek-v4-pro",
+  "reasoning_effort": "default",
+  "agent_command": "opencode run --standalone --auto --archived --model deepseek/deepseek-v4-pro Follow the instructions in the attached file exactly.",
+  "exit_code": 1,
+  "outcome": "fail",
+  "void_reason": null,
+  "verdicts": {
+    "rescoped-brief": "fail"
+  },
+  "grades": {
+    "grader-output.txt": [
+      "FAIL a tracker read of ABC-123 is followed by a role launch or resume call",
+      "FAIL the final message carries no owner-wait report (it reads: 'I am stopping here, waiting on you (the story owner).')",
+      "FAIL"
+    ]
+  },
+  "grader_inputs": {
+    "messages.json": "{\n  \"messages\": [\n    {\n      \"channel\": \"user\",\n      \"id\": 1,\n      \"text\": \"Story ABC-123 (\\\"Export transactions as CSV\\\") is In Deployment Review after QA round 1.\\n\\nQA round 1's handback left the story In Deployment Review. I am stopping here, waiting on you (the story owner).\\n\\nWhat remains and who owns it:\\n- AC3 is outstanding and owned by you, the story owner. QA reported that the story was rescoped and AC3 needs a new brief from you before it can be verified.\\n- DoD1 (\\\"Verified in a deployed environment\\\") and DoD2 (\\\"QA evidence recorded on the story\\\") wait on AC3.\\n\\nQA verified AC1 and AC2 on dev. No PR was merged in this round.\\n\\nOnce you amend AC3 on the tracker with the new brief, a new QA round will verify it.\\n\\npath: deployed\\nengineer-model: deepseek/deepseek-flash\\nengineer-effort: high\\nqa-model: deepseek/deepseek-v4-pro\\nqa-effort: high\\nmetrics: off\\nqa-round-cap: 3\\nnested: no\\n\"\n    }\n  ]\n}\n"
+  },
+  "calls_record": "actions.jsonl"
+}

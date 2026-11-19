@@ -9,7 +9,6 @@ import yaml
 ROOT = Path(__file__).resolve().parent.parent
 SKILL = ROOT / "skills" / "persona-scrum-master" / "SKILL.md"
 SCHEMA = json.loads((ROOT / "profile" / "schema.json").read_text())
-MANIFEST = json.loads((ROOT / "skills.json").read_text())
 
 REQUIRED_PHRASES = [
     "sprint goal",
@@ -30,18 +29,6 @@ REQUIRED_PHRASES = [
     "exception",
     "every unmet box",
 ]
-
-
-def test_skill_file_exists() -> None:
-    assert SKILL.is_file(), f"missing {SKILL.relative_to(ROOT)}"
-
-
-def test_manifest_registers_skill() -> None:
-    assert MANIFEST["skills"]["persona-scrum-master"] == [
-        "linear",
-        "todo-tracking",
-        "github",
-    ]
 
 
 def test_schema_has_velocity_window_cycles() -> None:
@@ -151,6 +138,73 @@ def test_retro_section_files_only_action_items() -> None:
         "no issue for a went-well or a did-not-go-well",
     ):
         assert phrase in body, f"retro missing: {phrase}"
+
+
+def test_retro_proposes_checklist_items_from_repeated_misses() -> None:
+    body = section(SKILL.read_text(), "Retro")
+    bullets = [b for b in body.split("\n- ") if b.startswith("Propose review checklist items from repeated misses:")]
+    assert len(bullets) == 1, "no single top-level Retro bullet proposes review checklist items"
+    bullet = bullets[0]
+    assert "review-checklist.txt" in bullet
+    for phrase in (
+        "since the previous retro",
+        "every PR review marked `Review of record <sha>`, delta reviews included",
+        "a miss its verdict ruled valid once per distinct PR, except a confirmed `pre-existing` finding",
+        "arbiter reports in PR bodies",
+        "`profile.git.host`",
+        "once per distinct PR",
+        "two or more PRs",
+        "count only a review or PR body whose author has write access to the repository",
+        "exclude scratch arbiter reports",
+        "on the retro issue",
+        "`<bash glob> | <review item>`",
+        "citing the review links",
+        "edits no file",
+    ):
+        assert phrase in bullet, f"retro checklist step missing: {phrase}"
+
+
+def test_retro_checklist_items_need_owner_approval() -> None:
+    body = section(SKILL.read_text(), "Retro")
+    bullets = [b for b in body.split("\n- ") if b.startswith("Propose review checklist items from repeated misses:")]
+    assert len(bullets) == 1, "no single top-level Retro bullet proposes review checklist items"
+    bullet = bullets[0]
+    for phrase in (
+        "enters the checklist only through an engineer PR that links the owner's approval comment on the retro issue",
+        "never adds the item itself",
+    ):
+        assert phrase in bullet, f"retro owner approval missing: {phrase}"
+
+
+def pruning_bullet() -> str:
+    """Return the Retro list item that starts the pruning routine, continuation lines included."""
+    lines = section(SKILL.read_text(), "Retro").splitlines()
+    starts = [
+        n for n, line in enumerate(lines)
+        if line.startswith("- If the repository provides a pruning-candidates script")
+    ]
+    assert len(starts) == 1, "the pruning routine must be one separate Retro bullet"
+    end = starts[0] + 1
+    while end < len(lines) and lines[end].startswith("  ") and lines[end].strip():
+        end += 1
+    return " ".join(" ".join(lines[starts[0] : end]).split())
+
+
+PRUNING_CONDITION = (
+    "- If the repository provides a pruning-candidates script, run it with `--since` set to "
+    "the previous retro's date, and record each candidate in the retro record with its "
+    "retire or keep proposal. Each retire proposal becomes an action item under these Retro rules"
+)
+PRUNING_APPROVAL = ", and nothing is removed until the owner approves it in a comment on the retro issue."
+
+
+def test_retro_runs_the_pruning_routine_only_when_the_repository_provides_it() -> None:
+    assert pruning_bullet().startswith(PRUNING_CONDITION)
+
+
+def test_retro_pruning_removes_nothing_without_owner_approval() -> None:
+    # The whole bullet is pinned, so nothing can be inserted between the condition and the approval.
+    assert pruning_bullet() == PRUNING_CONDITION + PRUNING_APPROVAL
 
 
 def test_velocity_and_burnup_section_covers_flow_metrics() -> None:

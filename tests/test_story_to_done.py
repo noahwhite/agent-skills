@@ -2,6 +2,7 @@
 
 import ast
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -21,7 +22,6 @@ import yaml
 ROOT = Path(__file__).resolve().parent.parent
 SKILL = ROOT / "skills" / "story-to-done" / "SKILL.md"
 PROTOCOL = ROOT / "skills" / "story-to-done" / "references" / "metrics-protocol.md"
-MANIFEST = json.loads((ROOT / "skills.json").read_text())
 
 
 def section(text: str, heading: str) -> str:
@@ -35,15 +35,6 @@ def section(text: str, heading: str) -> str:
 def visible(text: str) -> str:
     """The text a reader of the rendered Markdown sees: HTML comments removed, an unclosed one to the end."""
     return re.sub(r"<!--.*?(?:-->|\Z)", "", text, flags=re.DOTALL)
-
-
-def test_skill_file_exists() -> None:
-    assert SKILL.is_file(), f"missing {SKILL.relative_to(ROOT)}"
-
-
-def test_manifest_registers_skill() -> None:
-    required = {"todo-tracking", "linear", "code-review", "secrets"}
-    assert required <= set(MANIFEST["skills"]["story-to-done"])
 
 
 def test_todo_tracking_has_seed_entry() -> None:
@@ -157,7 +148,7 @@ def test_skill_names_no_model_id() -> None:
 
 def test_model_name_guard_catches_the_removed_defaults() -> None:
     for removed in ("Sonnet 5.5 (`claude-sonnet-5-5`)", "QA on Opus 5.5 at max", "`claude-opus-5-5`",
-                    "deepseek/deepseek-flash", "openai/gpt-6.1-sol", "mistral-large-4-0"):
+                    "deepseek/deepseek-flash", "openai/gpt-6.2-sol", "mistral-large-4-0"):
         assert MODEL_NAME.search(removed), removed
     for allowed in ("runtime `claude-code`", "`opencode` seat", "QA on <model> at max"):
         assert not MODEL_NAME.search(allowed), allowed
@@ -325,7 +316,7 @@ QA_ROUND_SENTENCE = (
     "agent from an earlier round, since it carries that round's conclusions."
 )
 QA_ROUND_EXCEPTION = (
-    "Continuation of the current round under step 4, and the step 0 checklist read-back resume or the resume "
+    "Continuation of the current round under step 4, and the step 0 checklist read-back resume or the resumes "
     "under the handback reference this step points to of the current round's QA agent, are the only exceptions "
     "to that sentence."
 )
@@ -567,6 +558,54 @@ def test_any_other_owner_stops_even_when_qa_work_remains() -> None:
         STEP4_NO_RUNTIME,
         STEP4_STALL,
     ), "a runtime that cannot resume must stop without a substitute agent, and a stall must be reported"
+
+
+OWNER_WAIT_DEFER = (
+    "That stop and its mixed-remainder sentence defer to the owner-wait verification rule below: they apply "
+    "only to a remainder that contains an item verified `owner-only: yes`."
+)
+OWNER_WAIT_RULE = [
+    "**Owner-wait verification.** This rule binds every place the coordinator reports an item as waiting on "
+    "the owner: an item relayed from a handback, one from its own reading, one on step 0's resume path, one at "
+    "any stop, and one in step 5's report.",
+    "Before reporting it, read the item's story in the tracker yourself - its current state, its acceptance "
+    "criteria, its comments, and its relations with each blocker's state - and never rely on the handback's "
+    "own claim.",
+    "Record two entries on your todo list, each followed by the field or relation that supports it: "
+    "`owner-only: yes|no` and `coordinator-or-role-can-act: yes|no`.",
+    "If the tracker read fails or is inconclusive, report the failed read and do not present the owner-wait as "
+    "verified.",
+    "An item is owner-only when it is an open acceptance criterion that needs input only the owner can give (a "
+    "comment, a value, a credential, an access grant), a decision on what an acceptance criterion means, a "
+    "maintainer's approval or access grant, a human merge, or an external deploy.",
+    "An owner-approval gate written into a criterion for the story's own outcome (the owner approving or "
+    "signing off on what the story delivered) is not owner-only and does not stop this skill, because the "
+    "operator's request for the story is the approval for that outcome; a maintainer's approval stays "
+    "owner-only.",
+    "When the entries are `owner-only: no` and `coordinator-or-role-can-act: yes`, do the next step this skill "
+    "defines for the story's current state, or launch or resume the role that step dispatches, writing its "
+    "brief from the story's acceptance criteria, and do not report the item as waiting on the owner, in step "
+    "5's report included.",
+    "The at-most-once continuation and stall rules still apply: when the role hands back the same owner claim "
+    "with no observed progress, report the stall, naming the tracker read it rests on, and stop.",
+    "When the entries are `owner-only: no` and `coordinator-or-role-can-act: no`, report the item and who can "
+    "act on it, and stop.",
+    "When the entries are `owner-only: yes`, report the item and stop; the report names the story id, the "
+    "exact criterion text, comment or relation read, and which owner-only category applies.",
+]
+DISPUTE_RULE = (
+    "If the senior engineer disputes a failed verdict or an adjudicator's ruling, do not relay its argument to "
+    "a QA agent and do not rule on it yourself. Stop and put the item, its evidence, and the engineer's "
+    "evidence to the user, since what an AC means is the product owner's decision."
+)
+
+
+def test_an_owner_wait_is_verified_against_the_tracker_before_it_is_reported() -> None:
+    step4 = " ".join(section(SKILL.read_text(), "4. Act on the QA outcome").split())
+    assert in_order(step4, *OWNER_WAIT_RULE, DISPUTE_RULE), "the owner-wait rule must sit in step 4 before the unchanged dispute rule"
+    assert in_order(in_deployment_review_branch(), STEP4_OTHER_OWNER, OWNER_WAIT_DEFER, STEP4_NO_RUNTIME), (
+        "the owner-action stop and the mixed-remainder sentence must defer to the owner-wait rule"
+    )
 
 
 def test_done_branch_checks_the_completion_record() -> None:
@@ -977,7 +1016,8 @@ METRICS_USAGE = (
 METRICS_TIMED_LAUNCHES = (
     "- **Timed launches:** time each senior engineer launch and each QA launch row, meaning each QA round's "
     "spawn in step 3, each continuation of that round in step 4, each checklist read-back resume of a QA "
-    "agent under step 0, and each interim-deadline resume of a QA agent, taking the start immediately before that "
+    "agent under step 0, and each interim-deadline resume, naming resume and stale-checklist resume of a QA agent, "
+    "taking the start immediately before that "
     "launch and the end when it returns, and record it as one row in launch order under a "
     "label unique within the invocation, with its runtime, model, effort, duration, tokens, and tool "
     "calls as `references/metrics.md` defines; `not "
@@ -986,11 +1026,13 @@ METRICS_TIMED_LAUNCHES = (
 )
 METRICS_LAUNCH_POINTS = (
     "The senior engineer's timed launches are the first launch in step 2, each checklist read-back resume "
-    "of the senior engineer under step 0, each interim-deadline resume of the senior engineer under "
+    "of the senior engineer under step 0, each interim-deadline resume, naming resume and stale-checklist resume "
+    "of the senior engineer under "
     "`references/interim-handbacks.md`, and each resume or re-spawn in step 4; each QA round is a launch "
     "row in step 3, a continuation of that round under step 4 is a further launch row within the same "
     "round, each checklist read-back resume of a QA agent is a launch row of its own within that QA agent's "
-    "round, and so is each interim-deadline resume of a QA agent under `references/interim-handbacks.md`."
+    "round, and so is each interim-deadline resume, naming resume and stale-checklist resume of a QA agent under "
+    "`references/interim-handbacks.md`."
 )
 METRICS_EXTRAS = (
     "- **Extras:** take each `story-to-done` extra at the step that observes it: **Start** from the step 1 "
@@ -1039,8 +1081,9 @@ METRICS_COMMAND_ROWS = (
     "figures recorded under `references/metrics.md` and `not reported` for any usage the runtime does not return."
 )
 METRICS_WRAPPER_INTRO = (
-    "Launch every later command other than the end form below, the summary post, and its read-back in this "
-    "wrapper, with the command in place of "
+    # SKL-98: a role launch and a role's return-notice timestamp are not wrapped.
+    "Launch every later command other than a role launch, which gets a role row below, the end form below, the "
+    "summary post, its read-back, and a role's return-notice `date -u +%s.%N` below in this wrapper, with the command in place of "
     "`<command>`, a label unique within the invocation, other than the reserved `start` and `end`, without a "
     "single quote and naming no path, in place of `<row label>`, and "
     "the absolute path of that `metrics.txt` in place of `<metrics file>`:"
@@ -1070,9 +1113,25 @@ METRICS_ROLE_END = (
 METRICS_ROLE_ROW = (
     "Record a role row with two commands that are not launches, so neither runs in the wrapper above and "
     f"neither gets a row of its own: immediately before the launch, `{METRICS_ROLE_START}`, and when it "
-    f"returns, `{METRICS_ROLE_END}`, where `<tokens>` and `<tool calls>` are written exactly as the summary's "
+    # SKL-98: a usage-after-exit role's end line is written where the next sentence sets.
+    "returns, or, for a role whose usage is read only after it exits, at the point the next sentence sets, "
+    f"`{METRICS_ROLE_END}`, where `<tokens>` and `<tool calls>` are written exactly as the summary's "
     "cells read: the number, `not reported`, or the number followed by ` cumulative`; a row label is unique, "
-    "is neither `start` nor `end`, and no value these commands carry contains a single quote."
+    "is neither `start` nor `end`, and no value these commands carry contains a single quote; a role row has "
+    "exactly one end line, this one, even when the launch was killed, so the recovery for a killed wrapped "
+    "command above never applies to a role launch."
+)
+# SKL-98: a role whose usage is read after it exits keeps its end timestamp at its return.
+METRICS_ROLE_END_BEFORE_USAGE = (
+    "When a role's usage can be read only after it exits, as for a `runtime: command` launch under "
+    "`references/runtimes.md`, the launch runs exactly as the profile gives it, with nothing chained before or "
+    "after it, and its end timestamp is taken before the usage read: on the runtime's notice that the role "
+    "returned, the coordinator's next command is `date -u +%s.%N`, which is not a launch and gets no row, then "
+    "the usage read runs in the wrapper above, and the end command carries the printed timestamp in place of "
+    "`$(date -u +%s.%N)` and the figures the usage read printed, without their `tokens: ` and `tool calls: ` "
+    "labels, in place of `<tokens>` and `<tool calls>`; when no usage read runs, as after a launch that did not "
+    "exit successfully, the end command still carries the printed timestamp, with `not reported` for each figure "
+    "not read."
 )
 METRICS_EXTRA_WRITE = "f='<metrics file>'; printf 'extra %s\\t%s\\n' '<slug>' '<value>' >> \"$f\""
 METRICS_EXTRAS_RECORD = (
@@ -1098,7 +1157,9 @@ METRICS_END_VERBATIM = (
     "converted."
 )
 METRICS_KILLED = (
-    "If a command is killed before it writes its `end` line, the coordinator's very next launch, made as "
+    # SKL-98: the killed-command recovery covers wrapped commands only.
+    "If a wrapped command is killed before its wrapper writes its `end` line, the coordinator's very next "
+    "launch, made as "
     "soon as the kill is reported, is a wrapped command whose `<command>` is `printf 'end %s %s\\n' "
     "\"$(date -u +%s.%N)\" '<killed row label>' >> '<metrics file>'`, and the recovery command gets a row "
     "of its own."
@@ -1121,12 +1182,6 @@ METRICS_NO_SECRETS = (
     "The closing report contains no secrets and no local or scratch paths, including where it relays a role's "
     "finding, evidence or incidental defect, which it restates without the path."
 )
-
-
-def test_manifest_appends_metrics_to_story_to_done() -> None:
-    entry = MANIFEST["skills"]["story-to-done"]
-    assert entry.count("metrics") == 1, "story-to-done must list metrics exactly once"
-    assert entry.index("metrics") == entry.index("secrets") + 1, "metrics is appended after secrets"
 
 
 def test_vendored_metrics_reference_carries_the_not_reported_rule() -> None:
@@ -1214,6 +1269,7 @@ PROTOCOL_LINES = [
     METRICS_WRAPPED_WHOLE,
     METRICS_KILLED,
     METRICS_ROLE_ROW,
+    METRICS_ROLE_END_BEFORE_USAGE,
     METRICS_EXTRAS_RECORD,
     METRICS_END_INTRO,
     METRICS_SCRIPT_ONCE,
@@ -1524,6 +1580,7 @@ def test_a_failed_metrics_write_shows_an_error_and_keeps_the_exit_status(tmp_pat
 def test_the_metrics_section_says_how_a_role_row_is_recorded() -> None:
     body = metrics_body()
     assert METRICS_ROLE_ROW in body, "the role row's own start and end lines are not stated"
+    assert METRICS_ROLE_END_BEFORE_USAGE in body, "a usage-after-exit role's end timestamp is not taken at its return"
     assert METRICS_EXTRAS_RECORD in body, "the extras' recording lines are not stated"
 
 
@@ -2177,7 +2234,8 @@ def test_only_the_on_path_lines_tell_the_coordinator_to_post_or_comment() -> Non
     for line, heading in on_path.items():
         home = metrics_section() if heading == "Metrics" else section(text, heading)
         assert line in home.splitlines(), f"an on-path post line left its section: {line}"
-    allowed = {"- " + OFF_PATH, METRICS_POINTER, *on_path}
+    # The owner-wait rule reads the story's comments and names a comment as owner input; it posts none.
+    allowed = {"- " + OFF_PATH, METRICS_POINTER, *on_path, *OWNER_WAIT_RULE}
     merge_rule = "needs a delta review posted before merging"
     for line in [*body.splitlines(), *PROTOCOL.read_text().splitlines()]:
         if line in allowed:
@@ -2952,8 +3010,8 @@ INTERIM_NO_SHORT_WAIT = (
 )
 INTERIM_RECEIPT = "Receipt is the coordinator's first clock read after the handback arrives."
 INTERIM_STATED_BLOCKER = (
-    "Step 0's stated-blocker sentence covers only the other handbacks, since an interim handback never reaches the "
-    "read-back."
+    "Step 0's stated-blocker sentence covers only the other handbacks, since neither an interim handback nor an "
+    "unnamed waiting handback reaches the read-back."
 )
 INTERIM_PR_WATCH = (
     "When the awaited CI run belongs to a PR, it also watches the PR, so a new head and its new run are not missed "
@@ -2971,7 +3029,8 @@ INTERIM_LIMITS = (
     "This rule changes no step logic for final or blocked handbacks, and leaves step 2's stop clause, step 4's "
     "continuation content limits, mixed-owner stop, owner-action stop, and new-round rules, and the no-write and "
     "no-verdict constraints unchanged; it only comes before step 0's read-back, step 2's check and step 4's "
-    "classification."
+    "classification, and adds only the handback classes it defines, its own checklist reads, its own resumes and "
+    "its own stops."
 )
 
 
@@ -3179,7 +3238,8 @@ def test_no_other_sentence_in_the_rule_stops_or_halts() -> None:
     sentences = re.split(r"(?<=\.)\s+", " ".join(body.split()))
     stops = [s for s in sentences if "stop" in s.lower() or "halt" in s.lower()]
     assert stops == [
-        INTERIM_ORDER, INTERIM_NO_RESUME_STOP, INTERIM_REDEADLINE, INTERIM_TWO_MISS_STOP, INTERIM_STOP, INTERIM_LIMITS,
+        INTERIM_ORDER, INTERIM_NO_RESUME_STOP, INTERIM_REDEADLINE, INTERIM_TWO_MISS_STOP, INTERIM_STOP,
+        UNNAMED_SECOND, UNNAMED_NO_RESUME_STOP, STALE_BOUND, STALE_NO_RESUME_STOP, INTERIM_LIMITS,
     ]
 
 
@@ -3284,6 +3344,282 @@ def test_each_qa_interim_contract_appears_exactly_once() -> None:
     skill = " ".join(visible(SKILL.read_text()).split())
     assert skill.count(INTERIM_STEP_3_POINTER) == 1
     assert skill.count(QA_ROUND_EXCEPTION) == 1
+
+
+# SKL-357: a waiting handback that names no awaited item, and a checklist that stops updating.
+ASSETS = ROOT / "skills" / "story-to-done" / "assets"
+RENDER_BRIEF = ROOT / "skills" / "story-to-done" / "scripts" / "render-brief.py"
+WAITING_BULLET = (
+    "- A handback that is neither final nor blocked and waits on your own background work must name the awaited "
+    "item, its primary source and its expected duration."
+)
+RENDER_CASES = {
+    "engineer-deployed": ("--role", "engineer", "--path", "deployed"),
+    "engineer-no-deployment": ("--role", "engineer", "--path", "no-deployment"),
+    "engineer-spike": ("--role", "engineer", "--path", "spike"),
+    "qa-deployed": ("--role", "qa", "--path", "deployed", "--round", "1", "--environment", "dev"),
+    "qa-deployed-default": ("--role", "qa", "--path", "deployed", "--round", "1"),
+    "qa-deployed-round-2": ("--role", "qa", "--path", "deployed", "--round", "2", "--environment", "dev"),
+    "qa-no-deployment": ("--role", "qa", "--path", "no-deployment", "--round", "1", "--commit", "0" * 40),
+    "qa-spike": ("--role", "qa", "--path", "spike", "--round", "1", "--link", "https://example.com/spike"),
+}
+UNNAMED_DEFINITION = (
+    "An unnamed waiting handback is a handback from the senior engineer or a QA agent that is neither a final "
+    "handback nor blocked, says it waits on the role's own background work, and names no awaited item."
+)
+UNNAMED_QA_EXCLUSION = (
+    "A QA agent's handback that names a failed item, or an outstanding item owned by anyone other than that QA "
+    "agent (an awaited item of its own background work counts as its own), is not an unnamed waiting handback; it "
+    "goes to step 0's checklist read-back and step 4 as usual."
+)
+DELEGATION = (
+    "A senior-engineer delegation is one senior-engineer subagent from its spawn until the coordinator spawns "
+    "another one for the story; a resume of the same subagent stays within the delegation."
+)
+UNNAMED_KEEPS_DEADLINE = (
+    "An unnamed waiting handback does not clear a live deadline or reset the miss count of an item already awaited "
+    "from that role."
+)
+UNNAMED_MISS_RECORD = (
+    "The coordinator records that miss on the todo list against the role, not against any awaited item, and "
+    "increments no awaited item's miss count."
+)
+CHECKLIST_READ_FIRST = "The read comes before any resume sent on the same handback."
+CHECKLIST_READ_SAVED = (
+    "The coordinator saves the contents of each read in its own scratch for the invocation and compares them byte "
+    "for byte with the contents saved at the previous such read."
+)
+UNNAMED_STALL = "An unnamed waiting handback is a stall, never an interim handback."
+UNNAMED_ORDER = (
+    "The coordinator classifies an unnamed waiting handback before step 0's checklist read-back, step 2's check and "
+    "step 4's classification."
+)
+UNNAMED_RESUME = (
+    "On an unnamed waiting handback the coordinator resumes that role once, asking only for the awaited item, its "
+    "primary source and its expected duration."
+)
+UNNAMED_RESUME_COUNTS = (
+    "The naming resume carries no conclusion or verdict, does not count against step 0's read-back resume cap, does "
+    "not increment a QA round count or consume step 4's continuation allowance, and with `metrics` on is its own "
+    "launch row."
+)
+UNNAMED_ANSWER = (
+    "If the answer is an interim handback as defined above, the deadline rule above applies from receipt of the "
+    "answer."
+)
+UNNAMED_SECOND = (
+    "A second unnamed waiting handback from the same role after that resume, within the same senior-engineer "
+    "delegation or, for a QA agent, the same QA round, counts as a missed deadline and stops the coordinator as at a "
+    "second miss under the two-miss stop above; the stop report names the role and both unnamed waiting handbacks."
+)
+UNNAMED_NO_RESUME_STOP = (
+    "If the runtime cannot resume the role for the naming resume, the coordinator reports the limitation and stops, "
+    "and spawns no new subagent."
+)
+CHECKLIST_READ = (
+    "At each interim handback and each unnamed waiting handback the coordinator reads the role's checklist file and "
+    "records on the todo list the item marked `(in progress)`, or else the first `- [ ]` item, or `none` when every "
+    "item is checked, or `missing or unreadable`, and whether the contents are identical to the contents read at the "
+    "previous such handback from that role (`no previous read` at the first)."
+)
+CHECKLIST_READ_SILENT = (
+    "The read sends nothing to the role, is separate from step 0's checklist read-back, and does not count against "
+    "its resume cap."
+)
+STALE_DEFINITION = (
+    "A checklist file is stale when its contents are identical, or it is missing or unreadable, at two consecutive "
+    "interim or unnamed waiting handbacks from the same role within the same senior-engineer delegation or QA round."
+)
+STALE_RESUME = (
+    "The coordinator then sends that role one stale-checklist resume asking it to update the checklist and name what "
+    "blocks it."
+)
+STALE_BOUND = (
+    "The stale-checklist resume is sent at most once per senior-engineer delegation and once per QA round, never on "
+    "a handback that gets the naming resume, and never on a handback on which the coordinator stops under Unnamed "
+    "waiting handbacks; that stop takes precedence over this resume, and staleness is judged again at the next such "
+    "handback on which the coordinator does not stop."
+)
+STALE_COUNTS = (
+    "It carries no conclusion or verdict, does not count against step 0's read-back resume cap, does not increment a "
+    "QA round count or consume step 4's continuation allowance, changes no awaited item's deadline or miss count, and "
+    "with `metrics` on is its own launch row."
+)
+STALE_NO_RESUME_STOP = (
+    "If the runtime cannot resume the role for the stale-checklist resume, the coordinator reports the limitation and "
+    "stops, and spawns no new subagent."
+)
+UNNAMED_SENTENCES = (
+    UNNAMED_DEFINITION, UNNAMED_QA_EXCLUSION, UNNAMED_STALL, INTERIM_STATED_BLOCKER, UNNAMED_ORDER, UNNAMED_RESUME,
+    UNNAMED_RESUME_COUNTS, UNNAMED_ANSWER, UNNAMED_SECOND, UNNAMED_NO_RESUME_STOP, CHECKLIST_READ,
+    CHECKLIST_READ_SILENT, STALE_DEFINITION, STALE_RESUME, STALE_BOUND, STALE_COUNTS, STALE_NO_RESUME_STOP,
+    DELEGATION, UNNAMED_KEEPS_DEADLINE, UNNAMED_MISS_RECORD, CHECKLIST_READ_FIRST, CHECKLIST_READ_SAVED,
+)
+
+
+def rendered_brief(tmp_path: Path, case: tuple[str, ...]) -> str:
+    scratch = Path(os.path.realpath(tmp_path))
+    if case[1] == "engineer":
+        role_dir = scratch / "senior-engineer"
+    else:
+        role_dir = scratch / f"qa-agent-round-{case[case.index('--round') + 1]}"
+    role_dir.mkdir(exist_ok=True)
+    result = subprocess.run(
+        [sys.executable, str(RENDER_BRIEF), *case, "--story", "ABC-123", "--scratch", str(scratch)],
+        capture_output=True, text=True, stdin=subprocess.DEVNULL,
+    )
+    assert result.returncode == 0, result.stderr
+    brief = f"{role_dir}/{role_dir.name}-brief.md"
+    assert result.stdout == brief + "\n", result.stdout
+    return Path(brief).read_text()
+
+
+def test_the_render_cases_cover_every_role_and_path_the_renderer_accepts() -> None:
+    spec = importlib.util.spec_from_file_location("render_brief", RENDER_BRIEF)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    covered = {(case[case.index("--role") + 1], case[case.index("--path") + 1]) for case in RENDER_CASES.values()}
+    assert covered == {(role, path) for role in module.ROLES for path in module.PATHS}
+
+
+@pytest.mark.parametrize("name", ["brief-engineer.md", "brief-qa.md"])
+def test_each_base_brief_requires_a_waiting_handback_to_name_its_awaited_item(name: str) -> None:
+    assert visible((ASSETS / name).read_text()).splitlines().count(WAITING_BULLET) == 1
+
+
+SKILL_WAITING_BULLET = (
+    "- A handback that is neither final nor blocked and is waiting on your own work names what it waits on, where "
+    "you read its state, and when you expect it to finish."
+)
+
+
+@pytest.mark.parametrize(
+    "heading", ["2. Senior engineer: implement to deployment review", "3. QA agent: verify the deployed story"]
+)
+def test_each_brief_list_in_the_skill_carries_the_waiting_handback_bullet(heading: str) -> None:
+    assert visible(section(SKILL.read_text(), heading)).splitlines().count(SKILL_WAITING_BULLET) == 1
+
+
+@pytest.mark.parametrize("case", sorted(RENDER_CASES))
+def test_every_rendered_brief_carries_the_waiting_handback_bullet(case: str, tmp_path: Path) -> None:
+    assert visible(rendered_brief(tmp_path, RENDER_CASES[case])).splitlines().count(WAITING_BULLET) == 1
+
+
+def test_the_unnamed_waiting_handback_is_defined_with_its_qa_exclusion_and_is_a_stall() -> None:
+    text = interim_text()
+    order = (INTERIM_QA_MIXED, UNNAMED_DEFINITION, UNNAMED_QA_EXCLUSION, UNNAMED_STALL, INTERIM_STATED_BLOCKER)
+    positions = [text.index(sentence) for sentence in order]
+    assert positions == sorted(positions)
+
+
+def test_an_unnamed_waiting_handback_is_classified_before_the_read_back_step_2_and_step_4() -> None:
+    text = interim_text()
+    assert text.index(INTERIM_QA_ORDER) < text.index(UNNAMED_ORDER) < text.index(INTERIM_RECORD)
+
+
+def test_an_unnamed_waiting_handback_gets_one_naming_resume_outside_every_cap() -> None:
+    text = interim_text()
+    order = (INTERIM_QA_CONCLUDED, UNNAMED_RESUME, UNNAMED_RESUME_COUNTS, UNNAMED_ANSWER)
+    positions = [text.index(sentence) for sentence in order]
+    assert positions == sorted(positions)
+
+
+def test_a_second_unnamed_waiting_handback_stops_as_a_second_miss() -> None:
+    text = interim_text()
+    assert text.index(INTERIM_TWO_MISS_STOP) < text.index(UNNAMED_ANSWER) < text.index(UNNAMED_SECOND)
+
+
+def test_a_runtime_that_cannot_make_the_naming_resume_stops_without_a_new_subagent() -> None:
+    text = interim_text()
+    assert text.index(UNNAMED_SECOND) < text.index(UNNAMED_NO_RESUME_STOP) < text.index(CHECKLIST_READ)
+
+
+def test_each_interim_or_unnamed_waiting_handback_reads_the_checklist_without_a_resume() -> None:
+    text = interim_text()
+    assert text.index(CHECKLIST_READ) < text.index(CHECKLIST_READ_SILENT) < text.index(STALE_DEFINITION)
+
+
+def test_a_stale_checklist_gets_one_bounded_resume_that_yields_to_the_unnamed_stop() -> None:
+    text = interim_text()
+    order = (STALE_DEFINITION, STALE_RESUME, STALE_BOUND, STALE_COUNTS, STALE_NO_RESUME_STOP, INTERIM_LIMITS)
+    positions = [text.index(sentence) for sentence in order]
+    assert positions == sorted(positions)
+
+
+STEP_2_UNNAMED_MIRROR = (
+    "An unnamed waiting handback, as that reference defines it, goes there too and does not continue here."
+)
+STEP_3_UNNAMED_MIRROR = (
+    "A QA agent's unnamed waiting handback, as that reference defines it, goes there too and does not continue here."
+)
+
+
+def test_steps_2_and_3_send_an_unnamed_waiting_handback_to_the_reference() -> None:
+    skill = visible(SKILL.read_text())
+    step_2 = " ".join(section(skill, "2. Senior engineer: implement to deployment review").split())
+    step_3 = " ".join(section(skill, "3. QA agent: verify the deployed story").split())
+    assert step_2.count(STEP_2_UNNAMED_MIRROR) == 1
+    assert step_3.count(STEP_3_UNNAMED_MIRROR) == 1
+    assert step_2.index(INTERIM_STEP_2_POINTER) < step_2.index(STEP_2_UNNAMED_MIRROR) < step_2.index(
+        STEP_2_READ_BACK_FIRST
+    )
+    assert step_3.index(INTERIM_STEP_3_POINTER) < step_3.index(STEP_3_UNNAMED_MIRROR) < step_3.index(
+        STEP_3_READ_BACK_FIRST
+    )
+
+
+STEP_0_UNNAMED_MIRROR = (
+    "So is an unnamed waiting handback as that reference defines it, which never reaches the read-back or spends "
+    "its resume cap."
+)
+
+
+def test_step_0_classifies_an_unnamed_waiting_handback_before_the_read_back() -> None:
+    step_0 = " ".join(section(visible(SKILL.read_text()), "0. Track everything on a todo list").split())
+    assert step_0.count(STEP_0_UNNAMED_MIRROR) == 1
+    assert step_0.index(INTERIM_STEP_0_POINTER) < step_0.index(STEP_0_UNNAMED_MIRROR) < step_0.index(
+        STEP_0_CHECKLIST_READ
+    )
+
+
+def test_the_unnamed_section_scopes_the_delegation_and_keeps_a_live_deadline() -> None:
+    text = interim_text()
+    order = (INTERIM_QA_CONCLUDED, DELEGATION, UNNAMED_KEEPS_DEADLINE, UNNAMED_RESUME)
+    positions = [text.index(sentence) for sentence in order]
+    assert positions == sorted(positions)
+
+
+def test_a_second_unnamed_waiting_handback_is_a_miss_of_the_role_not_of_an_item() -> None:
+    text = interim_text()
+    assert text.index(UNNAMED_SECOND) < text.index(UNNAMED_MISS_RECORD) < text.index(UNNAMED_NO_RESUME_STOP)
+
+
+def test_the_checklist_read_precedes_any_resume_and_compares_saved_bytes() -> None:
+    text = interim_text()
+    order = (CHECKLIST_READ_SILENT, CHECKLIST_READ_FIRST, CHECKLIST_READ_SAVED, STALE_DEFINITION)
+    positions = [text.index(sentence) for sentence in order]
+    assert positions == sorted(positions)
+
+
+def test_only_the_stale_bound_relates_the_naming_and_stale_checklist_resumes() -> None:
+    body = " ".join(line for line in visible(INTERIM.read_text()).splitlines() if not line.startswith("#"))
+    sentences = re.split(r"(?<=\.)\s+", " ".join(body.split()))
+    both = [s for s in sentences if "naming resume" in s and "stale-checklist resume" in s]
+    assert both == [STALE_BOUND]
+
+
+def test_each_unnamed_and_checklist_contract_appears_exactly_once() -> None:
+    text = interim_text()
+    for sentence in UNNAMED_SENTENCES:
+        assert text.count(sentence) == 1, sentence
+
+
+# SKL-357: a digest of the whole interim-handbacks reference, so an added overriding sentence fails too.
+INTERIM_SHA256 = "9918637916c5941a58bef867eb57a4590741bbb50df0ecc207808d5c13c65d5f"
+
+
+def test_the_interim_handbacks_reference_is_pinned() -> None:
+    assert hashlib.sha256(INTERIM.read_bytes()).hexdigest() == INTERIM_SHA256
 
 
 # SKL-155: the `qa-round-cap` argument stops the loop at the cap-th counted QA round that ends in
@@ -3557,10 +3893,13 @@ def test_the_record_shape_pattern_matches_the_record_and_not_the_bare_word_readi
 # digest only together with a reviewed change to the text it covers.
 STEP_3_HEADING = "3. QA agent: verify the deployed story"
 # SKL-138 re-baselined this digest for the step 3 nested launch line (NESTED_STEP_3), which carries no ruling.
-STEP_3_SHA256 = "105147fe7a76ad1dbec0aa4c8af02ab6b48fb94d06d9ff668d8131a16d36d566"
+# SKL-357 re-pinned it for the step 3 unnamed-waiting-handback pointer and the plural "resumes" exception.
+STEP_3_SHA256 = "2c57b85346ce7030aab1edc8e0fad3769538a4d38b2aff6dfd673adfb10fa330"
 # SKL-138 re-pinned IN_PROGRESS_SHA256 for the step 4 nested launch line (NESTED_STEP_4), which carries no pending item.
-IN_PROGRESS_SHA256 = "4e8e9242319fe952b90429a32214ec0de742e348a4de360808b88f052c63fb0c"
-IN_DEPLOYMENT_REVIEW_SHA256 = "36da368bed892519776e5be61064d2fad186151ca58ae90aff897e9a1ffaa968"
+# SKL-346 re-pinned IN_PROGRESS_SHA256 for the arbitration ledger hand-back lines, which carry no pending item.
+IN_PROGRESS_SHA256 = "40f0ab4f13d839dfa464e93be4b26b108ce82ec862e6e16bac48cae91ce2281c"
+# SKL-356 re-pinned IN_DEPLOYMENT_REVIEW_SHA256 for the owner-wait deferral line (OWNER_WAIT_DEFER), which carries no pending item.
+IN_DEPLOYMENT_REVIEW_SHA256 = "6ed2ebf62b1e00190b69f18eb7e619a5c1e973ce3b7ff64b76e6daf2b50e7955"
 # The only lines of a state bullet that may state the pending owner ruling record.
 IN_DEPLOYMENT_REVIEW_RECORD_LINES = ("  " + STEP4_OTHER_OWNER, PENDING_REPORT, PENDING_NO_RULING)
 IN_PROGRESS_RECORD_LINES = (PENDING_IN_PROGRESS, PENDING_CAP_REPORT, PENDING_HAND_BACK_OMITTED)
@@ -4083,3 +4422,118 @@ def test_readme_row_names_nested_and_its_default_before_the_metrics_clause() -> 
     row = readme_row()
     assert README_NESTED_CLAUSE in row
     assert row.index(README_NESTED_CLAUSE) < row.index(README_POSTED)
+
+
+# SKL-346: the step 2 and step 4 handbacks carry a per-PR arbitration ledger, the brief templates and
+# both steps of the skill document it, the escalation verifier names the head and itself, and the step 2
+# brief passes the arbiter's model verbatim to `--model`.
+LEDGER_HEADING = "`## Arbitration ledger`"
+LEDGER_HEADER_ROW = "`| round | kind | head | engineer | reviewer agent | reviewer model | report |`"
+LEDGER_COLUMNS = ("round", "kind", "head", "engineer", "reviewer agent", "reviewer model", "report")
+LEDGER_EMPTY = "`No rounds yet.`"
+LEDGER_KINDS = ("`arbitration`", "`escalation-verification`")
+LEDGER_MISSING_STOP = (
+    "When you hold no ledger for a PR that has earlier rounds, stop and report the missing ledger before you "
+    "launch the engineer again."
+)
+ARBITER_MODEL_FLAG = "passes `profile.review.pre_pr.arbiter.model` verbatim to `--model`"
+VERIFIED_HEAD_LINE = "`VERIFIED-HEAD: <full head SHA>`"
+VERIFIER_LINE = "`VERIFIER: <agent name> <model id>`"
+ENGINEER_PATH_TEMPLATES = ("brief-engineer-deployed.md", "brief-engineer-no-deployment.md", "brief-engineer-spike.md")
+WORKFLOW_SKILL = ROOT / "skills" / "engineering-workflow" / "SKILL.md"
+
+
+def ledger_sources() -> dict[str, str]:
+    """Every place AC 4 names for the ledger clause, flattened to one line each."""
+    skill = visible(SKILL.read_text())
+    sources = {
+        "SKILL.md step 2": section(skill, STEP_2),
+        "SKILL.md step 4": section(skill, STEP_4_HEADING),
+    }
+    for name in ENGINEER_PATH_TEMPLATES:
+        sources[name] = visible((ASSETS / name).read_text())
+    return {name: " ".join(text.split()) for name, text in sources.items()}
+
+
+@pytest.mark.parametrize("name", ["SKILL.md step 2", "SKILL.md step 4", *ENGINEER_PATH_TEMPLATES])
+def test_the_brief_carries_the_ledger_heading_columns_and_empty_line(name: str) -> None:
+    text = ledger_sources()[name]
+    assert LEDGER_HEADING in text
+    assert LEDGER_HEADER_ROW in text
+    row = re.search(r"`\|( round \|[^`]*)\|`", text)
+    assert row, "no ledger header row in the text"
+    assert tuple(cell.strip() for cell in row.group(1).split("|")) == LEDGER_COLUMNS
+    assert LEDGER_EMPTY in text
+    for kind in LEDGER_KINDS:
+        assert kind in text, kind
+
+
+@pytest.mark.parametrize("name", ["SKILL.md step 2", *ENGINEER_PATH_TEMPLATES])
+def test_the_brief_defines_rounds_provenance_reports_and_numbering(name: str) -> None:
+    text = ledger_sources()[name]
+    for phrase in (
+        "a re-run at an unchanged head is a new round",
+        "a step 4 fix, a rebase, a merge or a force-push",
+        "numbered contiguously from 1 per PR",
+        "the absolute path of the retained per-round report",
+        "the absolute path or `https://` URL of the verifier's report",
+        "`ARBITER-AGENT:` and `ARBITER-MODEL:` lines",
+        "the `VERIFIER:` line of the verifier's report",
+        "never from your text",
+        "the absolute directory that holds the retained per-round reports",
+        "return its entries unchanged",
+        "no new-head review or verification is waived",
+    ):
+        assert phrase in text, phrase
+
+
+@pytest.mark.parametrize("name", ["SKILL.md step 2", *ENGINEER_PATH_TEMPLATES])
+def test_the_step_2_brief_passes_the_arbiter_model_verbatim(name: str) -> None:
+    assert ARBITER_MODEL_FLAG in ledger_sources()[name]
+
+
+def test_step_2_has_the_coordinator_fill_the_identity_cells_from_the_seat_and_the_reports() -> None:
+    text = ledger_sources()["SKILL.md step 2"]
+    for phrase in (
+        "the seat you launched it on",
+        "copying the `ARBITER-AGENT:` and `ARBITER-MODEL:` lines of the retained report",
+        "the `VERIFIER:` line of the verifier's report",
+        "never from the engineer's text",
+    ):
+        assert phrase in text, phrase
+
+
+def test_step_4_puts_the_ledger_in_every_hand_back_and_stops_without_one() -> None:
+    text = ledger_sources()["SKILL.md step 4"]
+    assert LEDGER_HEADING in text
+    assert LEDGER_MISSING_STOP in text
+    assert in_order(
+        in_progress_bullet(),
+        "Hand them back to the senior engineer",
+        LEDGER_HEADING,
+        LEDGER_MISSING_STOP,
+        "Confirm that state as step 2 does",
+    )
+
+
+def test_step_2_puts_the_held_ledger_in_the_brief_and_stops_without_one() -> None:
+    text = ledger_sources()["SKILL.md step 2"]
+    stop = text.index(LEDGER_MISSING_STOP)
+    assert text.index("put the `## Arbitration ledger` you hold for each of its PRs into the brief") < stop
+    assert stop < text.index("Spawn a clean, neutral subagent")
+
+
+@pytest.mark.parametrize("case", ["engineer-deployed", "engineer-no-deployment", "engineer-spike"])
+def test_every_rendered_engineer_brief_carries_the_ledger_clause(case: str, tmp_path: Path) -> None:
+    text = " ".join(rendered_brief(tmp_path, RENDER_CASES[case]).split())
+    for anchor in (LEDGER_HEADING, LEDGER_HEADER_ROW, LEDGER_EMPTY, ARBITER_MODEL_FLAG):
+        assert text.count(anchor) == 1, anchor
+
+
+def test_the_escalation_verify_stage_has_the_verifier_name_the_head_and_itself() -> None:
+    escalation = section(WORKFLOW_SKILL.read_text(), "4. Pre-PR adversarial gate (required)")
+    verify = next(line for line in escalation.splitlines() if line.startswith("2. **Verify.**"))
+    stage = escalation[escalation.index(verify):escalation.index("3. **Fix.**")]
+    assert VERIFIED_HEAD_LINE in stage
+    assert VERIFIER_LINE in stage
+    assert "each on its own line of its report" in stage

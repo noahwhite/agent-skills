@@ -341,10 +341,30 @@ def pin(text: str, scratch: str) -> str:
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
+# SKL-357 re-pinned both QA digests for the waiting-handback bullet in brief-qa.md, and pinned the other renders.
 # Fixed inputs: story ABC-123, round 1, environment `dev`.
-DEPLOYED_QA_SHA256 = "277e2e46ec9814635931646e5fc4c9dd4344ae92630d25d1ad11056284d277e3"
+DEPLOYED_QA_SHA256 = "e014ba2c8f79c83455b632bff598a92baffdafd605cc816d3a227eccb08c8277"
 # Fixed inputs: story ABC-123, round 1, the two LINKS above.
-SPIKE_QA_SHA256 = "f8cace2ce0059ee916b794e2c65b46169cfd95c2b8c5d94092cc692fb27d7de1"
+SPIKE_QA_SHA256 = "c54650b59adf54cc751e5437942bfe235c71187da28cf9ca360f794efa4d47a3"
+# Fixed inputs: story ABC-123, round 1, commit SHA above.
+NO_DEPLOYMENT_QA_SHA256 = "5ce1b9bca9d508934d526a615f754aceec4b93f3530c0266606c3a39eb068c3e"
+# Fixed inputs: story ABC-123, one engineer render per path. SKL-346 re-pinned all three for the arbitration ledger.
+ENGINEER_SHA256 = {
+    "deployed": "a4ce47a63b64c8637a027f5596d372c886f68d9a00baea5e96a03c9f41ff3f3f",
+    "no-deployment": "4f8ff97431c64742412df63f7356b3569d3889c04b3b1d9b786f1c5bf63b0a13",
+    "spike": "68a4f6cb3a276beb95596cc8b00dbb15b62ae9c0212c4c7f6ca30433cced8277",
+}
+
+
+@pytest.mark.parametrize("path", sorted(ENGINEER_SHA256))
+def test_engineer_render_is_pinned(scratch, path):
+    _, text = engineer(scratch, path)
+    assert pin(text, scratch) == ENGINEER_SHA256[path]
+
+
+def test_no_deployment_qa_render_is_pinned(scratch):
+    _, text = qa(scratch, "no-deployment", "--commit", SHA)
+    assert pin(text, scratch) == NO_DEPLOYMENT_QA_SHA256
 
 
 def test_deployed_qa_render_is_pinned(scratch):

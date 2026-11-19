@@ -50,8 +50,7 @@ def run_script(*args: str, env: dict[str, str], timeout: int = 120) -> subproces
     )
 
 
-@pytest.fixture
-def gate(tmp_path):
+def new_gate(tmp_path: Path) -> tuple[Path, Path, dict[str, str]]:
     """A throwaway repository with an accepted preflight, plus the session scratch directory."""
     repo = make_repo(tmp_path)
     scratch = tmp_path / "session-scratch"
@@ -60,11 +59,16 @@ def gate(tmp_path):
     runtime_tmp.mkdir()
     env = clean_env({"TMPDIR": str(runtime_tmp)})
     preflight = run_script(
-        "preflight", "--repo", str(repo), "--base", "HEAD", "--test-cmd", "true",
+        "preflight", "--full-suite", "on", "--repo", str(repo), "--base", "HEAD", "--test-cmd", "true",
         "--scratch", str(scratch), env=env,
     )
     assert preflight.returncode == 0, preflight.stdout + preflight.stderr
     return repo, scratch, env
+
+
+@pytest.fixture
+def gate(tmp_path):
+    return new_gate(tmp_path)
 
 
 def artifacts(repo: Path, env: dict[str, str]) -> dict[str, Path]:
@@ -217,7 +221,7 @@ def test_a_failed_agent_is_diagnosed_from_its_stderr_and_stdout_log(gate):
 
 def test_an_agent_that_exits_zero_without_a_report_is_diagnosed(gate):
     repo, scratch, env = gate
-    result = run_sweep(repo, scratch, env, "--model", "gpt-6.1-sol", agent="true")
+    result = run_sweep(repo, scratch, env, "--model", "gpt-6.2-sol", agent="true")
     assert result.returncode == 15, result.stdout + result.stderr
     assert "produced no report" in result.stderr, result.stderr
     assert "phase=sweep" in result.stderr, result.stderr
@@ -228,7 +232,7 @@ def test_an_agent_that_exits_zero_without_a_report_is_diagnosed(gate):
 def test_a_report_that_does_not_attest_the_review_is_diagnosed(gate):
     repo, scratch, env = gate
     agent = '{ printf "sweep ok\\n"; } > {output_file}'
-    result = run_sweep(repo, scratch, env, "--model", "gpt-6.1-sol", agent=agent)
+    result = run_sweep(repo, scratch, env, "--model", "gpt-6.2-sol", agent=agent)
     assert result.returncode == 17, result.stdout + result.stderr
     assert "REVIEW-RAN: yes" in result.stderr, result.stderr
     assert "phase=sweep" in result.stderr, result.stderr
@@ -247,12 +251,12 @@ def test_record_gets_the_same_diagnosis_for_a_rejected_report(gate):
     paths["sweep"].write_text("REVIEW-RAN: no - the sandbox refused to start\n")
     result = run_script(
         "record", "sweep", "--repo", str(repo), "--base", "HEAD",
-        "--model", "gpt-6.1-sol", env=env,
+        "--model", "gpt-6.2-sol", env=env,
     )
     assert result.returncode == 17, result.stdout + result.stderr
     assert "phase=sweep" in result.stderr, result.stderr
     assert "exit=17" in result.stderr, result.stderr
-    assert "gpt-6.1-sol" in result.stderr, result.stderr
+    assert "gpt-6.2-sol" in result.stderr, result.stderr
     assert "reason:" in result.stderr, result.stderr
     assert "the sandbox refused to start" in result.stderr, result.stderr
 
@@ -260,7 +264,7 @@ def test_record_gets_the_same_diagnosis_for_a_rejected_report(gate):
 def test_an_agent_that_changes_the_primary_checkout_still_exits_18(gate):
     repo, scratch, env = gate
     agent = f'printf changed >> {shlex.quote(str(repo / "tracked.txt"))}; true'
-    result = run_sweep(repo, scratch, env, "--model", "gpt-6.1-sol", agent=agent)
+    result = run_sweep(repo, scratch, env, "--model", "gpt-6.2-sol", agent=agent)
     assert result.returncode == 18, result.stdout + result.stderr
     assert "primary checkout" in result.stderr, result.stderr
     assert "phase=sweep" in result.stderr, result.stderr
@@ -269,6 +273,444 @@ def test_an_agent_that_changes_the_primary_checkout_still_exits_18(gate):
                   if "phase=sweep complete elapsed=" in line]
     assert len(completion) == 1 and completion[0].endswith("exit=18"), completion
     assert_not_stamped(artifacts(repo, env), "sweep")
+
+
+# --- SKL-127: only the sandbox's own error marks a phase blind, not text the agent echoes ----------
+# The detector is a line-shape heuristic: a marker counts at line start or after a carriage return,
+# after optional whitespace and escape sequences (CSI, OSC), optionally after one `<word>: ` tool
+# prefix and more whitespace or escape sequences. Every line below that carries a marker is a quoted
+# Python string, so this file's own source stays acceptable when a gate agent echoes it.
+
+RUNTIMES_DOC = ROOT / "shared" / "runtimes.md"
+RUNTIMES_COPIES = [RUNTIMES_DOC, *sorted(ROOT.glob("skills/*/references/runtimes.md"))]
+
+# name -> (the marker the line carries, the echoed line)
+ECHOED_LINES = {
+    "runtimes-doc": ("bwrap:", (
+        "  Codex's `read-only` and `workspace-write` sandboxes need bubblewrap on Linux; where it "
+        "cannot start, every command fails with a `bwrap:` error and the review comes back empty."
+    )),
+    "removed-detector-line": ("Permission denied", (
+        "-  if [ -n \"$2\" ] && [ -f \"$2\" ] && grep -qiE "
+        "'bwrap:|sandbox (failed|denied|could not)|Failed to make .* Permission denied' -- \"$2\"; then"
+    )),
+    "ac-line-listing-markers": ("sandbox denied", (
+        "- The other markers (`sandbox failed`, `sandbox denied`, `sandbox could not`, "
+        "`Failed to make ... Permission denied`) still trip on real failures"
+    )),
+    "skill-doc-grep-hit": ("sandbox could not", (
+        "./skills/adversarial-review-pipeline/SKILL.md:209:- A hunter whose sandbox could not start "
+        "reads nothing yet may exit 0."
+    )),
+    "diff-line-sandbox-failed": (
+        "sandbox failed", "+  the reviewer notes that the sandbox failed once on another host"),
+    "comment-sandbox-denied": ("sandbox denied", "  # an older run where the sandbox denied a write"),
+    "diff-deleted-tool-prefixed-line": ("bwrap:", "-codex: bwrap: Can't mount proc on /newroot/proc"),
+    "diff-deleted-colon-noop-line": ("bwrap:", "-: bwrap: startup example"),
+    "prose-failed-to-make": (
+        "Failed to make", "If you see Failed to make /newroot: Permission denied, check the host."),
+}
+
+
+def stderr_lines_agent(tmp_path: Path, lines: list[str]) -> str:
+    """An agent command that writes the given lines to its stderr, then a valid report."""
+    fixture = tmp_path / "agent-stderr.txt"
+    fixture.write_text("\n".join(lines) + "\n")
+    return f"cat {shlex.quote(str(fixture))} >&2; {SWEEP_AGENT}"
+
+
+def test_echoing_a_whole_doc_that_mentions_the_markers_does_not_mark_the_phase_blind(gate):
+    """The SKL-95, SKL-182 and SKL-218 false alarms: the agent echoed runtimes.md on its stderr."""
+    repo, scratch, env = gate
+    doc = shlex.quote(str(RUNTIMES_DOC))
+    agent = f"cat {doc} >&2; sed 's/^/+  /' {doc} >&2; grep -n bwrap {doc} >&2; {SWEEP_AGENT}"
+    result = run_sweep(repo, scratch, env, "--model", "deepseek/deepseek-flash", agent=agent)
+    assert result.returncode == 0, result.stdout + result.stderr
+    errlog = next((repo / ".git").rglob("sweep-agent.err"), None)
+    assert errlog is not None and "bwrap:" in errlog.read_text(), "the fixture no longer echoes the doc"
+    assert Path(f"{artifacts(repo, env)['sweep']}.stamp").exists(), "the echoing phase was not accepted"
+
+
+def test_every_runtimes_copy_is_found():
+    assert len(RUNTIMES_COPIES) > 1, RUNTIMES_COPIES
+
+
+@pytest.mark.parametrize("doc", RUNTIMES_COPIES, ids=lambda p: str(p.relative_to(ROOT)))
+def test_echoing_any_vendored_runtimes_copy_does_not_mark_the_phase_blind(gate, doc):
+    """The SKL-95 and SKL-182 agents echoed the vendored copies, not only the shared source."""
+    assert "bwrap:" in doc.read_text(), f"{doc} no longer carries the marker this test echoes"
+    repo, scratch, env = gate
+    agent = f"cat {shlex.quote(str(doc))} >&2; {SWEEP_AGENT}"
+    result = run_sweep(repo, scratch, env, "--model", "deepseek/deepseek-flash", agent=agent)
+    assert result.returncode == 0, (str(doc), result.stdout + result.stderr)
+
+
+@pytest.mark.parametrize("name", sorted(ECHOED_LINES))
+def test_echoed_content_carrying_a_marker_does_not_mark_the_phase_blind(gate, tmp_path, name):
+    marker, line = ECHOED_LINES[name]
+    assert marker.lower() in line.lower(), f"{name}: the fixture no longer carries {marker!r}"
+    repo, scratch, env = gate
+    agent = stderr_lines_agent(tmp_path, [line])
+    result = run_sweep(repo, scratch, env, "--model", "deepseek/deepseek-flash", agent=agent)
+    assert result.returncode == 0, (name, result.stdout + result.stderr)
+    assert Path(f"{artifacts(repo, env)['sweep']}.stamp").exists(), f"{name}: the phase was not accepted"
+
+
+REAL_ERRORS = {
+    "bwrap": "bwrap: Can't mount proc on /newroot/proc: Operation not permitted",
+    "sandbox-failed": "sandbox failed to start",
+    "sandbox-denied": "sandbox denied the read of /repo",
+    "sandbox-could-not": "sandbox could not start: no user namespaces",
+    "failed-to-make": "Failed to make /newroot/proc: Permission denied",
+}
+
+LINE_PREFIXES = {
+    "bare": "",
+    "indented": "    ",
+    "coloured": "\x1b[31m",
+    "erase-line": "\x1b[2K",
+    "csi-tilde": "\x1b[3~",
+    "osc-bel": "\x1b]0;codex\x07",
+    "osc-st": "\x1b]8;;https://example.invalid\x1b\\",
+    "tool": "codex: ",
+    "tool-wide-gap": "codex:   ",
+    "tool-coloured-marker": "codex: \x1b[31m",
+    "tool-osc-marker": "codex: \x1b]0;t\x07 ",
+    "indented-coloured-tool": "  \x1b[0mcodex: ",
+    "after-carriage-return": "progress 40%\r",
+    "after-carriage-return-erase-tool": "progress 40%\r\x1b[2Kcodex: ",
+}
+
+
+@pytest.mark.parametrize("prefix", sorted(LINE_PREFIXES))
+@pytest.mark.parametrize("marker", sorted(REAL_ERRORS))
+def test_a_real_sandbox_error_line_still_marks_the_phase_blind(gate, tmp_path, marker, prefix):
+    repo, scratch, env = gate
+    line = LINE_PREFIXES[prefix] + REAL_ERRORS[marker]
+    agent = stderr_lines_agent(tmp_path, ["Reading the diff", line, "review done"])
+    result = run_sweep(repo, scratch, env, "--model", "gpt-6.1-sol", agent=agent)
+    assert result.returncode == 17, (marker, prefix, result.stdout + result.stderr)
+    assert "ran blind" in result.stderr, result.stderr
+    assert "exit=17" in result.stderr, result.stderr
+    assert_not_stamped(artifacts(repo, env), "sweep")
+
+
+# The two accepted limits of the line shape (SKL-127 AC, product owner 2026-11-18), pinned so a change
+# to either is deliberate: (a) a real error inside more than one prefix is missed; (b) echoed text
+# already in the line shape still marks the phase blind, which fails safe.
+RESIDUAL_EDGES = {
+    "a-timestamp-and-level": ("2026-11-18T10:00:00Z ERROR codex: bwrap: Can't mount proc", 0),
+    "b-indented-example": ("    bwrap: Can't mount proc on /newroot/proc: Operation not permitted", 17),
+}
+
+
+@pytest.mark.parametrize("name", sorted(RESIDUAL_EDGES))
+def test_the_documented_residual_edges_of_the_line_shape_hold(gate, tmp_path, name):
+    line, expected = RESIDUAL_EDGES[name]
+    repo, scratch, env = gate
+    agent = stderr_lines_agent(tmp_path, [line])
+    result = run_sweep(repo, scratch, env, "--model", "deepseek/deepseek-flash", agent=agent)
+    assert result.returncode == expected, (name, result.stdout + result.stderr)
+
+
+# --- SKL-365: a sweep that echoes a reviewed file quoting sandbox errors is still accepted ----------
+# The SKL-70 sweep (opencode) failed with exit 17 because opencode echoes the files it reads onto its
+# stderr, and the reviewed diff quoted a `bwrap:` error. These fixtures pin, for every alternative of
+# the pre-SKL-127 check, that an error line at line start still fails the phase and that the same
+# marker echoed mid-line from a reviewed file other than shared/runtimes.md does not. Each runtime
+# line states its own origin: only the `bwrap` line was captured from a live runtime; the
+# `sandbox-denied` line is built from a runtime binary string, and the `failed-to-make`,
+# `sandbox-failed` and `sandbox-could-not` lines are line shape only. No runtime installed here was
+# found to emit `sandbox failed` or `sandbox could not`; bubblewrap's own `Failed to make` line
+# carries its `bwrap: ` prefix, so it is pinned separately (BUBBLEWRAP_FAILED_TO_MAKE).
+
+# The pre-SKL-127 check, verbatim from run-adversarial-pipeline.sh at b59674261bbb (385718b^).
+HISTORICAL_CHECK = r"bwrap:|sandbox (failed|denied|could not)|Failed to make .* Permission denied"
+
+# One pattern per alternative of the pre-SKL-127 check, none dropped.
+OLD_CHECK_ALTERNATIVES = {
+    "bwrap": r"bwrap:",
+    "sandbox-failed": r"sandbox failed",
+    "sandbox-denied": r"sandbox denied",
+    "sandbox-could-not": r"sandbox could not",
+    "failed-to-make": r"Failed to make .* Permission denied",
+}
+
+ECHOED_REVIEWED_FILE = ROOT / "tests" / "fixtures" / "sandbox_echo" / "echoed-reviewed-file.txt"
+
+# How a fixture line's origin is established; a line no runtime emits is labelled line shape only.
+ORIGIN_KINDS = ("captured live", "built from a runtime binary string", "line shape only")
+LINE_SHAPE_ONLY = "none (line shape only)"
+
+# name -> (runtime whose error format the line uses, origin kind, how the origin is established, the
+# line). The lines are quoted strings, so this file stays acceptable when a gate agent echoes it.
+RUNTIME_ERROR_LINES = {
+    "bwrap": (
+        "Codex (bubblewrap)",
+        "captured live",
+        "captured verbatim from the stderr of the bubblewrap that Codex bundles "
+        "(codex-resources/bwrap) on 2026-11-19, run where /proc could not be mounted; bubblewrap "
+        "starts each of its own error lines with its program name",
+        "bwrap: Can't mount proc on /newroot/proc: Operation not permitted",
+    ),
+    "failed-to-make": (
+        LINE_SHAPE_ONLY,
+        "line shape only",
+        "'Failed to make / slave' is a message string of Codex's bundled bubblewrap binary, but "
+        "bubblewrap prints it after its 'bwrap: ' prefix, which trips the bwrap alternative first; "
+        "this bare form, at line start with no prefix, is the detector's line shape and trips only "
+        "this alternative. The prefixed runtime form is BUBBLEWRAP_FAILED_TO_MAKE",
+        "Failed to make / slave: Permission denied",
+    ),
+    "sandbox-denied": (
+        "Codex",
+        "built from a runtime binary string",
+        "Codex's SandboxErr::Denied formatter (codex-rs/protocol/src/error.rs) writes 'sandbox denied "
+        "exec error, exit code: {}, stdout: {}, stderr: {}', and the Codex binary carries those "
+        "strings; filled in with a denied write, placed at line start as a runtime's own error "
+        "line; not observed on a live Codex stderr here",
+        "sandbox denied exec error, exit code: 1, stdout: , stderr: touch: cannot touch 'out': "
+        "Read-only file system",
+    ),
+    "sandbox-failed": (
+        LINE_SHAPE_ONLY,
+        "line shape only",
+        "no runtime installed here (codex, its bundled bwrap, opencode) emits this marker; the line "
+        "is in the shape the detector attributes to a runtime: line start, one `codex: ` tool prefix",
+        "codex: sandbox failed to start",
+    ),
+    "sandbox-could-not": (
+        LINE_SHAPE_ONLY,
+        "line shape only",
+        "no runtime installed here (codex, its bundled bwrap, opencode) emits this marker; the line "
+        "is in the shape the detector attributes to a runtime: line start, one `codex: ` tool prefix",
+        "codex: sandbox could not start: no user namespaces",
+    ),
+}
+
+# bubblewrap's own format for the `Failed to make` message: the binary string after its program-name
+# prefix, as the bwrap fixture's captured line shows bubblewrap prints every error. Built from a
+# runtime binary string; not observed live here.
+BUBBLEWRAP_FAILED_TO_MAKE = "bwrap: Failed to make / slave: Permission denied"
+
+
+# The reviewed-file fixture's section headers, each naming the context its lines quote markers in.
+CONTEXT_KINDS = {
+    "Prose:": "prose",
+    "A removed detector line and its replacement, as a diff:": "removed detector line",
+    "A line listing the markers:": "marker list",
+    "Grep hits, as a reviewer pastes them (illustrative paths, not captured output):": "grep hit",
+    "Diff lines:": "+/- diff line",
+}
+
+# The shape a line must have to count as its context kind, so a section cannot hold an impostor.
+CONTEXT_SHAPES = {
+    "prose": re.compile(r"[A-Z][^\n]*\.$"),
+    "removed detector line": re.compile(r"-  .*grep -qiE '[^']*'.*|\+  \S.*"),
+    "marker list": re.compile(r"- The markers are (`[^`]+`(, | and |\.$))+"),
+    "grep hit": re.compile(r"\./[\w./-]+:\d+:\S.*"),
+    "+/- diff line": re.compile(r"[+-]  \S.*"),
+}
+
+# The gate's own diagnostic, which the echoed fixture's "reviewer ran blind" line cannot satisfy.
+BLIND_MESSAGE = "the sweep agent ran blind"
+
+
+def echoed_file_agent(*lines: str) -> str:
+    """An agent that echoes the reviewed file onto its stderr, then any extra lines, then a report."""
+    extra = "".join(f"; printf '%s\\n' {shlex.quote(line)} >&2" for line in lines)
+    return f"cat {shlex.quote(str(ECHOED_REVIEWED_FILE))} >&2{extra}; {SWEEP_AGENT}"
+
+
+def records(text: str) -> list[str]:
+    """Split text into the records `grep` reads: LF-delimited, carriage returns and other breaks kept."""
+    return text.split("\n")
+
+
+def fixture_records() -> list[str]:
+    return records(ECHOED_REVIEWED_FILE.read_bytes().decode())
+
+
+def echoed_lines_by_kind() -> dict[str, list[str]]:
+    """The fixture's lines per context kind; each line must have its kind's own shape."""
+    kinds: dict[str, list[str]] = {kind: [] for kind in CONTEXT_KINDS.values()}
+    kind = None
+    for line in fixture_records():
+        if line in CONTEXT_KINDS:
+            kind = CONTEXT_KINDS[line]
+        elif line and kind:
+            assert CONTEXT_SHAPES[kind].fullmatch(line), f"not a {kind}: {line!r}"
+            kinds[kind].append(line)
+    return kinds
+
+
+# The detector's documented runtime line shape: at a line start or after a carriage return, a gap of
+# whitespace or CSI/OSC escapes, at most one `<word>: ` tool prefix and another gap, then a marker,
+# where the `bwrap` marker carries its trailing space. The detector runs `grep` under LC_ALL=C, one
+# LF-delimited record at a time, so the model is ASCII-only and matched per record.
+ESCAPE_SEQUENCE = r"(?:\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\))"
+GAP = rf"(?:\s|{ESCAPE_SEQUENCE})*"
+DETECTOR_MARKERS = ("bwrap: ", "sandbox (?:failed|denied|could not)", "Failed to make .* Permission denied")
+RUNTIME_LINE_SHAPE = re.compile(
+    rf"(?:^|\r){GAP}(?:[A-Za-z0-9][\w.-]*:\s{GAP})?(?:{'|'.join(DETECTOR_MARKERS)})", re.I | re.ASCII
+)
+
+
+def starts_with_marker(text: str) -> bool:
+    """A record of the text is in the runtime line shape, so a marker in it is not mid-line."""
+    return any(RUNTIME_LINE_SHAPE.search(record) for record in records(text))
+
+
+def sweep_exit(tmp_path: Path, label: str, agent: str) -> int:
+    """Run one sweep through the production path in its own fresh gate; return the phase exit."""
+    base = tmp_path / label
+    base.mkdir()
+    repo, scratch, env = new_gate(base)
+    return run_sweep(repo, scratch, env, "--model", "gpt-6.1-sol", agent=agent).returncode
+
+
+def sweep_agent_stderr(repo: Path) -> str:
+    errlog = next((repo / ".git").rglob("sweep-agent.err"), None)
+    assert errlog is not None, "the sweep kept no sweep-agent.err"
+    return errlog.read_text()
+
+
+def historical_alternatives(regex: str) -> list[str]:
+    """Split an ERE at its top-level `|`, then expand one `(a|b)` group per alternative."""
+    tops, depth, current = [], 0, ""
+    for ch in regex:
+        if ch == "|" and depth == 0:
+            tops.append(current)
+            current = ""
+            continue
+        depth += (ch == "(") - (ch == ")")
+        current += ch
+    tops.append(current)
+    expanded = []
+    for alt in tops:
+        group = re.fullmatch(r"([^()]*)\(([^()]*)\)([^()]*)", alt)
+        expanded += [group[1] + o + group[3] for o in group[2].split("|")] if group else [alt]
+    return expanded
+
+
+def quotes_alternative(line: str, name: str) -> bool:
+    """The line carries the marker as text, or as an alternative of a quoted `grep -qiE` regex."""
+    if re.search(OLD_CHECK_ALTERNATIVES[name], line, re.I):
+        return True
+    quoted = re.search(r"grep -qiE '([^']*)'", line)
+    return bool(quoted) and OLD_CHECK_ALTERNATIVES[name] in historical_alternatives(quoted[1])
+
+
+def test_every_alternative_of_the_historical_check_has_a_runtime_error_fixture():
+    assert sorted(historical_alternatives(HISTORICAL_CHECK)) == sorted(OLD_CHECK_ALTERNATIVES.values())
+    assert sorted(RUNTIME_ERROR_LINES) == sorted(OLD_CHECK_ALTERNATIVES)
+    assert f"grep -qiE '{HISTORICAL_CHECK}'" in ECHOED_REVIEWED_FILE.read_text(), (
+        "the fixture's removed detector line no longer quotes the historical check"
+    )
+
+
+@pytest.mark.parametrize("name", sorted(RUNTIME_ERROR_LINES))
+def test_a_runtime_error_line_for_each_old_alternative_marks_the_phase_blind(gate, tmp_path, name):
+    runtime, kind, origin, line = RUNTIME_ERROR_LINES[name]
+    assert kind in ORIGIN_KINDS, f"{name}: the origin kind {kind!r} is not one of {ORIGIN_KINDS}"
+    assert (kind == "line shape only") == (runtime == LINE_SHAPE_ONLY), (
+        f"{name}: only a line-shape-only fixture may name no runtime, and it must be labelled so"
+    )
+    assert runtime and origin, f"{name}: the fixture must name its runtime format and its origin"
+    assert re.search(OLD_CHECK_ALTERNATIVES[name], line, re.I), f"{name}: the line lost its marker"
+    others = [other for other in OLD_CHECK_ALTERNATIVES if other != name
+              and re.search(OLD_CHECK_ALTERNATIVES[other], line, re.I)]
+    assert not others, f"{name}: the line also trips {others}, so it cannot pin its own alternative"
+    repo, scratch, env = gate
+    agent = stderr_lines_agent(tmp_path, ["Reading the diff", line, "review done"])
+    result = run_sweep(repo, scratch, env, "--model", "gpt-6.1-sol", agent=agent)
+    assert result.returncode == 17, (name, result.stdout + result.stderr)
+    assert BLIND_MESSAGE in result.stderr, result.stderr
+    assert_not_stamped(artifacts(repo, env), "sweep")
+
+
+def test_bubblewraps_own_failed_to_make_line_marks_the_phase_blind(gate, tmp_path):
+    line = BUBBLEWRAP_FAILED_TO_MAKE
+    assert re.search(OLD_CHECK_ALTERNATIVES["failed-to-make"], line, re.I), "the line lost its marker"
+    assert line.startswith("bwrap: "), "the line lost bubblewrap's program-name prefix"
+    repo, scratch, env = gate
+    agent = stderr_lines_agent(tmp_path, ["Reading the diff", line, "review done"])
+    result = run_sweep(repo, scratch, env, "--model", "gpt-6.1-sol", agent=agent)
+    assert result.returncode == 17, result.stdout + result.stderr
+    assert BLIND_MESSAGE in result.stderr, result.stderr
+    assert_not_stamped(artifacts(repo, env), "sweep")
+
+
+def test_the_echoed_file_is_not_shared_runtimes_md():
+    assert ECHOED_REVIEWED_FILE.resolve() not in {p.resolve() for p in RUNTIMES_COPIES}
+
+
+@pytest.mark.parametrize("name", sorted(OLD_CHECK_ALTERNATIVES))
+def test_a_reviewed_file_quoting_each_alternative_mid_line_is_accepted(gate, tmp_path, name):
+    quoting = []
+    for kind, lines in echoed_lines_by_kind().items():
+        hits = [ln for ln in lines if quotes_alternative(ln, name)]
+        assert hits, f"{name}: the reviewed-file fixture no longer quotes this alternative in a {kind}"
+        quoting += hits
+    opening = [ln for ln in quoting if starts_with_marker(ln)]
+    assert not opening, f"{name}: these lines open with a marker, so it is not mid-line: {opening}"
+    repo, scratch, env = gate
+    agent = stderr_lines_agent(tmp_path, quoting)
+    result = run_sweep(repo, scratch, env, "--model", "deepseek/deepseek-flash", agent=agent)
+    assert result.returncode == 0, (name, result.stdout + result.stderr)
+    assert "ran blind" not in result.stderr, result.stderr
+    assert Path(f"{artifacts(repo, env)['sweep']}.stamp").exists(), f"{name}: the phase was not accepted"
+    echoed = sweep_agent_stderr(repo)
+    assert all(ln in echoed for ln in quoting), f"{name}: the agent's stderr lost the quoting lines"
+
+
+def test_echoing_the_whole_reviewed_file_is_accepted(gate, tmp_path):
+    text = ECHOED_REVIEWED_FILE.read_text()
+    for name, alternative in OLD_CHECK_ALTERNATIVES.items():
+        assert re.search(alternative, text, re.I), f"the fixture no longer quotes {name}"
+    assert "fails with a `bwrap:` error" in text, "the fixture lost the SKL-70 sentence"
+    opening = [ln for ln in fixture_records() if starts_with_marker(ln)]
+    assert not opening, f"these fixture lines open with a marker, so it is not mid-line: {opening}"
+    repo, scratch, env = gate
+    result = run_sweep(repo, scratch, env, "--model", "deepseek/deepseek-flash", agent=echoed_file_agent())
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert text in sweep_agent_stderr(repo), "the agent's stderr lost the echoed file"
+
+
+# A line the mid-line check calls opening must be one the phase rejects, and one it calls mid-line one
+# the phase accepts: a bare `bwrap:` after a prefix, non-ASCII space and prefix characters, a vertical
+# tab, an OSC sequence broken by a line feed, and a coloured runtime line.
+@pytest.mark.parametrize("line, opens", [
+    ("Note: bwrap:status is an example.", False),
+    ("Note: bwrap: example.", False),
+    ("Noé: bwrap: example.", False),
+    ("Context\x0b bwrap: example.", False),
+    ("\x1b]0;x\n\x07bwrap: example.", False),
+    ("\x1b[31mbwrap: Can't mount proc on /newroot/proc: Operation not permitted\x1b[0m", True),
+])
+def test_the_reviewed_file_mid_line_check_agrees_with_the_phase_result(tmp_path, line, opens):
+    assert starts_with_marker(line) == opens, line
+    expected = 17 if opens else 0
+    assert sweep_exit(tmp_path, "edge", stderr_lines_agent(tmp_path, [line])) == expected, line
+
+
+@pytest.mark.parametrize("name", sorted(RUNTIME_ERROR_LINES))
+def test_an_echoed_file_plus_a_runtime_error_line_still_marks_the_phase_blind(gate, tmp_path, name):
+    line = RUNTIME_ERROR_LINES[name][3]
+    # Attribute the rejection through the same entry point: the echoed file alone is accepted and the
+    # runtime line alone is rejected, so the mixed rejection comes from the runtime line.
+    assert sweep_exit(tmp_path, "echo-only", echoed_file_agent()) == 0, f"{name}: the echo alone is rejected"
+    runtime_only = stderr_lines_agent(tmp_path, [line])
+    assert sweep_exit(tmp_path, "runtime-only", runtime_only) == 17, f"{name}: the line alone is accepted"
+    repo, scratch, env = gate
+    result = run_sweep(repo, scratch, env, "--model", "gpt-6.1-sol", agent=echoed_file_agent(line))
+    assert result.returncode == 17, (name, result.stdout + result.stderr)
+    assert BLIND_MESSAGE in result.stderr, result.stderr
+    assert_not_stamped(artifacts(repo, env), "sweep")
+    echoed = sweep_agent_stderr(repo)
+    assert ECHOED_REVIEWED_FILE.read_text() in echoed and line in echoed, (
+        f"{name}: the agent's stderr lost the echoed file or the runtime line"
+    )
 
 
 # --- AC3: a phase cannot outlive its timeout, and a timeout kill is its own exit code -------------
@@ -280,11 +722,11 @@ def test_a_hung_agent_is_killed_with_its_process_group_and_exits_19(gate, tmp_pa
         f'( while true; do printf x >> {shlex.quote(str(ticks))}; sleep 0.2; done ) & sleep 30'
     )
     result = run_sweep(
-        repo, scratch, env, "--model", "gpt-6.1-sol", "--timeout", "2", agent=agent, timeout=60,
+        repo, scratch, env, "--model", "gpt-6.2-sol", "--timeout", "2", agent=agent, timeout=60,
     )
     assert result.returncode == 19, result.stdout + result.stderr
     assert "phase=sweep" in result.stderr, result.stderr
-    assert "gpt-6.1-sol" in result.stderr, result.stderr
+    assert "gpt-6.2-sol" in result.stderr, result.stderr
     assert "2s" in result.stderr, result.stderr
     assert "timeout" in result.stderr.lower(), result.stderr
     assert ticks.exists(), "the child never ran, so the group kill was not exercised"
@@ -299,14 +741,14 @@ def test_a_hung_agent_is_killed_with_its_process_group_and_exits_19(gate, tmp_pa
 def test_progress_lines_and_one_completion_line_go_to_stderr_without_touching_the_artifact(gate):
     repo, scratch, env = gate
     agent = 'sleep 3; { printf "REVIEW-RAN: yes\\nsweep ok\\n"; } > {output_file}'
-    result = run_sweep(repo, scratch, env, "--model", "gpt-6.1-sol", agent=agent)
+    result = run_sweep(repo, scratch, env, "--model", "gpt-6.2-sol", agent=agent)
     assert result.returncode == 0, result.stdout + result.stderr
     beats = [line for line in result.stderr.splitlines() if "phase=sweep elapsed=" in line]
     assert beats, f"no heartbeat line while the agent ran: {result.stderr}"
     beat = beats[0]
     assert "timeout=900s" in beat, beat
     assert "availability check: not configured" in beat, beat
-    assert "model=gpt-6.1-sol" in beat, beat
+    assert "model=gpt-6.2-sol" in beat, beat
     completion = [line for line in result.stderr.splitlines() if "phase=sweep complete elapsed=" in line]
     assert len(completion) == 1, completion
     assert "elapsed=" in completion[0], completion[0]
@@ -320,7 +762,7 @@ def test_a_heartbeat_carries_the_probe_state_when_a_probe_ran(gate):
     repo, scratch, env = gate
     agent = 'sleep 3; { printf "REVIEW-RAN: yes\\n"; } > {output_file}'
     result = run_sweep(
-        repo, scratch, env, "--model", "gpt-6.1-sol", "--probe-cmd", ": {model}", agent=agent,
+        repo, scratch, env, "--model", "gpt-6.2-sol", "--probe-cmd", ": {model}", agent=agent,
     )
     assert result.returncode == 0, result.stdout + result.stderr
     beats = [line for line in result.stderr.splitlines() if "phase=sweep elapsed=" in line]
@@ -350,7 +792,7 @@ def test_the_probe_receives_the_model_id_and_honours_the_env_equivalents(gate, t
 def test_an_http_status_line_in_the_probe_output_fails_the_phase(gate):
     repo, scratch, env = gate
     result = run_sweep(
-        repo, scratch, env, "--model", "gpt-6.1-sol", "--probe-cmd", ": {model}; echo 'HTTP/2 429'; exit 0",
+        repo, scratch, env, "--model", "gpt-6.2-sol", "--probe-cmd", ": {model}; echo 'HTTP/2 429'; exit 0",
     )
     assert result.returncode == 20, result.stdout + result.stderr
     assert "HTTP/2 429" in result.stderr, result.stderr
@@ -364,7 +806,7 @@ def test_a_probe_reporting_quota_exhaustion_fails_the_phase(gate):
         ": {model}; echo 'Your credit balance is too low to access the API'; exit 0",
         ": {model}; echo 'credit balance: $0'; exit 0",
     ):
-        result = run_sweep(repo, scratch, env, "--model", "gpt-6.1-sol", "--probe-cmd", probe)
+        result = run_sweep(repo, scratch, env, "--model", "gpt-6.2-sol", "--probe-cmd", probe)
         assert result.returncode == 20, (probe, result.stdout + result.stderr)
         assert "provider error" in result.stderr, result.stderr
         assert_not_stamped(artifacts(repo, env), "sweep")
@@ -373,7 +815,7 @@ def test_a_probe_reporting_quota_exhaustion_fails_the_phase(gate):
 def test_a_healthy_probe_that_merely_says_unavailable_does_not_fail_the_phase(gate):
     repo, scratch, env = gate
     result = run_sweep(
-        repo, scratch, env, "--model", "gpt-6.1-sol",
+        repo, scratch, env, "--model", "gpt-6.2-sol",
         "--probe-cmd",
         ": {model}; echo 'unavailable'; echo 'latency 403ms'; echo 'quota tier active'; "
         "echo '429 tokens left'; echo 'credit balance: $100; model available'; "
@@ -388,10 +830,10 @@ def test_a_healthy_probe_that_merely_says_unavailable_does_not_fail_the_phase(ga
 def test_a_record_after_a_failed_run_cannot_accept_the_leftover_report(gate):
     repo, scratch, env = gate
     agent = 'printf "REVIEW-RAN: yes\\npartial report\\n"; exit 7'
-    failed = run_sweep(repo, scratch, env, "--model", "gpt-6.1-sol", agent=agent)
+    failed = run_sweep(repo, scratch, env, "--model", "gpt-6.2-sol", agent=agent)
     assert failed.returncode == 15, failed.stdout + failed.stderr
     rejected = run_script(
-        "record", "sweep", "--repo", str(repo), "--base", "HEAD", "--model", "gpt-6.1-sol", env=env,
+        "record", "sweep", "--repo", str(repo), "--base", "HEAD", "--model", "gpt-6.2-sol", env=env,
     )
     assert rejected.returncode != 0, rejected.stdout + rejected.stderr
     assert "no launch" in rejected.stderr, rejected.stderr
@@ -404,7 +846,7 @@ def test_a_failed_probe_discards_a_previously_accepted_phase(gate):
     assert accepted.returncode == 0, accepted.stdout + accepted.stderr
     hunt = run_script(
         "run", "hunt", "--repo", str(repo), "--base", "HEAD", "--scratch", str(scratch),
-        "--model", "gpt-6.1-sol", "--agent-cmd", SWEEP_AGENT, env=env,
+        "--model", "gpt-6.2-sol", "--agent-cmd", SWEEP_AGENT, env=env,
     )
     assert hunt.returncode == 0, hunt.stdout + hunt.stderr
     paths = artifacts(repo, env)
@@ -422,7 +864,7 @@ def test_a_failed_probe_discards_a_previously_accepted_phase(gate):
 
     again = run_script(
         "run", "hunt", "--repo", str(repo), "--base", "HEAD", "--scratch", str(scratch),
-        "--model", "gpt-6.1-sol", "--agent-cmd", SWEEP_AGENT, env=env,
+        "--model", "gpt-6.2-sol", "--agent-cmd", SWEEP_AGENT, env=env,
     )
     assert again.returncode == 13, again.stdout + again.stderr
     assert "accepted sweep artifact" in again.stderr, again.stderr
@@ -431,7 +873,7 @@ def test_a_failed_probe_discards_a_previously_accepted_phase(gate):
 def test_a_probe_that_changes_the_primary_checkout_fails_the_phase(gate):
     repo, scratch, env = gate
     probe = f': {{model}}; printf x >> {shlex.quote(str(repo / "tracked.txt"))}; true'
-    result = run_sweep(repo, scratch, env, "--model", "gpt-6.1-sol", "--probe-cmd", probe)
+    result = run_sweep(repo, scratch, env, "--model", "gpt-6.2-sol", "--probe-cmd", probe)
     assert result.returncode == 18, result.stdout + result.stderr
     assert "primary checkout" in result.stderr, result.stderr
     assert "availability check" in result.stderr, result.stderr
@@ -444,7 +886,7 @@ def test_the_phase_deadline_bounds_the_availability_check(gate):
     repo, scratch, env = gate
     started = time.monotonic()
     result = run_sweep(
-        repo, scratch, env, "--model", "gpt-6.1-sol", "--probe-cmd", ": {model}; sleep 10",
+        repo, scratch, env, "--model", "gpt-6.2-sol", "--probe-cmd", ": {model}; sleep 10",
         "--timeout", "1", "--probe-timeout", "30", timeout=60,
     )
     elapsed = time.monotonic() - started
@@ -462,7 +904,7 @@ def test_a_provider_error_past_the_tail_window_still_appears_verbatim(gate):
         "printf 'AI_APICallError: rate limit exceeded for model\\n' >&2; "
         'for i in $(seq 1 60); do printf "retry_%s\\n" "$i" >&2; done; exit 1'
     )
-    result = run_sweep(repo, scratch, env, "--model", "gpt-6.1-sol", agent=agent)
+    result = run_sweep(repo, scratch, env, "--model", "gpt-6.2-sol", agent=agent)
     assert result.returncode == 15, result.stdout + result.stderr
     assert "AI_APICallError: rate limit exceeded for model" in result.stderr, result.stderr
     assert "provider-error lines from" in result.stderr, result.stderr
@@ -475,7 +917,7 @@ def test_a_root_provider_error_survives_a_retry_storm_in_the_diagnosis(gate):
         "printf 'AI_APICallError: your credit balance is too low\n' >&2; "
         'for i in $(seq 1 50); do printf "status 429 retry %s\n" "$i" >&2; done; exit 1'
     )
-    result = run_sweep(repo, scratch, env, "--model", "gpt-6.1-sol", agent=agent)
+    result = run_sweep(repo, scratch, env, "--model", "gpt-6.2-sol", agent=agent)
     assert result.returncode == 15, result.stdout + result.stderr
     assert "AI_APICallError: your credit balance is too low" in result.stderr, result.stderr
 
@@ -483,7 +925,7 @@ def test_a_root_provider_error_survives_a_retry_storm_in_the_diagnosis(gate):
 def test_the_agents_stdout_log_is_diagnosed_when_stdout_is_the_artifact(gate):
     repo, scratch, env = gate
     agent = "printf 'partial report line\\n'; printf 'boom-on-stdout\\n'; exit 1"
-    result = run_sweep(repo, scratch, env, "--model", "gpt-6.1-sol", agent=agent)
+    result = run_sweep(repo, scratch, env, "--model", "gpt-6.2-sol", agent=agent)
     assert result.returncode == 15, result.stdout + result.stderr
     assert "boom-on-stdout" in result.stderr, result.stderr
     assert "sweep-agent.log: last 40 lines" in result.stderr, result.stderr
@@ -495,14 +937,14 @@ def test_the_agents_stdout_log_is_diagnosed_when_stdout_is_the_artifact(gate):
 def test_zero_timeouts_are_rejected_as_usage_errors(gate):
     repo, scratch, env = gate
     for flag in ("--timeout", "--probe-timeout"):
-        result = run_sweep(repo, scratch, env, "--model", "gpt-6.1-sol", flag, "0")
+        result = run_sweep(repo, scratch, env, "--model", "gpt-6.2-sol", flag, "0")
         assert result.returncode == 2, result.stdout + result.stderr
         assert "at least 1" in result.stderr, result.stderr
 
 
 def test_a_model_id_that_is_not_a_plain_id_is_rejected(gate):
     repo, scratch, env = gate
-    for bad in ("gpt-6.1-sol\nFORGED_LINE", ""):
+    for bad in ("gpt-6.2-sol\nFORGED_LINE", ""):
         result = run_sweep(repo, scratch, env, "--model", bad)
         assert result.returncode == 2, (bad, result.stdout + result.stderr)
         assert "FORGED_LINE" not in result.stderr, \
@@ -515,7 +957,7 @@ def test_a_model_id_that_is_not_a_plain_id_is_rejected(gate):
 def test_the_heartbeat_repeats_within_thirty_seconds(gate):
     repo, scratch, env = gate
     agent = 'sleep 12; { printf "REVIEW-RAN: yes\\n"; } > {output_file}'
-    result = run_sweep(repo, scratch, env, "--model", "gpt-6.1-sol", agent=agent)
+    result = run_sweep(repo, scratch, env, "--model", "gpt-6.2-sol", agent=agent)
     assert result.returncode == 0, result.stdout + result.stderr
     beats = []
     for line in result.stderr.splitlines():
@@ -533,7 +975,7 @@ def test_an_interrupted_gate_kills_its_agents_process_group(gate, tmp_path):
     agent = f'( while true; do printf x >> {shlex.quote(str(ticks))}; sleep 0.2; done ) & sleep 60'
     gate_process = subprocess.Popen(
         ["bash", str(SCRIPT), "run", "sweep", "--repo", str(repo), "--base", "HEAD",
-         "--scratch", str(scratch), "--model", "gpt-6.1-sol", "--agent-cmd", agent],
+         "--scratch", str(scratch), "--model", "gpt-6.2-sol", "--agent-cmd", agent],
         env=env, cwd=str(ROOT), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
     )
     try:
@@ -561,7 +1003,7 @@ def test_a_child_left_by_a_successful_agent_dies_with_the_phase(gate, tmp_path):
         f'( while true; do printf x >> {shlex.quote(str(ticks))}; sleep 0.2; done ) & '
         f'sleep 1; {{ printf "REVIEW-RAN: yes\\n"; }} > {{output_file}}'
     )
-    result = run_sweep(repo, scratch, env, "--model", "gpt-6.1-sol", agent=agent)
+    result = run_sweep(repo, scratch, env, "--model", "gpt-6.2-sol", agent=agent)
     assert result.returncode == 0, result.stdout + result.stderr
     assert ticks.exists(), "the child never ran, so the group kill was not exercised"
     size = ticks.stat().st_size
@@ -576,7 +1018,7 @@ def test_a_child_left_by_a_failed_agent_dies_with_the_phase(gate, tmp_path):
         f'( while true; do printf x >> {shlex.quote(str(ticks))}; sleep 0.2; done ) & '
         "printf 'AI_APICallError: rate limit exceeded\\n' >&2; sleep 1; exit 1"
     )
-    result = run_sweep(repo, scratch, env, "--model", "gpt-6.1-sol", agent=agent)
+    result = run_sweep(repo, scratch, env, "--model", "gpt-6.2-sol", agent=agent)
     assert result.returncode == 15, result.stdout + result.stderr
     size = ticks.stat().st_size
     time.sleep(2)
@@ -597,7 +1039,7 @@ def test_an_interrupted_run_cannot_be_recorded(gate, tmp_path):
     )
     gate_process = subprocess.Popen(
         ["bash", str(SCRIPT), "run", "sweep", "--repo", str(repo), "--base", "HEAD",
-         "--scratch", str(scratch), "--model", "gpt-6.1-sol", "--agent-cmd", agent],
+         "--scratch", str(scratch), "--model", "gpt-6.2-sol", "--agent-cmd", agent],
         env=env, cwd=str(ROOT), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
     )
     try:
@@ -611,7 +1053,7 @@ def test_an_interrupted_run_cannot_be_recorded(gate, tmp_path):
         if gate_process.poll() is None:
             gate_process.kill()
     rejected = run_script(
-        "record", "sweep", "--repo", str(repo), "--base", "HEAD", "--model", "gpt-6.1-sol", env=env,
+        "record", "sweep", "--repo", str(repo), "--base", "HEAD", "--model", "gpt-6.2-sol", env=env,
     )
     assert rejected.returncode != 0, rejected.stdout + rejected.stderr
     assert "no launch" in rejected.stderr, rejected.stderr
@@ -621,12 +1063,12 @@ def test_an_interrupted_run_cannot_be_recorded(gate, tmp_path):
 def test_a_previous_attempts_agent_log_is_not_used_as_this_attempts_diagnosis(gate):
     repo, scratch, env = gate
     first = run_sweep(
-        repo, scratch, env, "--model", "gpt-6.1-sol",
+        repo, scratch, env, "--model", "gpt-6.2-sol",
         agent="printf 'STALE_ATTEMPT_ONE_ERROR\\n' >&2; exit 1",
     )
     assert first.returncode == 15, first.stdout + first.stderr
     second = run_sweep(
-        repo, scratch, env, "--model", "gpt-6.1-sol",
+        repo, scratch, env, "--model", "gpt-6.2-sol",
         "--probe-cmd", ": {model}; echo 'provider error: rate limit exceeded' >&2; exit 7",
     )
     assert second.returncode == 20, second.stdout + second.stderr
@@ -644,10 +1086,10 @@ def test_a_timeout_kill_is_reported_as_19(gate):
     # test_an_agent_that_changes_the_primary_checkout_still_exits_18.
     agent = f'printf x >> {shlex.quote(str(repo / "tracked.txt"))}; sleep 30'
     result = run_sweep(
-        repo, scratch, env, "--model", "gpt-6.1-sol", "--timeout", "10", agent=agent, timeout=90,
+        repo, scratch, env, "--model", "gpt-6.2-sol", "--timeout", "10", agent=agent, timeout=90,
     )
     assert result.returncode == 19, result.stdout + result.stderr
-    assert "gpt-6.1-sol" in result.stderr, result.stderr
+    assert "gpt-6.2-sol" in result.stderr, result.stderr
     assert "10s" in result.stderr, result.stderr
     completion = [line for line in result.stderr.splitlines()
                   if "phase=sweep complete elapsed=" in line]
@@ -683,7 +1125,7 @@ def test_a_refused_checkout_cleanup_does_not_replace_the_phase_exit_code(gate, t
     # The deadline is counted in whole $SECONDS, so a 1s deadline can expire within milliseconds of
     # the phase start, before the checkout exists to be removed; 5s leaves the checkout time to land.
     result = run_sweep(
-        repo, scratch, env, "--model", "gpt-6.1-sol", "--timeout", "5", agent="sleep 30", timeout=60,
+        repo, scratch, env, "--model", "gpt-6.2-sol", "--timeout", "5", agent="sleep 30", timeout=60,
     )
     assert result.returncode == 19, result.stdout + result.stderr
     assert "could not remove checkout" in result.stderr, result.stderr
@@ -740,7 +1182,7 @@ def test_a_phase_refused_for_a_missing_predecessor_still_reports_completion(tmp_
     (tmp_path / "runtime-tmp").mkdir()
     result = run_script(
         "run", "sweep", "--repo", str(repo), "--base", "HEAD", "--scratch", str(scratch),
-        "--model", "gpt-6.1-sol", "--agent-cmd", SWEEP_AGENT, env=env,
+        "--model", "gpt-6.2-sol", "--agent-cmd", SWEEP_AGENT, env=env,
     )
     assert result.returncode == 13, result.stdout + result.stderr
     completion = [line for line in result.stderr.splitlines()
@@ -769,7 +1211,7 @@ def test_an_interrupted_phase_reports_completion_with_its_signal_status(gate, tm
     agent = f'touch {shlex.quote(str(started))}; sleep 60'
     gate_process = subprocess.Popen(
         ["bash", str(SCRIPT), "run", "sweep", "--repo", str(repo), "--base", "HEAD",
-         "--scratch", str(scratch), "--model", "gpt-6.1-sol", "--agent-cmd", agent],
+         "--scratch", str(scratch), "--model", "gpt-6.2-sol", "--agent-cmd", agent],
         env=env, cwd=str(ROOT), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
     )
     try:
@@ -817,7 +1259,7 @@ def test_a_stale_invalid_model_in_the_environment_does_not_refuse_other_commands
     repo, scratch, env = gate
     env = {**env, "ADVERSARIAL_MODEL": "provider/model with space"}
     preflight = run_script(
-        "preflight", "--repo", str(repo), "--base", "HEAD", "--test-cmd", "true",
+        "preflight", "--full-suite", "on", "--repo", str(repo), "--base", "HEAD", "--test-cmd", "true",
         "--scratch", str(scratch), env=env,
     )
     assert preflight.returncode == 0, preflight.stdout + preflight.stderr
@@ -896,7 +1338,7 @@ def test_probe_validation_belongs_to_run_only(gate):
     paths = run_script("paths", "--repo", str(repo), "--base", "HEAD", env=env)
     assert paths.returncode == 0, paths.stdout + paths.stderr
     preflight = run_script(
-        "preflight", "--repo", str(repo), "--base", "HEAD", "--test-cmd", "true",
+        "preflight", "--full-suite", "on", "--repo", str(repo), "--base", "HEAD", "--test-cmd", "true",
         "--scratch", str(scratch), env=env,
     )
     assert preflight.returncode == 0, preflight.stdout + preflight.stderr

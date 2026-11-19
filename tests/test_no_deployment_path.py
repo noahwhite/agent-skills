@@ -334,6 +334,15 @@ WORKTREE_CLAUSE = (
     "worktree rule in `references/github.md` if it is not; without a `worktree:` line, cut the branch and worktree "
     "as the sentence above states."
 )
+# SKL-346 adds two lines to the Verify stage of step 4's Escalation section. The digest above is kept the
+# same way: those lines are pinned here and cut out before hashing, so every other byte still has to match.
+VERIFIER_LINES = (
+    "   It writes, each on its own line of its report, `VERIFIED-HEAD: <full head SHA>` for the head it verified "
+    "and `VERIFIER: <agent name> <model id>` for itself, and the caller saves that report to a file and cites its "
+    "absolute path, or the `https://` URL where it is published.\n"
+    "   The optional accelerator below writes neither line and saves no report, so a round whose report must be "
+    "cited runs this stage by hand.\n"
+)
 
 
 def steps_two_to_twelve() -> str:
@@ -362,6 +371,8 @@ def test_steps_two_to_twelve_outside_the_handoff_blocks_are_unchanged() -> None:
     assert step_two.count(f"\n{WORKTREE_CLAUSE}\n") == 1, "step 2 must carry the SKL-70 worktree clause once"
     assert text.count(f"\n{WORKTREE_CLAUSE}\n") == 1, "the SKL-70 worktree clause appears nowhere else"
     text = text.replace(f"\n{WORKTREE_CLAUSE}\n", "\n", 1)
+    assert text.count(VERIFIER_LINES) == 1, "the Verify stage must carry the SKL-346 verifier line once"
+    text = text.replace(VERIFIER_LINES, "", 1)
     assert hashlib.sha256(text.encode()).hexdigest() == STEPS_TWO_TO_TWELVE_SHA256
 
 
@@ -622,7 +633,8 @@ def test_qa_added_blocks_appear_once_in_order() -> None:
 
 
 # The `deployed` text is unchanged: with the four SKL-269 blocks cut out, qa-verification's
-# SKILL.md is byte for byte the file at the base commit f9b6659.
+# SKILL.md hashes to QA_BASE_SHA256, which was first the file at the base commit f9b6659 and is
+# since the file as each re-baselining story below left it, with these blocks cut out.
 # A later story that changes qa-verification's SKILL.md outside these blocks re-baselines this hash
 # to the sha256 of the file at its own base with these blocks cut out, and says so in its PR.
 # SKL-270 re-baselined it for its one change outside the blocks: the `compatibility:` line now names
@@ -630,7 +642,10 @@ def test_qa_added_blocks_appear_once_in_order() -> None:
 # pins and cut out as before).
 # SKL-284 re-baselined it for its one change outside the blocks: the QA evidence comment's first line is
 # exactly `## QA evidence` (section 4, item 5), which story-to-done's qa-round-cap.py counts rounds by.
-QA_BASE_SHA256 = "c4d1f2c6d44a42bb390ee14ff57247c92363be192025eb127f91331db1301217"
+# SKL-182 re-baselined it for its changes outside the blocks: the "Await the gate" bullet in section 5,
+# the incomplete line in the completion summary and the todo-tracking index line; tests/test_qa_await_gate.py
+# pins the first two, and the index line is pinned only by this hash.
+QA_BASE_SHA256 = "d0a5d1c8a13f99e21cc8ef762aae246f1493bdbfbb073fae98af4caf9263f83a"
 
 
 def test_qa_text_outside_the_added_blocks_is_unchanged() -> None:

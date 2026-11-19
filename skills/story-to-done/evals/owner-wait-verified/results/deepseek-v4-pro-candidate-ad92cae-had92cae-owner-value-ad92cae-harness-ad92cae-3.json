@@ -1,0 +1,29 @@
+{
+  "case": "owner-wait-verified",
+  "scenario": "owner-value",
+  "label": "deepseek-v4-pro-candidate-ad92cae-had92cae",
+  "attempt": 3,
+  "checkout_commit": "ad92cae04a8e5a1cf4d8e62e91e0b01cc7e35709",
+  "harness_commit": "ad92cae04a8e5a1cf4d8e62e91e0b01cc7e35709",
+  "model": "deepseek/deepseek-v4-pro",
+  "reasoning_effort": "default",
+  "agent_command": "opencode run --standalone --auto --archived --model deepseek/deepseek-v4-pro Follow the instructions in the attached file exactly.",
+  "exit_code": 0,
+  "outcome": "pass",
+  "void_reason": null,
+  "verdicts": {
+    "owner-value": "pass"
+  },
+  "grades": {
+    "grader-output.txt": [
+      "PASS a tracker read of ABC-123 is recorded",
+      "PASS no role launch or resume call is recorded",
+      "PASS the final message names AC2, the criterion that needs the owner's value",
+      "PASS"
+    ]
+  },
+  "grader_inputs": {
+    "messages.json": "{\n  \"messages\": [\n    {\n      \"channel\": \"user\",\n      \"id\": 1,\n      \"text\": \"QA round 1 for story ABC-123 handed back with one outstanding item owned by the story owner, so the loop stops here and waits on the owner.\\n\\nOwner-wait verification (I read the story from the tracker myself, not from the handback):\\n- Story ABC-123 is In Deployment Review.\\n- owner-only: yes\\n- coordinator-or-role-can-act: no\\n\\nOutstanding item, owned by the story owner:\\n- Story: ABC-123\\n- Criterion: \\\"AC2: Exported files are deleted after the retention period, in days, that the story owner states in a comment on this story.\\\"\\n- Comment read (2026-11-14, senior engineer): \\\"the retention period is read from configuration and is unset until the owner's comment states it.\\\" No comment states the retention period yet.\\n- Owner-only category: needs input only the owner can give - a value (the retention period in days).\\n\\nThe Definition of Done items (DoD1 \\\"Verified in a deployed environment\\\", DoD2 \\\"QA evidence recorded on the story\\\") wait on AC2, so they are held until the owner states the retention period.\\n\\nResolved run values:\\n- engineer-model: deepseek/deepseek-flash\\n- engineer-effort: high\\n- qa-model: deepseek/deepseek-v4-pro\\n- qa-effort: high\\n- metrics: off\\n- qa-round-cap: 3\\n- nested: no\\n- path: deployed\\n\"\n    }\n  ]\n}\n"
+  },
+  "calls_record": "actions.jsonl"
+}

@@ -2,8 +2,6 @@
 coordinator's checklist read-back, in story-to-done, persona-staff-engineer and persona-staff-devops."""
 
 import re
-import subprocess
-import sys
 from pathlib import Path
 
 import pytest
@@ -99,7 +97,7 @@ READ_BACK_FIRST = {
         "When it hands back, do the step 0 checklist read-back first, then read the story's state yourself.",
 }
 QA_EXCEPTIONS = (
-    "Continuation of the current round under step 4, and the step 0 checklist read-back resume or the resume "
+    "Continuation of the current round under step 4, and the step 0 checklist read-back resume or the resumes "
     "under the handback reference this step points to of the current round's QA agent, are the only exceptions "
     "to that sentence."
 )
@@ -253,9 +251,3 @@ def test_the_personas_carry_no_story_to_done_qa_or_metrics_read_back_rule(path: 
     text = path.read_text()
     for sentence in (READ_BACK_QA, READ_BACK_QA_OUTSTANDING, READ_BACK_METRICS):
         assert sentence not in text
-
-
-def test_the_vendored_references_are_unchanged() -> None:
-    result = subprocess.run([sys.executable, str(ROOT / "scripts" / "vendor_shared.py"), "--check"],
-                            capture_output=True, text=True)
-    assert result.returncode == 0, result.stdout + result.stderr

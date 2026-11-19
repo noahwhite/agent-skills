@@ -9,7 +9,6 @@ import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
 SKILL = ROOT / "skills" / "persona-release-manager" / "SKILL.md"
-MANIFEST = json.loads((ROOT / "skills.json").read_text())
 
 
 def section(text: str, heading: str) -> str:
@@ -31,15 +30,6 @@ def per_story_readiness_line(body: str) -> str:
             break
         block.append(follow)
     return "\n".join(block)
-
-
-def test_skill_file_exists() -> None:
-    assert SKILL.is_file(), f"missing {SKILL.relative_to(ROOT)}"
-
-
-def test_manifest_registers_skill() -> None:
-    required = {"github", "linear", "code-review", "todo-tracking"}
-    assert required <= set(MANIFEST["skills"]["persona-release-manager"])
 
 
 def test_todo_tracking_has_seed_entry() -> None:

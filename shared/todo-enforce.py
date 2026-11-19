@@ -13,7 +13,13 @@ payload's hook_event_name and, per session_id:
 - in an armed session that has the task tools, denies a main-thread tool call outside
   TaskCreate, TaskUpdate, TaskList, TaskGet, ToolSearch, Skill and AskUserQuestion unless a
   main-owned task is in_progress, and allows it with a stderr warning when a main-owned task
-  file that exists is unreadable;
+  file that exists is unreadable, unless the update cadence below denies it;
+- update cadence: in an armed session that has the task tools, denies a main-thread tool call
+  outside those exempt tools once CADENCE_LIMIT such calls have been allowed since the last
+  main-thread TaskCreate or TaskUpdate PreToolUse, which resets the count; a call the in_progress
+  check denies is not counted, and the count is read, compared and incremented under an exclusive
+  lock waited on for at most CADENCE_LOCK_WAIT seconds; an unreadable, unwritable or unparseable
+  count, or a lock not acquired in time, allows the call with a stderr line;
 - in an armed session that has the task tools, refuses (exit 2) a main-owned task's completion
   (a task with no owner record counts as main-owned when the main thread completes it)
   from a subagent, or from the main thread unless its task file still says in_progress
@@ -47,6 +53,7 @@ import os
 import re
 import stat
 import sys
+import time
 
 try:
     import fcntl
@@ -55,6 +62,7 @@ except ImportError:  # no flock on this platform: the loop guard runs unlocked
 
 SKILLS = ("story-to-done", "story-refinement")
 EXEMPT = frozenset({"TaskCreate", "TaskUpdate", "TaskList", "TaskGet", "ToolSearch", "Skill", "AskUserQuestion"})
+LIST_UPDATES = frozenset({"TaskCreate", "TaskUpdate"})
 MAIN = "main"
 SAFE_ID = re.compile(r"[A-Za-z0-9_-]+")
 SLASH = re.compile(r"/(%s)(\s|$)" % "|".join(map(re.escape, SKILLS)))
@@ -87,6 +95,13 @@ OPEN_ITEMS = (
     "line, then report again."
 )
 NO_SUBJECT = "(no subject)"
+CADENCE_EXCEEDED = (
+    "todo-enforce: {tool} was not run because {limit} tool calls (CADENCE_LIMIT) have run since your "
+    "last todo-list update. Bring the list up to date with TaskUpdate: complete the finished item and "
+    "mark the current step in_progress, then retry."
+)
+CADENCE_LIMIT = 15
+CADENCE_LOCK_WAIT = 2.0
 
 IN_PROGRESS = "in_progress"
 OPEN = ("pending", IN_PROGRESS)
@@ -375,6 +390,79 @@ def write_report_blocks(session, blocks):
     os.replace(tmp, path)
 
 
+def cadence_path(session):
+    return os.path.join(state_dir(session), "cadence")
+
+
+@contextlib.contextmanager
+def cadence_lock(session):
+    """Holds an exclusive lock on the cadence count, waiting at most CADENCE_LOCK_WAIT seconds;
+    raises OSError when it cannot be taken in time or at all."""
+    if fcntl is None:
+        raise OSError("no file locking on this platform")
+    with open(cadence_path(session) + ".lock", "a") as fh:
+        deadline = time.monotonic() + CADENCE_LOCK_WAIT
+        while True:
+            try:
+                fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    raise TimeoutError("lock not acquired within %s seconds" % CADENCE_LOCK_WAIT)
+                time.sleep(0.01)
+        yield
+
+
+def read_cadence(session):
+    """The calls allowed since the last list update: 0 when none is recorded; a stored value that
+    is not a non-negative integer raises ValueError."""
+    try:
+        with open(cadence_path(session)) as fh:
+            text = fh.read()
+    except FileNotFoundError:
+        return 0
+    count = int(text)
+    if count < 0:
+        raise ValueError("negative count %d" % count)
+    return count
+
+
+def write_cadence(session, count):
+    path = cadence_path(session)
+    tmp = "%s.%d" % (path, os.getpid())
+    with open(tmp, "w") as fh:
+        fh.write(str(count))
+    os.replace(tmp, path)
+
+
+def reset_cadence(session):
+    """Sets the count to 0 under its lock; on failure logs and leaves the count unchanged."""
+    try:
+        with cadence_lock(session):
+            with contextlib.suppress(FileNotFoundError):
+                os.remove(cadence_path(session))
+    except OSError as exc:
+        log("update cadence count not reset: %s: %s" % (type(exc).__name__, exc))
+
+
+def check_cadence(session, tool):
+    """Denies the call once CADENCE_LIMIT calls were allowed since the last list update, else
+    counts it; reading, comparing and incrementing run in one critical section. At the limit the
+    count is rewritten unchanged, so an unwritable count fails open there too."""
+    try:
+        with cadence_lock(session):
+            count = read_cadence(session)
+            exceeded = count >= CADENCE_LIMIT
+            write_cadence(session, count if exceeded else count + 1)
+    except (OSError, ValueError) as exc:
+        log("allowing %s, the update cadence count is unreadable, unwritable or locked: %s: %s"
+            % (tool, type(exc).__name__, exc))
+        return 0
+    if exceeded:
+        return deny(CADENCE_EXCEEDED.format(tool=tool, limit=CADENCE_LIMIT))
+    return 0
+
+
 def open_main_items(session):
     """[(id, subject)] of the main-owned tasks whose task file reads pending or in_progress;
     an unreadable task file raises."""
@@ -469,22 +557,23 @@ def on_pre_tool_use(payload, session):
         skill = (payload.get("tool_input") or {}).get("skill")
         if skill in SKILLS:
             arm(session)
+    if tool in LIST_UPDATES:
+        if is_armed(session):
+            reset_cadence(session)
+        return 0
     if tool in EXEMPT or not is_armed(session):
         return 0
     if not has_task_tools(session, payload.get("transcript_path")):
         return 0
     progress, owned = main_task_in_progress(session)
     if progress is None:
-        log("allowing %s: a main-created task's state is unknown" % tool)
-        return 0
-    if progress:
-        return 0
-    if not owners_writable(session):
-        return 0
-    reason = NO_TASK_IN_PROGRESS.format(tool=tool)
-    if not owned:
-        reason += NO_TASK_RECORDED
-    return deny(reason)
+        log("the in_progress check does not deny %s: a main-created task's state is unknown" % tool)
+    elif not progress and owners_writable(session):
+        reason = NO_TASK_IN_PROGRESS.format(tool=tool)
+        if not owned:
+            reason += NO_TASK_RECORDED
+        return deny(reason)
+    return check_cadence(session, tool)
 
 
 def on_task_created(payload, session):

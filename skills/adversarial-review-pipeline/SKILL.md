@@ -1,8 +1,8 @@
 ---
 name: adversarial-review-pipeline
 description: >-
-  Run the pre-PR adversarial code-review gate: a deterministic preflight (clean tree, suite green in a
-  detached worktree at HEAD), a cheap sweep over the diff, an empirical verify-and-hunt pass that
+  Run the pre-PR adversarial code-review gate: a deterministic preflight (clean tree, and suite green in a
+  detached worktree at HEAD when the full-suite option is on), a cheap sweep over the diff, an empirical verify-and-hunt pass that
   mutates and runs code in a throwaway worktree, one bounded arbitration by a strong reviewer, then
   fix and one bounded re-verify. Use on every pre-PR review, and when asked to run the adversarial
   gate, the pre-PR pipeline, or the sweep, hunt and arbitrate review. The two-lens loop in
@@ -30,7 +30,7 @@ If a configured agent cannot run on this runtime, stop and say so (see `referenc
 
 | Phase | Agent | Job | Why this tier |
 |---|---|---|---|
-| 0 Preflight | none (deterministic) | Clean tree, every intended file committed, suite green in a detached worktree at HEAD | Free, seconds, catches a class no reviewer should spend tokens on |
+| 0 Preflight | none (deterministic) | Clean tree, every intended file committed, and, when the full-suite option is `on`, suite green in a detached worktree at HEAD | Free, seconds, catches a class no reviewer should spend tokens on |
 | 1 Sweep | `profile.review.pre_pr.sweeper` | Read the diffstat and the diff its dossier embeds (its read-only checkout holds anything not embedded), emit a raw candidate list with `file:line` and a concrete failure scenario | Large context at the lowest price; volume over precision |
 | 2 Verify and hunt | `profile.review.pre_pr.hunter` | For each candidate: mutate, run, report VERIFIED or REFUTED with the command and result; then hunt open-ended for new defects | The only phase that proves rather than asserts |
 | 3 Arbitrate | `profile.review.pre_pr.arbiter` | From the diffstat, both phase reports and its own read-only checkout (its dossier embeds no diff): filter false positives, weigh empirical evidence over theory, catch cross-module regressions, name accepted risks, decide converged or not | Strongest reasoning, spent once on a pre-filtered bundle |
@@ -84,7 +84,8 @@ Common inputs:
 - `--spec <file>`: the story text and acceptance criteria, so reviewers can reject out-of-scope work as a category.
   Write it to the session's scratch directory (`references/runtimes.md`, Scratch files), never the profile's base directory.
   A `--spec` naming a missing file is an error; only omitting it gives the "judge scope from the diff alone" fallback.
-- `--test-cmd`: `profile.project.test_command`; `--test-dir` when the suite must run from a subdirectory.
+- `--test-cmd`: `profile.project.test_command`; `--test-dir` when the suite must run from a subdirectory; the preflight runs it only when `--full-suite` is `on`.
+- `--full-suite on|off`: the full-suite option, read by `preflight` only (Phase 0 below).
 - `--scratch <dir>`: the absolute path of the session's scratch directory (`references/runtimes.md`, Scratch files), passed to every command so the dossiers and throwaway checkouts stay in it; the script gives each run its own directory inside it and hands the session directory to the phase agent as `ADVERSARIAL_SESSION_SCRATCH`.
   Never pass the profile's base directory; omitted, the script creates a standalone directory per invocation, so two commands no longer share one.
   The script keeps its own run state (accepted phases, logs, stamps) under the repository's git dir (`git rev-parse --git-path adversarial-pipeline`), keyed by base and head: that is the script's state, not a session scratch artifact.
@@ -168,13 +169,20 @@ SPEC="$scratch/spec.md"                                      # the story text an
 ```
 
 ```bash
-"$PIPELINE" preflight --base "$BASE" --test-cmd "<profile.project.test_command>" --scratch "$scratch"
+"$PIPELINE" preflight --base "$BASE" --full-suite "<on or off>" --test-cmd "<profile.project.test_command>" --scratch "$scratch"
 ```
 
-It asserts the working tree is clean (`git status --porcelain --untracked-files=all` empty), creates a detached worktree at `HEAD`, and runs the suite there.
+`--full-suite` is the full-suite option, `on` or `off`.
+Pass the value your brief names; otherwise, from inside the consumer repository, run `python3 <skill dir>/scripts/resolve-full-suite.py --story-key <story key>` and pass the one line it prints.
+It reads the profile from the locations the skills load it from and resolves `profile.full_suite.teams` for the story key's prefix, then `profile.full_suite.default`, then `off`; any other exit status is no value: stop and report its stderr line.
+Omitted, the script resolves it the same way with no story key, so the team is `profile.tracker.team_key`, and `off` when no profile exists.
+
+It asserts the working tree is clean (`git status --porcelain --untracked-files=all` empty), on any value.
+With `on` it creates a detached worktree at `HEAD` and runs the suite there.
+With `off` it runs no test command and logs `full-suite: off` in place of the suite log.
 It also fails when `python3` cannot run, because the sweep and hunt dossiers need it to cap the embedded diff.
 A detached worktree, not an archive export, so tests that shell out to git still work.
-Exit codes: 0 PASS, 1 FAIL (dirty tree or suite failed), 3 INCOMPLETE (clean tree but no test command: not a pass).
+Exit codes: 0 PASS (with `off`, a clean tree), 1 FAIL (dirty tree or suite failed), 2 (an invalid `--full-suite`, or an omitted one the profile cannot resolve), 3 INCOMPLETE (`on` and a clean tree but no test command: not a pass).
 Any other failure while writing the report exits non-zero rather than passing.
 
 - The suite's exit status is that of its last command, so chain a sequence with `&&` or use one self-checking wrapper.
@@ -193,6 +201,10 @@ Fix a FAIL before spending any model budget.
 The sweeper returns a structured candidate list, each entry with `file:line`, a severity, a one-line claim and a concrete failure scenario.
 Expect false positives; Phase 2 exists to remove them.
 
+The sweep dossier ends with a `Review checklist` section: each item of `.agent-skills/review-checklist.txt`, read from the base, whose glob matches a changed path (`*` crosses `/`); `checklist --base "$BASE"` prints them.
+The file holds one `<bash glob> | <review item>` per line; `#` comments and blank lines are ignored.
+`--no-sweep` skips them.
+
 ## Phase 2: verify and hunt
 
 ```bash
@@ -209,6 +221,10 @@ Its dossier asks for both jobs and demands execution rather than reasoning:
 - A hunter whose sandbox could not start reads nothing yet may exit 0.
   A sandbox or permission error on the agent's stderr, or a report whose first line is not `REVIEW-RAN: yes`, is a failed phase, never a clean one (the script exits 17).
   The report itself may quote such error text; only stderr is searched for it.
+  That stderr also carries text the agent echoes from files, specs and diffs it reads, so the check is a line-shape heuristic, not a source identifier.
+  A marker counts only at the start of a line or right after a carriage return (a progress line rewritten in place), after optional whitespace and terminal escape sequences (CSI, colour included, and OSC), optionally followed by one `<word>: ` tool prefix such as `codex: ` (the word starts with a letter or digit, so a `-` or `+` diff line is never read as a prefix) and more whitespace or escape sequences; the same marker quoted mid-line does not fail the phase.
+  Two limits of the line shape are accepted: (a) a real error wrapped in more than one prefix (a timestamp, a log level, `[pid] `, `error: ...: `) is missed; (b) echoed text already in the shape (an indented error example, a `Note: ` line, a diff context line) still fails the phase, which fails safe: rerun it.
+  A real wrapper form seen in the wild gets its own bug and fixture rather than a wider rule.
 - If the reviewer's own sandbox cannot start on this host (for Codex, its bwrap sandbox), that reviewer is unavailable: stop and say so.
   The one exception is an operator who confirms an outer sandbox, such as a disposable container or VM; only then may it run with `-s danger-full-access`.
   The throwaway worktree is not a sandbox and never justifies that flag.
@@ -243,7 +259,7 @@ ARBITER-HEAD: <full HEAD SHA>
 - `ARBITER-HEAD` is the HEAD when the script runs, so `record arbitrate` must run at the reviewed head: never record a report after moving the branch.
 - A report whose first line is not exactly `REVIEW-RAN: yes` (trailing whitespace or a CR included) fails (exit 17) and writes and retains nothing.
 
-Every accepted arbitration is retained, before its stamp is written, as an immutable, read-only copy of the report with its identity lines in `<git common dir>/adversarial-pipeline/arbitration-rounds`, where `<git common dir>` is the absolute output of `git rev-parse --git-common-dir`.
+Every accepted arbitration is retained, before its stamp is written, as an immutable, read-only copy of the report with its identity lines in `<git common dir>/adversarial-pipeline/arbitration-rounds`, where `<git common dir>` is the output of `git rev-parse --path-format=absolute --git-common-dir`.
 That directory belongs to the clone, not to the run directory, `--scratch` or the worktree, so every worktree of the clone resolves the same directory and removing a worktree loses nothing; a linked worktree's own `git rev-parse --git-path adversarial-pipeline` is under that worktree's git directory, which is why the run state is not used.
 The copy is named `round-<UTC timestamp>-<full HEAD SHA>-<first 12 hex of the report sha256>-<n>.md`, with the timestamp as `date -u +%Y%m%dT%H%M%SZ`.
 It is written to a temporary file in that directory and published with a no-clobber hard link; when the name exists the next `<n>` is tried, so two byte-identical arbitrations at one head leave two files and nothing is overwritten.
@@ -280,6 +296,8 @@ Those are follow-ups to file or flag, not work for this PR.
 Fix only what this diff's own behaviour depends on, and write the rest down in the PR body as accepted or deferred.
 
 ## Final report format (the arbiter's output)
+
+The arbiter prefixes a finding with `pre-existing` only when it meets the `pre-existing` rule in `references/code-review.md` (Handling findings), as the first words of its **The bug:** text (`pre-existing: ...`).
 
 ### Critical vulnerabilities and breaking bugs
 

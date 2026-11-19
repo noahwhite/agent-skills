@@ -1,0 +1,32 @@
+Review notes for a change to the gate script's blind-phase check (SKL-365 fixture).
+A gate agent that reads this file echoes it onto its stderr, as opencode does with the files it reads.
+Every sandbox marker below sits mid-line, so none of these lines is a runtime's own error line.
+
+Prose:
+The old check failed a phase whenever its stderr said bwrap: anywhere, even inside a sentence.
+The runtimes page said that where the sandbox cannot start, every command fails with a `bwrap:` error.
+A reviewer once noted that the sandbox failed on a host with user namespaces turned off.
+Another run logged that the sandbox denied a write to the primary checkout.
+When the sandbox could not start, the reviewer read nothing and still exited 0.
+If a log says Failed to make / slave: Permission denied, the host blocks mount propagation.
+
+A removed detector line and its replacement, as a diff:
+-  if [ -n "$2" ] && [ -f "$2" ] && grep -qiE 'bwrap:|sandbox (failed|denied|could not)|Failed to make .* Permission denied' -- "$2"; then
++  if [ -n "$2" ] && [ -f "$2" ] && sandbox_error_in "$2"; then
+
+A line listing the markers:
+- The markers are `bwrap:`, `sandbox failed`, `sandbox denied`, `sandbox could not` and `Failed to make ... Permission denied`.
+
+Grep hits, as a reviewer pastes them (illustrative paths, not captured output):
+./notes/host.md:12:the gate saw bwrap: errors only when the host lacked user namespaces
+./notes/host.md:31:a rerun showed the sandbox failed twice before the fix
+./notes/host.md:40:that run says the sandbox denied a network call
+./notes/host.md:52:a hunter whose sandbox could not start reads nothing yet may exit 0
+./notes/host.md:57:the log said Failed to make /newroot: Permission denied on that host
+
+Diff lines:
++  # the hunter exits 17 when the sandbox denied its read of the checkout
+-  # retry once if the sandbox failed to start
++  echo "the reviewer saw Failed to make /newroot: Permission denied and stopped"
+-  echo "reviewer ran blind: bwrap: could not mount proc"
++  # a reviewer whose sandbox could not start reads nothing

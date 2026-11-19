@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
 """The eval suite runner behind run-suite.sh: repeat each case's scenarios, record, summarise.
 
+It is shared by every skill: its first argument is the skill's evals/ directory in the harness
+checkout, and the cases, records and summary all sit under that directory.
+
 Every attempt runs the case's own run.sh (CHECKOUT SCENARIO RUN_DIR) through bash, and its exit
 status is the attempt's verdict: 0 graded pass, 1 graded fail, 2 void. An attempt that outlives
 its deadline is void too. A void attempt is recorded with its reason and retried until the
 scenario has N graded runs or 2×N attempts. Any other exit status means the case or the machine
 is broken, not that the run was void: the attempt is recorded and the suite stops.
 
-Exit status: 0 every scenario reached N graded runs, 1 at least one did not or the suite stopped
-on a broken attempt, 2 the suite refused to start or would have overwritten a file.
+Exit status: 0 every scenario reached N graded runs and every graded run passed, 1 a scenario has
+fewer graded runs, a graded run failed or the suite stopped on a broken attempt, 2 the suite
+refused to start or would have overwritten a file.
 """
 
 import argparse
@@ -28,9 +32,8 @@ from pathlib import Path
 
 import yaml
 
-EVALS = Path(__file__).resolve().parent
-ROOT = EVALS.parents[2]
-EVALS_PARTS = EVALS.relative_to(ROOT).parts
+# The directory holding this runner and the repository's leak scan beside it.
+SCRIPTS = Path(__file__).resolve().parent
 NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 # A relative file path a grader names, such as sessions.json or senior-engineer/todo.md.
 RELATIVE_FILE = re.compile(r"(?:[A-Za-z0-9][A-Za-z0-9._-]*/)*[A-Za-z0-9][A-Za-z0-9_-]*\.[A-Za-z0-9._-]+")
@@ -103,49 +106,86 @@ class Broken(Exception):
 
 
 def git(repo: Path, *args: str, strip: bool = True) -> str:
-    result = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True)
+    # Read as bytes and decode as the file system does: a path git prints may hold bytes that are
+    # not UTF-8, which os.fsdecode keeps so os.fsencode gives them back, or a carriage return,
+    # which text mode would turn into a newline.
+    result = subprocess.run(["git", "-C", str(repo), *args], capture_output=True)
     if result.returncode != 0:
-        raise Refused(f"git {' '.join(args)} failed in {repo}: {result.stderr.strip()}")
-    return result.stdout.strip() if strip else result.stdout
+        raise Refused(f"git {' '.join(args)} failed in {repo}: {os.fsdecode(result.stderr).strip()}")
+    stdout = os.fsdecode(result.stdout)
+    return stdout.strip() if strip else stdout
 
 
-def is_record(path: str) -> bool:
-    """True for a file the suite writes: directly in the suite's results/ or in a case's."""
+def toplevel(repo: Path) -> Path:
+    """The checkout's root, with only git's own newline removed, so a root ending in whitespace
+    keeps it."""
+    return Path(git(repo, "rev-parse", "--show-toplevel", strip=False).removesuffix("\n")).resolve()
+
+
+def is_evals(parts: tuple[str, ...]) -> bool:
+    """True for the path, from the checkout root, of a skill's evals/ directory."""
+    return len(parts) == 3 and parts[0] == "skills" and parts[2] == "evals"
+
+
+def is_record(path: str, evals_parts: tuple[str, ...]) -> bool:
+    """True for a file the suite writes: directly in the suite's results/ or in a case's, under
+    the evals/ directory whose path from the checkout root is evals_parts."""
     parts = Path(path).parts
-    if parts[:len(EVALS_PARTS)] != EVALS_PARTS:
+    if not is_evals(evals_parts) or parts[:3] != evals_parts:
         return False
-    rest = parts[len(EVALS_PARTS):]
+    rest = parts[3:]
     return (len(rest) == 2 and rest[0] == "results") or (len(rest) == 3 and rest[1] == "results")
 
 
-def commit_of(repo: Path, role: str) -> tuple[Path, str, str]:
+def commit_of(repo: Path, role: str, evals_parts: tuple[str, ...]) -> tuple[Path, str, str]:
     """The checkout's root, full and short HEAD. A checkout with tracked or untracked changes is
-    refused, because its commit would not describe what ran; only the suite's own records under a
-    results/ directory, untracked or with an unstaged modification, are allowed, since they are
-    outputs, not code."""
-    root = Path(git(repo, "rev-parse", "--show-toplevel")).resolve()
-    # Unstripped: each porcelain line is two status columns, a space and the path, and the first
-    # line's index column is a space for an unstaged change, so stripping would cut the path.
-    status = [line for line in git(root, "status", "--porcelain", "--untracked-files=all", strip=False).splitlines()
-              if line]
-    # A record is allowed only untracked or with an unstaged modification: any other state on a
-    # record (staged, deleted, unmerged, or a rename whose " -> " joins a record to another path)
-    # is a change the commit would not describe.
-    changed = [line[3:] for line in status if not (line[:2] in ("??", " M") and is_record(line[3:]))]
+    refused, because its commit would not describe what ran; only this suite's own records under
+    a results/ directory, untracked or with an unstaged modification, are allowed, since they are
+    outputs, not code. Another skill's records are changes like any other, and so is a git-ignored
+    path in or holding this suite's evals/ directory, other than its records."""
+    root = toplevel(repo)
+    # NUL-separated, so a path reaches is_record as its bytes, never quoted; each entry is two
+    # status columns, a space and the path, and a rename or copy is followed by its source path.
+    # Ignored entries (!!) are listed too: a git-ignored evals/ directory, or an ignored file in
+    # it, is not in the commit either, while ignored files elsewhere (.venv/) do not bear on the run.
+    entries = git(root, "status", "--porcelain", "-z", "--untracked-files=all", "--ignored=matching",
+                  strip=False).split("\0")
+    changed, index = [], 0
+    while index < len(entries):
+        entry = entries[index]
+        index += 1
+        if not entry:
+            continue
+        status, path = entry[:2], entry[3:]
+        if "R" in status or "C" in status:
+            path = f"{entries[index]} -> {path}"
+            index += 1
+        # A record is allowed only untracked or with an unstaged modification: any other state on
+        # a record (staged, deleted, unmerged, renamed) is a change the commit would not describe.
+        if status == "!!":
+            parts = Path(path).parts
+            under = parts[:len(evals_parts)] == evals_parts or evals_parts[:len(parts)] == parts
+            # git lists a wholly ignored results/ directory as one entry, which holds only records.
+            rest = parts[len(evals_parts):]
+            results_dir = rest == ("results",) or (len(rest) == 2 and rest[1] == "results")
+            if under and not results_dir and not is_record(path, evals_parts):
+                changed.append(path)
+        elif not (status in ("??", " M") and is_record(path, evals_parts)):
+            changed.append(path)
     if changed:
         raise Refused(f"the {role} checkout {root} has uncommitted changes ({', '.join(changed[:5])}), "
                       "so its commit would not describe the run")
     return root, git(root, "rev-parse", "HEAD"), git(root, "rev-parse", "--short=7", "HEAD")
 
 
-def committed_records(root: Path) -> dict[str, tuple[int, str]]:
+def committed_records(root: Path, evals_parts: tuple[str, ...]) -> dict[str, tuple[int, str]]:
     """Each committed record, by path, as its file mode and a hash of what it holds: a symlink's
     target text, a regular file's content, nothing for any other kind of file, so no read follows
     a link or blocks. The suite only ever writes new records, so a change to this during a run is
     a change an attempt made, not the suite's own output."""
     records = {}
     for path in git(root, "ls-files", "-z", strip=False).split("\0"):
-        if not path or not is_record(path):
+        if not path or not is_record(path, evals_parts):
             continue
         name = os.fsencode(root / path)
         try:
@@ -174,15 +214,47 @@ def held_by(name: bytes, mode: int) -> bytes:
         return handle.read()
 
 
+def is_case_name(name: str) -> bool:
+    """True for a case directory name the suite can run: it matches NAME and is not results,
+    the directory that holds the suite's summaries, whose files read as records."""
+    return bool(NAME.fullmatch(name)) and name != "results"
+
+
+def case_names(evals: Path) -> list[str]:
+    """Every case directory of EVALS that holds a case.yaml file, by name. EVALS with no case, or
+    with a case directory whose name the suite cannot run, is refused, so --list shows exactly
+    the cases a whole-suite run would run."""
+    names = sorted(path.parent.name for path in evals.glob("*/case.yaml") if path.is_file())
+    if not names:
+        raise Refused(f"EVALS {evals} holds no case, so the suite would run nothing")
+    for name in names:
+        if not is_case_name(name):
+            raise Refused(f"case directory {name!r} must match {NAME.pattern} and not be 'results'")
+    return names
+
+
 def parse(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="run-suite.sh", description=__doc__.splitlines()[0])
-    parser.add_argument("--runs", type=int, default=3, help="graded runs per scenario (default 3)")
+    parser.add_argument("--runs", type=int, help="graded runs per scenario (default 3)")
     parser.add_argument("--resume", action="store_true",
                         help="continue an interrupted run of this LABEL from its existing records")
-    parser.add_argument("checkout", type=Path, help="the checkout holding the skill under test")
-    parser.add_argument("label", help="names this suite run's records and summary")
+    parser.add_argument("--list", action="store_true", help="print the case names of EVALS and run nothing")
+    parser.add_argument("evals", type=Path, help="the skill's evals/ directory in the harness checkout")
+    parser.add_argument("checkout", type=Path, nargs="?", help="the checkout holding the skill under test")
+    parser.add_argument("label", nargs="?", help="names this suite run's records and summary")
     parser.add_argument("cases", nargs="*", help="case directories to run (default: every case)")
-    args = parser.parse_args(argv)
+    args = parser.parse_intermixed_args(argv)
+    if not args.evals.is_dir():
+        parser.error(f"EVALS {args.evals} is not a directory")
+    args.evals = args.evals.resolve()
+    if args.list:
+        if args.checkout is not None or args.runs is not None or args.resume:
+            parser.error("--list takes EVALS only")
+        return args
+    if args.label is None:
+        parser.error("CHECKOUT and LABEL are required")
+    if args.runs is None:
+        args.runs = 3
     if args.runs < 1:
         parser.error("--runs must be at least 1")
     if not NAME.fullmatch(args.label):
@@ -192,7 +264,7 @@ def parse(argv: list[str]) -> argparse.Namespace:
     if len(set(args.cases)) != len(args.cases):
         parser.error("a CASE is named more than once")
     for case in args.cases:
-        if not NAME.fullmatch(case) or not (EVALS / case / "case.yaml").is_file():
+        if not is_case_name(case) or not (args.evals / case / "case.yaml").is_file():
             parser.error(f"no case {case!r} in the harness checkout")
     return args
 
@@ -216,9 +288,9 @@ def grader_names(grader: Path) -> set[str]:
 def leak_patterns() -> list[re.Pattern]:
     """The repository's leak-scan patterns, public and any private ones loaded, so a record is
     normalised against exactly what the guard rejects."""
-    spec = importlib.util.spec_from_file_location("leak_scan", ROOT / "scripts" / "leak_scan.py")
+    spec = importlib.util.spec_from_file_location("leak_scan", SCRIPTS / "leak_scan.py")
     if spec is None or spec.loader is None:
-        raise Refused(f"cannot load {ROOT / 'scripts' / 'leak_scan.py'}")
+        raise Refused(f"cannot load {SCRIPTS / 'leak_scan.py'}")
     module = importlib.util.module_from_spec(spec)
     sys.dont_write_bytecode = True  # a __pycache__ in the harness checkout would make it dirty
     spec.loader.exec_module(module)
@@ -413,14 +485,14 @@ def resumed(record_path: Path, name: str, ctx: dict) -> dict:
     return record
 
 
-def label_records(label: str) -> set[Path]:
+def label_records(evals: Path, label: str) -> set[Path]:
     """Every run record on disk that names LABEL, in any case's results."""
     found = set()
-    for path in EVALS.glob(f"*/results/{label}-*.json"):
+    for path in evals.glob(f"*/results/{label}-*.json"):
         try:
             named = json.loads(read(path)).get("label")
-        except (ValueError, AttributeError):
-            named = label  # an unreadable record is never silently left out
+        except (ValueError, AttributeError, OSError):
+            named = label  # an unreadable record, or a directory, is never silently left out
         if named == label:
             found.add(path)
     return found
@@ -576,28 +648,46 @@ def seconds(name: str, default: int) -> int:
 
 def main(argv: list[str]) -> int:
     args = parse(argv)
-    summary_path = EVALS / "results" / f"suite-{args.label}.md"
+    evals = args.evals
+    # The harness is the checkout holding this runner, so the harness commit a record names is
+    # the checkout that held both the runner and the cases; EVALS must be one of its skills'
+    # evals/ directories, whose path from the root names the records in both checkouts.
+    runner_root = toplevel(SCRIPTS)
+    if toplevel(evals) != runner_root or not evals.is_relative_to(runner_root):
+        raise Refused(f"EVALS {evals} is not in the checkout holding this runner ({runner_root})")
+    parts = evals.relative_to(runner_root).parts
+    if not is_evals(parts):
+        raise Refused(f"EVALS {evals} is not a skills/<skill>/evals directory of its checkout")
+    # Named cases were checked one by one in parse, so only a listing or a whole-suite run reads
+    # every case directory, and a sibling the suite cannot run does not block a named case.
+    cases = args.cases or case_names(evals)
+    if args.list:
+        for case in cases:
+            print(case)
+        return 0
+    summary_path = evals / "results" / f"suite-{args.label}.md"
     if summary_path.exists():
         raise Refused(f"{summary_path} exists; a suite run never overwrites a summary")
-    existing = label_records(args.label)
+    existing = label_records(evals, args.label)
     if existing and not args.resume:
         raise Refused(f"{min(existing)} exists, a record of {args.label}; start a new LABEL, "
                       "or --resume with the arguments that run started with")
-    harness, harness_commit, harness_short = commit_of(EVALS, "harness")
-    checkout, checkout_commit, checkout_short = commit_of(args.checkout, "skill")
-    committed = {harness: committed_records(harness), checkout: committed_records(checkout)}
-    cases = args.cases or sorted(path.parent.name for path in EVALS.glob("*/case.yaml"))
+    harness, harness_commit, harness_short = commit_of(evals, "harness", parts)
+    checkout, checkout_commit, checkout_short = commit_of(args.checkout, "skill", parts)
+    committed = {harness: committed_records(harness, parts), checkout: committed_records(checkout, parts)}
     specs = {}
     for case in cases:
-        if not NAME.fullmatch(case):
-            raise Refused(f"case directory {case!r} must match {NAME.pattern}")
-        spec = yaml.safe_load(read(EVALS / case / "case.yaml"))
+        try:
+            spec = yaml.safe_load(read(evals / case / "case.yaml"))
+        except yaml.YAMLError as error:
+            raise Refused(f"case {case} case.yaml does not parse: {error}") from None
         scenarios = spec.get("scenarios") if isinstance(spec, dict) else None
-        if not scenarios or not all(isinstance(s, dict) and NAME.fullmatch(str(s.get("name", ""))) for s in scenarios):
+        if not isinstance(scenarios, list) or not scenarios or not all(isinstance(s, dict) and isinstance(s.get("name"), str) and NAME.fullmatch(s["name"])
+                                     for s in scenarios):
             raise Refused(f"case {case} names no scenarios, or a scenario without a valid name")
         if len({s["name"] for s in scenarios}) != len(scenarios):
             raise Refused(f"case {case} names a scenario more than once")
-        if not os.access(EVALS / case / "run.sh", os.R_OK) or not (EVALS / case / "grader.py").is_file():
+        if not os.access(evals / case / "run.sh", os.R_OK) or not (evals / case / "grader.py").is_file():
             raise Refused(f"case {case} has no readable run.sh and grader.py")
         specs[case] = spec
     deadline = seconds("EVAL_TIMEOUT", 900) + seconds("EVAL_GRADING_MARGIN", GRADING_MARGIN)
@@ -612,12 +702,12 @@ def main(argv: list[str]) -> int:
         an attempt that changed either stops the suite."""
         for repo, role, commit in ((harness, "harness", harness_commit), (checkout, "skill", checkout_commit)):
             try:
-                now = commit_of(repo, role)[1]
+                now = commit_of(repo, role, parts)[1]
             except Refused as error:
                 raise Broken(f"{error}, after an attempt of this run changed it") from None
             if now != commit:
                 raise Broken(f"the {role} checkout moved from {commit} to {now} during the run")
-            records = committed_records(repo)
+            records = committed_records(repo, parts)
             if records != committed[repo]:
                 paths = sorted(path for path in records.keys() | committed[repo].keys()
                                if records.get(path) != committed[repo].get(path))
@@ -637,7 +727,7 @@ def main(argv: list[str]) -> int:
                "secrets": secrets, "env": env, "deadline": deadline, "unchanged": unchanged,
                "agent_command": command, "model": model, "effort": effort, "counted": set()}
         for case in cases:
-            case_dir, spec = EVALS / case, specs[case]
+            case_dir, spec = evals / case, specs[case]
             # A relative path the grader's code names, such as sessions.json, is a file it
             # reads from the run directory; actions.jsonl is kept as the tool-call record.
             ctx.update(kind=str(spec.get("kind", "unset")),
@@ -649,19 +739,22 @@ def main(argv: list[str]) -> int:
         unchanged()
         # The summary accounts for every record of its label: a resume with fewer runs or
         # cases than the run started with would leave records out of it.
-        uncounted = sorted(label_records(args.label) - ctx["counted"])
+        uncounted = sorted(label_records(evals, args.label) - ctx["counted"])
         if uncounted:
             raise Refused(f"{uncounted[0]} records an attempt of {args.label} that this run did not count; "
                           "--resume with the --runs and cases that run started with")
-        short =[f"{s['case']} {r['name']}" for s in sections for r in s["rows"] if r["n"] < args.runs]
-        (EVALS / "results").mkdir(exist_ok=True)
+        short = [f"{s['case']} {r['name']}" for s in sections for r in s["rows"] if r["n"] < args.runs]
+        failing = [f"{s['case']} {g['name']}" for s in sections for r in s["rows"] for g in r["grades"]
+                   if g["k"] < r["n"]]
+        (evals / "results").mkdir(exist_ok=True)
         write_new(summary_path, summary(args.label, args.runs, sections, short, ctx))
     finally:
         shutil.rmtree(tmp)  # scratch only: every record was written above
     if short:
         print(f"run-suite: fewer than {args.runs} graded runs for: {', '.join(short)}", file=sys.stderr)
-        return 1
-    return 0
+    if failing:
+        print(f"run-suite: failing graded runs for: {', '.join(failing)}", file=sys.stderr)
+    return 1 if short or failing else 0
 
 
 if __name__ == "__main__":

@@ -8,7 +8,9 @@
 # location, and the skills repository itself is refused unless --repo names it explicitly.
 #
 # Usage:
-#   run-adversarial-pipeline.sh preflight --base REF [--test-cmd CMD] [--test-dir DIR] [--scratch DIR]
+#   run-adversarial-pipeline.sh preflight --base REF [--full-suite on|off] [--test-cmd CMD] [--test-dir DIR] [--scratch DIR]
+#                               # --full-suite off: no suite run, 'full-suite: off' logged in its place;
+#                               # omitted: resolve-full-suite.py resolves it from the profile (off when none)
 #   run-adversarial-pipeline.sh run <sweep|hunt|arbitrate> --base REF --agent-cmd TEMPLATE
 #                               [--model ID] [--agent NAME] [--probe-cmd TEMPLATE] [--probe-timeout SECONDS]
 #                               [--spec FILE] [--no-sweep] [--scratch DIR] [--timeout SECONDS]
@@ -20,6 +22,8 @@
 #   run-adversarial-pipeline.sh cleanup <checkout-path>               # removes a checkout this script made
 #   run-adversarial-pipeline.sh paths --base REF                      # prints this run's artifact paths,
 #                               # then a final 'dossier_sizes <path>' line naming the size log
+#   run-adversarial-pipeline.sh checklist --base REF                  # prints the review checklist items
+#                               # for the paths changed in REF...HEAD (see "Review checklist")
 # Every command also takes --repo DIR.
 #
 # Runs: artifacts live in a run directory keyed by the base and head commit SHAs, under
@@ -72,6 +76,20 @@
 # side's reason. Test modules get no automatic exclusion. The kept diff takes the same pinned options
 # and per-file cap as the embedded diff below. The arbitrate dossier embeds no diff, so it lists no
 # exclusions.
+#
+# Review checklist: `.agent-skills/review-checklist.txt` in the repository under review, read from the
+# base commit (so a change cannot rewrite the checklist its own review uses), holds one
+# `<bash glob> | <review item>` per line; blank lines and lines whose first non-space character is
+# '#' are ignored, and any other line without ' | ', or holding a NUL or \001 byte, is skipped
+# with a warning on stderr. The glob is the text before the first ' | ' and is matched unquoted with bash
+# `[[ path == glob ]]` against each changed path as git prints it (repo-relative, no leading './',
+# rename detection off, so both sides of a rename count): '*' crosses '/', and '**/x' does not match
+# a top-level 'x'. `checklist` prints each matching item once (keyed on its text), in file order; a
+# file absent at the base or no match prints nothing and exits 0, and a git failure exits 22. The
+# sweep dossier ends with the same items, each prefixed '- ', under a '===== Review checklist'
+# heading: every whole item that fits in CHECKLIST_CAP_CHARS, in order, then a truncation notice if
+# any was left out. It has no such heading when none matches. With the sweep skipped (--no-sweep),
+# no phase shows them.
 #
 # Embedded diff: the sweep and hunt dossiers embed `git diff --no-ext-diff --unified=1` of the run's
 # range, and DIFF_CAP_BYTES (4096, in bytes of unified-diff text, per file and not a bound on the whole
@@ -131,7 +149,7 @@
 # or a CR included) fails (exit 17) and writes and retains nothing. The report with its identity
 # lines is retained, before it is stamped, as an immutable (read-only) copy in
 #   <git common dir>/adversarial-pipeline/arbitration-rounds
-# where <git common dir> is the absolute `git rev-parse --git-common-dir`, so every worktree of the
+# where <git common dir> is the output of `git rev-parse --path-format=absolute --git-common-dir`, so every worktree of the
 # clone resolves the same directory, independent of the run directory, --scratch and the worktree:
 #   round-<UTC timestamp>-<full HEAD SHA>-<first 12 hex of the report sha256>-<n>.md
 # The timestamp is `date -u +%Y%m%dT%H%M%SZ`. The copy is written to a temporary file in that
@@ -234,7 +252,8 @@
 # or wrote no fresh report, 17 agent ran blind (sandbox error on its stderr, or no `REVIEW-RAN: yes`
 # first line), 18 the agent changed the primary checkout, 19 the phase was killed by --timeout,
 # 20 the phase's availability check failed before any agent ran, 21 the arbitrate phase could not
-# write its identity lines or retain its accepted report (not accepted). An accepted arbitration report that
+# write its identity lines or retain its accepted report (not accepted), 22 the review checklist or
+# the changed paths could not be read (checklist, dossier sweep). An accepted arbitration report that
 # cannot be written to stdout still exits 1, as it did before the completion-line work; the message
 # names the stamped artifact so a driver does not re-run the model call.
 # A checkout that cannot be created exits with git's own status, which is what that path did before
@@ -242,6 +261,9 @@
 set -euo pipefail
 
 DIFF_CAP_BYTES=4096   # bytes of unified-diff text per file in an embedded diff (see "Embedded diff" above)
+CHECKLIST_CAP_CHARS=8192   # characters of matched items in the sweep dossier (see "Review checklist" above)
+
+SCRIPT_DIR="$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")"   # the real directory, through any symlink
 
 usage() { awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0" >&2; exit 2; }
 die() { local code="$1"; shift; echo "ERROR: $*" >&2; exit "$code"; }
@@ -297,7 +319,7 @@ phase=""; target=""
 case "$cmd" in
   dossier|run|record) phase="${1:-}"; [ -n "$phase" ] || usage; shift ;;
   cleanup) target="${1:-}"; [ -n "$target" ] || usage; shift; target="$(abspath "$target")" ;;
-  preflight|checkout|paths) ;;
+  preflight|checkout|paths|checklist) ;;
   -h|--help|help) usage ;;
   *) echo "ERROR: unknown command '$cmd'" >&2; usage ;;
 esac
@@ -318,11 +340,14 @@ PROBE_TIMEOUT="${ADVERSARIAL_PROBE_TIMEOUT:-30}"
 PROBE_SET=0
 NO_SWEEP=0
 SCRATCH_SET=0
+FULL_SUITE=""
+FULL_SUITE_SET=0
 while [ $# -gt 0 ]; do
   case "$1" in
-    --repo|--base|--spec|--test-cmd|--test-dir|--scratch|--agent-cmd|--agent|--timeout|--model|--probe-cmd|--probe-timeout)
+    --repo|--base|--spec|--test-cmd|--test-dir|--scratch|--agent-cmd|--agent|--timeout|--model|--probe-cmd|--probe-timeout|--full-suite)
       [ $# -ge 2 ] || die 2 "$1 needs a value"
       case "$1" in
+        --full-suite) FULL_SUITE="$2"; FULL_SUITE_SET=1 ;;
         --repo) REPO="$2" ;;
         --base) BASE="$2" ;;
         --spec) SPEC_FILE="$2" ;;
@@ -341,6 +366,13 @@ while [ $# -gt 0 ]; do
     *) echo "ERROR: unknown option $1" >&2; usage ;;
   esac
 done
+if [ "$FULL_SUITE_SET" -eq 1 ]; then
+  case "$FULL_SUITE" in
+    on|off) ;;
+    *) printf 'ERROR: --full-suite must be on or off, not %q\n' "$FULL_SUITE" >&2; usage ;;
+  esac
+  [ "$cmd" = "preflight" ] || { echo "ERROR: --full-suite is a preflight option; $cmd does not read it" >&2; usage; }
+fi
 
 # A named spec that is missing is an error; only an omitted spec gets the "no spec" fallback.
 if [ -n "$SPEC_FILE" ]; then
@@ -400,7 +432,7 @@ cd "$ROOT"
 validate_scratch() {
   local resolved_scratch resolved_root
   case "$cmd" in
-    preflight|dossier|run|checkout) ;;
+    preflight|dossier|run|checkout|checklist) ;;
     *) return 0 ;;
   esac
   if [ "$SCRATCH_SET" -eq 1 ] && [ -z "$SCRATCH" ]; then
@@ -591,6 +623,28 @@ primary_state() {
   done
 }
 
+# Does an agent's stderr log ($1) show a sandbox start-up error? The log also carries whatever the
+# agent echoes while it reads files, specs and diffs (SKL-127), and the skills' own text quotes these
+# markers, so this is a line-shape heuristic, not a source identifier. A marker counts only at the
+# start of a line or right after a carriage return (a progress line rewritten in place), after
+# optional whitespace and terminal escape sequences (CSI, colour included, and OSC), optionally
+# followed by one `<word>: ` tool prefix (the word starts with a letter or digit, so a `-`/`+` diff
+# line is never read as a prefix) and more whitespace or escape sequences, so `codex: bwrap: `
+# trips with or without colour. A marker quoted mid-line does not trip it. Two accepted limits of
+# the line shape: (a) a real error wrapped in more than one prefix (a timestamp, a log level,
+# `[pid] `, `error: ...: `) is missed; (b) echoed text already in the shape (an indented error
+# example, a `Note: ` line, a diff context line) still marks the phase blind, which fails safe:
+# the phase is retried. A real wrapper form seen in the wild gets its own bug and fixture.
+# Brackets are written as [[] and [\] because \[ and \\ are undefined inside POSIX ERE brackets;
+# LC_ALL=C keeps the byte ranges of the CSI grammar locale-independent.
+sandbox_error_in() {
+  local esc=$'\e' cr=$'\r' bel=$'\a'
+  local escseq="(${esc}[[][0-?]*[ -/]*[@-~]|${esc}][^${bel}${esc}]*(${bel}|${esc}[\\]))"
+  local gap="([[:space:]]|${escseq})*"
+  local lead="(^|${cr})${gap}([[:alnum:]][[:alnum:]_.-]*:[[:space:]]${gap})?"
+  LC_ALL=C grep -qiE "${lead}(bwrap: |sandbox (failed|denied|could not)|Failed to make .* Permission denied)" -- "$1"
+}
+
 accept_phase() {  # $1 = phase, $2 = stderr log or "": validate a freshly written artifact, then stamp it
   local art; art="$(artifact_for "$1")"
   [ -f "$RUN_DIR/$1.launch" ] && [ -f "$RUN_DIR/$1.binding" ] && [ -f "$RUN_DIR/$1.primary" ] \
@@ -604,7 +658,7 @@ accept_phase() {  # $1 = phase, $2 = stderr log or "": validate a freshly writte
   fi
   # A reviewer whose sandbox could not start reads nothing yet may still exit 0: never a false clean.
   # Sandbox errors are looked for only in the agent's own stderr; the report may quote such text.
-  if [ -n "$2" ] && [ -f "$2" ] && grep -qiE 'bwrap:|sandbox (failed|denied|could not)|Failed to make .* Permission denied' -- "$2"; then
+  if [ -n "$2" ] && [ -f "$2" ] && sandbox_error_in "$2"; then
     die 17 "the $1 agent ran blind (sandbox error on its stderr, see $2); treat this phase as failed, not clean."
   fi
   # The report must positively attest that the review ran.
@@ -1495,14 +1549,60 @@ classify_exclusions() {
   done
 }
 
+# The review checklist items for this run's changed paths (see "Review checklist" in the header).
+checklist_items() {
+  local file=".agent-skills/review-checklist.txt" entry tmp line glob item path n=0
+  local -a changed=()
+  local -A seen=()
+  # Read from the base, so a change cannot rewrite the checklist its own review runs against.
+  entry="$(git ls-tree "$BASE_SHA" -- "$file")" \
+    || die 22 "could not look up $file at the base $BASE_SHA."
+  case "$entry" in
+    "") return 0 ;;
+    "100644 blob "* | "100755 blob "*) ;;
+    *) die 22 "$file at the base $BASE_SHA is not a regular file." ;;
+  esac
+  tmp="$(mktemp -p "$RUN_DIR" checklist.XXXXXX)"
+  # --ignore-submodules=none: a repository's diff.ignoreSubmodules must not hide a changed gitlink.
+  if ! git diff --no-renames --ignore-submodules=none --name-only -z "$BASE_SHA"..."$HEAD_SHA" > "$tmp"; then
+    rm -f -- "$tmp"; die 22 "could not list the paths changed in $BASE_SHA...$HEAD_SHA."
+  fi
+  while IFS= read -r -d '' path; do changed+=("$path"); done < "$tmp"
+  # NUL becomes \001, which bash `read` keeps (it drops NUL silently), so the line can be skipped
+  # with a warning; pipefail makes a failing `git cat-file` fail the pipeline.
+  if ! git cat-file blob "${BASE_SHA}:${file}" | tr '\000' '\001' > "$tmp"; then
+    rm -f -- "$tmp"; die 22 "could not read $file at the base $BASE_SHA."
+  fi
+  while IFS= read -r line || [ -n "$line" ]; do
+    n=$(( n + 1 ))
+    line="${line#"${line%%[![:space:]]*}"}"
+    line="${line%"${line##*[![:space:]]}"}"
+    if [ -z "$line" ] || [ "${line:0:1}" = "#" ]; then continue; fi
+    case "$line" in *$'\001'*)
+      echo "WARNING: $file line $n holds a NUL or \\001 byte; skipped." >&2; continue ;; esac
+    glob="${line%% | *}"; glob="${glob%"${glob##*[![:space:]]}"}"
+    item="${line#* | }"; item="${item#"${item%%[![:space:]]*}"}"
+    case "$line" in *" | "*) ;; *) glob="" ;; esac
+    if [ -z "$glob" ] || [ -z "$item" ]; then
+      echo "WARNING: $file line $n is not '<bash glob> | <review item>'; skipped." >&2; continue
+    fi
+    if [ -n "${seen[$item]:-}" ]; then continue; fi
+    for path in "${changed[@]}"; do
+      if [[ "$path" == $glob ]]; then printf '%s\n' "$item"; seen[$item]=1; break; fi
+    done
+  done < "$tmp"
+  rm -f -- "$tmp"
+}
+
 emit_prior() {  # $1 = phase, $2 = text when that phase is intentionally absent (--no-sweep)
   if accepted "$1"; then cat -- "$(artifact_for "$1")"; else echo "$2"; fi
 }
 
 write_dossier() {  # $1 = phase, $2 = dossier path, $3 = the phase's checkout (exists already)
-  local p="$1" out="$2" co="$3"
+  local p="$1" out="$2" co="$3" items item kept dropped
   case "$p" in
     sweep)
+      items="$(checklist_items)"
       {
         echo "You are a high-volume adversarial code reviewer doing a FAST FIRST-PASS SWEEP."
         echo "Output ONLY a structured candidate list - no prose, no fixes, no plan. One entry per candidate:"
@@ -1516,6 +1616,23 @@ write_dossier() {  # $1 = phase, $2 = dossier path, $3 = the phase's checkout (e
         echo "make it 'REVIEW-RAN: no - <reason>'. A report without that line is treated as a review that did not run."
         echo
         emit_context "$co" 1
+        if [ -n "$items" ]; then
+          echo
+          echo "===== Review checklist (owner-approved items read from the base, for the paths this diff changes: check each one, report a miss as a candidate) ====="
+          kept="" dropped=0   # every whole item that fits, in order; one that does not is left out
+          while IFS= read -r item; do
+            # The cap counts the items joined by newlines: no separator after the last one.
+            if [ $(( ${#kept} + ${#item} )) -le "$CHECKLIST_CAP_CHARS" ]; then
+              kept+="$item"$'\n'
+            else
+              dropped=1
+            fi
+          done <<< "$items"
+          if [ -n "$kept" ]; then printf '%s' "$kept" | sed 's/^/- /'; fi
+          if [ "$dropped" -eq 1 ]; then
+            echo "[checklist truncated at $CHECKLIST_CAP_CHARS characters; 'checklist --base $BASE_SHA' prints every item]"
+          fi
+        fi
       } > "$out"
       ;;
     hunt)
@@ -1557,7 +1674,8 @@ write_dossier() {  # $1 = phase, $2 = dossier path, $3 = the phase's checkout (e
         echo "   the lower tiers missed."
         echo "3. Never invent findings to fill a section. Do not modify files. Never write secrets to files or command arguments."
         echo "The session's scratch directory is ${SESSION_SCRATCH:-$SCRATCH}; keep any artifact you create there."
-        echo "4. Output the final report in EXACTLY this Markdown layout and nothing else, after one first line:"
+        echo "4. Prefix a finding with 'pre-existing' (as the first words of its The bug text: 'pre-existing: ...') only when the defect is present at the merge base of BASE and HEAD (not at BASE itself) in code the diff neither changes nor newly calls, imports or exercises; this pre-PR gate has no review-of-record adjudicator yet, so you are the confirming seat here: confirm the tag yourself against the merge base, per the pre-existing rule in references/code-review.md (Handling findings), whose adjudicator re-confirms any such tag at the PR review of record."
+        echo "5. Output the final report in EXACTLY this Markdown layout and nothing else, after one first line:"
         echo "   'REVIEW-RAN: yes' when you read the diffstat and both phase results below and this dossier"
         echo "   carries its CHECKOUT: line; otherwise 'REVIEW-RAN: no - <reason>'. A report without that"
         echo "   line is treated as a review that did not run."
@@ -1635,8 +1753,19 @@ make_checkout() {  # prints the path of a registered throwaway detached worktree
 
 case "$cmd" in
   preflight)
+    # Omitted, the option resolves from the profile the skills load (no story key, so the team is
+    # profile.tracker.team_key), and off when no profile exists. A profile that cannot be read stops
+    # the run after the previous acceptance is discarded, so a failed resolution never leaves it standing.
     rm -f -- "$PHASE0.stamp"
     invalidate_downstream preflight
+    if [ "$FULL_SUITE_SET" -eq 0 ]; then
+      FULL_SUITE="$(python3 "$SCRIPT_DIR/resolve-full-suite.py" < /dev/null)" \
+        || die 2 "--full-suite was omitted and could not be resolved from the profile (see above); pass --full-suite on|off or fix the profile."
+      case "$FULL_SUITE" in
+        on|off) ;;
+        *) die 2 "--full-suite was omitted and the resolver printed $(printf '%q' "$FULL_SUITE"), not on or off." ;;
+      esac
+    fi
     status=0
     suite_ran=0
     EXPORT_ROOT=""
@@ -1665,10 +1794,16 @@ case "$cmd" in
         status=1
       fi
       echo
-      echo "## 2. The suite, run in a clean checkout of HEAD"
-      if [ -z "${TEST_CMD//[[:space:]]/}" ]; then
+      if [ "$FULL_SUITE" = "off" ]; then
+        echo "## 2. The suite (full-suite: off, not run)"
+        echo "full-suite: off - the suite was not run; pass --full-suite on to run it."
+        printf 'full-suite: off\n' > "$SUITE_LOG"
+        echo "Suite log: $SUITE_LOG"
+      elif [ -z "${TEST_CMD//[[:space:]]/}" ]; then
+        echo "## 2. The suite, run in a clean checkout of HEAD"
         echo "SKIPPED - no test command, so NOTHING exercised the committed tree. This is INCOMPLETE, not a pass."
       else
+        echo "## 2. The suite, run in a clean checkout of HEAD"
         # A detached worktree, not an archive export: it keeps git metadata, so tests that shell out to
         # git (ls-files, rev-parse) still work.
         if [ -n "$SCRATCH" ]; then
@@ -1726,6 +1861,8 @@ case "$cmd" in
         echo "FAIL - fix this before spending any model budget."
       elif [ "$suite_ran" -eq 1 ]; then
         echo "PASS - proceed to the sweep and the hunt."
+      elif [ "$FULL_SUITE" = "off" ]; then
+        echo "PASS (full-suite: off, the suite was not run) - proceed to the sweep and the hunt."
       else
         echo "INCOMPLETE - the tree is clean but the suite did not run. Re-run with a test command."
       fi
@@ -1733,7 +1870,7 @@ case "$cmd" in
     cat -- "$PHASE0"
     echo "Phase 0 (preflight) -> $PHASE0" >&2
     if [ "$status" -ne 0 ]; then exit 1; fi
-    if [ "$suite_ran" -eq 0 ]; then exit 3; fi
+    if [ "$suite_ran" -eq 0 ] && [ "$FULL_SUITE" != "off" ]; then exit 3; fi
     stamp preflight
     exit 0
     ;;
@@ -1920,6 +2057,7 @@ case "$cmd" in
     ;;
 
   checkout) make_checkout || die 2 "could not create the throwaway checkout" ;;
+  checklist) checklist_items ;;
   paths)
     printf 'run %s\npreflight %s\nsuite_log %s\nsweep %s\nhunt %s\narbitrate %s\ndossier_sizes %s\n' \
       "$RUN_DIR" "$PHASE0" "$SUITE_LOG" "$PHASE1" "$PHASE2" "$PHASE3" "$RUN_DIR/dossier-sizes.md"

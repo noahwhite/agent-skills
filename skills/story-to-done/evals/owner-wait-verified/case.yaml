@@ -1,0 +1,73 @@
+case: owner-wait-verified
+skill: story-to-done
+kind: discriminating
+purpose: >-
+  Show that the coordinator verifies a handback's "waiting on the owner" claim against the story in
+  the tracker before it reports it: when the tracker shows the claim is not owner-only, it launches
+  or resumes the role that can act instead of reporting an owner-wait, and when the tracker shows
+  an open criterion that needs a value only the owner holds, it still stops and names that criterion.
+split: >-
+  SKL-356 owns this case: its prompt, case.yaml, grader, scenarios, the stub tracker and role
+  runtime, rerun instructions and recorded runs, and its row in the case list of ../README.md. The
+  suite harness (scripts/run-suite.sh, scripts/eval_suite.py at the repository root since
+  SKL-338) stays SKL-164's, and no file of another case changes.
+baseline:
+  commit: 9e65dd3e24b10076bd04237971c4f3974164c56a
+  note: >-
+    The skill on main immediately before SKL-356. Its in_deployment_review bullet reports and stops
+    on any outstanding item that names the owner, with no read of the story behind the claim.
+candidate:
+  commit: ad92cae04a8e5a1cf4d8e62e91e0b01cc7e35709
+  note: >-
+    SKL-356's commit that adds the owner-wait verification rule to step 4. The rule reads the
+    item's story in the tracker, records `owner-only` and `coordinator-or-role-can-act`, acts when
+    the item is not owner-only, and still stops on an owner-only item.
+runtime:
+  command: opencode run --standalone --auto --archived --model deepseek/deepseek-v4-pro
+  model: deepseek/deepseek-v4-pro
+  reasoning_effort: default
+  record: >-
+    SKL-356 records three graded runs per scenario at each commit through the suite runner. A run with
+    a different model records its own result files and names the model it used.
+scenarios:
+  - name: rescoped-brief
+    expectation: rescoped-brief
+    baseline: >-
+      reports AC3 as waiting on a new brief from the story owner and stops, launching or resuming no
+      role
+    candidate: >-
+      reads ABC-123 on the tracker, finds the rescoped criteria already on the story and no open
+      blocker, and launches or resumes QA, with no owner-wait in its final message
+  - name: owner-value
+    expectation: owner-value
+    baseline: reads ABC-123, stops, and names AC2 to the user
+    candidate: reads ABC-123, stops, and names AC2 to the user
+    control: an open criterion that needs a value only the owner holds still stops the run
+graded_on:
+  - >-
+    tool-call evidence: every tracker read and role-runtime call in actions.jsonl, and the text each
+    send carried, kept in messages.json under the id its call names; the final message is the last
+    message the run sent to the user
+  - >-
+    rescoped-brief: a tracker read of ABC-123 is followed by a role launch or resume call, and the
+    final message, if any, is judged to present no item as waiting on the owner (or on "you")
+  - >-
+    owner-value: a tracker read of ABC-123 is recorded, no role launch or resume call is recorded,
+    and the final message is judged to present AC2 (the retention period) as still outstanding and
+    needing the owner
+  - >-
+    the judge: the recorded calls are checked deterministically, and only the final message's intent
+    is judged, by the agent command that produced the run, launched afresh in an empty directory with
+    nothing but the final message and the intent; its yes is the pass, and its verdict is kept in
+    judge-verdict.json so a recorded run grades again to the same verdict
+not_graded_on:
+  - the agent's prose outside the messages it sent
+  - >-
+    the todo entries `owner-only` and `coordinator-or-role-can-act`: the todo list is the agent's
+    own, and the case grades the calls the rule leads to
+  - >-
+    whether the role call is a new QA round, a QA continuation or a senior-engineer launch: the rule
+    allows any role the next step dispatches
+  - >-
+    the wording of the final message: the judge reads its intent, so no phrasing is required or
+    forbidden, and quoting or rebutting the handback's owner-wait claim is not reporting one
