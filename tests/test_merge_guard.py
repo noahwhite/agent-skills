@@ -27,12 +27,17 @@ READ_BACK_QUERY = (
     "and `gh api --paginate repos/<owner>/<repo>/pulls/<n>/reviews`."
 )
 READ_BACK = (
-    "Select the review of record as the merge guard in `references/code-review.md` does "
-    "(the `COMMENTED` review whose body begins with `Review of record` and has the greatest `submitted_at`).\n"
+    "Select the review of record as merge guard step 2 in `references/code-review.md` does: "
+    "resolve the expected author as `profile.review.record_author` when set, otherwise the login of the "
+    "authenticated account (`gh api user --jq .login`); among the reviews in state `COMMENTED` whose body "
+    "begins with `Review of record`, keep only those whose `user.login` equals the expected author "
+    "(case-insensitive), and select the one with the greatest `submitted_at`.\n"
     "Compare the merged PR's `headRefOid` (its head at merge, not the merge commit) separately with that review's `commit_id` "
     "and with the full head SHA on its first line.\n"
-    "Except under the explicit per-PR review waiver in The gate, a missing review, a missing SHA, or either mismatch "
-    "is reported with the PR and all available SHAs, and stops the loop.\n"
+    "Except under the explicit per-PR review waiver in The gate, marker reviews but none by the expected author, "
+    "an expected author that cannot be resolved, a missing review, a missing SHA, or either mismatch "
+    "is reported with the PR, the expected author (or `unresolved` and the failing command), "
+    "each excluded review's `user.login` and `html_url`, and all available SHAs, and stops the loop.\n"
     "For a waived PR, compare the merged PR's `headRefOid` with the SHA recorded when the user gave the instruction; "
     "report and stop if that SHA is missing or differs."
 )
@@ -77,9 +82,17 @@ def skill(name: str) -> str:
 
 
 REVIEWS_READ = (
-    "2. Read the PR's reviews with `gh api --paginate repos/<owner>/<repo>/pulls/<n>/reviews`, "
-    "select the latest submitted review in state `COMMENTED` whose body begins with `Review of record`, "
-    "and take both its `commit_id` and the full head SHA on its first line."
+    "2. Resolve the expected author as `profile.review.record_author` when set, otherwise the login of the "
+    "authenticated account (`gh api user --jq .login`).\n"
+    "   Except under the explicit per-PR review waiver in The gate, if neither yields a login, the guard does not "
+    "merge and reports the failing command (the command and its exit status or empty output).\n"
+    "   Read the PR's reviews with `gh api --paginate repos/<owner>/<repo>/pulls/<n>/reviews`.\n"
+    "   Among the reviews in state `COMMENTED` whose body begins with `Review of record`, keep only those whose "
+    "`user.login` equals the expected author (case-insensitive), and select the one with the greatest "
+    "`submitted_at`; the guard's output lists each marker review it excluded, with its `user.login`, `html_url` "
+    "and `commit_id`.\n"
+    "   The latest review is the one with the greatest `submitted_at`, not the last in the list.\n"
+    "   Take both its `commit_id` and the full head SHA on its first line."
 )
 FAIL_CLOSED = (
     "3. Except under the explicit per-PR review waiver in The gate, "
@@ -354,8 +367,10 @@ def test_story_to_done_read_backs_compare_each_sha_separately_and_fail_closed() 
             "and with the full head SHA on its first line."
         ) in body, heading
         assert (
-            "Except under the explicit per-PR review waiver in The gate, a missing review, a missing SHA, or either mismatch "
-            "is reported with the PR and all available SHAs, and stops the loop."
+            "Except under the explicit per-PR review waiver in The gate, marker reviews but none by the expected author, "
+            "an expected author that cannot be resolved, a missing review, a missing SHA, or either mismatch "
+            "is reported with the PR, the expected author (or `unresolved` and the failing command), "
+            "each excluded review's `user.login` and `html_url`, and all available SHAs, and stops the loop."
         ) in body, heading
 
 
