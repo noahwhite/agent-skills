@@ -6,6 +6,8 @@ name: gate-base
 # head is checked out as data only and nothing in it is executed.
 on:
   pull_request_target:
+    # edited covers a change of base branch, which leaves the head SHA as it was.
+    types: [opened, synchronize, reopened, edited]
 
 permissions:
   contents: read

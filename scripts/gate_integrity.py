@@ -6,8 +6,9 @@ checkout as data only. Against each base workflow, the head copy may add jobs an
 workflows, may add steps after a base job's last step, and may rename a workflow,
 job or step. Everything else must stay as the base has it:
 
-- every base workflow file is still present and parses, without duplicate keys,
-  with booleans read as GitHub reads them (so only an `on` key declares triggers);
+- every base workflow file (`*.yml`) is still present, within GitHub's 500 KB limit,
+  and parses without duplicate keys, with scalars read as GitHub reads them (YAML 1.2
+  core, so only an `on` key declares triggers and `017` is 17);
 - every top-level key other than `name` and `jobs` (triggers, permissions, env,
   concurrency, defaults) is unchanged, and none is added; trigger spellings that
   GitHub reads the same (`on: push`, `on: [push]`, `push:` empty or `{}`) match;
@@ -16,19 +17,24 @@ job or step. Everything else must stay as the base has it:
 - every job's `needs` in a base workflow names jobs of that workflow without a cycle,
   since GitHub rejects the whole file otherwise and no base job runs;
 - a base job's head steps start with its base steps, in order and unchanged in
-  every field other than `name`. An added step runs only after every base step, so
-  it cannot change their execution (through $GITHUB_ENV, for example).
+  every field other than `name`, and no renamed step takes another base step's name.
+  An added step runs only after every base step, so it cannot change their execution
+  (through $GITHUB_ENV, for example);
+- added jobs and steps in a base workflow are ones GitHub accepts (known keys, one of
+  `runs-on` or `uses`, one of `run` or `uses`), since an invalid one stops the file.
 
 Values compare by type as well as value, so `true` does not match `1`.
 
-gate-base.yml itself may change only its workflow `name`, so nothing can be added to
-the job that judges. A head job may not report a check that a base job or this gate
-reports: no added job, in any workflow, may have a check name (its `name`, else its
-id) that is `gate-base` or a base job's check name, and no head job may take an
-expression as its name unless the base job had that same name.
+gate-base.yml itself may change only display names: no job or step may be added to it.
+A head job may not report or write a check that a base job or this gate reports: no
+added job, in any workflow file, may have a check name (its `name`, else its id) that
+is `gate-base` or a base job's check name, take an expression as its name, or run with
+a token that could write check runs (`checks: write`, `write-all`, or no explicit
+permissions, which leaves the repository default).
 
 --base-script and --head-script go together: the head file must have the base
-file's bytes, so a pull request cannot weaken its own judge.
+file's bytes, so a pull request cannot weaken its own judge. When they are left out
+and --base is a checkout's .github/workflows, the scripts beside both are compared.
 
   scripts/gate_integrity.py --base DIR --head DIR [--base-script FILE --head-script FILE]
 
@@ -45,19 +51,30 @@ import yaml
 
 GATE_WORKFLOW = "gate-base.yml"
 GATE_CHECK = "gate-base"
-SUFFIXES = (".yml", ".yaml")
+# Gate files are .github/workflows/*.yml; every file GitHub runs as a workflow is scanned
+# for jobs that could report or write a check.
+GATE_SUFFIX = ".yml"
+WORKFLOW_SUFFIXES = (".yml", ".yaml")
+# Fail closed at 500,000 bytes, below either reading of GitHub's 500 KB limit.
+MAX_WORKFLOW_BYTES = 500_000
+JOB_KEYS = {"name", "permissions", "needs", "if", "runs-on", "environment", "concurrency", "outputs", "env",
+            "defaults", "steps", "timeout-minutes", "strategy", "continue-on-error", "container", "services",
+            "uses", "with", "secrets", "snapshot"}
+STEP_KEYS = {"id", "if", "name", "uses", "run", "working-directory", "shell", "with", "env", "continue-on-error",
+             "timeout-minutes"}
 
 
 class UniqueKeyLoader(yaml.SafeLoader):
-    """A safe loader that reads booleans as GitHub does and refuses a repeated mapping key.
+    """A safe loader that reads plain scalars as GitHub does and refuses a repeated mapping key.
 
-    GitHub parses workflows with the YAML 1.2 core schema, where only true and false (in
-    lower, title or upper case) are booleans. PyYAML's YAML 1.1 schema also reads on, off,
-    yes and no as booleans, which would make a head `true:` key look like `on:`.
+    GitHub parses workflows with the YAML 1.2 core schema. PyYAML's YAML 1.1 schema reads
+    more as booleans (on, off, yes, no), numbers (017 as octal, 1:30 as 90) and dates, so a
+    head `true:` key would look like `on:` and `timeout-minutes: 017` like 15. This loader
+    keeps only null from PyYAML and resolves booleans, integers and floats by YAML 1.2 core.
     """
 
     yaml_implicit_resolvers = {
-        first: [(tag, regexp) for tag, regexp in resolvers if tag != "tag:yaml.org,2002:bool"]
+        first: [(tag, regexp) for tag, regexp in resolvers if tag == "tag:yaml.org,2002:null"]
         for first, resolvers in yaml.SafeLoader.yaml_implicit_resolvers.items()
     }
 
@@ -69,8 +86,29 @@ class UniqueKeyLoader(yaml.SafeLoader):
         return super().construct_mapping(node, deep=deep)
 
 
-UniqueKeyLoader.add_implicit_resolver(
-    "tag:yaml.org,2002:bool", re.compile(r"^(?:true|True|TRUE|false|False|FALSE)$"), list("tTfF"))
+def construct_core_int(loader, node):
+    value = loader.construct_scalar(node)
+    if value.startswith(("0o", "0x")):
+        return int(value[2:], 8 if value[1] == "o" else 16)
+    return int(value, 10)
+
+
+def construct_core_float(loader, node):
+    value = loader.construct_scalar(node).lower()
+    return float(value.replace(".inf", "inf").replace(".nan", "nan"))
+
+
+CORE_SCALARS = (
+    ("tag:yaml.org,2002:bool", r"true|True|TRUE|false|False|FALSE", "tTfF"),
+    ("tag:yaml.org,2002:int", r"[-+]?[0-9]+|0o[0-7]+|0x[0-9a-fA-F]+", "-+0123456789"),
+    ("tag:yaml.org,2002:float",
+     r"[-+]?(?:\.[0-9]+|[0-9]+(?:\.[0-9]*)?)(?:[eE][-+]?[0-9]+)?|[-+]?\.(?:inf|Inf|INF)|\.(?:nan|NaN|NAN)",
+     "-+.0123456789"),
+)
+for tag, pattern, first in CORE_SCALARS:
+    UniqueKeyLoader.add_implicit_resolver(tag, re.compile(f"^(?:{pattern})$"), list(first))
+UniqueKeyLoader.add_constructor("tag:yaml.org,2002:int", construct_core_int)
+UniqueKeyLoader.add_constructor("tag:yaml.org,2002:float", construct_core_float)
 
 
 def same(a, b) -> bool:
@@ -99,6 +137,8 @@ def load(path: Path):
     """Parse one workflow file; return (document, problem)."""
     if path.is_symlink() or not path.is_file():
         return None, "is not a regular file"
+    if path.stat().st_size > MAX_WORKFLOW_BYTES:
+        return None, "is over GitHub's 500 KB workflow file limit, so GitHub would not run it"
     try:
         document = yaml.load(path.read_text(encoding="utf-8"), Loader=UniqueKeyLoader)
     except yaml.constructor.ConstructorError as error:
@@ -149,27 +189,80 @@ def compare_steps(base_steps, head_steps, where: str) -> list[str]:
         return [] if same(base_steps, head_steps) else [f"{where}: steps changed"]
     problems = []
     head_bodies = [step_body(step) for step in head_steps]
+    base_names = [step_name(step) for step in base_steps]
     for position, base_step in enumerate(base_steps, start=1):
         body = step_body(base_step)
         if position <= len(head_bodies) and same(head_bodies[position - 1], body):
+            # Steps match by name when they have one: a renamed step may not take another base step's name.
+            name = step_name(head_steps[position - 1])
+            if name is not None and name != base_names[position - 1] and name in base_names:
+                problems.append(f"{where}: {describe(position, base_step)} takes the name of another base step")
             continue
         if any(same(head_body, body) for head_body in head_bodies):
             problems.append(f"{where}: {describe(position, base_step)} is out of order (moved, or an added"
                             " step runs before it; added steps go after the base steps)")
         else:
             problems.append(f"{where}: {describe(position, base_step)} was removed or changed")
+    for position, step in enumerate(head_steps[len(base_steps):], start=len(base_steps) + 1):
+        problems += invalid_step(step, f"{where}: added step {position}")
     return problems
 
 
+def steps_of(job) -> list:
+    steps = job.get("steps") if isinstance(job, dict) else None
+    return steps if isinstance(steps, list) else []
+
+
+def step_name(step):
+    return step.get("name") if isinstance(step, dict) else None
+
+
+def invalid_step(step, where: str) -> list[str]:
+    """An added step GitHub would reject, which stops every job in the file from running."""
+    if not isinstance(step, dict):
+        return [f"{where} is not a mapping"]
+    unknown = sorted(str(key) for key in step if key not in STEP_KEYS)
+    if unknown:
+        return [f"{where} has keys GitHub rejects: {', '.join(unknown)}"]
+    if ("run" in step) == ("uses" in step):
+        return [f"{where} needs exactly one of run and uses"]
+    return []
+
+
+def invalid_job(job, where: str) -> list[str]:
+    """An added job GitHub would reject, which stops every job in the file from running."""
+    if not isinstance(job, dict):
+        return [f"{where} is not a mapping"]
+    unknown = sorted(str(key) for key in job if key not in JOB_KEYS)
+    if unknown:
+        return [f"{where} has keys GitHub rejects: {', '.join(unknown)}"]
+    if ("runs-on" in job) == ("uses" in job):
+        return [f"{where} needs exactly one of runs-on and uses"]
+    if "uses" in job:
+        return [f"{where} has steps, which a reusable workflow call cannot"] if "steps" in job else []
+    steps = job.get("steps")
+    if not isinstance(steps, list) or not steps:
+        return [f"{where} needs a list of steps"]
+    return [problem for position, step in enumerate(steps, start=1)
+            for problem in invalid_step(step, f"{where} step {position}")]
+
+
 def compare_workflow(name: str, base: dict, head: dict) -> list[str]:
-    if name == GATE_WORKFLOW:
-        return compare_fields(base, head, ("name",), f"{name} (only its workflow name may change; a gate"
-                                                     " change follows the owner's disable, merge, re-enable"
-                                                     " procedure)")
     problems = compare_fields(base, head, ("name", "jobs"), name)
     base_jobs, head_jobs = base.get("jobs") or {}, head.get("jobs") or {}
     if not isinstance(base_jobs, dict) or not isinstance(head_jobs, dict):
         return problems + ([] if same(base_jobs, head_jobs) else [f"{name}: jobs changed"])
+    if name == GATE_WORKFLOW:
+        # Nothing may be added to the workflow that judges; display names may still change.
+        procedure = "a gate change follows the owner's disable, merge, re-enable procedure"
+        for job_id, head_job in head_jobs.items():
+            if job_id not in base_jobs:
+                problems.append(f"{name} job '{job_id}' was added; {procedure}")
+            elif len(steps_of(head_job)) > len(steps_of(base_jobs[job_id])):
+                problems.append(f"{name} job '{job_id}' has an added step; {procedure}")
+    for job_id, head_job in head_jobs.items():
+        if job_id not in base_jobs:
+            problems += invalid_job(head_job, f"{name} added job '{job_id}'")
     for job_id, base_job in base_jobs.items():
         where = f"{name} job '{job_id}'"
         if job_id not in head_jobs:
@@ -242,23 +335,54 @@ def forged_checks(bases: dict, heads: dict) -> list[str]:
     return problems
 
 
-def workflow_files(directory: Path) -> list[Path]:
+def check_writers(bases: dict, heads: dict) -> list[str]:
+    """Added jobs whose token could write check runs, and so post or overwrite a gate-base result.
+
+    A job's token takes the job's `permissions`, else its workflow's, else the repository
+    default, which this judge cannot read; an added job must therefore set them explicitly.
+    """
+    problems = []
+    for file, workflow in heads.items():
+        jobs = workflow.get("jobs")
+        base_jobs = (bases.get(file) or {}).get("jobs")
+        for job_id, job in (jobs.items() if isinstance(jobs, dict) else ()):
+            if isinstance(base_jobs, dict) and job_id in base_jobs:
+                continue
+            where = f"{file} job '{job_id}'"
+            if isinstance(job, dict) and "permissions" in job:
+                permissions = job["permissions"]
+            elif "permissions" in workflow:
+                permissions = workflow["permissions"]
+            else:
+                problems.append(f"{where} has no permissions, so its token gets the repository default,"
+                                " which could write check runs")
+                continue
+            if permissions == "write-all" or (isinstance(permissions, dict) and permissions.get("checks") == "write"):
+                problems.append(f"{where} can write check runs, so it could post a gate-base result")
+            elif not (permissions in ("read-all", {}) or isinstance(permissions, dict)):
+                problems.append(f"{where} has permissions the gate cannot read, so it could write check runs")
+    return problems
+
+
+def workflow_files(directory: Path, suffixes) -> list[Path]:
     if not directory.is_dir():
         return []
-    return sorted(p for p in directory.iterdir() if p.suffix.lower() in SUFFIXES)
+    return sorted(p for p in directory.iterdir() if p.suffix.lower() in suffixes)
 
 
 def judge(base_dir: Path, head_dir: Path, base_script: Path | None, head_script: Path | None) -> list[str]:
     if head_dir.is_symlink() or head_dir.parent.is_symlink():
         return ["head .github/workflows is a symlink; the head checkout is judged only as it is"]
     problems, bases, heads = [], {}, {}
-    for base_path in workflow_files(base_dir):
+    for base_path in workflow_files(base_dir, (GATE_SUFFIX,)):
+        if base_path.suffix != GATE_SUFFIX:
+            continue
         base, problem = load(base_path)
         if problem:
             problems.append(f"base {base_path.name} {problem}")
         else:
             bases[base_path.name] = base
-    for head_path in workflow_files(head_dir):
+    for head_path in workflow_files(head_dir, WORKFLOW_SUFFIXES):
         head, problem = load(head_path)
         if problem:
             problems.append(f"head {head_path.name} {problem}")
@@ -274,6 +398,7 @@ def judge(base_dir: Path, head_dir: Path, base_script: Path | None, head_script:
         elif name in heads:
             problems += compare_workflow(name, base, heads[name])
     problems += forged_checks(bases, heads)
+    problems += check_writers(bases, heads)
     if base_script is not None:
         if head_script.is_symlink() or not head_script.is_file():
             problems.append("scripts/gate_integrity.py was removed; the base copy judges and must stay")
@@ -294,6 +419,12 @@ def main(argv=None) -> int:
         parser.error(f"--base {args.base} is not a directory")
     if (args.base_script is None) != (args.head_script is None):
         parser.error("--base-script and --head-script go together")
+    if args.base_script is None and args.base.resolve().parent.name == ".github":
+        # Two checkouts' .github/workflows: the base checkout's judge, when it has one, is a gate file.
+        inferred = args.base.resolve().parent.parent / "scripts/gate_integrity.py"
+        if inferred.is_file():
+            args.base_script = inferred
+            args.head_script = args.head.parent.parent / "scripts/gate_integrity.py"
     if args.base_script is not None and (args.base_script.is_symlink() or not args.base_script.is_file()):
         parser.error(f"--base-script {args.base_script} is not a regular file")
     try:
@@ -301,7 +432,8 @@ def main(argv=None) -> int:
     except (RecursionError, MemoryError, OSError) as error:
         problems = [f"could not judge: {error.__class__.__name__}"]
     for problem in problems:
-        print(f"gate-base: {problem}")
+        # Head-controlled names are escaped onto one line, so none can start a runner workflow command.
+        print("gate-base: " + problem.encode("unicode_escape").decode("ascii"))
     if problems:
         print(f"gate-base: FAIL, {len(problems)} violation(s)")
         return 1

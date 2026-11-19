@@ -182,8 +182,39 @@ def test_a_job_added_passes(tmp_path):
 
 def test_an_added_job_that_needs_a_base_job_passes(tmp_path):
     result = judge(tmp_path, head_with(lambda ci: ci["jobs"].update(
-        lint={"needs": ["checks"], "steps": [{"run": "true"}]})))
+        lint={"needs": ["checks"], "runs-on": "ubuntu-24.04", "steps": [{"run": "true"}]})))
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_an_added_reusable_workflow_job_passes(tmp_path):
+    result = judge(tmp_path, head_with(lambda ci: ci["jobs"].update(
+        reuse={"uses": "./.github/workflows/reusable.yml", "with": {"x": 1}})))
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+# GitHub rejects a whole workflow file with an invalid job or step, so an addition like
+# these stops every base job in that file from running.
+INVALID_ADDITIONS = {
+    "job without runs-on or uses": lambda ci: ci["jobs"].update(lint={"steps": [{"run": "true"}]}),
+    "job with runs-on and uses": lambda ci: ci["jobs"].update(
+        lint={"runs-on": "ubuntu-24.04", "uses": "./x.yml", "steps": [{"run": "true"}]}),
+    "reusable call with steps": lambda ci: ci["jobs"].update(lint={"uses": "./x.yml", "steps": [{"run": "true"}]}),
+    "job without steps": lambda ci: ci["jobs"].update(lint={"runs-on": "ubuntu-24.04"}),
+    "job with an unknown key": lambda ci: ci["jobs"].update(
+        lint={"runs-on": "ubuntu-24.04", "stepz": [], "steps": [{"run": "true"}]}),
+    "job that is not a mapping": lambda ci: ci["jobs"].update(lint="ubuntu-24.04"),
+    "appended step without run or uses": lambda ci: steps(ci).append({"name": "Nothing"}),
+    "appended step with run and uses": lambda ci: steps(ci).append({"run": "true", "uses": "x/y@v1"}),
+    "appended step with an unknown key": lambda ci: steps(ci).append({"run": "true", "runs": "x"}),
+    "appended step that is not a mapping": lambda ci: steps(ci).append("echo hi"),
+}
+
+
+@pytest.mark.parametrize("change", INVALID_ADDITIONS.values(), ids=INVALID_ADDITIONS)
+def test_an_addition_github_rejects_fails(tmp_path, change):
+    result = judge(tmp_path, head_with(change))
+    assert result.returncode != 0, result.stdout
+    assert "added" in result.stdout
 
 
 # GitHub rejects a whole workflow file whose `needs` names a missing job or forms a cycle,
@@ -206,9 +237,44 @@ def test_an_added_job_with_needs_github_rejects_fails(tmp_path, jobs):
 
 def test_a_workflow_added_passes(tmp_path):
     workflows = head_with(lambda ci: None)
-    workflows["extra.yml"] = {"on": {"push": None}, "jobs": {"x": {"steps": [{"run": "true"}]}}}
+    workflows["extra.yml"] = {"on": {"push": None}, "permissions": {"contents": "read"},
+                              "jobs": {"x": {"runs-on": "ubuntu-24.04", "steps": [{"run": "true"}]}}}
     result = judge(tmp_path, workflows)
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+# A job that can write check runs could post a gate-base check run of its own, or overwrite
+# the gate's, on the PR head.
+CHECK_WRITERS = {
+    "workflow checks write": ({"checks": "write"}, None),
+    "workflow write-all": ("write-all", None),
+    "job checks write": ({"contents": "read"}, {"checks": "write"}),
+    "job write-all": ({"contents": "read"}, "write-all"),
+    "no permissions anywhere": (None, None),
+    "unreadable permissions": ("${{ inputs.p }}", None),
+}
+
+
+@pytest.mark.parametrize("workflow_permissions, job_permissions", CHECK_WRITERS.values(), ids=CHECK_WRITERS)
+def test_an_added_job_that_could_write_check_runs_fails(tmp_path, workflow_permissions, job_permissions):
+    job = {"runs-on": "ubuntu-24.04", "steps": [{"run": "gh api repos/o/r/check-runs -f name=gate-base"}]}
+    if job_permissions is not None:
+        job["permissions"] = job_permissions
+    added = {"on": {"pull_request": None}, "jobs": {"post": job}}
+    if workflow_permissions is not None:
+        added["permissions"] = workflow_permissions
+    workflows = head_with(lambda ci: None)
+    workflows["post.yaml"] = added
+    result = judge(tmp_path, workflows)
+    assert result.returncode != 0, result.stdout
+    assert "post.yaml job 'post'" in result.stdout
+
+
+def test_an_added_job_in_a_base_workflow_with_checks_write_fails(tmp_path):
+    result = judge(tmp_path, head_with(lambda ci: ci["jobs"].update(
+        post={"runs-on": "ubuntu-24.04", "permissions": {"checks": "write"}, "steps": [{"run": "true"}]})))
+    assert result.returncode != 0, result.stdout
+    assert "check runs" in result.stdout
 
 
 def test_a_renamed_step_passes(tmp_path):
@@ -331,9 +397,17 @@ def test_gate_base_trigger_changed_fails(tmp_path):
 
 GATE_CHANGES = {
     "step added": lambda gate: gate["jobs"]["gate"]["steps"].insert(0, {"run": "echo tamper"}),
+    "step appended": lambda gate: gate["jobs"]["gate"]["steps"].append({"run": "echo tamper"}),
     "job added": lambda gate: gate["jobs"].update(evil={"runs-on": "ubuntu-24.04", "steps": [{"run": "true"}]}),
     "job renamed": lambda gate: gate["jobs"]["gate"].update(name="gate-base"),
 }
+
+
+def test_a_gate_workflow_step_rename_passes(tmp_path):
+    gate = copy.deepcopy(GATE)
+    gate["jobs"]["gate"]["steps"][0]["name"] = "Judge the head"
+    result = judge(tmp_path, {"ci.yml": copy.deepcopy(CI), "gate-base.yml": gate})
+    assert result.returncode == 0, result.stdout
 
 
 @pytest.mark.parametrize("change", GATE_CHANGES.values(), ids=GATE_CHANGES.keys())
@@ -386,13 +460,69 @@ def test_a_malformed_base_still_yields_a_verdict(tmp_path, base_text, head_text)
     assert "gate-base: FAIL" in result.stdout
 
 
-def test_an_uppercase_extension_is_judged(tmp_path):
+@pytest.mark.parametrize("name", ["ci.yaml", "ci.YML"])
+def test_only_dot_yml_base_files_are_gate_files(tmp_path, name):
+    # D3: gate files are .github/workflows/*.yml.
     (tmp_path / "base").mkdir()
     (tmp_path / "head").mkdir()
-    (tmp_path / "base/ci.YML").write_text("on: push\njobs: {}\n")
+    (tmp_path / "base" / name).write_text("on: push\njobs: {}\n")
     result = run_dirs(tmp_path / "base", tmp_path / "head")
+    assert result.returncode == 0, result.stdout
+
+
+def test_a_workflow_over_githubs_file_size_limit_fails(tmp_path):
+    workflows = head_with(lambda ci: None)
+    head = write_tree(tmp_path / "head", workflows)
+    ci = head / ".github/workflows/ci.yml"
+    ci.write_text(ci.read_text() + "#" * 500_000 + "\n")
+    base = write_tree(tmp_path / "base", {"ci.yml": CI, "gate-base.yml": GATE})
+    result = run_dirs(base / ".github/workflows", head / ".github/workflows")
+    assert result.returncode != 0, result.stdout
+    assert "500 KB" in result.stdout
+
+
+def judge_timeouts(tmp_path, base_value, head_value):
+    for side, value in (("base", base_value), ("head", head_value)):
+        directory = tmp_path / side
+        directory.mkdir()
+        (directory / "ci.yml").write_text(f"on: push\njobs:\n  checks:\n    timeout-minutes: {value}\n"
+                                          "    runs-on: x\n    steps:\n      - run: 'true'\n")
+    return run_dirs(tmp_path / "base", tmp_path / "head")
+
+
+# GitHub reads YAML 1.2 core: 017 is 17, 1:30 and a date are strings, 0o17 is 15.
+@pytest.mark.parametrize("base_value, head_value", [("15", "017"), ("90", "1:30"), ("15", "15.0")])
+def test_a_scalar_github_reads_differently_fails(tmp_path, base_value, head_value):
+    result = judge_timeouts(tmp_path, base_value, head_value)
+    assert result.returncode != 0, result.stdout
+
+
+@pytest.mark.parametrize("base_value, head_value", [("15", "0o17"), ("'2026-01-01'", "2026-01-01")])
+def test_a_scalar_github_reads_the_same_passes(tmp_path, base_value, head_value):
+    result = judge_timeouts(tmp_path, base_value, head_value)
+    assert result.returncode == 0, result.stdout
+
+
+def test_swapped_step_names_fail(tmp_path):
+    def swap(ci):
+        steps(ci)[2]["name"], steps(ci)[3]["name"] = steps(ci)[3]["name"], steps(ci)[2]["name"]
+    result = judge(tmp_path, head_with(swap))
+    assert result.returncode != 0, result.stdout
+    assert "takes the name of another base step" in result.stdout
+
+
+def test_a_multiline_head_name_cannot_start_a_runner_command(tmp_path):
+    result = judge(tmp_path, head_with(lambda ci: ci.update({"x\n::error::forged": 1})))
     assert result.returncode != 0
-    assert "ci.YML" in result.stdout
+    assert all(line.startswith("gate-base: ") for line in result.stdout.splitlines()), result.stdout
+
+
+def test_the_two_directory_interface_judges_the_base_checkouts_script(tmp_path):
+    base = write_tree(tmp_path / "base", {"ci.yml": CI, "gate-base.yml": GATE})
+    head = write_tree(tmp_path / "head", head_with(lambda ci: None), script="print('weaker')\n")
+    result = run_dirs(base / ".github/workflows", head / ".github/workflows")
+    assert result.returncode != 0, result.stdout
+    assert "scripts/gate_integrity.py differs from base" in result.stdout
 
 
 def test_ci_workflow_removed_fails(tmp_path):
@@ -459,6 +589,8 @@ def test_gate_base_triggers_only_on_pull_request_target_without_a_paths_filter()
     assert list(on) == ["pull_request_target"]
     trigger = on["pull_request_target"] or {}
     assert "paths" not in trigger and "paths-ignore" not in trigger
+    # Every push to the PR and a change of its base branch get a fresh verdict.
+    assert set(trigger.get("types", [])) == {"opened", "synchronize", "reopened", "edited"}
 
 
 def test_gate_base_permissions_are_exactly_contents_read_and_checks_write():
