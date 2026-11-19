@@ -1340,6 +1340,7 @@ def test_a_short_failing_run_is_told_apart_from_a_complete_one(suite) -> None:
     assert "run-suite: fewer than" not in complete.stderr
     summary = (suite["evals"] / "results" / "suite-complete.md").read_text(encoding="utf-8")
     assert "Scenarios short of N graded runs: none." in summary
+    assert "Scenarios short of N graded runs: stub" not in summary
 
     suite["recommit"]("fail", "void-always")
     short = suite["run"]("--runs", "2", str(suite["checkout"]), "short", "stub")
@@ -1347,6 +1348,7 @@ def test_a_short_failing_run_is_told_apart_from_a_complete_one(suite) -> None:
     assert "run-suite: fewer than 2 graded runs for: stub void-always" in short.stderr, short.stderr
     summary = (suite["evals"] / "results" / "suite-short.md").read_text(encoding="utf-8")
     assert "Scenarios short of N graded runs: stub void-always." in summary
+    assert "Scenarios short of N graded runs: none." not in summary
 
 
 def test_list_prints_the_cases_of_the_evals_directory_and_runs_nothing(suite) -> None:
