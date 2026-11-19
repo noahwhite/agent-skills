@@ -106,7 +106,10 @@ class Broken(Exception):
 
 
 def git(repo: Path, *args: str, strip: bool = True) -> str:
-    result = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True)
+    # A path git prints may hold bytes that are not UTF-8; surrogateescape keeps them, as the
+    # file system's own encoding does, so os.fsencode gives back the bytes on disk.
+    result = subprocess.run(["git", "-C", str(repo), *args], capture_output=True,
+                            encoding="utf-8", errors="surrogateescape")
     if result.returncode != 0:
         raise Refused(f"git {' '.join(args)} failed in {repo}: {result.stderr.strip()}")
     return result.stdout.strip() if strip else result.stdout

@@ -991,6 +991,16 @@ def test_a_checkout_with_changes_is_refused(suite, where: str, change: str) -> N
     assert not (suite["state"] / "pass").exists(), "nothing ran"
 
 
+@pytest.mark.parametrize("where", ["harness", "checkout"])
+def test_a_path_that_is_not_utf8_is_refused_as_a_change(suite, where: str) -> None:
+    """A file name git prints as bytes that are not UTF-8 is still a change the run refuses."""
+    (suite[where] / os.fsdecode(b"bad-\xff.md")).write_text("new\n")
+    result = suite["run"]("--runs", "1", str(suite["checkout"]), "lab")
+    assert result.returncode == 2 and "uncommitted changes" in result.stderr, result.stderr
+    assert "Traceback" not in result.stderr, result.stderr
+    assert not (suite["state"] / "pass").exists(), "nothing ran"
+
+
 def test_uncommitted_records_do_not_block_a_later_run(suite) -> None:
     suite["recommit"]("pass")
     assert suite["run"]("--runs", "1", str(suite["checkout"]), "lab-1").returncode == 0
@@ -1232,7 +1242,8 @@ def contract_errors(case_dir: Path, tracked_mode) -> list[str]:
         errors.append("case.yaml names no scenarios")
     for scenario in scenarios if isinstance(scenarios, list) else []:
         name = scenario.get("name") if isinstance(scenario, dict) else None
-        if not name or not (case_dir / "scenarios" / name).is_dir():
+        # The runner takes only names that match NAME, so a name like ../results is no fixture.
+        if not SUITE.NAME.fullmatch(str(name or "")) or not (case_dir / "scenarios" / name).is_dir():
             errors.append(f"no fixtures for scenario {name!r}")
     names = SUITE.grader_names(case_dir / "grader.py") if (case_dir / "grader.py").is_file() else set()
     if not any("actions.jsonl" in name for name in names):
@@ -1287,7 +1298,7 @@ def test_a_case_of_any_skill_missing_its_grader_fails_the_contract(tmp_path: Pat
 @pytest.mark.parametrize("breakage", [
     "no-kind", "bad-kind", "no-prompt", "no-grader", "no-run", "run-not-executable",
     "no-results", "no-fixture", "prose-grader", "prose-beside-calls", "missing-field", "no-scenarios",
-    "prose-stdout", "prose-log", "prose-response", "prose-redirected",
+    "prose-stdout", "prose-log", "prose-response", "prose-redirected", "scenario-outside-scenarios",
 ])
 def test_the_contract_check_catches_each_breakage(tmp_path: Path, breakage: str) -> None:
     case_dir = tmp_path / "case"
@@ -1314,6 +1325,9 @@ def test_the_contract_check_catches_each_breakage(tmp_path: Path, breakage: str)
         shutil.rmtree(case_dir / "results")
     elif breakage == "no-fixture":
         shutil.rmtree(case_dir / "scenarios" / "fail")
+    elif breakage == "scenario-outside-scenarios":
+        # scenarios/../results is the case's results/ directory, so it exists but is no fixture.
+        case["scenarios"][0]["name"] = "../results"
     elif breakage == "prose-grader":
         (case_dir / "grader.py").write_text("open('agent-output.txt').read()\n")
     elif breakage == "prose-beside-calls":
