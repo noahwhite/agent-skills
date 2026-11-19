@@ -334,6 +334,11 @@ WORKTREE_CLAUSE = (
     "worktree rule in `references/github.md` if it is not; without a `worktree:` line, cut the branch and worktree "
     "as the sentence above states."
 )
+NO_RECUT_CLAUSE = (
+    "A worktree branch that heads an open PR or holds commits of its own is never recut: it was confirmed when it "
+    "was cut, so bring it up to date with `origin/<profile.git.integration_branch>` by a merge, per the open-PR "
+    "update rule in `references/github.md`, never by a rewrite or a force-push."
+)
 # SKL-346 adds two lines to the Verify stage of step 4's Escalation section. The digest above is kept the
 # same way: those lines are pinned here and cut out before hashing, so every other byte still has to match.
 VERIFIER_LINES = (
@@ -371,6 +376,9 @@ def test_steps_two_to_twelve_outside_the_handoff_blocks_are_unchanged() -> None:
     assert step_two.count(f"\n{WORKTREE_CLAUSE}\n") == 1, "step 2 must carry the SKL-70 worktree clause once"
     assert text.count(f"\n{WORKTREE_CLAUSE}\n") == 1, "the SKL-70 worktree clause appears nowhere else"
     text = text.replace(f"\n{WORKTREE_CLAUSE}\n", "\n", 1)
+    assert step_two.count(f"\n{NO_RECUT_CLAUSE}\n") == 1, "step 2 must carry the SKL-70 no-recut clause once"
+    assert text.count(f"\n{NO_RECUT_CLAUSE}\n") == 1, "the SKL-70 no-recut clause appears nowhere else"
+    text = text.replace(f"\n{NO_RECUT_CLAUSE}\n", "\n", 1)
     assert text.count(VERIFIER_LINES) == 1, "the Verify stage must carry the SKL-346 verifier line once"
     text = text.replace(VERIFIER_LINES, "", 1)
     assert hashlib.sha256(text.encode()).hexdigest() == STEPS_TWO_TO_TWELVE_SHA256

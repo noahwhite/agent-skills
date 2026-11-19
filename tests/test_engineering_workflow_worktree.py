@@ -16,6 +16,11 @@ WORKTREE_CLAUSE = (
     "worktree rule in `references/github.md` if it is not; without a `worktree:` line, cut the branch and worktree "
     "as the sentence above states."
 )
+NO_RECUT_CLAUSE = (
+    "A worktree branch that heads an open PR or holds commits of its own is never recut: it was confirmed when it "
+    "was cut, so bring it up to date with `origin/<profile.git.integration_branch>` by a merge, per the open-PR "
+    "update rule in `references/github.md`, never by a rewrite or a force-push."
+)
 
 
 def step_2_lines() -> list[str]:
@@ -33,3 +38,10 @@ def test_step_2_works_in_the_briefed_worktree_and_otherwise_cuts_one() -> None:
     assert WORKTREE_CLAUSE in lines, "step 2 must accept the worktree the brief names"
     assert lines.index(WORKTREE_CLAUSE) == lines.index(CUT_SENTENCE) + 1, "the clause follows the cut sentence"
     assert SKILL.read_text(encoding="utf-8").count(WORKTREE_CLAUSE) == 1, "the clause is stated once"
+
+
+def test_step_2_never_recuts_a_branch_with_an_open_pr_or_commits() -> None:
+    lines = step_2_lines()
+    assert NO_RECUT_CLAUSE in lines, "step 2 must forbid recutting a worktree branch with an open PR or commits"
+    assert lines.index(NO_RECUT_CLAUSE) == lines.index(WORKTREE_CLAUSE) + 1, "it follows the worktree clause"
+    assert SKILL.read_text(encoding="utf-8").count(NO_RECUT_CLAUSE) == 1, "the clause is stated once"
