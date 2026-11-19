@@ -12,14 +12,15 @@ CUT_SENTENCE = (
 )
 WORKTREE_CLAUSE = (
     "When the brief names a `worktree:` path, work in that worktree and cut no other story worktree, after "
-    "confirming that its branch is based on `origin/<profile.git.integration_branch>` and recutting it per the "
-    "worktree rule in `references/github.md` if it is not; without a `worktree:` line, cut the branch and worktree "
-    "as the sentence above states."
+    "confirming that its branch is based on the base the branch rule in `references/github.md` selects "
+    "(`origin/<profile.git.integration_branch>` by default) and recutting it per the worktree rule in "
+    "`references/github.md` if it is not; without a `worktree:` line, cut the branch and worktree as the "
+    "sentence above states."
 )
 NO_RECUT_CLAUSE = (
-    "A worktree branch that heads an open PR or holds commits of its own is never recut: it was confirmed when it "
-    "was cut, so bring it up to date with `origin/<profile.git.integration_branch>` by a merge, per the open-PR "
-    "update rule in `references/github.md`, never by a rewrite or a force-push."
+    "That confirmation is the base hard gate in `references/github.md`, which a branch that is only behind its "
+    "base still passes; bring such a branch, including one that heads an open PR, up to date with its base by a "
+    "merge, never by a rebase, a rewrite or a force-push."
 )
 
 
@@ -40,8 +41,8 @@ def test_step_2_works_in_the_briefed_worktree_and_otherwise_cuts_one() -> None:
     assert SKILL.read_text(encoding="utf-8").count(WORKTREE_CLAUSE) == 1, "the clause is stated once"
 
 
-def test_step_2_never_recuts_a_branch_with_an_open_pr_or_commits() -> None:
+def test_step_2_updates_a_behind_branch_by_merge_not_recut() -> None:
     lines = step_2_lines()
-    assert NO_RECUT_CLAUSE in lines, "step 2 must forbid recutting a worktree branch with an open PR or commits"
+    assert NO_RECUT_CLAUSE in lines, "step 2 must update a branch only behind its base by a merge, not a recut"
     assert lines.index(NO_RECUT_CLAUSE) == lines.index(WORKTREE_CLAUSE) + 1, "it follows the worktree clause"
     assert SKILL.read_text(encoding="utf-8").count(NO_RECUT_CLAUSE) == 1, "the clause is stated once"

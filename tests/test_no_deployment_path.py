@@ -330,14 +330,15 @@ DEPLOYED_NOTE_BEFORE_SKL_270 = "2. Add a concise implementation and deployment n
 # line is pinned here (and in tests/test_engineering_workflow_worktree.py) and cut out before hashing.
 WORKTREE_CLAUSE = (
     "When the brief names a `worktree:` path, work in that worktree and cut no other story worktree, after "
-    "confirming that its branch is based on `origin/<profile.git.integration_branch>` and recutting it per the "
-    "worktree rule in `references/github.md` if it is not; without a `worktree:` line, cut the branch and worktree "
-    "as the sentence above states."
+    "confirming that its branch is based on the base the branch rule in `references/github.md` selects "
+    "(`origin/<profile.git.integration_branch>` by default) and recutting it per the worktree rule in "
+    "`references/github.md` if it is not; without a `worktree:` line, cut the branch and worktree as the "
+    "sentence above states."
 )
 NO_RECUT_CLAUSE = (
-    "A worktree branch that heads an open PR or holds commits of its own is never recut: it was confirmed when it "
-    "was cut, so bring it up to date with `origin/<profile.git.integration_branch>` by a merge, per the open-PR "
-    "update rule in `references/github.md`, never by a rewrite or a force-push."
+    "That confirmation is the base hard gate in `references/github.md`, which a branch that is only behind its "
+    "base still passes; bring such a branch, including one that heads an open PR, up to date with its base by a "
+    "merge, never by a rebase, a rewrite or a force-push."
 )
 # SKL-346 adds two lines to the Verify stage of step 4's Escalation section. The digest above is kept the
 # same way: those lines are pinned here and cut out before hashing, so every other byte still has to match.

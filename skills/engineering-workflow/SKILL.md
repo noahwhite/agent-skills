@@ -81,8 +81,8 @@ The selected path governs the whole run.
 ## 2. Plan slices
 
 Cut a branch and worktree per `references/github.md`, from `origin/<integration branch>` (the integration branch is `profile.git.integration_branch`) after a fetch.
-When the brief names a `worktree:` path, work in that worktree and cut no other story worktree, after confirming that its branch is based on `origin/<profile.git.integration_branch>` and recutting it per the worktree rule in `references/github.md` if it is not; without a `worktree:` line, cut the branch and worktree as the sentence above states.
-A worktree branch that heads an open PR or holds commits of its own is never recut: it was confirmed when it was cut, so bring it up to date with `origin/<profile.git.integration_branch>` by a merge, per the open-PR update rule in `references/github.md`, never by a rewrite or a force-push.
+When the brief names a `worktree:` path, work in that worktree and cut no other story worktree, after confirming that its branch is based on the base the branch rule in `references/github.md` selects (`origin/<profile.git.integration_branch>` by default) and recutting it per the worktree rule in `references/github.md` if it is not; without a `worktree:` line, cut the branch and worktree as the sentence above states.
+That confirmation is the base hard gate in `references/github.md`, which a branch that is only behind its base still passes; bring such a branch, including one that heads an open PR, up to date with its base by a merge, never by a rebase, a rewrite or a force-push.
 Break the story into small vertical slices, each with a narrow behavioral objective, tests that define it, the minimum implementation to pass them, and refactoring only once green.
 State the slice sequence and the first slice before coding.
 

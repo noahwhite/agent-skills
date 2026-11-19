@@ -4156,10 +4156,11 @@ def test_path_unresolved_is_reported_only_for_a_stop_before_selection() -> None:
 # SKL-70 AC2: the delegating session creates the story worktree before the spawn, because a subagent
 # starts in its spawner's directory, and names its path in the brief.
 WORKTREE_CREATE = (
-    "Before you spawn the senior engineer, fetch the integration branch with the explicit refspec "
-    "`git fetch origin +refs/heads/<profile.git.integration_branch>:refs/remotes/origin/<profile.git.integration_branch>` "
-    "and run `git worktree add` to create the story worktree on a new story branch cut from "
-    "`origin/<profile.git.integration_branch>`, per the branch and worktree rules in `references/github.md`."
+    "Before you spawn the senior engineer, fetch the base the branch rule in `references/github.md` selects "
+    "(`<profile.git.integration_branch>` by default) with the explicit refspec `git fetch origin "
+    "+refs/heads/<base>:refs/remotes/origin/<base>` and, when the story has no unmerged story worktree and no "
+    "open PR, run `git worktree add -b <branch> <absolute path> origin/<base>` to create the story worktree on "
+    "a new story branch cut from that base, per the branch and worktree rules in `references/github.md`."
 )
 WORKTREE_LATER_PR = (
     "A later PR for the same story, opened after an earlier one merged, gets a fresh worktree under the existing "
@@ -4168,11 +4169,11 @@ WORKTREE_LATER_PR = (
     "and the hand-back reports its path too."
 )
 WORKTREE_EXISTING = (
-    "When the story already has an unmerged story worktree or an open PR, reuse it instead of cutting a new branch, "
-    "per the existing PR or branch rule in `references/github.md`: name an existing story worktree whose branch has not "
-    "merged in the `worktree:` line and create nothing, and when only the open PR's head branch exists, create the "
-    "story worktree on that branch; a branch whose PR merged is never reused, so a later PR gets the fresh worktree "
-    "above."
+    "A story with an existing unmerged story worktree or an open PR reuses that worktree or its branch and "
+    "names it in the `worktree:` line, per the existing PR or branch rule in `references/github.md`: name an "
+    "existing story worktree whose branch has not merged and create nothing, and when only the open PR's head "
+    "branch exists, run `git worktree add <absolute path> <branch>` after a fetch to create the story worktree "
+    "on that branch; a branch whose PR merged is never reused, so a later PR gets the fresh worktree above."
 )
 WORKTREE_BRIEF_LINE = (
     "- The line `worktree: <absolute path>`, whose whole text is exactly that, `<absolute path>` being the story "
