@@ -90,6 +90,8 @@ Make no state changes while preparing or posting the report.
 - Put the owner in the body of each action item, and leave the assignee at `profile.tracker.assignee`.
 - Label each action item with `profile.tracker.labels.improvement`.
 - File no issue for a went-well or a did-not-go-well entry.
+- If the repository provides a pruning-candidates script, run it with `--since` set to the previous retro's date, and record each candidate in the retro record with its retire or keep proposal.
+  Each retire proposal becomes an action item under these Retro rules, and nothing is removed until the owner approves it in a comment on the retro issue.
 
 ## Velocity and burnup
 
