@@ -631,9 +631,9 @@ def test_qa_added_blocks_appear_once_in_order() -> None:
 # SKL-284 re-baselined it for its one change outside the blocks: the QA evidence comment's first line is
 # exactly `## QA evidence` (section 4, item 5), which story-to-done's qa-round-cap.py counts rounds by.
 # SKL-182 re-baselined it for its changes outside the blocks: the "Await the gate" bullet in section 5,
-# the incomplete line in the completion summary and the todo-tracking index line, which
-# tests/test_qa_await_gate.py pins.
-QA_BASE_SHA256 = "3e59399ecfc5f5e3b361172b9f0630d6614ceca538cfc44bac36d418484137b7"
+# the incomplete line in the completion summary and the todo-tracking index line; tests/test_qa_await_gate.py
+# pins the first two, and the index line is pinned only by this hash.
+QA_BASE_SHA256 = "d0a5d1c8a13f99e21cc8ef762aae246f1493bdbfbb073fae98af4caf9263f83a"
 
 
 def test_qa_text_outside_the_added_blocks_is_unchanged() -> None:

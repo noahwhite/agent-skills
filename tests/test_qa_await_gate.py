@@ -25,9 +25,9 @@ BACKGROUNDED = (
 )
 BOUNDED_WAIT = (
     "  Launch each gate command with its report going to a named scratch file, and wait by short "
-    "foreground checks of its process or that file that each return at once, repeated until the "
-    "command exits or its own timeout passes; a command still running past that timeout takes the "
-    "incomplete stop below."
+    "foreground checks that each return at once, of the command's exit status and that file (or of "
+    "the runtime's completion notification for a background subagent), repeated until the command "
+    "exits; a command killed after its timeout has exited and takes the incomplete stop below."
 )
 NO_END_WHILE_OUTSTANDING = (
     "  A run never ends while a gate step it launched is still outstanding, and no stop is lawful "
@@ -40,7 +40,7 @@ CONSUME = (
     "and the merge - and then to the closing decision in step 6."
 )
 INCOMPLETE_STOP = (
-    "  When a gate command has exited and the gate still cannot finish - the command exited "
+    "  When a gate command has exited or could not be launched, and the gate still cannot finish - the command exited "
     "unsuccessfully, was killed after exceeding a timeout, or left a missing or empty report, or the "
     "gate needs an owner action or an access grant the run cannot supply itself - the run stops and "
     "reports itself incomplete with the completion summary's incomplete line: it names the "
@@ -62,8 +62,8 @@ FIX_HEAD = "- Fix what the adjudicator rules valid"
 MERGE_HEAD = "- Merge only on the exact final head"
 
 INCOMPLETE_LINE = (
-    "A run that stops with a gate step it launched still unfinished (the incomplete stop or a blocked "
-    "merge in step 5) opens its report with the incomplete line `QA incomplete: <unfinished gate step> "
+    "A run that stops with a gate step still unfinished (the incomplete stop or a blocked merge in "
+    "step 5) opens its report with the incomplete line `QA incomplete: <unfinished gate step> "
     "- <reason> - next action: <owner>`, so it never reads as a finished round."
 )
 
