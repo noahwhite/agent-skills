@@ -4,6 +4,7 @@ Each test builds its own git repository with dated commits, because a shallow CI
 no history to measure "untouched since" against (SKL-345).
 """
 
+import hashlib
 import os
 import subprocess
 import sys
@@ -25,9 +26,16 @@ STALE_RULE = (
 PINNED_RULE = "- ⛔ Always label the gearbox with its owner and the date it was last oiled.\n"
 FRESH_RULE = "- ⛔ Never paint the flywheel while it spins at full speed in the workshop.\n"
 
+TESTS = f"tests untouched since {SINCE}"
+REFERENCES = "reference files uncited at this commit"
+RULES = f"rules uncited at this commit, unchanged since {SINCE}"
+
+# An outer git environment (GIT_DIR, GIT_INDEX_FILE, a hooks path) must not leak into the fixture.
+ENV = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+
 
 def git(repo: Path, *args: str, date: str | None = None) -> str:
-    env = dict(os.environ)
+    env = dict(ENV)
     if date:
         env["GIT_AUTHOR_DATE"] = date
         env["GIT_COMMITTER_DATE"] = date
@@ -40,7 +48,12 @@ def git(repo: Path, *args: str, date: str | None = None) -> str:
 def write(repo: Path, rel: str, text: str) -> None:
     path = repo / rel
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text)
+    path.write_text(text, encoding="utf-8")
+
+
+def append(repo: Path, rel: str, text: str) -> None:
+    with (repo / rel).open("a", encoding="utf-8") as handle:
+        handle.write(text)
 
 
 def commit(repo: Path, date: str, message: str) -> None:
@@ -52,10 +65,13 @@ def commit(repo: Path, date: str, message: str) -> None:
 def repo(tmp_path: Path) -> Path:
     repo = tmp_path / "repo"
     repo.mkdir()
+    hooks = tmp_path / "no-hooks"
+    hooks.mkdir()
     git(repo, "init", "-q")
     git(repo, "config", "user.email", "agent-skills@example.com")
     git(repo, "config", "user.name", "agent-skills")
     git(repo, "config", "commit.gpgsign", "false")  # an inherited signing config must not break the fixture
+    git(repo, "config", "core.hooksPath", str(hooks))
 
     write(repo, "tests/test_old.py", "def test_old():\n    assert True\n")
     write(repo, "tests/test_new.py", "def test_new():\n    assert True\n")
@@ -63,82 +79,101 @@ def repo(tmp_path: Path) -> Path:
     write(repo, "shared/cited.md", "# Cited\n")
     write(repo, "shared/orphan.md", "# Orphan\n")
     write(repo, "shared/rules.md", "# Rules\n\n" + STALE_RULE + PINNED_RULE + "- An ordinary bullet.\n")
-    write(repo, "skills/alpha/SKILL.md", "Read references/cited.md and references/rules.md.\n")
+    write(repo, "skills/alpha/SKILL.md", "Read references/cited.md and (references/rules.md).\n")
     commit(repo, OLD, "old")
 
     pin = "label the gearbox with its owner and the date it was last oiled"
     write(repo, "tests/test_new.py", f"PIN = {pin!r}\n\ndef test_new():\n    assert PIN\n")
-    with (repo / "shared" / "rules.md").open("a") as handle:
-        handle.write(FRESH_RULE)
+    append(repo, "shared/rules.md", FRESH_RULE)
     commit(repo, NEW, "new")
     return repo
 
 
-def run(repo: Path, *args: str) -> subprocess.CompletedProcess:
+def run(cwd: Path, *args: str, env: dict | None = None) -> subprocess.CompletedProcess:
     return subprocess.run(
-        [sys.executable, str(SCRIPT), *args], cwd=repo, capture_output=True, text=True
+        [sys.executable, str(SCRIPT), *args], cwd=cwd, capture_output=True, text=True,
+        env=env or ENV,
     )
 
 
-def snapshot(repo: Path) -> dict[str, bytes]:
+def snapshot(repo: Path) -> dict[str, str]:
+    """Hash every file in the repository, .git included."""
     return {
-        str(path.relative_to(repo)): path.read_bytes()
+        str(path.relative_to(repo)): hashlib.sha256(path.read_bytes()).hexdigest()
         for path in sorted(repo.rglob("*"))
-        if path.is_file() and ".git" not in path.relative_to(repo).parts
+        if path.is_file()
     }
 
 
-def section(output: str, heading: str) -> list[str]:
-    lines = output.splitlines()
-    start = next(i for i, line in enumerate(lines) if line.startswith(heading))
-    body = []
-    for line in lines[start + 1 :]:
-        if not line.startswith("- "):
-            break
-        body.append(line)
-    return [lines[start], *body]
+def sections(output: str) -> dict[str, list[str]]:
+    """Map each category heading to its count line and its rows; every block must be well formed."""
+    blocks = output.split("\n\n")
+    assert blocks[0].splitlines()[0].startswith("Pruning candidates")
+    found = {}
+    for block in blocks[1:]:
+        lines = block.splitlines()
+        heading, _, count = lines[0].rpartition(": ")
+        assert count.isdigit(), lines[0]
+        assert all(line.startswith("- ") for line in lines[1:]), block
+        assert len(lines) - 1 == int(count), block
+        found[heading] = lines
+    assert len(found) == 3, output
+    return found
+
+
+def category(repo: Path, heading: str, since: str = SINCE, cwd: Path | None = None) -> list[str]:
+    result = run(cwd or repo, "--since", since)
+    assert result.returncode == 0, result.stderr
+    return sections(result.stdout)[heading]
 
 
 def test_header_names_commit_and_since(repo: Path) -> None:
     result = run(repo, "--since", SINCE)
     assert result.returncode == 0, result.stderr
     head = git(repo, "rev-parse", "HEAD").strip()
-    assert f"commit: {head}" in result.stdout
-    assert f"since: {SINCE}" in result.stdout
+    assert result.stdout.splitlines()[:3] == [
+        "Pruning candidates (proposals only; the owner decides, nothing is removed)",
+        f"commit: {head}",
+        f"since: {SINCE}",
+    ]
 
 
 def test_tests_untouched_since_date(repo: Path) -> None:
-    lines = section(run(repo, "--since", SINCE).stdout, "tests untouched since")
-    assert lines[0] == f"tests untouched since {SINCE}: 1"
-    assert len(lines) == 2
+    lines = category(repo, TESTS)
+    assert lines[0] == f"{TESTS}: 1"
     assert lines[1].startswith("- tests/test_old.py")
     assert "last change 2024-01-15" in lines[1]
     assert "proposal: keep" in lines[1]
 
 
 def test_reference_files_uncited_at_commit(repo: Path) -> None:
-    lines = section(run(repo, "--since", SINCE).stdout, "reference files uncited at this commit")
-    assert lines[0] == "reference files uncited at this commit: 1"
-    assert len(lines) == 2
+    lines = category(repo, REFERENCES)
+    assert lines[0] == f"{REFERENCES}: 1"
     assert lines[1].startswith("- shared/orphan.md")
     assert "references/orphan.md" in lines[1]
     assert "proposal: retire" in lines[1]
 
 
 def test_rules_uncited_at_commit_and_unchanged_since_date(repo: Path) -> None:
-    lines = section(run(repo, "--since", SINCE).stdout, "rules uncited at this commit")
-    assert lines[0] == f"rules uncited at this commit, unchanged since {SINCE}: 1"
-    assert len(lines) == 2
+    lines = category(repo, RULES)
+    assert lines[0] == f"{RULES}: 1"
     assert lines[1].startswith("- shared/rules.md:3")
     assert "last change 2024-01-15" in lines[1]
     assert "frobnicate the widget" in lines[1]
+    assert "drifts out of tolerance" in lines[1]  # the evidence carries the whole rule
     assert "proposal: retire" in lines[1]
 
 
 def test_zero_counts_are_explicit(repo: Path) -> None:
+    write(repo, "skills/alpha/SKILL.md", "Read references/cited.md, references/orphan.md and references/rules.md.\n")
+    commit(repo, NEW, "cite every reference")
     output = run(repo, "--since", "2023-01-01").stdout
-    assert "tests untouched since 2023-01-01: 0" in output
-    assert "rules uncited at this commit, unchanged since 2023-01-01: 0" in output
+    found = sections(output)
+    assert found["tests untouched since 2023-01-01"] == ["tests untouched since 2023-01-01: 0"]
+    assert found[REFERENCES] == [f"{REFERENCES}: 0"]
+    assert found["rules uncited at this commit, unchanged since 2023-01-01"] == [
+        "rules uncited at this commit, unchanged since 2023-01-01: 0"
+    ]
 
 
 def test_rule_continuation_line_counts_as_a_change(repo: Path) -> None:
@@ -146,31 +181,180 @@ def test_rule_continuation_line_counts_as_a_change(repo: Path) -> None:
     text = text.replace("drifts out of tolerance", "drifts out of its tolerance band")
     (repo / "shared" / "rules.md").write_text(text)
     commit(repo, NEW, "touch the continuation line")
-    lines = section(run(repo, "--since", SINCE).stdout, "rules uncited at this commit")
-    assert lines[0].endswith(": 0")
+    assert category(repo, RULES)[0] == f"{RULES}: 0"
+
+
+def test_run_from_a_subdirectory_matches_the_root(repo: Path) -> None:
+    root = run(repo, "--since", SINCE)
+    sub = run(repo / "tests", "--since", SINCE)
+    assert sub.returncode == 0, sub.stderr
+    assert sub.stdout == root.stdout
 
 
 def test_run_writes_nothing(repo: Path) -> None:
     before = snapshot(repo)
     result = run(repo, "--since", SINCE)
     assert result.returncode == 0, result.stderr
-    assert git(repo, "status", "--porcelain", "--untracked-files=all") == ""
     assert snapshot(repo) == before
+    assert git(repo, "status", "--porcelain", "--untracked-files=all") == ""
 
 
 def test_shallow_clone_is_refused(repo: Path, tmp_path: Path) -> None:
     shallow = tmp_path / "shallow"
     subprocess.run(
         ["git", "clone", "-q", "--depth", "1", f"file://{repo}", str(shallow)],
-        check=True, capture_output=True,
+        check=True, capture_output=True, env=ENV,
     )
     result = run(shallow, "--since", SINCE)
-    assert result.returncode != 0
+    assert result.returncode == 2
     assert "shallow" in result.stderr
     assert result.stdout == ""
 
 
-def test_since_must_be_a_date(repo: Path) -> None:
-    result = run(repo, "--since", "last week")
-    assert result.returncode != 0
+def test_partial_clone_is_refused_without_fetching(repo: Path, tmp_path: Path) -> None:
+    git(repo, "config", "uploadpack.allowFilter", "true")
+    partial = tmp_path / "partial"
+    subprocess.run(
+        ["git", "clone", "-q", "--no-checkout", "--filter=blob:none", f"file://{repo}", str(partial)],
+        check=True, capture_output=True, env=ENV,
+    )
+    before = snapshot(partial)
+    result = run(partial, "--since", SINCE)
+    assert result.returncode == 2
+    assert "partial clone" in result.stderr
+    assert result.stdout == ""
+    assert snapshot(partial) == before
+
+
+def test_a_backdated_later_commit_does_not_hide_a_change(repo: Path) -> None:
+    write(repo, "tests/test_old.py", "def test_old():\n    assert 1\n")
+    commit(repo, NEW, "change the old test")
+    write(repo, "tests/test_old.py", "def test_old():\n    assert 2\n")
+    commit(repo, OLD, "a later commit with a backdated clock")
+    assert category(repo, TESTS) == [f"{TESTS}: 0"]
+
+
+def test_paths_are_literal_and_unquoted(repo: Path) -> None:
+    write(repo, "tests/test_x.py", "def test_x():\n    assert True\n")
+    commit(repo, NEW, "a recent test")
+    write(repo, "tests/test_[x].py", "def test_brackets():\n    assert True\n")
+    write(repo, "tests/test_é.py", "def test_accent():\n    assert True\n")
+    commit(repo, OLD, "old tests with unusual names")
+    lines = category(repo, TESTS)
+    assert lines[0] == f"{TESTS}: 3"
+    assert sorted(line.split(" | ")[0] for line in lines[1:]) == [
+        "- tests/test_[x].py", "- tests/test_old.py", "- tests/test_é.py"
+    ]
+
+
+def test_non_utf8_locale_still_reports(repo: Path) -> None:
+    write(repo, "tests/test_é.py", "def test_accent():\n    assert True\n")
+    commit(repo, OLD, "an old test with a non-ASCII name")
+    env = {k: v for k, v in ENV.items() if k not in ("PYTHONIOENCODING", "PYTHONUTF8")}
+    env.update(LC_ALL="C", LANG="C", PYTHONUTF8="0")
+    result = run(repo, "--since", SINCE, env=env)
+    assert result.returncode == 0, result.stderr
+    assert "- tests/test_é.py" in result.stdout
+
+
+def test_a_citation_must_name_the_whole_path(repo: Path) -> None:
+    append(repo, "skills/alpha/SKILL.md", "See ../beta/references/orphan.md and references/orphan.md.bak.\n")
+    commit(repo, NEW, "near-miss citations")
+    lines = category(repo, REFERENCES)
+    assert lines[0] == f"{REFERENCES}: 1"
+    assert lines[1].startswith("- shared/orphan.md")
+
+
+def test_ignore_revs_config_does_not_change_the_result(repo: Path, tmp_path: Path) -> None:
+    text = (repo / "shared" / "rules.md").read_text()
+    (repo / "shared" / "rules.md").write_text(text.replace("drifts out of tolerance", "drifts out of its tolerance band"))
+    commit(repo, NEW, "touch the continuation line")
+    ignore = tmp_path / "ignore-revs"
+    ignore.write_text(git(repo, "rev-parse", "HEAD"))
+    git(repo, "config", "blame.ignoreRevsFile", str(ignore))
+    assert category(repo, RULES)[0] == f"{RULES}: 0"
+
+
+def test_a_list_item_in_a_code_fence_is_not_a_rule(repo: Path) -> None:
+    append(repo, "shared/rules.md", "\n```markdown\n- ⛔ Example only: a rule written inside a fenced code block.\n```\n")
+    commit(repo, OLD, "a fenced example")
+    lines = category(repo, RULES)
+    assert lines[0] == f"{RULES}: 1"
+    assert lines[1].startswith("- shared/rules.md:3")
+
+
+def test_nested_items_belong_to_their_rule(repo: Path) -> None:
+    text = (repo / "shared" / "rules.md").read_text()
+    child = "  - Check the sprocket gauge twice before you start.\n"
+    (repo / "shared" / "rules.md").write_text(text.replace(STALE_RULE, STALE_RULE + child))
+    commit(repo, OLD, "a nested item")
+    lines = category(repo, RULES)
+    assert lines[0] == f"{RULES}: 1"
+    assert "sprocket gauge twice" in lines[1]
+
+    text = (repo / "shared" / "rules.md").read_text()
+    (repo / "shared" / "rules.md").write_text(text.replace("gauge twice", "gauge three times"))
+    commit(repo, NEW, "change the nested item")
+    assert category(repo, RULES)[0] == f"{RULES}: 0"
+
+
+@pytest.mark.parametrize(
+    "rule",
+    [
+        "- ⛔ Lazy rule opening line.\nthe lazily continued tail of this rule carries the pinned words.\n",
+        "- ⛔ Loose rule opening line.\n\n  the loosely continued tail of this rule carries the pinned words.\n",
+    ],
+)
+def test_a_pin_on_any_continuation_line_counts(repo: Path, rule: str) -> None:
+    tail = rule.splitlines()[-1].strip()
+    append(repo, "shared/rules.md", "\n" + rule)
+    write(repo, "tests/test_pins.py", f"PIN = {tail!r}\n")
+    commit(repo, OLD, "a continued rule and its pin")
+    lines = category(repo, RULES)
+    assert lines[0] == f"{RULES}: 1"
+    assert lines[1].startswith("- shared/rules.md:3")
+
+
+def test_window_is_exactly_forty_characters(repo: Path) -> None:
+    forty = "abcdefghij klmnopqrst uvwxyzabcd efghijk"  # 40 characters of the first rule
+    thirty_nine = "zyxwvutsrq ponmlkjihg fedcbazyxw vutsrq"  # 39 characters of the second
+    assert (len(forty), len(thirty_nine)) == (40, 39)
+    append(repo, "shared/rules.md", f"\n- ⛔ Start {forty} end.\n- ⛔ Start {thirty_nine} end.\n")
+    write(repo, "tests/test_window.py", f"A = {forty!r}\nB = {thirty_nine!r}\n")
+    commit(repo, OLD, "window rules")
+    lines = category(repo, RULES)
+    assert lines[0] == f"{RULES}: 2"
+    assert "zyxwvutsrq" in lines[2]
+
+
+def test_short_and_empty_rules_need_a_whole_match(repo: Path) -> None:
+    append(repo, "shared/rules.md", "\n- ⛔ Oil it.\n- ⛔\n")
+    write(repo, "tests/test_short.py", "NOTE = 'Boil it.'\n")
+    commit(repo, OLD, "short rules")
+    lines = category(repo, RULES)
+    assert lines[0] == f"{RULES}: 3"
+    assert any('"Oil it."' in line for line in lines[1:])
+    assert any('""' in line for line in lines[1:])
+
+    write(repo, "tests/test_short.py", "NOTE = 'oil it.'\n")
+    commit(repo, OLD, "pin the short rule")
+    assert category(repo, RULES)[0] == f"{RULES}: 2"
+
+
+@pytest.mark.parametrize("value", ["last week", "2026-02-30", "2026-1-9"])
+def test_since_must_be_a_canonical_date(repo: Path, value: str) -> None:
+    result = run(repo, "--since", value)
+    assert result.returncode == 2
     assert "YYYY-MM-DD" in result.stderr
+    assert result.stdout == ""
+
+
+def test_real_checkout_reports_or_refuses_a_shallow_clone() -> None:
+    result = run(ROOT, "--since", "2026-01-01")
+    shallow = git(ROOT, "rev-parse", "--is-shallow-repository").strip() == "true"
+    if shallow:
+        assert result.returncode == 2 and "shallow" in result.stderr
+        return
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.splitlines()[1] == f"commit: {git(ROOT, 'rev-parse', 'HEAD').strip()}"
+    sections(result.stdout)

@@ -140,16 +140,33 @@ def test_retro_section_files_only_action_items() -> None:
         assert phrase in body, f"retro missing: {phrase}"
 
 
+def pruning_bullet() -> str:
+    """Return the Retro list item that starts the pruning routine, continuation lines included."""
+    lines = section(SKILL.read_text(), "Retro").splitlines()
+    starts = [
+        n for n, line in enumerate(lines)
+        if line.startswith("- If the repository provides a pruning-candidates script")
+    ]
+    assert len(starts) == 1, "the pruning routine must be one separate Retro bullet"
+    end = starts[0] + 1
+    while end < len(lines) and lines[end].startswith("  ") and lines[end].strip():
+        end += 1
+    return " ".join(" ".join(lines[starts[0] : end]).split())
+
+
 def test_retro_runs_the_pruning_routine_only_when_the_repository_provides_it() -> None:
-    body = " ".join(section(SKILL.read_text(), "Retro").split())
-    assert "If the repository provides a pruning-candidates script, run it with `--since` set to the previous retro's date" in body
-    assert "record each candidate in the retro record with its retire or keep proposal" in body
-    assert "Each retire proposal becomes an action item under these Retro rules" in body
+    bullet = pruning_bullet()
+    assert bullet.startswith(
+        "- If the repository provides a pruning-candidates script, run it with `--since` set to "
+        "the previous retro's date, and record each candidate in the retro record with its "
+        "retire or keep proposal. Each retire proposal becomes an action item under these Retro rules"
+    )
 
 
 def test_retro_pruning_removes_nothing_without_owner_approval() -> None:
-    body = " ".join(section(SKILL.read_text(), "Retro").split())
-    assert "nothing is removed until the owner approves it in a comment on the retro issue" in body
+    assert pruning_bullet().endswith(
+        ", and nothing is removed until the owner approves it in a comment on the retro issue."
+    )
 
 
 def test_velocity_and_burnup_section_covers_flow_metrics() -> None:
