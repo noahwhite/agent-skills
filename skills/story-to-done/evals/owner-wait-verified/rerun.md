@@ -25,7 +25,9 @@ The baseline is the skill on `main` immediately before SKL-356, `9e65dd3`; the c
 Run the candidate from its own detached checkout too: a checkout that is also the harness tree changes whenever another suite run writes a record into it, which voids the attempt.
 Record each through the suite runner from the repository root, as `../README.md` states, with `EVAL_AGENT_CMD` set as it shows.
 The baseline run exits 1 by design, because its graded runs fail; run the commands one at a time, not in a shell that stops on the first non-zero status, so the cleanup and the candidate run still follow.
-That expected exit 1 writes `results/suite-<label>.md` and names the failing runs on stderr (`run-suite: failing graded runs for:`); an exit 1 with no summary is a broken attempt or a changed checkout, not the baseline's result:
+That expected exit 1 writes `results/suite-<label>.md` and names the failing runs on stderr (`run-suite: failing graded runs for:`).
+It is the baseline's result only when the summary reads `Scenarios short of N graded runs: none.` and stderr has no `run-suite: fewer than N graded runs for:` line.
+A run with either is short of N graded runs, so the baseline is inconclusive (`../README.md`, Definitions) and is recorded again under a new label; an exit 1 with no summary is a broken attempt or a changed checkout, not the baseline's result:
 
 ```sh
 git worktree add --detach <scratch>/skill-9e65dd3 9e65dd3

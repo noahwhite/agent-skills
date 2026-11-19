@@ -1331,6 +1331,24 @@ def test_a_failing_case_exits_non_zero_and_still_writes_its_summary(suite) -> No
     assert rows["fail"][6:8] == ["2", "0"] and rows["pass"][6:8] == ["2", "2"]
 
 
+def test_a_short_failing_run_is_told_apart_from_a_complete_one(suite) -> None:
+    """owner-wait-verified/rerun.md accepts a failing baseline only when the summary reads
+    `Scenarios short of N graded runs: none.` and stderr has no `fewer than` line."""
+    suite["recommit"]("fail")
+    complete = suite["run"]("--runs", "2", str(suite["checkout"]), "complete", "stub")
+    assert complete.returncode == 1 and "failing graded runs for: stub fail" in complete.stderr, complete.stderr
+    assert "run-suite: fewer than" not in complete.stderr
+    summary = (suite["evals"] / "results" / "suite-complete.md").read_text(encoding="utf-8")
+    assert "Scenarios short of N graded runs: none." in summary
+
+    suite["recommit"]("fail", "void-always")
+    short = suite["run"]("--runs", "2", str(suite["checkout"]), "short", "stub")
+    assert short.returncode == 1 and "failing graded runs for: stub fail" in short.stderr, short.stderr
+    assert "run-suite: fewer than 2 graded runs for: stub void-always" in short.stderr, short.stderr
+    summary = (suite["evals"] / "results" / "suite-short.md").read_text(encoding="utf-8")
+    assert "Scenarios short of N graded runs: stub void-always." in summary
+
+
 def test_list_prints_the_cases_of_the_evals_directory_and_runs_nothing(suite) -> None:
     suite["recommit"]("pass")
     other = suite["evals"] / "other"
