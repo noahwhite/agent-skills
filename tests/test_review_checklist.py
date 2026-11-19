@@ -168,27 +168,25 @@ def test_a_missing_checklist_prints_nothing_and_exits_0(tmp_path):
     assert (result.returncode, result.stdout) == (0, ""), result.stderr
 
 
-def test_the_committed_checklist_maps_a_shared_change_to_its_item(tmp_path):
-    committed = CHECKLIST.read_text()
-    result = checklist(tmp_path, ["shared/runtimes.md"], text=committed)
-    assert result.returncode == 0, result.stderr
-    assert result.stderr == "", "a committed line is not '<bash glob> | <review item>'"
-    assert result.stdout.startswith("Every vendored copy of a changed shared/ file"), result.stdout
+VENDORING_ITEM = (
+    "Generated copies stay in step with shared/ and skills.json: `scripts/vendor_shared.py --check`"
+    " passes at the head, and no generated copy is edited by hand (the edit goes in shared/ or"
+    " skills.json, then scripts/vendor_shared.py is rerun).\n"
+)
 
 
-@pytest.mark.parametrize("copy", [
+@pytest.mark.parametrize("changed", [
+    "shared/runtimes.md",
+    "skills.json",
     "skills/persona-scrum-master/references/github.md",
     "skills/cleanup/scripts/check-signing-key.sh",
 ])
-def test_the_committed_checklist_maps_a_vendored_copy_path_to_the_generated_header_item(tmp_path, copy):
+def test_the_committed_checklist_maps_every_vendoring_input_and_output_to_its_item(tmp_path, changed):
     committed = CHECKLIST.read_text()
-    result = checklist(tmp_path, [copy], text=committed)
+    result = checklist(tmp_path, [changed], text=committed)
     assert result.returncode == 0, result.stderr
-    assert result.stdout == (
-        "A changed file that is a generated copy at the base or the head (its first line says"
-        ' "GENERATED from shared/", or scripts/vendor_shared.py writes it) is not edited by hand: the edit'
-        " goes in its shared/ source and the copy is regenerated with scripts/vendor_shared.py.\n"
-    ), result.stdout
+    assert result.stderr == "", "a committed line is not '<bash glob> | <review item>'"
+    assert result.stdout == VENDORING_ITEM, result.stdout
 
 
 def test_the_checklist_is_read_from_the_base_not_the_head(tmp_path):

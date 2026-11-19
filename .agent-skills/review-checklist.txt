@@ -3,6 +3,7 @@
 # An item is added only by an engineer PR that links the owner's approval on the retro issue
 # (persona-scrum-master "Retro").
 
-shared/* | Every vendored copy of a changed shared/ file is regenerated with scripts/vendor_shared.py in the same PR, and no copy under skills/*/references/ is edited by hand.
-skills/*/references/* | A changed file that is a generated copy at the base or the head (its first line says "GENERATED from shared/", or scripts/vendor_shared.py writes it) is not edited by hand: the edit goes in its shared/ source and the copy is regenerated with scripts/vendor_shared.py.
-skills/*/scripts/* | A changed file that is a generated copy at the base or the head (its first line says "GENERATED from shared/", or scripts/vendor_shared.py writes it) is not edited by hand: the edit goes in its shared/ source and the copy is regenerated with scripts/vendor_shared.py.
+shared/* | Generated copies stay in step with shared/ and skills.json: `scripts/vendor_shared.py --check` passes at the head, and no generated copy is edited by hand (the edit goes in shared/ or skills.json, then scripts/vendor_shared.py is rerun).
+skills.json | Generated copies stay in step with shared/ and skills.json: `scripts/vendor_shared.py --check` passes at the head, and no generated copy is edited by hand (the edit goes in shared/ or skills.json, then scripts/vendor_shared.py is rerun).
+skills/*/references/* | Generated copies stay in step with shared/ and skills.json: `scripts/vendor_shared.py --check` passes at the head, and no generated copy is edited by hand (the edit goes in shared/ or skills.json, then scripts/vendor_shared.py is rerun).
+skills/*/scripts/* | Generated copies stay in step with shared/ and skills.json: `scripts/vendor_shared.py --check` passes at the head, and no generated copy is edited by hand (the edit goes in shared/ or skills.json, then scripts/vendor_shared.py is rerun).
