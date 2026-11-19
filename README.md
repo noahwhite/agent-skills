@@ -235,6 +235,25 @@ Review roles run as subagents or as shell-launched CLIs (for example `codex exec
   Only npm/registry access is needed for installation.
 - Markdown puts one sentence per line.
 
+### Workflow files are judged by the base copy
+
+The `gate-base` check judges a pull request's edits to the base branch's `.github/workflows/*.yml` files by the base branch's copy of the judge, not the pull request's own.
+`.github/workflows/gate-base.yml` runs on `pull_request_target`, so its file and `scripts/gate_integrity.py` come from the base commit; the pull request head is checked out as data and never executed.
+It reports a check run named `gate-base` on the pull request head SHA.
+A pull request may add workflow files and jobs, may add steps after a base job's last step, and may change the display `name` of a workflow, job or step.
+A step added before a base step fails, because it could change how the base step runs.
+It fails `gate-base` when it removes or changes any other field of a base workflow, job or step, reorders base steps, gives a step another base step's name, changes a trigger, adds a job or step to `gate-base.yml` or removes it, or changes `scripts/gate_integrity.py`.
+It also fails when an added job, in any workflow file, would report a check named `gate-base` or named like a base job's check, takes an expression as its name, or runs with a token that could write check runs (`checks: write`, `write-all`, or no explicit `permissions`).
+It fails when an addition to a base workflow would make GitHub reject the file, so that no base job runs: an invalid job or step, a changed display name that is not a string or has an expression other than a plain context reference such as `${{ github.sha }}`, a `needs` that names a missing job or forms a cycle, or a file over 500 KB.
+In a base workflow, an added job must be a `runs-on` job, because the gate does not load a called reusable workflow, and a step added to a base job must be a `run` step, because an action's pre hook runs before the base steps.
+Scripts and tests that the workflows run stay judged by the pull request's own `checks` run.
+
+An intended gate change fails `gate-base` by design.
+For one, the owner sets the `main` ruleset to disabled, merges the pull request with a merge commit, sets the ruleset back to active, and records both ruleset read-backs on the pull request.
+
+Merges into `main` are signed merge commits.
+There is no bypass: the ruleset's bypass list stays empty, for the owner too.
+
 ## License
 
 [Apache-2.0](LICENSE)
