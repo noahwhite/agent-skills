@@ -3913,12 +3913,12 @@ def test_shared_linear_states_the_unestimated_split_trigger() -> None:
 def test_vendored_linear_copies_carry_the_unestimated_split_trigger() -> None:
     copies = sorted(ROOT.glob("skills/*/references/linear.md"))
     assert copies
-    for copy in copies:
+    for copy_path in copies:
         try:
-            lines = prose(section(copy.read_text(), "Estimation and slicing")).splitlines()
+            lines = prose(section(copy_path.read_text(), "Estimation and slicing")).splitlines()
         except AssertionError as error:
-            raise AssertionError(f"{copy.relative_to(ROOT)}: {error}") from error
-        assert SHARED_LINEAR_SPLIT in lines, copy.relative_to(ROOT)
+            raise AssertionError(f"{copy_path.relative_to(ROOT)}: {error}") from error
+        assert SHARED_LINEAR_SPLIT in lines, copy_path.relative_to(ROOT)
 
 
 def test_reviewer_output_contract_states_the_scope_signal_reading() -> None:
