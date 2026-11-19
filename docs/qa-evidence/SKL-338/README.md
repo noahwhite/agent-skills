@@ -25,7 +25,7 @@ The raw output is attached to SKL-338 as "SKL-338 QA round 1 raw assertion outpu
 | DoD: independently reviewed | Verified | PR #366 review 5980784792 is the review of record on `67659ca`, with 15 findings, 13 valid, 0 blocking, and a verdict for each. |
 | DoD: docs updated | Verified | `README.md:236`, `skills/story-to-done/evals/README.md` and `owner-wait-verified/rerun.md` cite `scripts/run-suite.sh`. |
 | DoD: verified in a deployed environment (if needed) | Correct by design | Not needed on the `no-deployment` path. |
-| DoD: no critical bugs or regressions | Verified | One non-critical regression: `spikes/SKL-317/poc/provider.py:63` still names the old runner path. It lies outside the AC6 boundary and is tracked as SKL-376. |
+| DoD: no critical bugs or regressions | Verified | PR #366 review 5980784792 rules three findings valid that the PR introduced, none critical, and all three remain at the target. F5 (Medium): `spikes/SKL-317/poc/provider.py:63` still names the old runner path; it lies outside the AC6 boundary and is tracked as SKL-376. F12 (Low): `scripts/run-suite.sh:34` loses a trailing newline in its parent directory name. F13 (Low): `skills/story-to-done/evals/owner-wait-verified/rerun.md:28` can let an operator accept an incomplete baseline. F12 and F13 are recorded only in the PR #366 body and review, with no tracker issue. |
 
 Pending owner rulings: none.
 
