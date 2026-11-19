@@ -38,27 +38,80 @@ Path: `no-deployment`, selected by `select-path.py`, so no environment or build 
 Target: merged commit `1231b1ad5e5cda57605e746fefdaceca0e76f1a9` (PR #370, reviewed head `b998995dfb97a8e144e611da2046eb175a90681a`) on `main`.
 `git merge-base --is-ancestor 1231b1ad5e5cda57605e746fefdaceca0e76f1a9 origin/main` exits 0.
 Checkout: a clean detached worktree at the target.
-Fixtures: none; repository items are read at the target commit, and tracker and CI items from the records each row cites.
+Fixtures: none; repository items are read at the target commit, and tracker and CI items from the records each item cites.
 The raw output is attached to SKL-338 as "SKL-338 QA round 2 raw assertion output"; there is no visual surface, so no screenshot applies.
 F12 is out of scope by owner decision.
 
 | Item | Verdict | Evidence |
 |---|---|---|
-| F13 fix | Verified | `owner-wait-verified/rerun.md:28-31` accepts the baseline's exit 1 only when the summary's one `Scenarios short of N graded runs:` line reads `none.`, the N and skill commit lines match the command, and stderr has no `run-suite: fewer than` line; a short run is inconclusive and recorded again with the same commit and `--runs` under a new label. Those strings are the ones `scripts/eval_suite.py:581`, `:582`, `:591` and `:754` print, and PR #370 changes no file under `scripts/`. `test_a_short_failing_run_is_told_apart_from_a_complete_one` drives `scripts/run-suite.sh` through a complete failing run and a short failing run and asserts both summary forms and the stderr line; it passes. |
-| AC1: refinement note | Verified | Comment 99f1918f is unchanged: its `editedAt` is null and it was created at 2026-11-19T08:57:27Z, before round 1. `git grep -n run-suite 5c3c388 -- 'skills/*/SKILL.md' 'skills/*/references/'` exits 1 with no output, and so does the same grep at the target. `README.md:64` holds the `ln -s` install, and `skills.json` has no evals entry. |
-| AC2: workflow skills enumerated, remainder split | Verified | The description lists the eight D1 skills and names SKL-348. `linear issue relation list SKL-338` shows SKL-338 blocks SKL-348, SKL-349, SKL-350, SKL-351, SKL-352 and SKL-353. |
-| AC3: shared runner | Verified | The only runner files are `scripts/run-suite.sh` and `scripts/eval_suite.py`. `uv run --locked bash scripts/run-suite.sh skills/story-to-done/evals --list` prints the three cases and exits 0. `test_a_failing_case_exits_non_zero_and_still_writes_its_summary` passes. |
-| AC4: contract test generalised | Verified | `uv run --locked pytest -q tests/test_eval_suite.py` reports 363 passed at the target. The glob is `skills/*/evals/*/case.yaml`, and `test_a_case_of_any_skill_missing_its_grader_fails_the_contract` passes. |
-| AC5: out of CI | Verified | The workflows grep at the target exits 1 with no output. Neither PR #366 nor PR #370 changes `.github/workflows/`. |
-| AC6: boundary | Verified | PR #366 changes the ten paths round 1 recorded. PR #370 changes `skills/story-to-done/evals/owner-wait-verified/rerun.md` and `tests/test_eval_suite.py`, both inside the boundary. |
+| F13 fix | Verified | See "F13 fix" below. |
+| AC1: refinement note | Verified | See "AC1" below. |
+| AC2: workflow skills enumerated, remainder split | Verified | See "AC2" below. |
+| AC3: shared runner | Verified | See "AC3" below. |
+| AC4: contract test generalised | Verified | See "AC4" below. |
+| AC5: out of CI | Verified | See "AC5" below. |
+| AC6: boundary | Verified | See "AC6" below. |
 | AC7: size guard | Verified | PR #370 changes no `SKILL.md`, `references/` or `shared/` file, so there is nothing to measure. |
-| AC8: guards | Verified | CI on the push to `main` at the target `1231b1a` (run 44607919537, which checked out `1231b1a` itself): `checks` passed with `uv run --locked pytest -q` at 3791 passed, the leak scan with `--require-private` (FORK_PR false) and all 18 skills valid; `discovery` found all 18 skills in each of its six layouts. The local full suite was not run, by owner directive; it is deferred to the end. |
+| AC8: guards | Verified | See "AC8" below. |
 | DoD: all acceptance criteria met | Verified | AC1 to AC8 above. |
 | DoD: unit/integration tests written and passing | Verified | The new F13 test and the AC3 and AC4 tests pass: 363 locally in `tests/test_eval_suite.py` and 3791 in CI on `1231b1a`. |
 | DoD: independently reviewed | Verified | PR #370 review 5982563191 is the review of record on `b998995`, the second parent of the merge commit, with 1 finding, 1 valid, 0 blocking, and a verdict for it. |
 | DoD: docs updated | Verified | The fix is the runbook text in `owner-wait-verified/rerun.md`. |
 | DoD: verified in a deployed environment (if needed) | Correct by design | Not needed on the `no-deployment` path. |
-| DoD: no critical bugs or regressions | Verified | F13 is fixed. Review 5982563191 rules one Low valid and unfixed: F1, the new test checks substrings, so it does not enforce that the summary has exactly one `Scenarios short of N graded runs:` line. The runner prints that line once today, so it is a test-strength gap, not a defect at the target. F5 (Medium) remains tracked as SKL-376. |
+| DoD: no critical bugs or regressions | Verified | See "No critical bugs or regressions" below. |
+
+### F13 fix
+
+`owner-wait-verified/rerun.md:28-31` accepts the baseline's exit 1 only when the summary's one `Scenarios short of N graded runs:` line reads `none.`, the N and skill commit lines match the command, and stderr has no `run-suite: fewer than` line.
+A short run is inconclusive and is recorded again with the same commit and `--runs` under a new label.
+Those strings are the ones `scripts/eval_suite.py:581`, `:582`, `:591` and `:754` print, and PR #370 changes no file under `scripts/`.
+`test_a_short_failing_run_is_told_apart_from_a_complete_one` drives `scripts/run-suite.sh` through a complete failing run and a short failing run, asserts both summary forms and the stderr line, and passes.
+
+### AC1
+
+Comment 99f1918f is unchanged: its `editedAt` is null and it was created at 2026-11-19T08:57:27Z, before round 1.
+`git grep -n run-suite 5c3c388 -- 'skills/*/SKILL.md' 'skills/*/references/'` exits 1 with no output, and so does the same grep at the target.
+`README.md:64` holds the `ln -s` install, and `skills.json` has no evals entry.
+
+### AC2
+
+The description lists the eight D1 skills and names SKL-348.
+`linear issue relation list SKL-338` shows SKL-338 blocks SKL-348, SKL-349, SKL-350, SKL-351, SKL-352 and SKL-353.
+
+### AC3
+
+The only runner files are `scripts/run-suite.sh` and `scripts/eval_suite.py`.
+`uv run --locked bash scripts/run-suite.sh skills/story-to-done/evals --list` prints the three cases and exits 0.
+`test_a_failing_case_exits_non_zero_and_still_writes_its_summary` passes.
+
+### AC4
+
+`uv run --locked pytest -q tests/test_eval_suite.py` reports 363 passed at the target.
+The glob is `skills/*/evals/*/case.yaml`, and `test_a_case_of_any_skill_missing_its_grader_fails_the_contract` passes.
+
+### AC5
+
+The workflows grep at the target exits 1 with no output.
+Neither PR #366 nor PR #370 changes `.github/workflows/`.
+
+### AC6
+
+PR #366 changes the ten paths round 1 recorded.
+PR #370 changes `skills/story-to-done/evals/owner-wait-verified/rerun.md` and `tests/test_eval_suite.py`, both inside the boundary.
+
+### AC8
+
+CI ran on the push to `main` at the target `1231b1a` (run 44607919537, which checked out `1231b1a` itself).
+`checks` passed: `uv run --locked pytest -q` reported 3791 passed, the leak scan ran with `--require-private` (FORK_PR false), and all 18 skills validated.
+`discovery` found all 18 skills in each of its six layouts.
+The local full suite was not run, by owner directive; it is deferred to the end.
+
+### No critical bugs or regressions
+
+F13 is fixed.
+Review 5982563191 rules one Low valid and unfixed, F1: the new test checks substrings, so it does not enforce that the summary has exactly one `Scenarios short of N graded runs:` line.
+The runner prints that line once today, so it is a test-strength gap, not a defect at the target.
+F5 (Medium) remains tracked as SKL-376.
 
 Pending owner rulings: none.
 
