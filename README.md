@@ -244,6 +244,7 @@ A pull request may add workflow files and jobs, may add steps after a base job's
 A step added before a base step fails, because it could change how the base step runs.
 It fails `gate-base` when it removes or changes any other field of a base workflow, job or step, reorders base steps, changes a trigger, changes `gate-base.yml` beyond its workflow name or removes it, or changes `scripts/gate_integrity.py`.
 It also fails when an added job would report a check named `gate-base` or named like a base job's check, or when a job's name is an expression the base did not already have.
+It fails when a job's `needs` in a base workflow names a missing job or forms a cycle, because GitHub then rejects the whole file and no base job runs.
 Scripts and tests that the workflows run stay judged by the pull request's own `checks` run.
 
 An intended gate change fails `gate-base` by design.

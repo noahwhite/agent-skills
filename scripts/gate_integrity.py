@@ -13,6 +13,8 @@ job or step. Everything else must stay as the base has it:
   GitHub reads the same (`on: push`, `on: [push]`, `push:` empty or `{}`) match;
 - every base job is present, with every key other than `name` and `steps` unchanged
   and none added;
+- every job's `needs` in a base workflow names jobs of that workflow without a cycle,
+  since GitHub rejects the whole file otherwise and no base job runs;
 - a base job's head steps start with its base steps, in order and unchanged in
   every field other than `name`. An added step runs only after every base step, so
   it cannot change their execution (through $GITHUB_ENV, for example).
@@ -180,7 +182,37 @@ def compare_workflow(name: str, base: dict, head: dict) -> list[str]:
             continue
         problems += compare_fields(base_job, head_job, ("name", "steps"), where)
         problems += compare_steps(base_job.get("steps"), head_job.get("steps"), where)
-    return problems
+    return problems + broken_needs(name, head_jobs)
+
+
+def broken_needs(name: str, jobs: dict) -> list[str]:
+    """Added jobs whose `needs` GitHub rejects, which stops every job in the file from running."""
+    needs = {}
+    for job_id, job in jobs.items():
+        value = job.get("needs", []) if isinstance(job, dict) else []
+        value = [value] if isinstance(value, str) else value
+        if not isinstance(value, list) or not all(isinstance(n, str) for n in value):
+            return [f"{name} job '{job_id}' needs something other than job ids"]
+        missing = [n for n in value if n not in jobs]
+        if missing:
+            return [f"{name} job '{job_id}' needs a job that does not exist: {', '.join(missing)}"]
+        needs[job_id] = value
+    done, path = set(), []
+
+    def cycle(job_id) -> bool:
+        if job_id in path:
+            return True
+        if job_id in done:
+            return False
+        path.append(job_id)
+        found = any(cycle(n) for n in needs[job_id])
+        path.pop()
+        done.add(job_id)
+        return found
+
+    if any(cycle(job_id) for job_id in needs):
+        return [f"{name}: job needs form a cycle"]
+    return []
 
 
 def check_names(workflows: dict) -> dict:

@@ -180,6 +180,30 @@ def test_a_job_added_passes(tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+def test_an_added_job_that_needs_a_base_job_passes(tmp_path):
+    result = judge(tmp_path, head_with(lambda ci: ci["jobs"].update(
+        lint={"needs": ["checks"], "steps": [{"run": "true"}]})))
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+# GitHub rejects a whole workflow file whose `needs` names a missing job or forms a cycle,
+# so an added job like this stops every base job in that file from running.
+BROKEN_NEEDS = {
+    "missing job": {"lint": {"needs": "nonexistent", "steps": [{"run": "true"}]}},
+    "cycle": {"a": {"needs": ["b"], "steps": [{"run": "true"}]},
+              "b": {"needs": "a", "steps": [{"run": "true"}]}},
+    "self": {"a": {"needs": "a", "steps": [{"run": "true"}]}},
+    "not a job id": {"a": {"needs": [{"job": "checks"}], "steps": [{"run": "true"}]}},
+}
+
+
+@pytest.mark.parametrize("jobs", BROKEN_NEEDS.values(), ids=BROKEN_NEEDS)
+def test_an_added_job_with_needs_github_rejects_fails(tmp_path, jobs):
+    result = judge(tmp_path, head_with(lambda ci: ci["jobs"].update(copy.deepcopy(jobs))))
+    assert result.returncode != 0, result.stdout
+    assert "needs" in result.stdout
+
+
 def test_a_workflow_added_passes(tmp_path):
     workflows = head_with(lambda ci: None)
     workflows["extra.yml"] = {"on": {"push": None}, "jobs": {"x": {"steps": [{"run": "true"}]}}}
