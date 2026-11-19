@@ -38,6 +38,8 @@ jobs:
           enable-cache: false
       - name: Judge the head workflows with the base gate
         id: judge
+        # Leaves the report step time to run within the job's timeout.
+        timeout-minutes: 5
         # shell: bash adds pipefail, so the judge's exit, not tee's, sets the step outcome.
         shell: bash
         run: >-
@@ -54,9 +56,20 @@ jobs:
           REPO: ${{ github.repository }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           OUTCOME: ${{ steps.judge.outcome }}
+        shell: bash
         run: |
           if [ "$OUTCOME" = success ]; then conclusion=success; else conclusion=failure; fi
-          [ -s "$RUNNER_TEMP/gate.log" ] || echo "gate-integrity did not run (outcome: $OUTCOME)" > "$RUNNER_TEMP/gate.log"
-          gh api --method POST "repos/$REPO/check-runs" \
-            -f name=gate-base -f "head_sha=$HEAD_SHA" -f status=completed -f "conclusion=$conclusion" \
-            -f "output[title]=gate-base: $conclusion" -F "output[summary]=@$RUNNER_TEMP/gate.log"
+          log="$RUNNER_TEMP/gate.log"
+          summary="$RUNNER_TEMP/summary.md"
+          [ -s "$log" ] || echo "gate-integrity did not run (outcome: $OUTCOME)" > "$log"
+          # The Checks API caps the summary at 65535 characters. Backtick runs collapse to one
+          # backtick, so head-controlled text in the log cannot close the code fence.
+          { echo '```text'; head -c 60000 "$log" | sed 's/``*/`/g'; echo; echo '```'; } > "$summary"
+          for attempt in 1 2 3; do
+            gh api --method POST "repos/$REPO/check-runs" \
+              -f name=gate-base -f "head_sha=$HEAD_SHA" -f status=completed -f "conclusion=$conclusion" \
+              -f "output[title]=gate-base: $conclusion" -F "output[summary]=@$summary" && exit 0
+            sleep $((attempt * 10))
+          done
+          echo "::error::could not create the gate-base check run on $HEAD_SHA"
+          exit 1

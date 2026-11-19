@@ -87,11 +87,91 @@ def test_a_renamed_workflow_passes(tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
 
 
-@pytest.mark.parametrize("where", [0, 2, 4], ids=["first", "between", "last"])
-def test_a_named_step_added_passes(tmp_path, where):
-    result = judge(tmp_path, head_with(
-        lambda ci: steps(ci).insert(where, {"name": "Lint", "run": "uv run ruff check"})))
+ADDED_STEPS = {
+    "named": {"name": "Lint", "run": "uv run ruff check"},
+    "unnamed": {"run": "echo hi"},
+    "same name as a base step": {"name": "Repository tests", "run": "echo more"},
+}
+BASE_STEP_COPY = {"name": "Repository tests", "run": "uv run --locked pytest -q"}
+
+
+@pytest.mark.parametrize("step", [*ADDED_STEPS.values(), BASE_STEP_COPY], ids=[*ADDED_STEPS, "copy of a base step"])
+def test_a_step_added_after_the_base_steps_passes(tmp_path, step):
+    result = judge(tmp_path, head_with(lambda ci: steps(ci).append(step)))
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize("where", [0, 1, 2, 3], ids=["first", "between-unnamed", "after-unnamed", "before-last"])
+@pytest.mark.parametrize("step", ADDED_STEPS.values(), ids=ADDED_STEPS.keys())
+def test_a_step_added_before_a_base_step_fails(tmp_path, step, where):
+    """A step that runs before a base step can change its execution, for example through $GITHUB_ENV."""
+    result = judge(tmp_path, head_with(lambda ci: steps(ci).insert(where, step)))
+    assert result.returncode != 0, result.stdout
+    assert "ci.yml job 'checks'" in result.stdout
+
+
+def test_a_base_step_copied_above_an_earlier_one_fails(tmp_path):
+    result = judge(tmp_path, head_with(lambda ci: steps(ci).insert(2, copy.deepcopy(steps(ci)[3]))))
+    assert result.returncode != 0, result.stdout
+
+
+@pytest.mark.parametrize("change", [lambda ci: steps(ci)[3].update({"if": 1}),
+                                    lambda ci: ci["jobs"]["checks"].update({"timeout-minutes": 15.0}),
+                                    lambda ci: steps(ci)[1]["with"].update({"enable-cache": 0})],
+                         ids=["if-true-to-1", "timeout-int-to-float", "false-to-0"])
+def test_a_value_that_changes_type_fails(tmp_path, change):
+    ci = copy.deepcopy(CI)
+    steps(ci)[3]["if"] = True
+    base = write_tree(tmp_path / "base", {"ci.yml": ci, "gate-base.yml": GATE})
+    head_ci = copy.deepcopy(ci)
+    change(head_ci)
+    head = write_tree(tmp_path / "head", {"ci.yml": head_ci, "gate-base.yml": GATE})
+    result = run_dirs(base / ".github/workflows", head / ".github/workflows")
+    assert result.returncode != 0, result.stdout
+
+
+def test_a_duplicate_key_fails(tmp_path):
+    for side, extra in (("base", ""), ("head", "  pull_request_target:\n")):
+        directory = tmp_path / side
+        directory.mkdir()
+        (directory / "ci.yml").write_text("on:\n  pull_request:\n" + extra +
+                                          ("on: [pull_request]\n" if extra else "") +
+                                          "jobs:\n  checks:\n    steps:\n      - run: 'true'\n")
+    result = run_dirs(tmp_path / "base", tmp_path / "head")
+    assert result.returncode != 0, result.stdout
+    assert "duplicate" in result.stdout
+
+
+@pytest.mark.parametrize("workflows_change", [
+    lambda w: w.update({"lint.yml": {"on": {"pull_request": None},
+                                     "jobs": {"lint": {"name": "${{ 'gate-base' }}", "steps": [{"run": "true"}]}}}}),
+    lambda w: w["ci.yml"]["jobs"]["checks"].update(name="${{ 'gate-base' }}"),
+    lambda w: w.update({"lint.yml": {"on": {"pull_request": None},
+                                     "jobs": {"checks": {"steps": [{"run": "true"}]}}}}),
+    lambda w: w["ci.yml"]["jobs"].update(lint={"name": "checks", "steps": [{"run": "true"}]}),
+], ids=["expression-name-in-added-workflow", "base-job-renamed-to-expression",
+        "base-check-name-in-added-workflow", "base-check-name-on-added-job"])
+def test_a_head_job_that_could_report_a_required_check_name_fails(tmp_path, workflows_change):
+    workflows = head_with(lambda ci: None)
+    workflows_change(workflows)
+    result = judge(tmp_path, workflows)
+    assert result.returncode != 0, result.stdout
+
+
+def test_an_unparseable_added_workflow_fails(tmp_path):
+    base = write_tree(tmp_path / "base", {"ci.yml": CI, "gate-base.yml": GATE})
+    head = write_tree(tmp_path / "head", {"ci.yml": CI, "gate-base.yml": GATE})
+    (head / ".github/workflows/lint.yml").write_text("jobs:\n  gate-base:\n    with: !custom foo\n")
+    result = run_dirs(base / ".github/workflows", head / ".github/workflows")
+    assert result.returncode != 0, result.stdout
+    assert "lint.yml" in result.stdout
+
+
+def test_a_head_script_without_a_base_script_is_a_usage_error(tmp_path):
+    base = write_tree(tmp_path / "base", {"ci.yml": CI, "gate-base.yml": GATE})
+    result = run_dirs(base / ".github/workflows", base / ".github/workflows",
+                      "--head-script", base / "scripts/gate_integrity.py")
+    assert result.returncode == 2, result.stdout + result.stderr
 
 
 def test_a_job_added_passes(tmp_path):
@@ -104,18 +184,6 @@ def test_a_workflow_added_passes(tmp_path):
     workflows = head_with(lambda ci: None)
     workflows["extra.yml"] = {"on": {"push": None}, "jobs": {"x": {"steps": [{"run": "true"}]}}}
     result = judge(tmp_path, workflows)
-    assert result.returncode == 0, result.stdout + result.stderr
-
-
-@pytest.mark.parametrize("where", [0, 1, 2, 4], ids=["first", "between-unnamed", "after-unnamed", "last"])
-def test_an_unnamed_step_added_passes(tmp_path, where):
-    result = judge(tmp_path, head_with(lambda ci: steps(ci).insert(where, {"run": "echo hi"})))
-    assert result.returncode == 0, result.stdout + result.stderr
-
-
-def test_a_same_named_step_added_before_the_original_passes(tmp_path):
-    result = judge(tmp_path, head_with(
-        lambda ci: steps(ci).insert(2, {"name": "Repository tests", "run": "echo more"})))
     assert result.returncode == 0, result.stdout + result.stderr
 
 
@@ -405,9 +473,12 @@ def test_the_head_is_checked_out_as_data_at_the_pr_head_sha():
     assert head["ref"] == "${{ github.event.pull_request.head.sha }}"
     assert head["repository"] == "${{ github.event.pull_request.head.repo.full_name }}"
     # Nothing under head/ is executed: a head path appears only as a data argument of the gate.
+    # The coreutils `head` command, which takes an option, is not a path.
     for step in all_steps(gate_workflow()):
         words = shlex.split(step.get("run", ""))
         for i, word in enumerate(words):
+            if word == "head" and words[i + 1:i + 2] and words[i + 1].startswith("-"):
+                continue
             if re.match(r"(\./)?head(/|$)", word):
                 assert i > 0 and words[i - 1] in ("--head", "--head-script"), word
 
@@ -440,6 +511,47 @@ def test_a_failing_judge_fails_the_judge_step(tmp_path, judge_exit):
                             env={"PATH": f"{tmp_path}:/usr/bin:/bin", "RUNNER_TEMP": str(tmp_path)})
     assert result.returncode != 0
     assert "gate-base: FAIL" in (tmp_path / "gate.log").read_text()
+
+
+def run_report_step(tmp_path, log_text, gh_failures):
+    """Run the report step with a stub gh that fails gh_failures times, then records its summary."""
+    [report] = [s for s in all_steps(gate_workflow()) if "check-runs" in s.get("run", "")]
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "sleep").write_text("#!/bin/sh\nexit 0\n")
+    (bin_dir / "gh").write_text(
+        "#!/bin/sh\n"
+        f"n=$(cat {tmp_path}/calls 2>/dev/null || echo 0); n=$((n + 1)); echo $n > {tmp_path}/calls\n"
+        f"[ $n -le {gh_failures} ] && exit 1\n"
+        f"for a in \"$@\"; do case $a in 'output[summary]=@'*) cp \"${{a#*@}}\" {tmp_path}/posted;; esac; done\n")
+    for tool in ("sleep", "gh"):
+        (bin_dir / tool).chmod(0o755)
+    (tmp_path / "gate.log").write_text(log_text)
+    (tmp_path / "step.sh").write_text(report["run"])
+    env = {"PATH": f"{bin_dir}:/usr/bin:/bin", "RUNNER_TEMP": str(tmp_path), "OUTCOME": "failure",
+           "REPO": "o/r", "HEAD_SHA": "0" * 40}
+    return subprocess.run([*RUNNER_SHELLS[report.get("shell")], str(tmp_path / "step.sh")],
+                          capture_output=True, text=True, timeout=30, env=env)
+
+
+def test_the_report_step_retries_and_caps_the_summary(tmp_path):
+    result = run_report_step(tmp_path, "gate-base: x ```\n" * 20000, gh_failures=2)
+    assert result.returncode == 0, result.stderr
+    posted = (tmp_path / "posted").read_text()
+    assert len(posted) <= 65535
+    # Head-controlled text cannot close the fence the log sits in.
+    assert posted.count("```") == 2
+
+
+def test_the_report_step_fails_when_the_check_run_cannot_be_created(tmp_path):
+    result = run_report_step(tmp_path, "gate-base: FAIL\n", gh_failures=99)
+    assert result.returncode != 0
+
+
+def test_the_judge_step_times_out_before_the_job():
+    workflow = gate_workflow()
+    [judge_step] = [s for s in all_steps(workflow) if s.get("id") == "judge"]
+    assert judge_step["timeout-minutes"] < workflow["jobs"]["gate"]["timeout-minutes"]
 
 
 def test_the_check_run_gate_base_is_created_on_the_pr_head_sha():

@@ -240,8 +240,10 @@ Review roles run as subagents or as shell-launched CLIs (for example `codex exec
 The `gate-base` check judges a pull request's edits to the base branch's `.github/workflows/*.yml` and `*.yaml` files by the base branch's copy of the judge, not the pull request's own.
 `.github/workflows/gate-base.yml` runs on `pull_request_target`, so its file and `scripts/gate_integrity.py` come from the base commit; the pull request head is checked out as data and never executed.
 It reports a check run named `gate-base` on the pull request head SHA.
-A pull request may add workflows, jobs and steps, and may rename a workflow, job or step.
-It fails `gate-base` when it removes or changes any other field of a base workflow, job or step, reorders base steps, changes a trigger, changes `gate-base.yml` beyond its workflow name or removes it, changes `scripts/gate_integrity.py`, or adds a job whose id or name is `gate-base`.
+A pull request may add workflow files and jobs, may add steps after a base job's last step, and may change the display `name` of a workflow, job or step.
+A step added before a base step fails, because it could change how the base step runs.
+It fails `gate-base` when it removes or changes any other field of a base workflow, job or step, reorders base steps, changes a trigger, changes `gate-base.yml` beyond its workflow name or removes it, or changes `scripts/gate_integrity.py`.
+It also fails when an added job would report a check named `gate-base` or named like a base job's check, or when a job's name is an expression the base did not already have.
 Scripts and tests that the workflows run stay judged by the pull request's own `checks` run.
 
 An intended gate change fails `gate-base` by design.

@@ -2,26 +2,30 @@
 """Judge a pull request's workflow files against the base branch's copies.
 
 The gate-base workflow runs this script from the base commit and reads the head
-checkout as data only. Against each base workflow, the head copy may add jobs,
-steps and workflows, and may rename a workflow, job or step. Everything else must
-stay as the base has it:
+checkout as data only. Against each base workflow, the head copy may add jobs and
+workflows, may add steps after a base job's last step, and may rename a workflow,
+job or step. Everything else must stay as the base has it:
 
-- every base workflow file is still present and parses;
+- every base workflow file is still present and parses, without duplicate keys;
 - every top-level key other than `name` and `jobs` (triggers, permissions, env,
   concurrency, defaults) is unchanged, and none is added; trigger spellings that
   GitHub reads the same (`on: push`, `on: [push]`, `push:` empty or `{}`) match;
 - every base job is present, with every key other than `name` and `steps` unchanged
   and none added;
-- every base step is present, unchanged in every field other than `name`, and in
-  the same order: the base steps, names aside, are an in-order subsequence of the
-  head steps, so added steps may sit anywhere.
+- a base job's head steps start with its base steps, in order and unchanged in
+  every field other than `name`. An added step runs only after every base step, so
+  it cannot change their execution (through $GITHUB_ENV, for example).
+
+Values compare by type as well as value, so `true` does not match `1`.
 
 gate-base.yml itself may change only its workflow `name`, so nothing can be added to
-the job that judges. No head workflow may define a job whose id or name is
-`gate-base`, the name of the check this gate reports.
+the job that judges. A head job may not report a check that a base job or this gate
+reports: no added job, in any workflow, may have a check name (its `name`, else its
+id) that is `gate-base` or a base job's check name, and no head job may take an
+expression as its name unless the base job had that same name.
 
-When --base-script is given, it must name a file, and --head-script must name a
-file with the same bytes, so a pull request cannot weaken its own judge.
+--base-script and --head-script go together: the head file must have the base
+file's bytes, so a pull request cannot weaken its own judge.
 
   scripts/gate_integrity.py --base DIR --head DIR [--base-script FILE --head-script FILE]
 
@@ -40,6 +44,28 @@ GATE_CHECK = "gate-base"
 SUFFIXES = (".yml", ".yaml")
 
 
+class UniqueKeyLoader(yaml.SafeLoader):
+    """A safe loader that refuses a mapping with a repeated key instead of keeping the last."""
+
+    def construct_mapping(self, node, deep=False):
+        keys = [self.construct_object(key, deep=deep) for key, _ in node.value]
+        for i, key in enumerate(keys):
+            if key in keys[:i]:
+                raise yaml.constructor.ConstructorError(None, None, f"duplicate key {key!r}", node.start_mark)
+        return super().construct_mapping(node, deep=deep)
+
+
+def same(a, b) -> bool:
+    """Equality that also requires the same types, so True does not match 1 or 15 match 15.0."""
+    if type(a) is not type(b):
+        return False
+    if isinstance(a, dict):
+        return a.keys() == b.keys() and all(same(a[k], b[k]) for k in a)
+    if isinstance(a, list):
+        return len(a) == len(b) and all(same(x, y) for x, y in zip(a, b))
+    return a == b
+
+
 def normalize_triggers(on):
     """Read the `on` value the way GitHub does: an event list or name is events with no filter."""
     if isinstance(on, str):
@@ -56,7 +82,11 @@ def load(path: Path):
     if path.is_symlink() or not path.is_file():
         return None, "is not a regular file"
     try:
-        document = yaml.safe_load(path.read_text(encoding="utf-8"))
+        document = yaml.load(path.read_text(encoding="utf-8"), Loader=UniqueKeyLoader)
+    except yaml.constructor.ConstructorError as error:
+        if "duplicate key" in str(error.problem):
+            return None, f"does not parse: {error.problem}"
+        return None, f"does not parse: {error.__class__.__name__}"
     except (yaml.YAMLError, UnicodeDecodeError, OSError) as error:
         return None, f"does not parse: {error.__class__.__name__}"
     if not isinstance(document, dict):
@@ -91,7 +121,7 @@ def compare_fields(base: dict, head: dict, ignored: tuple, where: str) -> list[s
     for key in base_fields:
         if key not in head_fields:
             problems.append(f"{where}: {label(key)} was removed")
-        elif head_fields[key] != base_fields[key]:
+        elif not same(head_fields[key], base_fields[key]):
             problems.append(f"{where}: {label(key)} changed")
     for key in head_fields:
         if key not in base_fields:
@@ -100,20 +130,18 @@ def compare_fields(base: dict, head: dict, ignored: tuple, where: str) -> list[s
 
 
 def compare_steps(base_steps, head_steps, where: str) -> list[str]:
-    """Each base step, names aside, must appear in the head after the previous one's match."""
-    if not isinstance(base_steps, list):
-        return [] if base_steps == head_steps else [f"{where}: steps changed"]
-    if not isinstance(head_steps, list):
-        return [f"{where}: steps are no longer a list"]
+    """The head steps must start with the base steps, names aside; added steps follow them."""
+    if not isinstance(base_steps, list) or not isinstance(head_steps, list):
+        return [] if same(base_steps, head_steps) else [f"{where}: steps changed"]
+    problems = []
     head_bodies = [step_body(step) for step in head_steps]
-    problems, last = [], -1
     for position, base_step in enumerate(base_steps, start=1):
         body = step_body(base_step)
-        match = next((i for i in range(last + 1, len(head_bodies)) if head_bodies[i] == body), None)
-        if match is not None:
-            last = match
-        elif body in head_bodies[:last + 1]:
-            problems.append(f"{where}: {describe(position, base_step)} moved; base step order changed")
+        if position <= len(head_bodies) and same(head_bodies[position - 1], body):
+            continue
+        if any(same(head_body, body) for head_body in head_bodies):
+            problems.append(f"{where}: {describe(position, base_step)} is out of order (moved, or an added"
+                            " step runs before it; added steps go after the base steps)")
         else:
             problems.append(f"{where}: {describe(position, base_step)} was removed or changed")
     return problems
@@ -126,18 +154,16 @@ def compare_workflow(name: str, base: dict, head: dict) -> list[str]:
                                                      " procedure)")
     problems = compare_fields(base, head, ("name", "jobs"), name)
     base_jobs, head_jobs = base.get("jobs") or {}, head.get("jobs") or {}
-    if not isinstance(base_jobs, dict):
-        return problems + ([] if base_jobs == head_jobs else [f"{name}: jobs changed"])
-    if not isinstance(head_jobs, dict):
-        return problems + [f"{name}: jobs are no longer a mapping"]
+    if not isinstance(base_jobs, dict) or not isinstance(head_jobs, dict):
+        return problems + ([] if same(base_jobs, head_jobs) else [f"{name}: jobs changed"])
     for job_id, base_job in base_jobs.items():
         where = f"{name} job '{job_id}'"
-        head_job = head_jobs.get(job_id)
-        if head_job is None:
+        if job_id not in head_jobs:
             problems.append(f"{where} was removed")
             continue
+        head_job = head_jobs[job_id]
         if not isinstance(base_job, dict) or not isinstance(head_job, dict):
-            if base_job != head_job:
+            if not same(base_job, head_job):
                 problems.append(f"{where} changed")
             continue
         problems += compare_fields(base_job, head_job, ("name", "steps"), where)
@@ -145,14 +171,31 @@ def compare_workflow(name: str, base: dict, head: dict) -> list[str]:
     return problems
 
 
-def forged_checks(name: str, head: dict) -> list[str]:
-    """A job whose check run would carry the gate's own check name."""
-    jobs = head.get("jobs")
-    if name == GATE_WORKFLOW or not isinstance(jobs, dict):
-        return []
-    return [f"{name} job '{job_id}' would report a check named {GATE_CHECK}"
-            for job_id, job in jobs.items()
-            if job_id == GATE_CHECK or (isinstance(job, dict) and job.get("name") == GATE_CHECK)]
+def check_names(workflows: dict) -> dict:
+    """(workflow file, job id) -> the check name the job reports: its `name`, else its id."""
+    names = {}
+    for file, workflow in workflows.items():
+        jobs = workflow.get("jobs")
+        for job_id, job in (jobs.items() if isinstance(jobs, dict) else ()):
+            name = job.get("name") if isinstance(job, dict) else None
+            names[(file, job_id)] = str(job_id) if name is None else name
+    return names
+
+
+def forged_checks(bases: dict, heads: dict) -> list[str]:
+    """Head jobs that could report a check named like the gate's or a base job's."""
+    base_names = check_names(bases)
+    reserved = {GATE_CHECK, *(n for n in base_names.values() if isinstance(n, str))}
+    problems = []
+    for (file, job_id), name in check_names(heads).items():
+        where = f"{file} job '{job_id}'"
+        if (file, job_id) in base_names and same(base_names[(file, job_id)], name):
+            continue
+        if not isinstance(name, str) or "${{" in name:
+            problems.append(f"{where} takes an expression as its name, so it could report any check name")
+        elif name in reserved:
+            problems.append(f"{where} would report a check named {name}, which a base job or this gate reports")
+    return problems
 
 
 def workflow_files(directory: Path) -> list[Path]:
@@ -164,35 +207,31 @@ def workflow_files(directory: Path) -> list[Path]:
 def judge(base_dir: Path, head_dir: Path, base_script: Path | None, head_script: Path | None) -> list[str]:
     if head_dir.is_symlink() or head_dir.parent.is_symlink():
         return ["head .github/workflows is a symlink; the head checkout is judged only as it is"]
-    problems = []
-    base_names = set()
+    problems, bases, heads = [], {}, {}
     for base_path in workflow_files(base_dir):
-        name = base_path.name
-        base_names.add(name)
         base, problem = load(base_path)
         if problem:
-            problems.append(f"base {name} {problem}")
-            continue
+            problems.append(f"base {base_path.name} {problem}")
+        else:
+            bases[base_path.name] = base
+    for head_path in workflow_files(head_dir):
+        head, problem = load(head_path)
+        if problem:
+            problems.append(f"head {head_path.name} {problem}")
+        else:
+            heads[head_path.name] = head
+    for name, base in bases.items():
         head_path = head_dir / name
         if not head_path.exists() and not head_path.is_symlink():
             if name == GATE_WORKFLOW:
                 problems.append(f"{name} was removed; the gate that judges workflow edits must stay")
             else:
                 problems.append(f"{name} was removed")
-            continue
-        head, problem = load(head_path)
-        if problem:
-            problems.append(f"head {name} {problem}")
-            continue
-        problems += compare_workflow(name, base, head)
-        problems += forged_checks(name, head)
-    for head_path in workflow_files(head_dir):
-        if head_path.name not in base_names:
-            head, problem = load(head_path)
-            if not problem:
-                problems += forged_checks(head_path.name, head)
+        elif name in heads:
+            problems += compare_workflow(name, base, heads[name])
+    problems += forged_checks(bases, heads)
     if base_script is not None:
-        if head_script is None or head_script.is_symlink() or not head_script.is_file():
+        if head_script.is_symlink() or not head_script.is_file():
             problems.append("scripts/gate_integrity.py was removed; the base copy judges and must stay")
         elif head_script.read_bytes() != base_script.read_bytes():
             problems.append("scripts/gate_integrity.py differs from base; a gate change follows the owner's"
@@ -209,18 +248,20 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
     if not args.base.is_dir():
         parser.error(f"--base {args.base} is not a directory")
+    if (args.base_script is None) != (args.head_script is None):
+        parser.error("--base-script and --head-script go together")
     if args.base_script is not None and (args.base_script.is_symlink() or not args.base_script.is_file()):
         parser.error(f"--base-script {args.base_script} is not a regular file")
     try:
         problems = judge(args.base, args.head, args.base_script, args.head_script)
-    except (RecursionError, OSError) as error:
+    except (RecursionError, MemoryError, OSError) as error:
         problems = [f"could not judge: {error.__class__.__name__}"]
     for problem in problems:
         print(f"gate-base: {problem}")
     if problems:
         print(f"gate-base: FAIL, {len(problems)} violation(s)")
         return 1
-    print("gate-base: PASS, every base workflow, job and step is unchanged")
+    print("gate-base: PASS, no base workflow, job or step was changed")
     return 0
 
 
