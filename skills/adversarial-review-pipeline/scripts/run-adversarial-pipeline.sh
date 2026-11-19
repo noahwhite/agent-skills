@@ -22,6 +22,8 @@
 #   run-adversarial-pipeline.sh cleanup <checkout-path>               # removes a checkout this script made
 #   run-adversarial-pipeline.sh paths --base REF                      # prints this run's artifact paths,
 #                               # then a final 'dossier_sizes <path>' line naming the size log
+#   run-adversarial-pipeline.sh checklist --base REF                  # prints the review checklist items
+#                               # for the paths changed in REF...HEAD (see "Review checklist")
 # Every command also takes --repo DIR.
 #
 # Runs: artifacts live in a run directory keyed by the base and head commit SHAs, under
@@ -74,6 +76,20 @@
 # side's reason. Test modules get no automatic exclusion. The kept diff takes the same pinned options
 # and per-file cap as the embedded diff below. The arbitrate dossier embeds no diff, so it lists no
 # exclusions.
+#
+# Review checklist: `.agent-skills/review-checklist.txt` in the repository under review, read from the
+# base commit (so a change cannot rewrite the checklist its own review uses), holds one
+# `<bash glob> | <review item>` per line; blank lines and lines whose first non-space character is
+# '#' are ignored, and any other line without ' | ', or holding a NUL or \001 byte, is skipped
+# with a warning on stderr. The glob is the text before the first ' | ' and is matched unquoted with bash
+# `[[ path == glob ]]` against each changed path as git prints it (repo-relative, no leading './',
+# rename detection off, so both sides of a rename count): '*' crosses '/', and '**/x' does not match
+# a top-level 'x'. `checklist` prints each matching item once (keyed on its text), in file order; a
+# file absent at the base or no match prints nothing and exits 0, and a git failure exits 22. The
+# sweep dossier ends with the same items, each prefixed '- ', under a '===== Review checklist'
+# heading: every whole item that fits in CHECKLIST_CAP_CHARS, in order, then a truncation notice if
+# any was left out. It has no such heading when none matches. With the sweep skipped (--no-sweep),
+# no phase shows them.
 #
 # Embedded diff: the sweep and hunt dossiers embed `git diff --no-ext-diff --unified=1` of the run's
 # range, and DIFF_CAP_BYTES (4096, in bytes of unified-diff text, per file and not a bound on the whole
@@ -236,7 +252,8 @@
 # or wrote no fresh report, 17 agent ran blind (sandbox error on its stderr, or no `REVIEW-RAN: yes`
 # first line), 18 the agent changed the primary checkout, 19 the phase was killed by --timeout,
 # 20 the phase's availability check failed before any agent ran, 21 the arbitrate phase could not
-# write its identity lines or retain its accepted report (not accepted). An accepted arbitration report that
+# write its identity lines or retain its accepted report (not accepted), 22 the review checklist or
+# the changed paths could not be read (checklist, dossier sweep). An accepted arbitration report that
 # cannot be written to stdout still exits 1, as it did before the completion-line work; the message
 # names the stamped artifact so a driver does not re-run the model call.
 # A checkout that cannot be created exits with git's own status, which is what that path did before
@@ -244,6 +261,7 @@
 set -euo pipefail
 
 DIFF_CAP_BYTES=4096   # bytes of unified-diff text per file in an embedded diff (see "Embedded diff" above)
+CHECKLIST_CAP_CHARS=8192   # characters of matched items in the sweep dossier (see "Review checklist" above)
 
 SCRIPT_DIR="$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")"   # the real directory, through any symlink
 
@@ -301,7 +319,7 @@ phase=""; target=""
 case "$cmd" in
   dossier|run|record) phase="${1:-}"; [ -n "$phase" ] || usage; shift ;;
   cleanup) target="${1:-}"; [ -n "$target" ] || usage; shift; target="$(abspath "$target")" ;;
-  preflight|checkout|paths) ;;
+  preflight|checkout|paths|checklist) ;;
   -h|--help|help) usage ;;
   *) echo "ERROR: unknown command '$cmd'" >&2; usage ;;
 esac
@@ -414,7 +432,7 @@ cd "$ROOT"
 validate_scratch() {
   local resolved_scratch resolved_root
   case "$cmd" in
-    preflight|dossier|run|checkout) ;;
+    preflight|dossier|run|checkout|checklist) ;;
     *) return 0 ;;
   esac
   if [ "$SCRATCH_SET" -eq 1 ] && [ -z "$SCRATCH" ]; then
@@ -1531,14 +1549,60 @@ classify_exclusions() {
   done
 }
 
+# The review checklist items for this run's changed paths (see "Review checklist" in the header).
+checklist_items() {
+  local file=".agent-skills/review-checklist.txt" entry tmp line glob item path n=0
+  local -a changed=()
+  local -A seen=()
+  # Read from the base, so a change cannot rewrite the checklist its own review runs against.
+  entry="$(git ls-tree "$BASE_SHA" -- "$file")" \
+    || die 22 "could not look up $file at the base $BASE_SHA."
+  case "$entry" in
+    "") return 0 ;;
+    "100644 blob "* | "100755 blob "*) ;;
+    *) die 22 "$file at the base $BASE_SHA is not a regular file." ;;
+  esac
+  tmp="$(mktemp -p "$RUN_DIR" checklist.XXXXXX)"
+  # --ignore-submodules=none: a repository's diff.ignoreSubmodules must not hide a changed gitlink.
+  if ! git diff --no-renames --ignore-submodules=none --name-only -z "$BASE_SHA"..."$HEAD_SHA" > "$tmp"; then
+    rm -f -- "$tmp"; die 22 "could not list the paths changed in $BASE_SHA...$HEAD_SHA."
+  fi
+  while IFS= read -r -d '' path; do changed+=("$path"); done < "$tmp"
+  # NUL becomes \001, which bash `read` keeps (it drops NUL silently), so the line can be skipped
+  # with a warning; pipefail makes a failing `git cat-file` fail the pipeline.
+  if ! git cat-file blob "${BASE_SHA}:${file}" | tr '\000' '\001' > "$tmp"; then
+    rm -f -- "$tmp"; die 22 "could not read $file at the base $BASE_SHA."
+  fi
+  while IFS= read -r line || [ -n "$line" ]; do
+    n=$(( n + 1 ))
+    line="${line#"${line%%[![:space:]]*}"}"
+    line="${line%"${line##*[![:space:]]}"}"
+    if [ -z "$line" ] || [ "${line:0:1}" = "#" ]; then continue; fi
+    case "$line" in *$'\001'*)
+      echo "WARNING: $file line $n holds a NUL or \\001 byte; skipped." >&2; continue ;; esac
+    glob="${line%% | *}"; glob="${glob%"${glob##*[![:space:]]}"}"
+    item="${line#* | }"; item="${item#"${item%%[![:space:]]*}"}"
+    case "$line" in *" | "*) ;; *) glob="" ;; esac
+    if [ -z "$glob" ] || [ -z "$item" ]; then
+      echo "WARNING: $file line $n is not '<bash glob> | <review item>'; skipped." >&2; continue
+    fi
+    if [ -n "${seen[$item]:-}" ]; then continue; fi
+    for path in "${changed[@]}"; do
+      if [[ "$path" == $glob ]]; then printf '%s\n' "$item"; seen[$item]=1; break; fi
+    done
+  done < "$tmp"
+  rm -f -- "$tmp"
+}
+
 emit_prior() {  # $1 = phase, $2 = text when that phase is intentionally absent (--no-sweep)
   if accepted "$1"; then cat -- "$(artifact_for "$1")"; else echo "$2"; fi
 }
 
 write_dossier() {  # $1 = phase, $2 = dossier path, $3 = the phase's checkout (exists already)
-  local p="$1" out="$2" co="$3"
+  local p="$1" out="$2" co="$3" items item kept dropped
   case "$p" in
     sweep)
+      items="$(checklist_items)"
       {
         echo "You are a high-volume adversarial code reviewer doing a FAST FIRST-PASS SWEEP."
         echo "Output ONLY a structured candidate list - no prose, no fixes, no plan. One entry per candidate:"
@@ -1552,6 +1616,23 @@ write_dossier() {  # $1 = phase, $2 = dossier path, $3 = the phase's checkout (e
         echo "make it 'REVIEW-RAN: no - <reason>'. A report without that line is treated as a review that did not run."
         echo
         emit_context "$co" 1
+        if [ -n "$items" ]; then
+          echo
+          echo "===== Review checklist (owner-approved items read from the base, for the paths this diff changes: check each one, report a miss as a candidate) ====="
+          kept="" dropped=0   # every whole item that fits, in order; one that does not is left out
+          while IFS= read -r item; do
+            # The cap counts the items joined by newlines: no separator after the last one.
+            if [ $(( ${#kept} + ${#item} )) -le "$CHECKLIST_CAP_CHARS" ]; then
+              kept+="$item"$'\n'
+            else
+              dropped=1
+            fi
+          done <<< "$items"
+          if [ -n "$kept" ]; then printf '%s' "$kept" | sed 's/^/- /'; fi
+          if [ "$dropped" -eq 1 ]; then
+            echo "[checklist truncated at $CHECKLIST_CAP_CHARS characters; 'checklist --base $BASE_SHA' prints every item]"
+          fi
+        fi
       } > "$out"
       ;;
     hunt)
@@ -1593,7 +1674,8 @@ write_dossier() {  # $1 = phase, $2 = dossier path, $3 = the phase's checkout (e
         echo "   the lower tiers missed."
         echo "3. Never invent findings to fill a section. Do not modify files. Never write secrets to files or command arguments."
         echo "The session's scratch directory is ${SESSION_SCRATCH:-$SCRATCH}; keep any artifact you create there."
-        echo "4. Output the final report in EXACTLY this Markdown layout and nothing else, after one first line:"
+        echo "4. Prefix a finding with 'pre-existing' (as the first words of its The bug text: 'pre-existing: ...') only when the defect is present at the merge base of BASE and HEAD (not at BASE itself) in code the diff neither changes nor newly calls, imports or exercises; this pre-PR gate has no review-of-record adjudicator yet, so you are the confirming seat here: confirm the tag yourself against the merge base, per the pre-existing rule in references/code-review.md (Handling findings), whose adjudicator re-confirms any such tag at the PR review of record."
+        echo "5. Output the final report in EXACTLY this Markdown layout and nothing else, after one first line:"
         echo "   'REVIEW-RAN: yes' when you read the diffstat and both phase results below and this dossier"
         echo "   carries its CHECKOUT: line; otherwise 'REVIEW-RAN: no - <reason>'. A report without that"
         echo "   line is treated as a review that did not run."
@@ -1975,6 +2057,7 @@ case "$cmd" in
     ;;
 
   checkout) make_checkout || die 2 "could not create the throwaway checkout" ;;
+  checklist) checklist_items ;;
   paths)
     printf 'run %s\npreflight %s\nsuite_log %s\nsweep %s\nhunt %s\narbitrate %s\ndossier_sizes %s\n' \
       "$RUN_DIR" "$PHASE0" "$SUITE_LOG" "$PHASE1" "$PHASE2" "$PHASE3" "$RUN_DIR/dossier-sizes.md"

@@ -201,6 +201,10 @@ Fix a FAIL before spending any model budget.
 The sweeper returns a structured candidate list, each entry with `file:line`, a severity, a one-line claim and a concrete failure scenario.
 Expect false positives; Phase 2 exists to remove them.
 
+The sweep dossier ends with a `Review checklist` section: each item of `.agent-skills/review-checklist.txt`, read from the base, whose glob matches a changed path (`*` crosses `/`); `checklist --base "$BASE"` prints them.
+The file holds one `<bash glob> | <review item>` per line; `#` comments and blank lines are ignored.
+`--no-sweep` skips them.
+
 ## Phase 2: verify and hunt
 
 ```bash
@@ -292,6 +296,8 @@ Those are follow-ups to file or flag, not work for this PR.
 Fix only what this diff's own behaviour depends on, and write the rest down in the PR body as accepted or deferred.
 
 ## Final report format (the arbiter's output)
+
+The arbiter prefixes a finding with `pre-existing` only when it meets the `pre-existing` rule in `references/code-review.md` (Handling findings), as the first words of its **The bug:** text (`pre-existing: ...`).
 
 ### Critical vulnerabilities and breaking bugs
 

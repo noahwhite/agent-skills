@@ -233,6 +233,8 @@ Review roles run as subagents or as shell-launched CLIs (for example `codex exec
   The request explicitly selects the fixture directory because the managed service starts in its home directory.
   A stop is attempted after every fixture, success or failure: a failed stop is appended to any discovery error, and if discovery succeeded, a failed stop still fails the layout.
   Only npm/registry access is needed for installation.
+- `uv run --locked bash scripts/run-suite.sh skills/<skill>/evals ...`, from the repository root, is the one executed-eval suite runner for every skill's `evals/` directory; `--list` prints a suite's cases, and `skills/story-to-done/evals/README.md` states the case contract and how to run it.
+  A real case runs a model agent, which needs its credentials, so CI does not run the suite; `tests/test_eval_suite.py` checks the runner with a credential-free stub agent and every case against the contract.
 - Markdown puts one sentence per line.
 
 ### Workflow files are judged by the base copy
@@ -242,6 +244,7 @@ The `gate-base` check judges a pull request's edits to the base branch's `.githu
 It reports a check run named `gate-base` on the pull request head SHA.
 A pull request may add workflow files and jobs, may add steps after a base job's last step, and may change the display `name` of a workflow, job or step.
 A step added before a base step fails, because it could change how the base step runs.
+The one exception is `ALLOWED_BEFORE_BASE` in `scripts/gate_integrity.py`: one copy of the `ci.yml` `checks` step `Lint` (`uv run --locked ruff check .`) may come anywhere in that job, before or between its base steps, when every key matches exactly and no base step has its name or command; the entry stops applying once `Lint` is a base step, and can then be removed.
 It fails `gate-base` when it removes or changes any other field of a base workflow, job or step, reorders base steps, gives a step another base step's name, changes a trigger, adds a job or step to `gate-base.yml` or removes it, or changes `scripts/gate_integrity.py`.
 It also fails when an added job, in any workflow file, would report a check named `gate-base` or named like a base job's check, takes an expression as its name, or runs with a token that could write check runs (`checks: write`, `write-all`, or no explicit `permissions`).
 It fails when an addition to a base workflow would make GitHub reject the file, so that no base job runs: an invalid job or step, a changed display name that is not a string or has an expression other than a plain context reference such as `${{ github.sha }}`, a `needs` that names a missing job or forms a cycle, or a file over 500 KB.

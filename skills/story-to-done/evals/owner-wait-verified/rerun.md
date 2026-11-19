@@ -23,14 +23,19 @@ The record sits outside the agent's `workspace/` but is not sandboxed from it, s
 
 The baseline is the skill on `main` immediately before SKL-356, `9e65dd3`; the candidate is SKL-356's commit that adds the owner-wait verification rule, `ad92cae`.
 Run the candidate from its own detached checkout too: a checkout that is also the harness tree changes whenever another suite run writes a record into it, which voids the attempt.
-Record each through the suite runner from the repository root, as `../README.md` states, with `EVAL_AGENT_CMD` set as it shows:
+Record each through the suite runner from the repository root, as `../README.md` states, with `EVAL_AGENT_CMD` set as it shows.
+The baseline run exits 1 by design, because its graded runs fail; run the commands one at a time, not in a shell that stops on the first non-zero status, so the cleanup and the candidate run still follow.
+That expected exit 1 writes `results/suite-<label>.md` and names the failing runs on stderr (`run-suite: failing graded runs for:`).
+It is the baseline's result only when the summary's one `Scenarios short of N graded runs:` line reads `none.`, its `Graded runs asked for per scenario (N)` and `Skill commit (CHECKOUT)` lines match the command below (N is 3, and the skill commit starts with `9e65dd3`), and stderr has no line starting `run-suite: fewer than`.
+A run whose summary names a short scenario, or whose stderr has that line, is short of N graded runs: the baseline is inconclusive (`../README.md`, Definitions) and is recorded again with the same commit and `--runs` under a new label.
+An exit 1 with no summary is a broken attempt or a changed checkout, not the baseline's result:
 
 ```sh
 git worktree add --detach <scratch>/skill-9e65dd3 9e65dd3
-uv run --locked bash skills/story-to-done/evals/run-suite.sh --runs 3 <scratch>/skill-9e65dd3 deepseek-v4-pro-baseline-9e65dd3 owner-wait-verified
+uv run --locked bash scripts/run-suite.sh skills/story-to-done/evals --runs 3 <scratch>/skill-9e65dd3 deepseek-v4-pro-baseline-9e65dd3 owner-wait-verified
 git worktree remove <scratch>/skill-9e65dd3
 git worktree add --detach <scratch>/skill-ad92cae ad92cae
-uv run --locked bash skills/story-to-done/evals/run-suite.sh --runs 3 <scratch>/skill-ad92cae deepseek-v4-pro-candidate-ad92cae owner-wait-verified
+uv run --locked bash scripts/run-suite.sh skills/story-to-done/evals --runs 3 <scratch>/skill-ad92cae deepseek-v4-pro-candidate-ad92cae owner-wait-verified
 git worktree remove <scratch>/skill-ad92cae
 ```
 

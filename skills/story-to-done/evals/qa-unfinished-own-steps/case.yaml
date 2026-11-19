@@ -8,8 +8,8 @@ purpose: >-
 split: >-
   SKL-159 owns this case's content: its prompt, case.yaml, grader, scenarios and rerun
   instructions, and the recorded baseline and candidate runs below. SKL-164 owns the suite
-  harness, the README and the repeat-run machinery (../run-suite.sh, ../README.md), and the
-  case content stays SKL-159's.
+  harness, the README and the repeat-run machinery (scripts/run-suite.sh since SKL-338,
+  ../README.md), and the case content stays SKL-159's.
 baseline:
   commit: 7a6cb17
   note: the skill as committed on origin/main before this change; the baseline stops instead of continuing.

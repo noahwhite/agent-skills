@@ -12,6 +12,7 @@ Reviewer and adjudicator models, launchers, and the merge owner come from `profi
   Without it, hold and say so.
 - ⛔ Never merge before every finding is resolved in that same PR.
   Fold fixes into the PR's branch; never merge first and file follow-up PRs for findings.
+  The only finding filed rather than fixed in the PR is a confirmed `pre-existing` one (Handling findings).
 - ⛔ Never attempt a merge until the review of record is posted on the PR as a PR review, except under the explicit per-PR review waiver in The gate.
   Posting is a step you take and confirm, before the merge call; once posted, it is sufficient evidence to proceed, with no further confirmation layer.
 - Promotion PRs get the same gate over their whole cumulative diff; never skip them as already-reviewed commits.
@@ -27,6 +28,7 @@ Every agent that judges work or takes delegated work (reviewer, adjudicator, sha
 - **Clean:** a fresh agent in its own context, never a fork of the current conversation.
 - **Neutral:** its prompt carries only the facts the task needs and never a steer toward an outcome.
   A judging agent gets the repo, head SHA, diff reference, the findings, evidence, or AC to verify, and the gate's own review criteria, never the author's intent or rationale, QA verdicts, or conclusions from earlier rounds or other gates.
+  Its only exception is a delta round's reviewer brief, which carries the prior review of record (Rounds).
   A delegated engineer gets the story, plan, and constraints, plus the findings or QA gaps ruled valid that it must fix, never the delegator's expectations about the outcome.
 - **Scoped sub-task:** a scoped sub-task goes to a clean, neutral agent whose self-contained prompt names the files, areas and systems it must not touch and the point where it stops, never to a `fork`, because a fork inherits the whole conversation.
   Before acting on a subagent's self-report, the delegator verifies it against ground truth (git history and refs, the PR list, run conclusions), and it reads the code the subagent wrote before merging it.
@@ -39,15 +41,15 @@ Every agent that judges work or takes delegated work (reviewer, adjudicator, sha
    Its findings go to an output file the adjudicator receives.
 2. **Adjudicator: `profile.review.adjudicator`.**
    When the reviewer finishes, launch it as a clean, neutral agent.
-   Give it the diff reference and the reviewer's findings, and ask it to verify each finding against the real code and rule it valid or invalid, with severity and whether it blocks merge.
+   Give it the diff reference (the PR's cumulative `origin/<base>...HEAD` in every round, and in a later round also the delta since the last reviewed head) and the reviewer's findings, and ask it to verify each finding against the real code and rule it valid or invalid, with severity and whether it blocks merge.
    It is read-only.
 3. **Clean and neutral.**
    Run the reviewer and the adjudicator clean and neutral, as defined above.
    Every prompt tells the agent never to write secrets to files or argv.
 4. **Act on the adjudication.**
-   Fix every finding ruled valid in the same PR.
+   Fix every finding ruled valid in the same PR, except a confirmed `pre-existing` finding, which is filed instead (Handling findings).
    Post the review of record as one PR review with the comment event, at the reviewed head, never as an issue comment: on GitHub, `gh pr review <n> --comment --body-file <file>`, with the body file in the scratch directory, never in the checkout.
-   The body's first line is `Review of record <full 40-character head SHA>`, followed by the reviewer and adjudicator names and models, the reviewer's findings, the verdict per finding, and the fix commit for each valid one.
+   The body's first line is `Review of record <full 40-character head SHA>`, followed by the reviewer and adjudicator names and models, the reviewer's findings, the verdict per finding, and the fix commit for each valid one, or the tracker issue link for a confirmed `pre-existing` one.
    Each delta round posts a new review; never edit an earlier one.
    If the host denies the post, do not fall back to an issue comment: report the exact command and the denial, and stop.
    Post it, confirm it landed, and only then move to merging.
@@ -64,6 +66,9 @@ If the runtime cannot run a configured model, stop and say so; never substitute 
 
 - Round 1 asks for an exhaustive list of findings over the whole diff.
 - Later rounds review the delta since the last reviewed head, plus any regressions that delta introduced.
+  A delta round's reviewer brief carries every earlier `Review of record <sha>` PR review on the PR, their findings and per-finding verdicts, labelled as historical context that does not decide the current verdict.
+  The reviewer raises a finding already adjudicated there only when the delta changes the code it concerns or newly calls, imports or exercises that code.
+- The adjudicator brief, and any shadow-adjudicator brief, never carry the prior review of record; both stay clean, neutral.
 
 ### Different pairs
 
@@ -109,8 +114,12 @@ Every merge, by any role, runs this guard immediately before the merge command.
 That covers the autonomous merge, a merge the agent performs for a human owner, and a manager-approved merge alike.
 
 1. Read the live PR head SHA (`gh pr view <n> --json headRefOid`).
-2. Read the PR's reviews with `gh api --paginate repos/<owner>/<repo>/pulls/<n>/reviews`, select the latest submitted review in state `COMMENTED` whose body begins with `Review of record`, and take both its `commit_id` and the full head SHA on its first line.
+2. Resolve the expected author as `profile.review.record_author` when set, otherwise the login of the authenticated account (`gh api user --jq .login`).
+   Except under the explicit per-PR review waiver in The gate, if neither yields a login, the guard does not merge and reports the failing command (the command and its exit status or empty output).
+   Read the PR's reviews with `gh api --paginate repos/<owner>/<repo>/pulls/<n>/reviews`.
+   Among the reviews in state `COMMENTED` whose body begins with `Review of record`, keep only those whose `user.login` equals the expected author (case-insensitive), and select the one with the greatest `submitted_at`; the guard's output lists each marker review it excluded, with its `user.login`, `html_url` and `commit_id`.
    The latest review is the one with the greatest `submitted_at`, not the last in the list.
+   Take both its `commit_id` and the full head SHA on its first line.
 3. Except under the explicit per-PR review waiver in The gate, if no such review exists, either SHA is missing, or either differs from the live head, do not merge: review the delta since the reviewed head (Rounds), post that review of record, and start again at step 1.
    Under that waiver, use the head SHA recorded when the user gave the instruction, as the paragraph below specifies.
 4. Merge with the reviewed full head SHA as the expected-head condition, so the host refuses the merge if the head moved after step 1: on GitHub, `gh pr merge <n> --match-head-commit <full reviewed SHA>`.
@@ -125,10 +134,15 @@ Green CI, a docs-only diff, a base-only merge commit, or a sibling waiting to me
 
 ## Handling findings
 
-- Fix or resolve every finding with a stated reason; none is left untouched.
+- Fix or resolve every finding with a stated reason; none is left untouched, and a confirmed `pre-existing` finding is resolved by filing it (below).
 - Verify each finding against the real code before acting (confirm SHAs, check that referenced APIs exist); never copy a suggested fix blindly.
 - A finding that names more locations of the same defect is fixed at every location.
-- Valid findings are fixed in the PR, never filed as follow-ups.
+- Valid findings are fixed in the PR, never filed as follow-ups, except a confirmed `pre-existing` finding.
+- `pre-existing` tag: the defect is present at the base SHA (the merge base of the reviewed head and the integration branch) in code the PR's cumulative diff (base SHA to head, in every round) neither changes nor newly calls, imports or exercises.
+  The adjudicator confirms the tag against the base SHA; an unconfirmed tag is handled as any other finding.
+  A confirmed `pre-existing` finding is listed in the review of record and does not block the merge; before merge, the engineer files it as a tracker issue and links that issue in the review-of-record thread.
+  It is the only finding filed rather than fixed in the PR.
+  A Medium or Low finding accepted with a reason in the pre-PR arbiter report does not thereby gain `pre-existing` status.
 - Human review threads: reply, then resolve with the `resolveReviewThread` GraphQL mutation (`gh api graphql`), before merging.
   ⛔ Never resolve an unaddressed thread.
 

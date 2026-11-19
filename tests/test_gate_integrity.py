@@ -115,6 +115,157 @@ def test_a_base_step_copied_above_an_earlier_one_fails(tmp_path):
     assert result.returncode != 0, result.stdout
 
 
+# ALLOWED_BEFORE_BASE admits exactly this step, by its whole body, before the ci.yml `checks` base steps.
+LINT = {"name": "Lint", "run": "uv run --locked ruff check ."}
+
+
+def judge_trees(tmp_path, base_workflows, head_workflows):
+    base = write_tree(tmp_path / "base", base_workflows)
+    head = write_tree(tmp_path / "head", head_workflows)
+    return subprocess.run(
+        [sys.executable, str(SCRIPT),
+         "--base", str(base / ".github/workflows"), "--head", str(head / ".github/workflows"),
+         "--base-script", str(base / "scripts/gate_integrity.py"),
+         "--head-script", str(head / "scripts/gate_integrity.py")],
+        capture_output=True, text=True, timeout=30,
+    )
+
+
+# Every position before the last base step; an appended step passes without the exception.
+@pytest.mark.parametrize("where", [0, 1, 2, 3], ids=["first", "between-unnamed", "before-repository-tests",
+                                                     "before-last"])
+def test_the_allowed_lint_step_passes_before_any_base_step_in_checks(tmp_path, where):
+    result = judge(tmp_path, head_with(lambda ci: steps(ci).insert(where, dict(LINT))))
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+NOT_THE_ALLOWED_STEP = {
+    "changed run": {"name": "Lint", "run": "uv run --locked ruff check . --exit-zero"},
+    "run without the dot": {"name": "Lint", "run": "uv run --locked ruff check"},
+    "run with a trailing newline": {"name": "Lint", "run": "uv run --locked ruff check .\n"},
+    "run with a trailing space": {"name": "Lint", "run": "uv run --locked ruff check . "},
+    "changed name": {"name": "lint", "run": "uv run --locked ruff check ."},
+    "no name": {"run": "uv run --locked ruff check ."},
+    "extra key": {**LINT, "env": {"RUFF_NO_CACHE": "true"}},
+    "extra continue-on-error": {**LINT, "continue-on-error": True},
+}
+
+
+@pytest.mark.parametrize("step", NOT_THE_ALLOWED_STEP.values(), ids=NOT_THE_ALLOWED_STEP.keys())
+def test_a_step_that_differs_from_the_allowed_one_still_fails_before_a_base_step(tmp_path, step):
+    result = judge(tmp_path, head_with(lambda ci: steps(ci).insert(2, step)))
+    assert result.returncode != 0, result.stdout
+    assert "'Repository tests' is out of order" in result.stdout
+    assert "only one copy of a step in ALLOWED_BEFORE_BASE, matching it in every key, may come before them" in result.stdout
+
+
+def test_a_second_copy_of_the_allowed_step_before_a_base_step_fails_and_names_the_one_copy_limit(tmp_path):
+    def add(ci):
+        steps(ci)[2:2] = [dict(LINT), dict(LINT)]
+
+    result = judge(tmp_path, head_with(add))
+    assert result.returncode != 0, result.stdout
+    assert "'Repository tests' is out of order" in result.stdout
+    assert "only one copy of a step in ALLOWED_BEFORE_BASE" in result.stdout
+
+
+APPENDED_COPIES = {
+    "one before the base steps, one appended": (0, 1),
+    "two appended": (None, 2),
+}
+
+
+@pytest.mark.parametrize("before, appended", APPENDED_COPIES.values(), ids=APPENDED_COPIES.keys())
+def test_appended_copies_of_the_allowed_step_pass_as_any_appended_step_does(tmp_path, before, appended):
+    def add(ci):
+        if before is not None:
+            steps(ci).insert(before, dict(LINT))
+        steps(ci).extend(dict(LINT) for _ in range(appended))
+
+    result = judge(tmp_path, head_with(add))
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_an_invalid_appended_step_is_numbered_by_its_head_position(tmp_path):
+    def add(ci):
+        steps(ci).insert(0, dict(LINT))
+        steps(ci).append({"run": "echo added", "bogus": True})
+
+    result = judge(tmp_path, head_with(add))
+    assert result.returncode != 0, result.stdout
+    assert "ci.yml job 'checks': added step 6 has keys GitHub rejects: bogus" in result.stdout
+
+
+BASE_LINT_VARIANTS = {
+    "with an extra key": {**LINT, "id": "lint"},
+    "unnamed with the same command": {"run": "uv run --locked ruff check ."},
+    "same name, another command": {"name": "Lint", "run": "uv run --locked ruff check scripts"},
+}
+
+
+@pytest.mark.parametrize("base_lint", BASE_LINT_VARIANTS.values(), ids=BASE_LINT_VARIANTS.keys())
+def test_the_exception_stops_once_the_base_job_has_a_lint_step(tmp_path, base_lint):
+    ci = copy.deepcopy(CI)
+    steps(ci).insert(2, base_lint)
+    head = copy.deepcopy(ci)
+    steps(head).insert(0, dict(LINT))
+    result = judge_trees(tmp_path, {"ci.yml": ci, "gate-base.yml": GATE}, {"ci.yml": head, "gate-base.yml": GATE})
+    assert result.returncode != 0, result.stdout
+    assert "ci.yml job 'checks': step 1 is out of order" in result.stdout
+    assert "ALLOWED_BEFORE_BASE" not in result.stdout
+
+
+EXTRA_BEFORE_BASE = {
+    "a second Lint": [dict(LINT), dict(LINT)],
+    "another step beside Lint": [dict(LINT), {"name": "Prep", "run": "echo prep"}],
+}
+
+
+@pytest.mark.parametrize("added", EXTRA_BEFORE_BASE.values(), ids=EXTRA_BEFORE_BASE.keys())
+def test_an_extra_step_before_the_base_steps_still_fails_beside_the_allowed_one(tmp_path, added):
+    def insert(ci):
+        steps(ci)[2:2] = added
+
+    result = judge(tmp_path, head_with(insert))
+    assert result.returncode != 0, result.stdout
+    assert "'Repository tests' is out of order" in result.stdout
+
+
+def test_the_allowed_step_still_fails_before_a_base_step_of_another_job(tmp_path):
+    ci = copy.deepcopy(CI)
+    ci["jobs"]["docs"] = {"runs-on": "ubuntu-24.04", "permissions": {"contents": "read"},
+                          "steps": [{"name": "Build docs", "run": "echo docs"}]}
+    head = copy.deepcopy(ci)
+    head["jobs"]["docs"]["steps"].insert(0, dict(LINT))
+    result = judge_trees(tmp_path, {"ci.yml": ci, "gate-base.yml": GATE}, {"ci.yml": head, "gate-base.yml": GATE})
+    assert result.returncode != 0, result.stdout
+    assert "ci.yml job 'docs': step 1 'Build docs' is out of order" in result.stdout
+
+
+def test_the_allowed_step_still_fails_before_a_base_step_of_another_file(tmp_path):
+    other = copy.deepcopy(CI)
+    head = copy.deepcopy(other)
+    steps(head).insert(2, dict(LINT))
+    result = judge_trees(tmp_path, {"ci.yml": CI, "other.yml": other, "gate-base.yml": GATE},
+                         {"ci.yml": CI, "other.yml": head, "gate-base.yml": GATE})
+    assert result.returncode != 0, result.stdout
+    assert "other.yml job 'checks': step 3 'Repository tests' is out of order" in result.stdout
+
+
+def test_once_lint_is_a_base_step_it_is_judged_like_any_base_step(tmp_path):
+    ci = copy.deepcopy(CI)
+    steps(ci).insert(2, dict(LINT))
+    unchanged = judge_trees(tmp_path / "unchanged", {"ci.yml": ci, "gate-base.yml": GATE},
+                            {"ci.yml": ci, "gate-base.yml": GATE})
+    assert unchanged.returncode == 0, unchanged.stdout + unchanged.stderr
+    moved = copy.deepcopy(ci)
+    steps(moved).append(steps(moved).pop(2))
+    result = judge_trees(tmp_path / "moved", {"ci.yml": ci, "gate-base.yml": GATE},
+                         {"ci.yml": moved, "gate-base.yml": GATE})
+    assert result.returncode != 0, result.stdout
+    assert "step 3 'Lint' is out of order" in result.stdout
+
+
 @pytest.mark.parametrize("change", [lambda ci: steps(ci)[3].update({"if": 1}),
                                     lambda ci: ci["jobs"]["checks"].update({"timeout-minutes": 15.0}),
                                     lambda ci: steps(ci)[1]["with"].update({"enable-cache": 0})],
