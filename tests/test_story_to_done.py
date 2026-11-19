@@ -1129,7 +1129,8 @@ METRICS_ROLE_END_BEFORE_USAGE = (
     "`$(date -u +%s.%N)` and the figures the usage read printed, without their `tokens: ` and `tool calls: ` "
     "labels, in place of `<tokens>` and `<tool calls>`; when no usage read runs, as after a launch that did not "
     "exit successfully, the end command still carries the printed timestamp, with `not reported` for each figure "
-    "not read."
+    "not read; this end command is the role row's only end line, even when the launch was killed, so the recovery "
+    "for a killed command above never applies to a role launch."
 )
 METRICS_EXTRA_WRITE = "f='<metrics file>'; printf 'extra %s\\t%s\\n' '<slug>' '<value>' >> \"$f\""
 METRICS_EXTRAS_RECORD = (
