@@ -271,6 +271,144 @@ def test_an_agent_that_changes_the_primary_checkout_still_exits_18(gate):
     assert_not_stamped(artifacts(repo, env), "sweep")
 
 
+# --- SKL-127: only the sandbox's own error marks a phase blind, not text the agent echoes ----------
+# The detector is a line-shape heuristic: a marker counts at line start or after a carriage return,
+# after optional whitespace and escape sequences (CSI, OSC), optionally after one `<word>: ` tool
+# prefix and more whitespace or escape sequences. Every line below that carries a marker is a quoted
+# Python string, so this file's own source stays acceptable when a gate agent echoes it.
+
+RUNTIMES_DOC = ROOT / "shared" / "runtimes.md"
+RUNTIMES_COPIES = [RUNTIMES_DOC, *sorted(ROOT.glob("skills/*/references/runtimes.md"))]
+
+# name -> (the marker the line carries, the echoed line)
+ECHOED_LINES = {
+    "runtimes-doc": ("bwrap:", (
+        "  Codex's `read-only` and `workspace-write` sandboxes need bubblewrap on Linux; where it "
+        "cannot start, every command fails with a `bwrap:` error and the review comes back empty."
+    )),
+    "removed-detector-line": ("Permission denied", (
+        "-  if [ -n \"$2\" ] && [ -f \"$2\" ] && grep -qiE "
+        "'bwrap:|sandbox (failed|denied|could not)|Failed to make .* Permission denied' -- \"$2\"; then"
+    )),
+    "ac-line-listing-markers": ("sandbox denied", (
+        "- The other markers (`sandbox failed`, `sandbox denied`, `sandbox could not`, "
+        "`Failed to make ... Permission denied`) still trip on real failures"
+    )),
+    "skill-doc-grep-hit": ("sandbox could not", (
+        "./skills/adversarial-review-pipeline/SKILL.md:209:- A hunter whose sandbox could not start "
+        "reads nothing yet may exit 0."
+    )),
+    "diff-line-sandbox-failed": (
+        "sandbox failed", "+  the reviewer notes that the sandbox failed once on another host"),
+    "comment-sandbox-denied": ("sandbox denied", "  # an older run where the sandbox denied a write"),
+    "diff-deleted-tool-prefixed-line": ("bwrap:", "-codex: bwrap: Can't mount proc on /newroot/proc"),
+    "diff-deleted-colon-noop-line": ("bwrap:", "-: bwrap: startup example"),
+    "prose-failed-to-make": (
+        "Failed to make", "If you see Failed to make /newroot: Permission denied, check the host."),
+}
+
+
+def stderr_lines_agent(tmp_path: Path, lines: list[str]) -> str:
+    """An agent command that writes the given lines to its stderr, then a valid report."""
+    fixture = tmp_path / "agent-stderr.txt"
+    fixture.write_text("\n".join(lines) + "\n")
+    return f"cat {shlex.quote(str(fixture))} >&2; {SWEEP_AGENT}"
+
+
+def test_echoing_a_whole_doc_that_mentions_the_markers_does_not_mark_the_phase_blind(gate):
+    """The SKL-95, SKL-182 and SKL-218 false alarms: the agent echoed runtimes.md on its stderr."""
+    repo, scratch, env = gate
+    doc = shlex.quote(str(RUNTIMES_DOC))
+    agent = f"cat {doc} >&2; sed 's/^/+  /' {doc} >&2; grep -n bwrap {doc} >&2; {SWEEP_AGENT}"
+    result = run_sweep(repo, scratch, env, "--model", "deepseek/deepseek-flash", agent=agent)
+    assert result.returncode == 0, result.stdout + result.stderr
+    errlog = next((repo / ".git").rglob("sweep-agent.err"), None)
+    assert errlog is not None and "bwrap:" in errlog.read_text(), "the fixture no longer echoes the doc"
+    assert Path(f"{artifacts(repo, env)['sweep']}.stamp").exists(), "the echoing phase was not accepted"
+
+
+def test_every_runtimes_copy_is_found():
+    assert len(RUNTIMES_COPIES) > 1, RUNTIMES_COPIES
+
+
+@pytest.mark.parametrize("doc", RUNTIMES_COPIES, ids=lambda p: str(p.relative_to(ROOT)))
+def test_echoing_any_vendored_runtimes_copy_does_not_mark_the_phase_blind(gate, doc):
+    """The SKL-95 and SKL-182 agents echoed the vendored copies, not only the shared source."""
+    assert "bwrap:" in doc.read_text(), f"{doc} no longer carries the marker this test echoes"
+    repo, scratch, env = gate
+    agent = f"cat {shlex.quote(str(doc))} >&2; {SWEEP_AGENT}"
+    result = run_sweep(repo, scratch, env, "--model", "deepseek/deepseek-flash", agent=agent)
+    assert result.returncode == 0, (str(doc), result.stdout + result.stderr)
+
+
+@pytest.mark.parametrize("name", sorted(ECHOED_LINES))
+def test_echoed_content_carrying_a_marker_does_not_mark_the_phase_blind(gate, tmp_path, name):
+    marker, line = ECHOED_LINES[name]
+    assert marker.lower() in line.lower(), f"{name}: the fixture no longer carries {marker!r}"
+    repo, scratch, env = gate
+    agent = stderr_lines_agent(tmp_path, [line])
+    result = run_sweep(repo, scratch, env, "--model", "deepseek/deepseek-flash", agent=agent)
+    assert result.returncode == 0, (name, result.stdout + result.stderr)
+    assert Path(f"{artifacts(repo, env)['sweep']}.stamp").exists(), f"{name}: the phase was not accepted"
+
+
+REAL_ERRORS = {
+    "bwrap": "bwrap: Can't mount proc on /newroot/proc: Operation not permitted",
+    "sandbox-failed": "sandbox failed to start",
+    "sandbox-denied": "sandbox denied the read of /repo",
+    "sandbox-could-not": "sandbox could not start: no user namespaces",
+    "failed-to-make": "Failed to make /newroot/proc: Permission denied",
+}
+
+LINE_PREFIXES = {
+    "bare": "",
+    "indented": "    ",
+    "coloured": "\x1b[31m",
+    "erase-line": "\x1b[2K",
+    "csi-tilde": "\x1b[3~",
+    "osc-bel": "\x1b]0;codex\x07",
+    "osc-st": "\x1b]8;;https://example.invalid\x1b\\",
+    "tool": "codex: ",
+    "tool-wide-gap": "codex:   ",
+    "tool-coloured-marker": "codex: \x1b[31m",
+    "tool-osc-marker": "codex: \x1b]0;t\x07 ",
+    "indented-coloured-tool": "  \x1b[0mcodex: ",
+    "after-carriage-return": "progress 40%\r",
+    "after-carriage-return-erase-tool": "progress 40%\r\x1b[2Kcodex: ",
+}
+
+
+@pytest.mark.parametrize("prefix", sorted(LINE_PREFIXES))
+@pytest.mark.parametrize("marker", sorted(REAL_ERRORS))
+def test_a_real_sandbox_error_line_still_marks_the_phase_blind(gate, tmp_path, marker, prefix):
+    repo, scratch, env = gate
+    line = LINE_PREFIXES[prefix] + REAL_ERRORS[marker]
+    agent = stderr_lines_agent(tmp_path, ["Reading the diff", line, "review done"])
+    result = run_sweep(repo, scratch, env, "--model", "gpt-6.1-sol", agent=agent)
+    assert result.returncode == 17, (marker, prefix, result.stdout + result.stderr)
+    assert "ran blind" in result.stderr, result.stderr
+    assert "exit=17" in result.stderr, result.stderr
+    assert_not_stamped(artifacts(repo, env), "sweep")
+
+
+# The two accepted limits of the line shape (SKL-127 AC, product owner 2026-11-18), pinned so a change
+# to either is deliberate: (a) a real error inside more than one prefix is missed; (b) echoed text
+# already in the line shape still marks the phase blind, which fails safe.
+RESIDUAL_EDGES = {
+    "a-timestamp-and-level": ("2026-11-18T10:00:00Z ERROR codex: bwrap: Can't mount proc", 0),
+    "b-indented-example": ("    bwrap: Can't mount proc on /newroot/proc: Operation not permitted", 17),
+}
+
+
+@pytest.mark.parametrize("name", sorted(RESIDUAL_EDGES))
+def test_the_documented_residual_edges_of_the_line_shape_hold(gate, tmp_path, name):
+    line, expected = RESIDUAL_EDGES[name]
+    repo, scratch, env = gate
+    agent = stderr_lines_agent(tmp_path, [line])
+    result = run_sweep(repo, scratch, env, "--model", "deepseek/deepseek-flash", agent=agent)
+    assert result.returncode == expected, (name, result.stdout + result.stderr)
+
+
 # --- AC3: a phase cannot outlive its timeout, and a timeout kill is its own exit code -------------
 
 def test_a_hung_agent_is_killed_with_its_process_group_and_exits_19(gate, tmp_path):
