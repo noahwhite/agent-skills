@@ -237,6 +237,47 @@ def test_the_arbitration_report_layout_is_unchanged(gate):
     assert layout in arbitrate, "the arbitration report's Markdown layout changed"
 
 
+# The whole line is pinned: the base is the merge base of BASE and HEAD, never BASE itself (the
+# integration tip), and the arbiter confirms the tag itself, since the pre-PR gate has no adjudicator.
+PRE_EXISTING_LINE = (
+    "4. Prefix a finding with 'pre-existing' (as the first words of its The bug text: 'pre-existing: ...') "
+    "only when the defect is present at the merge base of BASE and HEAD "
+    "(not at BASE itself) in code the diff neither changes nor newly calls, imports or exercises; this pre-PR "
+    "gate has no review-of-record adjudicator yet, so you are the confirming seat here: confirm the tag yourself "
+    "against the merge base, per the pre-existing rule in references/code-review.md (Handling findings), whose "
+    "adjudicator re-confirms any such tag at the PR review of record."
+)
+
+
+def test_only_the_arbitrate_preamble_carries_the_pre_existing_tag_line(gate):
+    # SKL-343: one line in the arbiter's own instructions, outside the three-heading layout and any
+    # fenced block, citing the code-review.md rule; the sweep and hunt instructions carry none.
+    # Only the preamble is searched, so an embedded phase report that quotes the line is not counted.
+    seen = run_all_phases(gate)
+    preambles = {phase: seen[phase][0].split("\n===== ", 1)[0] for phase in PHASES}
+    for phase in ("sweep", "hunt"):
+        assert "pre-existing" not in preambles[phase], f"the {phase} instructions carry the tag"
+    arbitrate = preambles["arbitrate"]
+    lines = [line for line in arbitrate.splitlines() if "pre-existing" in line]
+    assert len(lines) == 1, lines
+    line = lines[0]
+    assert line.strip() == PRE_EXISTING_LINE, line
+    before = arbitrate[: arbitrate.index(line)]
+    assert "### Critical vulnerabilities and breaking bugs" not in before
+    assert before.count("```") % 2 == 0, "the tag line sits inside a fenced block"
+
+
+def test_the_skill_report_format_cites_the_pre_existing_rule():
+    # SKL-343: the arbiter report format names the rule, under its own heading and before its sections.
+    text = skill_text()
+    start = text.index("## Final report format (the arbiter's output)")
+    first_section = text.index("\n### ", start)
+    line = ("The arbiter prefixes a finding with `pre-existing` only when it meets the `pre-existing` rule in "
+            "`references/code-review.md` (Handling findings), as the first words of its **The bug:** text "
+            "(`pre-existing: ...`).")
+    assert line in text[start:first_section], text[start:first_section]
+
+
 # --- CHECKOUT: and BASE: in every dossier, on both flows --------------------------------------------
 
 def test_every_run_dossier_names_its_checkout_and_base(gate):
