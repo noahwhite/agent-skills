@@ -1081,8 +1081,9 @@ METRICS_COMMAND_ROWS = (
     "figures recorded under `references/metrics.md` and `not reported` for any usage the runtime does not return."
 )
 METRICS_WRAPPER_INTRO = (
-    "Launch every later command other than the end form below, the summary post, and its read-back in this "
-    "wrapper, with the command in place of "
+    # SKL-98: a role launch and a role's return-notice timestamp are not wrapped.
+    "Launch every later command other than a role launch, which gets a role row below, the end form below, the "
+    "summary post, its read-back, and a role's return-notice `date -u +%s.%N` below in this wrapper, with the command in place of "
     "`<command>`, a label unique within the invocation, other than the reserved `start` and `end`, without a "
     "single quote and naming no path, in place of `<row label>`, and "
     "the absolute path of that `metrics.txt` in place of `<metrics file>`:"
@@ -1112,9 +1113,25 @@ METRICS_ROLE_END = (
 METRICS_ROLE_ROW = (
     "Record a role row with two commands that are not launches, so neither runs in the wrapper above and "
     f"neither gets a row of its own: immediately before the launch, `{METRICS_ROLE_START}`, and when it "
-    f"returns, `{METRICS_ROLE_END}`, where `<tokens>` and `<tool calls>` are written exactly as the summary's "
+    # SKL-98: a usage-after-exit role's end line is written where the next sentence sets.
+    "returns, or, for a role whose usage is read only after it exits, at the point the next sentence sets, "
+    f"`{METRICS_ROLE_END}`, where `<tokens>` and `<tool calls>` are written exactly as the summary's "
     "cells read: the number, `not reported`, or the number followed by ` cumulative`; a row label is unique, "
-    "is neither `start` nor `end`, and no value these commands carry contains a single quote."
+    "is neither `start` nor `end`, and no value these commands carry contains a single quote; a role row has "
+    "exactly one end line, this one, even when the launch was killed, so the recovery for a killed wrapped "
+    "command above never applies to a role launch."
+)
+# SKL-98: a role whose usage is read after it exits keeps its end timestamp at its return.
+METRICS_ROLE_END_BEFORE_USAGE = (
+    "When a role's usage can be read only after it exits, as for a `runtime: command` launch under "
+    "`references/runtimes.md`, the launch runs exactly as the profile gives it, with nothing chained before or "
+    "after it, and its end timestamp is taken before the usage read: on the runtime's notice that the role "
+    "returned, the coordinator's next command is `date -u +%s.%N`, which is not a launch and gets no row, then "
+    "the usage read runs in the wrapper above, and the end command carries the printed timestamp in place of "
+    "`$(date -u +%s.%N)` and the figures the usage read printed, without their `tokens: ` and `tool calls: ` "
+    "labels, in place of `<tokens>` and `<tool calls>`; when no usage read runs, as after a launch that did not "
+    "exit successfully, the end command still carries the printed timestamp, with `not reported` for each figure "
+    "not read."
 )
 METRICS_EXTRA_WRITE = "f='<metrics file>'; printf 'extra %s\\t%s\\n' '<slug>' '<value>' >> \"$f\""
 METRICS_EXTRAS_RECORD = (
@@ -1140,7 +1157,9 @@ METRICS_END_VERBATIM = (
     "converted."
 )
 METRICS_KILLED = (
-    "If a command is killed before it writes its `end` line, the coordinator's very next launch, made as "
+    # SKL-98: the killed-command recovery covers wrapped commands only.
+    "If a wrapped command is killed before its wrapper writes its `end` line, the coordinator's very next "
+    "launch, made as "
     "soon as the kill is reported, is a wrapped command whose `<command>` is `printf 'end %s %s\\n' "
     "\"$(date -u +%s.%N)\" '<killed row label>' >> '<metrics file>'`, and the recovery command gets a row "
     "of its own."
@@ -1250,6 +1269,7 @@ PROTOCOL_LINES = [
     METRICS_WRAPPED_WHOLE,
     METRICS_KILLED,
     METRICS_ROLE_ROW,
+    METRICS_ROLE_END_BEFORE_USAGE,
     METRICS_EXTRAS_RECORD,
     METRICS_END_INTRO,
     METRICS_SCRIPT_ONCE,
@@ -1560,6 +1580,7 @@ def test_a_failed_metrics_write_shows_an_error_and_keeps_the_exit_status(tmp_pat
 def test_the_metrics_section_says_how_a_role_row_is_recorded() -> None:
     body = metrics_body()
     assert METRICS_ROLE_ROW in body, "the role row's own start and end lines are not stated"
+    assert METRICS_ROLE_END_BEFORE_USAGE in body, "a usage-after-exit role's end timestamp is not taken at its return"
     assert METRICS_EXTRAS_RECORD in body, "the extras' recording lines are not stated"
 
 
