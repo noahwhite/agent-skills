@@ -329,18 +329,16 @@ def test_window_is_exactly_forty_characters(repo: Path) -> None:
     assert "zyxwvutsrq" in lines[2]
 
 
-def test_short_and_empty_rules_need_a_whole_match(repo: Path) -> None:
+def test_short_and_empty_rules_are_never_cited(repo: Path) -> None:
+    # A rule with no 40-character run cannot share one with a test or a skill, so even a test that
+    # quotes it whole does not cite it.
     append(repo, "shared/rules.md", "\n- ⛔ Oil it.\n- ⛔\n")
-    write(repo, "tests/test_short.py", "NOTE = 'Boil it.'\n")
+    write(repo, "tests/test_short.py", "NOTE = 'Oil it.'\n")
     commit(repo, OLD, "short rules")
     lines = category(repo, RULES)
     assert lines[0] == f"{RULES}: 3"
     assert any('"Oil it."' in line for line in lines[1:])
     assert any('""' in line for line in lines[1:])
-
-    write(repo, "tests/test_short.py", "NOTE = 'oil it.'\n")
-    commit(repo, OLD, "pin the short rule")
-    assert category(repo, RULES)[0] == f"{RULES}: 2"
 
 
 @pytest.mark.parametrize("value", ["last week", "2026-02-30", "2026-1-9"])
@@ -465,13 +463,18 @@ def test_a_fence_closes_only_on_its_own_delimiter(repo: Path) -> None:
 def test_a_stop_sign_after_a_nested_item_is_not_lost(repo: Path) -> None:
     append(
         repo, "shared/rules.md",
-        "\n- Parent opening line with no marker.\n  - A plain child item.\n"
+        "\n- Parent opening line with no marker.\n  - A plain child item.\n\n"
         "  ⛔ The parent's own continuation after the child carries the marker.\n",
     )
     commit(repo, OLD, "a marker after a child")
     lines = category(repo, RULES)
     assert lines[0] == f"{RULES}: 2"
-    assert any("continuation after the child carries the marker" in line for line in lines[1:])
+    # The blank line ends the child, so the rule is the parent's and starts on the parent's line.
+    assert any(
+        line.startswith("- shared/rules.md:9 |") and '| "Parent opening line' in line
+        and "continuation after the child carries the marker" in line
+        for line in lines[1:]
+    )
 
 
 def test_a_nested_rule_under_a_plain_parent_is_its_own_rule(repo: Path) -> None:
@@ -485,7 +488,7 @@ def test_a_nested_rule_under_a_plain_parent_is_its_own_rule(repo: Path) -> None:
     assert any(line.startswith("- shared/rules.md:") and "| \"Never open the nested" in line for line in lines[1:])
 
 
-def test_only_a_rule_shorter_than_the_window_needs_a_whole_match(repo: Path) -> None:
+def test_a_rule_shorter_than_the_window_is_never_cited(repo: Path) -> None:
     forty = "Exactly forty characters in this rule!!."
     short = "Only thirty-nine characters in a rule!."
     assert (len(forty), len(short)) == (40, 39)
@@ -590,3 +593,38 @@ def test_a_missing_ignore_revs_file_is_refused_before_the_report(repo: Path) -> 
     assert result.returncode == 2
     assert "blame.ignoreRevsFile" in result.stderr and "missing-ignore-revs.txt" in result.stderr
     assert result.stdout == ""
+
+
+def test_git_trace_settings_write_no_file(repo: Path, tmp_path: Path) -> None:
+    traces = tmp_path / "traces"
+    traces.mkdir()
+    env = dict(
+        ENV, GIT_TRACE=str(traces / "trace"), GIT_TRACE2=str(traces / "trace2"),
+        GIT_TRACE2_EVENT=str(traces / "event"), GIT_TRACE_PERFORMANCE=str(traces / "performance"),
+    )
+    result = run(repo, "--since", SINCE, env=env)
+    assert result.returncode == 0, result.stderr
+    assert list(traces.iterdir()) == []
+
+
+def test_a_carriage_return_is_kept_in_paths_and_text(repo: Path) -> None:
+    write(repo, "tests/test_a\r.py", "def test_cr():\n    assert True\n")
+    write(
+        repo, "shared/cr.md",
+        "# Title\rstill line one\n\n- ⛔ Never let a carriage return shift this rule off its line.\n",
+    )
+    commit(repo, OLD, "carriage returns")
+    assert any(line.startswith("- tests/test_a\\x0d.py |") for line in category(repo, TESTS)[1:])
+    assert any(line.startswith("- shared/cr.md:3 |") for line in category(repo, RULES)[1:])
+
+
+def test_punctuation_inside_a_file_name_ends_no_citation(repo: Path) -> None:
+    write(
+        repo, "skills/alpha/SKILL.md",
+        "Read references/cited.md, then (references/rules.md).\n"
+        "Not citations: references/orphan.md:backup.md, references/orphan.md,v2 and references/orphan.md!x.\n",
+    )
+    commit(repo, NEW, "punctuation inside names")
+    lines = category(repo, REFERENCES)
+    assert lines[0] == f"{REFERENCES}: 1"
+    assert lines[1].startswith("- shared/orphan.md")

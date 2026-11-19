@@ -36,7 +36,8 @@ MARKERS = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s", re.MULTILINE)
 FENCE = re.compile(r"^(\s*)(`{3,}|~{3,})(.*)$")
 BLOCK_START = re.compile(r"^\s*(?:#|>|\||```|~~~|---|\*\*\*|___)")
 CONTROL = re.compile(r"[\x00-\x1f\x7f]")
-CITE_EDGE = r"\s`'\"()\[\]{}<>,;:!?*|"
+CITE_PUNCT = r".,;:!?"  # ends a citation only when a delimiter or the end of the text follows it
+CITE_EDGE = r"\s`'\"()\[\]{}<>*|" + CITE_PUNCT
 
 # Every call is pinned to the repository root, takes paths literally, prints them unquoted, takes
 # no optional locks, and overrides the configuration that would change what it reads, so the
@@ -54,12 +55,14 @@ def clean_env() -> dict[str, str]:
 
     Git lists its repository-local variables (GIT_DIR, GIT_WORK_TREE, GIT_INDEX_FILE and the
     like); without them the repository is always the one the caller's directory is in. Replace
-    refs and grafts never substitute history.
+    refs and grafts never substitute history. The GIT_TRACE* variables are dropped first, so no
+    git call, this one included, writes a trace file.
     """
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_TRACE")}
     local = subprocess.run(
-        ["git", "rev-parse", "--local-env-vars"], stdin=subprocess.DEVNULL, capture_output=True, text=True
+        ["git", "rev-parse", "--local-env-vars"], stdin=subprocess.DEVNULL, capture_output=True, text=True, env=env
     ).stdout.split()
-    env = {k: v for k, v in os.environ.items() if k not in local and k != "GIT_NAMESPACE"}
+    env = {k: v for k, v in env.items() if k not in local and k != "GIT_NAMESPACE"}
     env.update(GIT_TERMINAL_PROMPT="0", GIT_NO_LAZY_FETCH="1", GIT_GRAFT_FILE=os.devnull)
     return env
 
@@ -69,12 +72,13 @@ ENV = clean_env()
 
 def probe(*args: str) -> subprocess.CompletedProcess:
     # Arguments and output travel as raw bytes (surrogateescape), so no locale and no
-    # non-UTF-8 path or text can break or merge them.
+    # non-UTF-8 path or text can break or merge them. Output is decoded by hand, not by
+    # subprocess, which would turn a carriage return into a line feed.
     argv = [arg.encode("utf-8", "surrogateescape") for arg in (*GIT, "-C", root, *args)]
-    return subprocess.run(
-        argv, stdin=subprocess.DEVNULL, capture_output=True, env=ENV,
-        encoding="utf-8", errors="surrogateescape",
-    )
+    result = subprocess.run(argv, stdin=subprocess.DEVNULL, capture_output=True, env=ENV)
+    result.stdout = result.stdout.decode("utf-8", "surrogateescape")
+    result.stderr = result.stderr.decode("utf-8", "surrogateescape")
+    return result
 
 
 def git(*args: str) -> str:
@@ -145,13 +149,15 @@ def cites(cite: str, text: str) -> bool:
     """True when text names cite as a whole relative path (optionally ./-prefixed).
 
     A cite counts only between delimiters (whitespace, quotes, brackets, punctuation), optionally
-    followed by a #anchor or a sentence-final period. A cite inside a longer path or name, such as
-    ../other/references/x.md, references/x.md/y, references/x.md.bak or references/x.md+old,
-    does not count.
+    followed by a #anchor. Punctuation after the cite ends it only when a delimiter or the end of
+    the text follows. A cite inside a longer path or name, such as ../other/references/x.md,
+    references/x.md/y, references/x.md.bak, references/x.md:y.md or references/x.md+old, does not
+    count.
     """
+    close = CITE_EDGE.removesuffix(CITE_PUNCT)
     pattern = (
         rf"(?:^|(?<=[{CITE_EDGE}]))(?:\./)?{re.escape(cite)}"
-        rf"(?=$|[{CITE_EDGE}#]|\.(?![^{CITE_EDGE}]))"
+        rf"(?=$|[{close}#]|[{CITE_PUNCT}](?![^{CITE_EDGE}]))"
     )
     return re.search(pattern, text, re.MULTILINE) is not None
 
@@ -284,18 +290,12 @@ def rule_text(item: str) -> str:
 def cited_rules(texts: list[str], haystack: str) -> set[int]:
     """Return the indexes of the texts that share a WINDOW-character run with the haystack.
 
-    A text shorter than WINDOW, which has no WINDOW-character run, counts as cited only when the haystack holds all of it with no
-    letter or digit on either side. An empty text is never cited.
+    A text shorter than WINDOW, the empty text included, has no WINDOW-character run and is never
+    cited.
     """
     found = set()
     index: dict[str, list[int]] = {}
     for n, text in enumerate(texts):
-        if not text:
-            continue
-        if len(text) < WINDOW:
-            if re.search(rf"(?<![^\W_]){re.escape(text)}(?![^\W_])", haystack):
-                found.add(n)
-            continue
         for k in range(len(text) - WINDOW + 1):
             index.setdefault(text[k : k + WINDOW], []).append(n)
     for k in range(len(haystack) - WINDOW + 1):
