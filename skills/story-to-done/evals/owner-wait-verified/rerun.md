@@ -23,7 +23,8 @@ The record sits outside the agent's `workspace/` but is not sandboxed from it, s
 
 The baseline is the skill on `main` immediately before SKL-356, `9e65dd3`; the candidate is SKL-356's commit that adds the owner-wait verification rule, `ad92cae`.
 Run the candidate from its own detached checkout too: a checkout that is also the harness tree changes whenever another suite run writes a record into it, which voids the attempt.
-Record each through the suite runner from the repository root, as `../README.md` states, with `EVAL_AGENT_CMD` set as it shows:
+Record each through the suite runner from the repository root, as `../README.md` states, with `EVAL_AGENT_CMD` set as it shows.
+The baseline run exits 1 by design, because its graded runs fail; run the commands one at a time, not in a shell that stops on the first non-zero status, so the cleanup and the candidate run still follow:
 
 ```sh
 git worktree add --detach <scratch>/skill-9e65dd3 9e65dd3
