@@ -169,15 +169,17 @@ def test_a_missing_checklist_prints_nothing_and_exits_0(tmp_path):
 
 
 VENDORING_ITEM = (
-    "Generated copies stay in step with shared/ and skills.json: `scripts/vendor_shared.py --check`"
-    " passes at the head, and no generated copy is edited by hand (the edit goes in shared/ or"
-    " skills.json, then scripts/vendor_shared.py is rerun).\n"
+    "Generated copies stay in step with shared/ and skills.json: `python3 scripts/vendor_shared.py --check`"
+    " passes at the head, and no file that is a generated copy at the base or the head (its first line says"
+    ' "GENERATED from shared/", or scripts/vendor_shared.py writes it) is edited by hand; the edit goes in'
+    " shared/ or skills.json, then scripts/vendor_shared.py is rerun.\n"
 )
 
 
 @pytest.mark.parametrize("changed", [
     "shared/runtimes.md",
     "skills.json",
+    "scripts/vendor_shared.py",
     "skills/persona-scrum-master/references/github.md",
     "skills/cleanup/scripts/check-signing-key.sh",
 ])
