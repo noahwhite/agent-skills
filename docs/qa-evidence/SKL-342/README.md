@@ -16,10 +16,10 @@ The story description carries four acceptance criteria, and the accepted round 3
 | Refined AC2: checklist file | Verified | The file holds five `<bash glob> \| <review item>` items, and one "Phase 1: sweep" paragraph documents its path and format. `tests/test_review_checklist.py` passes (27 tests). |
 | Refined AC3: reader | Verified | The same 27 tests pass. A QA probe of the merged script prints exactly the one mapped item for a diff touching one mapped path and 0 bytes for an unmapped diff, both with exit 0. |
 | Refined AC4: sweep dossier | Verified | The QA probe's sweep dossier ends with the `===== Review checklist` heading and the item when one matches, and has no such heading when none matches. |
-| Refined AC5: Retro step | Verified | The new Retro bullet reads every review of record and arbiter reports in PR bodies, counts a miss once per distinct PR, excludes scratch reports and proposes one line per miss seen in two or more PRs. `tests/test_persona_scrum_master.py` passes (22 tests). |
-| Refined AC6: owner approval | Verified | The same bullet says an item enters only through an engineer PR linking the owner's approval comment on the retro issue, and the persona never adds it. |
+| Refined AC5: Retro step | Verified | The new Retro bullet reads every review of record and arbiter reports in PR bodies, counts a miss once per distinct PR, excludes scratch reports and proposes one line per miss seen in two or more PRs. `tests/test_persona_scrum_master.py` passes (22 tests). The known limit below applies. |
+| Refined AC6: owner approval | Verified | The same bullet says an item enters only through an engineer PR linking the owner's approval comment on the retro issue, and the persona never adds it. The known limit below applies. |
 | Refined AC7: boundary | Verified | `git diff --name-only 74a29d4...565c8b0` lists only the checklist, the two `SKILL.md` files, the pipeline script and two test files. |
-| Refined AC8: size guard | Verified | QA measured `adversarial-review-pipeline` at 175081 to 175430 bytes (+0.20%) and `persona-scrum-master` at 134340 to 135181 bytes (+0.63%), as the PR body states. |
+| Refined AC8: size guard | Verified | Measured as the AC defines it, `wc -c` over `SKILL.md` plus every file under `references/`, at the merge base `74a29d4` and the head: `adversarial-review-pipeline` at 175081 to 175430 bytes (+0.20%) and `persona-scrum-master` at 134340 to 135181 bytes (+0.63%), as the PR body states. |
 | Refined AC9: guards | Verified | CI run 44570542770 on the head concluded `success` for pytest, the leak scan with `--require-private`, `skills-ref validate` and `smoke-opencode.sh`. The local full suite was not run: owner directive, full suite deferred to the end. |
 | AC: checklist file | Verified | Refined AC2, AC3 and AC4. |
 | AC: retro step | Verified | Refined AC5. |
@@ -31,6 +31,10 @@ The story description carries four acceptance criteria, and the accepted round 3
 | DoD: docs updated | Verified | The "Phase 1: sweep" paragraph, the script header's "Review checklist" block and the Retro bullet. |
 | DoD: verified in a deployed environment (if needed) | Correct by design | Not needed on the `no-deployment` path. |
 | DoD: no critical bugs or regressions | Verified | None found. |
+
+Known limit outside the acceptance criteria: the Retro section still allows the cycle record to live only in a project document, while the new bullet posts proposals and the owner's approval on the retro issue, so a document-only retro has nowhere to post either.
+The description AC and refined AC6 both name the retro issue, so AC5 and AC6 are met as written, and the two tests pin only the bullet's wording.
+PR #361's review of record (finding 3, Medium, non-blocking) and its PR body already record this as a refinement proposal, not an AC; no tracker issue carries it yet, and its owner is the product owner.
 
 Pending owner rulings: none.
 
