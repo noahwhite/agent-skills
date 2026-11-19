@@ -223,6 +223,16 @@ def test_a_gate_workflow_step_name_that_is_not_a_string_fails(tmp_path):
     assert "not a string" in result.stdout
 
 
+@pytest.mark.parametrize("name", ["${{ }}", "Judge ${{ github.sha }}"])
+def test_a_step_renamed_to_an_expression_fails(tmp_path, name):
+    # GitHub rejects a malformed expression, which would stop the whole file.
+    gate = copy.deepcopy(GATE)
+    gate["jobs"]["gate"]["steps"][0]["name"] = name
+    result = judge(tmp_path, {"ci.yml": copy.deepcopy(CI), "gate-base.yml": gate})
+    assert result.returncode != 0, result.stdout
+    assert "expression" in result.stdout
+
+
 # GitHub rejects a whole workflow file with an invalid job or step, so an addition like
 # these stops every base job in that file from running.
 INVALID_ADDITIONS = {
@@ -727,9 +737,9 @@ def test_a_failing_judge_fails_the_judge_step(tmp_path, judge_exit):
     assert "gate-base: FAIL" in (tmp_path / "gate.log").read_text()
 
 
-def run_report_step(tmp_path, log_text, gh_failures):
-    """Run the report step with a stub gh that fails gh_failures times, then records its summary."""
-    [report] = [s for s in all_steps(gate_workflow()) if "status=completed" in s.get("run", "")]
+def run_report_step(tmp_path, log_text, gh_failures, marker="status=completed"):
+    """Run the step posting `marker` with a stub gh that fails gh_failures times, then records its summary."""
+    [report] = [s for s in all_steps(gate_workflow()) if marker in s.get("run", "")]
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     (bin_dir / "sleep").write_text("#!/bin/sh\nexit 0\n")
@@ -778,9 +788,23 @@ def test_an_in_progress_gate_base_run_replaces_an_earlier_verdict_before_the_jud
     assert "if" not in first and "continue-on-error" not in first
 
 
+@pytest.mark.parametrize("gh_failures, ok", [(2, True), (99, False)])
+def test_the_in_progress_step_retries_and_fails_closed(tmp_path, gh_failures, ok):
+    result = run_report_step(tmp_path, "", gh_failures, marker="status=in_progress")
+    assert (result.returncode == 0) is ok, result.stderr
+
+
+def test_a_newer_run_for_the_pr_cancels_the_older_before_it_reports():
+    # A verdict judged against an earlier base must not land after the current one.
+    workflow = gate_workflow()
+    assert workflow["concurrency"] == {"group": "gate-base-${{ github.event.pull_request.number }}",
+                                       "cancel-in-progress": True}
+
+
 def test_the_check_run_gate_base_is_created_on_the_pr_head_sha():
     [report] = [s for s in all_steps(gate_workflow()) if "status=completed" in s.get("run", "")]
-    assert report["if"] == "always()"
+    # It reports a failed judge too, but not from a run a newer one cancelled.
+    assert report["if"] == "${{ !cancelled() }}"
     assert "name=gate-base" in report["run"]
     assert '"head_sha=$HEAD_SHA"' in report["run"]
     assert report["env"]["HEAD_SHA"] == "${{ github.event.pull_request.head.sha }}"

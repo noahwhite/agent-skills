@@ -13,6 +13,12 @@ permissions:
   contents: read
   checks: write
 
+# A newer event for the same PR (a push or a retarget) cancels the older run before it
+# reports, so a verdict against an earlier base cannot land after the current one.
+concurrency:
+  group: gate-base-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   gate:
     runs-on: ubuntu-24.04
@@ -25,9 +31,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: >-
-          gh api --method POST "repos/$REPO/check-runs"
-          -f name=gate-base -f "head_sha=$HEAD_SHA" -f status=in_progress
+        shell: bash
+        run: |
+          for attempt in 1 2 3; do
+            gh api --method POST "repos/$REPO/check-runs" \
+              -f name=gate-base -f "head_sha=$HEAD_SHA" -f status=in_progress && exit 0
+            sleep $((attempt * 10))
+          done
+          exit 1
       - name: Check out the base commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -65,7 +76,8 @@ jobs:
       # A pull_request_target job's own check run attaches to the base commit, so the
       # required gate-base check is created on the PR head SHA through the Checks API.
       - name: Report gate-base on the PR head
-        if: always()
+        # Runs after a failed judge too; a cancelled run leaves the verdict to its successor.
+        if: ${{ !cancelled() }}
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
