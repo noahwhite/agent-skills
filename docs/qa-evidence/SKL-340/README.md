@@ -48,7 +48,8 @@ PR #359 is closed and its branch is gone.
 ### AC4
 
 `project.test_command` is `uv run --locked ruff check . && uv run --locked pytest`, with the pytest half unfiltered.
-The AC's artifact is the transcript of `run-adversarial-pipeline.sh preflight --full-suite on --test-cmd '<project.test_command>'` at the head, which does not exist yet.
+The AC's artifact is the transcript of `run-adversarial-pipeline.sh preflight --repo . --base aafe80f --full-suite on --test-cmd '<project.test_command>'` run in a checkout of the target `9c76b03`, which does not exist yet.
+That transcript is the run's `phase0-preflight.md` together with `phase0-suite.log`, since the report keeps only the last 40 lines of suite output and the log holds the full lint-then-pytest order.
 A plain `uv run --locked pytest` run does not meet AC4, because only the preflight transcript shows lint running before pytest.
 A QA preflight at the target with `--full-suite on` and the pytest half narrowed to one file printed `All checks passed!` before the pytest summary and passed.
 
