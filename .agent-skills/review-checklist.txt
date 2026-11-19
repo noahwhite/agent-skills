@@ -4,5 +4,5 @@
 # (persona-scrum-master "Retro").
 
 shared/* | Every vendored copy of a changed shared/ file is regenerated with scripts/vendor_shared.py in the same PR, and no copy under skills/*/references/ is edited by hand.
-skills/*/references/* | A changed file whose first line says "GENERATED from shared/" is not edited by hand: the edit goes in its shared/ source and the copy is regenerated with scripts/vendor_shared.py.
-skills/*/scripts/* | A changed file whose first line says "GENERATED from shared/" is not edited by hand: the edit goes in its shared/ source and the copy is regenerated with scripts/vendor_shared.py.
+skills/*/references/* | A changed file that is a generated copy at the base or the head (its first line says "GENERATED from shared/", or scripts/vendor_shared.py writes it) is not edited by hand: the edit goes in its shared/ source and the copy is regenerated with scripts/vendor_shared.py.
+skills/*/scripts/* | A changed file that is a generated copy at the base or the head (its first line says "GENERATED from shared/", or scripts/vendor_shared.py writes it) is not edited by hand: the edit goes in its shared/ source and the copy is regenerated with scripts/vendor_shared.py.

@@ -185,7 +185,8 @@ def test_the_committed_checklist_maps_a_vendored_copy_path_to_the_generated_head
     result = checklist(tmp_path, [copy], text=committed)
     assert result.returncode == 0, result.stderr
     assert result.stdout == (
-        'A changed file whose first line says "GENERATED from shared/" is not edited by hand: the edit'
+        "A changed file that is a generated copy at the base or the head (its first line says"
+        ' "GENERATED from shared/", or scripts/vendor_shared.py writes it) is not edited by hand: the edit'
         " goes in its shared/ source and the copy is regenerated with scripts/vendor_shared.py.\n"
     ), result.stdout
 
