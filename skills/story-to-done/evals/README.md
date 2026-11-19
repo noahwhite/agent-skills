@@ -2,6 +2,7 @@
 
 Executed eval cases for the story-to-done skill.
 The suite runner that repeats them is shared by every skill's `evals/`: `scripts/run-suite.sh` at the repository root, which takes the skill's `evals/` directory as its first argument.
+That directory must be `skills/<skill>/evals` in the checkout holding the runner, so the harness commit a record names is the runner that ran; the runner refuses any other directory, and an `evals/` directory with no case.
 Each case runs a real agent against a fixed scenario and grades the tool calls it recorded, never its prose.
 
 ## Prerequisites
@@ -55,7 +56,8 @@ The whole suite, every case directory holding a `case.yaml`:
 uv run --locked bash scripts/run-suite.sh skills/story-to-done/evals <checkout> <label>
 ```
 
-A baseline and a candidate are two suite runs, one per commit, each from its own detached checkout:
+A baseline and a candidate are two suite runs, one per commit, each from its own detached checkout.
+A baseline run of a discriminating case exits 1 by design, so run the commands one at a time, not in a shell that stops on the first non-zero status, or the cleanup is skipped:
 
 ```sh
 git worktree add --detach <scratch>/skill-7a6cb17 7a6cb17
@@ -70,7 +72,8 @@ uv run --locked bash scripts/run-suite.sh skills/story-to-done/evals --list
 ```
 
 The runner lists cases from the harness checkout's `evals/` directory, never from `<checkout>`, so a baseline commit that predates a case still runs it.
-It refuses a harness or skill checkout with any uncommitted change, tracked or untracked, because the commit it records would not describe the run; only the suite's own records under a `results/` directory are allowed, untracked or with an unstaged modification; a record staged, deleted, renamed or unmerged is refused.
+It refuses a harness or skill checkout with any uncommitted change, tracked or untracked, because the commit it records would not describe the run; only the suite's own records under a `results/` directory of this `evals/` directory are allowed, untracked or with an unstaged modification; a record staged, deleted, renamed or unmerged is refused.
+Another skill's uncommitted records are changes like any other, so commit or remove them before running a different skill's suite in the same checkout.
 
 A run that stopped before writing its summary is continued with `--resume` and the same arguments and environment: each attempt that already has both records is counted from them instead of running again.
 Resume refuses a record whose label, commits, model, reasoning effort or agent command differ from this run's, a record whose outcome or verdicts are not the ones its exit code and grades give (a verdict line that redaction rewrote keeps the recorded verdict), and a record of a broken attempt.
