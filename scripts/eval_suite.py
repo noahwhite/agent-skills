@@ -116,6 +116,12 @@ def git(repo: Path, *args: str, strip: bool = True) -> str:
     return stdout.strip() if strip else stdout
 
 
+def toplevel(repo: Path) -> Path:
+    """The checkout's root, with only git's own newline removed, so a root ending in whitespace
+    keeps it."""
+    return Path(git(repo, "rev-parse", "--show-toplevel", strip=False).removesuffix("\n")).resolve()
+
+
 def is_evals(parts: tuple[str, ...]) -> bool:
     """True for the path, from the checkout root, of a skill's evals/ directory."""
     return len(parts) == 3 and parts[0] == "skills" and parts[2] == "evals"
@@ -136,7 +142,7 @@ def commit_of(repo: Path, role: str, evals_parts: tuple[str, ...]) -> tuple[Path
     refused, because its commit would not describe what ran; only this suite's own records under
     a results/ directory, untracked or with an unstaged modification, are allowed, since they are
     outputs, not code. Another skill's records are changes like any other."""
-    root = Path(git(repo, "rev-parse", "--show-toplevel")).resolve()
+    root = toplevel(repo)
     # NUL-separated, so a path reaches is_record as its bytes, never quoted; each entry is two
     # status columns, a space and the path, and a rename or copy is followed by its source path.
     entries = git(root, "status", "--porcelain", "-z", "--untracked-files=all", strip=False).split("\0")
@@ -634,8 +640,8 @@ def main(argv: list[str]) -> int:
     # The harness is the checkout holding this runner, so the harness commit a record names is
     # the checkout that held both the runner and the cases; EVALS must be one of its skills'
     # evals/ directories, whose path from the root names the records in both checkouts.
-    runner_root = Path(git(SCRIPTS, "rev-parse", "--show-toplevel")).resolve()
-    if Path(git(evals, "rev-parse", "--show-toplevel")).resolve() != runner_root:
+    runner_root = toplevel(SCRIPTS)
+    if toplevel(evals) != runner_root or not evals.is_relative_to(runner_root):
         raise Refused(f"EVALS {evals} is not in the checkout holding this runner ({runner_root})")
     parts = evals.relative_to(runner_root).parts
     if not is_evals(parts):
@@ -661,7 +667,8 @@ def main(argv: list[str]) -> int:
     for case in cases:
         spec = yaml.safe_load(read(evals / case / "case.yaml"))
         scenarios = spec.get("scenarios") if isinstance(spec, dict) else None
-        if not scenarios or not all(isinstance(s, dict) and NAME.fullmatch(str(s.get("name", ""))) for s in scenarios):
+        if not scenarios or not all(isinstance(s, dict) and isinstance(s.get("name"), str) and NAME.fullmatch(s["name"])
+                                     for s in scenarios):
             raise Refused(f"case {case} names no scenarios, or a scenario without a valid name")
         if len({s["name"] for s in scenarios}) != len(scenarios):
             raise Refused(f"case {case} names a scenario more than once")

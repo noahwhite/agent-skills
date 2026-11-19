@@ -72,7 +72,7 @@ The case names, with nothing run:
 uv run --locked bash scripts/run-suite.sh skills/story-to-done/evals --list
 ```
 
-The runner lists cases from the harness checkout's `evals/` directory, never from `<checkout>`, so a baseline commit that predates a case still runs it.
+The runner lists cases from the harness checkout's `skills/<skill>/evals/` directory, never from `<checkout>`, so a baseline commit that predates a case still runs it.
 It refuses a harness or skill checkout with any uncommitted change, tracked or untracked, because the commit it records would not describe the run; only the suite's own records under a `results/` directory of this `evals/` directory are allowed, untracked or with an unstaged modification; a record staged, deleted, renamed or unmerged is refused.
 Another skill's uncommitted records are changes like any other, so commit or remove them before running a different skill's suite in the same checkout.
 

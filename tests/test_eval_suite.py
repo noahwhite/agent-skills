@@ -968,6 +968,16 @@ def test_the_runner_wrapper_works_through_a_symlink(suite, tmp_path: Path) -> No
     assert (result.returncode, result.stdout) == (0, "stub\n"), result.stderr
 
 
+@pytest.mark.parametrize("suffix", [" ", "\t"])
+def test_a_harness_root_ending_in_whitespace_lists_its_cases(suite, tmp_path: Path, suffix: str) -> None:
+    harness = tmp_path / f"spaced{suffix}"
+    shutil.copytree(suite["harness"], harness, symlinks=True)
+    result = subprocess.run(["bash", str(harness / "scripts" / "run-suite.sh"),
+                             str(harness / "skills" / "story-to-done" / "evals"), "--list"],
+                            capture_output=True, text=True, env=suite["env"])
+    assert (result.returncode, result.stdout) == (0, "stub\n"), result.stderr
+
+
 def test_the_runner_wrapper_needs_no_readlink_f(suite, tmp_path: Path) -> None:
     """A readlink without -f, as on BSD, still follows a chain of relative links to the runner."""
     shims = tmp_path / "shims"
@@ -1220,6 +1230,18 @@ def test_a_case_without_scenarios_is_refused(suite, scenarios) -> None:
     assert result.returncode == 2 and "names no scenarios" in result.stderr, result.stderr
 
 
+def test_a_scenario_name_that_is_not_a_string_is_refused(suite) -> None:
+    """An unquoted 2026 in case.yaml loads as an int, which the runner refuses instead of crashing."""
+    case_file = suite["evals"] / "stub" / "case.yaml"
+    case = yaml.safe_load(case_file.read_text(encoding="utf-8"))
+    case["scenarios"][0]["name"] = 2026
+    case_file.write_text(yaml.safe_dump(case, sort_keys=False))
+    commit_all(suite["harness"])
+    result = suite["run"]("--runs", "1", str(suite["checkout"]), "lab")
+    assert result.returncode == 2 and "a scenario without a valid name" in result.stderr, result.stderr
+    assert "Traceback" not in result.stderr
+
+
 def test_a_run_with_every_scenario_graded_and_passing_exits_0(suite) -> None:
     suite["recommit"]("pass", "void-once")
     result = suite["run"]("--runs", "3", str(suite["checkout"]), "lab-3", "stub")
@@ -1318,7 +1340,7 @@ def contract_errors(case_dir: Path, tracked_mode) -> list[str]:
     for scenario in scenarios if isinstance(scenarios, list) else []:
         name = scenario.get("name") if isinstance(scenario, dict) else None
         # The runner takes only names that match NAME, so a name like ../results is no fixture.
-        if not SUITE.NAME.fullmatch(str(name or "")) or not (case_dir / "scenarios" / name).is_dir():
+        if not isinstance(name, str) or not SUITE.NAME.fullmatch(name) or not (case_dir / "scenarios" / name).is_dir():
             errors.append(f"no fixtures for scenario {name!r}")
     named = [scenario.get("name") for scenario in scenarios if isinstance(scenario, dict)] \
         if isinstance(scenarios, list) else []
@@ -1378,7 +1400,7 @@ def test_a_case_of_any_skill_missing_its_grader_fails_the_contract(tmp_path: Pat
     "no-kind", "bad-kind", "no-prompt", "no-grader", "no-run", "run-not-executable",
     "no-results", "no-fixture", "prose-grader", "prose-beside-calls", "missing-field", "no-scenarios",
     "prose-stdout", "prose-log", "prose-response", "prose-redirected", "scenario-outside-scenarios",
-    "duplicate-scenario",
+    "duplicate-scenario", "non-string-scenario",
 ])
 def test_the_contract_check_catches_each_breakage(tmp_path: Path, breakage: str) -> None:
     case_dir = tmp_path / "case"
@@ -1410,6 +1432,10 @@ def test_the_contract_check_catches_each_breakage(tmp_path: Path, breakage: str)
         case["scenarios"][0]["name"] = "../results"
     elif breakage == "duplicate-scenario":
         case["scenarios"].append(dict(case["scenarios"][0]))
+    elif breakage == "non-string-scenario":
+        # An unquoted 2026 in case.yaml is an int; its fixture directory exists, so only the type fails.
+        (case_dir / "scenarios" / "2026").mkdir()
+        case["scenarios"][0]["name"] = 2026
     elif breakage == "prose-grader":
         (case_dir / "grader.py").write_text("open('agent-output.txt').read()\n")
     elif breakage == "prose-beside-calls":
