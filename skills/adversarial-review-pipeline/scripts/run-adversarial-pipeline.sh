@@ -610,7 +610,8 @@ primary_state() {
 # markers, so this is a line-shape heuristic, not a source identifier. A marker counts only at the
 # start of a line or right after a carriage return (a progress line rewritten in place), after
 # optional whitespace and terminal escape sequences (CSI, colour included, and OSC), optionally
-# followed by one `<word>: ` tool prefix and more whitespace or escape sequences, so `codex: bwrap: `
+# followed by one `<word>: ` tool prefix (the word starts with a letter or digit, so a `-`/`+` diff
+# line is never read as a prefix) and more whitespace or escape sequences, so `codex: bwrap: `
 # trips with or without colour. A marker quoted mid-line does not trip it. Two accepted limits of
 # the line shape: (a) a real error wrapped in more than one prefix (a timestamp, a log level,
 # `[pid] `, `error: ...: `) is missed; (b) echoed text already in the shape (an indented error
@@ -622,7 +623,7 @@ sandbox_error_in() {
   local esc=$'\e' cr=$'\r' bel=$'\a'
   local escseq="(${esc}[[][0-?]*[ -/]*[@-~]|${esc}][^${bel}${esc}]*(${bel}|${esc}[\\]))"
   local gap="([[:space:]]|${escseq})*"
-  local lead="(^|${cr})${gap}([[:alnum:]_.-]+:[[:space:]]${gap})?"
+  local lead="(^|${cr})${gap}([[:alnum:]][[:alnum:]_.-]*:[[:space:]]${gap})?"
   LC_ALL=C grep -qiE "${lead}(bwrap: |sandbox (failed|denied|could not)|Failed to make .* Permission denied)" -- "$1"
 }
 

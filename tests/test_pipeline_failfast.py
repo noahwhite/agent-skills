@@ -301,6 +301,8 @@ ECHOED_LINES = {
     "diff-line-sandbox-failed": (
         "sandbox failed", "+  the reviewer notes that the sandbox failed once on another host"),
     "comment-sandbox-denied": ("sandbox denied", "  # an older run where the sandbox denied a write"),
+    "diff-deleted-tool-prefixed-line": ("bwrap:", "-codex: bwrap: Can't mount proc on /newroot/proc"),
+    "diff-deleted-colon-noop-line": ("bwrap:", "-: bwrap: startup example"),
     "prose-failed-to-make": (
         "Failed to make", "If you see Failed to make /newroot: Permission denied, check the host."),
 }
