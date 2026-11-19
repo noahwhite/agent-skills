@@ -6,7 +6,8 @@ checkout as data only. Against each base workflow, the head copy may add jobs an
 workflows, may add steps after a base job's last step, and may rename a workflow,
 job or step. Everything else must stay as the base has it:
 
-- every base workflow file is still present and parses, without duplicate keys;
+- every base workflow file is still present and parses, without duplicate keys,
+  with booleans read as GitHub reads them (so only an `on` key declares triggers);
 - every top-level key other than `name` and `jobs` (triggers, permissions, env,
   concurrency, defaults) is unchanged, and none is added; trigger spellings that
   GitHub reads the same (`on: push`, `on: [push]`, `push:` empty or `{}`) match;
@@ -34,6 +35,7 @@ Exit 0 when nothing is violated, 1 when anything is violated or cannot be judged
 """
 
 import argparse
+import re
 import sys
 from pathlib import Path
 
@@ -45,7 +47,17 @@ SUFFIXES = (".yml", ".yaml")
 
 
 class UniqueKeyLoader(yaml.SafeLoader):
-    """A safe loader that refuses a mapping with a repeated key instead of keeping the last."""
+    """A safe loader that reads booleans as GitHub does and refuses a repeated mapping key.
+
+    GitHub parses workflows with the YAML 1.2 core schema, where only true and false (in
+    lower, title or upper case) are booleans. PyYAML's YAML 1.1 schema also reads on, off,
+    yes and no as booleans, which would make a head `true:` key look like `on:`.
+    """
+
+    yaml_implicit_resolvers = {
+        first: [(tag, regexp) for tag, regexp in resolvers if tag != "tag:yaml.org,2002:bool"]
+        for first, resolvers in yaml.SafeLoader.yaml_implicit_resolvers.items()
+    }
 
     def construct_mapping(self, node, deep=False):
         keys = [self.construct_object(key, deep=deep) for key, _ in node.value]
@@ -53,6 +65,10 @@ class UniqueKeyLoader(yaml.SafeLoader):
             if key in keys[:i]:
                 raise yaml.constructor.ConstructorError(None, None, f"duplicate key {key!r}", node.start_mark)
         return super().construct_mapping(node, deep=deep)
+
+
+UniqueKeyLoader.add_implicit_resolver(
+    "tag:yaml.org,2002:bool", re.compile(r"^(?:true|True|TRUE|false|False|FALSE)$"), list("tTfF"))
 
 
 def same(a, b) -> bool:
@@ -91,11 +107,7 @@ def load(path: Path):
         return None, f"does not parse: {error.__class__.__name__}"
     if not isinstance(document, dict):
         return None, "is not a mapping"
-    # yaml.safe_load reads the bare key `on` as the boolean True; a quoted 'on' stays a string.
-    if True in document and "on" in document:
-        return None, "has two `on` keys"
-    return {("on" if key is True else key): (normalize_triggers(value) if key in (True, "on") else value)
-            for key, value in document.items()}, None
+    return {key: normalize_triggers(value) if key == "on" else value for key, value in document.items()}, None
 
 
 def label(key) -> str:

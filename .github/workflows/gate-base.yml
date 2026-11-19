@@ -29,6 +29,9 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           path: head
           persist-credentials: false
+          # checkout refuses a fork head under pull_request_target by default. Nothing under
+          # head/ is executed: the base gate only reads it, so fork PRs are judged like any other.
+          allow-unsafe-pr-checkout: true
           sparse-checkout: |
             .github/workflows/
             scripts/gate_integrity.py

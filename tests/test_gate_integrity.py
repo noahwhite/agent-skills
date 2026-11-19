@@ -218,6 +218,20 @@ def test_a_quoted_on_key_matches_a_bare_on_key(tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+@pytest.mark.parametrize("key", ["true", "True", "yes", "'true'"])
+def test_a_trigger_key_github_does_not_read_as_on_fails(tmp_path, key):
+    # GitHub reads workflow YAML with the YAML 1.2 core schema: only the key `on` (bare or
+    # quoted) declares triggers, so a head that respells it loses every trigger.
+    for side, on in (("base", "on"), ("head", key)):
+        directory = tmp_path / side
+        directory.mkdir()
+        (directory / "ci.yml").write_text(f"{on}:\n  pull_request:\n"
+                                          "jobs:\n  checks:\n    steps:\n      - run: 'true'\n")
+    result = run_dirs(tmp_path / "base", tmp_path / "head")
+    assert result.returncode != 0, result.stdout
+    assert "trigger" in result.stdout
+
+
 @pytest.mark.parametrize("head_on", ["{pull_request: {}}", "[pull_request]", "pull_request"])
 def test_equivalent_trigger_spellings_match(tmp_path, head_on):
     for side, on in (("base", "{pull_request: null}"), ("head", head_on)):
@@ -472,6 +486,9 @@ def test_the_head_is_checked_out_as_data_at_the_pr_head_sha():
     head = checkouts["head"]["with"]
     assert head["ref"] == "${{ github.event.pull_request.head.sha }}"
     assert head["repository"] == "${{ github.event.pull_request.head.repo.full_name }}"
+    # actions/checkout refuses a fork head under pull_request_target unless told the head is
+    # wanted; without this a fork PR fails gate-base before the judge runs.
+    assert head["allow-unsafe-pr-checkout"] is True
     # Nothing under head/ is executed: a head path appears only as a data argument of the gate.
     # The coreutils `head` command, which takes an option, is not a path.
     for step in all_steps(gate_workflow()):
