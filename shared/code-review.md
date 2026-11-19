@@ -41,7 +41,7 @@ Every agent that judges work or takes delegated work (reviewer, adjudicator, sha
    Its findings go to an output file the adjudicator receives.
 2. **Adjudicator: `profile.review.adjudicator`.**
    When the reviewer finishes, launch it as a clean, neutral agent.
-   Give it the diff reference and the reviewer's findings, and ask it to verify each finding against the real code and rule it valid or invalid, with severity and whether it blocks merge.
+   Give it the diff reference (the PR's cumulative `origin/<base>...HEAD` in every round, and in a later round also the delta since the last reviewed head) and the reviewer's findings, and ask it to verify each finding against the real code and rule it valid or invalid, with severity and whether it blocks merge.
    It is read-only.
 3. **Clean and neutral.**
    Run the reviewer and the adjudicator clean and neutral, as defined above.

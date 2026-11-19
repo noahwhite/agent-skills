@@ -159,6 +159,16 @@ def test_review_of_record_step_4_carves_out_only_a_confirmed_pre_existing_findin
     ) in body
 
 
+def test_the_adjudicator_gets_the_cumulative_diff_in_every_round() -> None:
+    # SKL-343: the pre-existing rule is judged against the PR's cumulative diff, so a delta-round
+    # adjudicator gets that range as well as the delta.
+    body = section(CODE_REVIEW.read_text(), "Review of record")
+    assert (
+        "Give it the diff reference (the PR's cumulative `origin/<base>...HEAD` in every round, and in a later "
+        "round also the delta since the last reviewed head) and the reviewer's findings"
+    ) in body
+
+
 def test_a_delta_round_brief_carries_the_prior_review_and_the_adjudicator_brief_never_does() -> None:
     # SKL-343
     rounds = section(CODE_REVIEW.read_text(), "Rounds", "###")
