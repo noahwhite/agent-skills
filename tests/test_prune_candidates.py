@@ -567,6 +567,28 @@ def test_a_citation_ends_at_a_delimiter(repo: Path) -> None:
     assert lines[1].startswith("- shared/orphan.md")
 
 
+@pytest.mark.parametrize(
+    "form",
+    [
+        '"Read references/cited.md."',
+        "(see references/cited.md.)",
+        "[the rules](references/cited.md#merge).",
+        "`references/cited.md`,",
+        "'references/cited.md'.",
+        "**references/cited.md**:",
+        "| references/cited.md |",
+        "<references/cited.md>",
+        "references/cited.md?)",
+    ],
+)
+def test_common_citation_forms_count(repo: Path, form: str) -> None:
+    write(repo, "skills/alpha/SKILL.md", f"Rules: {form} Also (references/rules.md).\n")
+    commit(repo, NEW, "one citation form")
+    lines = category(repo, REFERENCES)
+    assert lines[0] == f"{REFERENCES}: 1"
+    assert lines[1].startswith("- shared/orphan.md")
+
+
 def test_a_closing_backtick_or_bracket_ends_a_citation_before_prose(repo: Path) -> None:
     write(
         repo, "skills/alpha/SKILL.md",

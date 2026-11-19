@@ -158,16 +158,16 @@ def cites(cite: str, text: str) -> bool:
     """True when text names cite as a whole relative path (optionally ./-prefixed).
 
     A cite starts at the start of a line or after whitespace, a quote or an opening bracket. After
-    the cite and an optional #anchor comes a backtick, a double quote or a closing bracket, which
-    ends it whatever follows (as in `references/x.md`'s), or else the rest of its
-    whitespace-delimited word holds only a single quote, * or | and punctuation. A cite inside a
+    the cite and an optional #anchor may come a single quote, * or | and punctuation; then a
+    backtick, a double quote or a closing bracket ends it whatever follows (as in
+    `references/x.md`'s or "Read references/x.md."), and otherwise the word must end. A cite inside a
     longer path or name, such as ../other/references/x.md, old.references/x.md,
     references/x.md/y, references/x.md.bak, references/x.md:y.md, references/x.md(old).md or
     references/x.md+old, does not count.
     """
     pattern = (
         rf"(?:^|(?<=[{CITE_OPEN}]))(?:\./)?{re.escape(cite)}"
-        rf"(?=(?:#[^\s{CITE_END}]*)?(?:[{CITE_END}]|[{CITE_CLOSE}]*(?:\s|$)))"
+        rf"(?=(?:#[^\s{CITE_END}]*)?[{CITE_CLOSE}]*(?:[{CITE_END}]|\s|$))"
     )
     return re.search(pattern, text, re.MULTILINE) is not None
 
