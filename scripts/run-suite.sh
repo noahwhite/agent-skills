@@ -21,7 +21,10 @@ fi
 # Plain readlink, one link at a time, because readlink -f is not on every system.
 source=${BASH_SOURCE[0]}
 while [ -L "$source" ]; do
-  link=$(readlink -- "$source")
+  # The x keeps a target's trailing newlines, which command substitution would strip.
+  link=$(readlink -- "$source"; echo x)
+  link=${link%x}
+  link=${link%$'\n'}
   case $link in
     /*) source=$link ;;
     *) source=$(dirname -- "$source")/$link ;;

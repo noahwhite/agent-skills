@@ -978,6 +978,14 @@ def test_a_harness_root_ending_in_whitespace_lists_its_cases(suite, tmp_path: Pa
     assert (result.returncode, result.stdout) == (0, "stub\n"), result.stderr
 
 
+def test_the_runner_wrapper_follows_a_link_target_ending_in_a_newline(suite, tmp_path: Path) -> None:
+    (tmp_path / "inner\n").symlink_to(suite["harness"] / "scripts" / "run-suite.sh")
+    (tmp_path / "outer.sh").symlink_to("inner\n")
+    result = subprocess.run(["bash", str(tmp_path / "outer.sh"), str(suite["evals"]), "--list"], capture_output=True,
+                            text=True, env=suite["env"])
+    assert (result.returncode, result.stdout) == (0, "stub\n"), result.stderr
+
+
 def test_the_runner_wrapper_ignores_cdpath(suite, tmp_path: Path) -> None:
     """With CDPATH exported, cd prints the directory it enters; the wrapper must not capture it."""
     result = subprocess.run(["bash", "scripts/run-suite.sh", str(suite["evals"]), "--list"], capture_output=True,
@@ -1260,7 +1268,8 @@ def test_a_git_ignored_evals_directory_is_refused(suite) -> None:
 
 
 @pytest.mark.parametrize("ignored, refused", [("skills/story-to-done/evals/stub/notes.local", True),
-                                              (".venv/lib.py", False)])
+                                              (".venv/lib.py", False),
+                                              ("skills/story-to-done/evals/results/earlier.local", False)])
 def test_an_ignored_file_is_a_change_only_in_the_suites_evals(suite, ignored: str, refused: bool) -> None:
     harness = suite["harness"]
     (harness / ".gitignore").write_text("*.local\n.venv/\n", encoding="utf-8")

@@ -142,7 +142,7 @@ def commit_of(repo: Path, role: str, evals_parts: tuple[str, ...]) -> tuple[Path
     refused, because its commit would not describe what ran; only this suite's own records under
     a results/ directory, untracked or with an unstaged modification, are allowed, since they are
     outputs, not code. Another skill's records are changes like any other, and so is a git-ignored
-    path in or holding this suite's evals/ directory."""
+    path in or holding this suite's evals/ directory, other than its records."""
     root = toplevel(repo)
     # NUL-separated, so a path reaches is_record as its bytes, never quoted; each entry is two
     # status columns, a space and the path, and a rename or copy is followed by its source path.
@@ -164,7 +164,8 @@ def commit_of(repo: Path, role: str, evals_parts: tuple[str, ...]) -> tuple[Path
         # a record (staged, deleted, unmerged, renamed) is a change the commit would not describe.
         if status == "!!":
             parts = Path(path).parts
-            if parts[:len(evals_parts)] == evals_parts or evals_parts[:len(parts)] == parts:
+            under = parts[:len(evals_parts)] == evals_parts or evals_parts[:len(parts)] == parts
+            if under and not is_record(path, evals_parts):
                 changed.append(path)
         elif not (status in ("??", " M") and is_record(path, evals_parts)):
             changed.append(path)
