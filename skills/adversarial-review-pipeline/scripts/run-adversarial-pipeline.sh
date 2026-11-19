@@ -80,8 +80,8 @@
 # Review checklist: `.agent-skills/review-checklist.txt` in the repository under review, read from the
 # base commit (so a change cannot rewrite the checklist its own review uses), holds one
 # `<bash glob> | <review item>` per line; blank lines and lines whose first non-space character is
-# '#' are ignored, and any other line without ' | ', or holding a NUL or \001 byte, is skipped with
-# a warning on stderr. The glob is the text before the first ' | ' and is matched unquoted with bash
+# '#' are ignored, and any other line without ' | ', or holding a NUL or \001 byte, is skipped
+# with a warning on stderr. The glob is the text before the first ' | ' and is matched unquoted with bash
 # `[[ path == glob ]]` against each changed path as git prints it (repo-relative, no leading './',
 # rename detection off, so both sides of a rename count): '*' crosses '/', and '**/x' does not match
 # a top-level 'x'. `checklist` prints each matching item once (keyed on its text), in file order; a
@@ -1575,11 +1575,11 @@ checklist_items() {
   fi
   while IFS= read -r line || [ -n "$line" ]; do
     n=$(( n + 1 ))
-    case "$line" in *$'\001'*)
-      echo "WARNING: $file line $n holds a NUL or \\001 byte; skipped." >&2; continue ;; esac
     line="${line#"${line%%[![:space:]]*}"}"
     line="${line%"${line##*[![:space:]]}"}"
     if [ -z "$line" ] || [ "${line:0:1}" = "#" ]; then continue; fi
+    case "$line" in *$'\001'*)
+      echo "WARNING: $file line $n holds a NUL or \\001 byte; skipped." >&2; continue ;; esac
     glob="${line%% | *}"; glob="${glob%"${glob##*[![:space:]]}"}"
     item="${line#* | }"; item="${item#"${item%%[![:space:]]*}"}"
     case "$line" in *" | "*) ;; *) glob="" ;; esac
@@ -1621,7 +1621,8 @@ write_dossier() {  # $1 = phase, $2 = dossier path, $3 = the phase's checkout (e
           echo "===== Review checklist (owner-approved items read from the base, for the paths this diff changes: check each one, report a miss as a candidate) ====="
           kept="" dropped=0   # every whole item that fits, in order; one that does not is left out
           while IFS= read -r item; do
-            if [ $(( ${#kept} + ${#item} + 1 )) -le "$CHECKLIST_CAP_CHARS" ]; then
+            # The cap counts the items joined by newlines: no separator after the last one.
+            if [ $(( ${#kept} + ${#item} )) -le "$CHECKLIST_CAP_CHARS" ]; then
               kept+="$item"$'\n'
             else
               dropped=1

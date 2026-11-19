@@ -12,6 +12,8 @@ import re
 import subprocess
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parent.parent
 CHECKLIST = ROOT / ".agent-skills" / "review-checklist.txt"
 SKILL_DIR = ROOT / "skills" / "adversarial-review-pipeline"
@@ -174,11 +176,18 @@ def test_the_committed_checklist_maps_a_shared_change_to_its_item(tmp_path):
     assert result.stdout.startswith("Every vendored copy of a changed shared/ file"), result.stdout
 
 
-def test_the_committed_checklist_maps_a_hand_edited_vendored_copy_to_its_item(tmp_path):
+@pytest.mark.parametrize("copy", [
+    "skills/persona-scrum-master/references/github.md",
+    "skills/cleanup/scripts/check-signing-key.sh",
+])
+def test_the_committed_checklist_maps_a_vendored_copy_path_to_the_generated_header_item(tmp_path, copy):
     committed = CHECKLIST.read_text()
-    result = checklist(tmp_path, ["skills/persona-scrum-master/references/github.md"], text=committed)
+    result = checklist(tmp_path, [copy], text=committed)
     assert result.returncode == 0, result.stderr
-    assert result.stdout.startswith("Every vendored copy of a changed shared/ file"), result.stdout
+    assert result.stdout == (
+        'A changed file whose first line says "GENERATED from shared/" is not edited by hand: the edit'
+        " goes in its shared/ source and the copy is regenerated with scripts/vendor_shared.py.\n"
+    ), result.stdout
 
 
 def test_the_checklist_is_read_from_the_base_not_the_head(tmp_path):
@@ -230,6 +239,13 @@ def test_a_line_with_a_nul_byte_is_skipped_with_a_warning(tmp_path):
     assert result.returncode == 0, result.stderr
     assert result.stdout == "Check every changed doc link resolves.\n"
     assert "line 7 holds a NUL" in result.stderr, result.stderr
+
+
+def test_a_comment_with_a_nul_byte_is_ignored_without_a_warning(tmp_path):
+    text = FIXTURE_CHECKLIST + "  # a comment with \0 and \1 bytes\n"
+    result = checklist(tmp_path, ["docs/guide.md"], text=text)
+    assert (result.returncode, result.stderr) == (0, "")
+    assert result.stdout == "Check every changed doc link resolves.\n"
 
 
 def test_the_reader_runs_from_the_repository_without_repo(tmp_path):
@@ -297,6 +313,14 @@ def test_the_sweep_dossier_caps_the_checklist(tmp_path):
     items = [line[2:] for line in block[:-1]]
     # Only whole items, as many as fit in the cap: each is 100 characters plus its newline.
     assert items == [f"Item {n:04d} {'x' * 90}" for n in range(8192 // 101)]
+
+
+def test_an_item_exactly_at_the_cap_is_kept_whole(tmp_path):
+    item = "Exact " + "x" * (8192 - len("Exact "))
+    dossier = sweep_dossier(tmp_path, ["src/app.py"], text=f"src/*.py | {item}\n")
+    heading = HEADING.search(dossier)
+    assert heading, dossier
+    assert dossier[heading.end():].strip("\n").splitlines() == [f"- {item}"]
 
 
 def test_an_oversized_item_does_not_hide_a_later_item_that_fits(tmp_path):
