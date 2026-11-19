@@ -97,7 +97,7 @@ else:
         sets.append({int(n) for n in re.findall(r"\d+", accepted)})
     intersection = set.intersection(*sets)
     if intersection:
-        want = f"2 (the highest value in the intersection {{2}})" if max(intersection) == 2 else str(max(intersection))
+        want = "2 (the highest value in the intersection {2})" if max(intersection) == 2 else str(max(intersection))
         if consensus.group(1).strip() != want:
             problems.append(f"consensus does not match the re-vote sets {sets}: {consensus.group(1).strip()!r}")
     else:

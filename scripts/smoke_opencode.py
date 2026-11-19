@@ -90,7 +90,6 @@ def check_layout(root, work, layout, binary, timeout=30):
     # The service port is explicit so this fixture cannot attach to a user's server.
     # Another process can still take the port between this bind and the service start,
     # so a start failure that names the port is retried on a fresh port (C05).
-    started = False
     for attempt in range(3):
         with socket.socket() as sock:
             sock.bind(("127.0.0.1", 0))
@@ -104,7 +103,6 @@ def check_layout(root, work, layout, binary, timeout=30):
                     f"{layout}: opencode service did not start on any of 3 port attempts: "
                     f"{start_error.stderr or start_error.stdout or start_error}") from start_error
             continue
-        started = True
         break
     error = stop_error = None
     try:

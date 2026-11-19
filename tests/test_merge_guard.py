@@ -27,12 +27,17 @@ READ_BACK_QUERY = (
     "and `gh api --paginate repos/<owner>/<repo>/pulls/<n>/reviews`."
 )
 READ_BACK = (
-    "Select the review of record as the merge guard in `references/code-review.md` does "
-    "(the `COMMENTED` review whose body begins with `Review of record` and has the greatest `submitted_at`).\n"
+    "Select the review of record as merge guard step 2 in `references/code-review.md` does: "
+    "resolve the expected author as `profile.review.record_author` when set, otherwise the login of the "
+    "authenticated account (`gh api user --jq .login`); among the reviews in state `COMMENTED` whose body "
+    "begins with `Review of record`, keep only those whose `user.login` equals the expected author "
+    "(case-insensitive), and select the one with the greatest `submitted_at`.\n"
     "Compare the merged PR's `headRefOid` (its head at merge, not the merge commit) separately with that review's `commit_id` "
     "and with the full head SHA on its first line.\n"
-    "Except under the explicit per-PR review waiver in The gate, a missing review, a missing SHA, or either mismatch "
-    "is reported with the PR and all available SHAs, and stops the loop.\n"
+    "Except under the explicit per-PR review waiver in The gate, marker reviews but none by the expected author, "
+    "an expected author that cannot be resolved, a missing review, a missing SHA, or either mismatch "
+    "is reported with the PR, the expected author (or `unresolved` and the failing command), "
+    "each excluded review's `user.login` and `html_url`, and all available SHAs, and stops the loop.\n"
     "For a waived PR, compare the merged PR's `headRefOid` with the SHA recorded when the user gave the instruction; "
     "report and stop if that SHA is missing or differs."
 )
@@ -77,9 +82,17 @@ def skill(name: str) -> str:
 
 
 REVIEWS_READ = (
-    "2. Read the PR's reviews with `gh api --paginate repos/<owner>/<repo>/pulls/<n>/reviews`, "
-    "select the latest submitted review in state `COMMENTED` whose body begins with `Review of record`, "
-    "and take both its `commit_id` and the full head SHA on its first line."
+    "2. Resolve the expected author as `profile.review.record_author` when set, otherwise the login of the "
+    "authenticated account (`gh api user --jq .login`).\n"
+    "   Except under the explicit per-PR review waiver in The gate, if neither yields a login, the guard does not "
+    "merge and reports the failing command (the command and its exit status or empty output).\n"
+    "   Read the PR's reviews with `gh api --paginate repos/<owner>/<repo>/pulls/<n>/reviews`.\n"
+    "   Among the reviews in state `COMMENTED` whose body begins with `Review of record`, keep only those whose "
+    "`user.login` equals the expected author (case-insensitive), and select the one with the greatest "
+    "`submitted_at`; the guard's output lists each marker review it excluded, with its `user.login`, `html_url` "
+    "and `commit_id`.\n"
+    "   The latest review is the one with the greatest `submitted_at`, not the last in the list.\n"
+    "   Take both its `commit_id` and the full head SHA on its first line."
 )
 FAIL_CLOSED = (
     "3. Except under the explicit per-PR review waiver in The gate, "
@@ -286,18 +299,18 @@ def test_shared_files_no_longer_call_the_review_of_record_a_comment() -> None:
 
 def test_engineering_workflow_merge_uses_the_guard() -> None:
     body = section(skill("engineering-workflow"), "10. Merge")
-    autonomous = next(l for l in body.splitlines() if l.startswith("- If `profile.review.merge_owner` is `agent`:"))
+    autonomous = next(ln for ln in body.splitlines() if ln.startswith("- If `profile.review.merge_owner` is `agent`:"))
     assert GUARD in autonomous
     assert EXPECTED_HEAD in autonomous
     assert MATCH_HEAD in autonomous
-    approved = next(l for l in body.splitlines() if l.startswith("4. Re-read the live PR,"))
+    approved = next(ln for ln in body.splitlines() if ln.startswith("4. Re-read the live PR,"))
     assert "run the merge guard in `references/code-review.md`" in approved
     assert UNGUARDED_STOP + " instead of merging unguarded" in approved
 
 
 def test_qa_evidence_merge_uses_the_guard() -> None:
     text = skill("qa-verification")
-    line = next(l for l in text.splitlines() if "Merge only on the exact final head" in l)
+    line = next(ln for ln in text.splitlines() if "Merge only on the exact final head" in ln)
     assert GUARD in line
     assert EXPECTED_HEAD in line
     assert MATCH_HEAD in line
@@ -324,7 +337,7 @@ def test_story_to_done_reads_back_the_reviewed_head() -> None:
         body = section(text, heading)
         assert READ_BACK_QUERY + "\n" + READ_BACK in body, f"{heading} missing the reviewed-head read-back"
     # SKL-356's owner-wait rule reads the tracker story's comments; no line reads a PR's comments.
-    for line in (l for l in text.splitlines() if "comments" in l):
+    for line in (ln for ln in text.splitlines() if "comments" in ln):
         assert "story in the tracker" in line and "PR" not in line and "review of record" not in line, \
             f"story-to-done reads issue comments outside the tracker story: {line.strip()}"
     assert "/issues/" not in text, "story-to-done reads the issues endpoint somewhere"
@@ -354,8 +367,10 @@ def test_story_to_done_read_backs_compare_each_sha_separately_and_fail_closed() 
             "and with the full head SHA on its first line."
         ) in body, heading
         assert (
-            "Except under the explicit per-PR review waiver in The gate, a missing review, a missing SHA, or either mismatch "
-            "is reported with the PR and all available SHAs, and stops the loop."
+            "Except under the explicit per-PR review waiver in The gate, marker reviews but none by the expected author, "
+            "an expected author that cannot be resolved, a missing review, a missing SHA, or either mismatch "
+            "is reported with the PR, the expected author (or `unresolved` and the failing command), "
+            "each excluded review's `user.login` and `html_url`, and all available SHAs, and stops the loop."
         ) in body, heading
 
 
@@ -380,9 +395,9 @@ def test_skills_name_the_comment_pr_review() -> None:
 
 def test_review_policy_says_the_review_of_record_is_a_pr_review() -> None:
     for name in ("linear-user-story", "linear-bug"):
-        block = [l for l in skill(name).splitlines() if l.startswith("> ")]
+        block = [ln for ln in skill(name).splitlines() if ln.startswith("> ")]
         assert REVIEW_POLICY_SENTENCE in block, f"{name} Review Policy missing the format sentence"
-        policy = block.index(next(l for l in block if l.startswith("> **Review Policy**")))
+        policy = block.index(next(ln for ln in block if ln.startswith("> **Review Policy**")))
         assert block.index(REVIEW_POLICY_SENTENCE) == policy + 2, f"{name} sentence not in the Review Policy block"
 
 

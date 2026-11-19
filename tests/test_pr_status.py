@@ -142,13 +142,13 @@ def split_sections(stdout: str) -> dict[str, list[str]]:
 def test_prints_pr_reviews_before_issue_comments(run) -> None:
     done, _ = run()
     assert done.returncode == 0, done.stderr
-    headers = [l for l in done.stdout.splitlines() if l.startswith("=== ")]
+    headers = [ln for ln in done.stdout.splitlines() if ln.startswith("=== ")]
     assert headers == [REVIEWS_HEADER, COMMENTS_HEADER]
 
 
 def test_reviews_section_lists_author_state_commit_time_and_body(run) -> None:
     done, _ = run()
-    rows = [json.loads(l) for l in split_sections(done.stdout)[REVIEWS_HEADER] if l.strip()]
+    rows = [json.loads(ln) for ln in split_sections(done.stdout)[REVIEWS_HEADER] if ln.strip()]
     assert [r["author"] for r in rows] == ["record-author", "other"]
     record = rows[0]
     assert record["state"] == "COMMENTED"
@@ -173,7 +173,7 @@ def test_issue_comments_keep_their_own_section_without_the_reviews(run) -> None:
 def test_no_reviews_prints_an_empty_reviews_section(run) -> None:
     done, _ = run(reviews=[])
     assert done.returncode == 0, done.stderr
-    assert [l for l in split_sections(done.stdout)[REVIEWS_HEADER] if l.strip()] == []
+    assert [ln for ln in split_sections(done.stdout)[REVIEWS_HEADER] if ln.strip()] == []
 
 
 def test_reviews_api_failure_fails_the_script(run) -> None:
@@ -186,7 +186,7 @@ def test_reviews_across_pages_are_all_listed(run) -> None:
     second = {**REVIEWS[1], "user": {"login": "third"}, "html_url": "https://github.com/acme/widgets/pull/7#pullrequestreview-13"}
     done, _ = run(reviews=[REVIEWS, [second]])
     assert done.returncode == 0, done.stderr
-    rows = [json.loads(l) for l in split_sections(done.stdout)[REVIEWS_HEADER] if l.strip()]
+    rows = [json.loads(ln) for ln in split_sections(done.stdout)[REVIEWS_HEADER] if ln.strip()]
     assert [r["author"] for r in rows] == ["record-author", "other", "third"]
 
 
@@ -212,7 +212,7 @@ def test_unparseable_pr_metadata_fails_closed(run, meta) -> None:
     done, log = run(meta=meta)
     assert done.returncode == 12
     assert "Could not derive owner/repo and number" in done.stderr
-    assert not any(l.startswith("api ") for l in log)
+    assert not any(ln.startswith("api ") for ln in log)
     assert REVIEWS_HEADER not in done.stdout
 
 
@@ -220,7 +220,7 @@ def test_failing_pr_metadata_call_fails_closed(run) -> None:
     done, log = run(fail_meta=True)
     assert done.returncode == 12
     assert "Could not read the current PR's number and URL" in done.stderr
-    assert not any(l.startswith("api ") for l in log)
+    assert not any(ln.startswith("api ") for ln in log)
 
 
 def test_reviews_are_read_from_the_host_of_the_pr_url(run) -> None:
@@ -231,16 +231,16 @@ def test_reviews_are_read_from_the_host_of_the_pr_url(run) -> None:
 
 def test_issue_comments_are_read_with_json_only_like_real_gh(run) -> None:
     _, log = run()
-    views = [l for l in log if l.startswith("pr view") and "comments" in l]
+    views = [ln for ln in log if ln.startswith("pr view") and "comments" in ln]
     assert views == ["pr view --json comments --jq " + views[0].split("--jq ", 1)[1]]
-    assert not any("--comments" in l for l in log)
+    assert not any("--comments" in ln for ln in log)
 
 
 def test_zero_issue_comments_still_prints_the_section(run) -> None:
     done, _ = run(comments={"comments": []})
     assert done.returncode == 0, done.stderr
     assert COMMENTS_HEADER in done.stdout
-    assert [l for l in split_sections(done.stdout)[COMMENTS_HEADER] if l.strip()] == []
+    assert [ln for ln in split_sections(done.stdout)[COMMENTS_HEADER] if ln.strip()] == []
 
 
 def test_script_no_longer_says_the_review_of_record_is_an_issue_comment() -> None:

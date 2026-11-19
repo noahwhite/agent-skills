@@ -7,7 +7,7 @@ project:
   name: Agent Skills
   repos:
     - noahwhite/agent-skills
-  test_command: uv run pytest
+  test_command: uv run --locked ruff check . && uv run --locked pytest
 tracker:
   kind: linear
   team_key: SKL

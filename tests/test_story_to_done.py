@@ -3894,7 +3894,8 @@ def test_the_record_shape_pattern_matches_the_record_and_not_the_bare_word_readi
 STEP_3_HEADING = "3. QA agent: verify the deployed story"
 # SKL-138 re-baselined this digest for the step 3 nested launch line (NESTED_STEP_3), which carries no ruling.
 # SKL-357 re-pinned it for the step 3 unnamed-waiting-handback pointer and the plural "resumes" exception.
-STEP_3_SHA256 = "2c57b85346ce7030aab1edc8e0fad3769538a4d38b2aff6dfd673adfb10fa330"
+# SKL-35 re-pinned it for the step 3 read-back's expected-author selection rule, which carries no ruling.
+STEP_3_SHA256 = "0fbe54d0c798f259a1dff5063bdd8c20ddf87eacd01933ffc1f87d2e0245652f"
 # SKL-138 re-pinned IN_PROGRESS_SHA256 for the step 4 nested launch line (NESTED_STEP_4), which carries no pending item.
 # SKL-346 re-pinned IN_PROGRESS_SHA256 for the arbitration ledger hand-back lines, which carry no pending item.
 IN_PROGRESS_SHA256 = "40f0ab4f13d839dfa464e93be4b26b108ce82ec862e6e16bac48cae91ce2281c"
