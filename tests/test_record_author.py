@@ -29,7 +29,7 @@ def test_example_profile_validates_without_record_author() -> None:
     assert not errors(EXAMPLE)
 
 
-@pytest.mark.parametrize("login", ["noahwhite", "devin-ai-integration[bot]", "a-bot9"])
+@pytest.mark.parametrize("login", ["octocat", "devin-ai-integration[bot]", "a-bot9"])
 def test_record_author_accepts_a_user_or_bot_login(login) -> None:
     assert not errors(with_record_author(login)), login
 
@@ -43,7 +43,7 @@ def test_record_author_rejects_an_empty_string() -> None:
     assert errors(with_record_author(""))
 
 
-@pytest.mark.parametrize("login", ["-noahwhite", "noahwhite-", "noah white", "noahwhite.", "-bad[bot]", "x" * 46])
+@pytest.mark.parametrize("login", ["-octocat", "octocat-", "octo cat", "octocat.", "-bad[bot]", "x" * 46])
 def test_record_author_rejects_an_invalid_login(login) -> None:
     assert errors(with_record_author(login)), login
 
