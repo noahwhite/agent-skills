@@ -3,16 +3,16 @@
 
 Usage: python scripts/prune_candidates.py --since YYYY-MM-DD
 
-Run from anywhere inside the repository. It resolves HEAD once, evaluates that commit, reads
+Run it from anywhere inside the repository. It resolves HEAD once, evaluates that commit, reads
 only git objects, and writes nothing. Each candidate carries its evidence and a retire or keep
 proposal; the owner decides at the retro (docs/pruning-routine.md). The three categories:
 
-- tests untouched since D: a tests/test_*.py file whose latest committer time over every commit
-  that touched it is before D.
+- tests untouched since D: a tests/test_*.py file whose latest committer time, over every commit
+  in the history of HEAD that changed that path (side branches of merges included), is before D.
 - reference files uncited at this commit: a shared/*.md source other than README.md that no
   skills/*/SKILL.md cites as references/<name>.
-- rules uncited at this commit, unchanged since D: a list item in a shared/*.md source that
-  carries the stop sign, whose text (continuation lines and nested items included, whitespace
+- rules uncited at this commit, unchanged since D: a list item in a shared/*.md source whose own
+  lines carry the stop sign, whose text (continuation lines and nested items included, whitespace
   collapsed, case ignored) shares no 40-character run with any file under tests/ or any
   skills/*/SKILL.md, and whose lines were all last changed before D per git blame.
 
@@ -23,6 +23,7 @@ objects are incomplete and reading them would fetch and write into the repositor
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import subprocess
 import sys
@@ -32,20 +33,30 @@ STOP = "⛔"
 WINDOW = 40
 ITEM = re.compile(r"^(\s*)(?:[-*+]|\d+[.)])\s")
 MARKERS = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s", re.MULTILINE)
-FENCE = re.compile(r"^\s*(?:```|~~~)")
+FENCE = re.compile(r"^\s*(`{3,}|~{3,})(.*)$")
 BLOCK_START = re.compile(r"^\s*(?:#|>|\||```|~~~|---|\*\*\*|___)")
+CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 
-# Every call is pinned to the repository root, takes paths literally, prints paths unquoted,
-# and takes no optional locks, so the output does not depend on the caller's directory or on
-# local configuration.
-GIT = ["git", "--literal-pathspecs", "--no-optional-locks", "-c", "core.quotePath=false"]
+# Every call is pinned to the repository root, takes paths literally, prints them unquoted, takes
+# no optional locks, and overrides the configuration that would change what it reads, so the
+# report does not depend on the caller's directory or on local git configuration. Git never
+# prompts and never fetches a missing object.
+GIT = [
+    "git", "--literal-pathspecs", "--no-optional-locks",
+    "-c", "core.quotePath=false", "-c", "log.showSignature=false",
+]
+ENV = dict(os.environ, GIT_TERMINAL_PROMPT="0", GIT_NO_LAZY_FETCH="1")
 root = "."
 
 
 def probe(*args: str) -> subprocess.CompletedProcess:
-    # Paths travel as UTF-8 bytes both ways, so a non-UTF-8 locale cannot break them.
-    argv = [arg.encode("utf-8") for arg in (*GIT, "-C", root, *args)]
-    return subprocess.run(argv, capture_output=True, encoding="utf-8", errors="replace")
+    # Arguments and output travel as raw bytes (surrogateescape), so no locale and no
+    # non-UTF-8 path or text can break or merge them.
+    argv = [arg.encode("utf-8", "surrogateescape") for arg in (*GIT, "-C", root, *args)]
+    return subprocess.run(
+        argv, stdin=subprocess.DEVNULL, capture_output=True, env=ENV,
+        encoding="utf-8", errors="surrogateescape",
+    )
 
 
 def git(*args: str) -> str:
@@ -53,6 +64,11 @@ def git(*args: str) -> str:
     if result.returncode != 0:
         raise SystemExit(f"prune_candidates: git {' '.join(args)} failed: {result.stderr.strip()}")
     return result.stdout
+
+
+def shown(path: str) -> str:
+    """A path as one report field: control characters are escaped so a row stays one line."""
+    return CONTROL.sub(lambda m: f"\\x{ord(m.group()):02x}", path)
 
 
 def day(epoch: int) -> str:
@@ -68,7 +84,7 @@ def parse_since(value: str) -> datetime:
         parsed = datetime.strptime(value, "%Y-%m-%d")
     except ValueError:
         parsed = None
-    if parsed is None or parsed.strftime("%Y-%m-%d") != value:
+    if parsed is None or parsed.date().isoformat() != value:
         raise argparse.ArgumentTypeError(f"expected a date as YYYY-MM-DD, got {value!r}")
     return parsed.replace(tzinfo=timezone.utc)
 
@@ -82,10 +98,13 @@ def test_candidates(head: str, files: list[str], cutoff: int) -> list[str]:
     for path in files:
         if not re.fullmatch(r"tests/test_[^/]*\.py", path):
             continue
-        last = max(int(t) for t in git("log", "--format=%ct", head, "--", path).split())
+        times = git("log", "--full-history", "--no-follow", "--format=%ct", head, "--", path).split()
+        if not times:
+            raise SystemExit(f"prune_candidates: no commit in the history of {head} changed {shown(path)}")
+        last = max(int(t) for t in times)
         if last < cutoff:
             out.append(
-                f"- {path} | last change {day(last)} | proposal: keep "
+                f"- {shown(path)} | last change {day(last)} | proposal: keep "
                 "(it still runs on every CI run; retire only on a finding that it adds no value)"
             )
     return out
@@ -100,8 +119,13 @@ def skill_texts(head: str, files: list[str]) -> list[str]:
 
 
 def cites(cite: str, text: str) -> bool:
-    """True when text names cite as a whole path, not as part of a longer or nested path."""
-    return re.search(rf"(?<![\w./-]){re.escape(cite)}(?![\w-]|\.\w)", text) is not None
+    """True when text names cite as a whole relative path (optionally ./-prefixed).
+
+    A cite inside a longer path or name, such as ../other/references/x.md, references/x.md/y or
+    references/x.md.bak, does not count; trailing sentence punctuation does.
+    """
+    pattern = rf"(?:^|[^\w./-])(?:\./)?{re.escape(cite)}(?![\w/-]|\.\w)"
+    return re.search(pattern, text, re.MULTILINE) is not None
 
 
 def reference_candidates(files: list[str], skills: list[str]) -> list[str]:
@@ -109,7 +133,7 @@ def reference_candidates(files: list[str], skills: list[str]) -> list[str]:
     for path in sources(files):
         cite = f"references/{path.removeprefix('shared/')}"
         if not any(cites(cite, text) for text in skills):
-            out.append(f"- {path} | no skills/*/SKILL.md cites {cite} | proposal: retire")
+            out.append(f"- {shown(path)} | no skills/*/SKILL.md cites {shown(cite)} | proposal: retire")
     return out
 
 
@@ -118,15 +142,28 @@ def indent(line: str) -> int:
 
 
 def fenced_lines(lines: list[str]) -> list[bool]:
-    """Mark each line inside a fenced code block, fences included."""
+    """Mark each line inside a fenced code block, fences included.
+
+    A fence closes only on the same character repeated at least as many times with nothing after
+    it, so a ``` line inside a ~~~ block (or a shorter fence) stays inside the block.
+    """
     marks = []
-    inside = False
+    opener: str | None = None
     for line in lines:
-        if FENCE.match(line):
-            marks.append(True)
-            inside = not inside
-        else:
-            marks.append(inside)
+        match = FENCE.match(line)
+        if opener is None:
+            if match:
+                opener = match.group(1)
+            marks.append(opener is not None)
+            continue
+        marks.append(True)
+        if (
+            match
+            and match.group(1)[0] == opener[0]
+            and len(match.group(1)) >= len(opener)
+            and not match.group(2).strip()
+        ):
+            opener = None
     return marks
 
 
@@ -160,6 +197,24 @@ def item_end(lines: list[str], fenced: list[bool], start: int, marker: int) -> i
     return end
 
 
+def is_item(lines: list[str], fenced: list[bool], n: int) -> re.Match | None:
+    return None if fenced[n] else ITEM.match(lines[n])
+
+
+def own_lines(lines: list[str], fenced: list[bool], start: int, end: int) -> list[str]:
+    """The lines of the item at start that are not inside one of its nested items."""
+    own = [lines[start]]
+    k = start + 1
+    while k <= end:
+        child = is_item(lines, fenced, k)
+        if child:
+            k = item_end(lines, fenced, k, len(child.group(1))) + 1
+            continue
+        own.append(lines[k])
+        k += 1
+    return own
+
+
 def rule_items(text: str) -> list[tuple[int, int, str]]:
     """Return (first line, last line, text) for each list item whose own lines carry the stop sign.
 
@@ -170,15 +225,12 @@ def rule_items(text: str) -> list[tuple[int, int, str]]:
     lines = text.splitlines()
     fenced = fenced_lines(lines)
     items = []
-    for i, line in enumerate(lines):
-        match = ITEM.match(line)
-        if fenced[i] or not match:
+    for i in range(len(lines)):
+        match = is_item(lines, fenced, i)
+        if not match:
             continue
         end = item_end(lines, fenced, i, len(match.group(1)))
-        own = i
-        while own < end and not (ITEM.match(lines[own + 1]) and not fenced[own + 1]):
-            own += 1
-        if STOP in "\n".join(lines[i : own + 1]):
+        if STOP in "\n".join(own_lines(lines, fenced, i, end)):
             items.append((i + 1, end + 1, "\n".join(lines[i : end + 1])))
     return items
 
@@ -191,7 +243,7 @@ def cited_rules(texts: list[str], haystack: str) -> set[int]:
     """Return the indexes of the texts that share a WINDOW-character run with the haystack.
 
     A text no longer than WINDOW counts as cited only when the haystack holds all of it with no
-    word character on either side. An empty text is never cited.
+    letter or digit on either side. An empty text is never cited.
     """
     found = set()
     index: dict[str, list[int]] = {}
@@ -199,7 +251,7 @@ def cited_rules(texts: list[str], haystack: str) -> set[int]:
         if not text:
             continue
         if len(text) <= WINDOW:
-            if re.search(rf"(?<!\w){re.escape(text)}(?!\w)", haystack):
+            if re.search(rf"(?<![^\W_]){re.escape(text)}(?![^\W_])", haystack):
                 found.add(n)
             continue
         for k in range(len(text) - WINDOW + 1):
@@ -219,6 +271,18 @@ def last_change(head: str, path: str, first: int, last: int) -> int:
     return max(int(line.split()[1]) for line in blame.splitlines() if line.startswith("committer-time "))
 
 
+def blobs(head: str) -> list[str]:
+    """Every file path in the tree of head; submodules and other non-blob entries are skipped."""
+    out = []
+    for entry in git("ls-tree", "-r", "-z", head).split("\0"):
+        if not entry:
+            continue
+        meta, _, path = entry.partition("\t")
+        if meta.split()[1] == "blob":
+            out.append(path)
+    return out
+
+
 def rule_candidates(head: str, files: list[str], skills: list[str], cutoff: int) -> list[str]:
     tests = [show(head, f) for f in files if f.startswith("tests/")]
     haystack = "\n".join(collapse(t).lower() for t in tests + skills)
@@ -235,7 +299,7 @@ def rule_candidates(head: str, files: list[str], skills: list[str], cutoff: int)
         changed = last_change(head, path, first, last)
         if changed < cutoff:
             out.append(
-                f"- {path}:{first} | last change {day(changed)} | \"{text}\" | proposal: retire "
+                f"- {shown(path)}:{first} | last change {day(changed)} | \"{text}\" | proposal: retire "
                 "(no test or SKILL.md quotes it)"
             )
     return out
@@ -249,8 +313,9 @@ def refusal(reason: str) -> int:
 def partial_clone() -> bool:
     if probe("config", "--get", "extensions.partialClone").stdout.strip():
         return True
-    promisors = probe("config", "--get-regexp", r"^remote\..*\.promisor$").stdout.split("\n")
-    return any(line.split(" ", 1)[-1].strip().lower() == "true" for line in promisors if line)
+    # --type=bool makes git apply its own boolean parsing, so yes, on and 1 all read as true.
+    promisors = probe("config", "--type=bool", "--get-regexp", r"^remote\..*\.promisor$").stdout
+    return any(line.rsplit(" ", 1)[-1] == "true" for line in promisors.splitlines())
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -260,7 +325,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--since", required=True, type=parse_since, metavar="YYYY-MM-DD")
     args = parser.parse_args(argv)
 
-    root = git("rev-parse", "--show-toplevel").strip()
+    root = git("rev-parse", "--show-toplevel").removesuffix("\n")
     if git("rev-parse", "--is-shallow-repository").strip() == "true":
         return refusal(
             "shallow clone, whose history is incomplete; run `git fetch --unshallow` or use a full clone"
@@ -271,9 +336,9 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     head = git("rev-parse", "--verify", "HEAD^{commit}").strip()
-    since = args.since.strftime("%Y-%m-%d")
+    since = args.since.date().isoformat()
     cutoff = int(args.since.timestamp())
-    files = [f for f in git("ls-tree", "-r", "-z", "--name-only", head).split("\0") if f]
+    files = blobs(head)
     skills = skill_texts(head, files)
 
     print("Pruning candidates (proposals only; the owner decides, nothing is removed)")

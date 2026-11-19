@@ -30,8 +30,10 @@ TESTS = f"tests untouched since {SINCE}"
 REFERENCES = "reference files uncited at this commit"
 RULES = f"rules uncited at this commit, unchanged since {SINCE}"
 
-# An outer git environment (GIT_DIR, GIT_INDEX_FILE, a hooks path) must not leak into the fixture.
+# An outer git environment (GIT_DIR, GIT_INDEX_FILE) or global configuration (excludes, hooks,
+# templates) must not leak into the fixture.
 ENV = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+ENV.update(GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1")
 
 
 def git(repo: Path, *args: str, date: str | None = None) -> str:
@@ -67,7 +69,7 @@ def repo(tmp_path: Path) -> Path:
     repo.mkdir()
     hooks = tmp_path / "no-hooks"
     hooks.mkdir()
-    git(repo, "init", "-q")
+    git(repo, "init", "-q", "--template=")
     git(repo, "config", "user.email", "agent-skills@example.com")
     git(repo, "config", "user.name", "agent-skills")
     git(repo, "config", "commit.gpgsign", "false")  # an inherited signing config must not break the fixture
@@ -358,3 +360,146 @@ def test_real_checkout_reports_or_refuses_a_shallow_clone() -> None:
     assert result.returncode == 0, result.stderr
     assert result.stdout.splitlines()[1] == f"commit: {git(ROOT, 'rev-parse', 'HEAD').strip()}"
     sections(result.stdout)
+
+
+def test_a_promisor_remote_spelled_yes_is_still_refused(repo: Path, tmp_path: Path) -> None:
+    git(repo, "config", "uploadpack.allowFilter", "true")
+    partial = tmp_path / "partial"
+    subprocess.run(
+        ["git", "clone", "-q", "--no-checkout", "--filter=blob:none", f"file://{repo}", str(partial)],
+        check=True, capture_output=True, env=ENV,
+    )
+    assert "extensions.partialclone" not in git(partial, "config", "--list").lower()  # only the remote marks it
+    git(partial, "config", "remote.origin.promisor", "yes")
+    before = snapshot(partial)
+    result = run(partial, "--since", SINCE)
+    assert result.returncode == 2
+    assert "partial clone" in result.stderr
+    assert snapshot(partial) == before
+
+
+def test_log_follow_config_does_not_change_the_result(repo: Path) -> None:
+    write(repo, "tests/test_source.py", "def test_source():\n    assert True\n")
+    commit(repo, NEW, "a recent test")
+    git(repo, "mv", "tests/test_source.py", "tests/test_renamed.py")
+    commit(repo, OLD, "a backdated rename")
+    expected = run(repo, "--since", SINCE).stdout
+    assert "- tests/test_renamed.py |" in expected  # the path, not its rename history, is measured
+    git(repo, "config", "log.follow", "true")
+    git(repo, "config", "log.showSignature", "true")
+    result = run(repo, "--since", SINCE)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == expected
+
+
+def test_a_change_merged_from_a_side_branch_counts(repo: Path) -> None:
+    main = git(repo, "rev-parse", "--abbrev-ref", "HEAD").strip()
+    git(repo, "checkout", "-qb", "side")
+    write(repo, "tests/test_old.py", "def test_old():\n    assert 'side'\n")
+    commit(repo, NEW, "change on side")
+    git(repo, "checkout", "-q", main)
+    git(repo, "merge", "-q", "-s", "ours", "--no-edit", "side", date=OLD)
+    assert category(repo, TESTS) == [f"{TESTS}: 0"]
+
+
+def test_a_change_at_exactly_the_cutoff_is_not_before_it(repo: Path) -> None:
+    write(repo, "tests/test_old.py", "def test_old():\n    assert 3\n")
+    commit(repo, "2025-01-01T00:00:00+00:00", "a change at the cutoff")
+    assert category(repo, TESTS) == [f"{TESTS}: 0"]
+    later = "tests untouched since 2025-01-02"
+    assert category(repo, later, since="2025-01-02")[0] == f"{later}: 1"
+
+
+def test_a_submodule_under_tests_is_skipped(repo: Path) -> None:
+    head = git(repo, "rev-parse", "HEAD").strip()
+    git(repo, "update-index", "--add", "--cacheinfo", f"160000,{head},tests/submodule")
+    git(repo, "commit", "-qm", "a submodule entry", date=OLD)
+    result = run(repo, "--since", SINCE)
+    assert result.returncode == 0, result.stderr
+    sections(result.stdout)
+
+
+def test_odd_paths_stay_on_one_row(repo: Path, tmp_path: Path) -> None:
+    write(repo, "tests/test_new\nline.py", "def test_newline():\n    assert True\n")
+    commit(repo, OLD, "a test name with a newline")
+    lines = category(repo, TESTS)
+    assert lines[0] == f"{TESTS}: 2"
+    assert any(line.startswith("- tests/test_new\\x0aline.py |") for line in lines[1:])
+
+    spaced = tmp_path / "clone "
+    subprocess.run(["git", "clone", "-q", f"file://{repo}", str(spaced)], check=True, capture_output=True, env=ENV)
+    result = run(spaced, "--since", SINCE)
+    assert result.returncode == 0, result.stderr
+
+
+def test_a_non_utf8_path_is_read(repo: Path) -> None:
+    os.makedirs(repo / "tests", exist_ok=True)
+    (repo / os.fsdecode(b"tests/test_\xff.py")).write_text("def test_byte():\n    assert True\n")
+    commit(repo, OLD, "a test name that is not UTF-8")
+    lines = category(repo, TESTS)
+    assert lines[0] == f"{TESTS}: 2"
+
+
+def test_citation_boundaries(repo: Path) -> None:
+    write(
+        repo, "skills/alpha/SKILL.md",
+        "Read references/cited.md and (./references/rules.md).\n"
+        "Not citations: references/orphan.md/other, orphan.md, skills/alpha/references/orphan.md.\n",
+    )
+    write(repo, "skills/alpha/references/notes.md", "See references/orphan.md.\n")
+    commit(repo, NEW, "near-miss citations")
+    lines = category(repo, REFERENCES)
+    assert lines[0] == f"{REFERENCES}: 1"
+    assert lines[1].startswith("- shared/orphan.md")
+
+
+def test_a_fence_closes_only_on_its_own_delimiter(repo: Path) -> None:
+    append(
+        repo, "shared/rules.md",
+        "\n~~~markdown\n```\n- ⛔ Example only: still inside the tilde fence here.\n```\n~~~\n",
+    )
+    commit(repo, OLD, "a mixed fence")
+    assert category(repo, RULES)[0] == f"{RULES}: 1"
+
+
+def test_a_stop_sign_after_a_nested_item_is_not_lost(repo: Path) -> None:
+    append(
+        repo, "shared/rules.md",
+        "\n- Parent opening line with no marker.\n  - A plain child item.\n"
+        "  ⛔ The parent's own continuation after the child carries the marker.\n",
+    )
+    commit(repo, OLD, "a marker after a child")
+    lines = category(repo, RULES)
+    assert lines[0] == f"{RULES}: 2"
+    assert any("continuation after the child carries the marker" in line for line in lines[1:])
+
+
+def test_a_nested_rule_under_a_plain_parent_is_its_own_rule(repo: Path) -> None:
+    append(
+        repo, "shared/rules.md",
+        "\n- A plain parent item about the gearbox.\n  - ⛔ Never open the nested gearbox cover while powered.\n",
+    )
+    commit(repo, OLD, "a nested rule")
+    lines = category(repo, RULES)
+    assert lines[0] == f"{RULES}: 2"
+    assert any(line.startswith("- shared/rules.md:") and "| \"Never open the nested" in line for line in lines[1:])
+
+
+def test_a_forty_character_rule_needs_a_whole_match(repo: Path) -> None:
+    rule = "Exactly forty characters in this rule!!."
+    assert len(rule) == 40
+    append(repo, "shared/rules.md", f"\n- ⛔ {rule}\n- ⛔ Oil it.\n")
+    write(repo, "tests/test_forty.py", f"A = 'x{rule}x'\nB = '_oil it._'\n")
+    commit(repo, OLD, "boundary rules")
+    lines = category(repo, RULES)
+    assert lines[0] == f"{RULES}: 2"
+    assert any('"Exactly forty' in line for line in lines[1:])
+
+
+def test_since_is_required_and_accepts_year_one(repo: Path) -> None:
+    missing = run(repo)
+    assert missing.returncode == 2
+    assert "--since" in missing.stderr
+    early = run(repo, "--since", "0001-01-01")
+    assert early.returncode == 0, early.stderr
+    assert "since: 0001-01-01" in early.stdout
