@@ -235,6 +235,21 @@ Review roles run as subagents or as shell-launched CLIs (for example `codex exec
   Only npm/registry access is needed for installation.
 - Markdown puts one sentence per line.
 
+### Workflow files are judged by the base copy
+
+The `gate-base` check judges every pull request's `.github/workflows/*.yml` files by the base branch's copy, not the pull request's own.
+`.github/workflows/gate-base.yml` runs on `pull_request_target`, so its file and `scripts/gate_integrity.py` come from the base commit; the pull request head is checked out as data and never executed.
+It reports a check run named `gate-base` on the pull request head SHA.
+A pull request may add workflows, jobs and steps, and may rename a workflow or job.
+It fails `gate-base` when it removes or changes any base workflow, job or step field, reorders base steps, changes a trigger, removes `gate-base.yml`, or changes `scripts/gate_integrity.py`.
+Scripts and tests that the workflows run stay judged by the pull request's own `checks` run.
+
+An intended gate change fails `gate-base` by design.
+For one, the owner sets the `main` ruleset to disabled, merges the pull request with a merge commit, sets the ruleset back to active, and records both ruleset read-backs on the pull request.
+
+Merges into `main` are signed merge commits.
+There is no bypass: the ruleset's bypass list stays empty, for the owner too.
+
 ## License
 
 [Apache-2.0](LICENSE)

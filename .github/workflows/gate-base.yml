@@ -1,0 +1,60 @@
+name: gate-base
+
+# Judges a pull request's workflow files with the base branch's copy of
+# scripts/gate_integrity.py, so a pull request cannot weaken the gate that judges it.
+# pull_request_target runs this file and every command from the base commit; the PR
+# head is checked out as data only and nothing in it is executed.
+on:
+  pull_request_target:
+
+permissions:
+  contents: read
+  checks: write
+
+jobs:
+  gate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out the base commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          path: base
+          persist-credentials: false
+      - name: Check out the PR head as data
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: head
+          persist-credentials: false
+          sparse-checkout: |
+            .github/workflows/
+            scripts/gate_integrity.py
+          sparse-checkout-cone-mode: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: false
+      - name: Judge the head workflows with the base gate
+        id: judge
+        run: >-
+          uv run --locked --project base python base/scripts/gate_integrity.py
+          --base base/.github/workflows --head head/.github/workflows
+          --base-script base/scripts/gate_integrity.py --head-script head/scripts/gate_integrity.py
+          | tee "$RUNNER_TEMP/gate.log"
+      # A pull_request_target job's own check run attaches to the base commit, so the
+      # required gate-base check is created on the PR head SHA through the Checks API.
+      - name: Report gate-base on the PR head
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          OUTCOME: ${{ steps.judge.outcome }}
+        run: |
+          if [ "$OUTCOME" = success ]; then conclusion=success; else conclusion=failure; fi
+          [ -s "$RUNNER_TEMP/gate.log" ] || echo "gate-integrity did not run (outcome: $OUTCOME)" > "$RUNNER_TEMP/gate.log"
+          gh api --method POST "repos/$REPO/check-runs" \
+            -f name=gate-base -f "head_sha=$HEAD_SHA" -f status=completed -f "conclusion=$conclusion" \
+            -f "output[title]=gate-base: $conclusion" -F "output[summary]=@$RUNNER_TEMP/gate.log"

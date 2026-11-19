@@ -1,0 +1,305 @@
+"""The gate-integrity check that the base branch runs over a pull request's workflow files."""
+
+import copy
+import re
+import shlex
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+import yaml
+
+ROOT = Path(__file__).resolve().parents[1]
+SCRIPT = ROOT / "scripts/gate_integrity.py"
+GATE_BASE = ROOT / ".github/workflows/gate-base.yml"
+
+CI = {
+    "name": "ci",
+    "on": {"pull_request": None, "push": {"branches": ["main"]}},
+    "permissions": {"contents": "read"},
+    "jobs": {
+        "checks": {
+            "runs-on": "ubuntu-24.04",
+            "timeout-minutes": 15,
+            "steps": [
+                {"uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"},
+                {"uses": "astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7",
+                 "with": {"enable-cache": False}},
+                {"name": "Repository tests", "run": "uv run --locked pytest -q"},
+                {"name": "Validate skills", "run": "skills-ref validate skills/a/"},
+            ],
+        },
+    },
+}
+
+GATE = {
+    "name": "gate-base",
+    "on": {"pull_request_target": None},
+    "permissions": {"contents": "read", "checks": "write"},
+    "jobs": {"gate": {"runs-on": "ubuntu-24.04",
+                      "steps": [{"name": "Judge", "run": "python3 base/scripts/gate_integrity.py"}]}},
+}
+
+SCRIPT_TEXT = "print('judge')\n"
+
+
+def write_tree(root, workflows, script=SCRIPT_TEXT):
+    directory = root / ".github/workflows"
+    directory.mkdir(parents=True)
+    for name, workflow in workflows.items():
+        (directory / name).write_text(yaml.safe_dump(workflow, sort_keys=False))
+    if script is not None:
+        (root / "scripts").mkdir()
+        (root / "scripts/gate_integrity.py").write_text(script)
+    return root
+
+
+def judge(tmp_path, head_workflows, head_script=SCRIPT_TEXT):
+    base = write_tree(tmp_path / "base", {"ci.yml": CI, "gate-base.yml": GATE})
+    head = write_tree(tmp_path / "head", head_workflows, head_script)
+    return subprocess.run(
+        [sys.executable, str(SCRIPT),
+         "--base", str(base / ".github/workflows"), "--head", str(head / ".github/workflows"),
+         "--base-script", str(base / "scripts/gate_integrity.py"),
+         "--head-script", str(head / "scripts/gate_integrity.py")],
+        capture_output=True, text=True, timeout=30,
+    )
+
+
+def head_with(change):
+    ci = copy.deepcopy(CI)
+    change(ci)
+    return {"ci.yml": ci, "gate-base.yml": copy.deepcopy(GATE)}
+
+
+def steps(ci):
+    return ci["jobs"]["checks"]["steps"]
+
+
+def test_unchanged_workflows_pass(tmp_path):
+    result = judge(tmp_path, head_with(lambda ci: None))
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_a_renamed_workflow_passes(tmp_path):
+    result = judge(tmp_path, head_with(lambda ci: ci.update(name="ci renamed")))
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize("where", [0, 2, 4], ids=["first", "between", "last"])
+def test_a_named_step_added_passes(tmp_path, where):
+    result = judge(tmp_path, head_with(
+        lambda ci: steps(ci).insert(where, {"name": "Lint", "run": "uv run ruff check"})))
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_a_job_added_passes(tmp_path):
+    result = judge(tmp_path, head_with(lambda ci: ci["jobs"].update(
+        lint={"runs-on": "ubuntu-24.04", "steps": [{"run": "true"}]})))
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_a_workflow_added_passes(tmp_path):
+    workflows = head_with(lambda ci: None)
+    workflows["extra.yml"] = {"on": {"push": None}, "jobs": {"x": {"steps": [{"run": "true"}]}}}
+    result = judge(tmp_path, workflows)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def drop_named(name):
+    return lambda ci: steps(ci).remove(next(s for s in steps(ci) if s.get("name") == name))
+
+
+VIOLATIONS = {
+    "step removed": (drop_named("Validate skills"), "Validate skills"),
+    "unnamed step removed": (lambda ci: steps(ci).pop(0), "unnamed step 1"),
+    "step text changed": (lambda ci: steps(ci)[2].update(run="true"), "Repository tests"),
+    "if false on a base step": (lambda ci: steps(ci)[3].update({"if": False}), "Validate skills"),
+    "continue-on-error on a base step": (
+        lambda ci: steps(ci)[2].update({"continue-on-error": True}), "Repository tests"),
+    "with changed on an unnamed step": (
+        lambda ci: steps(ci)[1]["with"].update({"enable-cache": True}), "unnamed step 2"),
+    "env added to a base step": (
+        lambda ci: steps(ci)[2].update(env={"PYTEST_ADDOPTS": "-k nothing"}), "Repository tests"),
+    "base steps reordered": (
+        lambda ci: steps(ci).insert(2, steps(ci).pop(3)), "order"),
+    "unnamed base steps reordered": (
+        lambda ci: steps(ci).insert(0, steps(ci).pop(1)), "unnamed step"),
+    "trigger narrowed": (lambda ci: ci["on"].pop("push"), "trigger"),
+    "push branches narrowed": (
+        lambda ci: ci["on"]["push"].update(branches=["release"]), "trigger"),
+    "job removed": (lambda ci: ci["jobs"].pop("checks"), "checks"),
+    "job if false": (lambda ci: ci["jobs"]["checks"].update({"if": False}), "checks"),
+    "job continue-on-error": (
+        lambda ci: ci["jobs"]["checks"].update({"continue-on-error": True}), "checks"),
+    "job timeout changed": (
+        lambda ci: ci["jobs"]["checks"].update({"timeout-minutes": 1}), "checks"),
+    "workflow permissions changed": (
+        lambda ci: ci.update(permissions={"contents": "write"}), "permissions"),
+    "workflow env added": (lambda ci: ci.update(env={"CI": "false"}), "env"),
+}
+
+
+@pytest.mark.parametrize("change,mentions", VIOLATIONS.values(), ids=VIOLATIONS.keys())
+def test_each_violation_fails(tmp_path, change, mentions):
+    result = judge(tmp_path, head_with(change))
+    assert result.returncode != 0, result.stdout + result.stderr
+    assert mentions in result.stdout + result.stderr
+
+
+def test_gate_base_removed_fails(tmp_path):
+    result = judge(tmp_path, {"ci.yml": copy.deepcopy(CI)})
+    assert result.returncode != 0
+    assert "gate-base.yml" in result.stdout + result.stderr
+
+
+def test_gate_base_trigger_changed_fails(tmp_path):
+    gate = copy.deepcopy(GATE)
+    gate["on"] = {"pull_request": None}
+    result = judge(tmp_path, {"ci.yml": copy.deepcopy(CI), "gate-base.yml": gate})
+    assert result.returncode != 0
+    assert "trigger" in result.stdout + result.stderr
+
+
+def test_ci_workflow_removed_fails(tmp_path):
+    result = judge(tmp_path, {"gate-base.yml": copy.deepcopy(GATE)})
+    assert result.returncode != 0
+    assert "ci.yml" in result.stdout + result.stderr
+
+
+@pytest.mark.parametrize("script", ["print('pass')\n", None], ids=["changed", "removed"])
+def test_a_head_gate_script_that_differs_from_base_fails(tmp_path, script):
+    result = judge(tmp_path, head_with(lambda ci: None), head_script=script)
+    assert result.returncode != 0
+    assert "gate_integrity.py" in result.stdout + result.stderr
+
+
+def test_unparseable_head_workflow_fails(tmp_path):
+    workflows = head_with(lambda ci: None)
+    head = write_tree(tmp_path / "head", workflows)
+    (head / ".github/workflows/ci.yml").write_text("jobs: [unclosed\n")
+    base = write_tree(tmp_path / "base", {"ci.yml": CI, "gate-base.yml": GATE})
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--base", str(base / ".github/workflows"),
+         "--head", str(head / ".github/workflows")],
+        capture_output=True, text=True, timeout=30)
+    assert result.returncode != 0
+    assert "ci.yml" in result.stdout + result.stderr
+
+
+def test_a_symlinked_head_workflow_fails(tmp_path):
+    base = write_tree(tmp_path / "base", {"ci.yml": CI, "gate-base.yml": GATE})
+    head = write_tree(tmp_path / "head", {"gate-base.yml": GATE})
+    (head / ".github/workflows/ci.yml").symlink_to(base / ".github/workflows/ci.yml")
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--base", str(base / ".github/workflows"),
+         "--head", str(head / ".github/workflows")],
+        capture_output=True, text=True, timeout=30)
+    assert result.returncode != 0
+    assert "ci.yml" in result.stdout + result.stderr
+
+
+def test_the_repository_workflows_pass_against_themselves():
+    workflows = ROOT / ".github/workflows"
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--base", str(workflows), "--head", str(workflows),
+         "--base-script", str(SCRIPT), "--head-script", str(SCRIPT)],
+        capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+# The gate-base workflow itself.
+
+def gate_workflow():
+    return yaml.safe_load(GATE_BASE.read_text())
+
+
+def all_steps(workflow):
+    return [step for job in workflow["jobs"].values() for step in job.get("steps", [])]
+
+
+def test_gate_base_triggers_only_on_pull_request_target_without_a_paths_filter():
+    workflow = gate_workflow()
+    # yaml.safe_load reads the bare key `on` as the boolean True.
+    assert "on" not in workflow
+    assert list(workflow[True]) == ["pull_request_target"]
+    trigger = workflow[True]["pull_request_target"] or {}
+    assert "paths" not in trigger and "paths-ignore" not in trigger
+
+
+def test_gate_base_permissions_are_exactly_contents_read_and_checks_write():
+    workflow = gate_workflow()
+    assert workflow["permissions"] == {"contents": "read", "checks": "write"}
+    assert all("permissions" not in job for job in workflow["jobs"].values())
+
+
+def test_every_checkout_is_pinned_by_sha_without_persisted_credentials():
+    checkouts = [s for s in all_steps(gate_workflow()) if s.get("uses", "").startswith("actions/checkout@")]
+    assert len(checkouts) == 2
+    for step in checkouts:
+        assert re.fullmatch(r"actions/checkout@[0-9a-f]{40}", step["uses"]), step["uses"]
+        assert step["with"]["persist-credentials"] is False
+
+
+def test_every_action_is_pinned_by_sha():
+    for step in all_steps(gate_workflow()):
+        if "uses" in step:
+            assert re.fullmatch(r"[\w.-]+/[\w.-]+@[0-9a-f]{40}", step["uses"]), step["uses"]
+
+
+def test_no_cache_is_enabled():
+    for step in all_steps(gate_workflow()):
+        uses = step.get("uses", "")
+        assert not uses.startswith("actions/cache"), uses
+        inputs = step.get("with", {})
+        assert "cache" not in inputs
+        if uses.startswith("astral-sh/setup-uv@"):
+            # setup-uv caches by default on GitHub-hosted runners.
+            assert inputs.get("enable-cache") is False
+
+
+def test_no_secret_is_referenced():
+    assert "secrets." not in GATE_BASE.read_text()
+
+
+def test_exactly_one_job_with_id_gate_and_no_name():
+    jobs = gate_workflow()["jobs"]
+    assert list(jobs) == ["gate"]
+    assert "name" not in jobs["gate"]
+
+
+def test_the_head_is_checked_out_as_data_at_the_pr_head_sha():
+    checkouts = {s["with"]["path"]: s for s in all_steps(gate_workflow())
+                 if s.get("uses", "").startswith("actions/checkout@")}
+    assert set(checkouts) == {"base", "head"}
+    assert checkouts["base"]["with"]["ref"] == "${{ github.sha }}"
+    head = checkouts["head"]["with"]
+    assert head["ref"] == "${{ github.event.pull_request.head.sha }}"
+    assert head["repository"] == "${{ github.event.pull_request.head.repo.full_name }}"
+    # Nothing under head/ is executed: a head path appears only as a data argument of the gate.
+    for step in all_steps(gate_workflow()):
+        words = shlex.split(step.get("run", ""))
+        for i, word in enumerate(words):
+            if re.match(r"(\./)?head(/|$)", word):
+                assert i > 0 and words[i - 1] in ("--head", "--head-script"), word
+
+
+def test_the_base_gate_script_judges_the_head_workflows():
+    [judge_step] = [s for s in all_steps(gate_workflow()) if s.get("id") == "judge"]
+    run = judge_step["run"]
+    assert "base/scripts/gate_integrity.py" in run
+    assert "--base base/.github/workflows" in run
+    assert "--head head/.github/workflows" in run
+    assert "--base-script base/scripts/gate_integrity.py" in run
+    assert "--head-script head/scripts/gate_integrity.py" in run
+
+
+def test_the_check_run_gate_base_is_created_on_the_pr_head_sha():
+    [report] = [s for s in all_steps(gate_workflow()) if "check-runs" in s.get("run", "")]
+    assert report["if"] == "always()"
+    assert "name=gate-base" in report["run"]
+    assert '"head_sha=$HEAD_SHA"' in report["run"]
+    assert report["env"]["HEAD_SHA"] == "${{ github.event.pull_request.head.sha }}"
+    assert report["env"]["OUTCOME"] == "${{ steps.judge.outcome }}"
+    assert report["env"]["GH_TOKEN"] == "${{ github.token }}"
