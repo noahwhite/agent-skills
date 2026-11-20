@@ -63,21 +63,30 @@ review:
   shadow_adjudicators: []
   merge_owner: agent
   pre_pr:
+    # Owner directive 2026-11-20: sweep GLM-5.3 Flash, verify-and-hunt Kimi K3 Pro,
+    # arbitrate GPT-6.2 Astra. Each seat was probed for reachability in this container that day.
+    # Sweeper: GLM-5.3 Flash has no working route here - opencode-go/glm-5.3-flash is at its
+    # monthly usage limit, opencode/glm-5.3-flash has an insufficient balance, and
+    # openrouter/z-ai/glm-5.3-flash sits on a key whose total limit is spent. No Zhipu credential
+    # is configured. The seat therefore stays on DeepSeek V4.1 Flash until a GLM route has credit;
+    # the one-line change is this entry's name and model.
     sweeper:
       name: DeepSeek V4.1 Flash
       runtime: opencode
       model: deepseek/deepseek-flash
+    # Kimi K3 Pro runs as moonshotai/kimi-k3.1-pro, which answered on 2026-11-20. The kimi
+    # provider that reads KIMI_API_KEY serves only kimi/kimi-k3, and the kimi-code-plan ids
+    # reject that key, so K3 Pro cannot be addressed through the kimi provider here.
+    # Hunter and arbiter keep distinct labs (Moonshot, OpenAI), and the arbiter keeps a different
+    # lab from the DeepSeek sweeper and adjudicator.
     hunter:
-      name: GPT-6.2 Sol
-      runtime: codex
-      model: gpt-6.2-sol
-    # Owner decision 2026-11-11: the arbiter is Mistral Large 4 through OpenRouter (mistral lab),
-    # verified answering in this container. It replaces GLM-5.3-Flash on
-    # opencode/glm-5.3-flash-free, whose free tier failed with "Free usage limit reached" (429).
-    arbiter:
-      name: Mistral Large 4
+      name: Kimi K3 Pro
       runtime: opencode
-      model: openrouter/mistralai/mistral-large-4-0
+      model: moonshotai/kimi-k3.1-pro
+    arbiter:
+      name: GPT-6.2 Astra
+      runtime: opencode
+      model: openai/gpt-6.2-astra
     simplicity_reviewer:
       name: DeepSeek V4 Pro
       runtime: opencode
