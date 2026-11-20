@@ -63,26 +63,22 @@ review:
   shadow_adjudicators: []
   merge_owner: agent
   pre_pr:
-    # Owner directive 2026-11-20: sweep GLM-5.3 Flash, verify-and-hunt Kimi K3 Pro,
-    # arbitrate GPT-6.2 Astra. Each seat was probed for reachability in this container that day.
-    # Sweeper: GLM-5.3 Flash has no working route here - opencode-go/glm-5.3-flash is at its
-    # monthly usage limit, opencode/glm-5.3-flash has an insufficient balance, and
-    # openrouter/z-ai/glm-5.3-flash sits on a key whose total limit is spent. No Zhipu credential
-    # is configured. The seat therefore stays on DeepSeek V4.1 Flash until a GLM route has credit;
-    # the one-line change is this entry's name and model.
+    # Owner directive 2026-11-20, in two parts: sweep GLM-5.3 Flash, verify-and-hunt Kimi K3 Pro,
+    # arbitrate GPT-6.2 Astra; the owner then raised the OpenRouter key limit, so GLM-5.3 Flash is
+    # routable again and the sweep seat takes it. Every seat below was probed answering in this
+    # container on 2026-11-20 after that change.
+    # Lab spread: sweeper zhipu (OpenRouter), hunter Moonshot, arbiter OpenAI, adjudicator DeepSeek.
     sweeper:
-      name: DeepSeek V4.1 Flash
+      name: GLM-5.3 Flash
       runtime: opencode
-      model: deepseek/deepseek-flash
-    # Kimi K3 Pro runs as moonshotai/kimi-k3.1-pro, which answered on 2026-11-20. The kimi
-    # provider that reads KIMI_API_KEY serves only kimi/kimi-k3, and the kimi-code-plan ids
-    # reject that key, so K3 Pro cannot be addressed through the kimi provider here.
-    # Hunter and arbiter keep distinct labs (Moonshot, OpenAI), and the arbiter keeps a different
-    # lab from the DeepSeek sweeper and adjudicator.
+      model: openrouter/z-ai/glm-5.3-flash
+    # Kimi K3 Pro on the kimi provider, which reads KIMI_API_KEY. The provider's model list needed
+    # a kimi-k3.1-pro entry in the container's opencode.json to resolve the id; the durable copy of
+    # that entry belongs in the image's own configuration.
     hunter:
       name: Kimi K3 Pro
       runtime: opencode
-      model: moonshotai/kimi-k3.1-pro
+      model: kimi/kimi-k3.1-pro
     arbiter:
       name: GPT-6.2 Astra
       runtime: opencode
