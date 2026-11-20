@@ -54,9 +54,13 @@ git:
 review:
   # Owner directive 2026-11-20: the reviewer runs Gemini 3.8 Flash through OpenRouter.
   # The Google provider's own prepayment credits are depleted and the Copilot route refuses this
-  # container's PAT, so OpenRouter is the working route; the seat was probed answering 2026-11-20.
-  # With this change every gate seat sits on its own lab: reviewer Google, arbiter OpenAI,
-  # hunter Moonshot, sweeper zhipu, adjudicator DeepSeek.
+  # container's PAT, so OpenRouter is the working route; the seat answered a probe on 2026-11-20.
+  # Labs across the gate: reviewer Google, arbiter OpenAI, hunter Moonshot, sweeper zhipu, and the
+  # adjudicator DeepSeek, so those five roles are pairwise distinct; the simplicity reviewer shares
+  # the adjudicator's DeepSeek lab, and it and the fixer sit outside this gate's phases.
+  # The opencode runtime enforces no filesystem sandbox here, unlike the codex seat it replaces, so
+  # the reviewer's read-only rule is prompt-level: launch it against a throwaway detached worktree,
+  # never the branch, and treat any edit it makes as a failed round.
   reviewer:
     name: Gemini 3.8 Flash
     runtime: opencode
@@ -68,22 +72,28 @@ review:
   shadow_adjudicators: []
   merge_owner: agent
   pre_pr:
-    # Owner directive 2026-11-20, in two parts: sweep GLM-5.3 Flash, verify-and-hunt Kimi K3 Pro,
-    # arbitrate GPT-6.2 Astra; the owner then raised the OpenRouter key limit, so GLM-5.3 Flash is
-    # routable again and the sweep seat takes it. Every seat below was probed answering in this
-    # container on 2026-11-20 after that change.
-    # Lab spread: sweeper zhipu (OpenRouter), hunter Moonshot, arbiter OpenAI, adjudicator DeepSeek.
+    # Owner directive 2026-11-20: sweep GLM-5.3 Flash, verify-and-hunt Kimi K3.1 Pro, arbitrate
+    # GPT-6.2 Astra. The owner raised the OpenRouter key limit the same day, which is what makes the
+    # GLM sweep seat routable. Those three seats, plus the reviewer above, each answered a probe in
+    # this container on 2026-11-20; that claim covers those four seats only. The fixer seat below did
+    # not answer and cannot: every Anthropic route is revoked here (SKL-397).
+    # Labs: sweeper zhipu (OpenRouter), hunter Moonshot, arbiter OpenAI, adjudicator DeepSeek.
     sweeper:
       name: GLM-5.3 Flash
       runtime: opencode
       model: openrouter/z-ai/glm-5.3-flash
-    # Kimi K3 Pro on the kimi provider, which reads KIMI_API_KEY. The provider's model list needed
-    # a kimi-k3.1-pro entry in the container's opencode.json to resolve the id; the durable copy of
-    # that entry belongs in the image's own configuration.
+    # Kimi K3.1 Pro runs on the moonshotai provider, not the kimi provider: the kimi provider that
+    # reads KIMI_API_KEY registers only kimi-k3, and adding kimi-k3.1-pro to opencode.json is a
+    # live-container edit that entrypoint.sh overwrites at every start, which would kill this
+    # mandatory seat on the next restart. The moonshotai entry is part of the image's model
+    # registry, so it survives. Move the seat to kimi/kimi-k3.1-pro only once the image ships that
+    # model registration.
     hunter:
-      name: Kimi K3 Pro
+      name: Kimi K3.1 Pro
       runtime: opencode
-      model: kimi/kimi-k3.1-pro
+      model: moonshotai/kimi-k3.1-pro
+    # The hunt mutates and runs code, so give it a phase timeout well above the 900-second default:
+    # on a 40-line diff it needed 819 seconds and a 900-second run was killed mid-report.
     arbiter:
       name: GPT-6.2 Astra
       runtime: opencode
