@@ -634,8 +634,9 @@ def test_qa_added_blocks_appear_once_in_order() -> None:
 # the incomplete line in the completion summary and the todo-tracking index line; tests/test_qa_await_gate.py
 # pins the first two, and the index line is pinned only by this hash.
 # SKL-386 re-baselined it for its one change outside the blocks: the new section 5 bullet that names the
-# evidence skeleton generator `skills/qa-verification/scripts/qa-evidence.py`.
-QA_BASE_SHA256 = "0480e2ace0b8055801678c6c31e4ffcbd4b019fff487addd4bd90337e0999aee"
+# evidence skeleton generator, which the arbitration's fix round re-baselined again when the bullet's command
+# moved to `<skill dir>/scripts/qa-evidence.py` and the bullet named the generator's label constraints.
+QA_BASE_SHA256 = "fd7b4199086013a3f6c662fa91b29d35a271eca6137f4d05c04c3428d5d6cd3d"
 
 
 def test_qa_text_outside_the_added_blocks_is_unchanged() -> None:

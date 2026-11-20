@@ -139,7 +139,10 @@ If `profile.qa.evidence_dir` is unset, the project does not keep in-repo evidenc
 
 - The evidence directory holds only a short `README.md` (metadata, fixtures, per-item verdict table, one sentence per line) and the screenshots it cites.
   No probe scripts, scratch files, or bulk captures.
-- **Generate the skeleton, do not author it.** When `profile.qa.evidence_dir` is set and the story's `README.md` is absent there, create it with `python3 skills/qa-verification/scripts/qa-evidence.py --key <story key> --item '<label>' [--item '<label>' ...] --evidence-dir <dir>`, passing the acceptance criterion and Definition of Done labels in their story order, and fill in the verdict and evidence cells of the generated `README.md` rather than authoring its headings.
+- **Generate the skeleton, do not author it.** When `profile.qa.evidence_dir` is set and the story's `README.md` is absent there, create it with `python3 <skill dir>/scripts/qa-evidence.py --key <story key> --item=<label> [--item=<label> ...] --path <path> --evidence-dir <dir>`, where `<skill dir>` is the absolute directory your runtime loaded this skill from and `<path>` is the path selected above.
+  Pass the acceptance criterion and Definition of Done labels in their story order, and write each `'` inside a label as `'\''` so the shell expands nothing.
+  The generator writes each label as one table cell, and it refuses a label that is empty or carries U+2014, a stray term or a verdict word, exiting 1 with one line naming it, so rephrase such a label instead of editing the generated file's structure.
+  Then fill in the generated `README.md`'s `Date:`, `Fixtures:` and path metadata lines, verdict cells and evidence cells rather than authoring its headings.
   With no evidence directory configured, or a `README.md` already present, generate nothing and run the rest of this step unchanged.
 - Ship it through the normal branch and PR flow in `references/github.md`, signed when `profile.git.signed_commits` is true, and verify the signature after pushing.
 - **Never merge the evidence PR before its review of record is complete at the current head.**
