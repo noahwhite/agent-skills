@@ -4175,9 +4175,11 @@ WORKTREE_EXISTING = (
     "names it in the `worktree:` line, per the existing PR or branch rule in `references/github.md`: name an "
     "existing story worktree whose branch has not merged and create nothing, and when only the open PR's head "
     "branch exists, fetch it with `git fetch origin +refs/heads/<branch>:refs/remotes/origin/<branch>` and run "
-    "`git worktree add --no-track -b <branch> <absolute path> origin/<branch>`, or `git worktree add <absolute "
-    "path> <branch>` when a local branch of that name exists, to create the story worktree on that branch; a "
-    "branch whose PR merged is never reused, so a later PR gets the fresh worktree above."
+    "`git worktree add --no-track -b <branch> <absolute path> origin/<branch>`, or, when a local branch of that "
+    "name exists, `git worktree add <absolute path> <branch>` and then `git -C <absolute path> merge --ff-only "
+    "origin/<branch>` so it starts at the fetched PR head, stopping to report when it does not fast-forward, to "
+    "create the story worktree on that branch; a branch whose PR merged is never reused, so a later PR gets the "
+    "fresh worktree above."
 )
 WORKTREE_BRIEF_LINE = (
     "- The line `worktree: <absolute path>`, whose whole text is exactly that, `<absolute path>` being the story "
