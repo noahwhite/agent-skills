@@ -633,7 +633,9 @@ def test_qa_added_blocks_appear_once_in_order() -> None:
 # SKL-182 re-baselined it for its changes outside the blocks: the "Await the gate" bullet in section 5,
 # the incomplete line in the completion summary and the todo-tracking index line; tests/test_qa_await_gate.py
 # pins the first two, and the index line is pinned only by this hash.
-QA_BASE_SHA256 = "d0a5d1c8a13f99e21cc8ef762aae246f1493bdbfbb073fae98af4caf9263f83a"
+# SKL-386 re-baselined it for its one change outside the blocks: the new section 5 bullet that names the
+# evidence skeleton generator `skills/qa-verification/scripts/qa-evidence.py`.
+QA_BASE_SHA256 = "0480e2ace0b8055801678c6c31e4ffcbd4b019fff487addd4bd90337e0999aee"
 
 
 def test_qa_text_outside_the_added_blocks_is_unchanged() -> None:

@@ -139,6 +139,8 @@ If `profile.qa.evidence_dir` is unset, the project does not keep in-repo evidenc
 
 - The evidence directory holds only a short `README.md` (metadata, fixtures, per-item verdict table, one sentence per line) and the screenshots it cites.
   No probe scripts, scratch files, or bulk captures.
+- **Generate the skeleton, do not author it.** When `profile.qa.evidence_dir` is set and the story's `README.md` is absent there, create it with `python3 skills/qa-verification/scripts/qa-evidence.py --key <story key> --item '<label>' [--item '<label>' ...] --evidence-dir <dir>`, passing the acceptance criterion and Definition of Done labels in their story order, and fill in the verdict and evidence cells of the generated `README.md` rather than authoring its headings.
+  With no evidence directory configured, or a `README.md` already present, generate nothing and run the rest of this step unchanged.
 - Ship it through the normal branch and PR flow in `references/github.md`, signed when `profile.git.signed_commits` is true, and verify the signature after pushing.
 - **Never merge the evidence PR before its review of record is complete at the current head.**
   The review of record is `profile.review.reviewer`, then a separate clean, neutral `profile.review.adjudicator`, as `references/code-review.md` defines.

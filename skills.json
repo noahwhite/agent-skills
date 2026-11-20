@@ -144,6 +144,7 @@
     ],
     "qa-verification": [
       "check-signing-key.sh",
+      "qa-evidence.py",
       "select-path.py"
     ],
     "story-refinement": [
