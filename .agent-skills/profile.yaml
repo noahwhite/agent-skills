@@ -52,10 +52,15 @@ git:
   branch_prefixes:
     feature: feature/
 review:
+  # Owner directive 2026-11-20: the reviewer runs Gemini 3.8 Flash through OpenRouter.
+  # The Google provider's own prepayment credits are depleted and the Copilot route refuses this
+  # container's PAT, so OpenRouter is the working route; the seat was probed answering 2026-11-20.
+  # With this change every gate seat sits on its own lab: reviewer Google, arbiter OpenAI,
+  # hunter Moonshot, sweeper zhipu, adjudicator DeepSeek.
   reviewer:
-    name: GPT-6.2 Sol
-    runtime: codex
-    model: gpt-6.2-sol
+    name: Gemini 3.8 Flash
+    runtime: opencode
+    model: openrouter/google/gemini-3.8-flash
   adjudicator:
     name: DeepSeek V4.1 Flash
     runtime: opencode
