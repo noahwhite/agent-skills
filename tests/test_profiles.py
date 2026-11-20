@@ -39,4 +39,8 @@ def test_repo_and_example_profiles_validate():
     for path, profile in ((REPO_PROFILE, repo), (EXAMPLE_PROFILE, example)):
         jsonschema.validate(profile, SCHEMA)
         assert reviewer_problems(profile) == [], path
-    assert repo["refinement"]["reviewers"][2]["name"] != repo["refinement"]["product_owner"]["name"]
+        refinement = profile["refinement"]
+        product_owner = refinement["product_owner"]
+        for role in refinement["reviewers"]:
+            assert role["name"] != product_owner["name"], (path, role["name"])
+            assert role["model"] != product_owner["model"], (path, role["model"])
