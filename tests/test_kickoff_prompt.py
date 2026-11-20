@@ -13,7 +13,47 @@ CADENCE_MINUTES = 12
 CALLER_LINE = "Start the session in Lite mode where the session offers one, then paste the block below."
 POINTER = "assets/kickoff-prompt.md"
 
-FENCE = re.compile(r"^```[^\n]*\n(.*?)^```", re.MULTILINE | re.DOTALL)
+# The asset is exactly the caller line, blank space, and one fence with no info string.
+ASSET_SHAPE = re.compile(
+    rf"\A{re.escape(CALLER_LINE)}\n+```\n(?P<block>.+?)\n```\n*\Z",
+    re.DOTALL,
+)
+
+CADENCE_SENTENCE = (
+    "For this story-to-done run, make one progress check per "
+    f"{CADENCE_MINUTES}-minute window instead of several inside it, and batch your waits."
+)
+DEFAULT_SENTENCE = "This is the default cadence for such a story."
+SCOPE_SENTENCE = (
+    "An orchestration-heavy story is a run of this skill that spawns a senior engineer and at "
+    "least one QA agent; the poll covers routine checks where a role runs in the background, so "
+    "handle a handback without waiting for the next routine poll."
+)
+DEADLINE_SENTENCE = "The deadlines in references/interim-handbacks.md are unchanged."
+
+POINTER_SENTENCE = (
+    "For an orchestration-heavy run - one that spawns a senior engineer and at least one QA agent - "
+    f"Lite mode plus the {CADENCE_MINUTES}-minute batched-poll cadence is the default, and "
+    "`assets/kickoff-prompt.md` holds the caller prompt that starts it."
+)
+
+COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
+
+
+def asset_block() -> str:
+    match = ASSET_SHAPE.match(ASSET.read_text(encoding="utf-8"))
+    assert match, "the asset must be the caller line, blank space, and one bare fenced block"
+    block = match.group("block")
+    assert "```" not in block, "the paste block must hold no fence of its own"
+    return block
+
+
+def visible(text: str) -> str:
+    return COMMENT.sub("", text)
+
+
+def flat(text: str) -> str:
+    return " ".join(text.split())
 
 
 def step_sections(text: str) -> list[str]:
@@ -27,56 +67,39 @@ def step_sections(text: str) -> list[str]:
 
 
 def test_caller_line_is_the_first_line_and_sits_outside_the_block() -> None:
-    text = ASSET.read_text()
+    text = ASSET.read_text(encoding="utf-8")
     assert text.splitlines()[0] == CALLER_LINE
     assert text.count(CALLER_LINE) == 1
 
 
-def test_the_asset_holds_exactly_one_fenced_block_at_the_end() -> None:
-    text = ASSET.read_text()
-    blocks = FENCE.findall(text)
-    assert len(blocks) == 1, "the asset must hold exactly one fenced paste block"
+def test_the_asset_is_the_caller_line_and_exactly_one_block() -> None:
+    text = ASSET.read_text(encoding="utf-8")
+    assert asset_block()
+    assert len(re.findall(r"^```", text, re.MULTILINE)) == 2, "one opening fence and one closing fence"
     assert text.rstrip().endswith("```"), "the fenced block must close the asset"
-    assert FENCE.search(text).start() > text.index(CALLER_LINE), "the caller line precedes the block"
 
 
 def test_the_block_respects_the_line_and_word_ceilings() -> None:
-    block = FENCE.findall(ASSET.read_text())[0]
-    lines = block.splitlines()
-    assert len([line for line in lines if line.strip()]) <= 5
-    assert len(lines) <= 5
+    block = asset_block()
+    assert len(block.splitlines()) <= 5
     assert len(block.split()) <= 80
 
 
-def test_the_block_carries_the_required_literals_and_instructions() -> None:
-    asset = ASSET.read_text()
-    block = FENCE.findall(asset)[0]
-    assert "Lite mode" in asset
-    assert f"{CADENCE_MINUTES}-minute" in block
-    assert str(CADENCE_MINUTES) == "12"
-    assert "This is the default cadence for such a story." in block
-    assert "one progress check per 12-minute window" in block
-    assert "instead of several inside it" in block
-    assert "batch your waits" in block
-    assert "orchestration-heavy" in block
-    assert "senior engineer" in block
-    assert "QA agent" in block
-    assert "where a role runs in the background" in block
-    assert "references/interim-handbacks.md" in block
-    assert "unchanged" in block
+def test_the_block_carries_the_required_clauses_affirmatively() -> None:
+    block = flat(asset_block())
+    assert CADENCE_SENTENCE in block
+    assert DEFAULT_SENTENCE in block
+    assert SCOPE_SENTENCE in block
+    assert DEADLINE_SENTENCE in block
 
 
 def test_the_skill_points_at_the_asset_and_states_the_default_outside_the_steps() -> None:
-    text = SKILL.read_text()
-    assert text.count(POINTER) == 1
-    assert any(POINTER in section for section in step_sections(text)) is False, (
+    raw = SKILL.read_text(encoding="utf-8")
+    text = visible(raw)
+    sections = step_sections(text)
+    assert len(sections) == 5, "all five step sections must be recognised before placement is tested"
+    assert raw.count(POINTER) == 1, "the pointer must not be hidden in a comment or repeated"
+    assert all(POINTER not in section for section in sections), (
         "the kickoff pointer must sit outside the step 1 to step 5 sections"
     )
-    pointer_lines = [line for line in text.splitlines() if POINTER in line]
-    assert len(pointer_lines) == 1
-    pointer = pointer_lines[0]
-    assert "Lite mode" in pointer
-    assert f"{CADENCE_MINUTES}-minute" in pointer
-    assert "batched-poll cadence" in pointer
-    assert "default" in pointer
-    assert len(re.findall(r"\.(?=\s|$)", pointer)) == 1, "the pointer must be exactly one sentence"
+    assert POINTER_SENTENCE in flat(text)
