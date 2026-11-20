@@ -110,12 +110,15 @@ refinement:
       --title "{session_title}"
       --file "{prompt_file}" > "{output_file}"
     family: xai
+  # The roster is the home profile's three engineer voters, which stopped being two (SKL-181):
+  # three reviewers on three distinct model families, each carrying the repository's
+  # --title "{session_title}" placeholder so every launch resolves its own usage.
   reviewers:
-    - name: DeepSeek Flash V4.1
+    - name: DeepSeek V4.1 Flash 1017
       runtime: command
-      model: deepseek/deepseek-flash
+      model: openrouter/deepseek/deepseek-v4.1-flash-1017
       command: >-
-        opencode run --model deepseek/deepseek-flash "Follow the instructions in the attached file exactly. Do not modify any file."
+        opencode run --model openrouter/deepseek/deepseek-v4.1-flash-1017 "Follow the instructions in the attached file exactly. Do not modify any file."
         --title "{session_title}"
         --file "{prompt_file}" > "{output_file}"
       family: deepseek
@@ -127,6 +130,14 @@ refinement:
         --title "{session_title}"
         --file "{prompt_file}" > "{output_file}"
       family: openai
+    - name: MiMo V2.6 Flash
+      runtime: command
+      model: mimo/mimo-v2.6-flash
+      command: >-
+        opencode run --model mimo/mimo-v2.6-flash "Follow the instructions in the attached file exactly. Do not modify any file."
+        --title "{session_title}"
+        --file "{prompt_file}" > "{output_file}"
+      family: xiaomi
   point_cap: 5
 
 # The seats story-to-done falls back to when an invocation leaves a seat argument out (SKL-83).
