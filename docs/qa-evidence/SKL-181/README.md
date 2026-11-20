@@ -3,7 +3,7 @@
 - Verified: 2026-11-20
 - Path: `no-deployment`
 - Target: [`24608ed762729bc570998750cba84e2b6ccb180e`](https://github.com/noahwhite/agent-skills/commit/24608ed762729bc570998750cba84e2b6ccb180e) on `origin/main`, merged in [PR #375](https://github.com/noahwhite/agent-skills/pull/375).
-- The [Linear story](https://linear.app/officina-pub/issue/SKL-181/user-story-seat-three-engineers-in-the-agent-skills-profiles) holds the raw assertion output.
+- Raw assertion output is attached to the story.
 
 | Item | Verdict | Evidence |
 | --- | --- | --- |
