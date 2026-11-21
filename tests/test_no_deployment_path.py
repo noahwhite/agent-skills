@@ -635,7 +635,7 @@ def test_qa_added_blocks_appear_once_in_order() -> None:
 # pins the first two, and the index line is pinned only by this hash.
 # SKL-386 re-baselined it for its one change outside the blocks: the new section 5 bullet that names the
 # evidence skeleton generator.
-QA_BASE_SHA256 = "895c45ad347c4b34c6fc8233f248f54114f0fa0f88d798818f9d39353baa143e"
+QA_BASE_SHA256 = "343c0c3faf554ee1cb8dceff93e957e41158291b1aaffe8cbda705935f489c7e"
 
 
 def test_qa_text_outside_the_added_blocks_is_unchanged() -> None:

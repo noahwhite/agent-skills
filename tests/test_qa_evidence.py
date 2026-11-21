@@ -8,14 +8,26 @@ and evidence instead of authoring the structure. The lint assertions reuse the d
 
 import importlib.util
 import json
+import os
 import re
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
+from markdown_it import MarkdownIt
 
-from test_skills import BRITISH_ARTIFACT, EM_DASH, RUNTIME_TERMS, profile_refs, stray_terms
+from test_skills import (
+    BRITISH_ARTIFACT,
+    CANONICAL_RE,
+    EM_DASH,
+    PROFILE_REF_RE,
+    RUNTIME_TERMS,
+    STRAY_RE,
+    profile_refs,
+    resolve_schema_path,
+    stray_terms,
+)
 
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = ROOT / "shared" / "qa-evidence.py"
@@ -73,10 +85,16 @@ def load_generator():
 
 
 def tree_state(root: Path) -> dict[str, bytes]:
-    """Every path under `root`, by relative path: a file's bytes, or a marker for a directory."""
+    """Every path under `root`: a file's bytes, a directory marker, or a symlink's target."""
     state = {}
     for path in sorted(root.rglob("*")):
-        state[str(path.relative_to(root))] = b"<dir>" if path.is_dir() else path.read_bytes()
+        relative = str(path.relative_to(root))
+        if path.is_symlink():
+            state[relative] = b"<link>" + os.readlink(path).encode()
+        elif path.is_dir():
+            state[relative] = b"<dir>"
+        else:
+            state[relative] = path.read_bytes()
     return state
 
 
@@ -445,26 +463,11 @@ def test_an_empty_evidence_dir_is_refused(tmp_path):
 def test_a_failed_write_leaves_no_readme_and_a_retry_succeeds(tmp_path, monkeypatch):
     generator = load_generator()
     target = tmp_path / "docs" / "qa-evidence" / "SKL-386" / "README.md"
-    real_fdopen = generator.os.fdopen
 
-    class FailingHandle:
-        def __init__(self, handle):
-            self._handle = handle
+    def failing_write(_descriptor, _data):
+        raise OSError(28, "No space left on device")
 
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *_exc):
-            self._handle.close()
-            return False
-
-        def write(self, _text):
-            raise OSError(28, "No space left on device")
-
-    def failing_fdopen(descriptor, *args, **kwargs):
-        return FailingHandle(real_fdopen(descriptor, *args, **kwargs))
-
-    monkeypatch.setattr(generator.os, "fdopen", failing_fdopen)
+    monkeypatch.setattr(generator.os, "write", failing_write)
     assert generator.publish(target, "# SKL-386 QA evidence\n") is False
     assert not target.exists()
     assert list(target.parent.glob(".qa-evidence-*")) == []
@@ -489,3 +492,162 @@ def test_the_documented_equals_form_passes_one_argument(tmp_path):
     assert res.returncode == 0, res.stderr
     readme = tmp_path / "docs" / "qa-evidence" / "SKL-386" / "README.md"
     assert row_cells(table_rows(readme.read_text(encoding="utf-8"))[0]) == ["AC1 - one generator", "", ""]
+
+
+def test_the_copied_lint_rules_are_the_lint_rules():
+    generator = load_generator()
+    assert generator.EM_DASH == EM_DASH
+    assert generator.BRITISH_ARTIFACT == BRITISH_ARTIFACT
+    assert generator.STRAY_RE.pattern == STRAY_RE.pattern
+    assert generator.CANONICAL_RE.pattern == CANONICAL_RE.pattern
+    assert generator.RUNTIME_TERMS_RE.pattern == RUNTIME_TERMS.pattern
+    assert generator.PROFILE_REF_RE.pattern == PROFILE_REF_RE.pattern
+    for word in VERDICT_WORDS:
+        assert generator.VERDICT_RE.search(word), word
+
+
+VALID_REFS = (
+    "qa.evidence_dir",
+    "git.branch_prefixes.feature",
+    "overlays.qa-verification",
+    "review.*",
+    "environments[].preauthorized",
+    "git.integration_branch",
+    "git.integration_branch.",
+)
+INVALID_REFS = (
+    "not.a.key",
+    "extra",
+    "review.*[0].name",
+)
+
+
+@pytest.mark.parametrize("ref", VALID_REFS)
+def test_a_profile_reference_the_lint_resolves_is_accepted(tmp_path, ref):
+    label = f"AC1 - profile.{ref} is set"
+    assert profile_refs(label) == [ref.removesuffix(".")]
+    assert resolve_schema_path(ref.removesuffix(".")) and not ref.startswith("extra")
+    res = run_in(ROOT, "--key", "SKL-386", "--item", label, "--evidence-dir", str(tmp_path / "evidence"))
+    assert res.returncode == 0, res.stderr
+    readme = tmp_path / "evidence" / "SKL-386" / "README.md"
+    assert row_cells(table_rows(readme.read_text(encoding="utf-8"))[0])[0] == label
+
+
+@pytest.mark.parametrize("ref", INVALID_REFS)
+def test_a_profile_reference_the_lint_rejects_is_refused(tmp_path, ref):
+    label = f"AC1 - profile.{ref} is set"
+    lint_rejects = ref.startswith("extra") or not resolve_schema_path(ref)
+    assert lint_rejects, ref
+    res = run_in(ROOT, "--key", "SKL-386", "--item", label, "--evidence-dir", str(tmp_path / "evidence"))
+    assert res.returncode == 1, res.stderr
+    assert len(res.stderr.splitlines()) == 1, res.stderr
+    assert tree_state(tmp_path) == {}
+
+
+def test_an_emphasis_wrapped_profile_reference_is_accepted(tmp_path):
+    label = "AC1 - **profile.git.integration_branch** is set"
+    assert profile_refs(label) == ["git.integration_branch"]
+    res = run_in(ROOT, "--key", "SKL-386", "--item", label, "--evidence-dir", str(tmp_path / "evidence"))
+    assert res.returncode == 0, res.stderr
+
+
+def test_a_trailing_doubled_dot_does_not_slip_through(tmp_path):
+    label = "AC1 - profile.git.integration_branch.. is unset"
+    assert profile_refs(label) == ["git.integration_branch."]
+    assert not resolve_schema_path("git.integration_branch.")
+    res = run_in(ROOT, "--key", "SKL-386", "--item", label, "--evidence-dir", str(tmp_path / "evidence"))
+    assert res.returncode == 1, res.stderr
+    assert tree_state(tmp_path) == {}
+
+
+def test_a_verdict_word_hidden_in_an_html_entity_is_refused(tmp_path):
+    label = "AC1 - verif&#105;ed"
+    res = run(tmp_path, "--key", "SKL-386", "--item", label)
+    assert res.returncode == 1
+    assert len(res.stderr.splitlines()) == 1, res.stderr
+    assert tree_state(tmp_path) == {}
+
+
+def test_a_consumer_directory_without_a_schema_accepts_a_profile_reference(tmp_path):
+    label = "AC1 - profile.qa.evidence_dir is set"
+    res = run_vendored(tmp_path, "--key", "SKL-386", "--item", label)
+    assert res.returncode == 0, res.stderr
+    readme = tmp_path / "docs" / "qa-evidence" / "SKL-386" / "README.md"
+    assert row_cells(table_rows(readme.read_text(encoding="utf-8"))[0])[0] == label
+
+
+def test_an_absolute_path_inside_the_evidence_tree_keeps_the_spelling_exemption(tmp_path):
+    label = "AC1 - the " + BRITISH_ARTIFACT + " path"
+    evidence = tmp_path / "docs" / "qa-evidence"
+    res = run_in(tmp_path, "--key", "SKL-386", "--item", label, "--evidence-dir", str(evidence))
+    assert res.returncode == 0, res.stderr
+    assert (evidence / "SKL-386" / "README.md").is_file()
+
+
+def test_a_dotdot_path_out_of_the_evidence_tree_loses_the_spelling_exemption(tmp_path):
+    label = "AC1 - the " + BRITISH_ARTIFACT + " path"
+    res = run_in(tmp_path, "--key", "SKL-386", "--item", label, "--evidence-dir", "docs/qa-evidence/../outside")
+    assert res.returncode == 1, res.stderr
+    assert len(res.stderr.splitlines()) == 1, res.stderr
+    assert tree_state(tmp_path) == {}
+
+
+def test_a_key_with_the_british_spelling_is_refused_outside_the_evidence_tree(tmp_path):
+    key = BRITISH_ARTIFACT.upper() + "-1"
+    res = run_in(tmp_path, "--key", key, "--evidence-dir", "tmp-evidence")
+    assert res.returncode == 1
+    assert len(res.stderr.splitlines()) == 1, res.stderr
+    assert tree_state(tmp_path) == {}
+
+
+def test_a_key_with_the_british_spelling_is_accepted_inside_the_evidence_tree(tmp_path):
+    key = BRITISH_ARTIFACT.upper() + "-1"
+    res = run_in(tmp_path, "--key", key)
+    assert res.returncode == 0, res.stderr
+    assert (tmp_path / "docs" / "qa-evidence" / key / "README.md").is_file()
+
+
+def test_an_existing_readme_is_named_before_any_label_is_validated(tmp_path):
+    readme = tmp_path / "docs" / "qa-evidence" / "SKL-386" / "README.md"
+    readme.parent.mkdir(parents=True)
+    readme.write_text("# handwritten\n", encoding="utf-8")
+    res = run(tmp_path, "--key", "SKL-386", "--item", "AC1 - failed")
+    assert res.returncode == 1
+    assert len(res.stderr.splitlines()) == 1, res.stderr
+    assert str(readme) in res.stderr
+    assert "item label" not in res.stderr
+
+
+def test_a_newline_in_the_path_cannot_break_the_one_line_diagnostic(tmp_path):
+    readme = tmp_path / "a\nb" / "SKL-386" / "README.md"
+    readme.parent.mkdir(parents=True)
+    readme.write_text("# handwritten\n", encoding="utf-8")
+    res = run(tmp_path, "--key", "SKL-386", "--evidence-dir", "a\nb")
+    assert res.returncode == 1
+    assert len(res.stderr.splitlines()) == 1, res.stderr
+    assert "\\n" in res.stderr
+    assert readme.read_text(encoding="utf-8") == "# handwritten\n"
+
+
+@pytest.mark.parametrize(
+    ("label", "rendered"),
+    [
+        ("AC1 - a | b", "AC1 - a | b"),
+        ("AC1 - a \\| b", "AC1 - a \\| b"),
+        ("**AC1** - bold", "<strong>AC1</strong> - bold"),
+    ],
+    ids=["pipe", "backslash-pipe", "emphasis"],
+)
+def test_the_rendered_table_holds_three_cells_with_the_label_text(tmp_path, label, rendered):
+    text = generate(tmp_path, "SKL-386", (label,)).read_text(encoding="utf-8")
+    parser = MarkdownIt("commonmark").enable("table")
+    assert any(token.type == "table_open" for token in parser.parse(text))
+    html = parser.render(text)
+    assert html.count("<td>") == 3, html
+    assert f"<td>{rendered}</td>" in html, html
+
+
+def test_an_abbreviated_option_is_refused(tmp_path):
+    res = run(tmp_path, "--key", "SKL-386", "--pa", "spike")
+    assert res.returncode == 2, res.stderr
+    assert tree_state(tmp_path) == {}
