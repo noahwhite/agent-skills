@@ -216,9 +216,10 @@ def repository_tests_problems(workflow_text: str) -> list[str]:
         return problems
     if matches[0] != EXPECTED_REPOSITORY_TESTS_STEP:
         problems.append(f"the Repository tests step is {matches[0]!r}")
-    for candidate in steps:
-        if not str(candidate.get("uses", "")).startswith("actions/checkout"):
-            continue
+    checkouts = [candidate for candidate in steps if str(candidate.get("uses", "")).startswith("actions/checkout")]
+    if not checkouts:
+        problems.append("the checks job carries no actions/checkout step")
+    for candidate in checkouts:
         extras = set(candidate) - {"uses", "with"}
         if extras or set(candidate.get("with") or {}) - {"fetch-depth", "submodules"}:
             problems.append(f"the checkout step is configured as {candidate!r}")
@@ -505,6 +506,11 @@ def test_guard_kills_every_mutant() -> None:
         if str(step.get("uses", "")).startswith("actions/checkout"):
             step.setdefault("with", {})["repository"] = "example/other-repository"
     mutants.append(("a checkout of another repository", other_repository))
+    no_checkout = copy.deepcopy(workflow)
+    no_checkout["jobs"]["checks"]["steps"] = [
+        step for step in no_checkout["jobs"]["checks"]["steps"] if not str(step.get("uses", "")).startswith("actions/checkout")
+    ]
+    mutants.append(("no checkout step", no_checkout))
     for label, triggers in (
         ("no pull_request trigger", {"push": {"branches": ["main"]}}),
         ("a pull_request opened-only trigger", {"pull_request": {"types": ["opened"]}, "push": {"branches": ["main"]}}),
