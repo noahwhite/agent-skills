@@ -15,9 +15,9 @@ CADENCE_MINUTES = 12
 CALLER_LINE = "Start the session in Lite mode where the session offers one, then paste the block below."
 POINTER = "assets/kickoff-prompt.md"
 
+RUN_SENTENCE = "Run story-to-done for <story-id>."
 CADENCE_SENTENCE = (
-    "Make one progress check per "
-    f"{CADENCE_MINUTES}-minute window instead of several inside it, and batch your waits."
+    f"Batch your waits; make one progress check per {CADENCE_MINUTES}-minute window, not several."
 )
 DEFAULT_SENTENCE = "This is the default cadence for such a story."
 # One shared phrase so the asset's definition and the skill's default statement cannot drift apart.
@@ -28,7 +28,9 @@ SCOPE_SENTENCE = (
     "waiting for the next routine poll."
 )
 DEADLINE_SENTENCE = "The wait bounds and deadlines in references/interim-handbacks.md are unchanged."
-EXPECTED_BLOCK = "\n".join((CADENCE_SENTENCE, DEFAULT_SENTENCE, SCOPE_SENTENCE, DEADLINE_SENTENCE))
+EXPECTED_BLOCK = "\n".join(
+    (RUN_SENTENCE, CADENCE_SENTENCE, DEFAULT_SENTENCE, SCOPE_SENTENCE, DEADLINE_SENTENCE)
+)
 
 POINTER_SENTENCE = (
     f"For an orchestration-heavy run - one that spawns {ROLE_REQUIREMENT} - Lite mode plus the "
@@ -130,8 +132,10 @@ def step_ranges(text: str) -> list[tuple[int, int]]:
     return ranges
 
 
-def without_html_comments(content: str) -> str:
-    return re.sub(r"<!--.*?-->", "", content, flags=re.DOTALL)
+def html_text(content: str) -> str:
+    """The text nodes of a raw HTML fragment: comments and tags both removed."""
+    without_comments = re.sub(r"<!--.*?-->", "", content, flags=re.DOTALL)
+    return re.sub(r"<[^>]*>", "", without_comments)
 
 
 def visible_mentions(text: str) -> int:
@@ -153,11 +157,11 @@ def visible_mentions(text: str) -> int:
                     )
                     count += alt.count(POINTER)
                 elif child.type == "html_inline":
-                    count += without_html_comments(child.content).count(POINTER)
+                    count += html_text(child.content).count(POINTER)
         elif token.type in {"fence", "code_block"}:
             count += token.content.count(POINTER)
         elif token.type == "html_block":
-            count += without_html_comments(token.content).count(POINTER)
+            count += html_text(token.content).count(POINTER)
     return count
 
 
@@ -345,4 +349,9 @@ def test_the_placement_guard_counts_a_pointer_in_visible_html() -> None:
 
 def test_the_placement_guard_ignores_a_path_in_an_image_link_destination() -> None:
     text = skill_document(f"{POINTER_SENTENCE}\n\n![see [the prompt]({POINTER})](image.png)")
+    assert placement_problems(text) == []
+
+
+def test_the_placement_guard_ignores_a_path_in_a_raw_html_attribute() -> None:
+    text = skill_document(f'{POINTER_SENTENCE}\n\nSee <a href="{POINTER}">the prompt</a>.')
     assert placement_problems(text) == []
