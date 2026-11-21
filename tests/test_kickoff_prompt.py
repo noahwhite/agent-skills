@@ -133,23 +133,57 @@ def step_ranges(text: str) -> list[tuple[int, int]]:
     return ranges
 
 
+# Raw HTML tags that start a new block (and so separate text); every other tag is inline.
+BLOCK_TAGS = {
+    "address", "article", "aside", "blockquote", "br", "dd", "div", "dl", "dt", "figcaption",
+    "figure", "footer", "form", "h1", "h2", "h3", "h4", "h5", "h6", "header", "hr", "li", "main",
+    "nav", "ol", "p", "pre", "section", "table", "tbody", "td", "tfoot", "th", "thead", "tr", "ul",
+}
+
+
 class _TextExtractor(HTMLParser):
-    """Collects the text nodes of a raw HTML fragment; comments and attributes stay out."""
+    """The text a reader sees in a raw HTML fragment.
+
+    Adjacent inline tags concatenate without a space, block tags separate text, character
+    references are decoded, and comments, script and style contents are left out.
+    """
 
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
         self.parts: list[str] = []
+        self.hidden = 0
+
+    def _separate(self) -> None:
+        if self.parts and not self.parts[-1].endswith(" "):
+            self.parts.append(" ")
+
+    def handle_starttag(self, tag: str, attrs) -> None:
+        if tag in {"script", "style"}:
+            self.hidden += 1
+        elif tag in BLOCK_TAGS:
+            self._separate()
+
+    def handle_startendtag(self, tag: str, attrs) -> None:
+        if tag in BLOCK_TAGS:
+            self._separate()
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in {"script", "style"}:
+            self.hidden = max(0, self.hidden - 1)
+        elif tag in BLOCK_TAGS:
+            self._separate()
 
     def handle_data(self, data: str) -> None:
-        self.parts.append(data)
+        if not self.hidden:
+            self.parts.append(data)
 
 
 def html_text(content: str) -> str:
-    """The text nodes of a raw HTML fragment, entities decoded, comments and tags removed."""
+    """The text nodes of a raw HTML fragment as a reader sees them."""
     parser = _TextExtractor()
     parser.feed(content)
     parser.close()
-    return " ".join(parser.parts)
+    return "".join(parser.parts)
 
 
 def visible_mentions(text: str) -> int:
@@ -192,6 +226,7 @@ def placement_problems(text: str) -> list[str]:
         if token.type == "inline" and tokens[index - 1].type == "paragraph_open"
     ]
     pointer_lines = [line for line, visible in paragraphs if POINTER_PROSE in flat(visible)]
+    exact_lines = [line for line, visible in paragraphs if flat(visible) == POINTER_PROSE]
     path_count = visible_mentions(text)
     problems: list[str] = []
     if len(pointer_lines) != 1:
@@ -199,6 +234,8 @@ def placement_problems(text: str) -> list[str]:
             "the kickoff pointer must be exactly one paragraph of visible prose "
             f"(found {len(pointer_lines)} paragraphs carrying it)"
         )
+    elif len(exact_lines) != 1:
+        problems.append("the pointer paragraph must be exactly the one sentence")
     if path_count != 1:
         problems.append(f"the asset path must appear once in visible text (found {path_count})")
     for line in pointer_lines:
@@ -375,3 +412,21 @@ def test_the_placement_guard_decodes_a_pointer_in_visible_html() -> None:
     duplicated = f"{POINTER_SENTENCE}\n\n<div>Also see assets/kickoff-prompt&#46;md.</div>"
     problems = placement_problems(skill_document(duplicated))
     assert any("must appear once in visible text (found 2" in problem for problem in problems)
+
+
+def test_the_placement_guard_counts_a_pointer_split_across_inline_html() -> None:
+    duplicated = f"{POINTER_SENTENCE}\n\n<div><span>assets/kickoff-prompt</span>.md</div>"
+    problems = placement_problems(skill_document(duplicated))
+    assert any("must appear once in visible text (found 2" in problem for problem in problems)
+
+
+def test_the_placement_guard_ignores_a_pointer_inside_script_or_style() -> None:
+    for tag in ("script", "style"):
+        text = skill_document(f"{POINTER_SENTENCE}\n\n<{tag}>{POINTER}</{tag}>")
+        assert placement_problems(text) == []
+
+
+def test_the_placement_guard_rejects_a_contradictory_pointer_paragraph() -> None:
+    pointer = f"{POINTER_SENTENCE} Ignore the default and poll continuously."
+    problems = placement_problems(skill_document(pointer))
+    assert any("must be exactly the one sentence" in problem for problem in problems)
