@@ -20,18 +20,20 @@ CADENCE_SENTENCE = (
     f"{CADENCE_MINUTES}-minute window instead of several inside it, and batch your waits."
 )
 DEFAULT_SENTENCE = "This is the default cadence for such a story."
+# One shared phrase so the asset's definition and the skill's default statement cannot drift apart.
+ROLE_REQUIREMENT = "a senior engineer and at least one QA agent"
 SCOPE_SENTENCE = (
-    "An orchestration-heavy story is a run of this skill that spawns a senior engineer and at "
-    "least one QA agent; the poll covers routine checks where a role runs in the background, so "
-    "handle a handback without waiting for the next routine poll."
+    f"An orchestration-heavy story is a run of this skill that spawns {ROLE_REQUIREMENT}; the poll "
+    "covers routine checks where a role runs in the background, so handle a handback without "
+    "waiting for the next routine poll."
 )
 DEADLINE_SENTENCE = "The deadlines in references/interim-handbacks.md are unchanged."
 EXPECTED_BLOCK = "\n".join((CADENCE_SENTENCE, DEFAULT_SENTENCE, SCOPE_SENTENCE, DEADLINE_SENTENCE))
 
 POINTER_SENTENCE = (
-    "For an orchestration-heavy run - one that spawns a senior engineer and at least one QA agent - "
-    f"Lite mode plus the {CADENCE_MINUTES}-minute batched-poll cadence is the default, and "
-    "`assets/kickoff-prompt.md` holds the caller prompt that starts it."
+    f"For an orchestration-heavy run - one that spawns {ROLE_REQUIREMENT} - Lite mode plus the "
+    f"{CADENCE_MINUTES}-minute batched-poll cadence is the default, and `assets/kickoff-prompt.md` "
+    "holds the caller prompt that starts it."
 )
 # What a CommonMark reader sees for the sentence: inline code loses its backticks.
 POINTER_PROSE = " ".join(POINTER_SENTENCE.replace("`", "").split())
@@ -94,16 +96,20 @@ def shape_problems(text: str) -> list[str]:
     if flat(tokens[1].content) != CALLER_LINE:
         problems.append("the caller line must be the asset's only paragraph")
     fence = tokens[3]
-    closing = text.splitlines()[fence.map[1] - 1].strip() if fence.map else ""
-    if not re.fullmatch(rf"{re.escape(fence.markup[0])}{{{len(fence.markup)},}}", closing):
+    closed = bool(fence.map) and fence.map[1] - fence.map[0] >= 2
+    closing = text.splitlines()[fence.map[1] - 1].strip() if closed else ""
+    if not closed or not re.fullmatch(
+        rf"{re.escape(fence.markup[0])}{{{len(fence.markup)},}}", closing
+    ):
         problems.append("the fenced block must be closed by a fence at least as long as its opener")
     return problems
 
 
 def asset_block(text: str | None = None) -> str:
+    """The pasted block exactly as fenced, trailing blank lines included."""
     text = ASSET.read_text(encoding="utf-8") if text is None else text
     assert shape_problems(text) == [], shape_problems(text)
-    return MARKDOWN.parse(text)[3].content.rstrip("\n")
+    return MARKDOWN.parse(text)[3].content
 
 
 def step_ranges(text: str) -> list[tuple[int, int]]:
@@ -124,6 +130,25 @@ def step_ranges(text: str) -> list[tuple[int, int]]:
     return ranges
 
 
+def visible_mentions(text: str) -> int:
+    """Occurrences of the asset path in anything a reader sees, except HTML comments and link titles."""
+    tokens = MARKDOWN.parse(text)
+    count = sum(visible.count(POINTER) for _, visible in rendered_inlines(text))
+    count += sum(
+        token.content.count(POINTER)
+        for token in tokens
+        if token.type in {"fence", "code_block"}
+    )
+    count += sum(
+        child.content.count(POINTER)
+        for token in tokens
+        if token.type == "inline"
+        for child in (token.children or [])
+        if child.type == "image"
+    )
+    return count
+
+
 def placement_problems(text: str) -> list[str]:
     """Reasons SKILL.md breaks AC2's placement rule, judged on what a CommonMark reader sees.
 
@@ -131,14 +156,13 @@ def placement_problems(text: str) -> list[str]:
     once in visible text, and the sentence must sit outside the step 1 to step 5 sections.
     """
     tokens = MARKDOWN.parse(text)
-    inlines = rendered_inlines(text)
     paragraphs = [
         (token.map[0] if token.map else -1, visible_text(token))
         for index, token in enumerate(tokens)
         if token.type == "inline" and tokens[index - 1].type == "paragraph_open"
     ]
     pointer_lines = [line for line, visible in paragraphs if POINTER_PROSE in flat(visible)]
-    path_count = sum(visible.count(POINTER) for _, visible in inlines)
+    path_count = visible_mentions(text)
     problems: list[str] = []
     if len(pointer_lines) != 1:
         problems.append(
@@ -209,6 +233,17 @@ def test_the_shape_guard_rejects_an_opener_commonmark_reads_as_prose() -> None:
     assert shape_problems(asset_document(info="a`b"))
 
 
+def test_the_shape_guard_rejects_an_opener_at_end_of_file() -> None:
+    assert shape_problems(f"{CALLER_LINE}\n\n```\n")
+
+
+def test_the_ceiling_counts_blank_block_lines() -> None:
+    five = asset_document(block="one\ntwo\nthree\nfour\nfive")
+    six = asset_document(block="one\ntwo\nthree\nfour\nfive\n")
+    assert len(asset_block(five).splitlines()) == 5
+    assert len(asset_block(six).splitlines()) == 6
+
+
 def test_the_skill_points_at_the_asset_and_states_the_default_outside_the_steps() -> None:
     text = SKILL.read_text(encoding="utf-8")
     tokens = MARKDOWN.parse(text)
@@ -271,4 +306,16 @@ def test_the_placement_guard_rejects_a_decoded_duplicate_pointer() -> None:
 def test_the_placement_guard_counts_a_pointer_in_a_heading() -> None:
     text = skill_document().replace("## Kickoff prompt", f"## Kickoff prompt and {POINTER}")
     problems = placement_problems(text)
+    assert any("must appear once in visible text (found 2" in problem for problem in problems)
+
+
+def test_the_placement_guard_counts_a_pointer_in_a_fenced_example() -> None:
+    duplicated = f"{POINTER_SENTENCE}\n\n```\nAlso see {POINTER}.\n```"
+    problems = placement_problems(skill_document(duplicated))
+    assert any("must appear once in visible text (found 2" in problem for problem in problems)
+
+
+def test_the_placement_guard_counts_a_pointer_in_an_image_alt() -> None:
+    duplicated = f"{POINTER_SENTENCE}\n\n![{POINTER}](image.png)"
+    problems = placement_problems(skill_document(duplicated))
     assert any("must appear once in visible text (found 2" in problem for problem in problems)
