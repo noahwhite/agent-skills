@@ -345,8 +345,9 @@ def test_engineering_workflow_step_ten_pins_the_delivery_and_no_retry_instructio
 def test_engineering_workflow_step_ten_has_no_hand_written_github_commands_before_the_waiver() -> None:
     body = section(skill("engineering-workflow"), "10. Merge")
     before_waiver = body.partition("Under the explicit per-PR review waiver")[0]
-    for command in ("gh pr view", "gh pr checks", "gh pr merge"):
+    for command in ("gh pr view", "gh pr checks", "gh pr merge", "gh api"):
         assert command not in before_waiver, command
+    assert "naming the request ID, the PR, the full head SHA, the review-of-record link, and the CI state" in before_waiver
 
 
 def test_qa_evidence_merge_uses_the_guard() -> None:

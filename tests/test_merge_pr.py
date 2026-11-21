@@ -84,6 +84,7 @@ case "${1:-}" in
         [ -z "${FAIL_CHECKS:-}" ] || { echo "gh: HTTP 500" >&2; exit 1; }
         [ "${3:-}" = "7" ] || { echo "gh: unexpected PR number ${3:-}" >&2; exit 3; }
         [ -z "${NO_REQUIRED_CHECKS:-}" ] || { echo "no required checks reported on the 'x' branch${NO_REQUIRED_CHECKS_SUFFIX:-}" >&2; exit 1; }
+        [ -z "${NO_CHECKS:-}" ] || { echo "no checks reported on the 'x' branch" >&2; exit 1; }
         [ -z "${WARN_CHECKS:-}" ] || echo "warning: something happened" >&2
         cat "$FIXTURES/checks.json"
         exit "${CHECKS_EXIT:-0}"
@@ -92,6 +93,7 @@ case "${1:-}" in
         if [ "${3:-}" = "--help" ]; then cat "$FIXTURES/merge-help.txt"; exit 0; fi
         [ "${3:-}" = "7" ] || { echo "gh: unexpected PR number ${3:-}" >&2; exit 3; }
         [ -z "${FAIL_MERGE:-}" ] || { echo "${FAIL_MERGE}" >&2; exit 1; }
+        [ -z "${FAIL_MERGE_STDERR:-}" ] || { echo "${FAIL_MERGE_STDERR}" >&2; exit 1; }
         printf 'merged\n'
         exit 0
         ;;
@@ -153,6 +155,16 @@ def run(tmp_path):
     gh = bindir / "gh"
     gh.write_text(FAKE_GH)
     gh.chmod(gh.stat().st_mode | stat.S_IXUSR)
+    real_git = shutil.which("git")
+    git = bindir / "git"
+    git.write_text(
+        "#!/usr/bin/env bash\n"
+        'for a in "$@"; do\n'
+        '  case "$a" in *s3cr3t-token-value*) echo "git: token in argv" >&2; exit 3 ;; esac\n'
+        "done\n"
+        f'exec {real_git} "$@"\n'
+    )
+    git.chmod(git.stat().st_mode | stat.S_IXUSR)
     consumer = tmp_path / "consumer"
     consumer.mkdir()
     subprocess.run(["git", "init", "-q", str(consumer)], check=True)
@@ -471,10 +483,17 @@ def test_refuses_a_required_check_that_is_not_green(run, state):
     assert merged(log) == []
 
 
-def test_a_pending_checks_exit_code_still_reads_the_check_states(run):
-    done, log = run(reviews=[review()], checks=[check("ci/test", "PENDING")], checks_exit=8)
+def test_a_pending_required_check_is_refused_and_named(run):
+    done, log = run(reviews=[review()], checks=[check("ci/test", "PENDING")])
     assert done.returncode != 0
     assert "ci/test" in done.stderr
+    assert merged(log) == []
+
+
+def test_a_nonzero_checks_exit_with_json_never_authorizes_a_merge(run):
+    done, log = run(reviews=[review()], checks=[check("ci/test", "SUCCESS")], checks_exit=8)
+    assert done.returncode != 0
+    assert "not read cleanly" in done.stderr
     assert merged(log) == []
 
 
@@ -1015,4 +1034,22 @@ def test_refuses_a_confirmation_at_a_different_head(run):
     done, log = run(reviews=[review()], confirm=confirm)
     assert done.returncode != 0
     assert MOVED in done.stderr and HEAD in done.stderr
+    assert len(merged(log)) == 1
+
+
+def test_a_pr_with_no_checks_at_all_can_merge(run):
+    done, log = run(reviews=[review()], extra_env={"NO_CHECKS": "1"})
+    assert done.returncode == 0, done.stderr
+    assert "Check: none" in done.stdout
+    assert len(merged(log)) == 1
+
+
+def test_a_stderr_only_merge_failure_is_reported_blocked(run):
+    done, log = run(
+        reviews=[review()],
+        extra_env={"FAIL_MERGE_STDERR": "network unreachable"},
+        confirm={"state": "OPEN", "mergedAt": None, "mergeCommit": None},
+    )
+    assert done.returncode != 0
+    assert "failed (exit 1)" in done.stderr
     assert len(merged(log)) == 1

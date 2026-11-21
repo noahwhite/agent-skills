@@ -399,11 +399,15 @@ if [ -n "$CHECKS_OUT" ]; then
     *) refuse 14 "Could not read the required checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS): $CHECKS_ERR$CHECKS_OUT" ;;
   esac
 elif [ "$CHECKS_STATUS" = 1 ]; then
-  # gh prints exactly this diagnostic on stderr and exits 1 when the branch configures no required
-  # checks; only that whole value means "none", and a warning or a multiline failure that merely
-  # contains the line never does.
+  # gh prints one of these two diagnostics on stderr and exits 1 when there is nothing to report on
+  # the head: the branch configures no required checks, or the head has no check contexts at all.
+  # Only that whole value means "nothing can be non-green"; a warning or a multiline failure that
+  # merely contains the line never does.
   case "$CHECKS_ERR" in
-    "no required checks reported on the '"*"' branch") CHECKS_JSON='[]'; CHECKS_NONE=1 ;;
+    "no required checks reported on the '"*"' branch" | "no checks reported on the '"*"' branch")
+      CHECKS_JSON='[]'
+      CHECKS_NONE=1
+      ;;
     *) refuse 14 "Could not read the required checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS): $CHECKS_ERR$CHECKS_OUT" ;;
   esac
 else
@@ -521,14 +525,13 @@ case "$MERGE_METHOD" in
 esac
 
 MERGE_OUT=""
-MERGE_FAILED=""
-if ! MERGE_OUT="$(gh pr merge "$NUMBER" --match-head-commit "$HEAD" "$METHOD_FLAG")"; then
-  MERGE_FAILED="$MERGE_OUT"
-fi
+MERGE_STATUS=0
+MERGE_OUT="$(gh pr merge "$NUMBER" --match-head-commit "$HEAD" "$METHOD_FLAG")" || MERGE_STATUS=$?
 
 # Success only once GitHub reports the PR merged, at the reviewed head; a queued merge is not a
 # merge. The read runs after every attempt, so a client error that arrives after GitHub accepted the
-# merge is reported as the merge it is, and it never retries the mutation.
+# merge is reported as the merge it is, and it never retries the mutation. The attempt's own exit
+# status, not its captured output, decides whether it failed.
 CONFIRM_JSON="$(gh pr view "$NUMBER" --json state,mergedAt,mergeCommit,headRefOid)" \
   || refuse 17 "merge not confirmed: could not re-read PR #$NUMBER after the merge command"
 CONFIRM_STATE="$(printf '%s' "$CONFIRM_JSON" | jq -r '.state // empty' 2>/dev/null)" || CONFIRM_STATE=""
@@ -536,8 +539,8 @@ CONFIRM_STATE="$(printf '%s' "$CONFIRM_JSON" | jq -r '.state // empty' 2>/dev/nu
   || refuse 17 "merge submitted but not confirmed: could not read PR #$NUMBER after the merge command"
 CONFIRM_HEAD="$(printf '%s' "$CONFIRM_JSON" | jq -r '.headRefOid // empty' 2>/dev/null)" || CONFIRM_HEAD=""
 MERGE_COMMIT="$(printf '%s' "$CONFIRM_JSON" | jq -r '.mergeCommit.oid // empty' 2>/dev/null)" || MERGE_COMMIT=""
-if [ -n "$MERGE_FAILED" ] && [ "$CONFIRM_STATE" != "MERGED" ]; then
-  refuse 17 "gh pr merge $NUMBER --match-head-commit $HEAD $METHOD_FLAG failed: $MERGE_FAILED"
+if [ "$MERGE_STATUS" != 0 ] && [ "$CONFIRM_STATE" != "MERGED" ]; then
+  refuse 17 "gh pr merge $NUMBER --match-head-commit $HEAD $METHOD_FLAG failed (exit $MERGE_STATUS): $MERGE_OUT"
 fi
 [ "$CONFIRM_STATE" = "MERGED" ] \
   || refuse 17 "merge not confirmed: the merge was submitted, but PR #$NUMBER is in state $CONFIRM_STATE, not MERGED yet (a queued merge is not a success; re-read the PR before any retry)"
