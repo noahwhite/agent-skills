@@ -74,13 +74,36 @@ def text_of(path: Path) -> str:
 
 def section(text: str, heading: str) -> str:
     marker = f"\n## {heading}\n"
-    assert marker in text, f"missing section: {heading}"
+    count = text.count(marker)
+    assert count == 1, f"the {heading!r} heading must appear once, found {count}"
     return text.split(marker, 1)[1].split("\n## ", 1)[0]
 
 
+def active_lines(text: str) -> list[str]:
+    """The lines a reader sees as Markdown: nothing inside a fenced block or an HTML comment."""
+    lines: list[str] = []
+    fenced = False
+    in_comment = False
+    for line in text.splitlines():
+        if in_comment:
+            if "-->" in line:
+                in_comment = False
+            continue
+        if line.strip().startswith("```"):
+            fenced = not fenced
+            continue
+        if fenced:
+            continue
+        if "<!--" in line:
+            in_comment = "-->" not in line.split("<!--", 1)[1]
+            line = line.split("<!--", 1)[0]
+        lines.append(line)
+    return lines
+
+
 def numbered_item(text: str, number: int) -> list[str]:
-    """A numbered list item and its indented continuation lines, as written."""
-    lines = text.splitlines()
+    """A numbered list item and its indented continuation lines, as a reader sees them."""
+    lines = active_lines(text)
     for index, line in enumerate(lines):
         match = NUMBERED_ITEM.match(line)
         if not match or match.group(1) != str(number):
@@ -91,13 +114,13 @@ def numbered_item(text: str, number: int) -> list[str]:
                 break
             block.append(continuation)
         return block
-    raise AssertionError(f"no numbered item {number}")
+    raise AssertionError(f"no active numbered item {number}")
 
 
 def bullet_block(text: str, bullet: str) -> list[str]:
-    """A bullet and its indented continuation lines, as written."""
-    lines = text.splitlines()
-    assert bullet in lines, f"missing bullet: {bullet}"
+    """A bullet and its indented continuation lines, as a reader sees them."""
+    lines = active_lines(text)
+    assert bullet in lines, f"missing active bullet: {bullet}"
     index = lines.index(bullet)
     block = [bullet]
     for continuation in lines[index + 1 :]:
@@ -113,11 +136,10 @@ def own_lines(text: str) -> set[str]:
 
 def fenced_template(text: str) -> str:
     """The story template under `## Template (the description)` that linear-user-story copies into a story."""
-    heading = "\n## Template (the description)\n"
-    assert heading in text, "missing the story template section"
-    section_text = text.split(heading, 1)[1].split("\n## ", 1)[0]
+    section_text = section(text, "Template (the description)")
     opener = "\n```markdown\n"
-    assert opener in section_text, "missing the story template fence"
+    openers = section_text.count(opener)
+    assert openers == 1, f"the story template section must hold one fenced template, found {openers}"
     body = section_text.split(opener, 1)[1]
     end = body.find("\n```\n")
     assert end != -1, "the story template fence is never closed"
@@ -139,6 +161,32 @@ def expected_block(first_line: str, indent: str) -> list[str]:
     return [first_line, *(indent + sentence for sentence in (RULE, FALLBACK, EXCEPTION, PRESERVATION))]
 
 
+STEP3_ITEM5 = "5. Run broader validation periodically and before the PR."
+STEP5_ITEM1 = (
+    "1. Run the complete applicable test suite, plus the repository's formatters, linters, type checks, "
+    "static analysis and build."
+)
+
+
+def expected_blocks() -> dict[str, list[str]]:
+    return {
+        "step 3 item 5": expected_block(STEP3_ITEM5, "   "),
+        "step 5 item 1": expected_block(STEP5_ITEM1, "   "),
+        "step 9 bullet": expected_block(STEP9_BULLET, "  "),
+        "dod bullet": expected_block(DOD_BULLET, "  "),
+    }
+
+
+def located_blocks(engineering: str, user_story: str) -> dict[str, list[str]]:
+    """The block found at each location AC1 names, by the same locators the tests and the guard use."""
+    return {
+        "step 3 item 5": numbered_item(section(engineering, "3. TDD per slice"), 5),
+        "step 5 item 1": numbered_item(section(engineering, "5. Prepare the PR"), 1),
+        "step 9 bullet": bullet_block(section(engineering, "9. Merge readiness"), STEP9_BULLET),
+        "dod bullet": bullet_block(fenced_template(user_story), DOD_BULLET),
+    }
+
+
 # ---- AC1/AC3: the four sentences, pinned whole on their own line in both skills -----------------
 
 
@@ -150,27 +198,23 @@ def test_each_sentence_is_whole_on_its_own_line(path: Path, sentence: str) -> No
 
 
 def test_rule_sits_in_step_3_item_5() -> None:
-    block = numbered_item(section(text_of(ENGINEERING_WORKFLOW), "3. TDD per slice"), 5)
-    assert block == expected_block("5. Run broader validation periodically and before the PR.", "   ")
+    located = located_blocks(text_of(ENGINEERING_WORKFLOW), text_of(USER_STORY))
+    assert located["step 3 item 5"] == expected_blocks()["step 3 item 5"]
 
 
 def test_rule_sits_in_step_5_item_1() -> None:
-    block = numbered_item(section(text_of(ENGINEERING_WORKFLOW), "5. Prepare the PR"), 1)
-    assert block == expected_block(
-        "1. Run the complete applicable test suite, plus the repository's formatters, linters, type checks, "
-        "static analysis and build.",
-        "   ",
-    )
+    located = located_blocks(text_of(ENGINEERING_WORKFLOW), text_of(USER_STORY))
+    assert located["step 5 item 1"] == expected_blocks()["step 5 item 1"]
 
 
 def test_rule_sits_in_the_step_9_required_checks_bullet() -> None:
-    block = bullet_block(section(text_of(ENGINEERING_WORKFLOW), "9. Merge readiness"), STEP9_BULLET)
-    assert block == expected_block(STEP9_BULLET, "  ")
+    located = located_blocks(text_of(ENGINEERING_WORKFLOW), text_of(USER_STORY))
+    assert located["step 9 bullet"] == expected_blocks()["step 9 bullet"]
 
 
 def test_dod_bullet_states_the_whole_rule() -> None:
-    block = bullet_block(fenced_template(text_of(USER_STORY)), DOD_BULLET)
-    assert block == expected_block(DOD_BULLET, "  ")
+    located = located_blocks(text_of(ENGINEERING_WORKFLOW), text_of(USER_STORY))
+    assert located["dod bullet"] == expected_blocks()["dod bullet"]
 
 
 # ---- AC3: the CI checks job still runs the locked suite ----------------------------------------
@@ -288,15 +332,42 @@ def test_rule_and_preservation_say_once_per_head_and_nothing_else_changes() -> N
 # ---- mutation tests --------------------------------------------------------------------------
 
 
+def pin_fails(engineering: str, user_story: str, name: str, block: list[str]) -> bool:
+    """True when the named location pin rejects this text, whether by a wrong block or a locator error."""
+    try:
+        return located_blocks(engineering, user_story)[name] != block
+    except AssertionError:
+        return True
+
+
 def test_guard_kills_every_mutant() -> None:
-    survivors = []
-    for path in (ENGINEERING_WORKFLOW, USER_STORY):
-        text = text_of(path)
+    engineering = text_of(ENGINEERING_WORKFLOW)
+    user_story = text_of(USER_STORY)
+    expected = expected_blocks()
+    assert located_blocks(engineering, user_story) == expected
+    for name, block in expected.items():
+        original = "\n".join(block)
         for sentence in (RULE, FALLBACK, EXCEPTION, PRESERVATION):
-            mutant = text.replace(sentence, "")
-            if mutant == text or sentence in own_lines(mutant):
-                survivors.append(f"{path.name}: sentence still present after deletion")
-    assert not survivors, survivors
+            broken = "\n".join(line for line in block if line.strip() != sentence)
+            engineering_mutant = engineering.replace(original, broken, 1) if name != "dod bullet" else engineering
+            user_story_mutant = user_story.replace(original, broken, 1) if name == "dod bullet" else user_story
+            assert pin_fails(engineering_mutant, user_story_mutant, name, block), (
+                f"the {name} pin accepted a mutant without {sentence[:40]!r}"
+            )
+    fenced = engineering.replace(
+        "\n".join(expected["step 3 item 5"]), "```text\n" + "\n".join(expected["step 3 item 5"]) + "\n```", 1
+    )
+    assert pin_fails(fenced, user_story, "step 3 item 5", expected["step 3 item 5"]), "the pin accepted a fenced rule"
+    commented = user_story.replace(
+        "\n".join(expected["dod bullet"]), "<!--\n" + "\n".join(expected["dod bullet"]) + "\n-->", 1
+    )
+    assert pin_fails(engineering, commented, "dod bullet", expected["dod bullet"]), "the pin accepted a commented rule"
+    duplicate_heading = user_story.replace(
+        "\n## Template (the description)\n", "\n## Template (the description)\n\n## Template (the description)\n", 1
+    )
+    assert pin_fails(engineering, duplicate_heading, "dod bullet", expected["dod bullet"]), (
+        "the pin accepted a duplicate template heading"
+    )
     workflow = yaml.safe_load(text_of(CI))
     mutants = []
     for mutant_run in ("uv run --locked pytest -x", "pytest -q", "uv run --locked pytest"):
