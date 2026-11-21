@@ -7,6 +7,7 @@ replaces both skills' prose selection with a call to `scripts/select-path.py`.
 """
 
 import hashlib
+import importlib.util
 import re
 from pathlib import Path
 
@@ -344,6 +345,24 @@ def steps_two_to_twelve() -> str:
     return text[start:end]
 
 
+def one_green_signal_sentences() -> tuple[str, ...]:
+    """The SKL-387 sentences, from tests/test_one_green_signal.py, loaded without making tests/ a package."""
+    spec = importlib.util.spec_from_file_location("repo_test_one_green_signal", ROOT / "tests" / "test_one_green_signal.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.RULE, module.FALLBACK, module.EXCEPTION, module.PRESERVATION
+
+
+# SKL-387 states the one-green-signal rule in step 3 item 5, step 5 item 1 and the step 9
+# "All required checks are green" bullet. The digest above is kept the same way: those three blocks
+# are built from the sentences `tests/test_one_green_signal.py` pins and cut out before hashing, so
+# every other byte of steps 2 to 12 still has to match.
+ONE_GREEN_SIGNAL_BLOCKS = (
+    "".join(f"   {sentence}\n" for sentence in one_green_signal_sentences()),
+    "".join(f"  {sentence}\n" for sentence in one_green_signal_sentences()),
+)
+
+
 def test_handoff_blocks_appear_once_in_order() -> None:
     text = steps_two_to_twelve()
     positions = []
@@ -361,6 +380,9 @@ def test_steps_two_to_twelve_outside_the_handoff_blocks_are_unchanged() -> None:
     text = text.replace(f"\n{DEPLOYED_NOTE}\n", f"\n{DEPLOYED_NOTE_BEFORE_SKL_270}\n", 1)
     assert text.count(VERIFIER_LINES) == 1, "the Verify stage must carry the SKL-346 verifier line once"
     text = text.replace(VERIFIER_LINES, "", 1)
+    for block, expected in ((ONE_GREEN_SIGNAL_BLOCKS[0], 2), (ONE_GREEN_SIGNAL_BLOCKS[1], 1)):
+        assert text.count(block) == expected, "the one-green-signal rule must sit once in each named step"
+        text = text.replace(block, "")
     assert hashlib.sha256(text.encode()).hexdigest() == STEPS_TWO_TO_TWELVE_SHA256
 
 
