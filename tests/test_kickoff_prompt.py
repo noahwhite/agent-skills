@@ -15,14 +15,6 @@ CADENCE_MINUTES = 12
 CALLER_LINE = "Start the session in Lite mode where the session offers one, then paste the block below."
 POINTER = "assets/kickoff-prompt.md"
 
-# The asset is exactly the caller line, blank space, and one fenced block: a CommonMark fence
-# (three or more backticks or tildes) with an optional info string, closed by the same fence.
-ASSET_SHAPE = re.compile(
-    rf"\A{re.escape(CALLER_LINE)}\n+(?P<fence>(?P<marker>`|~)\2{{2,}})[^\n]*\n"
-    r"(?P<block>.+?)\n(?P=fence)\n*\Z",
-    re.DOTALL,
-)
-
 CADENCE_SENTENCE = (
     "For this story-to-done run, make one progress check per "
     f"{CADENCE_MINUTES}-minute window instead of several inside it, and batch your waits."
@@ -34,6 +26,7 @@ SCOPE_SENTENCE = (
     "handle a handback without waiting for the next routine poll."
 )
 DEADLINE_SENTENCE = "The deadlines in references/interim-handbacks.md are unchanged."
+EXPECTED_BLOCK = "\n".join((CADENCE_SENTENCE, DEFAULT_SENTENCE, SCOPE_SENTENCE, DEADLINE_SENTENCE))
 
 POINTER_SENTENCE = (
     "For an orchestration-heavy run - one that spawns a senior engineer and at least one QA agent - "
@@ -43,69 +36,109 @@ POINTER_SENTENCE = (
 # What a CommonMark reader sees for the sentence: inline code loses its backticks.
 POINTER_PROSE = " ".join(POINTER_SENTENCE.replace("`", "").split())
 
+MARKDOWN = MarkdownIt("commonmark")
+STEP_HEADING = re.compile(r"^[1-5]\. ")
+
 
 def flat(text: str) -> str:
     return " ".join(text.split())
 
 
-def shape_match(text: str) -> re.Match[str] | None:
-    return ASSET_SHAPE.match(text)
+def visible_text(token) -> str:
+    """The text of an inline token as a reader sees it.
+
+    Text and inline code count; a soft or hard line break becomes one space, so a rewrapped
+    sentence still reads as one sentence. An HTML comment or a link attribute is invisible.
+    """
+    parts = []
+    for child in token.children or []:
+        if child.type in {"text", "code_inline"}:
+            parts.append(child.content)
+        elif child.type in {"softbreak", "hardbreak"}:
+            parts.append(" ")
+    return "".join(parts)
 
 
-def asset_block() -> str:
-    match = shape_match(ASSET.read_text(encoding="utf-8"))
-    assert match, "the asset must be the caller line, blank space, and one fenced block"
-    block = match.group("block")
-    assert match.group("fence") not in block, "the paste block must hold no fence of its own"
-    return block
+def rendered_inlines(text: str) -> list[tuple[int, str]]:
+    """Every inline run a CommonMark reader sees, with its starting source line."""
+    return [
+        (token.map[0] if token.map else -1, visible_text(token))
+        for token in MARKDOWN.parse(text)
+        if token.type == "inline"
+    ]
 
 
-MARKDOWN = MarkdownIt("commonmark")
-STEP_HEADING = re.compile(r"^[1-5]\. ")
+def asset_document(
+    block: str = EXPECTED_BLOCK,
+    *,
+    info: str = "",
+    opener: str = "```",
+    closer: str | None = None,
+) -> str:
+    """A minimal kickoff asset fixture; independent of the shipped file."""
+    closing = opener if closer is None else closer
+    return f"{CALLER_LINE}\n\n{opener}{info}\n{block}\n{closing}\n"
 
 
-def rendered_paragraphs(text: str) -> list[tuple[int, str]]:
-    """Each paragraph as a CommonMark reader sees it, with its starting line number.
+def shape_problems(text: str) -> list[str]:
+    """Reasons an asset text is not one caller paragraph followed by one closed fenced block.
 
-    Only text and inline-code children count: an HTML comment or a link title is not
-    something a reader sees, so a sentence hidden there is not carried prose.
+    The block is judged by CommonMark's own tokenizer, so an info string, an indented fence
+    and a longer closing fence are all accepted, while an opener CommonMark reads as prose or
+    a fence that is never closed is rejected.
     """
     tokens = MARKDOWN.parse(text)
-    paragraphs: list[tuple[int, str]] = []
+    if [token.type for token in tokens] != ["paragraph_open", "inline", "paragraph_close", "fence"]:
+        return ["the asset must be one caller paragraph followed by exactly one fenced block"]
+    problems = []
+    if flat(tokens[1].content) != CALLER_LINE:
+        problems.append("the caller line must be the asset's only paragraph")
+    fence = tokens[3]
+    closing = text.splitlines()[fence.map[1] - 1].strip() if fence.map else ""
+    if not re.fullmatch(rf"{re.escape(fence.markup[0])}{{{len(fence.markup)},}}", closing):
+        problems.append("the fenced block must be closed by a fence at least as long as its opener")
+    return problems
+
+
+def asset_block(text: str | None = None) -> str:
+    text = ASSET.read_text(encoding="utf-8") if text is None else text
+    assert shape_problems(text) == [], shape_problems(text)
+    return MARKDOWN.parse(text)[3].content.rstrip("\n")
+
+
+def step_ranges(text: str) -> list[tuple[int, int]]:
+    """Source line spans of the step 1 to step 5 sections."""
+    tokens = MARKDOWN.parse(text)
+    ranges: list[tuple[int, int]] = []
+    pending: int | None = None
     for index, token in enumerate(tokens):
-        if token.type == "inline" and tokens[index - 1].type == "paragraph_open":
-            visible = "".join(
-                child.content
-                for child in token.children or []
-                if child.type in {"text", "code_inline"}
-            )
-            paragraphs.append((token.map[0] if token.map else -1, visible))
-    return paragraphs
+        if token.type == "heading_open" and token.tag == "h2" and token.level == 0:
+            if pending is not None:
+                ranges.append((pending, token.map[0]))
+                pending = None
+            content = tokens[index + 1].content if tokens[index + 1].type == "inline" else ""
+            if STEP_HEADING.match(content):
+                pending = token.map[0]
+    if pending is not None:
+        ranges.append((pending, len(text.splitlines())))
+    return ranges
 
 
 def placement_problems(text: str) -> list[str]:
-    """Reasons SKILL.md breaks AC2's placement rule, judged on the rendered CommonMark text.
+    """Reasons SKILL.md breaks AC2's placement rule, judged on what a CommonMark reader sees.
 
-    The pointer must be exactly one paragraph of visible prose, the asset path must appear
-    once in that prose, and the sentence must sit outside the step 1 to step 5 sections. A
-    sentence the reader only sees as code, a comment or a link title counts as absent.
+    The pointer must be exactly one paragraph of visible prose, the asset path must be named
+    once in visible text, and the sentence must sit outside the step 1 to step 5 sections.
     """
     tokens = MARKDOWN.parse(text)
-    paragraphs = rendered_paragraphs(text)
+    inlines = rendered_inlines(text)
+    paragraphs = [
+        (token.map[0] if token.map else -1, visible_text(token))
+        for index, token in enumerate(tokens)
+        if token.type == "inline" and tokens[index - 1].type == "paragraph_open"
+    ]
     pointer_lines = [line for line, visible in paragraphs if POINTER_PROSE in flat(visible)]
-    path_count = sum(visible.count(POINTER) for _, visible in paragraphs)
-    step_ranges: list[tuple[int, int]] = []
-    pending_step: int | None = None
-    for index, token in enumerate(tokens):
-        if token.type == "heading_open" and token.tag == "h2" and token.level == 0:
-            if pending_step is not None:
-                step_ranges.append((pending_step, token.map[0]))
-                pending_step = None
-            content = tokens[index + 1].content if tokens[index + 1].type == "inline" else ""
-            if STEP_HEADING.match(content):
-                pending_step = token.map[0]
-    if pending_step is not None:
-        step_ranges.append((pending_step, len(text.splitlines())))
+    path_count = sum(visible.count(POINTER) for _, visible in inlines)
     problems: list[str] = []
     if len(pointer_lines) != 1:
         problems.append(
@@ -113,14 +146,20 @@ def placement_problems(text: str) -> list[str]:
             f"(found {len(pointer_lines)} paragraphs carrying it)"
         )
     if path_count != 1:
-        problems.append(f"the asset path must appear once in visible prose (found {path_count})")
+        problems.append(f"the asset path must appear once in visible text (found {path_count})")
     for line in pointer_lines:
-        if any(start <= line < end for start, end in step_ranges):
+        if any(start <= line < end for start, end in step_ranges(text)):
             problems.append(
                 "the kickoff pointer must sit outside the step 1 to step 5 sections "
                 f"(line {line + 1})"
             )
     return problems
+
+
+def skill_document(pointer: str = POINTER_SENTENCE) -> str:
+    """A minimal SKILL.md fixture whose five step sections carry no pointer."""
+    steps = "\n\n".join(f"## {number}. Step {number}\n\nStep {number} body." for number in range(1, 6))
+    return f"# Title\n\n## Kickoff prompt\n\n{pointer}\n\n{steps}\n"
 
 
 def test_caller_line_is_the_first_line_and_sits_outside_the_block() -> None:
@@ -130,13 +169,7 @@ def test_caller_line_is_the_first_line_and_sits_outside_the_block() -> None:
 
 
 def test_the_asset_is_the_caller_line_and_exactly_one_block() -> None:
-    match = shape_match(ASSET.read_text(encoding="utf-8"))
-    assert match, "the asset must be the caller line, blank space, and one fenced block"
-    text = ASSET.read_text(encoding="utf-8")
-    assert len(re.findall(r"^(?:`{3,}|~{3,})", text, re.MULTILINE)) == 2, (
-        "one opening fence and one closing fence"
-    )
-    assert text.rstrip().endswith(match.group("fence")), "the fenced block must close the asset"
+    assert shape_problems(ASSET.read_text(encoding="utf-8")) == []
 
 
 def test_the_block_respects_the_line_and_word_ceilings() -> None:
@@ -146,14 +179,34 @@ def test_the_block_respects_the_line_and_word_ceilings() -> None:
 
 
 def test_the_block_is_exactly_the_required_instructions_in_order() -> None:
-    expected = " ".join((CADENCE_SENTENCE, DEFAULT_SENTENCE, SCOPE_SENTENCE, DEADLINE_SENTENCE))
-    assert flat(asset_block()) == flat(expected)
+    assert flat(asset_block()) == flat(EXPECTED_BLOCK)
 
 
 def test_the_cadence_figure_is_pinned_both_ways() -> None:
     assert CADENCE_MINUTES == 12
     assert f"{CADENCE_MINUTES}-minute" in asset_block()
     assert "12-minute" in asset_block()
+
+
+def test_the_shape_guard_accepts_a_fence_with_an_info_string() -> None:
+    assert shape_problems(asset_document(info="text")) == []
+
+
+def test_the_shape_guard_accepts_a_longer_closing_fence() -> None:
+    assert shape_problems(asset_document(closer="````")) == []
+
+
+def test_the_shape_guard_rejects_an_unclosed_fence() -> None:
+    unclosed = f"{CALLER_LINE}\n\n```\n{EXPECTED_BLOCK}\n"
+    assert shape_problems(unclosed)
+
+
+def test_the_shape_guard_rejects_trailing_text_outside_the_block() -> None:
+    assert shape_problems(asset_document() + "Trailing prose.\n")
+
+
+def test_the_shape_guard_rejects_an_opener_commonmark_reads_as_prose() -> None:
+    assert shape_problems(asset_document(info="a`b"))
 
 
 def test_the_skill_points_at_the_asset_and_states_the_default_outside_the_steps() -> None:
@@ -172,39 +225,50 @@ def test_the_skill_points_at_the_asset_and_states_the_default_outside_the_steps(
     assert placement_problems(text) == []
 
 
-def test_the_shape_guard_accepts_a_fence_with_an_info_string() -> None:
-    text = ASSET.read_text(encoding="utf-8")
-    mutated = text.replace("\n```\n", "\n```text\n", 1)
+def test_the_placement_guard_accepts_a_rewrapped_pointer() -> None:
+    wrapped = POINTER_SENTENCE.replace("Lite mode", "\nLite mode")
+    assert wrapped != POINTER_SENTENCE
+    assert placement_problems(skill_document(wrapped)) == []
+
+
+def test_the_placement_guard_rejects_a_pointer_inside_a_step_section() -> None:
+    text = skill_document()
+    heading = "## 2. Step 2\n"
+    mutated = text.replace(heading, f"{heading}\n{POINTER_SENTENCE}\n")
     assert mutated != text
-    assert shape_match(mutated), "AC1 allows one fenced block; an info string does not change it"
+    problems = placement_problems(mutated)
+    assert any("outside the step 1 to step 5 sections" in problem for problem in problems), problems
 
 
 def test_the_placement_guard_rejects_an_indented_code_block() -> None:
-    text = SKILL.read_text(encoding="utf-8")
-    mutated = text.replace(POINTER_SENTENCE, f"    {POINTER_SENTENCE}")
-    assert placement_problems(mutated), "a four-space-indented pointer renders as code, not prose"
+    problems = placement_problems(skill_document(f"    {POINTER_SENTENCE}"))
+    assert any("exactly one paragraph of visible prose (found 0" in problem for problem in problems)
 
 
 def test_the_placement_guard_rejects_a_pointer_hidden_in_a_mismatched_fence() -> None:
-    text = SKILL.read_text(encoding="utf-8")
-    mutated = text.replace(POINTER_SENTENCE, "") + f"\n~~~\n{POINTER_SENTENCE}\n```\n"
-    assert placement_problems(mutated), "a tilde fence is not closed by a backtick fence"
+    hidden = f"~~~\n{POINTER_SENTENCE}\n```"
+    problems = placement_problems(skill_document(hidden))
+    assert any("exactly one paragraph of visible prose (found 0" in problem for problem in problems)
 
 
 def test_the_placement_guard_rejects_a_sentence_hidden_in_a_comment() -> None:
-    text = SKILL.read_text(encoding="utf-8")
-    mutated = text.replace(POINTER_SENTENCE, f"See <!-- {POINTER_SENTENCE} --> the prompt.")
-    assert placement_problems(mutated), "an HTML comment is not carried prose"
+    problems = placement_problems(skill_document(f"<!-- {POINTER_SENTENCE} -->"))
+    assert any("exactly one paragraph of visible prose (found 0" in problem for problem in problems)
 
 
 def test_the_placement_guard_rejects_a_sentence_hidden_in_a_link_title() -> None:
-    text = SKILL.read_text(encoding="utf-8")
-    mutated = text.replace(POINTER_SENTENCE, f'[Kickoff](https://example.com "{POINTER_SENTENCE}")')
-    assert placement_problems(mutated), "a link title is not carried prose"
+    hidden = f'[Kickoff](https://example.com "{POINTER_SENTENCE}")'
+    problems = placement_problems(skill_document(hidden))
+    assert any("exactly one paragraph of visible prose (found 0" in problem for problem in problems)
 
 
 def test_the_placement_guard_rejects_a_decoded_duplicate_pointer() -> None:
-    text = SKILL.read_text(encoding="utf-8")
-    mutated = text.replace("## Metrics\n", "Also see assets/kickoff-prompt&#46;md.\n\n## Metrics\n")
-    assert mutated != text
-    assert placement_problems(mutated), "an entity-decoded second pointer is still visible prose"
+    duplicated = f"{POINTER_SENTENCE}\n\nAlso see assets/kickoff-prompt&#46;md."
+    problems = placement_problems(skill_document(duplicated))
+    assert any("must appear once in visible text (found 2" in problem for problem in problems)
+
+
+def test_the_placement_guard_counts_a_pointer_in_a_heading() -> None:
+    text = skill_document().replace("## Kickoff prompt", f"## Kickoff prompt and {POINTER}")
+    problems = placement_problems(text)
+    assert any("must appear once in visible text (found 2" in problem for problem in problems)
