@@ -25,6 +25,13 @@ FAKE_GH = r"""#!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$*" >> "$GH_LOG"
 filter=""
+prev=""
+for a in "$@"; do
+  if [ "$prev" = "--repo" ]; then
+    [[ "$a" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || { echo "gh: --repo needs OWNER/REPO, got $a" >&2; exit 3; }
+  fi
+  prev="$a"
+done
 args=("$@")
 for ((i = 0; i < ${#args[@]}; i++)); do
   if [ "${args[i]}" = "--jq" ]; then filter="${args[i+1]}"; fi
@@ -60,14 +67,21 @@ case "${1:-}" in
         [ -z "${FAIL_PR:-}" ] || { echo "gh: no pull requests found" >&2; exit 1; }
         case "$*" in
           *state,mergedAt,mergeCommit*) cat "$FIXTURES/confirm.json" ;;
-          *headRefOid*) cat "$FIXTURES/pr.json" ;;
+          *headRefOid*)
+            if [ -n "${MOVED_AFTER_CHECKS:-}" ] && [ -f "$FIXTURES/moved-once" ]; then
+              jq '.headRefOid = "89abcdef0123456789abcdef0123456789abcdef"' "$FIXTURES/pr.json"
+            else
+              touch "$FIXTURES/moved-once"
+              cat "$FIXTURES/pr.json"
+            fi
+            ;;
           *) echo "unexpected pr view: $*" >&2; exit 3 ;;
         esac
         exit 0
         ;;
       checks)
         [ -z "${FAIL_CHECKS:-}" ] || { echo "gh: HTTP 500" >&2; exit 1; }
-        [ -z "${NO_REQUIRED_CHECKS:-}" ] || { echo "no required checks reported on the 'x' branch" >&2; exit 1; }
+        [ -z "${NO_REQUIRED_CHECKS:-}" ] || { echo "no required checks reported on the 'x' branch${NO_REQUIRED_CHECKS_SUFFIX:-}" >&2; exit 1; }
         [ -z "${WARN_CHECKS:-}" ] || echo "warning: something happened" >&2
         cat "$FIXTURES/checks.json"
         exit "${CHECKS_EXIT:-0}"
@@ -159,6 +173,7 @@ def run(tmp_path):
         args=(),
         cwd=None,
         extra_env=None,
+        shadow_yaml=False,
     ):
         pages = reviews if reviews and isinstance(reviews[0], list) else [reviews or []]
         (fixtures / "reviews.json").write_text(json.dumps(pages))
@@ -180,6 +195,8 @@ def run(tmp_path):
             (consumer / "shared").mkdir()
             (consumer / "skills.json").write_text("[]\n")
             (consumer / "shared" / "runtimes.md").write_text("map\n")
+        if shadow_yaml:
+            (consumer / "yaml.py").write_text("raise SystemExit('consumer yaml.py was imported')\n")
         if profile_text is not None:
             profile.write_text(profile_text)
         log.write_text("")
@@ -198,6 +215,11 @@ def run(tmp_path):
             local = consumer / ".agent-skills"
             local.mkdir()
             (local / "profile.yaml").write_text(profile_text)
+            env["HOME"] = str(tmp_path / "home")
+        elif profile_path == "repo-dir":
+            local = consumer / ".agent-skills"
+            local.mkdir()
+            (local / "profile.yaml").mkdir()
             env["HOME"] = str(tmp_path / "home")
         elif profile_path == "home":
             home = tmp_path / "home"
@@ -230,7 +252,7 @@ def calls(log):
 
 
 def merged(log):
-    return [ln for ln in log if ln.startswith("pr merge 7")]
+    return [ln for ln in log if ln.startswith("pr merge") and "--help" not in ln]
 
 
 # --- Slice 1: invocation, profile read, PR read, expected-author resolution ---------------------
@@ -691,7 +713,7 @@ def test_ignores_an_unterminated_trailing_approval_line(run, tmp_path):
     assert merged(log) == []
 
 
-def test_reports_conflicting_decisions_and_refuses(run, tmp_path):
+def test_reports_conflicting_decisions_and_applies_the_first(run, tmp_path):
     path = approvals_file(
         tmp_path,
         [
@@ -700,9 +722,24 @@ def test_reports_conflicting_decisions_and_refuses(run, tmp_path):
         ],
     )
     done, log = run(reviews=[review()], args=("--approvals", str(path), "--request-id", REQUEST))
-    assert done.returncode != 0
     assert "conflicting decisions" in done.stderr
-    assert "APPROVE" in done.stderr and "BOUNCE" in done.stderr
+    assert "the first decision stands" in done.stderr
+    assert done.returncode == 0, done.stderr
+    assert len(merged(log)) == 1
+
+
+def test_reports_a_conflict_and_honours_a_first_bounce(run, tmp_path):
+    path = approvals_file(
+        tmp_path,
+        [
+            f"BOUNCE | {REQUEST} | {HEAD} | manager | not yet | 2026-11-20T19:00:00Z",
+            f"APPROVE | {REQUEST} | {HEAD} | manager | 2026-11-20T19:05:00Z",
+        ],
+    )
+    done, log = run(reviews=[review()], args=("--approvals", str(path), "--request-id", REQUEST))
+    assert done.returncode != 0
+    assert "bounced" in done.stderr
+    assert "conflicting decisions" in done.stderr
     assert merged(log) == []
 
 
@@ -729,12 +766,14 @@ def test_lists_each_excluded_marker_review(run, tmp_path):
 
 def test_a_missing_jq_is_a_named_prerequisite_failure(tmp_path):
     bash = shutil.which("bash")
-    assert bash
-    bindir = tmp_path / "only-gh"
+    git = shutil.which("git")
+    assert bash and git
+    bindir = tmp_path / "only-gh-and-git"
     bindir.mkdir()
     gh = bindir / "gh"
     gh.write_text("#!/usr/bin/env bash\nexit 0\n")
     gh.chmod(gh.stat().st_mode | stat.S_IXUSR)
+    (bindir / "git").symlink_to(git)
     done = subprocess.run(
         [bash, str(SCRIPT), "7"],
         cwd=str(tmp_path),
@@ -745,3 +784,112 @@ def test_a_missing_jq_is_a_named_prerequisite_failure(tmp_path):
     )
     assert done.returncode == 10
     assert "jq" in done.stderr
+
+
+# --- Slice 7: the re-verify round's findings ------------------------------------------------
+
+
+def test_refuses_a_stale_commit_id_even_when_the_body_names_the_live_head(run):
+    stale = review()
+    stale["commit_id"] = MOVED  # body still names HEAD
+    done, log = run(reviews=[stale])
+    assert done.returncode != 0
+    assert HEAD in done.stderr and MOVED in done.stderr
+    assert merged(log) == []
+
+
+def test_lists_excluded_markers_before_the_no_match_refusal(run):
+    other_url = "https://github.com/acme/widgets/pull/7#pullrequestreview-13"
+    excluded = review(author="someone-else")
+    excluded["html_url"] = other_url
+    done, log = run(reviews=[excluded])
+    assert done.returncode != 0
+    assert f"Excluded marker review: someone-else {other_url} {HEAD}" in done.stdout, done.stdout
+    assert merged(log) == []
+
+
+def test_resolves_a_relative_profile_env_path_from_the_invocation_directory(run, tmp_path):
+    consumer = tmp_path / "consumer"
+    sub = consumer / "sub"
+    sub.mkdir()
+    (sub / "profile.yaml").write_text(PROFILE.replace("merge_owner: agent", "merge_owner: human"))
+    done, log = run(
+        profile_text=None,
+        reviews=[review()],
+        cwd=sub,
+        extra_env={"AGENT_SKILLS_PROFILE": "profile.yaml"},
+    )
+    assert done.returncode == 0, done.stderr
+    assert merged(log) == []
+    assert "no merge command" in done.stdout
+
+
+def test_refuses_a_profile_path_that_is_not_a_regular_file(run):
+    done, log = run(profile_path="repo-dir", profile_text=None)
+    assert done.returncode == 13
+    assert ".agent-skills/profile.yaml" in done.stderr
+    assert "not a regular file" in done.stderr
+    assert log == []
+
+
+def test_a_human_owner_reports_merge_ready_without_a_merge_method(run):
+    text = "version: 1\nreview:\n  merge_owner: human\n  record_author: record-author\n"
+    done, log = run(profile_text=text, reviews=[review()])
+    assert done.returncode == 0, done.stderr
+    assert HEAD in done.stdout and URL in done.stdout and REVIEW_URL in done.stdout
+    assert "no merge command" in done.stdout
+    assert merged(log) == []
+
+
+def test_refuses_when_the_head_moves_while_the_checks_are_read(run):
+    done, log = run(reviews=[review()], extra_env={"MOVED_AFTER_CHECKS": "1"})
+    assert done.returncode != 0
+    assert "moved" in done.stderr
+    assert merged(log) == []
+
+
+def test_an_empty_approvals_argument_is_a_usage_error(run):
+    done, log = run(reviews=[review()], args=("--approvals", "", "--request-id", REQUEST))
+    assert done.returncode == 2
+    assert merged(log) == []
+
+
+def test_a_request_id_that_does_not_name_the_pr_is_refused(run, tmp_path):
+    path = approvals_file(tmp_path, [f"APPROVE | REQ-SKL-388-PR8-1 | {HEAD} | manager | 2026-11-20T19:00:00Z"])
+    done, log = run(reviews=[review()], args=("--approvals", str(path), "--request-id", "REQ-SKL-388-PR8-1"))
+    assert done.returncode == 2
+    assert "PR #7" in done.stderr
+    assert merged(log) == []
+
+
+def test_does_not_import_a_module_from_the_consumer_checkout(run):
+    done, log = run(reviews=[review()], shadow_yaml=True)
+    assert done.returncode == 0, done.stderr
+    assert "consumer yaml.py was imported" not in done.stderr
+    assert len(merged(log)) == 1
+
+
+def test_refuses_a_first_line_without_a_full_head_sha(run):
+    body = "Review of record please-see-the-thread\nreviewer and adjudicator\n"
+    done, log = run(reviews=[review(body=body)])
+    assert done.returncode != 0
+    assert "does not carry a full head SHA" in done.stderr
+    assert "please-see-the-thread" not in done.stderr
+    assert merged(log) == []
+
+
+def test_refuses_a_near_miss_no_required_checks_diagnostic(run):
+    done, log = run(
+        reviews=[review()],
+        extra_env={"NO_REQUIRED_CHECKS": "1", "NO_REQUIRED_CHECKS_SUFFIX": " (cached)"},
+    )
+    assert done.returncode != 0
+    assert "Could not read the required checks" in done.stderr
+    assert merged(log) == []
+
+
+def test_reports_a_confirmation_read_failure_as_submitted_not_confirmed(run):
+    done, log = run(reviews=[review()], confirm="not json")
+    assert done.returncode != 0
+    assert "merge submitted but not confirmed" in done.stderr
+    assert len(merged(log)) == 1

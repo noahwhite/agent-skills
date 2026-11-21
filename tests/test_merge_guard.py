@@ -305,7 +305,7 @@ def test_engineering_workflow_merge_uses_the_guard() -> None:
     assert GUARD in autonomous
     assert EXPECTED_HEAD in autonomous
     assert MATCH_HEAD in autonomous
-    approved = next(ln for ln in body.splitlines() if ln.startswith("4. Re-read the live PR,"))
+    approved = next(ln for ln in body.splitlines() if ln.startswith("4. Have the helper run the merge guard"))
     assert "run the merge guard in `references/code-review.md`" in approved
     assert UNGUARDED_STOP + " instead of merging unguarded" in approved
 
@@ -317,7 +317,7 @@ def test_engineering_workflow_step_ten_names_the_merge_helper_on_every_merge_pat
     # SKL-388: step 10 merges through the one-call helper instead of a hand-written gh sequence.
     body = section(skill("engineering-workflow"), "10. Merge")
     autonomous = next(ln for ln in body.splitlines() if ln.startswith("- If `profile.review.merge_owner` is `agent`:"))
-    approved = next(ln for ln in body.splitlines() if ln.startswith("4. Re-read the live PR,"))
+    approved = next(ln for ln in body.splitlines() if ln.startswith("4. Have the helper run the merge guard"))
     assert MERGE_PR_INVOCATION in autonomous
     assert MERGE_PR_INVOCATION in approved
     assert "--approvals <approvals file> --request-id <request ID>" in approved
