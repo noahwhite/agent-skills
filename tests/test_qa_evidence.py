@@ -344,20 +344,35 @@ def test_a_dangling_symlink_readme_is_refused_not_followed(tmp_path):
     assert not destination.exists()
 
 
+def test_a_symlinked_story_directory_is_refused_not_followed(tmp_path):
+    story = tmp_path / "docs" / "qa-evidence" / "SKL-386"
+    story.parent.mkdir(parents=True)
+    destination = tmp_path / "elsewhere"
+    destination.mkdir()
+    story.symlink_to(destination, target_is_directory=True)
+    res = run(tmp_path, "--key", "SKL-386", "--item", "AC1 - one generator")
+    assert res.returncode == 1
+    assert len(res.stderr.splitlines()) == 1, res.stderr
+    assert str(story) in res.stderr
+    assert list(destination.iterdir()) == []
+
+
 def test_a_readme_that_appears_before_the_write_is_never_overwritten(tmp_path, monkeypatch):
     generator = load_generator()
     concurrent = "# written by the other invocation\n"
     readme = tmp_path / "docs" / "qa-evidence" / "SKL-386" / "README.md"
+    real_link = os.link
 
-    def write_concurrently(*_args, **_kwargs):
+    def racing_link(source, destination, *args, **kwargs):
         readme.parent.mkdir(parents=True, exist_ok=True)
         readme.write_text(concurrent, encoding="utf-8")
-        return "skeleton\n"
+        return real_link(source, destination, *args, **kwargs)
 
-    monkeypatch.setattr(generator, "skeleton", write_concurrently)
+    monkeypatch.setattr(generator.os, "link", racing_link)
     code = generator.main(["--key", "SKL-386", "--evidence-dir", str(tmp_path / "docs" / "qa-evidence")])
     assert code == 1
     assert readme.read_text(encoding="utf-8") == concurrent
+    assert list(readme.parent.glob(".qa-evidence-*")) == []
 
 
 def test_the_vendored_entry_point_creates_and_refuses_from_a_consumer_directory(tmp_path):
@@ -506,6 +521,33 @@ def test_the_copied_lint_rules_are_the_lint_rules():
         assert generator.VERDICT_RE.search(word), word
 
 
+REF_PARITY_LABELS = (
+    "AC1 - profile.qa.evidence_dir is set",
+    "AC1 - `profile.qa.evidence_dir.` is set",
+    "AC1 - profile.git.integration_branch.. is unset",
+    "AC1 - **profile.git.integration_branch** is set",
+    "AC1 - *profile.git.integration_branch* is set",
+    "AC1 - [profile.git.integration_branch](guide.md)",
+    "AC1 - [a guide](profile.not.a.key)",
+    "AC1 - <img alt=\"profile.not.a.key\">",
+    "AC1 - <!-- profile.not.a.key -->",
+    "AC1 - ![alt profile.not.a.key](img.png)",
+    "AC1 - profile.qa.evidence&#95;dir is set",
+    "AC1 - profile.qa.evidence\\*_dir",
+    "AC1 - profile.review.* is the section",
+    "AC1 - profile.review.*[0].name is set",
+    "AC1 - [profile.x] is literal",
+)
+
+
+@pytest.mark.parametrize("label", REF_PARITY_LABELS)
+def test_reference_extraction_matches_the_doc_lint(label):
+    generator = load_generator()
+    cleaned = generator.clean_label(label)
+    lint_sees = profile_refs(f"| {cleaned} |  |  |")
+    assert generator.ref_candidates(cleaned) == lint_sees, label
+
+
 VALID_REFS = (
     "qa.evidence_dir",
     "git.branch_prefixes.feature",
@@ -542,6 +584,40 @@ def test_a_profile_reference_the_lint_rejects_is_refused(tmp_path, ref):
     assert res.returncode == 1, res.stderr
     assert len(res.stderr.splitlines()) == 1, res.stderr
     assert tree_state(tmp_path) == {}
+
+
+def test_a_code_span_reference_keeping_its_dot_is_refused(tmp_path):
+    label = "AC1 - `profile.qa.evidence_dir.` is set"
+    assert profile_refs(label) == ["qa.evidence_dir."]
+    res = run_in(ROOT, "--key", "SKL-386", "--item", label, "--evidence-dir", str(tmp_path / "evidence"))
+    assert res.returncode == 1, res.stderr
+    assert len(res.stderr.splitlines()) == 1, res.stderr
+    assert tree_state(tmp_path) == {}
+
+
+def test_an_html_attribute_reference_is_refused(tmp_path):
+    label = 'AC1 - <img alt="profile.not.a.key"> is set'
+    assert profile_refs(label) == ["not.a.key"]
+    res = run_in(ROOT, "--key", "SKL-386", "--item", label, "--evidence-dir", str(tmp_path / "evidence"))
+    assert res.returncode == 1, res.stderr
+    assert len(res.stderr.splitlines()) == 1, res.stderr
+    assert tree_state(tmp_path) == {}
+
+
+def test_a_link_wrapped_resolvable_reference_is_accepted(tmp_path):
+    label = "AC1 - [profile.git.integration_branch](guide.md) is set"
+    assert profile_refs(label) == ["git.integration_branch"]
+    res = run_in(ROOT, "--key", "SKL-386", "--item", label, "--evidence-dir", str(tmp_path / "evidence"))
+    assert res.returncode == 0, res.stderr
+    readme = tmp_path / "evidence" / "SKL-386" / "README.md"
+    assert row_cells(table_rows(readme.read_text(encoding="utf-8"))[0])[0] == label
+
+
+def test_a_reference_in_a_link_destination_is_not_a_reference(tmp_path):
+    label = "AC1 - [the guide](profile.not.a.key)"
+    assert profile_refs(label) == []
+    res = run_in(ROOT, "--key", "SKL-386", "--item", label, "--evidence-dir", str(tmp_path / "evidence"))
+    assert res.returncode == 0, res.stderr
 
 
 def test_an_emphasis_wrapped_profile_reference_is_accepted(tmp_path):
@@ -645,6 +721,55 @@ def test_the_rendered_table_holds_three_cells_with_the_label_text(tmp_path, labe
     html = parser.render(text)
     assert html.count("<td>") == 3, html
     assert f"<td>{rendered}</td>" in html, html
+
+
+def test_a_nested_working_directory_finds_the_repository_schema(tmp_path):
+    (tmp_path / "profile").mkdir()
+    (tmp_path / "profile" / "schema.json").write_text(
+        (ROOT / "profile" / "schema.json").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    sub = tmp_path / "sub"
+    sub.mkdir()
+    label = "AC1 - profile.not.a.key is set"
+    assert profile_refs(label) == ["not.a.key"]
+    res = run_in(sub, "--key", "SKL-386", "--item", label, "--evidence-dir", str(tmp_path / "evidence"))
+    assert res.returncode == 1, res.stderr
+    assert len(res.stderr.splitlines()) == 1, res.stderr
+    assert not (tmp_path / "evidence").exists()
+
+
+def test_a_nested_working_directory_loses_the_spelling_exemption(tmp_path):
+    (tmp_path / "profile").mkdir()
+    (tmp_path / "profile" / "schema.json").write_text("{}\n", encoding="utf-8")
+    sub = tmp_path / "sub"
+    sub.mkdir()
+    label = "AC1 - the " + BRITISH_ARTIFACT + " path"
+    res = run_in(sub, "--key", "SKL-386", "--item", label)
+    assert res.returncode == 1, res.stderr
+    assert len(res.stderr.splitlines()) == 1, res.stderr
+    assert not (sub / "docs").exists()
+
+
+def test_a_broken_schema_is_named_instead_of_skipping_the_reference_check(tmp_path):
+    (tmp_path / "profile").mkdir()
+    broken = tmp_path / "profile" / "schema.json"
+    broken.write_text("{not json", encoding="utf-8")
+    res = run_in(tmp_path, "--key", "SKL-386", "--item", "AC1 - profile.any.key")
+    assert res.returncode == 1, res.stderr
+    assert len(res.stderr.splitlines()) == 1, res.stderr
+    assert "schema.json" in res.stderr
+    assert not (tmp_path / "docs").exists()
+
+
+def test_an_existing_readme_is_named_before_the_key_content_lint(tmp_path):
+    readme = tmp_path / "docs" / "qa-evidence" / "FAILED-1" / "README.md"
+    readme.parent.mkdir(parents=True)
+    readme.write_text("# handwritten\n", encoding="utf-8")
+    res = run(tmp_path, "--key", "FAILED-1", "--item", "AC1 - one generator")
+    assert res.returncode == 1
+    assert len(res.stderr.splitlines()) == 1, res.stderr
+    assert str(readme) in res.stderr
+    assert readme.read_text(encoding="utf-8") == "# handwritten\n"
 
 
 def test_an_abbreviated_option_is_refused(tmp_path):

@@ -10,10 +10,10 @@ instead of authoring the structure.
 
 The verdict and evidence cells are left empty, because a generated verdict would be an authored
 result. An existing README is refused before any label is validated, with one line naming it, and
-the README is then published atomically without overwriting, so a concurrent writer and a dangling
-symlink at its path are refused too and a failed write leaves nothing behind. A key outside
-^[A-Z][A-Z0-9]+-[0-9]+$, an empty `--evidence-dir`, and a story key the doc-lint rejects all exit 1
-naming what is wrong.
+the README is then published atomically without overwriting, so a concurrent writer, a dangling
+symlink at its path and a symlinked story directory are refused too, and a failed write removes its
+temporary file and never leaves a README behind. A key outside ^[A-Z][A-Z0-9]+-[0-9]+$, an empty
+`--evidence-dir`, and a story key the doc-lint rejects all exit 1 naming what is wrong.
 
 A label is Markdown text, written as one table cell: its line breaks fold to spaces, runs of
 whitespace collapse, and a backslash and a literal `|` are escaped, so the cell renders the label
@@ -68,7 +68,14 @@ TAG_RE = re.compile(r"<[^>]*>")
 MARKER_RE = re.compile(r"[*`]+")
 # CommonMark treats `_` as emphasis only at a word boundary, so an identifier keeps its underscores.
 UNDERSCORE_RE = re.compile(r"(?<!\w)_+|_+(?!\w)")
-CODE_SPLIT_RE = re.compile(r"(`+)")
+# The characters a CommonMark backslash escape can quote, and the delimiter pairs the reader strips.
+ESCAPABLE = set("!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~")
+EMPHASIS_PATTERNS = (
+    re.compile(r"\*\*(?=\S)(.+?)(?<=\S)\*\*", re.S),
+    re.compile(r"(?<!\w)__(?=\S)(.+?)(?<=\S)__(?!\w)", re.S),
+    re.compile(r"\*(?=\S)(.+?)(?<=\S)\*", re.S),
+    re.compile(r"(?<!\w)_(?=\S)(.+?)(?<=\S)_(?!\w)", re.S),
+)
 
 
 def one_line(text: str) -> str:
@@ -117,26 +124,164 @@ def lint_problem(text: str, *, spelling: bool) -> str | None:
     return None
 
 
+def strip_emphasis(text: str) -> str:
+    """`text` with the balanced emphasis delimiters a CommonMark reader removes, wildcards kept."""
+    for _ in range(3):
+        before = text
+        for pattern in EMPHASIS_PATTERNS:
+            text = pattern.sub(r"\1", text)
+        if text == before:
+            break
+    return text
+
+
+def matching(text: str, start: int, opener: str, closer: str) -> int:
+    """The index of the `closer` that balances the `opener` at `start`, or -1."""
+    depth = 0
+    index = start
+    while index < len(text):
+        if text[index] == "\\" and index + 1 < len(text):
+            index += 2
+            continue
+        if text[index] == opener:
+            depth += 1
+        elif text[index] == closer:
+            depth -= 1
+            if depth == 0:
+                return index
+        index += 1
+    return -1
+
+
+def skip_link_tail(text: str, position: int) -> int:
+    """Where the inline content resumes after a link or image body, skipping its destination."""
+    if position < len(text) and text[position] == "(":
+        end = matching(text, position, "(", ")")
+        return len(text) if end == -1 else end + 1
+    if position < len(text) and text[position] == "[":
+        end = matching(text, position, "[", "]")
+        return len(text) if end == -1 else end + 1
+    return position
+
+
+def inline_segments(text: str) -> list[tuple[str, bool]]:
+    """The `(literal, is_code)` runs a CommonMark reader scans, in order.
+
+    Code spans are literal and keep a trailing dot; link destinations and reference labels are
+    not scanned; link text, image alt text and inline HTML are; escapes and entities decode in
+    text; emphasis delimiters are removed. This mirrors the doc-lint's token walk in
+    tests/test_skills.py, which the generated README must pass.
+    """
+    segments: list[tuple[str, bool]] = []
+    pending: list[str] = []
+
+    def flush() -> None:
+        if pending:
+            segments.append((html.unescape(strip_emphasis("".join(pending))), False))
+            pending.clear()
+
+    index = 0
+    while index < len(text):
+        char = text[index]
+        if char == "\\" and index + 1 < len(text):
+            quoted = text[index + 1]
+            pending.append(quoted if quoted in ESCAPABLE else char)
+            index += 2 if quoted in ESCAPABLE else 1
+            continue
+        if char == "`":
+            end = index
+            while end < len(text) and text[end] == "`":
+                end += 1
+            width = end - index
+            scan = end
+            close = -1
+            while scan < len(text):
+                if text[scan] == "`":
+                    run = scan
+                    while run < len(text) and text[run] == "`":
+                        run += 1
+                    if run - scan == width:
+                        close = scan
+                        break
+                    scan = run
+                else:
+                    scan += 1
+            if close == -1:
+                pending.append(text[index:end])
+                index = end
+                continue
+            flush()
+            content = text[end:close]
+            if len(content) >= 2 and content[0] == " " and content[-1] == " " and content.strip():
+                content = content[1:-1]
+            segments.append((content, True))
+            index = close + width
+            continue
+        if char == "!" and index + 1 < len(text) and text[index + 1] == "[":
+            end = matching(text, index + 1, "[", "]")
+            if end != -1 and end + 1 < len(text) and text[end + 1] in "([":
+                flush()
+                segments.extend(inline_segments(text[index + 2:end]))
+                index = skip_link_tail(text, end + 1)
+                continue
+        if char == "[":
+            end = matching(text, index, "[", "]")
+            if end != -1 and end + 1 < len(text) and text[end + 1] in "([":
+                flush()
+                segments.extend(inline_segments(text[index + 1:end]))
+                index = skip_link_tail(text, end + 1)
+                continue
+        if char == "<":
+            if text.startswith("<!--", index):
+                close = text.find("-->", index + 4)
+                if close != -1:
+                    flush()
+                    segments.append((text[index:close + 3], False))
+                    index = close + 3
+                    continue
+            close = text.find(">", index + 1)
+            if close != -1 and "\n" not in text[index:close]:
+                flush()
+                segments.append((text[index:close + 1], False))
+                index = close + 1
+                continue
+        pending.append(char)
+        index += 1
+    flush()
+    return segments
+
+
 def ref_candidates(text: str) -> list[str]:
     """The `profile.` references the doc-lint reads in `text`, a sentence-final dot removed."""
     refs = []
-    for index, part in enumerate(CODE_SPLIT_RE.split(text)):
-        in_code = index % 2 == 1
-        for match in PROFILE_REF_RE.finditer(part):
+    for literal, is_code in inline_segments(text):
+        for match in PROFILE_REF_RE.finditer(literal):
             ref = match.group(1)
-            refs.append(ref if in_code else ref.removesuffix("."))
+            refs.append(ref if is_code else ref.removesuffix("."))
     return refs
 
 
-def local_schema() -> dict | None:
-    """The profile schema of the target repository, which is the working directory, or None."""
-    candidate = Path.cwd() / "profile" / "schema.json"
+def repository_root() -> Path:
+    """The target repository root: the nearest ancestor with a schema, else with a `.git`."""
+    here = Path.cwd()
+    for candidate in (here, *here.parents):
+        if (candidate / "profile" / "schema.json").is_file():
+            return candidate
+    for candidate in (here, *here.parents):
+        if (candidate / ".git").exists():
+            return candidate
+    return here
+
+
+def local_schema(root: Path) -> tuple[dict | None, str | None]:
+    """The target repository's profile schema, or None when it has none, with any read problem."""
+    candidate = root / "profile" / "schema.json"
     if not candidate.is_file():
-        return None
+        return None, None
     try:
-        return json.loads(candidate.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return None
+        return json.loads(candidate.read_text(encoding="utf-8")), None
+    except (OSError, ValueError) as exc:
+        return None, f"error: cannot read {one_line(str(candidate))}: {exc}"
 
 
 def deref(node, defs: dict) -> dict:
@@ -201,10 +346,9 @@ def refs_problem(schema: dict | None, text: str) -> str | None:
     return None
 
 
-def spelling_applies(evidence_dir: str) -> bool:
+def spelling_applies(root: Path, evidence_dir: str) -> bool:
     """The spelling lint exempts frozen QA evidence, so it applies outside that tree only."""
-    root = Path.cwd()
-    target = Path(os.path.normpath(os.path.join(str(root), evidence_dir)))
+    target = Path(os.path.normpath(os.path.join(str(Path.cwd()), evidence_dir)))
     try:
         relative = target.relative_to(root)
     except ValueError:
@@ -213,10 +357,15 @@ def spelling_applies(evidence_dir: str) -> bool:
     return not (path == DEFAULT_EVIDENCE_DIR or path.startswith(DEFAULT_EVIDENCE_DIR + "/"))
 
 
-def key_problem(key: str, *, spelling: bool) -> str | None:
-    """Why `key` cannot head the skeleton, or None when it can."""
+def key_syntax_problem(key: str) -> str | None:
+    """Why `key` cannot name an evidence directory at all, or None when it can."""
     if not KEY_RE.fullmatch(key):
         return f"error: {key!r} is not a story key (expected ^[A-Z][A-Z0-9]+-[0-9]+$)"
+    return None
+
+
+def key_content_problem(key: str, *, spelling: bool) -> str | None:
+    """Why `key` would make the generated README fail the doc-lint, or None when it would not."""
     for text in (key, rendered_text(key)):
         problem = lint_problem(text, spelling=spelling)
         if problem is not None:
@@ -232,7 +381,7 @@ def label_problem(label: str, *, schema: dict | None, spelling: bool) -> str | N
         problem = lint_problem(text, spelling=spelling)
         if problem is not None:
             return problem
-    return refs_problem(schema, rendered_text(label))
+    return refs_problem(schema, label)
 
 
 def skeleton(key: str, items: list[str], path: str | None) -> str:
@@ -244,6 +393,13 @@ def skeleton(key: str, items: list[str], path: str | None) -> str:
 
 def publish(target: Path, text: str) -> bool:
     """Publish `text` at `target` without overwriting anything, or report why not."""
+    story_dir = target.parent
+    if story_dir.is_symlink():
+        print(
+            f"error: {one_line(str(story_dir.absolute()))} is a symlink; refusing to write the README through it",
+            file=sys.stderr,
+        )
+        return False
     try:
         data = text.encode("utf-8")
     except UnicodeError:
@@ -253,6 +409,12 @@ def publish(target: Path, text: str) -> bool:
         target.parent.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
         print(f"error: cannot create {one_line(str(target.parent))}: {exc.strerror or exc}", file=sys.stderr)
+        return False
+    if story_dir.is_symlink():
+        print(
+            f"error: {one_line(str(story_dir.absolute()))} is a symlink; refusing to write the README through it",
+            file=sys.stderr,
+        )
         return False
     direct = target.is_symlink() or target.exists()
     if direct:
@@ -295,11 +457,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--evidence-dir", default=DEFAULT_EVIDENCE_DIR, help="Evidence directory.")
     args = parser.parse_args(argv)
 
+    root = repository_root()
     if not args.evidence_dir:
         print("error: --evidence-dir is empty", file=sys.stderr)
         return 1
-    spelling = spelling_applies(args.evidence_dir)
-    problem = key_problem(args.key, spelling=spelling)
+    problem = key_syntax_problem(args.key)
     if problem is not None:
         print(problem, file=sys.stderr)
         return 1
@@ -309,7 +471,16 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: {one_line(str(target.absolute()))} already exists; refusing to overwrite it", file=sys.stderr)
         return 1
 
-    schema = local_schema()
+    spelling = spelling_applies(root, args.evidence_dir)
+    problem = key_content_problem(args.key, spelling=spelling)
+    if problem is not None:
+        print(problem, file=sys.stderr)
+        return 1
+
+    schema, schema_problem = local_schema(root)
+    if schema_problem is not None:
+        print(schema_problem, file=sys.stderr)
+        return 1
     labels = []
     for raw in args.items:
         label = clean_label(raw)
