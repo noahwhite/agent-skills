@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from test_skills import BRITISH_ARTIFACT, EM_DASH, stray_terms
+from test_skills import BRITISH_ARTIFACT, EM_DASH, RUNTIME_TERMS, profile_refs, stray_terms
 
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = ROOT / "shared" / "qa-evidence.py"
@@ -54,6 +54,16 @@ def run_vendored(tmp_path: Path, *args: str) -> subprocess.CompletedProcess:
     )
 
 
+def run_in(cwd: Path, *args: str) -> subprocess.CompletedProcess:
+    """Run the generator with `cwd` as the target repository the profile schema is resolved from."""
+    return subprocess.run(
+        [sys.executable, str(SCRIPT), *args],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+    )
+
+
 def load_generator():
     """The generator as a module, so a test can interpose between its checks and its write."""
     spec = importlib.util.spec_from_file_location("qa_evidence", SCRIPT)
@@ -63,12 +73,11 @@ def load_generator():
 
 
 def tree_state(root: Path) -> dict[str, bytes]:
-    """Every file under `root`, by relative path, with its bytes."""
-    return {
-        str(path.relative_to(root)): path.read_bytes()
-        for path in sorted(root.rglob("*"))
-        if path.is_file()
-    }
+    """Every path under `root`, by relative path: a file's bytes, or a marker for a directory."""
+    state = {}
+    for path in sorted(root.rglob("*")):
+        state[str(path.relative_to(root))] = b"<dir>" if path.is_dir() else path.read_bytes()
+    return state
 
 
 def generate(
@@ -258,10 +267,25 @@ def test_an_item_label_renders_as_exactly_one_cell(tmp_path, label, rendered):
         "AC1 \u2014 a dash",
         "AC1 - neutral path",
         "AC1 - a fresh verifier",
-        "DoD 1 - verified",
-        "DoD 2 - out of scope",
+        "AC1 - verified",
+        "AC1 - failed",
+        "AC1 - correct by design",
+        "AC1 - out of scope",
+        "AC1 - not covered",
+        "AC1 - pending owner ruling",
     ],
-    ids=["empty", "em-dash", "neutral", "fresh-verifier", "verified", "out-of-scope"],
+    ids=[
+        "empty",
+        "em-dash",
+        "neutral",
+        "fresh-verifier",
+        "verified",
+        "failed",
+        "correct-by-design",
+        "out-of-scope",
+        "not-covered",
+        "pending-owner-ruling",
+    ],
 )
 def test_a_label_the_doc_lint_rejects_is_refused_and_nothing_is_written(tmp_path, label):
     before = tree_state(tmp_path)
@@ -331,3 +355,137 @@ def test_the_vendored_entry_point_creates_and_refuses_from_a_consumer_directory(
     assert second.returncode == 1
     assert len(second.stderr.splitlines()) == 1, second.stderr
     assert readme.read_bytes() == before
+
+
+def test_the_canonical_clean_neutral_phrase_is_not_a_stray_term(tmp_path):
+    label = "AC5 - a clean, neutral reviewer"
+    assert stray_terms(label) == []
+    text = generate(tmp_path, "SKL-386", (label,)).read_text(encoding="utf-8")
+    assert row_cells(table_rows(text)[0])[0] == label
+
+
+@pytest.mark.parametrize(
+    "label",
+    [
+        "AC1 - todowrite is enforced",
+        "AC2 - the .opencode/agents tree is read",
+        "AC3 - mcp__github is not called",
+    ],
+    ids=["todowrite", "opencode-path", "mcp-tool"],
+)
+def test_a_label_carrying_a_runtime_term_is_refused(tmp_path, label):
+    assert RUNTIME_TERMS.search(label), label
+    before = tree_state(tmp_path)
+    res = run(tmp_path, "--key", "SKL-386", "--item", label)
+    assert res.returncode == 1
+    assert len(res.stderr.splitlines()) == 1, res.stderr
+    assert tree_state(tmp_path) == before
+
+
+def test_a_label_carrying_an_unresolvable_profile_reference_is_refused(tmp_path):
+    label = "AC3 - profile.not.a.key stays unset"
+    assert profile_refs(label) == ["not.a.key"]
+    before = tree_state(tmp_path)
+    res = run_in(ROOT, "--key", "SKL-386", "--item", label, "--evidence-dir", str(tmp_path / "evidence"))
+    assert res.returncode == 1
+    assert len(res.stderr.splitlines()) == 1, res.stderr
+    assert tree_state(tmp_path) == before
+
+
+def test_a_label_carrying_a_resolvable_profile_reference_is_accepted(tmp_path):
+    label = "AC2 - profile.qa.evidence_dir names the directory"
+    assert profile_refs(label) == ["qa.evidence_dir"]
+    schema = json.loads((ROOT / "profile" / "schema.json").read_text(encoding="utf-8"))
+    assert "evidence_dir" in schema["properties"]["qa"]["properties"]
+    res = run_in(ROOT, "--key", "SKL-386", "--item", label, "--evidence-dir", str(tmp_path / "evidence"))
+    assert res.returncode == 0, res.stderr
+    readme = tmp_path / "evidence" / "SKL-386" / "README.md"
+    assert row_cells(table_rows(readme.read_text(encoding="utf-8"))[0])[0] == label
+
+
+def test_british_spelling_is_refused_outside_the_evidence_tree(tmp_path):
+    label = "AC1 - the " + BRITISH_ARTIFACT + " path"
+    assert BRITISH_ARTIFACT in label.lower()
+    res = run_in(ROOT, "--key", "SKL-386", "--item", label, "--evidence-dir", str(tmp_path / "tmp-evidence"))
+    assert res.returncode == 1
+    assert len(res.stderr.splitlines()) == 1, res.stderr
+    assert tree_state(tmp_path) == {}
+
+
+def test_british_spelling_is_accepted_inside_the_evidence_tree(tmp_path):
+    label = "AC1 - the " + BRITISH_ARTIFACT + " path"
+    text = generate(tmp_path, "SKL-386", (label,)).read_text(encoding="utf-8")
+    assert row_cells(table_rows(text)[0])[0] == label
+
+
+def test_a_verdict_word_inside_a_longer_word_is_accepted(tmp_path):
+    label = "AC4 - an unverified commit is refused"
+    text = generate(tmp_path, "SKL-386", (label,)).read_text(encoding="utf-8")
+    assert row_cells(table_rows(text)[0])[0] == label
+
+
+@pytest.mark.parametrize("key", ["FAILED-1", "VERIFIED-1", "NEUTRAL-1"])
+def test_a_key_the_doc_lint_rejects_is_refused(tmp_path, key):
+    before = tree_state(tmp_path)
+    res = run(tmp_path, "--key", key)
+    assert res.returncode == 1
+    assert len(res.stderr.splitlines()) == 1, res.stderr
+    assert key in res.stderr
+    assert tree_state(tmp_path) == before
+
+
+def test_an_empty_evidence_dir_is_refused(tmp_path):
+    before = tree_state(tmp_path)
+    res = run(tmp_path, "--key", "SKL-386", "--evidence-dir", "")
+    assert res.returncode == 1
+    assert len(res.stderr.splitlines()) == 1, res.stderr
+    assert tree_state(tmp_path) == before
+
+
+def test_a_failed_write_leaves_no_readme_and_a_retry_succeeds(tmp_path, monkeypatch):
+    generator = load_generator()
+    target = tmp_path / "docs" / "qa-evidence" / "SKL-386" / "README.md"
+    real_fdopen = generator.os.fdopen
+
+    class FailingHandle:
+        def __init__(self, handle):
+            self._handle = handle
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc):
+            self._handle.close()
+            return False
+
+        def write(self, _text):
+            raise OSError(28, "No space left on device")
+
+    def failing_fdopen(descriptor, *args, **kwargs):
+        return FailingHandle(real_fdopen(descriptor, *args, **kwargs))
+
+    monkeypatch.setattr(generator.os, "fdopen", failing_fdopen)
+    assert generator.publish(target, "# SKL-386 QA evidence\n") is False
+    assert not target.exists()
+    assert list(target.parent.glob(".qa-evidence-*")) == []
+    monkeypatch.undo()
+    assert generator.publish(target, "# SKL-386 QA evidence\n") is True
+    assert target.read_text(encoding="utf-8") == "# SKL-386 QA evidence\n"
+
+
+def test_an_unencodable_label_is_refused_and_nothing_is_written(tmp_path, monkeypatch, capsys):
+    generator = load_generator()
+    monkeypatch.chdir(tmp_path)
+    assert generator.main(["--key", "SKL-386", "--item", "AC1 - \udcff"]) == 1
+    err = capsys.readouterr().err
+    assert len(err.splitlines()) == 1, err
+    assert tree_state(tmp_path) == {}
+    assert generator.main(["--key", "SKL-386", "--item", "AC1 - one generator"]) == 0
+    assert (tmp_path / "docs" / "qa-evidence" / "SKL-386" / "README.md").is_file()
+
+
+def test_the_documented_equals_form_passes_one_argument(tmp_path):
+    res = run(tmp_path, "--key", "SKL-386", "--item=AC1 - one generator", "--path=no-deployment")
+    assert res.returncode == 0, res.stderr
+    readme = tmp_path / "docs" / "qa-evidence" / "SKL-386" / "README.md"
+    assert row_cells(table_rows(readme.read_text(encoding="utf-8"))[0]) == ["AC1 - one generator", "", ""]
