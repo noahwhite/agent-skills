@@ -43,7 +43,7 @@ case "${1:-}" in
         [ "${3:-}" = "$REVIEWS_PATH" ] || { echo "unexpected api path: ${3:-}" >&2; exit 3; }
         for ((p = 0; p < $(jq length "$FIXTURES/reviews.json"); p++)); do
           if [ -n "$filter" ]; then
-            jq ".[$p]" "$FIXTURES/reviews.json" | jq -c "($filter) | if type == \"string\" then . else tojson end"
+            jq ".[$p]" "$FIXTURES/reviews.json" | jq -c "$filter"
           else
             jq -c ".[$p]" "$FIXTURES/reviews.json"
           fi
@@ -315,3 +315,145 @@ def test_a_failing_pr_read_fails_closed(run):
     assert done.returncode != 0
     assert "Could not read" in done.stderr
     assert merged(log) == []
+
+
+# --- Slice 2: reviews read, review-of-record selection, and the moved-head refusal ---------------
+
+
+def test_refuses_a_moved_head_and_names_both_shas(run):
+    done, log = run(reviews=[review(head=MOVED)])
+    assert done.returncode != 0
+    assert HEAD in done.stderr and MOVED in done.stderr
+    assert "review of record" in done.stderr.lower()
+    assert merged(log) == []
+
+
+def test_refuses_a_first_line_sha_that_does_not_match_the_head(run):
+    body = f"Review of record {MOVED}\nreviewer and adjudicator\n"
+    done, log = run(reviews=[review(body=body)])
+    assert done.returncode != 0
+    assert HEAD in done.stderr and MOVED in done.stderr
+    assert merged(log) == []
+
+
+def test_refuses_without_a_review_of_record(run):
+    done, log = run(reviews=[])
+    assert done.returncode != 0
+    assert "no review of record" in done.stderr.lower()
+    assert merged(log) == []
+
+
+def test_reads_the_reviews_with_the_paginated_endpoint(run):
+    _, log = run(reviews=[review()])
+    assert f"api --paginate {REVIEWS_END}" in calls(log)
+
+
+def test_selects_the_greatest_submitted_at_across_pages(run):
+    # A newer review at a moved head beats an older review at the live head.
+    done, log = run(
+        reviews=[
+            [review(head=HEAD, submitted="2026-11-20T18:00:00Z")],
+            [review(head=MOVED, submitted="2026-11-20T18:05:00Z")],
+        ]
+    )
+    assert done.returncode != 0
+    assert HEAD in done.stderr and MOVED in done.stderr
+    assert merged(log) == []
+
+
+def test_selects_a_review_at_the_live_head_from_the_second_page(run):
+    done, log = run(
+        reviews=[
+            [review(head=MOVED, submitted="2026-11-20T18:00:00Z")],
+            [review(head=HEAD, submitted="2026-11-20T18:05:00Z")],
+        ]
+    )
+    assert f"Reviewed head: {HEAD}" in done.stdout, done.stderr
+    assert f"Review of record: {REVIEW_URL}" in done.stdout
+
+
+def test_matches_the_expected_author_case_insensitively(run):
+    text = PROFILE.replace("record-author", "Record-Author")
+    done, _ = run(profile_text=text, reviews=[review(author="record-author")])
+    assert f"Reviewed head: {HEAD}" in done.stdout, done.stderr
+
+
+def test_refuses_a_marker_review_by_another_author(run):
+    done, log = run(reviews=[review(author="someone-else")])
+    assert done.returncode != 0
+    assert "no review of record" in done.stderr.lower()
+    assert "record-author" in done.stderr
+    assert merged(log) == []
+
+
+def test_ignores_a_marker_review_that_is_not_COMMENTED(run):
+    done, log = run(reviews=[review(state="APPROVED")])
+    assert done.returncode != 0
+    assert merged(log) == []
+
+
+def test_ignores_a_body_that_does_not_begin_with_the_marker(run):
+    body = f"Looks good.\nReview of record {HEAD}\n"
+    done, log = run(reviews=[review(body=body)])
+    assert done.returncode != 0
+    assert merged(log) == []
+
+
+def test_a_failing_reviews_read_fails_closed(run):
+    done, log = run(reviews=[review()], extra_env={"FAIL_REVIEWS": "1"})
+    assert done.returncode != 0
+    assert "Could not read" in done.stderr
+    assert merged(log) == []
+
+
+# --- Slice 3: the required-checks read and the mergeability refusal -----------------------------
+
+
+@pytest.mark.parametrize("state", ["PENDING", "FAILURE", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED"])
+def test_refuses_a_required_check_that_is_not_green(run, state):
+    done, log = run(reviews=[review()], checks=[check("ci/test", "SUCCESS"), check("ci/discovery", state)])
+    assert done.returncode != 0
+    assert "ci/discovery" in done.stderr
+    assert state in done.stderr
+    assert merged(log) == []
+
+
+def test_a_pending_checks_exit_code_still_reads_the_check_states(run):
+    done, log = run(reviews=[review()], checks=[check("ci/test", "PENDING")], checks_exit=8)
+    assert done.returncode != 0
+    assert "ci/test" in done.stderr
+    assert merged(log) == []
+
+
+def test_a_failing_checks_read_fails_closed(run):
+    done, log = run(reviews=[review()], extra_env={"FAIL_CHECKS": "1"})
+    assert done.returncode != 0
+    assert "Could not read" in done.stderr
+    assert merged(log) == []
+
+
+@pytest.mark.parametrize("mergeable", ["CONFLICTING", "UNKNOWN"])
+def test_refuses_a_pr_that_is_not_mergeable(run, mergeable):
+    done, log = run(reviews=[review()], pr=pr_payload(mergeable=mergeable))
+    assert done.returncode != 0
+    assert "not mergeable" in done.stderr.lower()
+    assert merged(log) == []
+
+
+@pytest.mark.parametrize("state", ["BEHIND", "BLOCKED", "DIRTY", "DRAFT", "UNKNOWN"])
+def test_refuses_a_blocking_merge_state(run, state):
+    done, log = run(reviews=[review()], pr=pr_payload(state=state))
+    assert done.returncode != 0
+    assert state in done.stderr
+    assert merged(log) == []
+
+
+def test_prints_each_required_check_state(run):
+    done, _ = run(reviews=[review()], checks=[check("ci/test", "SUCCESS"), check("ci/discovery", "SUCCESS")])
+    assert "Check: ci/test=SUCCESS" in done.stdout, done.stderr
+    assert "Check: ci/discovery=SUCCESS" in done.stdout
+
+
+def test_no_required_checks_is_not_a_refusal(run):
+    done, _ = run(reviews=[review()], checks=[])
+    assert "Check: none" in done.stdout, done.stderr

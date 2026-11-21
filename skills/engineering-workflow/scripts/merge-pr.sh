@@ -188,4 +188,87 @@ fi
 [ -n "$AUTHOR" ] \
   || die 15 "no expected author: review.record_author is unset and gh api user --jq .login returned nothing"
 
-die 1 "reviews read is not implemented yet"
+# The PR reviews, through the paginated reviews endpoint.
+REVIEWS_JSON="$(
+  gh api --paginate "repos/$SLUG/pulls/$NUMBER/reviews" --jq \
+    '.[] | {author: .user.login, state: .state, commit_id: .commit_id, submitted_at: .submitted_at, html_url: .html_url, body: .body}'
+)" || die 15 "Could not read the reviews of PR #$NUMBER with gh api --paginate"
+
+# Among the COMMENTED reviews whose body begins with 'Review of record', the expected author's,
+# with the greatest submitted_at.
+SELECTED=""
+if [ -n "$REVIEWS_JSON" ]; then
+  SELECTED="$(
+    printf '%s\n' "$REVIEWS_JSON" | jq -s --arg author "$AUTHOR" '
+      [ .[]
+        | select(.state == "COMMENTED")
+        | select((.body // "") | startswith("Review of record"))
+        | select(((.author // "") | ascii_downcase) == ($author | ascii_downcase)) ]
+      | sort_by(.submitted_at // "")
+      | if length == 0 then empty else .[-1] end
+    '
+  )" || die 15 "Could not select the review of record from the reviews of PR #$NUMBER"
+fi
+[ -n "$SELECTED" ] \
+  || die 15 "no review of record on PR #$NUMBER: no COMMENTED review whose body begins with 'Review of record' was submitted by $AUTHOR at the live head $HEAD"
+
+REVIEWED_COMMIT="$(json_field "$SELECTED" .commit_id)"
+REVIEW_URL="$(json_field "$SELECTED" .html_url)"
+REVIEWED_FIRSTLINE_SHA="$(
+  printf '%s' "$SELECTED" \
+    | jq -r '.body | split("\n")[0] | sub("^[[:space:]]+"; "") | sub("[[:space:]]+$"; "")' \
+    | awk '{print $NF}'
+)"
+
+printf 'PR: %s %s\n' "$NUMBER" "$PR_URL"
+printf 'Live head: %s\n' "$HEAD"
+printf 'Reviewed head: %s\n' "$REVIEWED_COMMIT"
+printf 'Review of record: %s\n' "$REVIEW_URL"
+
+if [ "$REVIEWED_COMMIT" != "$HEAD" ]; then
+  die 15 "merge blocked: the review of record ($REVIEW_URL) covers commit $REVIEWED_COMMIT, but the live head of PR #$NUMBER is $HEAD"
+fi
+if [ "$REVIEWED_FIRSTLINE_SHA" != "$HEAD" ]; then
+  die 15 "merge blocked: the review of record ($REVIEW_URL) names $REVIEWED_FIRSTLINE_SHA on its first line, but the live head of PR #$NUMBER is $HEAD"
+fi
+
+# The required checks on the head: every one green, and none pending or failing.
+if [ "$IS_DRAFT" = "true" ]; then
+  die 16 "merge blocked: PR #$NUMBER is a draft (merge state $MERGE_STATE)"
+fi
+if [ "$MERGEABLE" != "MERGEABLE" ]; then
+  die 16 "merge blocked: PR #$NUMBER is not mergeable (mergeable=$MERGEABLE, merge state $MERGE_STATE)"
+fi
+case "$MERGE_STATE" in
+  CLEAN | HAS_HOOKS | UNSTABLE) ;;
+  *) die 16 "merge blocked: PR #$NUMBER is in merge state $MERGE_STATE" ;;
+esac
+
+CHECKS_JSON=""
+CHECKS_STATUS=0
+CHECKS_JSON="$(gh pr checks "$NUMBER" --required --json name,state,bucket)" || CHECKS_STATUS=$?
+case "$CHECKS_STATUS" in
+  0 | 1 | 8) ;;
+  *) die 14 "Could not read the required checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS)" ;;
+esac
+[ -n "$CHECKS_JSON" ] \
+  || die 14 "Could not read the required checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS and printed nothing)"
+CHECKS_COUNT="$(printf '%s' "$CHECKS_JSON" | jq -r 'if type == "array" then length else "invalid" end')" \
+  || die 14 "the required checks of PR #$NUMBER were not readable JSON"
+[ -n "$CHECKS_COUNT" ] && [ "$CHECKS_COUNT" != "invalid" ] \
+  || die 14 "the required checks of PR #$NUMBER were not a JSON array"
+if [ "$CHECKS_COUNT" = "0" ]; then
+  printf 'Check: none\n'
+else
+  printf '%s' "$CHECKS_JSON" | jq -r '.[] | "Check: \(.name)=\(.state)"'
+fi
+NON_GREEN="$(
+  printf '%s' "$CHECKS_JSON" \
+    | jq -r '[ .[] | select((.state != "SUCCESS") and (.state != "NEUTRAL") and (.state != "SKIPPED")) | "\(.name)=\(.state)" ] | join(", ")'
+)" || die 14 "the required checks of PR #$NUMBER were not readable JSON"
+if [ -n "$NON_GREEN" ]; then
+  die 14 "merge blocked: the required checks on head $HEAD are not green: $NON_GREEN"
+fi
+
+die 1 "merge is not implemented yet"
+
