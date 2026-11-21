@@ -3,6 +3,8 @@
 import re
 from pathlib import Path
 
+from markdown_it import MarkdownIt
+
 ROOT = Path(__file__).resolve().parent.parent
 SKILL_DIR = ROOT / "skills" / "story-to-done"
 ASSET = SKILL_DIR / "assets" / "kickoff-prompt.md"
@@ -49,53 +51,62 @@ def flat(text: str) -> str:
     return " ".join(text.split())
 
 
-def visible_lines(lines: list[str]) -> list[str]:
-    """Each line as the agent reads it: comments removed, and nothing inside a fence."""
-    result: list[str] = []
-    fenced = False
-    commented = False
-    for line in lines:
-        stripped = line.strip()
-        if fenced:
-            if stripped.startswith(("```", "~~~")):
-                fenced = False
-            result.append("")
-            continue
-        if not commented and stripped.startswith(("```", "~~~")):
-            fenced = True
-            result.append("")
-            continue
-        visible = ""
-        rest = line
-        while rest:
-            if commented:
-                end = rest.find("-->")
-                if end < 0:
-                    rest = ""
-                else:
-                    rest = rest[end + 3:]
-                    commented = False
-            else:
-                start = rest.find("<!--")
-                if start < 0:
-                    visible += rest
-                    rest = ""
-                else:
-                    visible += rest[:start]
-                    rest = rest[start + 4:]
-                    commented = True
-        result.append(visible)
-    return result
+MARKDOWN = MarkdownIt("commonmark")
+STEP_HEADING = re.compile(r"^[1-5]\. ")
 
 
-def step_sections(visible: list[str]) -> list[str]:
-    headings = [index for index, line in enumerate(visible) if line.startswith("## ")]
-    sections = []
-    for position, index in enumerate(headings):
-        end = headings[position + 1] if position + 1 < len(headings) else len(visible)
-        if re.match(r"^## [1-5]\. ", visible[index]):
-            sections.append("\n".join(visible[index + 1:end]))
-    return sections
+def paragraph_text(text: str) -> str:
+    """The prose a CommonMark reader sees, with code blocks, fences and HTML comments dropped."""
+    tokens = MARKDOWN.parse(text)
+    paragraphs = [
+        token.content
+        for index, token in enumerate(tokens)
+        if token.type == "inline" and tokens[index - 1].type == "paragraph_open"
+    ]
+    return "\n".join(paragraphs)
+
+
+def placement_problems(text: str) -> list[str]:
+    """Reasons SKILL.md breaks AC2's placement rule, judged on the rendered CommonMark tokens.
+
+    The pointer must be exactly one paragraph of prose and must sit outside the step 1 to
+    step 5 sections. A sentence rendered as an indented code block or inside a fence is not
+    carried as prose, so it counts as absent rather than passing.
+    """
+    tokens = MARKDOWN.parse(text)
+    pointer_lines = [
+        token.map[0]
+        for index, token in enumerate(tokens)
+        if token.type == "inline"
+        and tokens[index - 1].type == "paragraph_open"
+        and token.map
+        and flat(POINTER_SENTENCE) in flat(token.content)
+    ]
+    step_ranges: list[tuple[int, int]] = []
+    pending_step: int | None = None
+    for index, token in enumerate(tokens):
+        if token.type == "heading_open" and token.tag == "h2" and token.level == 0:
+            if pending_step is not None:
+                step_ranges.append((pending_step, token.map[0]))
+                pending_step = None
+            content = tokens[index + 1].content if tokens[index + 1].type == "inline" else ""
+            if STEP_HEADING.match(content):
+                pending_step = token.map[0]
+    if pending_step is not None:
+        step_ranges.append((pending_step, len(text.splitlines())))
+    problems: list[str] = []
+    if len(pointer_lines) != 1:
+        problems.append(
+            "the kickoff pointer must be exactly one paragraph of prose "
+            f"(found {len(pointer_lines)} paragraphs carrying it)"
+        )
+    for line in pointer_lines:
+        if any(start <= line < end for start, end in step_ranges):
+            problems.append(
+                "the kickoff pointer must sit outside the step 1 to step 5 sections "
+                f"(line {line + 1})"
+            )
+    return problems
 
 
 def test_caller_line_is_the_first_line_and_sits_outside_the_block() -> None:
@@ -129,13 +140,32 @@ def test_the_cadence_figure_is_pinned_both_ways() -> None:
 
 
 def test_the_skill_points_at_the_asset_and_states_the_default_outside_the_steps() -> None:
-    lines = SKILL.read_text(encoding="utf-8").splitlines()
-    visible = visible_lines(lines)
-    prose = "\n".join(visible)
-    sections = step_sections(visible)
-    assert len(sections) == 5, "all five step sections must be recognised before placement is tested"
+    text = SKILL.read_text(encoding="utf-8")
+    tokens = MARKDOWN.parse(text)
+    step_headings = [
+        index
+        for index, token in enumerate(tokens)
+        if token.type == "heading_open"
+        and token.tag == "h2"
+        and token.level == 0
+        and tokens[index + 1].type == "inline"
+        and STEP_HEADING.match(tokens[index + 1].content)
+    ]
+    assert len(step_headings) == 5, "all five step sections must be recognised before placement is tested"
+    prose = paragraph_text(text)
     assert prose.count(POINTER) == 1, "the pointer sentence must be stated exactly once in visible prose"
-    assert all(POINTER not in section for section in sections), (
-        "the kickoff pointer must sit outside the step 1 to step 5 sections"
-    )
-    assert POINTER_SENTENCE in flat(prose)
+    assert flat(POINTER_SENTENCE) in flat(prose)
+    assert placement_problems(text) == []
+
+
+def test_the_placement_guard_rejects_an_indented_code_block() -> None:
+    text = SKILL.read_text(encoding="utf-8")
+    mutated = text.replace(POINTER_SENTENCE, f"    {POINTER_SENTENCE}")
+    assert placement_problems(mutated), "a four-space-indented pointer renders as code, not prose"
+
+
+def test_the_placement_guard_rejects_a_pointer_hidden_in_a_mismatched_fence() -> None:
+    text = SKILL.read_text(encoding="utf-8")
+    mutated = text.replace(POINTER_SENTENCE, "") + f"\n~~~\n{POINTER_SENTENCE}\n```\n"
+    assert placement_problems(mutated), "a tilde fence is not closed by a backtick fence"
+
