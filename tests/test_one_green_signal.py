@@ -185,38 +185,43 @@ def fenced_template(text: str) -> str:
     return template
 
 
+EXPECTED_TRIGGERS = {"pull_request": None, "push": {"branches": ["main"]}}
+EXPECTED_REPOSITORY_TESTS_STEP = {"name": "Repository tests", "run": "uv run --locked pytest -q"}
+UNSET_ON_THE_CHECKS_JOB = ("if", "continue-on-error", "env", "defaults", "concurrency", "strategy")
+
+
 def repository_tests_problems(workflow_text: str) -> list[str]:
-    """Every way the pinned CI contract is broken; empty when the step still runs the suite on a pull request."""
+    """Every way the pinned CI contract is broken; empty when the step still runs the suite on a pull request.
+
+    The contract is pinned closed: the step carries the name and command and no other key, the job sets
+    none of the keys that can skip or alter it, and the workflow triggers exactly as it does today.
+    """
     workflow = yaml.safe_load(workflow_text)
     problems: list[str] = []
     triggers = workflow.get("on", workflow.get(True)) or {}
-    if isinstance(triggers, str):
-        triggers = {triggers: None}
-    if "pull_request" not in triggers:
-        problems.append("the workflow no longer triggers on pull_request")
+    if triggers != EXPECTED_TRIGGERS:
+        problems.append(f"the workflow no longer triggers exactly {EXPECTED_TRIGGERS}")
     jobs = workflow.get("jobs") or {}
     if "checks" not in jobs:
         problems.append("the workflow no longer has a `checks` job")
         return problems
     job = jobs["checks"]
-    if job.get("if") is not None:
-        problems.append("the checks job is conditional")
+    for key in UNSET_ON_THE_CHECKS_JOB:
+        if job.get(key) is not None:
+            problems.append(f"the checks job sets {key}")
     steps = job.get("steps") or []
     matches = [step for step in steps if step.get("name") == "Repository tests"]
     if len(matches) != 1:
         problems.append(f"the checks job carries {len(matches)} Repository tests steps")
         return problems
-    step = matches[0]
-    if step.get("run") != "uv run --locked pytest -q":
-        problems.append(f"the Repository tests step runs {step.get('run')!r}")
-    if step.get("if") is not None:
-        problems.append("the Repository tests step is conditional")
-    for key in ("continue-on-error", "working-directory", "env"):
-        if step.get(key):
-            problems.append(f"the Repository tests step sets {key}")
+    if matches[0] != EXPECTED_REPOSITORY_TESTS_STEP:
+        problems.append(f"the Repository tests step is {matches[0]!r}")
     for candidate in steps:
-        if str(candidate.get("uses", "")).startswith("actions/checkout") and (candidate.get("with") or {}).get("ref"):
-            problems.append("the checkout step pins a ref instead of the pull request")
+        if not str(candidate.get("uses", "")).startswith("actions/checkout"):
+            continue
+        extras = set(candidate) - {"uses", "with"}
+        if extras or set(candidate.get("with") or {}) - {"fetch-depth", "submodules"}:
+            problems.append(f"the checkout step is configured as {candidate!r}")
     return problems
 
 
@@ -466,22 +471,48 @@ def test_guard_kills_every_mutant() -> None:
         step for step in removed["jobs"]["checks"]["steps"] if step.get("name") != "Repository tests"
     ]
     mutants.append(("a removed step", removed))
-    for key, value in (("if", False), ("continue-on-error", True), ("working-directory", "skills"), ("env", {"X": "1"})):
+    for key, value in (
+        ("if", "false"),
+        ("continue-on-error", True),
+        ("working-directory", "skills"),
+        ("env", {"X": "1"}),
+        ("shell", "bash"),
+        ("id", "tests"),
+    ):
         skipped = copy.deepcopy(workflow)
         for step in skipped["jobs"]["checks"]["steps"]:
             if step.get("name") == "Repository tests":
                 step[key] = value
         mutants.append((f"a step with {key}", skipped))
     disabled_job = copy.deepcopy(workflow)
-    disabled_job["jobs"]["checks"]["if"] = False
+    disabled_job["jobs"]["checks"]["if"] = "false"
     mutants.append(("a disabled checks job", disabled_job))
+    for key, value in (
+        ("continue-on-error", True),
+        ("env", {"PYTEST_ADDOPTS": "--ignore=tests"}),
+        ("defaults", {"run": {"working-directory": "skills"}}),
+    ):
+        altered_job = copy.deepcopy(workflow)
+        altered_job["jobs"]["checks"][key] = value
+        mutants.append((f"a checks job with {key}", altered_job))
     wrong_ref = copy.deepcopy(workflow)
     for step in wrong_ref["jobs"]["checks"]["steps"]:
         if str(step.get("uses", "")).startswith("actions/checkout"):
             step.setdefault("with", {})["ref"] = "refs/heads/main"
     mutants.append(("a checkout pinned to main", wrong_ref))
-    no_pull_request = copy.deepcopy(workflow)
-    no_pull_request[True] = {"push": no_pull_request[True]["push"]}
-    mutants.append(("no pull_request trigger", no_pull_request))
+    other_repository = copy.deepcopy(workflow)
+    for step in other_repository["jobs"]["checks"]["steps"]:
+        if str(step.get("uses", "")).startswith("actions/checkout"):
+            step.setdefault("with", {})["repository"] = "example/other-repository"
+    mutants.append(("a checkout of another repository", other_repository))
+    for label, triggers in (
+        ("no pull_request trigger", {"push": {"branches": ["main"]}}),
+        ("a pull_request opened-only trigger", {"pull_request": {"types": ["opened"]}, "push": {"branches": ["main"]}}),
+        ("a path-filtered trigger", {"pull_request": {"paths": ["skills/**"]}, "push": {"branches": ["main"]}}),
+    ):
+        retriggered = copy.deepcopy(workflow)
+        for key in [key for key in retriggered if key is True or key == "on"]:
+            retriggered[key] = triggers
+        mutants.append((label, retriggered))
     for label, mutated in mutants:
         assert repository_tests_problems(yaml.safe_dump(mutated)), f"the CI pin accepted {label!r}"
