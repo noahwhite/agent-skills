@@ -112,10 +112,13 @@ def own_lines(text: str) -> set[str]:
 
 
 def fenced_template(text: str) -> str:
-    """The fenced story template that linear-user-story copies into every filed story."""
+    """The story template under `## Template (the description)` that linear-user-story copies into a story."""
+    heading = "\n## Template (the description)\n"
+    assert heading in text, "missing the story template section"
+    section_text = text.split(heading, 1)[1].split("\n## ", 1)[0]
     opener = "\n```markdown\n"
-    assert opener in text, "missing the story template fence"
-    body = text.split(opener, 1)[1]
+    assert opener in section_text, "missing the story template fence"
+    body = section_text.split(opener, 1)[1]
     end = body.find("\n```\n")
     assert end != -1, "the story template fence is never closed"
     template = body[:end]
