@@ -1,0 +1,317 @@
+"""SKL-388: merge-pr.sh reads the reviews and checks, verifies the review of record, and merges guarded."""
+
+import json
+import os
+import shutil
+import stat
+import subprocess
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).resolve().parent.parent
+SCRIPT = ROOT / "skills" / "engineering-workflow" / "scripts" / "merge-pr.sh"
+
+HEAD = "0123456789abcdef0123456789abcdef01234567"
+MOVED = "89abcdef0123456789abcdef0123456789abcdef"
+MERGED_COMMIT = "fedcba9876543210fedcba9876543210fedcba98"
+URL = "https://github.com/acme/widgets/pull/7"
+REVIEW_URL = "https://github.com/acme/widgets/pull/7#pullrequestreview-11"
+REVIEWS_END = "repos/acme/widgets/pulls/7/reviews"
+
+# A stand-in for gh: it serves canned JSON per call, applies --jq with the real jq (per page for
+# --paginate, like gh), logs argv, and fails on any call the script should not make.
+FAKE_GH = r"""#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >> "$GH_LOG"
+filter=""
+args=("$@")
+for ((i = 0; i < ${#args[@]}; i++)); do
+  if [ "${args[i]}" = "--jq" ]; then filter="${args[i+1]}"; fi
+done
+
+case "${1:-}" in
+  api)
+    case "${2:-}" in
+      user)
+        [ -z "${FAIL_USER:-}" ] || { echo "gh: authentication required" >&2; exit 1; }
+        printf '%s\n' "${LOGIN:-}"
+        exit 0
+        ;;
+      --paginate)
+        [ -z "${FAIL_REVIEWS:-}" ] || { echo "gh: HTTP 500" >&2; exit 1; }
+        [ "${3:-}" = "$REVIEWS_PATH" ] || { echo "unexpected api path: ${3:-}" >&2; exit 3; }
+        for ((p = 0; p < $(jq length "$FIXTURES/reviews.json"); p++)); do
+          if [ -n "$filter" ]; then
+            jq ".[$p]" "$FIXTURES/reviews.json" | jq -c "($filter) | if type == \"string\" then . else tojson end"
+          else
+            jq -c ".[$p]" "$FIXTURES/reviews.json"
+          fi
+        done
+        exit 0
+        ;;
+      *) echo "unexpected api call: $*" >&2; exit 3 ;;
+    esac
+    ;;
+  pr)
+    case "${2:-}" in
+      view)
+        [ -z "${FAIL_PR:-}" ] || { echo "gh: no pull requests found" >&2; exit 1; }
+        case "$*" in
+          *state,mergedAt,mergeCommit*) cat "$FIXTURES/confirm.json" ;;
+          *headRefOid*) cat "$FIXTURES/pr.json" ;;
+          *) echo "unexpected pr view: $*" >&2; exit 3 ;;
+        esac
+        exit 0
+        ;;
+      checks)
+        [ -z "${FAIL_CHECKS:-}" ] || { echo "gh: HTTP 500" >&2; exit 1; }
+        cat "$FIXTURES/checks.json"
+        exit "${CHECKS_EXIT:-0}"
+        ;;
+      merge)
+        if [ "${3:-}" = "--help" ]; then cat "$FIXTURES/merge-help.txt"; exit 0; fi
+        [ -z "${FAIL_MERGE:-}" ] || { echo "${FAIL_MERGE}" >&2; exit 1; }
+        printf 'merged\n'
+        exit 0
+        ;;
+      *) echo "unexpected pr call: $*" >&2; exit 3 ;;
+    esac
+    ;;
+  *) echo "unexpected gh call: $*" >&2; exit 3 ;;
+esac
+"""
+
+PROFILE = """\
+version: 1
+git:
+  integration_branch: main
+  merge_method: squash
+review:
+  merge_owner: agent
+  record_author: record-author
+"""
+
+
+def review(head=HEAD, author="record-author", state="COMMENTED", submitted="2026-11-20T18:00:00Z", body=None):
+    return {
+        "user": {"login": author},
+        "state": state,
+        "commit_id": head,
+        "submitted_at": submitted,
+        "html_url": REVIEW_URL,
+        "body": f"Review of record {head}\nreviewer and adjudicator\n" if body is None else body,
+    }
+
+
+def pr_payload(head=HEAD, mergeable="MERGEABLE", state="CLEAN", pr_state="OPEN"):
+    return {
+        "number": 7,
+        "url": URL,
+        "state": pr_state,
+        "isDraft": pr_state == "DRAFT",
+        "mergeable": mergeable,
+        "mergeStateStatus": state,
+        "headRefOid": head,
+    }
+
+
+def check(name="ci/test", state="SUCCESS"):
+    return {"name": name, "state": state, "bucket": "pass" if state == "SUCCESS" else state.lower()}
+
+
+@pytest.fixture
+def run(tmp_path):
+    if shutil.which("jq") is None:
+        if os.environ.get("CI"):
+            pytest.fail("jq is required to apply the --jq filters and must be installed in CI")
+        pytest.skip("jq is required to apply the --jq filters")
+    fixtures = tmp_path / "fixtures"
+    fixtures.mkdir()
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    gh = bindir / "gh"
+    gh.write_text(FAKE_GH)
+    gh.chmod(gh.stat().st_mode | stat.S_IXUSR)
+    consumer = tmp_path / "consumer"
+    consumer.mkdir()
+    subprocess.run(["git", "init", "-q", str(consumer)], check=True)
+    profile = tmp_path / "profile.yaml"
+    log = tmp_path / "gh.log"
+
+    def go(
+        *,
+        reviews=None,
+        pr=None,
+        checks=None,
+        merge_help=True,
+        checks_exit=0,
+        fail_merge="",
+        confirm=None,
+        login="record-author",
+        fail_user=False,
+        profile_text=PROFILE,
+        profile_path="env",
+        args=(),
+        cwd=None,
+        extra_env=None,
+    ):
+        pages = reviews if reviews and isinstance(reviews[0], list) else [reviews or []]
+        (fixtures / "reviews.json").write_text(json.dumps(pages))
+        (fixtures / "pr.json").write_text(json.dumps(pr or pr_payload()))
+        (fixtures / "checks.json").write_text(json.dumps(checks if checks is not None else [check()]))
+        (fixtures / "confirm.json").write_text(
+            json.dumps(
+                confirm
+                if confirm is not None
+                else {"state": "MERGED", "mergedAt": "2026-11-20T19:00:00Z", "mergeCommit": {"oid": MERGED_COMMIT}}
+            )
+        )
+        help_line = "--match-head-commit SHA   Commit SHA that the pull request head must match to allow merge"
+        (fixtures / "merge-help.txt").write_text(
+            "USAGE\n  gh pr merge [<number> | <url> | <branch>] [flags]\n\nFLAGS\n"
+            + (f"      {help_line}\n" if merge_help else "  -s, --squash   Squash the commits into one\n")
+        )
+        if profile_text is not None:
+            profile.write_text(profile_text)
+        log.write_text("")
+        env = {
+            **os.environ,
+            "PATH": f"{bindir}:{os.environ['PATH']}",
+            "FIXTURES": str(fixtures),
+            "GH_LOG": str(log),
+            "REVIEWS_PATH": REVIEWS_END,
+            "LOGIN": login,
+        }
+        env.pop("AGENT_SKILLS_PROFILE", None)
+        if profile_path == "env":
+            env["AGENT_SKILLS_PROFILE"] = str(profile)
+        elif profile_path == "repo":
+            local = consumer / ".agent-skills"
+            local.mkdir()
+            (local / "profile.yaml").write_text(profile_text)
+            env["HOME"] = str(tmp_path / "home")
+        elif profile_path == "home":
+            home = tmp_path / "home"
+            (home / ".config" / "agent-skills").mkdir(parents=True)
+            (home / ".config" / "agent-skills" / "profile.yaml").write_text(profile_text)
+            env["HOME"] = str(home)
+        else:
+            env["HOME"] = str(tmp_path / "empty-home")
+        if fail_user:
+            env["FAIL_USER"] = "1"
+        if fail_merge:
+            env["FAIL_MERGE"] = fail_merge
+        env["CHECKS_EXIT"] = str(checks_exit)
+        env.update(extra_env or {})
+        done = subprocess.run(
+            ["bash", str(SCRIPT), "7", "--repo", str(consumer), *args],
+            cwd=str(cwd or consumer),
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        return done, log.read_text().splitlines()
+
+    return go
+
+
+def calls(log):
+    return " | ".join(log)
+
+
+def merged(log):
+    return [ln for ln in log if ln.startswith("merge 7")]
+
+
+# --- Slice 1: invocation, profile read, PR read, expected-author resolution ---------------------
+
+
+def test_a_pr_number_is_required(tmp_path):
+    done = subprocess.run(
+        ["bash", str(SCRIPT)],
+        cwd=str(tmp_path),
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert done.returncode == 2
+    assert "usage" in done.stderr.lower()
+
+
+def test_refuses_the_skills_repository_unless_repo_names_it(tmp_path):
+    skills = tmp_path / "skillsrepo"
+    (skills / "shared").mkdir(parents=True)
+    (skills / "skills.json").write_text("[]\n")
+    (skills / "shared" / "runtimes.md").write_text("map\n")
+    subprocess.run(["git", "init", "-q", str(skills)], check=True)
+    done = subprocess.run(
+        ["bash", str(SCRIPT), "7"],
+        cwd=str(skills),
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert done.returncode == 2
+    assert "skills repository" in done.stderr
+
+
+def test_missing_profile_fails_closed_naming_the_locations(run):
+    done, log = run(profile_path="none")
+    assert done.returncode == 13
+    assert "profile" in done.stderr
+    assert "AGENT_SKILLS_PROFILE" in done.stderr
+    assert ".agent-skills/profile.yaml" in done.stderr
+    assert "~/.config/agent-skills/profile.yaml" in done.stderr
+    assert log == []
+
+
+@pytest.mark.parametrize("field", ["merge_owner", "merge_method"])
+def test_a_missing_profile_key_fails_closed_naming_it(run, field):
+    if field == "merge_owner":
+        text = "version: 1\ngit:\n  merge_method: squash\nreview:\n  record_author: record-author\n"
+        key = "review.merge_owner"
+    else:
+        text = "version: 1\nreview:\n  merge_owner: agent\n"
+        key = "git.merge_method"
+    done, log = run(profile_text=text)
+    assert done.returncode == 13
+    assert key in done.stderr
+    assert log == []
+
+
+@pytest.mark.parametrize("location", ["repo", "home"])
+def test_reads_the_profile_from_the_other_two_locations(run, location):
+    done, log = run(profile_path=location)
+    assert "pr view 7" in calls(log), done.stderr
+
+
+def test_falling_back_to_the_authenticated_login_reads_it_with_gh(run):
+    text = "version: 1\ngit:\n  merge_method: squash\nreview:\n  merge_owner: agent\n"
+    done, log = run(profile_text=text, login="record-author")
+    assert "api user --jq .login" in calls(log), done.stderr
+    assert "pr view 7" in calls(log)
+
+
+def test_refuses_when_no_expected_author_can_be_resolved(run):
+    text = "version: 1\ngit:\n  merge_method: squash\nreview:\n  merge_owner: agent\n"
+    done, log = run(profile_text=text, login="")
+    assert done.returncode != 0
+    assert "expected author" in done.stderr
+    assert merged(log) == []
+
+
+def test_refuses_when_the_authenticated_login_read_fails(run):
+    text = "version: 1\ngit:\n  merge_method: squash\nreview:\n  merge_owner: agent\n"
+    done, log = run(profile_text=text, fail_user=True)
+    assert done.returncode != 0
+    assert "expected author" in done.stderr
+    assert merged(log) == []
+
+
+def test_a_failing_pr_read_fails_closed(run):
+    done, log = run(extra_env={"FAIL_PR": "1"})
+    assert done.returncode != 0
+    assert "Could not read" in done.stderr
+    assert merged(log) == []
