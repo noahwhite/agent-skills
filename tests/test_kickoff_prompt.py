@@ -16,7 +16,7 @@ CALLER_LINE = "Start the session in Lite mode where the session offers one, then
 POINTER = "assets/kickoff-prompt.md"
 
 CADENCE_SENTENCE = (
-    "For this story-to-done run, make one progress check per "
+    "Make one progress check per "
     f"{CADENCE_MINUTES}-minute window instead of several inside it, and batch your waits."
 )
 DEFAULT_SENTENCE = "This is the default cadence for such a story."
@@ -27,7 +27,7 @@ SCOPE_SENTENCE = (
     "covers routine checks where a role runs in the background, so handle a handback without "
     "waiting for the next routine poll."
 )
-DEADLINE_SENTENCE = "The deadlines in references/interim-handbacks.md are unchanged."
+DEADLINE_SENTENCE = "The wait bounds and deadlines in references/interim-handbacks.md are unchanged."
 EXPECTED_BLOCK = "\n".join((CADENCE_SENTENCE, DEFAULT_SENTENCE, SCOPE_SENTENCE, DEADLINE_SENTENCE))
 
 POINTER_SENTENCE = (
@@ -97,9 +97,9 @@ def shape_problems(text: str) -> list[str]:
         problems.append("the caller line must be the asset's only paragraph")
     fence = tokens[3]
     closed = bool(fence.map) and fence.map[1] - fence.map[0] >= 2
-    closing = text.splitlines()[fence.map[1] - 1].strip() if closed else ""
+    closing = text.splitlines()[fence.map[1] - 1] if closed else ""
     if not closed or not re.fullmatch(
-        rf"{re.escape(fence.markup[0])}{{{len(fence.markup)},}}", closing
+        rf" {{0,3}}{re.escape(fence.markup[0])}{{{len(fence.markup)},}}[ \t]*", closing
     ):
         problems.append("the fenced block must be closed by a fence at least as long as its opener")
     return problems
@@ -130,22 +130,34 @@ def step_ranges(text: str) -> list[tuple[int, int]]:
     return ranges
 
 
+def without_html_comments(content: str) -> str:
+    return re.sub(r"<!--.*?-->", "", content, flags=re.DOTALL)
+
+
 def visible_mentions(text: str) -> int:
-    """Occurrences of the asset path in anything a reader sees, except HTML comments and link titles."""
-    tokens = MARKDOWN.parse(text)
-    count = sum(visible.count(POINTER) for _, visible in rendered_inlines(text))
-    count += sum(
-        token.content.count(POINTER)
-        for token in tokens
-        if token.type in {"fence", "code_block"}
-    )
-    count += sum(
-        child.content.count(POINTER)
-        for token in tokens
-        if token.type == "inline"
-        for child in (token.children or [])
-        if child.type == "image"
-    )
+    """Occurrences of the asset path in anything a reader sees.
+
+    Prose, code blocks, rendered image alt text and non-comment raw HTML count; HTML comments,
+    link destinations and link titles do not.
+    """
+    count = 0
+    for token in MARKDOWN.parse(text):
+        if token.type == "inline":
+            count += visible_text(token).count(POINTER)
+            for child in token.children or []:
+                if child.type == "image":
+                    alt = "".join(
+                        part.content
+                        for part in (child.children or [])
+                        if part.type in {"text", "code_inline"}
+                    )
+                    count += alt.count(POINTER)
+                elif child.type == "html_inline":
+                    count += without_html_comments(child.content).count(POINTER)
+        elif token.type in {"fence", "code_block"}:
+            count += token.content.count(POINTER)
+        elif token.type == "html_block":
+            count += without_html_comments(token.content).count(POINTER)
     return count
 
 
@@ -237,6 +249,10 @@ def test_the_shape_guard_rejects_an_opener_at_end_of_file() -> None:
     assert shape_problems(f"{CALLER_LINE}\n\n```\n")
 
 
+def test_the_shape_guard_rejects_an_indented_closing_fence() -> None:
+    assert shape_problems(asset_document(closer="    ```"))
+
+
 def test_the_ceiling_counts_blank_block_lines() -> None:
     five = asset_document(block="one\ntwo\nthree\nfour\nfive")
     six = asset_document(block="one\ntwo\nthree\nfour\nfive\n")
@@ -319,3 +335,14 @@ def test_the_placement_guard_counts_a_pointer_in_an_image_alt() -> None:
     duplicated = f"{POINTER_SENTENCE}\n\n![{POINTER}](image.png)"
     problems = placement_problems(skill_document(duplicated))
     assert any("must appear once in visible text (found 2" in problem for problem in problems)
+
+
+def test_the_placement_guard_counts_a_pointer_in_visible_html() -> None:
+    duplicated = f"{POINTER_SENTENCE}\n\n<div>Also see {POINTER}.</div>"
+    problems = placement_problems(skill_document(duplicated))
+    assert any("must appear once in visible text (found 2" in problem for problem in problems)
+
+
+def test_the_placement_guard_ignores_a_path_in_an_image_link_destination() -> None:
+    text = skill_document(f"{POINTER_SENTENCE}\n\n![see [the prompt]({POINTER})](image.png)")
+    assert placement_problems(text) == []
