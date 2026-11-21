@@ -1,6 +1,7 @@
 """Contract checks for the story-to-done kickoff prompt asset (SKL-389)."""
 
 import re
+from html.parser import HTMLParser
 from pathlib import Path
 
 from markdown_it import MarkdownIt
@@ -132,10 +133,23 @@ def step_ranges(text: str) -> list[tuple[int, int]]:
     return ranges
 
 
+class _TextExtractor(HTMLParser):
+    """Collects the text nodes of a raw HTML fragment; comments and attributes stay out."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.parts: list[str] = []
+
+    def handle_data(self, data: str) -> None:
+        self.parts.append(data)
+
+
 def html_text(content: str) -> str:
-    """The text nodes of a raw HTML fragment: comments and tags both removed."""
-    without_comments = re.sub(r"<!--.*?-->", "", content, flags=re.DOTALL)
-    return re.sub(r"<[^>]*>", "", without_comments)
+    """The text nodes of a raw HTML fragment, entities decoded, comments and tags removed."""
+    parser = _TextExtractor()
+    parser.feed(content)
+    parser.close()
+    return " ".join(parser.parts)
 
 
 def visible_mentions(text: str) -> int:
@@ -352,6 +366,12 @@ def test_the_placement_guard_ignores_a_path_in_an_image_link_destination() -> No
     assert placement_problems(text) == []
 
 
-def test_the_placement_guard_ignores_a_path_in_a_raw_html_attribute() -> None:
+def test_the_placement_guard_counts_a_pointer_in_a_raw_html_attribute() -> None:
     text = skill_document(f'{POINTER_SENTENCE}\n\nSee <a href="{POINTER}">the prompt</a>.')
     assert placement_problems(text) == []
+
+
+def test_the_placement_guard_decodes_a_pointer_in_visible_html() -> None:
+    duplicated = f"{POINTER_SENTENCE}\n\n<div>Also see assets/kickoff-prompt&#46;md.</div>"
+    problems = placement_problems(skill_document(duplicated))
+    assert any("must appear once in visible text (found 2" in problem for problem in problems)
