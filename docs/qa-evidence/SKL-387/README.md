@@ -6,8 +6,8 @@
 - Implementation: https://github.com/noahwhite/agent-skills/pull/383.
 - Reviewed implementation head: `ee38d3e8065b1fb5ee2ebcb80eb1a90dcbd6a802`.
 - Fixtures: committed skill documents, test modules, PR records and Actions records; no accounts or deployed environment.
-- Raw evidence: [sanitized assertions attached to the story](https://linear.app/officina-pub/issue/SKL-387/user-story-accept-the-local-suite-or-the-ci-checks-job-as-one-green#comment-12172032).
-- Per-item tracker record: [QA evidence comment](https://linear.app/officina-pub/issue/SKL-387/user-story-accept-the-local-suite-or-the-ci-checks-job-as-one-green#comment-1f33125c).
+- Raw evidence: `SKL-387-QA-round-1-assertions.txt`, linked from SKL-387 comment whose identifier starts `12172032`.
+- Per-item tracker record: SKL-387 QA evidence comment whose identifier starts `1f33125c`, available with `linear issue comment list SKL-387 --json`.
 
 ## Verdicts
 
