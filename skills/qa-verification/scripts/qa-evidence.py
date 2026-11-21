@@ -68,9 +68,16 @@ PROFILE_REF_RE = re.compile(
 )
 ESCAPE_RE = re.compile(r"\\([!-/:-@\[-`{-~])")
 # The Markdown punctuation a literal cell escapes, so the reader renders the text unchanged.
-LITERAL_ESCAPES = set("\\`*_[<>&|~]")
+LITERAL_ESCAPES = set("\\`*_[<>&|~$]")
 # A sentence ends at `.`, `!` or `?` before whitespace or the end; dots inside an identifier do not.
 SENTENCE_END_RE = re.compile(r"[.!?](?=\s|$)")
+# Common abbreviations whose dot is not a sentence boundary.
+ABBREVIATION_RE = re.compile(r"(?i)\b(?:e\.g|i\.e|etc|vs|mr|mrs|ms|dr)\.(?=\s|$)")
+# Link errors that mean the filesystem cannot publish a hard link, where an exclusive copy is the fallback.
+LINK_UNSUPPORTED = {errno.EPERM, errno.EXDEV, errno.EMLINK}
+for _name in ("EOPNOTSUPP", "ENOTSUP"):
+    if hasattr(errno, _name):
+        LINK_UNSUPPORTED.add(getattr(errno, _name))
 
 
 def one_line(text: str) -> str:
@@ -79,6 +86,13 @@ def one_line(text: str) -> str:
     for separator in ("\u2028", "\u2029", "\u0085"):
         text = text.replace(separator, f"\\u{ord(separator):04x}")
     return text
+
+
+def print_path(path: Path) -> None:
+    """Print the created path, escaping any character the standard output cannot encode."""
+    line = str(path.absolute())
+    encoding = getattr(sys.stdout, "encoding", None) or "utf-8"
+    sys.stdout.write(line.encode(encoding, "backslashreplace").decode(encoding) + "\n")
 
 
 def metadata_lines(path: str | None) -> list[str]:
@@ -266,7 +280,7 @@ def label_problem(label: str, *, schema: dict | None, spelling: bool) -> str | N
     """Why a cleaned label cannot be written into the skeleton, or None when it can."""
     if not label:
         return "is empty"
-    if len(SENTENCE_END_RE.findall(label)) > 1:
+    if len(SENTENCE_END_RE.findall(ABBREVIATION_RE.sub("", label))) > 1:
         return "holds more than one sentence"
     for text in (label, visible_text(label)):
         problem = lint_problem(text, spelling=spelling)
@@ -349,8 +363,46 @@ def publish(target: Path, text: str) -> bool:
             print(f"error: {one_line(str(target.absolute()))} already exists; refusing to overwrite it", file=sys.stderr)
             return False
         except OSError as exc:
-            print(f"error: cannot write {one_line(str(target.absolute()))}: {exc.strerror or exc}", file=sys.stderr)
-            return False
+            if exc.errno not in LINK_UNSUPPORTED:
+                print(f"error: cannot write {one_line(str(target.absolute()))}: {exc.strerror or exc}", file=sys.stderr)
+                return False
+            # The filesystem cannot publish a hard link: create the target exclusively and copy, so an
+            # existing README is still never overwritten and an orderly failure removes our own file.
+            try:
+                direct = os.open(
+                    target.name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=descriptor
+                )
+            except FileExistsError:
+                print(
+                    f"error: {one_line(str(target.absolute()))} already exists; refusing to overwrite it",
+                    file=sys.stderr,
+                )
+                return False
+            except OSError as fallback_error:
+                print(
+                    f"error: cannot write {one_line(str(target.absolute()))}: {fallback_error.strerror or fallback_error}",
+                    file=sys.stderr,
+                )
+                return False
+            failure: OSError | None = None
+            try:
+                view = memoryview(data)
+                while view:
+                    view = view[os.write(direct, view):]
+            except OSError as write_error:
+                failure = write_error
+            finally:
+                os.close(direct)
+            if failure is not None:
+                try:
+                    os.unlink(target.name, dir_fd=descriptor)
+                except OSError:
+                    pass
+                print(
+                    f"error: cannot write {one_line(str(target.absolute()))}: {failure.strerror or failure}",
+                    file=sys.stderr,
+                )
+                return False
         return True
     finally:
         if created:
@@ -408,10 +460,12 @@ def main(argv: list[str] | None = None) -> int:
         print(problem, file=sys.stderr)
         return 1
 
-    schema, schema_problem = local_schema(destination_root)
-    if schema_problem is not None:
-        print(schema_problem, file=sys.stderr)
-        return 1
+    schema: dict | None = None
+    if any("profile." in visible_text(clean_label(raw)) for raw in args.items):
+        schema, schema_problem = local_schema(destination_root)
+        if schema_problem is not None:
+            print(schema_problem, file=sys.stderr)
+            return 1
     labels = []
     for raw in args.items:
         label = clean_label(raw)
@@ -423,7 +477,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if not publish(target, skeleton(args.key, labels, args.path)):
         return 1
-    print(target.absolute())
+    print_path(target)
     return 0
 
 

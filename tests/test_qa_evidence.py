@@ -6,6 +6,7 @@ and evidence instead of authoring the structure. The lint assertions reuse the d
 `tests/test_skills.py` rather than restating them, so the skeleton stays safe as that lint grows.
 """
 
+import errno
 import importlib.util
 import json
 import os
@@ -13,7 +14,6 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-
 import pytest
 from markdown_it import MarkdownIt
 
@@ -906,6 +906,88 @@ def test_a_branching_schema_shape_does_not_raise():
     generator = load_generator()
     assert generator.deref({"allOf": [True]}, {}) == {"allOf": [True]}
     assert generator.deref({"allOf": [{"$ref": "#/$defs/gone"}]}, {}) == {}
+
+
+def test_an_abbreviation_does_not_count_as_a_sentence_boundary(tmp_path):
+    label = "AC1 - set e.g. config. and stop"
+    res = run(tmp_path, "--key", "SKL-386", "--item", label)
+    assert res.returncode == 0, res.stderr
+    readme = tmp_path / "docs" / "qa-evidence" / "SKL-386" / "README.md"
+    assert row_cells(table_rows(readme.read_text(encoding="utf-8"))[0])[0] == label
+
+
+def test_a_dollar_pair_is_escaped_literally(tmp_path):
+    label = "AC1 - cost $x$ today"
+    res = run(tmp_path, "--key", "SKL-386", "--item", label)
+    assert res.returncode == 0, res.stderr
+    text = (tmp_path / "docs" / "qa-evidence" / "SKL-386" / "README.md").read_text(encoding="utf-8")
+    assert r"\$x\$" in text
+    assert row_cells(table_rows(text)[0])[0] == label
+
+
+def test_a_broken_schema_is_ignored_when_no_label_names_a_reference(tmp_path):
+    (tmp_path / "profile").mkdir()
+    (tmp_path / "profile" / "schema.json").write_text("{not json", encoding="utf-8")
+    res = run(tmp_path, "--key", "SKL-386", "--item", "AC1 - one generator")
+    assert res.returncode == 0, res.stderr
+    assert (tmp_path / "docs" / "qa-evidence" / "SKL-386" / "README.md").is_file()
+
+
+def test_a_filesystem_without_hard_links_still_publishes(tmp_path, monkeypatch):
+    generator = load_generator()
+    target = tmp_path / "docs" / "qa-evidence" / "SKL-386" / "README.md"
+
+    def refusing_link(*_args, **_kwargs):
+        raise OSError(errno.EPERM, "Operation not permitted")
+
+    monkeypatch.setattr(generator.os, "link", refusing_link)
+    assert generator.publish(target, "# SKL-386 QA evidence\n") is True
+    assert target.read_text(encoding="utf-8") == "# SKL-386 QA evidence\n"
+    assert list(target.parent.glob(".qa-evidence-*")) == []
+
+
+def test_the_hard_link_fallback_never_overwrites_a_concurrent_readme(tmp_path, monkeypatch):
+    generator = load_generator()
+    target = tmp_path / "docs" / "qa-evidence" / "SKL-386" / "README.md"
+    target.parent.mkdir(parents=True)
+    concurrent = "# written by the other invocation\n"
+
+    def racing_link(*_args, **_kwargs):
+        target.write_text(concurrent, encoding="utf-8")
+        raise OSError(errno.EPERM, "Operation not permitted")
+
+    monkeypatch.setattr(generator.os, "link", racing_link)
+    assert generator.publish(target, "# ours\n") is False
+    assert target.read_text(encoding="utf-8") == concurrent
+
+
+def test_a_non_utf8_path_still_reports_success(tmp_path):
+    raw = os.fsencode(tmp_path) + b"/ev\xff"
+    os.mkdir(raw)
+    evidence = os.fsdecode(raw)
+    res = subprocess.run(
+        [sys.executable, str(SCRIPT), "--key", "SKL-386", "--evidence-dir", evidence],
+        cwd=tmp_path,
+        capture_output=True,
+    )
+    assert res.returncode == 0, res.stderr
+    assert (Path(evidence) / "SKL-386" / "README.md").is_file()
+
+
+def test_a_relative_cross_checkout_destination_uses_the_outer_schema(tmp_path):
+    outer = tmp_path / "outer"
+    (outer / ".git").mkdir(parents=True)
+    (outer / "profile").mkdir()
+    (outer / "profile" / "schema.json").write_text(
+        (ROOT / "profile" / "schema.json").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    inner = outer / "inner"
+    (inner / ".git").mkdir(parents=True)
+    label = "AC1 - profile.not.a.key is set"
+    res = run_in(inner, "--key", "SKL-386", "--item", label, "--evidence-dir", "../docs/qa-evidence")
+    assert res.returncode == 1, res.stderr
+    assert len(res.stderr.splitlines()) == 1, res.stderr
+    assert not (outer / "docs").exists()
 
 
 def test_an_abbreviated_option_is_refused(tmp_path):
