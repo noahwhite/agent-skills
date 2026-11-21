@@ -185,12 +185,39 @@ def fenced_template(text: str) -> str:
     return template
 
 
-def repository_tests_run(workflow_text: str) -> list[str]:
+def repository_tests_problems(workflow_text: str) -> list[str]:
+    """Every way the pinned CI contract is broken; empty when the step still runs the suite on a pull request."""
     workflow = yaml.safe_load(workflow_text)
+    problems: list[str] = []
+    triggers = workflow.get("on", workflow.get(True)) or {}
+    if isinstance(triggers, str):
+        triggers = {triggers: None}
+    if "pull_request" not in triggers:
+        problems.append("the workflow no longer triggers on pull_request")
     jobs = workflow.get("jobs") or {}
-    assert "checks" in jobs, "the CI workflow no longer has a `checks` job"
-    steps = jobs["checks"].get("steps") or []
-    return [step.get("run") for step in steps if step.get("name") == "Repository tests"]
+    if "checks" not in jobs:
+        problems.append("the workflow no longer has a `checks` job")
+        return problems
+    job = jobs["checks"]
+    if job.get("if") is not None:
+        problems.append("the checks job is conditional")
+    steps = job.get("steps") or []
+    matches = [step for step in steps if step.get("name") == "Repository tests"]
+    if len(matches) != 1:
+        problems.append(f"the checks job carries {len(matches)} Repository tests steps")
+        return problems
+    step = matches[0]
+    if step.get("run") != "uv run --locked pytest -q":
+        problems.append(f"the Repository tests step runs {step.get('run')!r}")
+    if step.get("if") is not None:
+        problems.append("the Repository tests step is conditional")
+    for key in ("continue-on-error", "working-directory", "env"):
+        if step.get(key):
+            problems.append(f"the Repository tests step sets {key}")
+    for candidate in steps:
+        if str(candidate.get("uses", "")).startswith("actions/checkout") and (candidate.get("with") or {}).get("ref"):
+            problems.append("the checkout step pins a ref instead of the pull request")
+    return problems
 
 
 def expected_block(first_line: str, indent: str) -> list[str]:
@@ -270,7 +297,7 @@ def test_the_rule_is_rendered_where_ac1_names_it() -> None:
 
 
 def test_checks_job_repository_tests_step_runs_the_locked_suite() -> None:
-    assert repository_tests_run(text_of(CI)) == ["uv run --locked pytest -q"]
+    assert repository_tests_problems(text_of(CI)) == [], "the CI pin no longer proves the suite runs on a pull request"
 
 
 # ---- AC3: decision cases ---------------------------------------------------------------------
@@ -439,7 +466,22 @@ def test_guard_kills_every_mutant() -> None:
         step for step in removed["jobs"]["checks"]["steps"] if step.get("name") != "Repository tests"
     ]
     mutants.append(("a removed step", removed))
+    for key, value in (("if", False), ("continue-on-error", True), ("working-directory", "skills"), ("env", {"X": "1"})):
+        skipped = copy.deepcopy(workflow)
+        for step in skipped["jobs"]["checks"]["steps"]:
+            if step.get("name") == "Repository tests":
+                step[key] = value
+        mutants.append((f"a step with {key}", skipped))
+    disabled_job = copy.deepcopy(workflow)
+    disabled_job["jobs"]["checks"]["if"] = False
+    mutants.append(("a disabled checks job", disabled_job))
+    wrong_ref = copy.deepcopy(workflow)
+    for step in wrong_ref["jobs"]["checks"]["steps"]:
+        if str(step.get("uses", "")).startswith("actions/checkout"):
+            step.setdefault("with", {})["ref"] = "refs/heads/main"
+    mutants.append(("a checkout pinned to main", wrong_ref))
+    no_pull_request = copy.deepcopy(workflow)
+    no_pull_request[True] = {"push": no_pull_request[True]["push"]}
+    mutants.append(("no pull_request trigger", no_pull_request))
     for label, mutated in mutants:
-        assert repository_tests_run(yaml.safe_dump(mutated)) != ["uv run --locked pytest -q"], (
-            f"the CI pin accepted {label!r}"
-        )
+        assert repository_tests_problems(yaml.safe_dump(mutated)), f"the CI pin accepted {label!r}"
