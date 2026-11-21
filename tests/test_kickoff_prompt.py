@@ -49,19 +49,21 @@ def flat(text: str) -> str:
     return " ".join(text.split())
 
 
-def prose_lines(lines: list[str]) -> set[int]:
-    """The indexes of the lines an agent reads as instructions: not in a fence, not in a comment."""
-    prose: set[int] = set()
+def visible_lines(lines: list[str]) -> list[str]:
+    """Each line as the agent reads it: comments removed, and nothing inside a fence."""
+    result: list[str] = []
     fenced = False
     commented = False
-    for index, line in enumerate(lines):
+    for line in lines:
         stripped = line.strip()
         if fenced:
             if stripped.startswith(("```", "~~~")):
                 fenced = False
+            result.append("")
             continue
         if not commented and stripped.startswith(("```", "~~~")):
             fenced = True
+            result.append("")
             continue
         visible = ""
         rest = line
@@ -82,18 +84,17 @@ def prose_lines(lines: list[str]) -> set[int]:
                     visible += rest[:start]
                     rest = rest[start + 4:]
                     commented = True
-        if visible.strip():
-            prose.add(index)
-    return prose
+        result.append(visible)
+    return result
 
 
-def step_sections(text: str) -> list[str]:
-    headings = list(re.finditer(r"^## .*$", text, re.MULTILINE))
+def step_sections(visible: list[str]) -> list[str]:
+    headings = [index for index, line in enumerate(visible) if line.startswith("## ")]
     sections = []
-    for index, heading in enumerate(headings):
-        end = headings[index + 1].start() if index + 1 < len(headings) else len(text)
-        if re.match(r"^## [1-5]\. ", heading.group(0)):
-            sections.append(text[heading.end():end])
+    for position, index in enumerate(headings):
+        end = headings[position + 1] if position + 1 < len(headings) else len(visible)
+        if re.match(r"^## [1-5]\. ", visible[index]):
+            sections.append("\n".join(visible[index + 1:end]))
     return sections
 
 
@@ -121,16 +122,20 @@ def test_the_block_is_exactly_the_required_instructions_in_order() -> None:
     assert flat(asset_block()) == flat(expected)
 
 
+def test_the_cadence_figure_is_pinned_both_ways() -> None:
+    assert CADENCE_MINUTES == 12
+    assert f"{CADENCE_MINUTES}-minute" in asset_block()
+    assert "12-minute" in asset_block()
+
+
 def test_the_skill_points_at_the_asset_and_states_the_default_outside_the_steps() -> None:
     lines = SKILL.read_text(encoding="utf-8").splitlines()
-    text = "\n".join(lines)
-    prose = prose_lines(lines)
-    sections = step_sections(text)
+    visible = visible_lines(lines)
+    prose = "\n".join(visible)
+    sections = step_sections(visible)
     assert len(sections) == 5, "all five step sections must be recognised before placement is tested"
-    pointer_lines = [index for index, line in enumerate(lines) if POINTER in line]
-    assert len(pointer_lines) == 1, "the pointer sentence must be stated exactly once"
-    assert pointer_lines[0] in prose, "the pointer must be operative prose, not a comment or a fenced example"
+    assert prose.count(POINTER) == 1, "the pointer sentence must be stated exactly once in visible prose"
     assert all(POINTER not in section for section in sections), (
         "the kickoff pointer must sit outside the step 1 to step 5 sections"
     )
-    assert POINTER_SENTENCE in flat(text)
+    assert POINTER_SENTENCE in flat(prose)
