@@ -37,9 +37,6 @@ POINTER_SENTENCE = (
     "`assets/kickoff-prompt.md` holds the caller prompt that starts it."
 )
 
-COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
-
-
 def asset_block() -> str:
     match = ASSET_SHAPE.match(ASSET.read_text(encoding="utf-8"))
     assert match, "the asset must be the caller line, blank space, and one bare fenced block"
@@ -48,12 +45,46 @@ def asset_block() -> str:
     return block
 
 
-def visible(text: str) -> str:
-    return COMMENT.sub("", text)
-
-
 def flat(text: str) -> str:
     return " ".join(text.split())
+
+
+def prose_lines(lines: list[str]) -> set[int]:
+    """The indexes of the lines an agent reads as instructions: not in a fence, not in a comment."""
+    prose: set[int] = set()
+    fenced = False
+    commented = False
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if fenced:
+            if stripped.startswith(("```", "~~~")):
+                fenced = False
+            continue
+        if not commented and stripped.startswith(("```", "~~~")):
+            fenced = True
+            continue
+        visible = ""
+        rest = line
+        while rest:
+            if commented:
+                end = rest.find("-->")
+                if end < 0:
+                    rest = ""
+                else:
+                    rest = rest[end + 3:]
+                    commented = False
+            else:
+                start = rest.find("<!--")
+                if start < 0:
+                    visible += rest
+                    rest = ""
+                else:
+                    visible += rest[:start]
+                    rest = rest[start + 4:]
+                    commented = True
+        if visible.strip():
+            prose.add(index)
+    return prose
 
 
 def step_sections(text: str) -> list[str]:
@@ -85,20 +116,20 @@ def test_the_block_respects_the_line_and_word_ceilings() -> None:
     assert len(block.split()) <= 80
 
 
-def test_the_block_carries_the_required_clauses_affirmatively() -> None:
-    block = flat(asset_block())
-    assert CADENCE_SENTENCE in block
-    assert DEFAULT_SENTENCE in block
-    assert SCOPE_SENTENCE in block
-    assert DEADLINE_SENTENCE in block
+def test_the_block_is_exactly_the_required_instructions_in_order() -> None:
+    expected = " ".join((CADENCE_SENTENCE, DEFAULT_SENTENCE, SCOPE_SENTENCE, DEADLINE_SENTENCE))
+    assert flat(asset_block()) == flat(expected)
 
 
 def test_the_skill_points_at_the_asset_and_states_the_default_outside_the_steps() -> None:
-    raw = SKILL.read_text(encoding="utf-8")
-    text = visible(raw)
+    lines = SKILL.read_text(encoding="utf-8").splitlines()
+    text = "\n".join(lines)
+    prose = prose_lines(lines)
     sections = step_sections(text)
     assert len(sections) == 5, "all five step sections must be recognised before placement is tested"
-    assert raw.count(POINTER) == 1, "the pointer must not be hidden in a comment or repeated"
+    pointer_lines = [index for index, line in enumerate(lines) if POINTER in line]
+    assert len(pointer_lines) == 1, "the pointer sentence must be stated exactly once"
+    assert pointer_lines[0] in prose, "the pointer must be operative prose, not a comment or a fenced example"
     assert all(POINTER not in section for section in sections), (
         "the kickoff pointer must sit outside the step 1 to step 5 sections"
     )
