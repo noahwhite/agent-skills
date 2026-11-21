@@ -260,6 +260,7 @@ if [[ ! "$PR_URL" =~ ^https?://([^/]+)/([^/]+/[^/]+)/pull/([0-9]+)/?$ ]]; then
   refuse 12 "Could not derive owner/repo and number from the PR URL ($PR_URL)"
 fi
 SLUG="${BASH_REMATCH[2]}"
+HOST="${BASH_REMATCH[1]}"
 [ "${BASH_REMATCH[3]}" = "$NUMBER" ] || refuse 12 "the PR URL ($PR_URL) is not PR #$NUMBER"
 [[ "$HEAD" =~ ^[0-9a-f]{40}$ ]] || refuse 12 "the PR head SHA read from GitHub is not a full commit SHA: '$HEAD'"
 
@@ -273,9 +274,10 @@ fi
 [ -n "$AUTHOR" ] \
   || refuse 15 "no expected author: review.record_author is unset and gh api user --jq .login returned nothing"
 
-# The PR reviews, through the paginated reviews endpoint.
+# The PR reviews, through the paginated reviews endpoint on the PR's own host (`gh api` does not
+# infer the host from the checkout's remote, unlike `gh pr view`).
 REVIEWS_JSON="$(
-  gh api --paginate "repos/$SLUG/pulls/$NUMBER/reviews" --jq \
+  gh api --paginate "repos/$SLUG/pulls/$NUMBER/reviews" --hostname "$HOST" --jq \
     '.[] | {author: .user.login, state: .state, commit_id: .commit_id, submitted_at: .submitted_at, html_url: .html_url, body: .body}'
 )" || refuse 15 "Could not read the reviews of PR #$NUMBER with gh api --paginate"
 
@@ -294,11 +296,23 @@ if [ -n "$REVIEWS_JSON" ]; then
     '
   )" || refuse 15 "Could not select the review of record from the reviews of PR #$NUMBER"
 fi
-# references/code-review.md's merge guard step 2: list every marker review it excluded, with its
-# login, URL and commit, and never a review body.
+# references/code-review.md's merge guard step 2: list every marker review the selection excluded
+# (the selected one is not excluded), with its login, URL and commit, and never a review body.
+REVIEWED_COMMIT=""
+REVIEW_URL=""
+REVIEWED_FIRSTLINE_SHA=""
+if [ -n "$SELECTED" ]; then
+  REVIEWED_COMMIT="$(json_field "$SELECTED" .commit_id)"
+  REVIEW_URL="$(json_field "$SELECTED" .html_url)"
+  REVIEWED_FIRSTLINE_SHA="$(
+    printf '%s' "$SELECTED" \
+      | jq -r '.body | split("\n")[0] | sub("^[[:space:]]+"; "") | sub("[[:space:]]+$"; "")' \
+      | awk '{print $NF}'
+  )"
+fi
 EXCLUDED_MARKERS="$(
-  printf '%s\n' "$REVIEWS_JSON" | jq -s -r '
-    [ .[] | select((.body // "") | startswith("Review of record")) ]
+  printf '%s\n' "$REVIEWS_JSON" | jq -s -r --arg sel "$REVIEW_URL" '
+    [ .[] | select((.body // "") | startswith("Review of record")) | select((.html_url // "") != $sel) ]
     | .[] | "Excluded marker review: \(.author // "-") \(.html_url // "-") \(.commit_id // "-")"
   '
 )" || refuse 15 "Could not list the excluded marker reviews of PR #$NUMBER"
@@ -309,14 +323,6 @@ if [ -z "$SELECTED" ]; then
   printf '%s\n' "$EXCLUDED_MARKERS"
   refuse 15 "no review of record on PR #$NUMBER: no COMMENTED review whose body begins with 'Review of record' was submitted by $AUTHOR at the live head $HEAD"
 fi
-
-REVIEWED_COMMIT="$(json_field "$SELECTED" .commit_id)"
-REVIEW_URL="$(json_field "$SELECTED" .html_url)"
-REVIEWED_FIRSTLINE_SHA="$(
-  printf '%s' "$SELECTED" \
-    | jq -r '.body | split("\n")[0] | sub("^[[:space:]]+"; "") | sub("[[:space:]]+$"; "")' \
-    | awk '{print $NF}'
-)"
 
 printf 'PR: %s %s\n' "$NUMBER" "$PR_URL"
 printf 'Live head: %s\n' "$HEAD"
@@ -358,7 +364,7 @@ CHECKS_OUT=""
 CHECKS_ERR=""
 CHECKS_STATUS=0
 CHECKS_ERR_FILE="$(mktemp)" || refuse 14 "could not create a file for the required-checks stderr of PR #$NUMBER"
-CHECKS_OUT="$(gh pr checks "$NUMBER" --required --json name,state,bucket 2>"$CHECKS_ERR_FILE")" || CHECKS_STATUS=$?
+CHECKS_OUT="$(gh pr checks "$NUMBER" --required --json name,state 2>"$CHECKS_ERR_FILE")" || CHECKS_STATUS=$?
 CHECKS_ERR="$(cat -- "$CHECKS_ERR_FILE")"
 rm -f -- "$CHECKS_ERR_FILE"
 case "$CHECKS_STATUS" in

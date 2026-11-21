@@ -121,10 +121,10 @@ def review(head=HEAD, author="record-author", state="COMMENTED", submitted="2026
     }
 
 
-def pr_payload(head=HEAD, mergeable="MERGEABLE", state="CLEAN", pr_state="OPEN"):
+def pr_payload(head=HEAD, mergeable="MERGEABLE", state="CLEAN", pr_state="OPEN", url=URL):
     return {
         "number": 7,
-        "url": URL,
+        "url": url,
         "state": pr_state,
         "isDraft": pr_state == "DRAFT",
         "mergeable": mergeable,
@@ -174,10 +174,11 @@ def run(tmp_path):
         cwd=None,
         extra_env=None,
         shadow_yaml=False,
+        pr_url=None,
     ):
         pages = reviews if reviews and isinstance(reviews[0], list) else [reviews or []]
         (fixtures / "reviews.json").write_text(json.dumps(pages))
-        (fixtures / "pr.json").write_text(json.dumps(pr or pr_payload()))
+        (fixtures / "pr.json").write_text(json.dumps(pr or pr_payload(url=pr_url or URL)))
         (fixtures / "checks.json").write_text(json.dumps(checks if checks is not None else [check()]))
         (fixtures / "confirm.json").write_text(
             json.dumps(
@@ -381,7 +382,7 @@ def test_refuses_without_a_review_of_record(run):
 
 def test_reads_the_reviews_with_the_paginated_endpoint(run):
     _, log = run(reviews=[review()])
-    assert f"api --paginate {REVIEWS_END}" in calls(log)
+    assert f"api --paginate {REVIEWS_END} --hostname github.com" in calls(log)
 
 
 def test_selects_the_greatest_submitted_at_across_pages(run):
@@ -752,7 +753,7 @@ def test_reads_the_required_checks_from_stdout_when_gh_warns_on_stderr(run):
 
 def test_pins_the_required_scope_of_the_checks_read(run):
     _, log = run(reviews=[review()])
-    assert "pr checks 7 --required --json name,state,bucket" in log
+    assert "pr checks 7 --required --json name,state" in log
 
 
 def test_lists_each_excluded_marker_review(run, tmp_path):
@@ -762,6 +763,14 @@ def test_lists_each_excluded_marker_review(run, tmp_path):
     done, _ = run(reviews=[review(), excluded])
     assert done.returncode == 0, done.stderr
     assert f"Excluded marker review: someone-else {other_url} {HEAD}" in done.stdout
+    excluded_lines = [ln for ln in done.stdout.splitlines() if ln.startswith("Excluded marker review:")]
+    assert not any(REVIEW_URL in ln for ln in excluded_lines), excluded_lines
+
+
+def test_reads_the_reviews_from_the_pr_host(run):
+    done, log = run(reviews=[review()], pr_url="https://ghe.example.com/acme/widgets/pull/7")
+    assert done.returncode == 0, done.stderr
+    assert f"api --paginate {REVIEWS_END} --hostname ghe.example.com" in calls(log)
 
 
 def test_a_missing_jq_is_a_named_prerequisite_failure(tmp_path):
