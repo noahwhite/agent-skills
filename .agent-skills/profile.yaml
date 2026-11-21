@@ -55,7 +55,7 @@ review:
   # Owner directive 2026-11-20: the reviewer runs Gemini 3.8 Flash through OpenRouter.
   # The Google provider's own prepayment credits are depleted and the Copilot route refuses this
   # container's PAT, so OpenRouter is the working route; the seat answered a probe on 2026-11-20.
-  # Labs across the gate: reviewer Google, arbiter OpenAI, hunter Moonshot, sweeper zhipu, and the
+  # Labs across the gate: reviewer Google, arbiter OpenAI, hunter MiniMax, sweeper zhipu, and the
   # adjudicator DeepSeek, so those five roles are pairwise distinct; the simplicity reviewer shares
   # the adjudicator's DeepSeek lab, and it and the fixer sit outside this gate's phases.
   # The opencode runtime enforces no filesystem sandbox here, unlike the codex seat it replaces, so
@@ -72,30 +72,32 @@ review:
   shadow_adjudicators: []
   merge_owner: agent
   pre_pr:
-    # Owner directive 2026-11-20: sweep GLM-5.3 Flash, verify-and-hunt Kimi K3.1 Pro, arbitrate
-    # GPT-6.2 Astra. The owner raised the OpenRouter key limit the same day, which is what makes the
-    # GLM sweep seat routable. Those three seats, plus the reviewer above, each answered a probe in
-    # this container on 2026-11-20; the fixer below answered a probe on 2026-11-21 after the
-    # owner rewired it off the dead Anthropic route (SKL-397).
-    # Labs: sweeper zhipu (OpenRouter), hunter Moonshot, arbiter OpenAI, adjudicator DeepSeek,
-    # fixer Xiaomi.
+    # Owner directive 2026-11-20: sweep GLM-5.3 Flash, verify-and-hunt MiniMax M3.1 Flash (Kimi
+    # K3.1 Pro until 2026-11-21), arbitrate GPT-6.2 Astra. The owner raised the OpenRouter key limit
+    # the same day, which is what makes the GLM sweep seat routable. Every seat below answered a
+    # probe in this container on 2026-11-20 or 2026-11-21; the fixer did so after the owner rewired
+    # it off the dead Anthropic route (SKL-397).
+    # Labs: sweeper zhipu, hunter MiniMax, arbiter OpenAI and reviewer Google, all four served
+    # through OpenRouter, and adjudicator DeepSeek, fixer Xiaomi. Those four distinct models map to
+    # four distinct labs, but they share one OpenRouter credential, so a single key limit event
+    # takes sweep, hunt, review and arbitration down together.
     sweeper:
       name: GLM-5.3 Flash
       runtime: opencode
       model: openrouter/z-ai/glm-5.3-flash
-    # Kimi K3.1 Pro runs on the moonshotai provider, not the kimi provider: the kimi provider that
-    # reads KIMI_API_KEY registers only kimi-k3 in the shipped image (the running volume also
-    # carries kimi-k3.1-pro, added by hand, and a restart drops it), and adding kimi-k3.1-pro to opencode.json is a
-    # live-container edit that entrypoint.sh overwrites at every start, which would kill this
-    # mandatory seat on the next restart. The moonshotai entry is part of the image's model
-    # registry, so it survives. Move the seat to kimi/kimi-k3.1-pro only once the image ships that
-    # model registration.
+    # Owner directive 2026-11-21: the hunter runs MiniMax M3.1 Flash on OpenRouter, replacing Kimi
+    # K3.1 Pro. The OpenCode Go route to the same model is at its monthly usage limit, so OpenRouter
+    # is the working route; the seat answered a probe on 2026-11-21. It replaced moonshotai/
+    # kimi-k3.1-pro, which was chosen because the kimi provider registers only kimi-k3 in the
+    # shipped image; the MiniMax entry comes from the provider registry, so no hand-added model
+    # registration is involved.
     hunter:
-      name: Kimi K3.1 Pro
+      name: MiniMax M3.1 Flash
       runtime: opencode
-      model: moonshotai/kimi-k3.1-pro
+      model: openrouter/minimax/minimax-m3.1-flash
     # The hunt mutates and runs code, so give it a phase timeout well above the 900-second default:
-    # on a 40-line diff it needed 819 seconds and a 900-second run was killed mid-report.
+    # a Kimi run on a 40-line diff needed 819 seconds and a 900-second run was killed mid-report.
+    # MiniMax M3.1 Flash is fast, but the timeout belongs to the phase, not to the model.
     arbiter:
       name: GPT-6.2 Astra
       runtime: opencode
