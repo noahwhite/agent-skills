@@ -242,13 +242,16 @@ Any change to the head after the review of record, including the fixes for its f
 
 Only once step 9 holds.
 
+The merge is one invocation, `bash <skill dir>/scripts/merge-pr.sh <PR number> --repo <consumer repo>`: it reads the PR's reviews, reads the required checks, verifies the review of record against the live head, and merges with the reviewed head as the expected-head condition, or refuses and reports the merge blocked.
+It runs the merge guard in `references/code-review.md`, so do not repeat the reviews read or the checks read by hand.
+
 If the brief assigns merge approval to a manager, follow [references/merge-approval.md](references/merge-approval.md) before any merge.
 If the brief does not give the approvals-file path or the wake address the runtime needs, stop and report the engagement blocked on the missing metadata; do not fall through to autonomous merge.
 
 1. Record a `REQUEST` in the approvals file, naming the request ID, the PR, the full head SHA, the review-of-record link, and the CI state.
 2. Deliver the same request through the wake capability in `references/runtimes.md`.
 3. Poll the approvals file and do not merge until an `APPROVE` for that request ID and the current full head SHA is recorded.
-4. Re-read the live PR, run the merge guard in `references/code-review.md`, and confirm the head SHA still matches the approval, the required checks are green, and the PR is mergeable; merge with the approved full head SHA as an expected-head condition, and if the merge command cannot carry one, stop and report the merge blocked instead of merging unguarded.
+4. Re-read the live PR, run the merge guard in `references/code-review.md` through the helper with the request it approved (`bash <skill dir>/scripts/merge-pr.sh <PR number> --repo <consumer repo> --approvals <approvals file> --request-id <request ID>`), and confirm the head SHA still matches the approval, the required checks are green, and the PR is mergeable; the helper merges with the approved full head SHA as an expected-head condition, and if the merge command cannot carry one, stop and report the merge blocked instead of merging unguarded.
 5. If the head changes for any reason, including a base-only update, record a new request with a new request ID and the new full head SHA.
 
 If you must stop while waiting, the handback states that the work is blocked on merge approval and names the request ID, the PR, and the head SHA.
@@ -258,11 +261,16 @@ The handshake takes precedence over the autonomous merge in `references/github.m
 
 Otherwise:
 
-- If `profile.review.merge_owner` is `agent`: run the merge guard in `references/code-review.md`, then merge with `profile.git.merge_method` and the reviewed full head SHA as the expected-head condition (on GitHub, `gh pr merge <n> --match-head-commit <full reviewed SHA>` plus the merge-method flag), per `references/github.md`, and confirm the PR is actually merged.
+- If `profile.review.merge_owner` is `agent`: invoke `bash <skill dir>/scripts/merge-pr.sh <PR number> --repo <consumer repo>`, and do not run the merge guard in `references/code-review.md` by hand: it reads the reviews and the required checks, verifies the review of record, and merges with `profile.git.merge_method` and the reviewed full head SHA as the expected-head condition (the helper passes it as `--match-head-commit <full reviewed SHA>`), then confirms the PR is actually merged.
+  A refusal is reported as the merge blocked; never retry it with a hand-written merge command.
 - If it is `human`: tell the user the PR is merge-ready (link, head SHA, review-of-record `--comment` PR review link, its `html_url`) and wait; resume at step 11 once it is merged.
+  The owner performs the merge, and the helper's `--approvals` form stops the same way after it verifies.
 
 Never merge with failing required checks or before the review of record is clean on head.
 An update-branch after the review, even one that brings in only base changes, is a new head: review the delta before merging.
+
+Under the explicit per-PR review waiver in [references/code-review.md](references/code-review.md) (The gate) there is no review of record, so the helper refuses.
+That path keeps its hand-written sequence: record the head SHA the PR has when the user gives the instruction, read the PR and its required checks (`gh pr view <n> --json headRefOid,mergeable,mergeStateStatus` and `gh pr checks <n> --required`), then merge carrying that full SHA as the expected-head condition, `gh pr merge <n> --match-head-commit <full SHA>` plus the merge-method flag.
 
 ## 11. Deploy and verify
 

@@ -308,6 +308,27 @@ def test_engineering_workflow_merge_uses_the_guard() -> None:
     assert UNGUARDED_STOP + " instead of merging unguarded" in approved
 
 
+MERGE_PR_INVOCATION = "bash <skill dir>/scripts/merge-pr.sh <PR number> --repo <consumer repo>"
+
+
+def test_engineering_workflow_step_ten_names_the_merge_helper_on_every_merge_path() -> None:
+    # SKL-388: step 10 merges through the one-call helper instead of a hand-written gh sequence.
+    body = section(skill("engineering-workflow"), "10. Merge")
+    autonomous = next(ln for ln in body.splitlines() if ln.startswith("- If `profile.review.merge_owner` is `agent`:"))
+    approved = next(ln for ln in body.splitlines() if ln.startswith("4. Re-read the live PR,"))
+    assert MERGE_PR_INVOCATION in autonomous
+    assert MERGE_PR_INVOCATION in approved
+    assert "--approvals <approvals file> --request-id <request ID>" in approved
+
+
+def test_engineering_workflow_step_ten_keeps_only_the_waiver_hand_written() -> None:
+    body = section(skill("engineering-workflow"), "10. Merge")
+    assert body.count("gh pr merge") == 1
+    waiver = next(ln for ln in body.splitlines() if ln.startswith("That path keeps its hand-written sequence:"))
+    assert "gh pr merge <n> --match-head-commit <full SHA>" in waiver
+    assert "The owner performs the merge" in body
+
+
 def test_qa_evidence_merge_uses_the_guard() -> None:
     text = skill("qa-verification")
     line = next(ln for ln in text.splitlines() if "Merge only on the exact final head" in ln)

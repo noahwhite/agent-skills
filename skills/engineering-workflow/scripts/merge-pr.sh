@@ -34,6 +34,14 @@ die() {
   exit "$status"
 }
 
+# A merge refusal: the reason on stderr, and the refusal result on stdout.
+refuse() {
+  local status="$1"
+  shift
+  printf 'Result: merge blocked: %s\n' "$*"
+  die "$status" "$*"
+}
+
 while [ $# -gt 0 ]; do
   case "$1" in
     --repo)
@@ -162,7 +170,7 @@ done <<<"$PROFILE_LINES"
 
 # The live PR: number, URL, state, draft flag, mergeability, merge state and head SHA.
 PR_JSON="$(gh pr view "$NUMBER" --json number,url,state,isDraft,mergeable,mergeStateStatus,headRefOid)" \
-  || die 12 "Could not read PR #$NUMBER with gh pr view"
+  || refuse 12 "Could not read PR #$NUMBER with gh pr view"
 json_field() { printf '%s' "$1" | jq -r "$2"; }
 PR_URL="$(json_field "$PR_JSON" .url)"
 HEAD="$(json_field "$PR_JSON" .headRefOid)"
@@ -170,29 +178,29 @@ MERGEABLE="$(json_field "$PR_JSON" .mergeable)"
 MERGE_STATE="$(json_field "$PR_JSON" .mergeStateStatus)"
 PR_STATE="$(json_field "$PR_JSON" .state)"
 IS_DRAFT="$(json_field "$PR_JSON" .isDraft)"
-[ "$(json_field "$PR_JSON" .number)" = "$NUMBER" ] || die 12 "gh pr view returned a different PR number than #$NUMBER"
+[ "$(json_field "$PR_JSON" .number)" = "$NUMBER" ] || refuse 12 "gh pr view returned a different PR number than #$NUMBER"
 if [[ ! "$PR_URL" =~ ^https?://([^/]+)/([^/]+/[^/]+)/pull/([0-9]+)/?$ ]]; then
-  die 12 "Could not derive owner/repo and number from the PR URL ($PR_URL)"
+  refuse 12 "Could not derive owner/repo and number from the PR URL ($PR_URL)"
 fi
 SLUG="${BASH_REMATCH[2]}"
-[ "${BASH_REMATCH[3]}" = "$NUMBER" ] || die 12 "the PR URL ($PR_URL) is not PR #$NUMBER"
-[[ "$HEAD" =~ ^[0-9a-f]{40}$ ]] || die 12 "the PR head SHA read from GitHub is not a full commit SHA: '$HEAD'"
+[ "${BASH_REMATCH[3]}" = "$NUMBER" ] || refuse 12 "the PR URL ($PR_URL) is not PR #$NUMBER"
+[[ "$HEAD" =~ ^[0-9a-f]{40}$ ]] || refuse 12 "the PR head SHA read from GitHub is not a full commit SHA: '$HEAD'"
 
 # The expected author of the review of record: review.record_author when set, else the login of
 # the authenticated account.
 AUTHOR="$RECORD_AUTHOR"
 if [ -z "$AUTHOR" ]; then
   AUTHOR="$(gh api user --jq .login)" \
-    || die 15 "could not resolve the expected author: gh api user --jq .login failed"
+    || refuse 15 "could not resolve the expected author: gh api user --jq .login failed"
 fi
 [ -n "$AUTHOR" ] \
-  || die 15 "no expected author: review.record_author is unset and gh api user --jq .login returned nothing"
+  || refuse 15 "no expected author: review.record_author is unset and gh api user --jq .login returned nothing"
 
 # The PR reviews, through the paginated reviews endpoint.
 REVIEWS_JSON="$(
   gh api --paginate "repos/$SLUG/pulls/$NUMBER/reviews" --jq \
     '.[] | {author: .user.login, state: .state, commit_id: .commit_id, submitted_at: .submitted_at, html_url: .html_url, body: .body}'
-)" || die 15 "Could not read the reviews of PR #$NUMBER with gh api --paginate"
+)" || refuse 15 "Could not read the reviews of PR #$NUMBER with gh api --paginate"
 
 # Among the COMMENTED reviews whose body begins with 'Review of record', the expected author's,
 # with the greatest submitted_at.
@@ -207,10 +215,10 @@ if [ -n "$REVIEWS_JSON" ]; then
       | sort_by(.submitted_at // "")
       | if length == 0 then empty else .[-1] end
     '
-  )" || die 15 "Could not select the review of record from the reviews of PR #$NUMBER"
+  )" || refuse 15 "Could not select the review of record from the reviews of PR #$NUMBER"
 fi
 [ -n "$SELECTED" ] \
-  || die 15 "no review of record on PR #$NUMBER: no COMMENTED review whose body begins with 'Review of record' was submitted by $AUTHOR at the live head $HEAD"
+  || refuse 15 "no review of record on PR #$NUMBER: no COMMENTED review whose body begins with 'Review of record' was submitted by $AUTHOR at the live head $HEAD"
 
 REVIEWED_COMMIT="$(json_field "$SELECTED" .commit_id)"
 REVIEW_URL="$(json_field "$SELECTED" .html_url)"
@@ -226,37 +234,49 @@ printf 'Reviewed head: %s\n' "$REVIEWED_COMMIT"
 printf 'Review of record: %s\n' "$REVIEW_URL"
 
 if [ "$REVIEWED_COMMIT" != "$HEAD" ]; then
-  die 15 "merge blocked: the review of record ($REVIEW_URL) covers commit $REVIEWED_COMMIT, but the live head of PR #$NUMBER is $HEAD"
+  refuse 15 "the review of record ($REVIEW_URL) covers commit $REVIEWED_COMMIT, but the live head of PR #$NUMBER is $HEAD"
 fi
 if [ "$REVIEWED_FIRSTLINE_SHA" != "$HEAD" ]; then
-  die 15 "merge blocked: the review of record ($REVIEW_URL) names $REVIEWED_FIRSTLINE_SHA on its first line, but the live head of PR #$NUMBER is $HEAD"
+  refuse 15 "the review of record ($REVIEW_URL) names $REVIEWED_FIRSTLINE_SHA on its first line, but the live head of PR #$NUMBER is $HEAD"
 fi
 
-# The required checks on the head: every one green, and none pending or failing.
+# A merge needs an open PR, no draft, a mergeable branch and no blocking merge state.
+if [ "$PR_STATE" != "OPEN" ]; then
+  refuse 16 "PR #$NUMBER is in state $PR_STATE, not OPEN"
+fi
 if [ "$IS_DRAFT" = "true" ]; then
-  die 16 "merge blocked: PR #$NUMBER is a draft (merge state $MERGE_STATE)"
+  refuse 16 "PR #$NUMBER is a draft (merge state $MERGE_STATE)"
 fi
 if [ "$MERGEABLE" != "MERGEABLE" ]; then
-  die 16 "merge blocked: PR #$NUMBER is not mergeable (mergeable=$MERGEABLE, merge state $MERGE_STATE)"
+  refuse 16 "PR #$NUMBER is not mergeable (mergeable=$MERGEABLE, merge state $MERGE_STATE)"
 fi
 case "$MERGE_STATE" in
   CLEAN | HAS_HOOKS | UNSTABLE) ;;
-  *) die 16 "merge blocked: PR #$NUMBER is in merge state $MERGE_STATE" ;;
+  *) refuse 16 "PR #$NUMBER is in merge state $MERGE_STATE" ;;
 esac
 
 CHECKS_JSON=""
 CHECKS_STATUS=0
-CHECKS_JSON="$(gh pr checks "$NUMBER" --required --json name,state,bucket)" || CHECKS_STATUS=$?
+CHECKS_JSON="$(gh pr checks "$NUMBER" --required --json name,state,bucket 2>&1)" || CHECKS_STATUS=$?
 case "$CHECKS_STATUS" in
   0 | 1 | 8) ;;
-  *) die 14 "Could not read the required checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS)" ;;
+  *) refuse 14 "Could not read the required checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS): $CHECKS_JSON" ;;
 esac
-[ -n "$CHECKS_JSON" ] \
-  || die 14 "Could not read the required checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS and printed nothing)"
+case "$CHECKS_JSON" in
+  \[*) ;;
+  *)
+    # gh prints this on stderr and exits 1 when the branch configures no required checks.
+    if printf '%s' "$CHECKS_JSON" | grep -q 'no required checks reported'; then
+      CHECKS_JSON='[]'
+    else
+      refuse 14 "Could not read the required checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS): $CHECKS_JSON"
+    fi
+    ;;
+esac
 CHECKS_COUNT="$(printf '%s' "$CHECKS_JSON" | jq -r 'if type == "array" then length else "invalid" end')" \
-  || die 14 "the required checks of PR #$NUMBER were not readable JSON"
-[ -n "$CHECKS_COUNT" ] && [ "$CHECKS_COUNT" != "invalid" ] \
-  || die 14 "the required checks of PR #$NUMBER were not a JSON array"
+  || refuse 14 "the required checks of PR #$NUMBER were not readable JSON"
+[ "$CHECKS_COUNT" != "invalid" ] \
+  || refuse 14 "the required checks of PR #$NUMBER were not a JSON array"
 if [ "$CHECKS_COUNT" = "0" ]; then
   printf 'Check: none\n'
 else
@@ -265,10 +285,65 @@ fi
 NON_GREEN="$(
   printf '%s' "$CHECKS_JSON" \
     | jq -r '[ .[] | select((.state != "SUCCESS") and (.state != "NEUTRAL") and (.state != "SKIPPED")) | "\(.name)=\(.state)" ] | join(", ")'
-)" || die 14 "the required checks of PR #$NUMBER were not readable JSON"
+)" || refuse 14 "the required checks of PR #$NUMBER were not readable JSON"
 if [ -n "$NON_GREEN" ]; then
-  die 14 "merge blocked: the required checks on head $HEAD are not green: $NON_GREEN"
+  refuse 14 "the required checks on head $HEAD are not green: $NON_GREEN"
 fi
 
-die 1 "merge is not implemented yet"
+# The manager-approval handshake: once the brief assigns merge approval to a manager, the merge
+# runs only after a matching APPROVE for the live head is recorded.
+if [ -n "$APPROVALS" ]; then
+  [ -f "$APPROVALS" ] || refuse 18 "the approvals file $APPROVALS does not exist"
+  DECISION="$(
+    awk -v id="$REQUEST_ID" -v head="$HEAD" '
+      {
+        count = split($0, field, "|")
+        if (count < 4) next
+        for (i = 1; i <= count; i++) { gsub(/^ +| +$/, "", field[i]) }
+        if (field[1] == "APPROVE" && field[2] == id && field[3] == head) { print "APPROVE"; exit }
+        if (field[1] == "BOUNCE" && field[2] == id && field[3] == head) { print "BOUNCE " field[5]; exit }
+      }
+    ' "$APPROVALS"
+  )" || refuse 18 "could not read the approvals file $APPROVALS"
+  case "$DECISION" in
+    APPROVE) ;;
+    BOUNCE*) refuse 18 "the manager bounced $REQUEST_ID at $HEAD: ${DECISION#BOUNCE }" ;;
+    *) refuse 18 "no APPROVE recorded for $REQUEST_ID at head $HEAD in $APPROVALS" ;;
+  esac
+fi
+
+# The human merge owner performs the merge itself.
+if [ "$MERGE_OWNER" = "human" ]; then
+  printf 'Result: merge-ready; profile.review.merge_owner is human, so no merge command was run\n'
+  exit 0
+fi
+
+# The merge must carry the reviewed head as an expected-head condition; a gh that cannot carry one
+# refuses here, and a rejected head change below is never retried without it.
+MERGE_HELP="$(gh pr merge --help)" || refuse 17 "could not read gh pr merge --help"
+if ! printf '%s' "$MERGE_HELP" | grep -q -- '--match-head-commit'; then
+  refuse 17 "this gh cannot carry an expected-head condition (gh pr merge has no --match-head-commit)"
+fi
+
+case "$MERGE_METHOD" in
+  squash) METHOD_FLAG="--squash" ;;
+  merge) METHOD_FLAG="--merge" ;;
+  rebase) METHOD_FLAG="--rebase" ;;
+esac
+
+MERGE_OUT=""
+if ! MERGE_OUT="$(gh pr merge "$NUMBER" --match-head-commit "$HEAD" "$METHOD_FLAG")"; then
+  refuse 17 "gh pr merge $NUMBER --match-head-commit $HEAD $METHOD_FLAG failed: $MERGE_OUT"
+fi
+
+# Success only once GitHub reports the PR merged; a queued merge is not a merge.
+CONFIRM_JSON="$(gh pr view "$NUMBER" --json state,mergedAt,mergeCommit)" \
+  || refuse 17 "merge not confirmed: could not re-read PR #$NUMBER after the merge command"
+CONFIRM_STATE="$(json_field "$CONFIRM_JSON" .state)"
+[ "$CONFIRM_STATE" = "MERGED" ] \
+  || refuse 17 "merge not confirmed: PR #$NUMBER is in state $CONFIRM_STATE, not MERGED (a queued merge is not a merge)"
+MERGE_COMMIT="$(printf '%s' "$CONFIRM_JSON" | jq -r '.mergeCommit.oid // empty')"
+[ -n "$MERGE_COMMIT" ] || refuse 17 "merge not confirmed: PR #$NUMBER reports no merge commit"
+
+printf 'Result: merged %s\n' "$MERGE_COMMIT"
 

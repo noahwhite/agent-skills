@@ -66,6 +66,7 @@ case "${1:-}" in
         ;;
       checks)
         [ -z "${FAIL_CHECKS:-}" ] || { echo "gh: HTTP 500" >&2; exit 1; }
+        [ -z "${NO_REQUIRED_CHECKS:-}" ] || { echo "no required checks reported on the 'x' branch" >&2; exit 1; }
         cat "$FIXTURES/checks.json"
         exit "${CHECKS_EXIT:-0}"
         ;;
@@ -152,6 +153,7 @@ def run(tmp_path):
         fail_user=False,
         profile_text=PROFILE,
         profile_path="env",
+        skills_repo=False,
         args=(),
         cwd=None,
         extra_env=None,
@@ -172,6 +174,10 @@ def run(tmp_path):
             "USAGE\n  gh pr merge [<number> | <url> | <branch>] [flags]\n\nFLAGS\n"
             + (f"      {help_line}\n" if merge_help else "  -s, --squash   Squash the commits into one\n")
         )
+        if skills_repo:
+            (consumer / "shared").mkdir()
+            (consumer / "skills.json").write_text("[]\n")
+            (consumer / "shared" / "runtimes.md").write_text("map\n")
         if profile_text is not None:
             profile.write_text(profile_text)
         log.write_text("")
@@ -222,7 +228,7 @@ def calls(log):
 
 
 def merged(log):
-    return [ln for ln in log if ln.startswith("merge 7")]
+    return [ln for ln in log if ln.startswith("pr merge 7")]
 
 
 # --- Slice 1: invocation, profile read, PR read, expected-author resolution ---------------------
@@ -255,6 +261,12 @@ def test_refuses_the_skills_repository_unless_repo_names_it(tmp_path):
     )
     assert done.returncode == 2
     assert "skills repository" in done.stderr
+
+
+def test_targets_the_skills_repository_when_repo_names_it_explicitly(run):
+    done, log = run(reviews=[review()], skills_repo=True)
+    assert done.returncode == 0, done.stderr
+    assert len(merged(log)) == 1
 
 
 def test_missing_profile_fails_closed_naming_the_locations(run):
@@ -454,6 +466,145 @@ def test_prints_each_required_check_state(run):
     assert "Check: ci/discovery=SUCCESS" in done.stdout
 
 
-def test_no_required_checks_is_not_a_refusal(run):
-    done, _ = run(reviews=[review()], checks=[])
+def test_no_required_checks_configured_is_not_a_refusal(run):
+    done, log = run(reviews=[review()], extra_env={"NO_REQUIRED_CHECKS": "1"})
     assert "Check: none" in done.stdout, done.stderr
+    assert len(merged(log)) == 1
+
+
+def test_no_required_checks_on_the_head_is_not_a_refusal(run):
+    done, log = run(reviews=[review()], checks=[])
+    assert "Check: none" in done.stdout, done.stderr
+    assert len(merged(log)) == 1
+
+
+def test_refuses_a_pr_that_is_not_open(run):
+    done, log = run(reviews=[review()], pr=pr_payload(pr_state="CLOSED"))
+    assert done.returncode != 0
+    assert "not OPEN" in done.stderr
+    assert merged(log) == []
+
+
+# --- Slice 4: the guarded merge, its confirmation, and the no-unguarded-retry rules -------------
+
+MERGE_PREFIX = f"pr merge 7 --match-head-commit {HEAD}"
+
+
+@pytest.mark.parametrize("method,flag", [("squash", "--squash"), ("merge", "--merge"), ("rebase", "--rebase")])
+def test_merges_with_the_expected_head_and_the_profile_merge_method(run, method, flag):
+    text = PROFILE.replace("merge_method: squash", f"merge_method: {method}")
+    done, log = run(profile_text=text, reviews=[review()])
+    assert done.returncode == 0, done.stderr
+    assert merged(log) == [f"{MERGE_PREFIX} {flag}"]
+
+
+def test_reports_success_only_after_github_confirms_the_merge(run):
+    done, log = run(reviews=[review()])
+    assert done.returncode == 0, done.stderr
+    assert f"Result: merged {MERGED_COMMIT}" in done.stdout
+    merge_at = next(i for i, ln in enumerate(log) if ln.startswith("pr merge 7"))
+    confirm_at = next(i for i, ln in enumerate(log) if "state,mergedAt,mergeCommit" in ln)
+    assert merge_at < confirm_at, calls(log)
+
+
+def test_a_queued_merge_is_not_success(run):
+    done, log = run(reviews=[review()], confirm={"state": "OPEN", "mergedAt": None, "mergeCommit": None})
+    assert done.returncode != 0
+    assert "not confirmed" in done.stderr
+    assert "Result: merged" not in done.stdout
+    assert len(merged(log)) == 1
+
+
+def test_a_failing_merge_is_reported_blocked_without_an_unguarded_retry(run):
+    done, log = run(reviews=[review()], fail_merge="failed to update pull request head")
+    assert done.returncode != 0
+    assert "Result: merge blocked" in done.stdout
+    assert len(merged(log)) == 1, calls(log)
+    assert merged(log)[0].startswith(MERGE_PREFIX)
+
+
+def test_refuses_when_the_merge_command_cannot_carry_an_expected_head(run):
+    done, log = run(reviews=[review()], merge_help=False)
+    assert done.returncode != 0
+    assert "--match-head-commit" in done.stderr
+    assert merged(log) == [], calls(log)
+
+
+def test_passes_no_admin_override(run):
+    _, log = run(reviews=[review()])
+    assert "--admin" not in calls(log)
+
+
+def test_never_puts_a_token_in_argv_or_output(run):
+    done, log = run(reviews=[review()], extra_env={"GH_TOKEN": "s3cr3t-token-value"})
+    assert done.returncode == 0, done.stderr
+    for text in (" ".join(log), done.stdout, done.stderr):
+        assert "s3cr3t-token-value" not in text
+
+
+# --- Slice 5: the human merge owner and the manager-approval gate -------------------------------
+
+
+def test_human_merge_owner_stops_without_a_merge_command(run):
+    text = PROFILE.replace("merge_owner: agent", "merge_owner: human")
+    done, log = run(profile_text=text, reviews=[review()])
+    assert done.returncode == 0, done.stderr
+    assert merged(log) == []
+    assert HEAD in done.stdout and URL in done.stdout and REVIEW_URL in done.stdout
+    assert "no merge command" in done.stdout
+
+
+def test_human_merge_owner_still_refuses_a_stale_review(run):
+    text = PROFILE.replace("merge_owner: agent", "merge_owner: human")
+    done, log = run(profile_text=text, reviews=[review(head=MOVED)])
+    assert done.returncode != 0
+    assert merged(log) == []
+
+
+def approvals_file(tmp_path, records):
+    path = tmp_path / "approvals.txt"
+    path.write_text("\n".join(records) + "\n")
+    return path
+
+
+REQUEST = "REQ-SKL-388-PR7-1"
+
+
+def test_a_matching_approve_permits_the_merge(run, tmp_path):
+    path = approvals_file(tmp_path, [f"APPROVE | {REQUEST} | {HEAD} | manager | 2026-11-20T19:00:00Z"])
+    done, log = run(reviews=[review()], args=("--approvals", str(path), "--request-id", REQUEST))
+    assert done.returncode == 0, done.stderr
+    assert len(merged(log)) == 1
+
+
+def test_refuses_without_a_matching_approve(run, tmp_path):
+    path = approvals_file(tmp_path, [f"APPROVE | {REQUEST} | {MOVED} | manager | 2026-11-20T19:00:00Z"])
+    done, log = run(reviews=[review()], args=("--approvals", str(path), "--request-id", REQUEST))
+    assert done.returncode != 0
+    assert "APPROVE" in done.stderr and HEAD in done.stderr
+    assert merged(log) == []
+
+
+def test_refuses_a_bounced_request(run, tmp_path):
+    path = approvals_file(
+        tmp_path, [f"BOUNCE | {REQUEST} | {HEAD} | manager | needs a delta review | 2026-11-20T19:00:00Z"]
+    )
+    done, log = run(reviews=[review()], args=("--approvals", str(path), "--request-id", REQUEST))
+    assert done.returncode != 0
+    assert "bounced" in done.stderr and "needs a delta review" in done.stderr
+    assert merged(log) == []
+
+
+def test_refuses_a_missing_approvals_file(run, tmp_path):
+    done, log = run(
+        reviews=[review()], args=("--approvals", str(tmp_path / "absent.txt"), "--request-id", REQUEST)
+    )
+    assert done.returncode != 0
+    assert "approvals file" in done.stderr
+    assert merged(log) == []
+
+
+def test_a_request_id_without_an_approvals_file_is_a_usage_error(run):
+    done, log = run(reviews=[review()], args=("--request-id", REQUEST))
+    assert done.returncode == 2
+    assert merged(log) == []

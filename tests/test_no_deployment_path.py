@@ -316,7 +316,10 @@ def added_blocks() -> list[str]:
 # sentence of steps 2 to 12 (the `deployed` path text of steps 11 and 12 included) must stay byte for
 # byte as it was, and the blocks themselves are kept whole and in order by the pins in
 # `HANDOFF_PINS` and `test_handoff_blocks_appear_once_in_order`.
-STEPS_TWO_TO_TWELVE_SHA256 = "a36c006733b7b3bc23d65530faee575a02b5e59c1b8c68d48d7657fcf639f2c3"
+# SKL-388 rewrites step 10 to name the one-call merge helper, so step 10 is cut out of the digest and
+# pinned by its own checks in tests/test_merge_guard.py and tests/test_merge_pr.py. Every other
+# sentence of steps 2 to 12 still has to match the digest byte for byte.
+STEPS_TWO_TO_TWELVE_SHA256 = "8b35ab29c70f129283dd2a9f0e2591364e910a995ea820544ced3b0f12b9ff58"
 # SKL-270 makes the `deployed` step 12 note carry the exact `path: deployed` line that story-to-done
 # and qa-verification pass to `scripts/select-path.py` as `--recorded-path`. The digest above is kept:
 # that one line is pinned here and swapped back to its pre-SKL-270 text before hashing, so every other
@@ -337,11 +340,25 @@ VERIFIER_LINES = (
 )
 
 
+STEP_TEN_START = "\n## 10. Merge\n"
+STEP_ELEVEN_START = "\n## 11. Deploy and verify\n"
+
+
 def steps_two_to_twelve() -> str:
     text = SKILL.read_text(encoding="utf-8")
     start = text.index("\n## 2. Plan slices\n") + 1
     end = text.index("\n## Operational rules\n") + 1
     return text[start:end]
+
+
+def without_step_ten(text: str) -> str:
+    """Drop step 10, whose own text SKL-388 rewrites and tests/test_merge_guard.py pins.
+
+    Every other sentence of steps 2 to 12 still has to match the digest below byte for byte.
+    """
+    start = text.index(STEP_TEN_START)
+    end = text.index(STEP_ELEVEN_START)
+    return text[:start] + text[end:]
 
 
 def test_handoff_blocks_appear_once_in_order() -> None:
@@ -361,6 +378,7 @@ def test_steps_two_to_twelve_outside_the_handoff_blocks_are_unchanged() -> None:
     text = text.replace(f"\n{DEPLOYED_NOTE}\n", f"\n{DEPLOYED_NOTE_BEFORE_SKL_270}\n", 1)
     assert text.count(VERIFIER_LINES) == 1, "the Verify stage must carry the SKL-346 verifier line once"
     text = text.replace(VERIFIER_LINES, "", 1)
+    text = without_step_ten(text)
     assert hashlib.sha256(text.encode()).hexdigest() == STEPS_TWO_TO_TWELVE_SHA256
 
 
