@@ -14,9 +14,10 @@ profile schema and spelling policy come from the checkout that owns the destinat
 README is refused before any label is validated, with one line naming it, and the README is then
 published through opened directory descriptors that refuse every symlink component, without
 overwriting anything, so a concurrent writer, a dangling symlink and a symlinked directory are
-refused too, and a failed write removes its temporary file and never leaves a README behind. A key
-outside ^[A-Z][A-Z0-9]+-[0-9]+$, an empty `--evidence-dir`, and a story key the doc-lint rejects all
-exit 1 naming what is wrong.
+refused too, and an orderly failed write removes its temporary file and never leaves a README
+behind. An abrupt kill can strand the temporary file, and a README left by an interrupted fallback
+write is removed by hand. A key outside ^[A-Z][A-Z0-9]+-[0-9]+$, an empty `--evidence-dir`, and a
+story key the doc-lint rejects all exit 1 naming what is wrong.
 
 A label is written as one table cell of literal text: its line breaks fold to spaces, runs of
 whitespace collapse, and every Markdown punctuation character is backslash-escaped, so a cell can
@@ -71,7 +72,7 @@ LITERAL_ESCAPES = set("\\`*_[<>&|~$]")
 # A sentence ends at `.`, `!` or `?` before whitespace or the end; dots inside an identifier do not.
 SENTENCE_END_RE = re.compile(r"[.!?](?=\s|$)")
 # Common abbreviations whose dot is not a sentence boundary.
-ABBREVIATION_RE = re.compile(r"(?i)\b(?:e\.g|i\.e|etc|vs|mr|mrs|ms|dr)\.(?=\s|$)")
+ABBREVIATION_RE = re.compile(r"(?i)\b(?:e\.g|i\.e|etc|vs|fig|mr|mrs|ms|dr)\.(?=\s|$)")
 # Link errors that mean the filesystem cannot publish a hard link, where an exclusive copy is the fallback.
 LINK_UNSUPPORTED = {errno.EPERM, errno.EXDEV, errno.EMLINK}
 for _name in ("EOPNOTSUPP", "ENOTSUP"):
@@ -82,7 +83,7 @@ for _name in ("EOPNOTSUPP", "ENOTSUP"):
 def one_line(text: str) -> str:
     """A diagnostic fragment that can never break the single stderr line it sits in."""
     text = text.replace("\r", "\\r").replace("\n", "\\n")
-    for separator in ("\u2028", "\u2029", "\u0085"):
+    for separator in ("\u000b", "\u000c", "\u001c", "\u001d", "\u001e", "\u2028", "\u2029", "\u0085"):
         text = text.replace(separator, f"\\u{ord(separator):04x}")
     return text
 
@@ -220,6 +221,7 @@ def schema_node(schema: dict, path: str) -> dict | None:
         else:
             return None
         if is_array:
+            node = deref(node, defs)
             if node.get("type") != "array":
                 return None
             node = node.get("items", {})
@@ -449,7 +451,13 @@ def main(argv: list[str] | None = None) -> int:
     evidence = resolve_evidence_dir(root, args.evidence_dir)
     destination_root = checkout_root(evidence) or root
     target = evidence / args.key / "README.md"
-    if target.is_symlink() or target.exists():
+    if target.is_symlink():
+        print(
+            f"error: {one_line(str(target.absolute()))} is a symlink; refusing to follow it",
+            file=sys.stderr,
+        )
+        return 1
+    if target.exists():
         print(f"error: {one_line(str(target.absolute()))} already exists; refusing to overwrite it", file=sys.stderr)
         return 1
 

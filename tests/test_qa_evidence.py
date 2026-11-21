@@ -908,6 +908,48 @@ def test_a_branching_schema_shape_does_not_raise():
     assert generator.deref({"allOf": [{"$ref": "#/$defs/gone"}]}, {}) == {}
 
 
+def test_a_boolean_schema_property_is_an_unresolved_reference(tmp_path):
+    (tmp_path / "profile").mkdir()
+    (tmp_path / "profile" / "schema.json").write_text(
+        json.dumps({"type": "object", "properties": {"check": True}}), encoding="utf-8"
+    )
+    res = run_in(tmp_path, "--key", "SKL-386", "--item", "AC1 - profile.check[] is set")
+    assert res.returncode == 1, res.stderr
+    assert len(res.stderr.splitlines()) == 1, res.stderr
+    assert "profile.check[]" in res.stderr
+    assert not (tmp_path / "docs").exists()
+
+
+def test_a_figure_abbreviation_is_not_a_sentence_boundary(tmp_path):
+    label = "AC1 - compares Fig. 2 with Fig. 3"
+    res = run(tmp_path, "--key", "SKL-386", "--item", label)
+    assert res.returncode == 0, res.stderr
+
+
+@pytest.mark.parametrize("separator", ["\u000b", "\u000c", "\u001c", "\u001d", "\u001e"])
+def test_every_line_separator_is_escaped_in_a_path_diagnostic(tmp_path, separator):
+    evidence = f"a{separator}b"
+    readme = tmp_path / evidence / "SKL-386" / "README.md"
+    readme.parent.mkdir(parents=True)
+    readme.write_text("# handwritten\n", encoding="utf-8")
+    res = run(tmp_path, "--key", "SKL-386", "--evidence-dir", evidence)
+    assert res.returncode == 1, res.stderr
+    assert len(res.stderr.splitlines()) == 1, res.stderr
+    assert readme.read_text(encoding="utf-8") == "# handwritten\n"
+
+
+def test_a_readme_symlink_is_named_as_a_symlink(tmp_path):
+    readme = tmp_path / "docs" / "qa-evidence" / "SKL-386" / "README.md"
+    readme.parent.mkdir(parents=True)
+    destination = tmp_path / "elsewhere.md"
+    readme.symlink_to(destination)
+    res = run(tmp_path, "--key", "SKL-386")
+    assert res.returncode == 1
+    assert len(res.stderr.splitlines()) == 1, res.stderr
+    assert "symlink" in res.stderr
+    assert not destination.exists()
+
+
 def test_an_abbreviation_does_not_count_as_a_sentence_boundary(tmp_path):
     label = "AC1 - set e.g. config. and stop"
     res = run(tmp_path, "--key", "SKL-386", "--item", label)

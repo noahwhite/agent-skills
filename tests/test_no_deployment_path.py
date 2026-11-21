@@ -634,9 +634,9 @@ def test_qa_added_blocks_appear_once_in_order() -> None:
 # the incomplete line in the completion summary and the todo-tracking index line; tests/test_qa_await_gate.py
 # pins the first two, and the index line is pinned only by this hash.
 # SKL-386 re-baselined it for its one change outside the blocks: the new section 5 bullet that names the
-# evidence skeleton generator, and its arbiter-ruled rewordings: a refused label is retried through the
-# full ordered item list, and the schema check is qualified for a destination without a schema.
-QA_BASE_SHA256 = "0345edd160b81a58e4a9a89b7f2078ba37f15a6b0fc0bbbed835959c39d69d0a"
+# evidence skeleton generator, and its arbiter-ruled rewordings: the target worktree as the working
+# directory, the ordered retry after a refusal, the schema qualification, and the symlink distinction.
+QA_BASE_SHA256 = "b5f2bdf0dc588ffedb8401bacaad296c4cd8b4e24fa8ec3ced54612ccf87ccbc"
 
 
 def test_qa_text_outside_the_added_blocks_is_unchanged() -> None:
