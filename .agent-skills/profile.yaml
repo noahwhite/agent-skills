@@ -83,7 +83,8 @@ review:
       runtime: opencode
       model: openrouter/z-ai/glm-5.3-flash
     # Kimi K3.1 Pro runs on the moonshotai provider, not the kimi provider: the kimi provider that
-    # reads KIMI_API_KEY registers only kimi-k3, and adding kimi-k3.1-pro to opencode.json is a
+    # reads KIMI_API_KEY registers only kimi-k3 in the shipped image (the running volume also
+    # carries kimi-k3.1-pro, added by hand, and a restart drops it), and adding kimi-k3.1-pro to opencode.json is a
     # live-container edit that entrypoint.sh overwrites at every start, which would kill this
     # mandatory seat on the next restart. The moonshotai entry is part of the image's model
     # registry, so it survives. Move the seat to kimi/kimi-k3.1-pro only once the image ships that
