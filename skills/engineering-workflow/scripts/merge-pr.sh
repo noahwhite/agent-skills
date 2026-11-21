@@ -13,7 +13,12 @@
 #
 # It uses the ambient gh auth and never puts a token in argv or in its output.
 # Output: the PR number and URL, the live and reviewed head SHAs, the review URL, the check states,
-# and the merge or refusal result.
+# the marker reviews it excluded, and the merge or refusal result.
+#
+# Prerequisites, each checked before any GitHub call: bash, git, gh, jq, and python3 with PyYAML.
+# Repository selection comes from --repo (or the current directory) alone: the helper clears
+# inherited GIT_* and GH_REPO overrides before it resolves the repository.
+# A relative --approvals path is resolved against the directory the helper was invoked from.
 set -euo pipefail
 
 PROG="merge-pr.sh"
@@ -78,10 +83,27 @@ if [ -n "$REQUEST_ID" ] && [ -z "$APPROVALS" ]; then
   die 2 "--request-id needs the --approvals file it belongs to"
 fi
 
+# Resolve a relative --approvals path where the caller wrote it, before the cd into the repository
+# root below turns it into a different (same-named) file.
+INVOCATION_DIR="$PWD"
+case "$APPROVALS" in
+  "" | /*) ;;
+  *) APPROVALS="$INVOCATION_DIR/$APPROVALS" ;;
+esac
+
 if ! command -v gh >/dev/null 2>&1; then
   echo "ERROR: GitHub CLI (gh) is required." >&2
   exit 10
 fi
+if ! command -v jq >/dev/null 2>&1; then
+  echo "ERROR: jq is required (the helper parses gh's JSON with it)." >&2
+  exit 10
+fi
+
+# The repository comes from --repo or the current directory, never from an inherited override: a
+# caller's GIT_DIR, GIT_WORK_TREE, GIT_COMMON_DIR, GIT_INDEX_FILE, GIT_CEILING_DIRECTORIES or
+# GH_REPO must not move the root, the profile lookup or the repository gh targets.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_CEILING_DIRECTORIES GH_REPO
 
 if [ -n "$REPO" ]; then
   ROOT="$(git -C "$REPO" rev-parse --show-toplevel)" || die 11 "--repo '$REPO' is not inside a Git repository"
@@ -97,7 +119,7 @@ cd "$ROOT"
 HOME_DIR="${HOME:-}"
 PROFILE=""
 if [ -n "${AGENT_SKILLS_PROFILE:-}" ]; then
-  [ -f "$AGENT_SKILLS_PROFILE" ] || die 13 "no consumer profile at AGENT_SKILLS_PROFILE ($AGENT_SKILLS_PROFILE); also searched $ROOT/.agent-skills/profile.yaml and ~/.config/agent-skills/profile.yaml"
+  [ -f "$AGENT_SKILLS_PROFILE" ] || die 13 "no consumer profile at AGENT_SKILLS_PROFILE ($AGENT_SKILLS_PROFILE); unset it to fall back to $ROOT/.agent-skills/profile.yaml and ~/.config/agent-skills/profile.yaml"
   PROFILE="$AGENT_SKILLS_PROFILE"
 elif [ -f "$ROOT/.agent-skills/profile.yaml" ]; then
   PROFILE="$ROOT/.agent-skills/profile.yaml"
@@ -149,6 +171,19 @@ record_author = review.get("record_author")
 if record_author is not None and not isinstance(record_author, str):
     print(f"merge-pr.sh: review.record_author must be a string in {path}", file=sys.stderr)
     sys.exit(13)
+if record_author:
+    import re
+
+    # The schema's login pattern: letters, digits and hyphens, with an optional literal [bot]
+    # suffix. A value outside it (a newline included) could inject another profile setting into the
+    # line-based hand-off below, so it fails closed here, before any GitHub call.
+    login = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\[bot\])?")
+    if len(record_author) > 45 or not login.fullmatch(record_author):
+        print(
+            f"merge-pr.sh: review.record_author is not a GitHub login (got {record_author!r}) in {path}",
+            file=sys.stderr,
+        )
+        sys.exit(13)
 
 print(f"merge_owner={merge_owner}")
 print(f"merge_method={merge_method}")
@@ -233,6 +268,20 @@ printf 'Live head: %s\n' "$HEAD"
 printf 'Reviewed head: %s\n' "$REVIEWED_COMMIT"
 printf 'Review of record: %s\n' "$REVIEW_URL"
 
+# references/code-review.md's merge guard step 2: list every marker review it excluded, with its
+# login, URL and commit, and never a review body.
+EXCLUDED_MARKERS="$(
+  printf '%s\n' "$REVIEWS_JSON" | jq -s -r --arg sel "$REVIEW_URL" '
+    [ .[]
+      | select((.body // "") | startswith("Review of record"))
+      | select((.html_url // "") != $sel) ]
+    | .[] | "Excluded marker review: \(.author // "-") \(.html_url // "-") \(.commit_id // "-")"
+  '
+)" || refuse 15 "Could not list the excluded marker reviews of PR #$NUMBER"
+if [ -n "$EXCLUDED_MARKERS" ]; then
+  printf '%s\n' "$EXCLUDED_MARKERS"
+fi
+
 if [ "$REVIEWED_COMMIT" != "$HEAD" ]; then
   refuse 15 "the review of record ($REVIEW_URL) covers commit $REVIEWED_COMMIT, but the live head of PR #$NUMBER is $HEAD"
 fi
@@ -251,26 +300,35 @@ if [ "$MERGEABLE" != "MERGEABLE" ]; then
   refuse 16 "PR #$NUMBER is not mergeable (mergeable=$MERGEABLE, merge state $MERGE_STATE)"
 fi
 case "$MERGE_STATE" in
-  CLEAN | HAS_HOOKS | UNSTABLE) ;;
+  CLEAN | UNSTABLE) ;;
   *) refuse 16 "PR #$NUMBER is in merge state $MERGE_STATE" ;;
 esac
 
 CHECKS_JSON=""
+CHECKS_OUT=""
+CHECKS_ERR=""
 CHECKS_STATUS=0
-CHECKS_JSON="$(gh pr checks "$NUMBER" --required --json name,state,bucket 2>&1)" || CHECKS_STATUS=$?
+CHECKS_ERR_FILE="$(mktemp)" || refuse 14 "could not create a file for the required-checks stderr of PR #$NUMBER"
+CHECKS_OUT="$(gh pr checks "$NUMBER" --required --json name,state,bucket 2>"$CHECKS_ERR_FILE")" || CHECKS_STATUS=$?
+CHECKS_ERR="$(cat -- "$CHECKS_ERR_FILE")"
+rm -f -- "$CHECKS_ERR_FILE"
 case "$CHECKS_STATUS" in
   0 | 1 | 8) ;;
-  *) refuse 14 "Could not read the required checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS): $CHECKS_JSON" ;;
+  *) refuse 14 "Could not read the required checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS): $CHECKS_ERR$CHECKS_OUT" ;;
 esac
-case "$CHECKS_JSON" in
-  \[*) ;;
-  *)
-    # gh prints this on stderr and exits 1 when the branch configures no required checks.
-    if printf '%s' "$CHECKS_JSON" | grep -q 'no required checks reported'; then
+case "$CHECKS_OUT" in
+  \[*) CHECKS_JSON="$CHECKS_OUT" ;;
+  '')
+    # gh prints exactly this diagnostic on stderr and exits 1 when the branch configures no
+    # required checks; only that shape means "none", and a warning on stderr never does.
+    if [ "$CHECKS_STATUS" = 1 ] && printf '%s' "$CHECKS_ERR" | grep -q "no required checks reported on the '"; then
       CHECKS_JSON='[]'
     else
-      refuse 14 "Could not read the required checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS): $CHECKS_JSON"
+      refuse 14 "Could not read the required checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS): $CHECKS_ERR$CHECKS_OUT"
     fi
+    ;;
+  *)
+    refuse 14 "Could not read the required checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS): $CHECKS_ERR$CHECKS_OUT"
     ;;
 esac
 CHECKS_COUNT="$(printf '%s' "$CHECKS_JSON" | jq -r 'if type == "array" then length else "invalid" end')" \
@@ -284,7 +342,7 @@ else
 fi
 NON_GREEN="$(
   printf '%s' "$CHECKS_JSON" \
-    | jq -r '[ .[] | select((.state != "SUCCESS") and (.state != "NEUTRAL") and (.state != "SKIPPED")) | "\(.name)=\(.state)" ] | join(", ")'
+    | jq -r '[ .[] | select(.state != "SUCCESS") | "\(.name)=\(.state)" ] | join(", ")'
 )" || refuse 14 "the required checks of PR #$NUMBER were not readable JSON"
 if [ -n "$NON_GREEN" ]; then
   refuse 14 "the required checks on head $HEAD are not green: $NON_GREEN"
@@ -294,17 +352,49 @@ fi
 # runs only after a matching APPROVE for the live head is recorded.
 if [ -n "$APPROVALS" ]; then
   [ -f "$APPROVALS" ] || refuse 18 "the approvals file $APPROVALS does not exist"
-  DECISION="$(
-    awk -v id="$REQUEST_ID" -v head="$HEAD" '
-      {
-        count = split($0, field, "|")
-        if (count < 4) next
-        for (i = 1; i <= count; i++) { gsub(/^ +| +$/, "", field[i]) }
-        if (field[1] == "APPROVE" && field[2] == id && field[3] == head) { print "APPROVE"; exit }
-        if (field[1] == "BOUNCE" && field[2] == id && field[3] == head) { print "BOUNCE " field[5]; exit }
-      }
-    ' "$APPROVALS"
-  )" || refuse 18 "could not read the approvals file $APPROVALS"
+  # references/merge-approval.md: a record is one complete newline-terminated line; a reader that
+  # sees a trailing partial line ignores it, the first decision for the (request id, head) pair in
+  # file order wins, and a conflicting later decision is reported.
+  trim_field() {
+    local value="$1"
+    value="${value#"${value%%[![:space:]]*}"}"
+    value="${value%"${value##*[![:space:]]}"}"
+    printf '%s' "$value"
+  }
+  DECISION=""
+  CONFLICT=""
+  while IFS= read -r LINE; do
+    IFS='|' read -r -a FIELD <<<"$LINE"
+    [ "${#FIELD[@]}" -ge 3 ] || continue
+    VERDICT="$(trim_field "${FIELD[0]}")"
+    RECORD_ID="$(trim_field "${FIELD[1]}")"
+    RECORD_HEAD="$(trim_field "${FIELD[2]}")"
+    [ "$RECORD_ID" = "$REQUEST_ID" ] || continue
+    [ "$RECORD_HEAD" = "$HEAD" ] || continue
+    case "$VERDICT" in
+      APPROVE)
+        [ "${#FIELD[@]}" -eq 5 ] || continue
+        [ -n "$(trim_field "${FIELD[3]}")" ] || continue
+        [ -n "$(trim_field "${FIELD[4]}")" ] || continue
+        CURRENT="APPROVE"
+        ;;
+      BOUNCE)
+        [ "${#FIELD[@]}" -eq 6 ] || continue
+        [ -n "$(trim_field "${FIELD[3]}")" ] || continue
+        [ -n "$(trim_field "${FIELD[4]}")" ] || continue
+        [ -n "$(trim_field "${FIELD[5]}")" ] || continue
+        CURRENT="BOUNCE $(trim_field "${FIELD[4]}")"
+        ;;
+      *) continue ;;
+    esac
+    if [ -z "$DECISION" ]; then
+      DECISION="$CURRENT"
+    elif [ "$CURRENT" != "$DECISION" ]; then
+      CONFLICT="first ${DECISION%% *}, later ${CURRENT%% *}"
+    fi
+  done <"$APPROVALS"
+  [ -z "$CONFLICT" ] \
+    || refuse 18 "conflicting decisions for $REQUEST_ID at head $HEAD in $APPROVALS: $CONFLICT"
   case "$DECISION" in
     APPROVE) ;;
     BOUNCE*) refuse 18 "the manager bounced $REQUEST_ID at $HEAD: ${DECISION#BOUNCE }" ;;
@@ -341,7 +431,7 @@ CONFIRM_JSON="$(gh pr view "$NUMBER" --json state,mergedAt,mergeCommit)" \
   || refuse 17 "merge not confirmed: could not re-read PR #$NUMBER after the merge command"
 CONFIRM_STATE="$(json_field "$CONFIRM_JSON" .state)"
 [ "$CONFIRM_STATE" = "MERGED" ] \
-  || refuse 17 "merge not confirmed: PR #$NUMBER is in state $CONFIRM_STATE, not MERGED (a queued merge is not a merge)"
+  || refuse 17 "merge not confirmed: the merge was submitted, but PR #$NUMBER is in state $CONFIRM_STATE, not MERGED yet (a queued merge is not a success; re-read the PR before any retry)"
 MERGE_COMMIT="$(printf '%s' "$CONFIRM_JSON" | jq -r '.mergeCommit.oid // empty')"
 [ -n "$MERGE_COMMIT" ] || refuse 17 "merge not confirmed: PR #$NUMBER reports no merge commit"
 

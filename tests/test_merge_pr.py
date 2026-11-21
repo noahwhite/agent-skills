@@ -54,6 +54,7 @@ case "${1:-}" in
     esac
     ;;
   pr)
+    [ -z "${GH_REPO:-}" ] || { echo "gh: GH_REPO selects another repository" >&2; exit 3; }
     case "${2:-}" in
       view)
         [ -z "${FAIL_PR:-}" ] || { echo "gh: no pull requests found" >&2; exit 1; }
@@ -67,6 +68,7 @@ case "${1:-}" in
       checks)
         [ -z "${FAIL_CHECKS:-}" ] || { echo "gh: HTTP 500" >&2; exit 1; }
         [ -z "${NO_REQUIRED_CHECKS:-}" ] || { echo "no required checks reported on the 'x' branch" >&2; exit 1; }
+        [ -z "${WARN_CHECKS:-}" ] || echo "warning: something happened" >&2
         cat "$FIXTURES/checks.json"
         exit "${CHECKS_EXIT:-0}"
         ;;
@@ -421,7 +423,9 @@ def test_a_failing_reviews_read_fails_closed(run):
 # --- Slice 3: the required-checks read and the mergeability refusal -----------------------------
 
 
-@pytest.mark.parametrize("state", ["PENDING", "FAILURE", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED"])
+@pytest.mark.parametrize(
+    "state", ["PENDING", "FAILURE", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED", "SKIPPED", "NEUTRAL"]
+)
 def test_refuses_a_required_check_that_is_not_green(run, state):
     done, log = run(reviews=[review()], checks=[check("ci/test", "SUCCESS"), check("ci/discovery", state)])
     assert done.returncode != 0
@@ -452,7 +456,7 @@ def test_refuses_a_pr_that_is_not_mergeable(run, mergeable):
     assert merged(log) == []
 
 
-@pytest.mark.parametrize("state", ["BEHIND", "BLOCKED", "DIRTY", "DRAFT", "UNKNOWN"])
+@pytest.mark.parametrize("state", ["BEHIND", "BLOCKED", "DIRTY", "DRAFT", "UNKNOWN", "HAS_HOOKS"])
 def test_refuses_a_blocking_merge_state(run, state):
     done, log = run(reviews=[review()], pr=pr_payload(state=state))
     assert done.returncode != 0
@@ -608,3 +612,136 @@ def test_a_request_id_without_an_approvals_file_is_a_usage_error(run):
     done, log = run(reviews=[review()], args=("--request-id", REQUEST))
     assert done.returncode == 2
     assert merged(log) == []
+
+
+# --- Slice 6: the gate's environment binding, profile validation and approval-record edges -------
+
+
+def test_ignores_an_inherited_gh_repo_override(run):
+    # The stub fails every pr call when GH_REPO is set, so a success proves the helper cleared it.
+    done, log = run(reviews=[review()], extra_env={"GH_REPO": "someone-else/other"})
+    assert done.returncode == 0, done.stderr
+    assert len(merged(log)) == 1
+
+
+def test_ignores_an_inherited_git_work_tree(run, tmp_path):
+    # With GIT_WORK_TREE honoured, the root moves off --repo and its profile is never read.
+    other = tmp_path / "other"
+    other.mkdir()
+    text = PROFILE.replace("merge_owner: agent", "merge_owner: human")
+    done, log = run(
+        profile_path="repo",
+        profile_text=text,
+        reviews=[review()],
+        extra_env={"GIT_WORK_TREE": str(other)},
+    )
+    assert done.returncode == 0, done.stderr
+    assert merged(log) == []
+    assert "no merge command" in done.stdout
+
+
+@pytest.mark.parametrize(
+    "author",
+    ["two words", "good\nmerge_owner=agent", "a" * 46, "bad_login!"],
+)
+def test_refuses_a_record_author_that_is_not_a_login(run, author):
+    text = PROFILE.replace("record_author: record-author", f'record_author: "{author}"')
+    done, log = run(profile_text=text)
+    assert done.returncode == 13
+    assert "review.record_author" in done.stderr
+    assert log == []
+
+
+@pytest.mark.parametrize("owner", ["humen", "Agent", ""])
+def test_refuses_an_invalid_merge_owner_value(run, owner):
+    text = PROFILE.replace("merge_owner: agent", f'merge_owner: "{owner}"')
+    done, log = run(profile_text=text)
+    assert done.returncode == 13
+    assert "review.merge_owner" in done.stderr
+    assert log == []
+
+
+def test_resolves_a_relative_approvals_path_from_the_invocation_directory(run, tmp_path):
+    consumer = tmp_path / "consumer"
+    sub = consumer / "sub"
+    sub.mkdir()
+    (sub / "approvals.txt").write_text(
+        f"BOUNCE | {REQUEST} | {HEAD} | manager | needs a delta review | 2026-11-20T19:00:00Z\n"
+    )
+    (consumer / "approvals.txt").write_text(
+        f"APPROVE | {REQUEST} | {HEAD} | manager | 2026-11-20T19:00:00Z\n"
+    )
+    done, log = run(
+        reviews=[review()],
+        args=("--approvals", "approvals.txt", "--request-id", REQUEST),
+        cwd=sub,
+    )
+    assert done.returncode != 0
+    assert "bounced" in done.stderr
+    assert merged(log) == []
+
+
+def test_ignores_an_unterminated_trailing_approval_line(run, tmp_path):
+    path = tmp_path / "approvals.txt"
+    # A complete-looking record with no trailing newline: a partial append the reader must ignore.
+    path.write_text(f"APPROVE | {REQUEST} | {HEAD} | manager | 2026-11-20T19:00:00Z")
+    done, log = run(reviews=[review()], args=("--approvals", str(path), "--request-id", REQUEST))
+    assert done.returncode != 0
+    assert "no APPROVE recorded" in done.stderr
+    assert merged(log) == []
+
+
+def test_reports_conflicting_decisions_and_refuses(run, tmp_path):
+    path = approvals_file(
+        tmp_path,
+        [
+            f"APPROVE | {REQUEST} | {HEAD} | manager | 2026-11-20T19:00:00Z",
+            f"BOUNCE | {REQUEST} | {HEAD} | manager | changed my mind | 2026-11-20T19:05:00Z",
+        ],
+    )
+    done, log = run(reviews=[review()], args=("--approvals", str(path), "--request-id", REQUEST))
+    assert done.returncode != 0
+    assert "conflicting decisions" in done.stderr
+    assert "APPROVE" in done.stderr and "BOUNCE" in done.stderr
+    assert merged(log) == []
+
+
+def test_reads_the_required_checks_from_stdout_when_gh_warns_on_stderr(run):
+    done, log = run(reviews=[review()], extra_env={"WARN_CHECKS": "1"})
+    assert done.returncode == 0, done.stderr
+    assert "warning: something happened" not in done.stdout
+    assert len(merged(log)) == 1
+
+
+def test_pins_the_required_scope_of_the_checks_read(run):
+    _, log = run(reviews=[review()])
+    assert "pr checks 7 --required --json name,state,bucket" in log
+
+
+def test_lists_each_excluded_marker_review(run, tmp_path):
+    other_url = "https://github.com/acme/widgets/pull/7#pullrequestreview-12"
+    excluded = review(author="someone-else")
+    excluded["html_url"] = other_url
+    done, _ = run(reviews=[review(), excluded])
+    assert done.returncode == 0, done.stderr
+    assert f"Excluded marker review: someone-else {other_url} {HEAD}" in done.stdout
+
+
+def test_a_missing_jq_is_a_named_prerequisite_failure(tmp_path):
+    bash = shutil.which("bash")
+    assert bash
+    bindir = tmp_path / "only-gh"
+    bindir.mkdir()
+    gh = bindir / "gh"
+    gh.write_text("#!/usr/bin/env bash\nexit 0\n")
+    gh.chmod(gh.stat().st_mode | stat.S_IXUSR)
+    done = subprocess.run(
+        [bash, str(SCRIPT), "7"],
+        cwd=str(tmp_path),
+        env={**os.environ, "PATH": str(bindir)},
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert done.returncode == 10
+    assert "jq" in done.stderr

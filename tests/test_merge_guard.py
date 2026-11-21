@@ -53,8 +53,10 @@ SKILL_LINES = {
         "never as an issue comment, **before** attempting the merge.",
         "- The review of record completed at the current head, every valid finding is fixed, "
         "and its " + COMMENT_REVIEW + " is posted and visible.",
-        "- If it is `human`: tell the user the PR is merge-ready "
-        "(link, head SHA, review-of-record " + COMMENT_REVIEW + " link, its `html_url`) and wait; resume at step 11 once it is merged.",
+        "- If it is `human`: invoke `bash <skill dir>/scripts/merge-pr.sh <PR number> --repo <consumer repo>`; "
+        "it verifies the review of record and the required checks and stops without a merge, printing the verified "
+        "full head SHA, the PR URL and the selected review-of-record " + COMMENT_REVIEW + " link, so relay that summary "
+        "to the user and wait; resume at step 11 once it is merged.",
         "[scripts/pr-status.sh](scripts/pr-status.sh) prints the current branch's PR state, checks, "
         "PR reviews (including the `--comment` review of record) and issue comments.",
     ),
@@ -319,6 +321,9 @@ def test_engineering_workflow_step_ten_names_the_merge_helper_on_every_merge_pat
     assert MERGE_PR_INVOCATION in autonomous
     assert MERGE_PR_INVOCATION in approved
     assert "--approvals <approvals file> --request-id <request ID>" in approved
+    human = next(ln for ln in body.splitlines() if ln.startswith("- If it is `human`:"))
+    assert MERGE_PR_INVOCATION in human
+    assert "stops without a merge" in human
 
 
 def test_engineering_workflow_step_ten_keeps_only_the_waiver_hand_written() -> None:

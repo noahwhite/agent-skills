@@ -243,7 +243,7 @@ Any change to the head after the review of record, including the fixes for its f
 Only once step 9 holds.
 
 The merge is one invocation, `bash <skill dir>/scripts/merge-pr.sh <PR number> --repo <consumer repo>`: it reads the PR's reviews, reads the required checks, verifies the review of record against the live head, and merges with the reviewed head as the expected-head condition, or refuses and reports the merge blocked.
-It runs the merge guard in `references/code-review.md`, so do not repeat the reviews read or the checks read by hand.
+It runs the merge guard in `references/code-review.md`, so do not repeat the reviews read or the checks read by hand, except on the per-PR review waiver path below, which keeps its own sequence.
 
 If the brief assigns merge approval to a manager, follow [references/merge-approval.md](references/merge-approval.md) before any merge.
 If the brief does not give the approvals-file path or the wake address the runtime needs, stop and report the engagement blocked on the missing metadata; do not fall through to autonomous merge.
@@ -263,8 +263,8 @@ Otherwise:
 
 - If `profile.review.merge_owner` is `agent`: invoke `bash <skill dir>/scripts/merge-pr.sh <PR number> --repo <consumer repo>`, and do not run the merge guard in `references/code-review.md` by hand: it reads the reviews and the required checks, verifies the review of record, and merges with `profile.git.merge_method` and the reviewed full head SHA as the expected-head condition (the helper passes it as `--match-head-commit <full reviewed SHA>`), then confirms the PR is actually merged.
   A refusal is reported as the merge blocked; never retry it with a hand-written merge command.
-- If it is `human`: tell the user the PR is merge-ready (link, head SHA, review-of-record `--comment` PR review link, its `html_url`) and wait; resume at step 11 once it is merged.
-  The owner performs the merge, and the helper's `--approvals` form stops the same way after it verifies.
+- If it is `human`: invoke `bash <skill dir>/scripts/merge-pr.sh <PR number> --repo <consumer repo>`; it verifies the review of record and the required checks and stops without a merge, printing the verified full head SHA, the PR URL and the selected review-of-record `--comment` PR review link, so relay that summary to the user and wait; resume at step 11 once it is merged.
+  The owner performs the merge.
 
 Never merge with failing required checks or before the review of record is clean on head.
 An update-branch after the review, even one that brings in only base changes, is a new head: review the delta before merging.
