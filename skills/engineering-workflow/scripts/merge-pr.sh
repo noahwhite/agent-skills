@@ -165,20 +165,21 @@ CANDIDATES+=("$ROOT/.agent-skills/profile.yaml")
 [ -z "$HOME_DIR" ] || CANDIDATES+=("$HOME_DIR/.config/agent-skills/profile.yaml")
 for candidate in "${CANDIDATES[@]}"; do
   [ -e "$candidate" ] || continue
-  [ -f "$candidate" ] || die 13 "the consumer profile $candidate is not a regular file"
-  [ -r "$candidate" ] || die 13 "the consumer profile $candidate is not readable"
+  [ -f "$candidate" ] || refuse 13 "the consumer profile $candidate is not a regular file"
+  [ -r "$candidate" ] || refuse 13 "the consumer profile $candidate is not readable"
   PROFILE="$candidate"
   break
 done
 [ -n "$PROFILE" ] \
-  || die 13 "no consumer profile: searched $ROOT/.agent-skills/profile.yaml and ~/.config/agent-skills/profile.yaml (AGENT_SKILLS_PROFILE is ${AGENT_SKILLS_PROFILE:-unset})"
+  || refuse 13 "no consumer profile: searched $ROOT/.agent-skills/profile.yaml and ~/.config/agent-skills/profile.yaml (AGENT_SKILLS_PROFILE is ${AGENT_SKILLS_PROFILE:-unset})"
 
 # Print the three values this helper needs, or exit 13 naming the key that is missing or invalid.
 read_profile() {
-  # PYTHONSAFEPATH keeps the checkout off sys.path, so the reader never imports a same-named module
-  # (such as a checkout-local yaml.py) from the consumer repository, while a user-site PyYAML still
-  # resolves; it runs no consumer code.
-  PYTHONSAFEPATH=1 python3 - "$PROFILE" <<'PY'
+  # -I isolates the interpreter from the checkout on every supported Python: it never imports a
+  # same-named module (such as a checkout-local yaml.py) from the consumer repository, so the reader
+  # runs no consumer code. PyYAML must therefore be importable in the interpreter's own environment
+  # (system or virtualenv site-packages), which the prerequisite message names.
+  python3 -I - "$PROFILE" <<'PY'
 import sys
 
 path = sys.argv[1]
@@ -243,7 +244,10 @@ print(f"record_author={record_author or ''}")
 PY
 }
 
-PROFILE_LINES="$(read_profile)"
+PROFILE_LINES="$(read_profile)" || {
+  printf 'Result: merge blocked: the consumer profile %s was rejected\n' "$PROFILE"
+  exit 13
+}
 MERGE_OWNER=""
 MERGE_METHOD=""
 RECORD_AUTHOR=""
@@ -300,6 +304,7 @@ if [ -n "$REVIEWS_JSON" ]; then
       [ .[]
         | select(.state == "COMMENTED")
         | select((.body // "") | startswith("Review of record"))
+        | select((.submitted_at // "") | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"))
         | select(((.author // "") | ascii_downcase) == ($author | ascii_downcase)) ]
       | sort_by(.submitted_at // "")
       | if length == 0 then empty else .[-1] end
@@ -379,6 +384,7 @@ CHECKS_JSON=""
 CHECKS_OUT=""
 CHECKS_ERR=""
 CHECKS_STATUS=0
+CHECKS_NONE=0
 CHECKS_ERR_FILE="$(mktemp)" || refuse 14 "could not create a file for the required-checks stderr of PR #$NUMBER"
 CHECKS_OUT="$(gh pr checks "$NUMBER" --required --json name,state 2>"$CHECKS_ERR_FILE")" || CHECKS_STATUS=$?
 CHECKS_ERR="$(cat -- "$CHECKS_ERR_FILE")"
@@ -387,25 +393,22 @@ case "$CHECKS_STATUS" in
   0 | 1 | 8) ;;
   *) refuse 14 "Could not read the required checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS): $CHECKS_ERR$CHECKS_OUT" ;;
 esac
-case "$CHECKS_OUT" in
-  \[*) CHECKS_JSON="$CHECKS_OUT" ;;
-  '')
-    # gh prints exactly this diagnostic on stderr and exits 1 when the branch configures no
-    # required checks; only that whole value means "none", and a warning or a multiline failure
-    # that merely contains the line never does.
-    if [ "$CHECKS_STATUS" = 1 ]; then
-      case "$CHECKS_ERR" in
-        "no required checks reported on the '"*"' branch") CHECKS_JSON='[]' ;;
-        *) refuse 14 "Could not read the required checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS): $CHECKS_ERR$CHECKS_OUT" ;;
-      esac
-    else
-      refuse 14 "Could not read the required checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS): $CHECKS_ERR$CHECKS_OUT"
-    fi
-    ;;
-  *)
-    refuse 14 "Could not read the required checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS): $CHECKS_ERR$CHECKS_OUT"
-    ;;
-esac
+if [ -n "$CHECKS_OUT" ]; then
+  case "$CHECKS_OUT" in
+    \[*) CHECKS_JSON="$CHECKS_OUT" ;;
+    *) refuse 14 "Could not read the required checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS): $CHECKS_ERR$CHECKS_OUT" ;;
+  esac
+elif [ "$CHECKS_STATUS" = 1 ]; then
+  # gh prints exactly this diagnostic on stderr and exits 1 when the branch configures no required
+  # checks; only that whole value means "none", and a warning or a multiline failure that merely
+  # contains the line never does.
+  case "$CHECKS_ERR" in
+    "no required checks reported on the '"*"' branch") CHECKS_JSON='[]'; CHECKS_NONE=1 ;;
+    *) refuse 14 "Could not read the required checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS): $CHECKS_ERR$CHECKS_OUT" ;;
+  esac
+else
+  refuse 14 "Could not read the required checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS): $CHECKS_ERR$CHECKS_OUT"
+fi
 CHECKS_COUNT="$(printf '%s' "$CHECKS_JSON" | jq -r 'if type == "array" then length else "invalid" end')" \
   || refuse 14 "the required checks of PR #$NUMBER were not readable JSON"
 [ "$CHECKS_COUNT" != "invalid" ] \
@@ -415,10 +418,15 @@ if [ "$CHECKS_COUNT" = "0" ]; then
 else
   printf '%s' "$CHECKS_JSON" | jq -r '.[] | "Check: \(.name)=\(.state)"'
 fi
+# Only a clean read can authorize a merge; exit 8 still carries the states, and they are reported in
+# the refusal, but a command that exited non-zero never counts as green.
 NON_GREEN="$(
   printf '%s' "$CHECKS_JSON" \
     | jq -r '[ .[] | select(.state != "SUCCESS") | "\(.name)=\(.state)" ] | join(", ")'
 )" || refuse 14 "the required checks of PR #$NUMBER were not readable JSON"
+if [ "$CHECKS_STATUS" != 0 ] && [ "$CHECKS_NONE" = 0 ]; then
+  refuse 14 "the required checks of PR #$NUMBER were not read cleanly (gh pr checks exited $CHECKS_STATUS): ${NON_GREEN:-none reported}, stderr: $CHECKS_ERR"
+fi
 if [ -n "$NON_GREEN" ]; then
   refuse 14 "the required checks on head $HEAD are not green: $NON_GREEN"
 fi
@@ -518,20 +526,23 @@ if ! MERGE_OUT="$(gh pr merge "$NUMBER" --match-head-commit "$HEAD" "$METHOD_FLA
   MERGE_FAILED="$MERGE_OUT"
 fi
 
-# Success only once GitHub reports the PR merged; a queued merge is not a merge. The read runs after
-# every attempt, so a client error that arrives after GitHub accepted the merge is reported as the
-# merge it is, and it never retries the mutation.
-CONFIRM_JSON="$(gh pr view "$NUMBER" --json state,mergedAt,mergeCommit)" \
+# Success only once GitHub reports the PR merged, at the reviewed head; a queued merge is not a
+# merge. The read runs after every attempt, so a client error that arrives after GitHub accepted the
+# merge is reported as the merge it is, and it never retries the mutation.
+CONFIRM_JSON="$(gh pr view "$NUMBER" --json state,mergedAt,mergeCommit,headRefOid)" \
   || refuse 17 "merge not confirmed: could not re-read PR #$NUMBER after the merge command"
 CONFIRM_STATE="$(printf '%s' "$CONFIRM_JSON" | jq -r '.state // empty' 2>/dev/null)" || CONFIRM_STATE=""
 [ -n "$CONFIRM_STATE" ] \
   || refuse 17 "merge submitted but not confirmed: could not read PR #$NUMBER after the merge command"
+CONFIRM_HEAD="$(printf '%s' "$CONFIRM_JSON" | jq -r '.headRefOid // empty' 2>/dev/null)" || CONFIRM_HEAD=""
 MERGE_COMMIT="$(printf '%s' "$CONFIRM_JSON" | jq -r '.mergeCommit.oid // empty' 2>/dev/null)" || MERGE_COMMIT=""
 if [ -n "$MERGE_FAILED" ] && [ "$CONFIRM_STATE" != "MERGED" ]; then
   refuse 17 "gh pr merge $NUMBER --match-head-commit $HEAD $METHOD_FLAG failed: $MERGE_FAILED"
 fi
 [ "$CONFIRM_STATE" = "MERGED" ] \
   || refuse 17 "merge not confirmed: the merge was submitted, but PR #$NUMBER is in state $CONFIRM_STATE, not MERGED yet (a queued merge is not a success; re-read the PR before any retry)"
+[ "$CONFIRM_HEAD" = "$HEAD" ] \
+  || refuse 17 "merge not confirmed: PR #$NUMBER merged head $CONFIRM_HEAD, not the reviewed head $HEAD"
 [ -n "$MERGE_COMMIT" ] || refuse 17 "merge not confirmed: PR #$NUMBER reports no merge commit"
 
 printf 'Result: merged %s\n' "$MERGE_COMMIT"

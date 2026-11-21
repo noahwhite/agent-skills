@@ -338,6 +338,15 @@ def test_engineering_workflow_step_ten_pins_the_delivery_and_no_retry_instructio
     body = section(skill("engineering-workflow"), "10. Merge")
     assert "Deliver the same request through the wake capability in `references/runtimes.md`." in body
     assert "never retry it with a hand-written merge command" in body
+    assert "do not merge until an `APPROVE` for that request ID and the current full head SHA is recorded" in body
+    assert "record a new request with a new request ID and the new full head SHA" in body
+
+
+def test_engineering_workflow_step_ten_has_no_hand_written_github_commands_before_the_waiver() -> None:
+    body = section(skill("engineering-workflow"), "10. Merge")
+    before_waiver = body.partition("Under the explicit per-PR review waiver")[0]
+    for command in ("gh pr view", "gh pr checks", "gh pr merge"):
+        assert command not in before_waiver, command
 
 
 def test_qa_evidence_merge_uses_the_guard() -> None:

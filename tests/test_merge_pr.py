@@ -65,6 +65,7 @@ case "${1:-}" in
     case "${2:-}" in
       view)
         [ -z "${FAIL_PR:-}" ] || { echo "gh: no pull requests found" >&2; exit 1; }
+        [ "${3:-}" = "7" ] || { echo "gh: unexpected PR number ${3:-}" >&2; exit 3; }
         case "$*" in
           *state,mergedAt,mergeCommit*) cat "$FIXTURES/confirm.json" ;;
           *headRefOid*)
@@ -81,6 +82,7 @@ case "${1:-}" in
         ;;
       checks)
         [ -z "${FAIL_CHECKS:-}" ] || { echo "gh: HTTP 500" >&2; exit 1; }
+        [ "${3:-}" = "7" ] || { echo "gh: unexpected PR number ${3:-}" >&2; exit 3; }
         [ -z "${NO_REQUIRED_CHECKS:-}" ] || { echo "no required checks reported on the 'x' branch${NO_REQUIRED_CHECKS_SUFFIX:-}" >&2; exit 1; }
         [ -z "${WARN_CHECKS:-}" ] || echo "warning: something happened" >&2
         cat "$FIXTURES/checks.json"
@@ -88,6 +90,7 @@ case "${1:-}" in
         ;;
       merge)
         if [ "${3:-}" = "--help" ]; then cat "$FIXTURES/merge-help.txt"; exit 0; fi
+        [ "${3:-}" = "7" ] || { echo "gh: unexpected PR number ${3:-}" >&2; exit 3; }
         [ -z "${FAIL_MERGE:-}" ] || { echo "${FAIL_MERGE}" >&2; exit 1; }
         printf 'merged\n'
         exit 0
@@ -185,7 +188,12 @@ def run(tmp_path):
             json.dumps(
                 confirm
                 if confirm is not None
-                else {"state": "MERGED", "mergedAt": "2026-11-20T19:00:00Z", "mergeCommit": {"oid": MERGED_COMMIT}}
+                else {
+                    "state": "MERGED",
+                    "mergedAt": "2026-11-20T19:00:00Z",
+                    "mergeCommit": {"oid": MERGED_COMMIT},
+                    "headRefOid": HEAD,
+                }
             )
         )
         help_line = "--match-head-commit SHA   Commit SHA that the pull request head must match to allow merge"
@@ -967,4 +975,44 @@ def test_the_explicit_profile_wins_over_the_repository_profile(run):
     repo_text = PROFILE.replace("merge_owner: agent", "merge_owner: human")
     done, log = run(profile_text=PROFILE, repo_profile_text=repo_text, reviews=[review()])
     assert done.returncode == 0, done.stderr
+    assert len(merged(log)) == 1
+
+
+def test_resolves_the_fallback_author_on_the_pr_host(run):
+    text = "version: 1\ngit:\n  merge_method: squash\nreview:\n  merge_owner: agent\n"
+    done, log = run(
+        profile_text=text,
+        reviews=[review()],
+        login="record-author",
+        pr_url="https://ghe.example.com/acme/widgets/pull/7",
+    )
+    assert done.returncode == 0, done.stderr
+    assert "api user --jq .login --hostname ghe.example.com" in calls(log)
+
+
+def test_ignores_a_marker_review_with_a_non_utc_timestamp(run):
+    offset = review(submitted="2026-11-20T18:00:00+02:00")
+    live = review(submitted="2026-11-20T17:00:00Z")
+    done, _ = run(reviews=[offset, live])
+    assert done.returncode == 0, done.stderr
+    assert f"Reviewed head: {HEAD}" in done.stdout
+
+
+def test_refuses_a_checks_read_that_exited_eight_even_when_every_state_is_success(run):
+    done, log = run(reviews=[review()], checks_exit=8)
+    assert done.returncode != 0
+    assert "not read cleanly" in done.stderr
+    assert merged(log) == []
+
+
+def test_refuses_a_confirmation_at_a_different_head(run):
+    confirm = {
+        "state": "MERGED",
+        "mergedAt": "2026-11-20T19:00:00Z",
+        "mergeCommit": {"oid": MERGED_COMMIT},
+        "headRefOid": MOVED,
+    }
+    done, log = run(reviews=[review()], confirm=confirm)
+    assert done.returncode != 0
+    assert MOVED in done.stderr and HEAD in done.stderr
     assert len(merged(log)) == 1
