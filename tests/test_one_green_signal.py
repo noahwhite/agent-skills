@@ -16,6 +16,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from markdown_it import MarkdownIt
 
 ROOT = Path(__file__).resolve().parent.parent
 ENGINEERING_WORKFLOW = ROOT / "skills" / "engineering-workflow" / "SKILL.md"
@@ -89,7 +90,8 @@ def active_lines(text: str) -> list[str]:
             if "-->" in line:
                 in_comment = False
             continue
-        if line.strip().startswith("```"):
+        stripped = line.strip()
+        if stripped.startswith("```") or stripped.startswith("~~~"):
             fenced = not fenced
             continue
         if fenced:
@@ -99,6 +101,41 @@ def active_lines(text: str) -> list[str]:
             line = line.split("<!--", 1)[0]
         lines.append(line)
     return lines
+
+
+def rendered_items(text: str) -> list[str]:
+    """Each top-level rendered list item, as the text a CommonMark reader sees."""
+    items: list[str] = []
+    depth = 0
+    current: list[str] = []
+    for token in MarkdownIt().parse(text):
+        if token.type == "list_item_open":
+            depth += 1
+            if depth == 1:
+                current = []
+        elif token.type == "list_item_close":
+            depth -= 1
+            if depth == 0:
+                items.append(" ".join(" ".join(current).split()))
+        elif depth == 1 and token.type == "inline":
+            current.append("".join(child.content for child in token.children or () if child.type != "html_inline"))
+    return items
+
+
+LIST_MARKER = re.compile(r"^(?:\d+\.|[-*+])\s+")
+TASK_MARKER = re.compile(r"^\[[ x]\]\s*")
+
+
+def plain(text: str) -> str:
+    """Text with inline code markers dropped, so a rendered item is compared with the sentence it carries."""
+    return TASK_MARKER.sub("", text.replace("`", ""))
+
+
+def rendered_rule_in_item(text: str, first_line: str) -> bool:
+    """True when exactly one rendered list item starts with first_line and states the whole rule."""
+    lead = plain(LIST_MARKER.sub("", first_line))
+    items = [item for item in (plain(item) for item in rendered_items(text)) if item.startswith(lead)]
+    return len(items) == 1 and all(plain(sentence) in items[0] for sentence in (RULE, FALLBACK, EXCEPTION, PRESERVATION))
 
 
 def numbered_item(text: str, number: int) -> list[str]:
@@ -215,6 +252,18 @@ def test_rule_sits_in_the_step_9_required_checks_bullet() -> None:
 def test_dod_bullet_states_the_whole_rule() -> None:
     located = located_blocks(text_of(ENGINEERING_WORKFLOW), text_of(USER_STORY))
     assert located["dod bullet"] == expected_blocks()["dod bullet"]
+
+
+def test_the_rule_is_rendered_where_ac1_names_it() -> None:
+    engineering = text_of(ENGINEERING_WORKFLOW)
+    for first_line in (STEP3_ITEM5, STEP5_ITEM1, STEP9_BULLET):
+        assert rendered_rule_in_item(engineering, first_line), (
+            f"a CommonMark reader does not see the whole rule at {first_line!r}"
+        )
+    template = fenced_template(text_of(USER_STORY))
+    assert rendered_rule_in_item(template, DOD_BULLET), (
+        "a filed story's Definition of Done does not render the whole rule"
+    )
 
 
 # ---- AC3: the CI checks job still runs the locked suite ----------------------------------------
@@ -368,6 +417,10 @@ def test_guard_kills_every_mutant() -> None:
     assert pin_fails(engineering, duplicate_heading, "dod bullet", expected["dod bullet"]), (
         "the pin accepted a duplicate template heading"
     )
+    hidden_block = "\n".join(expected["step 3 item 5"])
+    for opener, closer in (("```text", "```"), ("~~~text", "~~~"), ("<pre>", "</pre>")):
+        hidden = engineering.replace(hidden_block, opener + "\n" + hidden_block + "\n" + closer, 1)
+        assert not rendered_rule_in_item(hidden, STEP3_ITEM5), f"the rendered pin accepted a {opener!r} wrapper"
     workflow = yaml.safe_load(text_of(CI))
     mutants = []
     for mutant_run in ("uv run --locked pytest -x", "pytest -q", "uv run --locked pytest"):
