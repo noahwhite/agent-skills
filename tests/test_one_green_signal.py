@@ -69,7 +69,7 @@ NUMBERED_ITEM = re.compile(r"^(\d+)\. ")
 
 
 def text_of(path: Path) -> str:
-    return path.read_text()
+    return path.read_text(encoding="utf-8")
 
 
 def section(text: str, heading: str) -> str:
@@ -115,16 +115,25 @@ def fenced_template(text: str) -> str:
     """The fenced story template that linear-user-story copies into every filed story."""
     opener = "\n```markdown\n"
     assert opener in text, "missing the story template fence"
-    return text.split(opener, 1)[1].split("\n```", 1)[0]
+    body = text.split(opener, 1)[1]
+    end = body.find("\n```\n")
+    assert end != -1, "the story template fence is never closed"
+    template = body[:end]
+    assert DOD_BULLET in template, "the story template ends before its Definition of Done bullet"
+    return template
 
 
 def repository_tests_run(workflow_text: str) -> list[str]:
     workflow = yaml.safe_load(workflow_text)
-    return [
-        step.get("run")
-        for step in workflow["jobs"]["checks"]["steps"]
-        if step.get("name") == "Repository tests"
-    ]
+    jobs = workflow.get("jobs") or {}
+    assert "checks" in jobs, "the CI workflow no longer has a `checks` job"
+    steps = jobs["checks"].get("steps") or []
+    return [step.get("run") for step in steps if step.get("name") == "Repository tests"]
+
+
+def expected_block(first_line: str, indent: str) -> list[str]:
+    """The four sentences as the exact continuation lines of one named item, in order."""
+    return [first_line, *(indent + sentence for sentence in (RULE, FALLBACK, EXCEPTION, PRESERVATION))]
 
 
 # ---- AC1/AC3: the four sentences, pinned whole on their own line in both skills -----------------
@@ -133,29 +142,32 @@ def repository_tests_run(workflow_text: str) -> list[str]:
 @pytest.mark.parametrize("sentence", SENTENCES)
 @pytest.mark.parametrize("path", SKILL_FILES)
 def test_each_sentence_is_whole_on_its_own_line(path: Path, sentence: str) -> None:
-    assert sentence in own_lines(text_of(path)), f"{path.name} lacks the sentence whole on its own line"
+    skill = f"{path.parent.name}/{path.name}"
+    assert sentence in own_lines(text_of(path)), f"{skill} lacks the sentence whole on its own line"
 
 
 def test_rule_sits_in_step_3_item_5() -> None:
     block = numbered_item(section(text_of(ENGINEERING_WORKFLOW), "3. TDD per slice"), 5)
-    assert RULE in own_lines("\n".join(block))
+    assert block == expected_block("5. Run broader validation periodically and before the PR.", "   ")
 
 
 def test_rule_sits_in_step_5_item_1() -> None:
     block = numbered_item(section(text_of(ENGINEERING_WORKFLOW), "5. Prepare the PR"), 1)
-    assert RULE in own_lines("\n".join(block))
+    assert block == expected_block(
+        "1. Run the complete applicable test suite, plus the repository's formatters, linters, type checks, "
+        "static analysis and build.",
+        "   ",
+    )
 
 
 def test_rule_sits_in_the_step_9_required_checks_bullet() -> None:
     block = bullet_block(section(text_of(ENGINEERING_WORKFLOW), "9. Merge readiness"), STEP9_BULLET)
-    assert RULE in own_lines("\n".join(block))
+    assert block == expected_block(STEP9_BULLET, "  ")
 
 
 def test_dod_bullet_states_the_whole_rule() -> None:
     block = bullet_block(fenced_template(text_of(USER_STORY)), DOD_BULLET)
-    stated = own_lines("\n".join(block))
-    missing = [sentence for sentence in (RULE, FALLBACK, EXCEPTION, PRESERVATION) if sentence not in stated]
-    assert not missing, f"the Definition of Done bullet does not state: {missing}"
+    assert block == expected_block(DOD_BULLET, "  ")
 
 
 # ---- AC3: the CI checks job still runs the locked suite ----------------------------------------
@@ -190,10 +202,24 @@ def both_signals_required(changed: tuple[ChangedFile, ...]) -> bool:
         if name in EXCEPTION_PATHS or name == PYTEST_CONFIG_FILE:
             return True
         if name == PYPROJECT and any(
-            section == "pytest" or section.startswith("tool.pytest") for section in item.toml_sections
+            section == "pytest" or section == "tool.pytest" or section.startswith("tool.pytest.")
+            for section in item.toml_sections
         ):
             return True
     return False
+
+
+def local_evidence_required(
+    changed: tuple[ChangedFile, ...],
+    *,
+    ci_step_passing: bool,
+    ci_step_on_head: bool = False,
+    ci_step_tree_verified: bool = False,
+) -> bool:
+    """AC1 and AC2 together: the exception forces the local run even when the CI step earns credit."""
+    return both_signals_required(changed) or local_run_required(
+        ci_step_passing=ci_step_passing, ci_step_on_head=ci_step_on_head, ci_step_tree_verified=ci_step_tree_verified
+    )
 
 
 def test_unverified_equivalence_requires_the_local_run() -> None:
@@ -224,11 +250,21 @@ def test_both_signals_exception_decides_the_named_paths() -> None:
         ChangedFile("docs/qa-evidence/SKL-387/README.md"),
         ChangedFile("tests_free/notes.md"),
         ChangedFile(PYPROJECT, frozenset({"tool.ruff"})),
+        ChangedFile(PYPROJECT, frozenset({"tool.pytest_helper"})),
         ChangedFile("pyproject.toml.bak"),
         ChangedFile("pytest.ini.example"),
         ChangedFile("uv.lock.bak"),
     ):
         assert not both_signals_required((changed,)), f"{changed.path} stays outside the exception"
+
+
+def test_combined_decision_keeps_a_suite_change_on_both_signals() -> None:
+    skill_change = (ChangedFile("skills/engineering-workflow/SKILL.md"),)
+    suite_change = (ChangedFile("tests/test_one_green_signal.py"),)
+    passing_head = {"ci_step_passing": True, "ci_step_on_head": True}
+    assert not local_evidence_required(skill_change, **passing_head), "the green CI step is the one signal for a skill change"
+    assert local_evidence_required(suite_change, **passing_head), "the exception still requires the local run for a suite change"
+    assert local_evidence_required(skill_change, ci_step_passing=False), "no CI step means the local run"
 
 
 def test_exception_sentence_names_the_decided_paths_and_keeps_the_rest_required() -> None:
@@ -259,11 +295,24 @@ def test_guard_kills_every_mutant() -> None:
                 survivors.append(f"{path.name}: sentence still present after deletion")
     assert not survivors, survivors
     workflow = yaml.safe_load(text_of(CI))
-    for mutant_run in ("uv run --locked pytest -x", "pytest -q"):
+    mutants = []
+    for mutant_run in ("uv run --locked pytest -x", "pytest -q", "uv run --locked pytest"):
         mutated = copy.deepcopy(workflow)
         for step in mutated["jobs"]["checks"]["steps"]:
             if step.get("name") == "Repository tests":
                 step["run"] = mutant_run
+        mutants.append((mutant_run, mutated))
+    renamed = copy.deepcopy(workflow)
+    for step in renamed["jobs"]["checks"]["steps"]:
+        if step.get("name") == "Repository tests":
+            step["name"] = "Project tests"
+    mutants.append(("a renamed step", renamed))
+    removed = copy.deepcopy(workflow)
+    removed["jobs"]["checks"]["steps"] = [
+        step for step in removed["jobs"]["checks"]["steps"] if step.get("name") != "Repository tests"
+    ]
+    mutants.append(("a removed step", removed))
+    for label, mutated in mutants:
         assert repository_tests_run(yaml.safe_dump(mutated)) != ["uv run --locked pytest -q"], (
-            f"the CI pin accepted {mutant_run!r}"
+            f"the CI pin accepted {label!r}"
         )
