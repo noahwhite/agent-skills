@@ -634,9 +634,9 @@ def test_qa_added_blocks_appear_once_in_order() -> None:
 # the incomplete line in the completion summary and the todo-tracking index line; tests/test_qa_await_gate.py
 # pins the first two, and the index line is pinned only by this hash.
 # SKL-386 re-baselined it for its one change outside the blocks: the new section 5 bullet that names the
-# evidence skeleton generator, and the arbiter-ruled rewording of that bullet so a refused label is never
-# copied into the README's Evidence cell.
-QA_BASE_SHA256 = "ed8ba5e4169bf77e04befcce3bfa5160ffe8158c8dc468c2d99b7220ac6c9087"
+# evidence skeleton generator, and its arbiter-ruled rewording so a refused label is retried through the
+# full ordered item list instead of being copied into the README's Evidence cell.
+QA_BASE_SHA256 = "684112cbad98ee5ce808a72aadc2aa81d54fe8a20d5628272b5db372306fd8e9"
 
 
 def test_qa_text_outside_the_added_blocks_is_unchanged() -> None:
