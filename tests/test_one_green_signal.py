@@ -9,7 +9,9 @@ The Definition of Done bullet is pinned where it lives, inside the fenced templa
 Definition of Done, not hidden prose.
 """
 
+import copy
 import re
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -52,16 +54,13 @@ SKILL_FILES = (
     pytest.param(USER_STORY, id="linear-user-story"),
 )
 
-STEP3_ITEM5 = "5. Run broader validation periodically and before the PR."
-STEP5_ITEM1 = (
-    "1. Run the complete applicable test suite, plus the repository's formatters, linters, type checks, "
-    "static analysis and build."
-)
 STEP9_BULLET = "- All required checks are green."
 DOD_BULLET = "- [ ] Unit/integration tests written & passing"
 
 # AC2: the changed paths that put a PR inside its own exception, and the dedup's blast radius.
-EXCEPTION_PATHS = (".github/workflows/", "pyproject.toml", "pytest.ini", "uv.lock", "tests/")
+EXCEPTION_PREFIXES = (".github/workflows/", "tests/")
+EXCEPTION_PATHS = ("uv.lock", "pytest.ini")
+PYPROJECT = "pyproject.toml"
 PYTEST_CONFIG_FILE = "conftest.py"
 DEDUPED_STEP = "`pytest -q` step only"
 KEPT_REQUIRED = ("`ruff check .`", "the leak scan", "`skills-ref validate`", "`full_suite`")
@@ -112,6 +111,13 @@ def own_lines(text: str) -> set[str]:
     return {line.strip() for line in text.splitlines()}
 
 
+def fenced_template(text: str) -> str:
+    """The fenced story template that linear-user-story copies into every filed story."""
+    opener = "\n```markdown\n"
+    assert opener in text, "missing the story template fence"
+    return text.split(opener, 1)[1].split("\n```", 1)[0]
+
+
 def repository_tests_run(workflow_text: str) -> list[str]:
     workflow = yaml.safe_load(workflow_text)
     return [
@@ -145,9 +151,11 @@ def test_rule_sits_in_the_step_9_required_checks_bullet() -> None:
     assert RULE in own_lines("\n".join(block))
 
 
-def test_dod_bullet_states_the_rule() -> None:
-    block = bullet_block(text_of(USER_STORY), DOD_BULLET)
-    assert RULE in own_lines("\n".join(block))
+def test_dod_bullet_states_the_whole_rule() -> None:
+    block = bullet_block(fenced_template(text_of(USER_STORY)), DOD_BULLET)
+    stated = own_lines("\n".join(block))
+    missing = [sentence for sentence in (RULE, FALLBACK, EXCEPTION, PRESERVATION) if sentence not in stated]
+    assert not missing, f"the Definition of Done bullet does not state: {missing}"
 
 
 # ---- AC3: the CI checks job still runs the locked suite ----------------------------------------
@@ -160,48 +168,71 @@ def test_checks_job_repository_tests_step_runs_the_locked_suite() -> None:
 # ---- AC3: decision cases ---------------------------------------------------------------------
 
 
-def local_run_required(ci_step_on_head: bool, ci_step_passing: bool) -> bool:
-    """AC1's fallback: CI stands in only when its step passed on the head or a verified identical tree."""
-    return not (ci_step_on_head and ci_step_passing)
+@dataclass(frozen=True)
+class ChangedFile:
+    """A repository-relative path the PR changes, with the TOML tables it edits when it is a pyproject.toml."""
+
+    path: str
+    toml_sections: frozenset[str] = frozenset()
 
 
-def both_signals_required(changed_paths: list[str]) -> bool:
+def local_run_required(*, ci_step_passing: bool, ci_step_on_head: bool = False, ci_step_tree_verified: bool = False) -> bool:
+    """AC1's fallback: a passing CI step stands in on the head or on a verified identical tree, never otherwise."""
+    return not (ci_step_passing and (ci_step_on_head or ci_step_tree_verified))
+
+
+def both_signals_required(changed: tuple[ChangedFile, ...]) -> bool:
     """AC2's exception: the dedup needs both signals once the PR touches the suite's own inputs."""
-    for path in changed_paths:
-        if path == PYTEST_CONFIG_FILE or path.endswith("/" + PYTEST_CONFIG_FILE):
+    for item in changed:
+        name = item.path.rsplit("/", 1)[-1]
+        if any(item.path.startswith(prefix) for prefix in EXCEPTION_PREFIXES):
             return True
-        if any(path.startswith(prefix) for prefix in EXCEPTION_PATHS):
+        if name in EXCEPTION_PATHS or name == PYTEST_CONFIG_FILE:
+            return True
+        if name == PYPROJECT and any(
+            section == "pytest" or section.startswith("tool.pytest") for section in item.toml_sections
+        ):
             return True
     return False
 
 
 def test_unverified_equivalence_requires_the_local_run() -> None:
-    assert local_run_required(ci_step_on_head=False, ci_step_passing=False), "no CI step means the local run"
-    assert local_run_required(ci_step_on_head=False, ci_step_passing=True), "a step off the head earns no credit"
-    assert local_run_required(ci_step_on_head=True, ci_step_passing=False), "a failing step earns no credit"
-    assert not local_run_required(ci_step_on_head=True, ci_step_passing=True), "a passing step on the head is the one signal"
+    assert local_run_required(ci_step_passing=False), "no CI step means the local run"
+    assert local_run_required(ci_step_passing=True), "a passing step on an unverified tree means the local run"
+    assert local_run_required(ci_step_passing=False, ci_step_on_head=True), "a failing step earns no credit"
+    assert not local_run_required(ci_step_passing=True, ci_step_on_head=True), "a passing step on the head is the one signal"
+    assert not local_run_required(ci_step_passing=True, ci_step_tree_verified=True), "a verified identical tree earns credit"
     assert "current PR head or on a verified identical tree" in FALLBACK
     assert "when equivalence cannot be verified" in FALLBACK
     assert "with the tested SHA" in FALLBACK
 
 
 def test_both_signals_exception_decides_the_named_paths() -> None:
-    for path in (
-        ".github/workflows/ci.yml",
-        "tests/test_one_green_signal.py",
-        "tests/conftest.py",
-        "conftest.py",
-        "uv.lock",
-        "pyproject.toml",
-        "pytest.ini",
+    for changed in (
+        ChangedFile(".github/workflows/ci.yml"),
+        ChangedFile("tests/test_one_green_signal.py"),
+        ChangedFile("tests/conftest.py"),
+        ChangedFile("conftest.py"),
+        ChangedFile("uv.lock"),
+        ChangedFile("pytest.ini"),
+        ChangedFile(PYPROJECT, frozenset({"tool.pytest.ini_options"})),
+        ChangedFile("service/" + PYPROJECT, frozenset({"tool.pytest.ini_options", "tool.ruff"})),
     ):
-        assert both_signals_required([path]), f"{path} must require both signals"
-    for path in ("skills/engineering-workflow/SKILL.md", "docs/qa-evidence/SKL-387/README.md", "tests_free/notes.md"):
-        assert not both_signals_required([path]), f"{path} stays outside the exception"
+        assert both_signals_required((changed,)), f"{changed.path} must require both signals"
+    for changed in (
+        ChangedFile("skills/engineering-workflow/SKILL.md"),
+        ChangedFile("docs/qa-evidence/SKL-387/README.md"),
+        ChangedFile("tests_free/notes.md"),
+        ChangedFile(PYPROJECT, frozenset({"tool.ruff"})),
+        ChangedFile("pyproject.toml.bak"),
+        ChangedFile("pytest.ini.example"),
+        ChangedFile("uv.lock.bak"),
+    ):
+        assert not both_signals_required((changed,)), f"{changed.path} stays outside the exception"
 
 
 def test_exception_sentence_names_the_decided_paths_and_keeps_the_rest_required() -> None:
-    for token in (*EXCEPTION_PATHS, PYTEST_CONFIG_FILE):
+    for token in (*EXCEPTION_PREFIXES, *EXCEPTION_PATHS, PYPROJECT, PYTEST_CONFIG_FILE):
         assert token in EXCEPTION, f"the exception sentence does not name {token}"
     assert DEDUPED_STEP in EXCEPTION
     for kept in KEPT_REQUIRED:
@@ -226,10 +257,13 @@ def test_guard_kills_every_mutant() -> None:
             mutant = text.replace(sentence, "")
             if mutant == text or sentence in own_lines(mutant):
                 survivors.append(f"{path.name}: sentence still present after deletion")
-    for original, mutant in (
-        ("run: uv run --locked pytest -q", "run: uv run --locked pytest -x"),
-        ("run: uv run --locked pytest -q", "run: pytest -q"),
-    ):
-        mutated = text_of(CI).replace(original, mutant, 1)
-        assert repository_tests_run(mutated) != ["uv run --locked pytest -q"], f"the CI pin accepted {mutant!r}"
     assert not survivors, survivors
+    workflow = yaml.safe_load(text_of(CI))
+    for mutant_run in ("uv run --locked pytest -x", "pytest -q"):
+        mutated = copy.deepcopy(workflow)
+        for step in mutated["jobs"]["checks"]["steps"]:
+            if step.get("name") == "Repository tests":
+                step["run"] = mutant_run
+        assert repository_tests_run(yaml.safe_dump(mutated)) != ["uv run --locked pytest -q"], (
+            f"the CI pin accepted {mutant_run!r}"
+        )
