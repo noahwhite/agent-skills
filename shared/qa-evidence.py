@@ -9,12 +9,14 @@ instead of authoring the structure.
                          [--path spike|no-deployment|deployed] [--evidence-dir docs/qa-evidence]
 
 The verdict and evidence cells are left empty, because a generated verdict would be an authored
-result. A relative `--evidence-dir` resolves against the target checkout root, not the working
-directory. An existing README is refused before any label is validated, with one line naming it,
-and the README is then published atomically without overwriting, so a concurrent writer, a dangling
-symlink at its path and a symlinked story directory are refused too, and a failed write removes its
-temporary file and never leaves a README behind. A key outside ^[A-Z][A-Z0-9]+-[0-9]+$, an empty
-`--evidence-dir`, and a story key the doc-lint rejects all exit 1 naming what is wrong.
+result. A relative `--evidence-dir` resolves against the working directory's checkout root, and the
+profile schema and spelling policy come from the checkout that owns the destination. An existing
+README is refused before any label is validated, with one line naming it, and the README is then
+published through opened directory descriptors that refuse every symlink component, without
+overwriting anything, so a concurrent writer, a dangling symlink and a symlinked directory are
+refused too, and a failed write removes its temporary file and never leaves a README behind. A key
+outside ^[A-Z][A-Z0-9]+-[0-9]+$, an empty `--evidence-dir`, and a story key the doc-lint rejects all
+exit 1 naming what is wrong.
 
 A label is written as one table cell of literal text: its line breaks fold to spaces, runs of
 whitespace collapse, and every Markdown punctuation character is backslash-escaped, so a cell can
@@ -29,11 +31,11 @@ It reads no tracker, makes no network call and needs no credential.
 """
 
 import argparse
+import errno
 import json
 import os
 import re
 import sys
-import tempfile
 from pathlib import Path
 
 DEFAULT_EVIDENCE_DIR = "docs/qa-evidence"
@@ -65,14 +67,17 @@ PROFILE_REF_RE = re.compile(
 )
 ESCAPE_RE = re.compile(r"\\([!-/:-@\[-`{-~])")
 # The Markdown punctuation a literal cell escapes, so the reader renders the text unchanged.
-LITERAL_ESCAPES = set("\\`*_[<>&|]")
+LITERAL_ESCAPES = set("\\`*_[<>&|~]")
 # A sentence ends at `.`, `!` or `?` before whitespace or the end; dots inside an identifier do not.
 SENTENCE_END_RE = re.compile(r"[.!?](?=\s|$)")
 
 
 def one_line(text: str) -> str:
     """A diagnostic fragment that can never break the single stderr line it sits in."""
-    return text.replace("\r", "\\r").replace("\n", "\\n")
+    text = text.replace("\r", "\\r").replace("\n", "\\n")
+    for separator in ("\u2028", "\u2029", "\u0085"):
+        text = text.replace(separator, f"\\u{ord(separator):04x}")
+    return text
 
 
 def metadata_lines(path: str | None) -> list[str]:
@@ -117,12 +122,20 @@ def ref_candidates(text: str) -> list[str]:
     return [match.group(1).removesuffix(".") for match in PROFILE_REF_RE.finditer(text)]
 
 
-def repository_root() -> Path:
-    """The target checkout root: the nearest ancestor with `.git`, else with a profile schema."""
-    here = Path.cwd()
-    for candidate in (here, *here.parents):
+def checkout_root(start: Path) -> Path | None:
+    """The nearest ancestor of `start` with a `.git` entry, which is the checkout that owns it."""
+    for candidate in (start, *start.parents):
         if (candidate / ".git").exists():
             return candidate
+    return None
+
+
+def repository_root() -> Path:
+    """The working directory's checkout root, else the nearest ancestor with a profile schema."""
+    here = Path.cwd()
+    root = checkout_root(here)
+    if root is not None:
+        return root
     for candidate in (here, *here.parents):
         if (candidate / "profile" / "schema.json").is_file():
             return candidate
@@ -161,8 +174,17 @@ def deref(node, defs: dict) -> dict:
                 return {}
             seen.add(name)
             node = defs[name]
-        elif "properties" not in node and [list(item) for item in node.get("allOf", [])] == [["$ref"]]:
-            node = node["allOf"][0]
+        elif "properties" not in node:
+            all_of = node.get("allOf")
+            if (
+                isinstance(all_of, list)
+                and len(all_of) == 1
+                and isinstance(all_of[0], dict)
+                and list(all_of[0]) == ["$ref"]
+            ):
+                node = all_of[0]
+            else:
+                return node
         else:
             return node
     return {}
@@ -259,68 +281,92 @@ def skeleton(key: str, items: list[str], path: str | None) -> str:
     return "\n".join(lines) + "\n"
 
 
+def open_directory(path: Path) -> tuple[int | None, str | None]:
+    """Open `path` one component at a time, creating missing directories, never following a symlink."""
+    if not path.is_absolute():
+        return None, f"{one_line(str(path))} is not absolute"
+    descriptor = os.open("/", os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        for part in path.parts[1:]:
+            try:
+                child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=descriptor)
+            except FileNotFoundError:
+                try:
+                    os.mkdir(part, dir_fd=descriptor)
+                except FileExistsError:
+                    pass
+                child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=descriptor)
+            os.close(descriptor)
+            descriptor = child
+    except OSError as exc:
+        os.close(descriptor)
+        if exc.errno == errno.ELOOP:
+            return None, f"{one_line(str(path))} has a symlink in its path"
+        return None, f"cannot create {one_line(str(path))}: {exc.strerror or exc}"
+    return descriptor, None
+
+
 def publish(target: Path, text: str) -> bool:
     """Publish `text` at `target` without overwriting anything, or report why not."""
-    story_dir = target.parent
-    if story_dir.is_symlink():
-        print(
-            f"error: {one_line(str(story_dir.absolute()))} is a symlink; refusing to write the README through it",
-            file=sys.stderr,
-        )
-        return False
     try:
         data = text.encode("utf-8")
     except UnicodeError:
         print(f"error: the skeleton for {one_line(str(target))} cannot be encoded as UTF-8", file=sys.stderr)
         return False
+    descriptor, problem = open_directory(target.parent)
+    if descriptor is None:
+        print(f"error: {problem}", file=sys.stderr)
+        return False
+    temp = f".qa-evidence-{os.getpid()}-{os.urandom(6).hex()}.tmp"
+    created = False
     try:
-        target.parent.mkdir(parents=True, exist_ok=True)
-    except OSError as exc:
-        print(f"error: cannot create {one_line(str(target.parent))}: {exc.strerror or exc}", file=sys.stderr)
-        return False
-    if story_dir.is_symlink():
-        print(
-            f"error: {one_line(str(story_dir.absolute()))} is a symlink; refusing to write the README through it",
-            file=sys.stderr,
-        )
-        return False
-    direct = target.is_symlink() or target.exists()
-    if direct:
-        print(f"error: {one_line(str(target.absolute()))} already exists; refusing to overwrite it", file=sys.stderr)
-        return False
-    temp: Path | None = None
-    try:
-        descriptor, name = tempfile.mkstemp(dir=target.parent, prefix=".qa-evidence-", suffix=".tmp")
-        temp = Path(name)
-        view = memoryview(data)
         try:
+            os.stat(target.name, dir_fd=descriptor, follow_symlinks=False)
+        except FileNotFoundError:
+            pass
+        else:
+            print(f"error: {one_line(str(target.absolute()))} already exists; refusing to overwrite it", file=sys.stderr)
+            return False
+        try:
+            handle = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=descriptor)
+            created = True
+        except OSError as exc:
+            print(f"error: cannot write {one_line(str(target.absolute()))}: {exc.strerror or exc}", file=sys.stderr)
+            return False
+        try:
+            view = memoryview(data)
             while view:
-                view = view[os.write(descriptor, view):]
+                view = view[os.write(handle, view):]
+        except OSError as exc:
+            print(f"error: cannot write {one_line(str(target.absolute()))}: {exc.strerror or exc}", file=sys.stderr)
+            return False
         finally:
-            os.close(descriptor)
-        os.link(temp, target)
-    except FileExistsError:
-        print(f"error: {one_line(str(target.absolute()))} already exists; refusing to overwrite it", file=sys.stderr)
-        return False
-    except OSError as exc:
-        print(f"error: cannot write {one_line(str(target.absolute()))}: {exc.strerror or exc}", file=sys.stderr)
-        return False
+            os.close(handle)
+        try:
+            os.link(temp, target.name, src_dir_fd=descriptor, dst_dir_fd=descriptor, follow_symlinks=False)
+        except FileExistsError:
+            print(f"error: {one_line(str(target.absolute()))} already exists; refusing to overwrite it", file=sys.stderr)
+            return False
+        except OSError as exc:
+            print(f"error: cannot write {one_line(str(target.absolute()))}: {exc.strerror or exc}", file=sys.stderr)
+            return False
+        return True
     finally:
-        if temp is not None:
+        if created:
             try:
-                temp.unlink()
+                os.unlink(temp, dir_fd=descriptor)
             except OSError:
                 pass
-    return True
+        os.close(descriptor)
 
 
 def normalize_argv(argv: list[str]) -> list[str]:
-    """Turn `--key VALUE` into `--key=VALUE`, so a value starting with `-` reaches key validation."""
+    """Turn `--key`, `--item` and `--evidence-dir` values into the `=` form, so a value starting with `-` is data."""
     normalized = []
     index = 0
     while index < len(argv):
-        if argv[index] == "--key" and index + 1 < len(argv):
-            normalized.append(f"--key={argv[index + 1]}")
+        if argv[index] in ("--key", "--item", "--evidence-dir") and index + 1 < len(argv):
+            normalized.append(f"{argv[index]}={argv[index + 1]}")
             index += 2
             continue
         normalized.append(argv[index])
@@ -349,18 +395,19 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     evidence = resolve_evidence_dir(root, args.evidence_dir)
+    destination_root = checkout_root(evidence) or root
     target = evidence / args.key / "README.md"
     if target.is_symlink() or target.exists():
         print(f"error: {one_line(str(target.absolute()))} already exists; refusing to overwrite it", file=sys.stderr)
         return 1
 
-    spelling = spelling_applies(root, evidence)
+    spelling = spelling_applies(destination_root, evidence)
     problem = key_content_problem(args.key, spelling=spelling)
     if problem is not None:
         print(problem, file=sys.stderr)
         return 1
 
-    schema, schema_problem = local_schema(root)
+    schema, schema_problem = local_schema(destination_root)
     if schema_problem is not None:
         print(schema_problem, file=sys.stderr)
         return 1

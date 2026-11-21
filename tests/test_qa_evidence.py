@@ -837,6 +837,77 @@ def test_the_cell_renders_the_label_as_literal_text(tmp_path):
     assert f"<td>{label}</td>" in html, html
 
 
+def test_a_dash_leading_item_reaches_validation_in_the_space_form(tmp_path):
+    space = run(tmp_path, "--key", "SKL-386", "--item", "-blocked")
+    assert space.returncode == 0, space.stderr
+    readme = tmp_path / "docs" / "qa-evidence" / "SKL-386" / "README.md"
+    assert row_cells(table_rows(readme.read_text(encoding="utf-8"))[0]) == ["-blocked", "", ""]
+
+
+def test_a_dash_leading_item_matches_the_equals_form(tmp_path):
+    equal = run(tmp_path, "--key", "SKL-386", "--item=-blocked", "--evidence-dir", "equal")
+    space = run(tmp_path, "--key", "SKL-386", "--item", "-blocked", "--evidence-dir", "space")
+    assert equal.returncode == 0, equal.stderr
+    assert space.returncode == 0, space.stderr
+    equal_text = (tmp_path / "equal" / "SKL-386" / "README.md").read_text(encoding="utf-8")
+    space_text = (tmp_path / "space" / "SKL-386" / "README.md").read_text(encoding="utf-8")
+    assert equal_text == space_text
+
+
+def test_a_line_separator_in_the_path_cannot_break_the_one_line_diagnostic(tmp_path):
+    evidence = "a\u2028b"
+    readme = tmp_path / evidence / "SKL-386" / "README.md"
+    readme.parent.mkdir(parents=True)
+    readme.write_text("# handwritten\n", encoding="utf-8")
+    res = run(tmp_path, "--key", "SKL-386", "--evidence-dir", evidence)
+    assert res.returncode == 1, res.stderr
+    assert len(res.stderr.splitlines()) == 1, res.stderr
+    assert "u2028" in res.stderr.lower()
+    assert readme.read_text(encoding="utf-8") == "# handwritten\n"
+
+
+def test_a_symlinked_ancestor_is_refused_not_followed(tmp_path):
+    destination = tmp_path / "elsewhere"
+    destination.mkdir()
+    (tmp_path / "docs").symlink_to(destination, target_is_directory=True)
+    res = run(tmp_path, "--key", "SKL-386", "--item", "AC1 - one generator")
+    assert res.returncode == 1, res.stderr
+    assert len(res.stderr.splitlines()) == 1, res.stderr
+    assert str(tmp_path / "docs" / "qa-evidence" / "SKL-386") in res.stderr
+    assert list(destination.rglob("*")) == []
+
+
+def test_the_destination_checkout_owns_the_schema_check(tmp_path):
+    outer = tmp_path / "outer"
+    (outer / ".git").mkdir(parents=True)
+    (outer / "profile").mkdir()
+    (outer / "profile" / "schema.json").write_text(
+        (ROOT / "profile" / "schema.json").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    inner = outer / "inner"
+    (inner / ".git").mkdir(parents=True)
+    label = "AC1 - profile.not.a.key is set"
+    res = run_in(inner, "--key", "SKL-386", "--item", label, "--evidence-dir", str(outer / "docs" / "qa-evidence"))
+    assert res.returncode == 1, res.stderr
+    assert len(res.stderr.splitlines()) == 1, res.stderr
+    assert not (outer / "docs").exists()
+
+
+def test_a_tilde_pair_is_escaped_literally(tmp_path):
+    label = "AC1 - ~~struck~~ text"
+    res = run(tmp_path, "--key", "SKL-386", "--item", label)
+    assert res.returncode == 0, res.stderr
+    text = (tmp_path / "docs" / "qa-evidence" / "SKL-386" / "README.md").read_text(encoding="utf-8")
+    assert r"\~\~struck\~\~" in text
+    assert row_cells(table_rows(text)[0])[0] == label
+
+
+def test_a_branching_schema_shape_does_not_raise():
+    generator = load_generator()
+    assert generator.deref({"allOf": [True]}, {}) == {"allOf": [True]}
+    assert generator.deref({"allOf": [{"$ref": "#/$defs/gone"}]}, {}) == {}
+
+
 def test_an_abbreviated_option_is_refused(tmp_path):
     res = run(tmp_path, "--key", "SKL-386", "--pa", "spike")
     assert res.returncode == 2, res.stderr
