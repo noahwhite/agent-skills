@@ -30,8 +30,8 @@ APPROVALS_SET=0
 REQUEST_ID_SET=0
 
 usage() {
-  echo "usage: $PROG <PR number> [--repo DIR] [--approvals FILE --request-id ID]" >&2
-  exit 2
+  echo "usage: $PROG <PR number> [--repo DIR] [--approvals FILE --request-id ID]"
+  exit "${1:-2}"
 }
 
 die() {
@@ -53,22 +53,31 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --repo)
       [ $# -ge 2 ] || usage
+      case "$2" in
+        "" | --*) echo "ERROR: --repo needs a directory" >&2; usage ;;
+      esac
       REPO="$2"
       shift 2
       ;;
     --approvals)
       [ $# -ge 2 ] || usage
+      case "$2" in
+        "" | --*) echo "ERROR: --approvals needs a file path" >&2; usage ;;
+      esac
       APPROVALS="$2"
       APPROVALS_SET=1
       shift 2
       ;;
     --request-id)
       [ $# -ge 2 ] || usage
+      case "$2" in
+        "" | --*) echo "ERROR: --request-id needs the manager's request ID" >&2; usage ;;
+      esac
       REQUEST_ID="$2"
       REQUEST_ID_SET=1
       shift 2
       ;;
-    -h | --help) usage ;;
+    -h | --help) usage 0 ;;
     -*) echo "ERROR: unknown option $1" >&2; usage ;;
     *)
       [ -z "$NUMBER" ] || usage
@@ -92,10 +101,10 @@ if [ "$APPROVALS_SET" != "$REQUEST_ID_SET" ]; then
   die 2 "--approvals and --request-id always travel together"
 fi
 if [ "$REQUEST_ID_SET" = 1 ]; then
-  # references/merge-approval.md: the request ID is REQ-<story-key>-PR<number>-<n>, so it names the
-  # PR it authorizes; an ID that names another PR can never approve this merge.
-  [[ "$REQUEST_ID" =~ ^REQ-.+-PR${NUMBER}-[0-9]+$ ]] \
-    || die 2 "--request-id must name PR #$NUMBER as REQ-<story-key>-PR${NUMBER}-<n>, got '$REQUEST_ID'"
+  # references/merge-approval.md: the request ID is REQ-<story-key>-PR<number>-<n> with <n> from 1,
+  # so it names the PR it authorizes; an ID naming another PR can never approve this merge.
+  [[ "$REQUEST_ID" =~ ^REQ-.+-PR${NUMBER}-[1-9][0-9]*$ ]] \
+    || die 2 "--request-id must name PR #$NUMBER as REQ-<story-key>-PR${NUMBER}-<n> with <n> from 1, got '$REQUEST_ID'"
 fi
 
 # Resolve a relative --approvals path and a relative AGENT_SKILLS_PROFILE where the caller wrote
@@ -166,9 +175,10 @@ done
 
 # Print the three values this helper needs, or exit 13 naming the key that is missing or invalid.
 read_profile() {
-  # -I isolates the interpreter from the checkout: it never imports a same-named module (such as a
-  # checkout-local yaml.py) from the consumer repository, so this runs no consumer code.
-  python3 -I - "$PROFILE" <<'PY'
+  # PYTHONSAFEPATH keeps the checkout off sys.path, so the reader never imports a same-named module
+  # (such as a checkout-local yaml.py) from the consumer repository, while a user-site PyYAML still
+  # resolves; it runs no consumer code.
+  PYTHONSAFEPATH=1 python3 - "$PROFILE" <<'PY'
 import sys
 
 path = sys.argv[1]
@@ -268,8 +278,8 @@ HOST="${BASH_REMATCH[1]}"
 # the authenticated account.
 AUTHOR="$RECORD_AUTHOR"
 if [ -z "$AUTHOR" ]; then
-  AUTHOR="$(gh api user --jq .login)" \
-    || refuse 15 "could not resolve the expected author: gh api user --jq .login failed"
+  AUTHOR="$(gh api user --jq .login --hostname "$HOST")" \
+    || refuse 15 "could not resolve the expected author: gh api user --jq .login --hostname $HOST failed"
 fi
 [ -n "$AUTHOR" ] \
   || refuse 15 "no expected author: review.record_author is unset and gh api user --jq .login returned nothing"
@@ -304,11 +314,17 @@ REVIEWED_FIRSTLINE_SHA=""
 if [ -n "$SELECTED" ]; then
   REVIEWED_COMMIT="$(json_field "$SELECTED" .commit_id)"
   REVIEW_URL="$(json_field "$SELECTED" .html_url)"
-  REVIEWED_FIRSTLINE_SHA="$(
+  # references/code-review.md: the first line is exactly `Review of record <full head SHA>`; any
+  # other text in that position is not a review of record.
+  FIRST_LINE="$(
     printf '%s' "$SELECTED" \
-      | jq -r '.body | split("\n")[0] | sub("^[[:space:]]+"; "") | sub("[[:space:]]+$"; "")' \
-      | awk '{print $NF}'
+      | jq -r '.body | split("\n")[0] | sub("\r$"; "") | sub("^[[:space:]]+"; "") | sub("[[:space:]]+$"; "")'
   )"
+  if [[ "$FIRST_LINE" =~ ^Review\ of\ record\ ([0-9a-f]{40})$ ]]; then
+    REVIEWED_FIRSTLINE_SHA="${BASH_REMATCH[1]}"
+  else
+    REVIEWED_FIRSTLINE_SHA=""
+  fi
 fi
 EXCLUDED_MARKERS="$(
   printf '%s\n' "$REVIEWS_JSON" | jq -s -r --arg sel "$REVIEW_URL" '
@@ -375,9 +391,13 @@ case "$CHECKS_OUT" in
   \[*) CHECKS_JSON="$CHECKS_OUT" ;;
   '')
     # gh prints exactly this diagnostic on stderr and exits 1 when the branch configures no
-    # required checks; only that complete line means "none", and a warning on stderr never does.
-    if [ "$CHECKS_STATUS" = 1 ] && printf '%s' "$CHECKS_ERR" | grep -qxE "no required checks reported on the '[^']*' branch"; then
-      CHECKS_JSON='[]'
+    # required checks; only that whole value means "none", and a warning or a multiline failure
+    # that merely contains the line never does.
+    if [ "$CHECKS_STATUS" = 1 ]; then
+      case "$CHECKS_ERR" in
+        "no required checks reported on the '"*"' branch") CHECKS_JSON='[]' ;;
+        *) refuse 14 "Could not read the required checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS): $CHECKS_ERR$CHECKS_OUT" ;;
+      esac
     else
       refuse 14 "Could not read the required checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS): $CHECKS_ERR$CHECKS_OUT"
     fi
@@ -427,6 +447,9 @@ if [ -n "$APPROVALS" ]; then
     value="${value%"${value##*[![:space:]]}"}"
     printf '%s' "$value"
   }
+  is_utc_timestamp() {
+    [[ "$1" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]
+  }
   DECISION=""
   CONFLICT=""
   while IFS= read -r LINE; do
@@ -441,14 +464,14 @@ if [ -n "$APPROVALS" ]; then
       APPROVE)
         [ "${#FIELD[@]}" -eq 5 ] || continue
         [ -n "$(trim_field "${FIELD[3]}")" ] || continue
-        [ -n "$(trim_field "${FIELD[4]}")" ] || continue
+        is_utc_timestamp "$(trim_field "${FIELD[4]}")" || continue
         CURRENT="APPROVE"
         ;;
       BOUNCE)
         [ "${#FIELD[@]}" -eq 6 ] || continue
         [ -n "$(trim_field "${FIELD[3]}")" ] || continue
         [ -n "$(trim_field "${FIELD[4]}")" ] || continue
-        [ -n "$(trim_field "${FIELD[5]}")" ] || continue
+        is_utc_timestamp "$(trim_field "${FIELD[5]}")" || continue
         CURRENT="BOUNCE $(trim_field "${FIELD[4]}")"
         ;;
       *) continue ;;
@@ -490,19 +513,25 @@ case "$MERGE_METHOD" in
 esac
 
 MERGE_OUT=""
+MERGE_FAILED=""
 if ! MERGE_OUT="$(gh pr merge "$NUMBER" --match-head-commit "$HEAD" "$METHOD_FLAG")"; then
-  refuse 17 "gh pr merge $NUMBER --match-head-commit $HEAD $METHOD_FLAG failed: $MERGE_OUT"
+  MERGE_FAILED="$MERGE_OUT"
 fi
 
-# Success only once GitHub reports the PR merged; a queued merge is not a merge.
+# Success only once GitHub reports the PR merged; a queued merge is not a merge. The read runs after
+# every attempt, so a client error that arrives after GitHub accepted the merge is reported as the
+# merge it is, and it never retries the mutation.
 CONFIRM_JSON="$(gh pr view "$NUMBER" --json state,mergedAt,mergeCommit)" \
   || refuse 17 "merge not confirmed: could not re-read PR #$NUMBER after the merge command"
 CONFIRM_STATE="$(printf '%s' "$CONFIRM_JSON" | jq -r '.state // empty' 2>/dev/null)" || CONFIRM_STATE=""
 [ -n "$CONFIRM_STATE" ] \
   || refuse 17 "merge submitted but not confirmed: could not read PR #$NUMBER after the merge command"
+MERGE_COMMIT="$(printf '%s' "$CONFIRM_JSON" | jq -r '.mergeCommit.oid // empty' 2>/dev/null)" || MERGE_COMMIT=""
+if [ -n "$MERGE_FAILED" ] && [ "$CONFIRM_STATE" != "MERGED" ]; then
+  refuse 17 "gh pr merge $NUMBER --match-head-commit $HEAD $METHOD_FLAG failed: $MERGE_FAILED"
+fi
 [ "$CONFIRM_STATE" = "MERGED" ] \
   || refuse 17 "merge not confirmed: the merge was submitted, but PR #$NUMBER is in state $CONFIRM_STATE, not MERGED yet (a queued merge is not a success; re-read the PR before any retry)"
-MERGE_COMMIT="$(printf '%s' "$CONFIRM_JSON" | jq -r '.mergeCommit.oid // empty' 2>/dev/null)" || MERGE_COMMIT=""
 [ -n "$MERGE_COMMIT" ] || refuse 17 "merge not confirmed: PR #$NUMBER reports no merge commit"
 
 printf 'Result: merged %s\n' "$MERGE_COMMIT"

@@ -175,6 +175,7 @@ def run(tmp_path):
         extra_env=None,
         shadow_yaml=False,
         pr_url=None,
+        repo_profile_text=None,
     ):
         pages = reviews if reviews and isinstance(reviews[0], list) else [reviews or []]
         (fixtures / "reviews.json").write_text(json.dumps(pages))
@@ -198,6 +199,10 @@ def run(tmp_path):
             (consumer / "shared" / "runtimes.md").write_text("map\n")
         if shadow_yaml:
             (consumer / "yaml.py").write_text("raise SystemExit('consumer yaml.py was imported')\n")
+        if repo_profile_text is not None:
+            local = consumer / ".agent-skills"
+            local.mkdir(exist_ok=True)
+            (local / "profile.yaml").write_text(repo_profile_text)
         if profile_text is not None:
             profile.write_text(profile_text)
         log.write_text("")
@@ -268,7 +273,7 @@ def test_a_pr_number_is_required(tmp_path):
         timeout=60,
     )
     assert done.returncode == 2
-    assert "usage" in done.stderr.lower()
+    assert "usage" in (done.stdout + done.stderr).lower()
 
 
 def test_refuses_the_skills_repository_unless_repo_names_it(tmp_path):
@@ -381,7 +386,8 @@ def test_refuses_without_a_review_of_record(run):
 
 
 def test_reads_the_reviews_with_the_paginated_endpoint(run):
-    _, log = run(reviews=[review()])
+    done, log = run(reviews=[review()])
+    assert done.returncode == 0, done.stderr
     assert f"api --paginate {REVIEWS_END} --hostname github.com" in calls(log)
 
 
@@ -543,11 +549,22 @@ def test_a_queued_merge_is_not_success(run):
 
 
 def test_a_failing_merge_is_reported_blocked_without_an_unguarded_retry(run):
-    done, log = run(reviews=[review()], fail_merge="failed to update pull request head")
+    done, log = run(
+        reviews=[review()],
+        fail_merge="failed to update pull request head",
+        confirm={"state": "OPEN", "mergedAt": None, "mergeCommit": None},
+    )
     assert done.returncode != 0
     assert "Result: merge blocked" in done.stdout
     assert len(merged(log)) == 1, calls(log)
     assert merged(log)[0].startswith(MERGE_PREFIX)
+
+
+def test_a_merge_that_lands_despite_a_client_error_is_reported_merged(run):
+    done, log = run(reviews=[review()], fail_merge="connection reset by peer")
+    assert done.returncode == 0, done.stderr
+    assert f"Result: merged {MERGED_COMMIT}" in done.stdout
+    assert len(merged(log)) == 1, calls(log)
 
 
 def test_refuses_when_the_merge_command_cannot_carry_an_expected_head(run):
@@ -901,4 +918,53 @@ def test_reports_a_confirmation_read_failure_as_submitted_not_confirmed(run):
     done, log = run(reviews=[review()], confirm="not json")
     assert done.returncode != 0
     assert "merge submitted but not confirmed" in done.stderr
+    assert len(merged(log)) == 1
+
+
+def test_an_explicitly_empty_repo_is_a_usage_error(tmp_path):
+    done = subprocess.run(
+        ["bash", str(SCRIPT), "7", "--repo", ""],
+        cwd=str(tmp_path),
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert done.returncode == 2
+    assert "--repo" in done.stderr
+
+
+def test_help_is_not_an_error():
+    done = subprocess.run(["bash", str(SCRIPT), "--help"], capture_output=True, text=True, timeout=60)
+    assert done.returncode == 0
+    assert "usage" in done.stdout.lower()
+
+
+def test_refuses_a_first_line_with_trailing_prose(run):
+    body = f"Review of record {HEAD} please read the thread\n"
+    done, log = run(reviews=[review(body=body)])
+    assert done.returncode != 0
+    assert "does not carry a full head SHA" in done.stderr
+    assert merged(log) == []
+
+
+def test_refuses_a_request_id_whose_sequence_starts_at_zero(run, tmp_path):
+    request = "REQ-SKL-388-PR7-0"
+    path = approvals_file(tmp_path, [f"APPROVE | {request} | {HEAD} | manager | 2026-11-20T19:00:00Z"])
+    done, log = run(reviews=[review()], args=("--approvals", str(path), "--request-id", request))
+    assert done.returncode == 2
+    assert merged(log) == []
+
+
+def test_refuses_an_approval_without_a_utc_timestamp(run, tmp_path):
+    path = approvals_file(tmp_path, [f"APPROVE | {REQUEST} | {HEAD} | manager | 2026-11-20 19:00:00"])
+    done, log = run(reviews=[review()], args=("--approvals", str(path), "--request-id", REQUEST))
+    assert done.returncode != 0
+    assert "no APPROVE recorded" in done.stderr
+    assert merged(log) == []
+
+
+def test_the_explicit_profile_wins_over_the_repository_profile(run):
+    repo_text = PROFILE.replace("merge_owner: agent", "merge_owner: human")
+    done, log = run(profile_text=PROFILE, repo_profile_text=repo_text, reviews=[review()])
+    assert done.returncode == 0, done.stderr
     assert len(merged(log)) == 1

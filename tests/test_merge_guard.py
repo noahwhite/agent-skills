@@ -334,6 +334,12 @@ def test_engineering_workflow_step_ten_keeps_only_the_waiver_hand_written() -> N
     assert "The owner performs the merge" in body
 
 
+def test_engineering_workflow_step_ten_pins_the_delivery_and_no_retry_instructions() -> None:
+    body = section(skill("engineering-workflow"), "10. Merge")
+    assert "Deliver the same request through the wake capability in `references/runtimes.md`." in body
+    assert "never retry it with a hand-written merge command" in body
+
+
 def test_qa_evidence_merge_uses_the_guard() -> None:
     text = skill("qa-verification")
     line = next(ln for ln in text.splitlines() if "Merge only on the exact final head" in ln)
