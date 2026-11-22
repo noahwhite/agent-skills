@@ -294,6 +294,34 @@ def test_an_unsharded_hunt_then_a_shard_is_a_usage_error(accepted_gate):
     assert Path(f"{files['hunt']}.stamp").exists()
 
 
+def test_dossier_and_record_hunt_take_the_same_shard(accepted_gate):
+    repo, scratch, env = accepted_gate
+    dossier = run_script(
+        "dossier", "hunt", "--repo", str(repo), "--base", "HEAD", "--scratch", str(scratch),
+        "--shard", "1/2", env=env,
+    )
+    checkout, dossier_path = dossier_of(dossier)
+    run_dir = paths(repo, env)["run"]
+    report = run_dir / "phase2-hunt.1.md"
+    assert str(report) in dossier.stderr, dossier.stderr
+    assert dossier_path.name == "hunt.1-dossier.md", dossier_path
+    report.write_text("REVIEW-RAN: yes\nshard one\n")
+    wrong = run_script(
+        "record", "hunt", "--repo", str(repo), "--base", "HEAD", "--shard", "2/2", env=env,
+    )
+    assert wrong.returncode == 15, wrong.stdout + wrong.stderr
+    assert not Path(f"{report}.stamp").exists()
+    missing = run_script("record", "hunt", "--repo", str(repo), "--base", "HEAD", env=env)
+    assert missing.returncode == 2, missing.stdout + missing.stderr
+    recorded = run_script(
+        "record", "hunt", "--repo", str(repo), "--base", "HEAD", "--shard", "1/2", env=env,
+    )
+    assert recorded.returncode == 0, recorded.stdout + recorded.stderr
+    assert Path(f"{report}.stamp").exists()
+    assert "shard=1/2" in (run_dir / "hunt.1.binding").read_text().splitlines()
+    assert run_script("cleanup", str(checkout), "--repo", str(repo), env=env).returncode == 0
+
+
 def test_rerunning_the_preflight_removes_the_plan_and_every_shard_file(accepted_gate):
     repo, scratch, env = accepted_gate
     for k in (1, 2):
