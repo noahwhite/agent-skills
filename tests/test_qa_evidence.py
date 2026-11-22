@@ -1311,6 +1311,32 @@ def test_a_key_with_a_trailing_path_component_is_refused(tmp_path):
         assert tree_state(tmp_path) == {}
 
 
+def test_a_symlink_before_a_parent_component_is_refused(tmp_path):
+    nested = tmp_path / "nested"
+    (nested / "child").mkdir(parents=True)
+    (nested / "evidence" / "SKL-386").mkdir(parents=True)
+    existing = nested / "evidence" / "SKL-386" / "README.md"
+    existing.write_text("# handwritten\n", encoding="utf-8")
+    (tmp_path / "alias").symlink_to(nested / "child", target_is_directory=True)
+    res = run(tmp_path, "--key", "SKL-386", "--evidence-dir", "alias/../evidence")
+    assert res.returncode == 1, res.stderr
+    assert len(res.stderr.splitlines()) == 1, res.stderr
+    assert existing.read_text(encoding="utf-8") == "# handwritten\n"
+    assert not (tmp_path / "evidence").exists()
+
+
+def test_a_missing_item_value_is_not_read_as_the_next_option(tmp_path):
+    res = run(tmp_path, "--key", "SKL-386", "--item", "--path")
+    assert res.returncode == 2, res.stderr
+    assert not (tmp_path / "docs").exists()
+
+
+def test_an_acronym_before_a_proper_noun_is_not_a_sentence_end(tmp_path):
+    label = "AC1 - the U.S. Congress passes the bill"
+    res = run(tmp_path, "--key", "SKL-386", "--item", label)
+    assert res.returncode == 0, res.stderr
+
+
 def test_a_standalone_dot_before_a_capital_is_a_sentence_end(tmp_path):
     label = "AC1 - do this . Then push"
     res = run(tmp_path, "--key", "SKL-386", "--item", label)

@@ -77,12 +77,17 @@ SENTENCE_END_RE = re.compile(r"(?:[。｡？！؟]|[.!?][\"'\u2019\u201d)\]]*(?=
 # A dot that never ends a sentence: an abbreviation or title that never ends one, a title before a
 # name, an abbreviation that continues in lowercase, a standalone path argument, an initial in a
 # sequence of initials or an acronym, or a numbered item or decimal that continues in lowercase.
+# Words that commonly start a sentence; a capitalized one after an acronym's dot marks a boundary.
+SENTENCE_STARTERS = (
+    r"(?:The|Then|This|That|These|Those|It|Its|If|When|After|Before|However|But|And|Also|Next|Finally"
+    r"|First|Second|Third|Now|Here|There|We|They|He|She|You|A|An)"
+)
 NEVER_BOUNDARY_RE = re.compile(
     r"\b(?i:etc|vs|fig|a\.m|p\.m)\.(?=\s+[a-z0-9])"
     r"|\b(?i:e\.g|i\.e|mr|mrs|prof)\."
     r"|(?<!\d )\b(?i:ms|dr|st|gen|col|sr|jr)\.(?=\s+[A-Z])"
     r"|\b[A-Z]\.(?=\s+[A-Z]\.)"
-    r"|(?<=[A-Z]\.)[A-Z]\.(?=\s+[a-z0-9]|\s*$)"
+    r"|(?<=[A-Z]\.)[A-Z]\.(?!\s+" + SENTENCE_STARTERS + r"\b)"
     r"|(?<=[A-Z]\.\s)[A-Z]\.(?=\s+[A-Z][a-z])"
     r"|(?<=\s)\.(?=\s+[a-z0-9]|\s*$)"
     r"|\b\d+\.(?=\s+[a-z0-9])"
@@ -184,11 +189,11 @@ def repository_root() -> Path:
 
 
 def resolve_evidence_dir(root: Path, value: str) -> Path:
-    """The evidence directory as an absolute path: a relative value resolves against the checkout root."""
+    """The evidence directory as an absolute path, keeping every supplied component as written."""
     evidence = Path(value)
     if not evidence.is_absolute():
         evidence = root / evidence
-    return Path(os.path.normpath(evidence))
+    return evidence
 
 
 def local_schema(root: Path) -> tuple[dict | None, str | None]:
@@ -308,7 +313,7 @@ def spelling_applies(owner: Path | None, evidence: Path) -> bool:
         relative = evidence.relative_to(owner)
     except ValueError:
         return True
-    path = relative.as_posix()
+    path = Path(os.path.normpath(relative)).as_posix()
     return not (path == DEFAULT_EVIDENCE_DIR or path.startswith(DEFAULT_EVIDENCE_DIR + "/"))
 
 
@@ -337,8 +342,8 @@ def mask_sentence_noise(text: str) -> str:
 def more_than_one_sentence(label: str) -> bool:
     """Whether the text a reader sees holds more than one sentence, with abbreviations accounted for."""
     prose = mask_sentence_noise(visible_text(label).rstrip())
-    ends = list(SENTENCE_END_RE.finditer(prose))
-    return len(ends) > 1 or bool(ends and ends[0].end() < len(prose))
+    first = SENTENCE_END_RE.search(prose)
+    return first is not None and first.end() < len(prose)
 
 
 def label_problem(label: str, *, schema: dict | None, spelling: bool) -> str | None:
@@ -480,12 +485,16 @@ def publish(target: Path, text: str) -> bool:
         os.close(descriptor)
 
 
+OPTIONS = ("--key", "--item", "--path", "--evidence-dir")
+
+
 def normalize_argv(argv: list[str]) -> list[str]:
-    """Turn `--key`, `--item` and `--evidence-dir` values into the `=` form, so a value starting with `-` is data."""
+    """Turn a `--key`, `--item` or `--evidence-dir` value into the `=` form, so a value starting with `-` is data."""
     normalized = []
     index = 0
     while index < len(argv):
-        if argv[index] in ("--key", "--item", "--evidence-dir") and index + 1 < len(argv):
+        value_follows = index + 1 < len(argv) and argv[index + 1] not in OPTIONS
+        if argv[index] in ("--key", "--item", "--evidence-dir") and value_follows:
             normalized.append(f"{argv[index]}={argv[index + 1]}")
             index += 2
             continue
