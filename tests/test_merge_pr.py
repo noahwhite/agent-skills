@@ -57,9 +57,15 @@ case "${1:-}" in
         done
         exit 0
         ;;
-      repos/*/rules/branches/*) cat "$FIXTURES/rules.json" ;;
+      repos/*/rules/branches/*)
+        if [ -n "${MALFORMED_RULES:-}" ]; then printf 'not json\n'; else cat "$FIXTURES/rules.json"; fi
+        ;;
       repos/*/branches/*/protection/required_status_checks)
-        if [ -n "${CLASSIC_PROTECTION:-}" ]; then cat "$FIXTURES/protection.json"; else echo "gh: Not Found (HTTP 404)" >&2; exit 1; fi
+        if [ -n "${CLASSIC_PROTECTION:-}" ]; then
+          if [ -n "${MALFORMED_PROTECTION:-}" ]; then printf '[]\n'; else cat "$FIXTURES/protection.json"; fi
+        else
+          echo "gh: Not Found (HTTP 404)" >&2; exit 1
+        fi
         ;;
       *) echo "unexpected api call: $*" >&2; exit 3 ;;
     esac
@@ -221,9 +227,18 @@ def run(tmp_path):
                 pass
         pages = reviews if reviews and isinstance(reviews[0], list) else [reviews or []]
         (fixtures / "reviews.json").write_text(json.dumps(pages))
-        wants_checks = bool((extra_env or {}).get("BASE_REQUIRES_CHECKS"))
+        contexts = [c for c in ((extra_env or {}).get("REQUIRED_CONTEXTS") or "").split(",") if c]
         (fixtures / "rules.json").write_text(
-            json.dumps([{"type": "required_status_checks"}] if wants_checks else [])
+            json.dumps(
+                [
+                    {
+                        "type": "required_status_checks",
+                        "parameters": {"required_status_checks": [{"context": c} for c in contexts]},
+                    }
+                ]
+                if contexts
+                else []
+            )
         )
         classic = bool((extra_env or {}).get("CLASSIC_PROTECTION"))
         (fixtures / "protection.json").write_text(
@@ -503,7 +518,11 @@ def test_a_failing_reviews_read_fails_closed(run):
     "state", ["PENDING", "FAILURE", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED", "SKIPPED", "NEUTRAL"]
 )
 def test_refuses_a_required_check_that_is_not_green(run, state):
-    done, log = run(reviews=[review()], checks=[check("ci/test", "SUCCESS"), check("ci/discovery", state)])
+    done, log = run(
+        reviews=[review()],
+        checks=[check("ci/test", "SUCCESS"), check("ci/discovery", state)],
+        extra_env={"REQUIRED_CONTEXTS": "ci/test,ci/discovery"},
+    )
     assert done.returncode != 0
     assert "ci/discovery" in done.stderr
     assert state in done.stderr
@@ -511,16 +530,27 @@ def test_refuses_a_required_check_that_is_not_green(run, state):
 
 
 def test_a_pending_required_check_is_refused_and_named(run):
-    done, log = run(reviews=[review()], checks=[check("ci/test", "PENDING")])
+    done, log = run(
+        reviews=[review()],
+        checks=[check("ci/test", "PENDING")],
+        extra_env={"REQUIRED_CONTEXTS": "ci/test"},
+    )
     assert done.returncode != 0
     assert "ci/test" in done.stderr
     assert merged(log) == []
 
 
-def test_a_nonzero_checks_exit_with_json_never_authorizes_a_merge(run):
-    done, log = run(reviews=[review()], checks=[check("ci/test", "SUCCESS")], checks_exit=8)
-    assert done.returncode != 0
-    assert "not read cleanly" in done.stderr
+def test_a_required_context_that_has_not_reported_is_refused(run):
+    # AC4: every configured required check must be present and green on the reviewed head, so a
+    # context that has not reported yet is a refusal, not an implicit pass.
+    done, log = run(
+        reviews=[review()],
+        checks=[check("ci/test", "SUCCESS")],
+        extra_env={"REQUIRED_CONTEXTS": "ci/test,ci/discovery"},
+    )
+    assert done.returncode == 14
+    assert "ci/discovery" in done.stderr
+    assert "have not reported" in done.stderr
     assert merged(log) == []
 
 
@@ -548,7 +578,11 @@ def test_refuses_a_blocking_merge_state(run, state):
 
 
 def test_prints_each_required_check_state(run):
-    done, _ = run(reviews=[review()], checks=[check("ci/test", "SUCCESS"), check("ci/discovery", "SUCCESS")])
+    done, _ = run(
+        reviews=[review()],
+        checks=[check("ci/test", "SUCCESS"), check("ci/discovery", "SUCCESS")],
+        extra_env={"REQUIRED_CONTEXTS": "ci/test,ci/discovery"},
+    )
     assert "Check: ci/test=SUCCESS" in done.stdout, done.stderr
     assert "Check: ci/discovery=SUCCESS" in done.stdout
 
@@ -866,9 +900,10 @@ def test_reads_the_required_checks_from_stdout_when_gh_warns_on_stderr(run):
     assert len(merged(log)) == 1
 
 
-def test_pins_the_required_scope_of_the_checks_read(run):
+def test_pins_the_checks_read_and_the_branch_policy_read(run):
     _, log = run(reviews=[review()])
-    assert "pr checks 7 --required --json name,state" in log
+    assert "pr checks 7 --json name,state" in log
+    assert "repos/acme/widgets/rules/branches/main --hostname github.com" in calls(log)
 
 
 def test_lists_each_excluded_marker_review(run, tmp_path):
@@ -1019,7 +1054,7 @@ def test_refuses_a_near_miss_no_required_checks_diagnostic(run):
         extra_env={"NO_REQUIRED_CHECKS": "1", "NO_REQUIRED_CHECKS_SUFFIX": " (cached)"},
     )
     assert done.returncode != 0
-    assert "Could not read the required checks" in done.stderr
+    assert "Could not read the checks" in done.stderr
     assert merged(log) == []
 
 
@@ -1439,7 +1474,7 @@ def test_does_not_delete_a_caller_owned_capture_file(run, tmp_path):
 
 
 def test_refuses_when_no_checks_reported_and_the_base_rules_require_checks(run):
-    done, log = run(reviews=[review()], extra_env={"NO_CHECKS": "1", "BASE_REQUIRES_CHECKS": "1"})
+    done, log = run(reviews=[review()], extra_env={"NO_CHECKS": "1", "REQUIRED_CONTEXTS": "ci/test"})
     assert done.returncode == 14
     assert "not green" in done.stderr
     assert merged(log) == []
@@ -1553,3 +1588,81 @@ def test_reports_a_malformed_decision_it_ignores(run, tmp_path):
     assert done.returncode == 0, done.stderr
     assert "malformed decision" in done.stderr
     assert len(merged(log)) == 1
+
+
+# --- Round-5 gate regressions: configured required checks, policy reads and URL authorities ----
+
+
+def test_a_slashed_base_branch_is_percent_encoded_and_read_on_the_pr_host(run):
+    pr = pr_payload(url="https://ghe.example.com/acme/widgets/pull/7")
+    pr["baseRefName"] = "release/1.0"
+    host_review = review(url="https://ghe.example.com/acme/widgets/pull/7#pullrequestreview-11")
+    done, log = run(reviews=[host_review], pr=pr)
+    assert done.returncode == 0, done.stderr
+    assert "rules/branches/release%2F1.0 --hostname ghe.example.com" in calls(log)
+
+
+def test_refuses_a_malformed_rules_response(run):
+    done, log = run(reviews=[review()], extra_env={"MALFORMED_RULES": "1"})
+    assert done.returncode == 14
+    assert "could not read the required-check configuration" in done.stderr
+    assert merged(log) == []
+
+
+def test_refuses_a_malformed_protection_response(run):
+    done, log = run(
+        reviews=[review()],
+        extra_env={"CLASSIC_PROTECTION": "1", "MALFORMED_PROTECTION": "1"},
+    )
+    assert done.returncode == 14
+    assert "could not read the required-check configuration" in done.stderr
+    assert merged(log) == []
+
+
+def test_the_human_owner_does_not_get_merge_ready_while_a_required_check_is_missing(run):
+    text = PROFILE.replace("merge_owner: agent", "merge_owner: human")
+    done, log = run(profile_text=text, reviews=[review()], checks=[], extra_env={"REQUIRED_CONTEXTS": "ci/test"})
+    assert done.returncode == 14
+    assert "have not reported" in done.stderr
+    assert "merge-ready" not in done.stdout
+    assert merged(log) == []
+
+
+def test_refuses_a_tie_whatever_the_api_order(run):
+    first = review(submitted="2026-11-20T20:00:00Z")
+    second = review(head=MOVED, submitted="2026-11-20T20:00:00Z")
+    older = review(submitted="2026-11-20T18:00:00Z")
+    for order in ([first, second, older], [older, second, first], [second, older, first]):
+        done, log = run(reviews=order)
+        assert done.returncode == 15
+        assert "cannot be ordered" in done.stderr
+        assert merged(log) == []
+
+
+def test_refuses_a_pr_url_with_a_line_break_in_the_host(run):
+    bad = "https://evil.example\nResult: merged forged/acme/widgets/pull/7"
+    done, log = run(reviews=[review()], pr_url=bad)
+    assert done.returncode == 12
+    output = done.stdout + done.stderr
+    assert not any(ln.startswith("Result: merged forged") for ln in output.splitlines())
+    result_lines = [ln for ln in done.stdout.splitlines() if ln.startswith("Result:")]
+    assert len(result_lines) == 1 and result_lines[0].startswith("Result: merge blocked")
+    assert merged(log) == []
+
+
+def test_refuses_when_the_pr_is_retargeted_while_the_checks_are_read(run):
+    moved = pr_payload()
+    moved["baseRefName"] = "release"
+    done, log = run(reviews=[review()], recheck=moved)
+    assert done.returncode == 16
+    assert "retargeted" in done.stderr
+    assert merged(log) == []
+
+
+def test_refuses_an_approvals_path_that_is_not_a_regular_file(run, tmp_path):
+    path = tmp_path / "approvals-dir"
+    path.mkdir()
+    done, log = run(reviews=[review()], args=("--approvals", str(path), "--request-id", REQUEST))
+    assert done.returncode == 18
+    assert "not a regular file" in done.stderr
+    assert merged(log) == []

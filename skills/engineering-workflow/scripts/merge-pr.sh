@@ -34,12 +34,12 @@ GH_STDERR_FILE=""
 PROG="merge-pr.sh"
 # Regexes live in variables: bash 3.2, which macOS ships, parses `[[ x =~ $re ]]` but chokes on
 # some literal patterns, so every match below goes through one of these.
-PR_URL_RE='^https?://([^/]+)/([^/]+/[^/]+)/pull/([0-9]+)/?$'
+PR_URL_RE='^https?://([A-Za-z0-9][A-Za-z0-9.-]*)/([A-Za-z0-9._-]+/[A-Za-z0-9._-]+)/pull/([0-9]+)/?$'
 NUMERIC_RE='^[0-9]+$'
 LOWER_SHA_RE='^[0-9a-f]{40}$'
 MIXED_SHA_RE='^[0-9A-Fa-f]{40}$'
 REVIEW_LINE_RE='^Review of record ([0-9A-Fa-f]{40})$'
-REVIEW_URL_RE='^https?://([^/]+)/([^/]+/[^/]+)/pull/([0-9]+)#pullrequestreview-[0-9]+$'
+REVIEW_URL_RE='^https?://([A-Za-z0-9][A-Za-z0-9.-]*)/([A-Za-z0-9._-]+/[A-Za-z0-9._-]+)/pull/([0-9]+)#pullrequestreview-[0-9]+$'
 UTC_TIMESTAMP_RE='^([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})Z$'
 NUMBER=""
 REPO=""
@@ -502,7 +502,8 @@ if [ -n "$REVIEWS_JSON" ]; then
         | select((.body // "") | startswith("Review of record"))
         | select(((.author // "") | ascii_downcase) == ($author | ascii_downcase)) ]
       | if length == 0 then 0
-        else (.[-1].submitted_at as $latest | map(select(.submitted_at == $latest)) | length) end
+        else (map(.submitted_at) | max) as $latest
+          | map(select(.submitted_at == $latest)) | length end
     '
   )" || refuse 15 "Could not order the reviews of record of PR #$NUMBER"
   if [ "$TIE_COUNT" != 0 ] && [ "$TIE_COUNT" != 1 ]; then
@@ -600,7 +601,10 @@ fi
 # The manager-approval handshake: once the brief assigns merge approval to a manager, the merge
 # runs only after a matching APPROVE for the live head is recorded.
 if [ -n "$APPROVALS" ]; then
-  [ -f "$APPROVALS" ] || refuse 18 "the approvals file $APPROVALS does not exist"
+  if [ ! -e "$APPROVALS" ]; then
+    refuse 18 "the approvals file $(one_line "$APPROVALS") does not exist"
+  fi
+  [ -f "$APPROVALS" ] || refuse 18 "the approvals path $(one_line "$APPROVALS") is not a regular file"
   # references/merge-approval.md: a record is one complete newline-terminated line; a reader that
   # sees a trailing partial line ignores it, the first decision for the (request id, head) pair in
   # file order wins, and a conflicting later decision is reported.
@@ -691,11 +695,11 @@ if [ -n "$APPROVALS" ]; then
   done <"$APPROVALS"
   if [ "$MALFORMED" = 1 ]; then
     printf 'Warning: a malformed decision record for %s at head %s was ignored; under references/merge-approval.md it is not a decision\n' \
-      "$REQUEST_ID" "$HEAD" >&2
+      "$(one_line "$REQUEST_ID")" "$HEAD" >&2
   fi
   if [ -n "$CONFLICT" ]; then
     printf 'Warning: conflicting decisions for %s at head %s in %s: %s; the first decision stands\n' \
-      "$REQUEST_ID" "$HEAD" "$APPROVALS" "$CONFLICT" >&2
+      "$(one_line "$REQUEST_ID")" "$HEAD" "$(one_line "$APPROVALS")" "$(one_line "$CONFLICT")" >&2
   fi
   if [ "$REQUEST_SEEN" != 1 ]; then
     refuse 18 "no valid REQUEST for $REQUEST_ID at head $HEAD in file $APPROVALS: the request must name this PR, this head, the selected review of record and a green CI state before any decision can authorize a merge"
@@ -726,101 +730,95 @@ CHECKS_JSON=""
 CHECKS_OUT=""
 CHECKS_ERR=""
 CHECKS_STATUS=0
-CHECKS_NONE=0
+CHECKS_EMPTY=0
 
-# "No checks reported on the branch" is not proof that nothing is required: a required check that
-# has not reported yet is not green (AC4). Confirm against the base branch's own configuration
-# before treating an empty head as nothing to be non-green. Prints yes or no; any failure to read
-# the configuration returns non-zero, and the caller refuses rather than guessing.
-base_requires_checks() {
-  local rules protection
-  rules="$(gh_quiet api "repos/$SLUG/rules/branches/$BASE_REF")" || return 2
-  if printf '%s' "$rules" | jq -e '[.[] | select(.type == "required_status_checks")] | length > 0' >/dev/null 2>&1; then
-    printf 'yes'
+# The required context names come from the base branch's own configuration, not from the results:
+# a required check that has not reported yet must never read as green (AC4). Rulesets are read
+# first, then classic protection, both on the PR's host and with the branch percent-encoded as one
+# path segment. Prints one context name per line; fails on any read or parse error, so an
+# unreadable policy is never mistaken for an empty one.
+base_required_contexts() {
+  local encoded rules from_rules protection
+  encoded="$(printf '%s' "$BASE_REF" | jq -rn --arg v "$BASE_REF" '$v|@uri')" || return 2
+  rules="$(gh_quiet api "repos/$SLUG/rules/branches/$encoded" --hostname "$HOST")" || return 2
+  printf '%s' "$rules" | jq -e 'type == "array"' >/dev/null 2>&1 || return 2
+  from_rules="$(printf '%s' "$rules" | jq -r '[ .[] | select(.type == "required_status_checks") | .parameters.required_status_checks[]?.context ] | .[]')" || return 2
+  if [ -n "$from_rules" ]; then
+    printf '%s\n' "$from_rules"
     return 0
   fi
-  if protection="$(gh_quiet api "repos/$SLUG/branches/$BASE_REF/protection/required_status_checks")"; then
-    if printf '%s' "$protection" | jq -e '(((.contexts // []) | length) + ((.checks // []) | length)) > 0' >/dev/null 2>&1; then
-      printf 'yes'
-    else
-      printf 'no'
-    fi
+  if protection="$(gh_quiet api "repos/$SLUG/branches/$encoded/protection/required_status_checks" --hostname "$HOST")"; then
+    printf '%s' "$protection" | jq -e 'type == "object"' >/dev/null 2>&1 || return 2
+    printf '%s' "$protection" | jq -r '[ (.contexts // [])[], (.checks // [])[].context ] | .[]' || return 2
     return 0
   fi
   case "$(gh_stderr_detail)" in
-    *404* | *"Not Found"*)
-      printf 'no'
-      return 0
-      ;;
+    *404* | *"Not Found"*) return 0 ;;
   esac
   return 2
 }
 
-CHECKS_ERR_FILE="$(mktemp)" || refuse 14 "could not create a file for the required-checks stderr of PR #$NUMBER"
-CHECKS_OUT="$(gh pr checks "$NUMBER" --required --json name,state 2>"$CHECKS_ERR_FILE")" || CHECKS_STATUS=$?
+CHECKS_ERR_FILE="$(mktemp)" || refuse 14 "could not create a file for the checks stderr of PR #$NUMBER"
+CHECKS_OUT="$(gh pr checks "$NUMBER" --json name,state 2>"$CHECKS_ERR_FILE")" || CHECKS_STATUS=$?
 CHECKS_ERR="$(cat -- "$CHECKS_ERR_FILE")"
 rm -f -- "$CHECKS_ERR_FILE"
 case "$CHECKS_STATUS" in
   0 | 1 | 8) ;;
-  *) refuse 14 "Could not read the required checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS): $(gh_detail "$CHECKS_ERR$CHECKS_OUT")" ;;
+  *) refuse 14 "Could not read the checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS): $(gh_detail "$CHECKS_ERR$CHECKS_OUT")" ;;
 esac
 if [ -n "$CHECKS_OUT" ]; then
   case "$CHECKS_OUT" in
     \[*) CHECKS_JSON="$CHECKS_OUT" ;;
-    *) refuse 14 "Could not read the required checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS): $(gh_detail "$CHECKS_ERR$CHECKS_OUT")" ;;
+    *) refuse 14 "Could not read the checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS): $(gh_detail "$CHECKS_ERR$CHECKS_OUT")" ;;
   esac
 elif [ "$CHECKS_STATUS" = 1 ]; then
-  # gh prints one of these two diagnostics on stderr and exits 1 when there is nothing to report on
-  # the head: the branch configures no required checks, or the head has no check contexts at all.
-  # Only that whole single-line value means "nothing can be non-green"; a warning or a multiline
-  # failure never does, because a `*` in a case pattern would otherwise span lines.
+  # gh prints one of these two diagnostics on stderr and exits 1 when the head has no check
+  # contexts to report. Only that whole single-line value means "nothing reported"; a warning or a
+  # multiline failure never does, because a `*` in a case pattern would otherwise span lines.
   if [[ "$CHECKS_ERR" == *$'\n'* ]]; then
-    refuse 14 "Could not read the required checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS): $(gh_detail "$CHECKS_ERR$CHECKS_OUT")"
+    refuse 14 "Could not read the checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS): $(gh_detail "$CHECKS_ERR$CHECKS_OUT")"
   fi
   case "$CHECKS_ERR" in
-    "no required checks reported on the '"*"' branch")
-      # The base configures no required checks at all, so nothing can be non-green.
+    "no required checks reported on the '"*"' branch" | "no checks reported on the '"*"' branch")
       CHECKS_JSON='[]'
-      CHECKS_NONE=1
+      CHECKS_EMPTY=1
       ;;
-    "no checks reported on the '"*"' branch")
-      BASE_REQUIRED="$(base_requires_checks)" \
-        || refuse 14 "no checks have reported on head $HEAD and the required-check configuration of $BASE_REF could not be read, so the head cannot be judged green"
-      if [ "$BASE_REQUIRED" = "yes" ]; then
-        refuse 14 "no checks have reported on head $HEAD while $BASE_REF requires required checks; a required check awaiting its first report is not green"
-      fi
-      CHECKS_JSON='[]'
-      CHECKS_NONE=1
-      ;;
-    *) refuse 14 "Could not read the required checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS): $(gh_detail "$CHECKS_ERR$CHECKS_OUT")" ;;
+    *) refuse 14 "Could not read the checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS): $(gh_detail "$CHECKS_ERR$CHECKS_OUT")" ;;
   esac
 else
-  refuse 14 "Could not read the required checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS): $(gh_detail "$CHECKS_ERR$CHECKS_OUT")"
+  refuse 14 "Could not read the checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS): $(gh_detail "$CHECKS_ERR$CHECKS_OUT")"
 fi
 CHECKS_COUNT="$(printf '%s' "$CHECKS_JSON" | jq -r 'if type == "array" then length else "invalid" end')" \
-  || refuse 14 "the required checks of PR #$NUMBER were not readable JSON"
+  || refuse 14 "the checks of PR #$NUMBER were not readable JSON"
 [ "$CHECKS_COUNT" != "invalid" ] \
-  || refuse 14 "the required checks of PR #$NUMBER were not a JSON array"
-if [ "$CHECKS_COUNT" = "0" ]; then
+  || refuse 14 "the checks of PR #$NUMBER were not a JSON array"
+if [ "$CHECKS_STATUS" != 0 ] && [ "$CHECKS_EMPTY" = 0 ]; then
+  refuse 14 "the checks of PR #$NUMBER were not read cleanly (gh pr checks exited $CHECKS_STATUS): $(gh_detail "$CHECKS_ERR$CHECKS_OUT")"
+fi
+REQUIRED_CONTEXTS="$(base_required_contexts)" \
+  || refuse 14 "could not read the required-check configuration of $BASE_REF on $HOST/$SLUG, so the head cannot be judged green: $(gh_stderr_detail)"
+if [ -z "$REQUIRED_CONTEXTS" ]; then
   printf 'Check: none\n'
 else
-  # @tsv escapes tab, CR and LF inside a check name, so a remote-controlled name can never print a
-  # second line; one_line then removes the remaining controls and the Unicode separators.
-  while IFS=$'\t' read -r CHECK_NAME CHECK_STATE; do
-    printf 'Check: %s=%s\n' "$(one_line "$CHECK_NAME")" "$(one_line "$CHECK_STATE")"
-  done < <(printf '%s' "$CHECKS_JSON" | jq -r '.[] | [.name, .state] | @tsv')
-fi
-# Only a clean read can authorize a merge; exit 8 still carries the states, and they are reported in
-# the refusal, but a command that exited non-zero never counts as green.
-NON_GREEN="$(
-  printf '%s' "$CHECKS_JSON" \
-    | jq -r '[ .[] | select(.state != "SUCCESS") | "\(( .name | tostring | gsub("[\\r\\n\\t]"; " ")))=\((.state | tostring | gsub("[\\r\\n\\t]"; " ")))" ] | join(", ")'
-)" || refuse 14 "the required checks of PR #$NUMBER were not readable JSON"
-if [ "$CHECKS_STATUS" != 0 ] && [ "$CHECKS_NONE" = 0 ]; then
-  refuse 14 "the required checks of PR #$NUMBER were not read cleanly (gh pr checks exited $CHECKS_STATUS): ${NON_GREEN:-none reported}, stderr: $(gh_detail "$CHECKS_ERR")"
-fi
-if [ -n "$NON_GREEN" ]; then
-  refuse 14 "the required checks on head $HEAD are not green: $NON_GREEN"
+  MISSING_CONTEXTS=""
+  NON_GREEN=""
+  while IFS= read -r REQUIRED_NAME; do
+    [ -n "$REQUIRED_NAME" ] || continue
+    REQUIRED_STATE="$(printf '%s' "$CHECKS_JSON" | jq -r --arg n "$REQUIRED_NAME" '[ .[] | select(.name == $n) | .state ] | if length == 0 then "MISSING" else .[-1] end')" \
+      || refuse 14 "the checks of PR #$NUMBER were not readable JSON"
+    printf 'Check: %s=%s\n' "$(one_line "$REQUIRED_NAME")" "$(one_line "$REQUIRED_STATE")"
+    case "$REQUIRED_STATE" in
+      SUCCESS) ;;
+      MISSING) MISSING_CONTEXTS="$MISSING_CONTEXTS$(one_line "$REQUIRED_NAME"); " ;;
+      *) NON_GREEN="$NON_GREEN$(one_line "$REQUIRED_NAME")=$(one_line "$REQUIRED_STATE"), " ;;
+    esac
+  done <<<"$REQUIRED_CONTEXTS"
+  if [ -n "$MISSING_CONTEXTS" ]; then
+    refuse 14 "required check(s) on head $HEAD have not reported, so they are not green: $MISSING_CONTEXTS"
+  fi
+  if [ -n "$NON_GREEN" ]; then
+    refuse 14 "the required checks on head $HEAD are not green: $NON_GREEN"
+  fi
 fi
 
 # The checks are read by PR number, and the PR's readiness can change without its head moving: a
@@ -832,6 +830,8 @@ MOVED_JSON="$(gh_quiet pr view "$NUMBER" --json headRefOid,state,isDraft,mergeab
   || refuse 16 "Could not re-read PR #$NUMBER after the checks read: $(gh_stderr_detail)"
 RECHECK_HEAD="$(printf '%s' "$MOVED_JSON" | jq -r '.headRefOid // empty')" \
   || refuse 16 "Could not read the live head of PR #$NUMBER after the checks read"
+RECHECK_BASE="$(printf '%s' "$MOVED_JSON" | jq -r '.baseRefName // empty')" \
+  || refuse 16 "Could not read the base branch of PR #$NUMBER after the checks read"
 RECHECK_STATE="$(printf '%s' "$MOVED_JSON" | jq -r '.state // empty')" \
   || refuse 16 "Could not read the state of PR #$NUMBER after the checks read"
 RECHECK_DRAFT="$(printf '%s' "$MOVED_JSON" | jq -r '.isDraft | tostring')" \
@@ -844,6 +844,8 @@ RECHECK_MERGE_STATE="$(printf '%s' "$MOVED_JSON" | jq -r '.mergeStateStatus // e
   || refuse 16 "Could not read the live head of PR #$NUMBER after the checks read"
 [ "$RECHECK_HEAD" = "$HEAD" ] \
   || refuse 16 "the head of PR #$NUMBER moved from $HEAD to $RECHECK_HEAD while its checks were read; re-run the helper at the new head"
+[ "$RECHECK_BASE" = "$BASE_REF" ] \
+  || refuse 16 "PR #$NUMBER was retargeted from $BASE_REF to ${RECHECK_BASE:-an unreadable base} while its checks were read"
 [ "$RECHECK_STATE" = "OPEN" ] \
   || refuse 16 "PR #$NUMBER is in state $RECHECK_STATE after the checks read, not OPEN"
 [ "$RECHECK_DRAFT" != "true" ] \
