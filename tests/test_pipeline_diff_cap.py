@@ -257,8 +257,13 @@ def assert_capped(g: dict, phase: str, flow: str, truncated_paths: list[str]) ->
     # the diffstat is git's own `git diff --stat` under the options the script pins for determinism
     # (AC7 of SKL-411), so a hostile user config cannot change what the arbiter reads
     assert blueprint_of(dossier) == git_bytes(
-        g["repo"], "diff", "--stat", "--no-ext-diff", "--no-color",
-        "--src-prefix=a/", "--dst-prefix=b/", "--no-textconv", f"{BASE_REF}...HEAD",
+        g["repo"], "-c", "core.quotePath=true", "-c", "core.abbrev=7",
+        "-c", "diff.renameLimit=1000", "-c", "diff.suppressBlankEmpty=false",
+        "-c", "diff.orderFile=/dev/null", "diff", "--stat", "--no-ext-diff", "--no-color",
+        "--src-prefix=a/", "--dst-prefix=b/", "--no-textconv", "--find-renames",
+        "--submodule=short", "--inter-hunk-context=0", "--diff-algorithm=myers",
+        "--no-indent-heuristic", "--stat-width=80", "--stat-name-width=50",
+        "--stat-graph-width=30", f"{BASE_REF}...HEAD",
         env=g["env"]), "the diffstat changed"
     return dossier
 

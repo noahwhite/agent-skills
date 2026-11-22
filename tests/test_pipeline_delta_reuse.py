@@ -489,6 +489,286 @@ def test_a_reused_phase_refuses_when_its_producer_lapses(gate):
     assert producing.name in result.stderr, result.stderr
 
 
+def test_a_reused_phase_refuses_when_the_producer_arbitration_lapses(gate):
+    write_spec(gate)
+    producing = gate.accept_full_run("base")
+    commit_empty(gate.repo, gate.env)
+    assert gate.preflight().returncode == 0
+    assert gate.run_phase("sweep", report_agent(gate.scratch / "reuse-sweep.launched")).returncode == 0
+    assert gate.run_phase("hunt", report_agent(gate.scratch / "reuse-hunt.launched")).returncode == 0
+    # Only the producer's arbitration is lost; its phases and preflight still accept.
+    (producing / "phase3-arbitration.md.stamp").unlink()
+    result = gate.run_phase("arbitrate",
+                            report_agent(gate.scratch / "reuse-arbitrate.launched",
+                                         "REVIEW-RAN: yes\nverdict\n"))
+    assert result.returncode == 13, result.stdout + result.stderr
+    assert producing.name in result.stderr, result.stderr
+
+
+def test_a_fresh_run_reports_four_reuse_misses(gate):
+    write_spec(gate)
+    assert gate.preflight().returncode == 0
+    assert gate.run_phase("sweep", report_agent(gate.scratch / "fresh-sweep.launched")).returncode == 0
+    assert gate.run_phase("hunt", report_agent(gate.scratch / "fresh-hunt.launched")).returncode == 0
+    assert gate.run_phase("arbitrate", report_agent(gate.scratch / "fresh-arbitrate.launched",
+                                                    "REVIEW-RAN: yes\nverdict\n")).returncode == 0
+    listed = gate.paths().stdout
+    assert "reuse_hits 0" in listed, listed
+    assert "reuse_misses 4" in listed, listed
+
+
+def test_a_conflicting_explicit_story_base_is_refused(gate):
+    write_spec(gate)
+    gate.accept_full_run("base")
+    head_b = _git(gate.repo, gate.env, "rev-parse", "HEAD")
+    result = gate.preflight(story_base=head_b)
+    assert result.returncode == 12, result.stdout + result.stderr
+    assert "already records story base" in result.stderr, result.stderr
+
+
+def make_repo_with_mid(tmp_path, env, name="repo"):
+    repo = tmp_path / name
+    repo.mkdir()
+    _git(repo, env, "init", "-q", "--initial-branch=main")
+    _git(repo, env, "config", "core.autocrlf", "false")
+    _git(repo, env, "config", "commit.gpgsign", "false")
+    (repo / "tracked.txt").write_text("one\n")
+    _git(repo, env, "add", "-A")
+    _git(repo, env, "commit", "-q", "-m", "a")
+    _git(repo, env, "tag", "base")
+    (repo / "mid.txt").write_text("mid\n")
+    _git(repo, env, "add", "-A")
+    _git(repo, env, "commit", "-q", "-m", "x")
+    mid = _git(repo, env, "rev-parse", "HEAD")
+    (repo / "tracked.txt").write_text("two\n")
+    _git(repo, env, "add", "-A")
+    _git(repo, env, "commit", "-q", "-m", "b")
+    return repo, mid
+
+
+def test_delta_with_two_accepted_bases_at_one_head_uses_the_tie_break(tmp_path):
+    env = fixed_env(tmp_path)
+    repo, mid = make_repo_with_mid(tmp_path, env)
+    scratch = tmp_path / "session-scratch"
+    scratch.mkdir()
+    spec = tmp_path / "spec.txt"
+    spec.write_text(SPEC_TEXT)
+    gate = Gate(repo, scratch, env, spec)
+    first = gate.accept_full_run("base")
+    second = Gate(repo, scratch, env, spec).accept_full_run(mid)
+    commit_change(repo, env, "three\n")
+    listed = gate.paths(delta=True)
+    assert listed.returncode == 0, listed.stdout + listed.stderr
+    run = next(line.split(" ", 1)[1] for line in listed.stdout.splitlines()
+               if line.startswith("run "))
+    # Both accepted runs share head B, so the delta base is B whichever run the tie-break names.
+    base = Path(run).name.split("-")[0]
+    assert base == Path(first).name.split("-")[1] == Path(second).name.split("-")[1], run
+
+
+def test_a_producer_whose_arbitrate_was_rerun_still_counts_as_lapsed(gate):
+    """The append-only acceptance log survives a destructive arbitrate re-run (round 3 High)."""
+    write_spec(gate)
+    producing = gate.accept_full_run("base")
+    failed = gate.run_phase("arbitrate", report_agent(gate.scratch / "repeat-arbitrate.launched",
+                                                      "not a review\n"))
+    assert failed.returncode != 0, failed.stdout + failed.stderr
+    assert (producing / "arbitrate.accepted.log").exists()
+    assert not (producing / "phase3-arbitration.md.stamp").exists()
+    commit_empty(gate.repo, gate.env)
+    assert gate.preflight().returncode == 0
+    result = gate.run_phase("sweep", report_agent(gate.scratch / "reuse-sweep.launched"))
+    assert result.returncode == 13, result.stdout + result.stderr
+    assert "reuse: miss reason=acceptance lapsed" in result.stderr, result.stderr
+    assert producing.name in result.stderr, result.stderr
+
+
+def test_a_producer_whose_preflight_was_rerun_still_counts_as_lapsed(gate):
+    """A preflight re-run discards the live model stamps; the acceptance log still proves a lapse."""
+    write_spec(gate)
+    producing = gate.accept_full_run("base")
+    assert gate.preflight().returncode == 0
+    assert not (producing / "phase3-arbitration.md.stamp").exists()
+    assert (producing / "arbitrate.accepted.log").exists()
+    commit_empty(gate.repo, gate.env)
+    assert gate.preflight().returncode == 0
+    result = gate.run_phase("sweep", report_agent(gate.scratch / "reuse-sweep.launched"))
+    assert result.returncode == 13, result.stdout + result.stderr
+    assert "reuse: miss reason=acceptance lapsed" in result.stderr, result.stderr
+    assert producing.name in result.stderr, result.stderr
+
+
+def test_delta_and_base_together_are_a_usage_error(gate):
+    result = run_script(
+        "preflight", "--repo", str(gate.repo), "--base", "base", "--delta",
+        "--full-suite", "off", "--scratch", str(gate.scratch), env=gate.env,
+    )
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "do not also pass --base" in result.stderr, result.stderr
+
+
+def test_sweep_with_no_sweep_is_a_usage_error(gate):
+    write_spec(gate)
+    result = gate.run_phase("sweep", report_agent(gate.scratch / "sweep.launched"),
+                            extra=("--no-sweep",))
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "cannot run with --no-sweep" in result.stderr, result.stderr
+
+
+def test_a_story_base_that_is_not_an_ancestor_is_refused(gate):
+    write_spec(gate)
+    _git(gate.repo, gate.env, "checkout", "-q", "base")
+    _git(gate.repo, gate.env, "commit", "-q", "--allow-empty", "-m", "sibling")
+    sibling = _git(gate.repo, gate.env, "rev-parse", "HEAD")
+    _git(gate.repo, gate.env, "checkout", "-q", "-")
+    result = gate.preflight(story_base=sibling)
+    assert result.returncode == 12, result.stdout + result.stderr
+    assert "is not an ancestor of HEAD" in result.stderr, result.stderr
+
+
+def test_a_producer_that_depends_on_this_run_is_not_reused(gate):
+    """Rerunning a run must not reuse a producer whose chain reaches that same run."""
+    write_spec(gate)
+    producing = gate.accept_full_run("base")
+    commit_empty(gate.repo, gate.env)
+    assert gate.preflight().returncode == 0
+    assert gate.run_phase("sweep", report_agent(gate.scratch / "q-sweep.launched")).returncode == 0
+    assert gate.run_phase("hunt", report_agent(gate.scratch / "q-hunt.launched")).returncode == 0
+    assert gate.run_phase("arbitrate", report_agent(gate.scratch / "q-arbitrate.launched",
+                                                    "REVIEW-RAN: yes\nverdict\n")).returncode == 0
+    # The later run depends on the earlier one, so rerunning the earlier run must not reuse it.
+    _git(gate.repo, gate.env, "checkout", "-q", producing.name.split("-")[1])
+    marker = gate.scratch / "rerun-sweep.launched"
+    result = gate.run_phase("sweep", report_agent(marker))
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "reuse: hit" not in result.stderr, result.stderr
+    assert marker.exists(), "the rerun did not launch a fresh sweep"
+
+
+def test_a_live_stamp_for_another_spec_does_not_hide_the_recorded_lapse(gate):
+    """A producer accepted for this spec and later re-stamped for another spec must refuse, not launch."""
+    write_spec(gate, "spec one\n")
+    producing = gate.accept_full_run("base")
+    # Re-stamp the producer's live chain with a different spec.
+    write_spec(gate, "spec two\n")
+    assert gate.preflight().returncode == 0
+    assert gate.run_phase("sweep", report_agent(gate.scratch / "other-spec-sweep.launched")).returncode == 0
+    commit_empty(gate.repo, gate.env)
+    write_spec(gate, "spec one\n")
+    assert gate.preflight().returncode == 0
+    result = gate.run_phase("sweep", report_agent(gate.scratch / "reuse-sweep.launched"))
+    assert result.returncode == 13, result.stdout + result.stderr
+    assert "reuse: miss reason=acceptance lapsed" in result.stderr, result.stderr
+    assert producing.name in result.stderr, result.stderr
+
+
+def test_a_producer_accepted_for_another_spec_does_not_block_a_fresh_sweep(gate):
+    """An acceptance for spec A must not be borrowed as a lapse for spec B on the same trees."""
+    write_spec(gate, "spec one\n")
+    gate.accept_full_run("base")
+    write_spec(gate, "spec two\n")
+    commit_empty(gate.repo, gate.env)
+    assert gate.preflight().returncode == 0
+    marker = gate.scratch / "reuse-sweep.launched"
+    result = gate.run_phase("sweep", report_agent(marker))
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert marker.exists(), "a producer accepted for another spec blocked a fresh sweep"
+    assert "acceptance lapsed" not in result.stderr, result.stderr
+
+
+def test_delta_breaks_a_divergent_maximal_tie_on_committer_date(tmp_path):
+    env = fixed_env(tmp_path)
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, env, "init", "-q", "--initial-branch=main")
+    _git(repo, env, "config", "core.autocrlf", "false")
+    _git(repo, env, "config", "commit.gpgsign", "false")
+    (repo / "tracked.txt").write_text("root\n")
+    _git(repo, env, "add", "-A")
+    _git(repo, env, "commit", "-q", "-m", "a")
+    _git(repo, env, "tag", "base")
+    _git(repo, env, "checkout", "-q", "-b", "side1")
+    (repo / "tracked.txt").write_text("p1\n")
+    _git(repo, env, "add", "-A")
+    _git(repo, env, "commit", "-q", "-m", "p1")
+    p1 = _git(repo, env, "rev-parse", "HEAD")
+    _git(repo, env, "checkout", "-q", "base")
+    _git(repo, env, "checkout", "-q", "-b", "side2")
+    (repo / "extra.txt").write_text("p2\n")
+    _git(repo, env, "add", "-A")
+    later = {**env, "GIT_COMMITTER_DATE": "2026-01-02T00:00:00+0000"}
+    subprocess.run(["git", "commit", "-q", "-m", "p2"], cwd=repo, env=later, check=True)
+    p2 = _git(repo, env, "rev-parse", "HEAD")
+    _git(repo, env, "checkout", "-q", "side2")
+    _git(repo, env, "merge", "-q", "--no-ff", "-m", "merge", "side1")
+    merge = _git(repo, env, "rev-parse", "HEAD")
+    scratch = tmp_path / "session-scratch"
+    scratch.mkdir()
+    spec = tmp_path / "spec.txt"
+    spec.write_text(SPEC_TEXT)
+    # Accept a run at each divergent head, then ask for the delta at the merge.
+    for head in (p1, p2):
+        _git(repo, env, "checkout", "-q", head)
+        assert Gate(repo, scratch, env, spec).accept_full_run("base").name.endswith(head)
+    _git(repo, env, "checkout", "-q", merge)
+    listed = Gate(repo, scratch, env, spec).paths(delta=True)
+    assert listed.returncode == 0, listed.stdout + listed.stderr
+    run = next(line.split(" ", 1)[1] for line in listed.stdout.splitlines()
+               if line.startswith("run "))
+    assert Path(run).name.split("-")[0] == p2, f"expected the later committer date {p2}, got {run}"
+
+
+def test_a_never_accepted_attempt_at_a_shared_head_does_not_block_reuse(tmp_path):
+    env = fixed_env(tmp_path)
+    repo, mid = make_repo_with_mid(tmp_path, env)
+    scratch = tmp_path / "session-scratch"
+    scratch.mkdir()
+    spec = tmp_path / "spec.txt"
+    spec.write_text(SPEC_TEXT)
+    gate = Gate(repo, scratch, env, spec)
+    gate.accept_full_run("base")                       # A-B accepted, retains a round at B
+    # X-B runs its sweep and hunt but its arbitration fails, so it was never accepted.
+    assert gate.preflight(mid).returncode == 0
+    assert gate.run_phase("sweep", report_agent(scratch / "failed-sweep.launched"), base=mid).returncode == 0
+    assert gate.run_phase("hunt", report_agent(scratch / "failed-hunt.launched"), base=mid).returncode == 0
+    failed = gate.run_phase("arbitrate", report_agent(scratch / "failed-arbitrate.launched",
+                                                      "not a review\n"), base=mid)
+    assert failed.returncode != 0, failed.stdout + failed.stderr
+    # A new head with X-B's tree identity must launch fresh, not treat X-B as lapsed.
+    commit_empty(repo, env)
+    assert gate.preflight(mid).returncode == 0
+    marker = scratch / "fresh-sweep.launched"
+    sweep = gate.run_phase("sweep", report_agent(marker), base=mid)
+    assert sweep.returncode == 0, sweep.stdout + sweep.stderr
+    assert marker.exists(), "a never-accepted attempt blocked a fresh sweep"
+    assert reuse_line(sweep.stderr) == "reuse: miss reason=no accepted run", sweep.stderr
+
+
+def test_a_two_hop_reuse_chain_follows_provenance(gate):
+    write_spec(gate)
+    producer = gate.accept_full_run("base")
+    commit_empty(gate.repo, gate.env)
+    assert gate.preflight().returncode == 0
+    assert gate.run_phase("sweep", report_agent(gate.scratch / "q-sweep.launched")).returncode == 0
+    assert gate.run_phase("hunt", report_agent(gate.scratch / "q-hunt.launched")).returncode == 0
+    assert gate.run_phase("arbitrate", report_agent(gate.scratch / "q-arbitrate.launched",
+                                                    "REVIEW-RAN: yes\nverdict\n")).returncode == 0
+    middle = gate.run_dir()
+    commit_empty(gate.repo, gate.env)
+    assert gate.preflight().returncode == 0
+    assert gate.run_phase("sweep", report_agent(gate.scratch / "r-sweep.launched")).returncode == 0
+    assert gate.run_phase("hunt", report_agent(gate.scratch / "r-hunt.launched")).returncode == 0
+    second = gate.run_dir()
+    assert (middle / "sweep.reuse").read_text().splitlines()[1] == f"run={producer.name}"
+    assert (second / "sweep.reuse").read_text().splitlines()[1] == f"run={middle.name}"
+    # Breaking the far end of the chain breaks the consumer's provenance.
+    (producer / "phase0-preflight.md.stamp").unlink()
+    result = gate.run_phase("arbitrate", report_agent(gate.scratch / "r-arbitrate.launched",
+                                                      "REVIEW-RAN: yes\nverdict\n"))
+    assert result.returncode == 13, result.stdout + result.stderr
+    assert middle.name in result.stderr, result.stderr
+
+
 # --- AC7 / AC4: deterministic dossier input -------------------------------------------------------
 
 def sweep_dossier_bytes(gate: Gate) -> bytes:
@@ -507,7 +787,7 @@ def test_hostile_git_config_leaves_the_dossier_and_identity_unchanged(tmp_path):
     # diff.quotePath is the key the story names; core.quotePath is the key git actually reads.
     config.write_text(
         "[diff]\n\talgorithm = patience\n\tnoprefix = true\n\tquotePath = false\n\tcontext = 5\n"
-        "[core]\n\tquotePath = false\n"
+        "[core]\n\tquotePath = false\n\tabbrev = 40\n"
     )
     hostile_env["GIT_CONFIG_GLOBAL"] = str(config)
 
@@ -552,6 +832,7 @@ def test_hostile_git_config_still_reuses_the_identical_tree(tmp_path):
     config = tmp_path / "hostile.gitconfig"
     config.write_text(
         "[diff]\n\talgorithm = patience\n\tnoprefix = true\n\tquotePath = false\n\tcontext = 5\n"
+        "[core]\n\tquotePath = false\n\tabbrev = 40\n"
     )
     hostile_env["GIT_CONFIG_GLOBAL"] = str(config)
     repo, _ = make_repo(tmp_path, hostile_env)
