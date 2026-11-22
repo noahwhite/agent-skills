@@ -197,6 +197,12 @@ def test_each_permission_is_quoted_from_the_receiving_roles_skill() -> None:
     }
 
 
+def test_no_citation_quotes_a_fragment_too_short_to_identify_its_rule() -> None:
+    """A quotation must identify its rule: an identifier can, while a stray word cannot."""
+    for quote, path, number in citations():
+        assert len(quote) >= 8, f"{path}:{number} quotes a fragment too short to identify its rule: {quote!r}"
+
+
 def test_the_ac2_actor_and_prohibition_come_from_one_line() -> None:
     """The admissibility example's actor and text are one source line; a different rule cannot supply one."""
     by_quote = {quote: (path, number) for quote, path, number in citations()}
