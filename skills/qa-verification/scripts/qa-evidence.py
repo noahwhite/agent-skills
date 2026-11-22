@@ -16,9 +16,9 @@ README is refused before any label is validated, with one line naming it, and th
 published through opened directory descriptors that refuse every symlink component, without
 overwriting anything, so a concurrent writer, a dangling symlink and a symlinked directory are
 refused too, and an orderly failed write removes its temporary file and never leaves a README
-behind. An abrupt kill can strand the temporary file, and a README left by an interrupted fallback
-write is removed by hand. A key outside ^[A-Z][A-Z0-9]+-[0-9]+$, an empty `--evidence-dir`, and a
-story key the doc-lint rejects all exit 1 naming what is wrong.
+behind. An abrupt kill can strand the temporary file, and a partial README left by a failed direct
+copy must be removed by hand. A key outside ^[A-Z][A-Z0-9]+-[0-9]+$, an empty `--evidence-dir`, and
+a story key the doc-lint rejects all exit 1 naming what is wrong.
 
 A label is written as one table cell of literal text: its line breaks fold to spaces, runs of
 whitespace collapse, and every Markdown punctuation character is backslash-escaped, so a cell can
@@ -37,6 +37,7 @@ import errno
 import json
 import os
 import re
+import stat
 import sys
 from pathlib import Path
 
@@ -147,15 +148,9 @@ def checkout_root(start: Path) -> Path | None:
 
 
 def repository_root() -> Path:
-    """The working directory's checkout root, else the nearest ancestor with a profile schema."""
+    """The checkout that contains the working directory, else the working directory itself."""
     here = Path.cwd()
-    root = checkout_root(here)
-    if root is not None:
-        return root
-    for candidate in (here, *here.parents):
-        if (candidate / "profile" / "schema.json").is_file():
-            return candidate
-    return here
+    return checkout_root(here) or here
 
 
 def resolve_evidence_dir(root: Path, value: str) -> Path:
@@ -180,14 +175,14 @@ def local_schema(root: Path) -> tuple[dict | None, str | None]:
     return schema, None
 
 
-def deref(node, defs: dict) -> dict:
-    """A node with its `$ref`, or its `allOf` of exactly one `$ref`, resolved."""
+def deref(node, defs: dict):
+    """A node with its `$ref`, or its `allOf` of exactly one `$ref`, resolved; None when unresolvable."""
     seen: set[str] = set()
     while isinstance(node, dict):
         if "$ref" in node:
             name = node["$ref"].split("/")[-1]
             if name in seen or name not in defs:
-                return {}
+                return None
             seen.add(name)
             node = defs[name]
         elif "properties" not in node:
@@ -203,17 +198,19 @@ def deref(node, defs: dict) -> dict:
                 return node
         else:
             return node
-    return {}
+    return node
 
 
-def schema_node(schema: dict, path: str) -> dict | None:
-    """The node `path` names in `schema`, following properties, arrays and additional properties."""
+def schema_node(schema: dict, path: str):
+    """The node `path` names in `schema`, or None when it does not resolve as the lint requires."""
     defs = schema.get("$defs", {})
-    node: dict = schema
+    node = schema
     for part in path.split("."):
         is_array = part.endswith("[]")
         key = part.removesuffix("[]")
         node = deref(node, defs)
+        if not isinstance(node, dict):
+            return None
         properties = node.get("properties", {})
         if key in properties:
             node = properties[key]
@@ -221,11 +218,11 @@ def schema_node(schema: dict, path: str) -> dict | None:
             node = node["additionalProperties"]
         else:
             return None
+        node = deref(node, defs)
         if is_array:
-            node = deref(node, defs)
-            if node.get("type") != "array":
+            if not isinstance(node, dict) or node.get("type") != "array" or "items" not in node:
                 return None
-            node = node.get("items", {})
+            node = node["items"]
         node = deref(node, defs)
     return node
 
@@ -234,7 +231,7 @@ def resolves_ref(schema: dict, ref: str) -> bool:
     """Whether `ref`, the text after `profile.`, resolves in `schema`, wildcards included."""
     if ref.endswith(".*"):
         node = schema_node(schema, ref.removesuffix(".*"))
-        return node is not None and (
+        return isinstance(node, dict) and (
             "properties" in node or isinstance(node.get("additionalProperties"), dict)
         )
     return schema_node(schema, ref) is not None
@@ -282,7 +279,9 @@ def label_problem(label: str, *, schema: dict | None, spelling: bool) -> str | N
     """Why a cleaned label cannot be written into the skeleton, or None when it can."""
     if not label:
         return "is empty"
-    if len(SENTENCE_END_RE.findall(ABBREVIATION_RE.sub("", label))) > 1:
+    prose = PROFILE_REF_RE.sub("profile", ABBREVIATION_RE.sub("", label)).rstrip()
+    ends = list(SENTENCE_END_RE.finditer(prose))
+    if len(ends) > 1 or (ends and ends[0].end() < len(prose)):
         return "holds more than one sentence"
     for text in (label, visible_text(label)):
         problem = lint_problem(text, spelling=spelling)
@@ -298,8 +297,8 @@ def skeleton(key: str, items: list[str], path: str | None) -> str:
     return "\n".join(lines) + "\n"
 
 
-def open_directory(path: Path) -> tuple[int | None, str | None]:
-    """Open `path` one component at a time, creating missing directories, never following a symlink."""
+def open_directory(path: Path, *, create: bool) -> tuple[int | None, str | None]:
+    """Open `path` one component at a time, never following a symlink, creating it when asked."""
     if not path.is_absolute():
         return None, f"{one_line(str(path))} is not absolute"
     descriptor = os.open("/", os.O_RDONLY | os.O_DIRECTORY)
@@ -308,6 +307,9 @@ def open_directory(path: Path) -> tuple[int | None, str | None]:
             try:
                 child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=descriptor)
             except FileNotFoundError:
+                if not create:
+                    os.close(descriptor)
+                    return None, None
                 try:
                     os.mkdir(part, dir_fd=descriptor)
                 except FileExistsError:
@@ -317,10 +319,28 @@ def open_directory(path: Path) -> tuple[int | None, str | None]:
             descriptor = child
     except OSError as exc:
         os.close(descriptor)
-        if exc.errno == errno.ELOOP:
-            return None, f"{one_line(str(path))} has a symlink in its path"
-        return None, f"cannot create {one_line(str(path))}: {exc.strerror or exc}"
+        if exc.errno in (errno.ELOOP, errno.ENOTDIR):
+            return None, f"cannot open {one_line(str(path))}: a path component is a file or symlink"
+        return None, f"cannot open {one_line(str(path))}: {exc.strerror or exc}"
     return descriptor, None
+
+
+def target_problem(target: Path) -> str | None:
+    """The refusal when `target` already exists on a safe path or sits on an unsafe one, else None."""
+    descriptor, problem = open_directory(target.parent, create=False)
+    if problem is not None:
+        return problem
+    if descriptor is None:
+        return None
+    try:
+        info = os.stat(target.name, dir_fd=descriptor, follow_symlinks=False)
+    except FileNotFoundError:
+        return None
+    finally:
+        os.close(descriptor)
+    if stat.S_ISLNK(info.st_mode):
+        return f"error: {one_line(str(target.absolute()))} is a symlink; refusing to follow it"
+    return f"error: {one_line(str(target.absolute()))} already exists; refusing to overwrite it"
 
 
 def publish(target: Path, text: str) -> bool:
@@ -330,7 +350,7 @@ def publish(target: Path, text: str) -> bool:
     except UnicodeError:
         print(f"error: the skeleton for {one_line(str(target))} cannot be encoded as UTF-8", file=sys.stderr)
         return False
-    descriptor, problem = open_directory(target.parent)
+    descriptor, problem = open_directory(target.parent, create=True)
     if descriptor is None:
         print(f"error: {problem}", file=sys.stderr)
         return False
@@ -396,12 +416,9 @@ def publish(target: Path, text: str) -> bool:
             finally:
                 os.close(direct)
             if failure is not None:
-                try:
-                    os.unlink(target.name, dir_fd=descriptor)
-                except OSError:
-                    pass
                 print(
-                    f"error: cannot write {one_line(str(target.absolute()))}: {failure.strerror or failure}",
+                    f"error: cannot write {one_line(str(target.absolute()))}: {failure.strerror or failure}; "
+                    "a partial README may remain and must be removed by hand",
                     file=sys.stderr,
                 )
                 return False
@@ -452,14 +469,9 @@ def main(argv: list[str] | None = None) -> int:
     evidence = resolve_evidence_dir(root, args.evidence_dir)
     destination_root = checkout_root(evidence) or root
     target = evidence / args.key / "README.md"
-    if target.is_symlink():
-        print(
-            f"error: {one_line(str(target.absolute()))} is a symlink; refusing to follow it",
-            file=sys.stderr,
-        )
-        return 1
-    if target.exists():
-        print(f"error: {one_line(str(target.absolute()))} already exists; refusing to overwrite it", file=sys.stderr)
+    problem = target_problem(target)
+    if problem is not None:
+        print(problem, file=sys.stderr)
         return 1
 
     spelling = spelling_applies(destination_root, evidence)

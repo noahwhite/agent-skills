@@ -730,6 +730,7 @@ def test_the_rendered_table_holds_three_cells_with_the_label_text(tmp_path, labe
 
 
 def test_a_nested_working_directory_finds_the_repository_schema(tmp_path):
+    (tmp_path / ".git").mkdir()
     (tmp_path / "profile").mkdir()
     (tmp_path / "profile" / "schema.json").write_text(
         (ROOT / "profile" / "schema.json").read_text(encoding="utf-8"), encoding="utf-8"
@@ -744,6 +745,7 @@ def test_a_nested_working_directory_finds_the_repository_schema(tmp_path):
 
 
 def test_a_nested_working_directory_resolves_the_default_evidence_dir_against_the_root(tmp_path):
+    (tmp_path / ".git").mkdir()
     (tmp_path / "profile").mkdir()
     (tmp_path / "profile" / "schema.json").write_text("{}\n", encoding="utf-8")
     sub = tmp_path / "sub"
@@ -756,6 +758,7 @@ def test_a_nested_working_directory_resolves_the_default_evidence_dir_against_th
 
 
 def test_a_nested_working_directory_detects_an_existing_readme_at_the_root(tmp_path):
+    (tmp_path / ".git").mkdir()
     (tmp_path / "profile").mkdir()
     (tmp_path / "profile" / "schema.json").write_text("{}\n", encoding="utf-8")
     sub = tmp_path / "sub"
@@ -905,7 +908,7 @@ def test_a_tilde_pair_is_escaped_literally(tmp_path):
 def test_a_branching_schema_shape_does_not_raise():
     generator = load_generator()
     assert generator.deref({"allOf": [True]}, {}) == {"allOf": [True]}
-    assert generator.deref({"allOf": [{"$ref": "#/$defs/gone"}]}, {}) == {}
+    assert generator.deref({"allOf": [{"$ref": "#/$defs/gone"}]}, {}) is None
 
 
 def test_a_boolean_schema_property_is_an_unresolved_reference(tmp_path):
@@ -926,7 +929,7 @@ def test_a_figure_abbreviation_is_not_a_sentence_boundary(tmp_path):
     assert res.returncode == 0, res.stderr
 
 
-@pytest.mark.parametrize("separator", ["\u000b", "\u000c", "\u001c", "\u001d", "\u001e"])
+@pytest.mark.parametrize("separator", ["\u000b", "\u000c", "\u001c", "\u001d", "\u001e", "\u0085", "\u2029"])
 def test_every_line_separator_is_escaped_in_a_path_diagnostic(tmp_path, separator):
     evidence = f"a{separator}b"
     readme = tmp_path / evidence / "SKL-386" / "README.md"
@@ -951,7 +954,7 @@ def test_a_readme_symlink_is_named_as_a_symlink(tmp_path):
 
 
 def test_an_abbreviation_does_not_count_as_a_sentence_boundary(tmp_path):
-    label = "AC1 - set e.g. config. and stop"
+    label = "AC1 - set e.g. config."
     res = run(tmp_path, "--key", "SKL-386", "--item", label)
     assert res.returncode == 0, res.stderr
     readme = tmp_path / "docs" / "qa-evidence" / "SKL-386" / "README.md"
@@ -1030,6 +1033,100 @@ def test_a_relative_cross_checkout_destination_uses_the_outer_schema(tmp_path):
     assert res.returncode == 1, res.stderr
     assert len(res.stderr.splitlines()) == 1, res.stderr
     assert not (outer / "docs").exists()
+
+
+def test_without_a_checkout_an_ancestor_schema_does_not_move_the_output(tmp_path):
+    root = tmp_path / "root"
+    (root / "profile").mkdir(parents=True)
+    (root / "profile" / "schema.json").write_text("{}\n", encoding="utf-8")
+    child = root / "child"
+    child.mkdir()
+    res = run_in(child, "--key", "SKL-386", "--item", "AC1 - one generator")
+    assert res.returncode == 0, res.stderr
+    assert (child / "docs" / "qa-evidence" / "SKL-386" / "README.md").is_file()
+    assert not (root / "docs").exists()
+
+
+def test_a_dangling_schema_reference_is_refused(tmp_path):
+    (tmp_path / "profile").mkdir()
+    (tmp_path / "profile" / "schema.json").write_text(
+        json.dumps({"type": "object", "properties": {"x": {"$ref": "#/$defs/missing"}}}), encoding="utf-8"
+    )
+    res = run_in(tmp_path, "--key", "SKL-386", "--item", "AC1 - profile.x is set")
+    assert res.returncode == 1, res.stderr
+    assert len(res.stderr.splitlines()) == 1, res.stderr
+    assert "profile.x" in res.stderr
+    assert not (tmp_path / "docs").exists()
+
+
+def test_an_array_reference_without_items_is_refused(tmp_path):
+    (tmp_path / "profile").mkdir()
+    (tmp_path / "profile" / "schema.json").write_text(
+        json.dumps({"type": "object", "properties": {"x": {"type": "array"}}}), encoding="utf-8"
+    )
+    res = run_in(tmp_path, "--key", "SKL-386", "--item", "AC1 - profile.x[] is set")
+    assert res.returncode == 1, res.stderr
+    assert len(res.stderr.splitlines()) == 1, res.stderr
+    assert not (tmp_path / "docs").exists()
+
+
+def test_an_unpunctuated_second_sentence_is_refused(tmp_path):
+    label = "Create the file. Check the rows"
+    res = run(tmp_path, "--key", "SKL-386", "--item", label)
+    assert res.returncode == 1, res.stderr
+    assert "more than one sentence" in res.stderr
+
+
+@pytest.mark.parametrize("ending", ["!", "?"])
+def test_a_single_sentence_with_a_strong_terminator_is_accepted(tmp_path, ending):
+    label = f"AC1 - one generator{ending}"
+    res = run(tmp_path, "--key", "SKL-386", "--item", label)
+    assert res.returncode == 0, res.stderr
+
+
+@pytest.mark.parametrize("ending", ["!", "?"])
+def test_a_second_strong_terminator_is_refused(tmp_path, ending):
+    label = f"AC1 - first{ending} second"
+    res = run(tmp_path, "--key", "SKL-386", "--item", label)
+    assert res.returncode == 1, res.stderr
+    assert "more than one sentence" in res.stderr
+
+
+def test_a_regular_readme_under_a_symlinked_ancestor_is_refused_as_unsafe(tmp_path):
+    destination = tmp_path / "elsewhere"
+    readme = destination / "qa-evidence" / "SKL-386" / "README.md"
+    readme.parent.mkdir(parents=True)
+    readme.write_text("# handwritten\n", encoding="utf-8")
+    (tmp_path / "docs").symlink_to(destination, target_is_directory=True)
+    res = run(tmp_path, "--key", "SKL-386")
+    assert res.returncode == 1, res.stderr
+    assert len(res.stderr.splitlines()) == 1, res.stderr
+    assert "symlink" in res.stderr
+    assert "already exists" not in res.stderr
+    assert readme.read_text(encoding="utf-8") == "# handwritten\n"
+
+
+def test_a_failed_fallback_write_keeps_another_writers_readme(tmp_path, monkeypatch):
+    generator = load_generator()
+    target = tmp_path / "docs" / "qa-evidence" / "SKL-386" / "README.md"
+    real_write = generator.os.write
+    calls = {"count": 0}
+
+    def refusing_link(*_args, **_kwargs):
+        raise OSError(errno.EPERM, "Operation not permitted")
+
+    def failing_second_write(handle, data):
+        calls["count"] += 1
+        if calls["count"] == 2:
+            target.unlink()
+            target.write_text("# concurrent writer\n", encoding="utf-8")
+            raise OSError(errno.ENOSPC, "No space left on device")
+        return real_write(handle, data)
+
+    monkeypatch.setattr(generator.os, "link", refusing_link)
+    monkeypatch.setattr(generator.os, "write", failing_second_write)
+    assert generator.publish(target, "# ours\n") is False
+    assert target.read_text(encoding="utf-8") == "# concurrent writer\n"
 
 
 def test_an_abbreviated_option_is_refused(tmp_path):

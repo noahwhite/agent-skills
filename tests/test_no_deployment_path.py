@@ -635,8 +635,9 @@ def test_qa_added_blocks_appear_once_in_order() -> None:
 # pins the first two, and the index line is pinned only by this hash.
 # SKL-386 re-baselined it for its one change outside the blocks: the new section 5 bullet that names the
 # evidence skeleton generator, and its arbiter-ruled rewordings: the target worktree as the working
-# directory, the ordered retry after a refusal, the schema qualification, and the symlink distinction.
-QA_BASE_SHA256 = "b5f2bdf0dc588ffedb8401bacaad296c4cd8b4e24fa8ec3ced54612ccf87ccbc"
+# directory, the ordered retry after a refusal, the schema qualification, the symlink distinction, and
+# the re-check before editing an existing README.
+QA_BASE_SHA256 = "0787c08d678a887c65da9b0e386e36c1f7753aa7bd483c9109e1d5051b12d55d"
 
 
 def test_qa_text_outside_the_added_blocks_is_unchanged() -> None:
