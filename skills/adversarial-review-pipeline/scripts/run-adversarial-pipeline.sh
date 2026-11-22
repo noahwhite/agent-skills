@@ -294,8 +294,10 @@
 # its contents into argv (argv is visible to other processes and one argument is capped at 128 KiB).
 #
 # Exit codes: 0 ok / PASS, 1 preflight FAIL, 2 usage, 3 preflight INCOMPLETE, 11 not a git repo,
-# 12 bad base, 13 missing or invalid prior artifact, 14 cleanup refused, 15 agent command failed
-# or wrote no fresh report, 17 agent ran blind (sandbox error on its stderr, or no `REVIEW-RAN: yes`
+# 12 bad base, 13 missing or invalid prior artifact, or a phase's inputs (spec, --shard, --no-sweep,
+# a predecessor artifact) changed since its dossier was written, 14 cleanup refused, 15 agent command
+# failed, wrote no fresh report, or left a phase launch marker that is missing, empty or unreadable,
+# 17 agent ran blind (sandbox error on its stderr, or no `REVIEW-RAN: yes`
 # first line), 18 the agent changed the primary checkout, 19 the phase was killed by --timeout,
 # 20 the phase's availability check failed before any agent ran, 21 the arbitrate phase could not
 # write its identity lines or retain its accepted report (not accepted), 22 the review checklist or
@@ -738,14 +740,13 @@ binding_text() {  # $1 = phase
 # The launch records the exact invocation a dossier was written for where the binding cannot see the
 # difference: `--shard 1/1` and an omitted flag are unsharded and share a byte-identical binding
 # (AC1's parity clause), so the launch itself carries the flag selection. `shard=none` is the
-# omitted flag, so a launch that is missing, empty or unreadable is a state error, never a selection.
+# omitted flag, so a launch that is missing, empty or unreadable is a state error, never a selection:
+# a dossier written before this release, whose launch is empty, has no recorded selection and must be
+# written again.
 launch_text() {  # $1 = phase -> what the launch file records; only the hunt records a selection
   if [ "$1" = "hunt" ]; then
     if [ "$SHARD_SET" -eq 1 ]; then printf 'shard=%s/%s\n' "$SHARD_K" "$SHARD_N"; else printf 'shard=none\n'; fi
   fi
-}
-shard_choice_label() {  # -> the selection this invocation passes, as the operator wrote it
-  if [ "$SHARD_SET" -eq 1 ]; then printf '%s' "--shard $SHARD_K/$SHARD_N"; else printf '%s' "no --shard"; fi
 }
 
 # The stamp is the binding plus the artifact's own content.
@@ -875,15 +876,16 @@ accept_phase() {  # $1 = phase, $2 = stderr log or "": validate a freshly writte
     die 13 "the $1 inputs changed since its dossier was written (spec, --shard, --no-sweep or a predecessor artifact); start the $1 phase again."
   fi
   # `--shard 1/1` and an omitted flag share a binding byte for byte, so the hunt's launch carries the
-  # exact selection the dossier was written for: a record must repeat it exactly. The recorded value
-  # is printed only after control characters are neutralised, so a tampered marker cannot forge a line.
+  # exact selection the dossier was written for: a record must repeat it exactly. The read is bounded
+  # to one short line and the recorded value is sanitised, so a tampered marker can neither forge a
+  # diagnosis line nor make the refusal unbounded.
   if [ "$1" = "hunt" ]; then
-    if ! launched="$(cat -- "$RUN_DIR/$key.launch" 2>/dev/null)" || [ -z "$launched" ]; then
+    if ! IFS= read -r -n 64 launched < "$RUN_DIR/$key.launch" 2>/dev/null || [ -z "$launched" ]; then
       die 15 "the hunt launch marker $RUN_DIR/$key.launch is missing, empty or unreadable; start the hunt phase again."
     fi
     if [ "$launched" != "$(launch_text "$1")" ]; then
-      launched_arg="$(printf '%s' "$launched" | tr -c '[:print:]' '?')"
-      die 13 "the hunt launch records '$launched_arg' but this record invocation passes '$(shard_choice_label)'; pass the --shard the dossier was written with, or start the hunt phase again."
+      launched_arg="$(printf '%s' "$launched" | LC_ALL=C tr -c '[:print:]' '?')"
+      die 13 "the hunt launch records '$launched_arg' but this record invocation selects '$(launch_text "$1" | LC_ALL=C tr -d '\n')'; pass the --shard the dossier was written with (or the same ADVERSARIAL_SHARD), or start the hunt phase again."
     fi
   fi
   [ -s "$art" ] || die 15 "the $1 agent produced no report ($art is missing or empty)."

@@ -353,7 +353,7 @@ def test_record_hunt_refuses_a_shard_selection_the_dossier_did_not_use(accepted_
     report.write_text("REVIEW-RAN: yes\none of one\n")
     plain = run_script("record", "hunt", "--repo", str(repo), "--base", "HEAD", env=env)
     assert plain.returncode == 13, plain.stdout + plain.stderr
-    assert "'shard=1/1'" in plain.stderr and "'no --shard'" in plain.stderr, plain.stderr
+    assert "records 'shard=1/1'" in plain.stderr and "selects 'shard=none'" in plain.stderr, plain.stderr
     assert not Path(f"{report}.stamp").exists()
     assert launch.read_bytes() == b"shard=1/1\n", launch.read_bytes()
     recorded = run_script(
@@ -377,7 +377,7 @@ def test_record_hunt_refuses_a_shard_selection_the_dossier_did_not_use(accepted_
         "record", "hunt", "--repo", str(repo), "--base", "HEAD", "--shard", "1/1", env=env,
     )
     assert flagged.returncode == 13, flagged.stdout + flagged.stderr
-    assert "'shard=none'" in flagged.stderr and "'--shard 1/1'" in flagged.stderr, flagged.stderr
+    assert "records 'shard=none'" in flagged.stderr and "selects 'shard=1/1'" in flagged.stderr, flagged.stderr
     assert not Path(f"{report}.stamp").exists()
     recorded = run_script("record", "hunt", "--repo", str(repo), "--base", "HEAD", env=env)
     assert recorded.returncode == 0, recorded.stdout + recorded.stderr
@@ -432,7 +432,7 @@ def test_an_emptied_launch_marker_is_refused_for_either_selection(accepted_gate)
     )
     flagged_checkout, _ = dossier_of(dossier)
     report.write_text("REVIEW-RAN: yes\none of one\n")
-    launch.write_text("")
+    launch.write_text("\n")
     flagged = run_script(
         "record", "hunt", "--repo", str(repo), "--base", "HEAD", "--shard", "1/1", env=env,
     )
