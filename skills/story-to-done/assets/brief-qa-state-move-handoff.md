@@ -1,1 +1,0 @@
-- Your closing state move is "**`profile.tracker.states.done`**: every AC and DoD item is verified as met, and the evidence PR is merged (when in-repo evidence is kept)." at `skills/qa-verification/SKILL.md:169`.
