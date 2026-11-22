@@ -107,6 +107,25 @@ Where this file and a capability file disagree, the capability file wins.
 
 For an orchestration-heavy run - one that spawns a senior engineer and at least one QA agent - Lite mode plus the 12-minute batched-poll cadence is the default, and [assets/kickoff-prompt.md](assets/kickoff-prompt.md) holds the caller prompt that starts it.
 
+## Brief authoring
+
+A brief carries facts, constraints and permissions, and each of them is scoped to the role it is written for and quoted from the skill that governs that role.
+
+- A brief constrains only the agent it is written for.
+  A constraint taken from the coordinator's own persona is never restated as a rule for a role.
+  Any boundary carried into a brief is quoted from its source with `path:line` rather than paraphrased.
+- A prohibition is admissible only when it names the actor it binds and the skill text it comes from.
+  "Never reword an acceptance criterion" is admissible, because it names the implementing engineer and quotes `references/linear.md`; "never edit the DoD text" is not, because ticking a box edits DoD text.
+- Every role brief names what the role may do as well as what it may not: it ticks the boxes it verified, moves the states its skill assigns, opens its own PR, and posts the review of record.
+  Each permission's wording is quoted from the file that states it, with its `path:line`.
+  The tick wording is `Tick the boxes you verified.` at `skills/qa-verification/SKILL.md:170`, and the review of record is named at `skills/qa-verification/SKILL.md:155`.
+  The state moves are quoted at `references/linear.md:40` (`Move an issue to in progress the moment its branch is created, before writing code.`), and the completion record is `Ticking the Acceptance Criteria and Definition of Done checkboxes in the description is the completion record.`, at `references/linear.md:45`.
+  The PR it opens is the one `engineering-workflow` step 5 opens.
+- The completion tick is the product owner's acceptance record, and the current skills delegate it to the agent that observed the behaviour, so a brief may qualify the tick but may never remove the permission.
+  This changes no ownership: the product owner remains the authority on criteria, scope, estimates and closure.
+- A role that finds a brief contradicting its skill reports the conflict and stops.
+  The coordinator escalates it to the owner, and neither resolves it silently in either direction.
+
 ## Metrics
 
 Only when `metrics` is on, read [references/metrics.md](references/metrics.md) right after step 0 creates the todo list: it is the single home for what a `story-to-done` run collects and reports, and this file does not restate it.
