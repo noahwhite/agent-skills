@@ -5,9 +5,9 @@
 #
 #   bash scripts/pre-push-check.sh [--base REF] [--list]
 #
-# A passing run covers the tracked content of the exact HEAD being pushed: the run prints that
-# HEAD, refuses to pass when HEAD moved during the run, and checks a clean snapshot of HEAD when
-# the index differs from it. Re-run it whenever HEAD changes.
+# A passing run covers the exact HEAD being pushed: the checks run in a throwaway worktree at that
+# HEAD, so neither staged content nor a mid-run edit in the working tree can change the result, and
+# the run fails when HEAD moves. Re-run it whenever HEAD changes.
 # Exit status: 0 every check passed, 1 at least one check failed, 2 an input, git or startup error.
 set -uo pipefail
 
@@ -25,6 +25,7 @@ fallback=tests/test_skills.py
 # It is also printed by --help.
 table=(
   '.agent-skills/profile.yaml tests/test_profiles.py'
+  '.agent-skills/review-checklist.txt tests/test_review_checklist.py'
   '.github/workflows/ci.yml tests/test_gate_integrity.py'
   '.github/workflows/gate-base.yml tests/test_gate_integrity.py'
   'profile/example.yaml tests/test_profiles.py'
@@ -47,6 +48,7 @@ table=(
   'shared/select-path.py tests/test_select_path.py'
   'shared/todo-enforce.py tests/test_todo_enforce.py'
   'skills.json tests/test_skills.py'
+  'skills/engineering-workflow/SKILL.md tests/test_no_deployment_path.py'
   'skills/engineering-workflow/scripts/pr-status.sh tests/test_pr_status.py'
   'skills/engineering-workflow/scripts/select-path.py tests/test_select_path.py'
   'skills/qa-verification/scripts/select-path.py tests/test_select_path.py'
@@ -77,9 +79,9 @@ Change set:
   and so are assume-unchanged and skip-worktree entries, which would hide one.
   Untracked files are not in the change set.
   An empty change set is reported explicitly, and the doc and vendor checks still run.
-  Stray files in the checkout can affect the doc lint, because it reads the working tree, so
-  run the check in a clean checkout when its result matters. When the index differs from HEAD
-  the checks run against a clean snapshot of HEAD instead, so a pass always covers HEAD.
+  The checks run in a throwaway worktree at HEAD, so only committed content is judged, and
+  the doc lint scans every eligible file in that tree, not only the change set: a stray
+  checked-out file can still fail it.
 
 Checks, in order, each continuing past a failure:
   tests/test_skills.py::test_no_em_dash
@@ -98,8 +100,8 @@ EOF
 
   a changed tests/test_*.py path maps to itself; every other path is unmapped: it prints
   "focused: no module for <path>" and runs the fallback module $fallback. A selected module
-  that is absent from the revision under test is named and skipped, but the two doc lints and
-  the vendored-copy check are required, so the run is a named startup error without them.
+  that is absent from HEAD is named and skipped, but the two doc lints and the vendored-copy
+  check are required, so the run is a named startup error without them.
 EOF
   cat <<'EOF'
 
@@ -113,7 +115,8 @@ Output: one line per check with its label and its elapsed seconds, one FAIL line
 check with its command and its output, and a total line.
 Exit status: 0 every check passed, 1 at least one check failed, 2 an error (an unresolvable
 base ref, invalid input, a check that cannot start, or HEAD moving during the run).
-Requires bash 4.4 or newer and GNU date; another runtime is one named error with exit 2.
+Requires bash 4.4 or newer, git, uv, and the GNU date and sort that +%s%N and -z need;
+another runtime is one named error with exit 2.
 
 A passing run is required for the exact HEAD being pushed: re-run it whenever HEAD changes.
 EOF
@@ -170,10 +173,6 @@ if [ "${BASH_VERSINFO[0]}" -lt 4 ] ||
   { [ "${BASH_VERSINFO[0]}" -eq 4 ] && [ "${BASH_VERSINFO[1]}" -lt 4 ]; }; then
   die "bash 4.4 or newer is required (found $BASH_VERSION)"
 fi
-stamp=$(date +%s%N) || die "date +%s%N failed"
-case $stamp in
-  '' | *[!0-9]*) die "GNU date with +%s%N is required for elapsed seconds" ;;
-esac
 
 root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd) || exit 2
 cd -- "$root" || exit 2
@@ -181,25 +180,32 @@ cd -- "$root" || exit 2
 unset PYTEST_ADDOPTS
 
 git rev-parse --git-dir > /dev/null 2>&1 || die "not in a git repository"
+toplevel=$(git rev-parse --show-toplevel) || die "not in a git work tree"
+[ "$toplevel" = "$root" ] ||
+  die "the git work tree is $toplevel, not this checkout $root (check GIT_DIR and GIT_WORK_TREE)"
 git rev-parse --verify --quiet --end-of-options "$base^{commit}" > /dev/null 2>&1 ||
   die "unresolvable base ref $base"
 head_sha=$(git rev-parse --verify HEAD) || die "HEAD is unresolvable"
 git merge-base "$base" "$head_sha" > /dev/null 2>&1 ||
   die "no merge base between $base and HEAD $head_sha"
-unstaged=$(git diff --name-only) || die "git diff --name-only failed"
+unstaged=$(git -c core.quotePath=false diff --name-only) || die "git diff --name-only failed"
 [ -z "$unstaged" ] ||
   die "unstaged modifications to tracked files (stage or revert them first): $(printf '%s' "$unstaged" | tr '\n' ' ')"
-hidden=$(git ls-files -v) || die "git ls-files -v failed"
+git diff --cached --quiet
+staged_status=$?
+case $staged_status in
+  0 | 1) ;;
+  *) die "git diff --cached --quiet failed" ;;
+esac
+hidden=$(git -c core.quotePath=false ls-files -v) || die "git ls-files -v failed"
 hidden_paths=$(printf '%s\n' "$hidden" | sed -n '/^[a-zS] /s/^..//p')
 [ -z "$hidden_paths" ] ||
   die "assume-unchanged or skip-worktree entries hide working-tree state (clear them first): $(printf '%s' "$hidden_paths" | tr '\n' ' ')"
 
 work=$(mktemp -d) || die "could not create a temporary directory"
-snapshot=
+snapshot=$work/head
 cleanup() {
-  if [ -n "$snapshot" ]; then
-    git worktree remove --force -- "$snapshot" > /dev/null 2>&1
-  fi
+  git worktree remove --force -- "$snapshot" > /dev/null 2>&1
   rm -rf -- "$work"
 }
 trap cleanup EXIT
@@ -215,20 +221,20 @@ cat -- "$work/staged" "$work/committed" | sort -z -u > "$work/changes" ||
   die "could not sort the change set"
 path_count=$(tr -cd '\0' < "$work/changes" | wc -c | tr -d ' ')
 
-modules=()
+: > "$work/modules"
 unmapped=()
 while IFS= read -r -d '' path; do
   if module=$(module_for "$path"); then
-    modules+=("$module")
+    printf '%s\0' "$module" >> "$work/modules"
   else
     unmapped+=("$path")
   fi
 done < "$work/changes"
-
-modules=$(printf '%s\n' "${modules[@]}" | sed '/^$/d' | sort -u)
 if [ ${#unmapped[@]} -gt 0 ]; then
-  modules=$(printf '%s\n%s\n' "$modules" "$fallback" | sed '/^$/d' | sort -u)
+  printf '%s\0' "$fallback" >> "$work/modules"
 fi
+sort -z -u "$work/modules" -o "$work/modulelist" || die "could not sort the selected modules"
+module_count=$(tr -cd '\0' < "$work/modulelist" | wc -c | tr -d ' ')
 
 if $list; then
   printf 'HEAD: %s\n' "$head_sha"
@@ -240,16 +246,15 @@ if $list; then
       printf '  %s\n' "$path"
     done < "$work/changes"
   fi
-  git diff --cached --quiet
-  [ $? -eq 1 ] &&
-    printf 'note: the index differs from HEAD %s; a run would check a clean snapshot of HEAD\n' "$head_sha"
+  [ "$staged_status" -eq 1 ] &&
+    printf 'note: the index differs from HEAD %s; a run checks a clean snapshot of HEAD\n' "$head_sha"
   printf 'selected modules:\n'
-  if [ -z "$modules" ]; then
+  if [ "$module_count" = 0 ]; then
     printf '  none\n'
   else
-    while IFS= read -r module; do
+    while IFS= read -r -d '' module; do
       printf '  %s\n' "$module"
-    done <<< "$modules"
+    done < "$work/modulelist"
   fi
   if [ ${#unmapped[@]} -gt 0 ]; then
     printf 'fallback: %s\n' "$fallback"
@@ -262,35 +267,24 @@ if $list; then
   exit 0
 fi
 
-run_start=$(date +%s%N)
-
-# The checks read the tree they run in, so a staged change would let a passing run cover content
-# that is not HEAD. With a staged change they run in a clean snapshot of HEAD instead, reusing the
-# checkout's environment when it has one so every staged run does not rebuild it.
-check_in=.
-git diff --cached --quiet
-staged_status=$?
-case $staged_status in
-  0) ;;
-  1)
-    snapshot=$work/head
-    git -c core.hooksPath=/dev/null worktree add --detach --quiet "$snapshot" "$head_sha" ||
-      die "could not create a clean snapshot worktree of HEAD $head_sha"
-    check_in=$snapshot
-    if [ -d "$root/.venv" ]; then
-      export UV_PROJECT_ENVIRONMENT="$root/.venv"
-    fi
-    printf 'note: the index differs from HEAD %s; the checks run against a clean snapshot of HEAD\n' "$head_sha"
-    ;;
-  *) die "git diff --cached --quiet failed" ;;
+run_start=$(date +%s%N) || die "date +%s%N failed"
+case $run_start in
+  '' | *[!0-9]*) die "GNU date with +%s%N is required for elapsed seconds" ;;
 esac
 
-pytest_ready=$(cd -- "$check_in" && uv run --locked pytest --version 2>&1) ||
+# Every check runs in a throwaway worktree at the captured HEAD, so the result covers that commit
+# and nothing that is staged, unstaged, untracked or edited in the caller's checkout mid-run.
+git -c core.hooksPath=/dev/null worktree add --detach --quiet "$snapshot" "$head_sha" ||
+  die "could not create a clean snapshot worktree of HEAD $head_sha"
+[ "$staged_status" -eq 1 ] &&
+  printf 'note: the index differs from HEAD %s; the checks run against a clean snapshot of HEAD\n' "$head_sha"
+
+pytest_ready=$(cd -- "$snapshot" && uv run --locked pytest --version 2>&1) ||
   die "cannot start the pytest checks: ${pytest_ready:-uv run --locked pytest failed}"
-[ -f "$check_in/tests/test_skills.py" ] ||
-  die "cannot start the doc lint checks: tests/test_skills.py is not in the revision under test"
-[ -f "$check_in/scripts/vendor_shared.py" ] ||
-  die "cannot start the vendor check: scripts/vendor_shared.py is not in the revision under test"
+[ -f "$snapshot/tests/test_skills.py" ] ||
+  die "cannot start the doc lint checks: tests/test_skills.py is not in HEAD $head_sha"
+[ -f "$snapshot/scripts/vendor_shared.py" ] ||
+  die "cannot start the vendor check: scripts/vendor_shared.py is not in HEAD $head_sha"
 
 printf 'HEAD: %s\n' "$head_sha"
 if [ "$path_count" = 0 ]; then
@@ -307,26 +301,33 @@ done
 
 checked=0
 failed=0
+elapsed_s=0
 
 elapsed() {
-  local ns=$(($(date +%s%N) - $1))
-  printf '%d.%01d' $((ns / 1000000000)) $(((ns % 1000000000) / 100000000))
+  local now
+  now=$(date +%s%N) || die "date +%s%N failed during the run"
+  case $now in
+    '' | *[!0-9]*) die "date +%s%N stopped returning a timestamp during the run" ;;
+  esac
+  local ns=$((now - $1))
+  printf -v elapsed_s '%d.%01d' $((ns / 1000000000)) $(((ns % 1000000000) / 100000000))
 }
 
 run_check() {
   local label=$1
   shift
   local start out code
-  start=$(date +%s%N)
-  out=$(cd -- "$check_in" && "$@" 2>&1)
+  start=$(date +%s%N) || die "date +%s%N failed during the run"
+  out=$(cd -- "$snapshot" && "$@" 2>&1)
   code=$?
   checked=$((checked + 1))
+  elapsed "$start"
   if [ "$code" -eq 0 ]; then
-    printf 'ok %s (%ss)\n' "$label" "$(elapsed "$start")"
+    printf 'ok %s (%ss)\n' "$label" "$elapsed_s"
     return
   fi
   failed=$((failed + 1))
-  printf 'FAIL %s (%ss)\n' "$label" "$(elapsed "$start")"
+  printf 'FAIL %s (%ss)\n' "$label" "$elapsed_s"
   printf '  command: %s\n' "$*"
   if [ -n "$out" ]; then
     printf '%s\n' "$out" | sed 's/^/  /'
@@ -338,19 +339,21 @@ run_check 'tests/test_skills.py::test_clean_and_neutral_use_the_canonical_phrase
   uv run --locked pytest -q tests/test_skills.py::test_clean_and_neutral_use_the_canonical_phrase
 run_check 'vendor: uv run --locked python scripts/vendor_shared.py --check' \
   uv run --locked python scripts/vendor_shared.py --check
-if [ -n "$modules" ]; then
-  while IFS= read -r module; do
-    if [ ! -f "$check_in/$module" ]; then
-      printf 'focused: module %s is not present in the revision under test; skipped\n' "$module"
+if [ "$module_count" -gt 0 ]; then
+  while IFS= read -r -d '' module; do
+    if [ ! -f "$snapshot/$module" ]; then
+      printf 'focused: module %s is not present in HEAD %s; skipped\n' "$module" "$head_sha"
       continue
     fi
     run_check "$module" uv run --locked pytest -q "$module"
-  done <<< "$modules"
+  done < "$work/modulelist"
 fi
 
-printf 'total: %d checks, %d failed, %ss\n' "$checked" "$failed" "$(elapsed "$run_start")"
-[ "$failed" -eq 0 ] || exit 1
 current=$(git rev-parse --verify HEAD) || die "HEAD became unresolvable during the run"
 [ "$current" = "$head_sha" ] ||
   die "HEAD moved from $head_sha to $current during the run; re-run the check for the new HEAD"
+
+elapsed "$run_start"
+printf 'total: %d checks, %d failed, %ss (HEAD %s)\n' "$checked" "$failed" "$elapsed_s" "$head_sha"
+[ "$failed" -eq 0 ] || exit 1
 exit 0

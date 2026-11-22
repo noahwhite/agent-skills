@@ -27,7 +27,7 @@ if [ "$1" = "run" ] && [ "$3" = "python" ]; then
   exec python3 "$@"
 fi
 if [ -n "${STUB_ADVANCE:-}" ] && [[ "$*" == *"--version"* ]]; then
-  git commit --allow-empty -qm "advanced during the run"
+  git -C "$STUB_REPO" commit --allow-empty -qm "advanced during the run"
 fi
 if [ -n "${STUB_START_FAIL:-}" ] && [[ "$*" == *"$STUB_START_FAIL"* ]]; then
   echo "error: Failed to spawn: pytest"
@@ -121,6 +121,7 @@ def run(repo: Path, tmp_path: Path):
     env = dict(ENV)
     env["PATH"] = f"{tmp_path / 'bin'}{os.pathsep}{env['PATH']}"
     env["STUB_LOG"] = str(log)
+    env["STUB_REPO"] = str(repo)
     env["HOME"] = str(tmp_path / "home")
 
     def call(*args: str, **extra: str) -> subprocess.CompletedProcess:
@@ -229,6 +230,16 @@ def test_unresolvable_base_names_the_ref(repo, run):
     assert result.returncode == 2
     assert "pre-push-check: error: unresolvable base ref nosuchref" in result.stderr
     assert "total: " not in result.stdout
+
+
+def test_a_base_with_no_merge_base_is_named(repo, run):
+    git(repo, "checkout", "-q", "--orphan", "orphan")
+    write(repo, "ORPHAN", "orphan\n")
+    commit(repo, "orphan root")
+    git(repo, "checkout", "-q", "main")
+    result = run("--list", "--base", "orphan")
+    assert result.returncode == 2
+    assert "no merge base between orphan and HEAD" in result.stderr
 
 
 def test_empty_change_set_runs_only_the_doc_and_vendor_checks(repo, run):
@@ -455,12 +466,29 @@ def test_inherited_pytest_addopts_is_scrubbed(repo, run):
     assert "addopts:" not in run.log.read_text()
 
 
+def test_a_stray_untracked_file_cannot_change_a_head_pass(repo, run):
+    write(repo, "zz-stray.md", "a stray line with an em dash \u2014 in it\n")
+    result = run("--base", "main", STUB_GREP="\u2014", STUB_GREP_FILE="zz-stray.md")
+    assert result.returncode == 0, result.stdout
+    assert "0 failed" in result.stdout.splitlines()[-1]
+
+
+def test_a_tracked_path_with_a_newline_is_selected_and_run(repo, run):
+    topic(repo)
+    write(repo, "tests/test_a\nb.py", "def test_odd():\n    assert False\n")
+    commit(repo, "add a path with a newline")
+    result = run("--base", "main")
+    assert result.returncode == 0, result.stderr
+    log = run.log.read_text()
+    assert "run --locked pytest -q tests/test_a\nb.py\n" in log
+
+
 def test_head_moving_during_the_run_is_a_named_error(repo, run):
     result = run("--base", "main", STUB_ADVANCE="1")
     assert result.returncode == 2
     assert "HEAD moved from" in result.stderr
     assert "re-run the check for the new HEAD" in result.stderr
-    invariants(result)
+    assert "total: " not in result.stdout
 
 
 def test_an_unsupported_date_is_a_named_error_and_help_still_works(repo, run):
@@ -468,7 +496,8 @@ def test_an_unsupported_date_is_a_named_error_and_help_still_works(repo, run):
     date.write_text(DATE_STUB, encoding="utf-8")
     date.chmod(date.stat().st_mode | stat.S_IEXEC)
     assert run("--help").returncode == 0
-    result = run("--list")
+    assert run("--list", "--base", "main").returncode == 0
+    result = run("--base", "main")
     assert result.returncode == 2
     assert "pre-push-check: error: GNU date with +%s%N is required" in result.stderr
 
@@ -517,10 +546,11 @@ def test_help_states_checks_change_set_table_fallback_and_exit_codes(repo, run):
     assert "2 an error" in text
     assert "origin/main" in text
     assert "first push" in text
-    assert "Stray files in the checkout can affect the doc lint" in text
+    assert "not only the change set" in text
+    assert "checked-out file can still fail it" in text
     assert "exact HEAD being pushed" in text
-    assert "clean snapshot of HEAD" in text
-    assert "bash 4.4 or newer and GNU date" in text
+    assert "throwaway worktree at HEAD" in text
+    assert "bash 4.4 or newer, git, uv, and the GNU date and sort" in text
     assert "assume-unchanged" in text
 
 
