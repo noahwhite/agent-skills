@@ -1,6 +1,6 @@
 # SKL-410 QA evidence, round 1
 
-- Story: [SKL-410](https://linear.app/officina-pub/issue/SKL-410/user-story-scope-every-brief-constraint-to-its-role-and-quote-it-from).
+- Story: SKL-410.
 - Path: `no-deployment`.
 - Target: [`6a3e21140b83b50a190f5658ef41670548ed405e`](https://github.com/noahwhite/agent-skills/commit/6a3e21140b83b50a190f5658ef41670548ed405e), confirmed on `origin/main`.
 - Implementation: [PR #400](https://github.com/noahwhite/agent-skills/pull/400), reviewed at `ee35eecf18ddbf4cf6484bcfcfc39e188b348285`.
