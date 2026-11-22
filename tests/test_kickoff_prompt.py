@@ -49,23 +49,22 @@ def flat(text: str) -> str:
     return " ".join(text.split())
 
 
-def _feed_inline(parser: "_TextExtractor", token) -> None:
-    """Feed one inline token to a shared extractor, so hidden state spans the document."""
-    for child in token.children or []:
+def _feed_children(parser: "_TextExtractor", children) -> None:
+    """Feed inline children to a shared extractor, following an image's alt text recursively."""
+    for child in children or []:
         if child.type in {"text", "code_inline"}:
             parser.handle_data(child.content)
         elif child.type in {"softbreak", "hardbreak"}:
             parser.handle_data(" ")
         elif child.type == "image":
-            parser.handle_data(
-                "".join(
-                    part.content
-                    for part in (child.children or [])
-                    if part.type in {"text", "code_inline"}
-                )
-            )
+            _feed_children(parser, child.children)
         elif child.type == "html_inline":
             parser.feed(child.content)
+
+
+def _feed_inline(parser: "_TextExtractor", token) -> None:
+    """Feed one inline token to a shared extractor, so hidden state spans the document."""
+    _feed_children(parser, token.children)
 
 
 def asset_document(
@@ -155,19 +154,21 @@ class _TextExtractor(HTMLParser):
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
         self.parts: list[str] = []
-        self.hidden_tags: list[str] = []
+        self.open_tags: list[tuple[str, bool]] = []
+
+    @property
+    def hidden(self) -> bool:
+        return any(hidden for _, hidden in self.open_tags)
 
     def _separate(self) -> None:
         if self.parts and not self.parts[-1].endswith(" "):
             self.parts.append(" ")
 
     def _start(self, tag: str, attrs) -> None:
-        hidden = tag in HIDDEN_TAGS or any(name == "hidden" for name, _ in attrs)
-        if hidden:
-            if tag not in VOID_TAGS:
-                self.hidden_tags.append(tag)
-            return
-        if self.hidden_tags:
+        hides = tag in HIDDEN_TAGS or any(name == "hidden" for name, _ in attrs)
+        if tag not in VOID_TAGS:
+            self.open_tags.append((tag, self.hidden or hides))
+        if self.hidden or (hides and tag in VOID_TAGS):
             return
         if tag == "img":
             alt = dict(attrs).get("alt")
@@ -180,28 +181,22 @@ class _TextExtractor(HTMLParser):
         self._start(tag, attrs)
 
     def handle_startendtag(self, tag: str, attrs) -> None:
+        # HTML ignores a self-closing slash on a non-void element, so it opens a subtree.
         self._start(tag, attrs)
 
     def handle_endtag(self, tag: str) -> None:
-        if self.hidden_tags and self.hidden_tags[-1] == tag:
-            self.hidden_tags.pop()
-            return
-        if self.hidden_tags:
+        for index in range(len(self.open_tags) - 1, -1, -1):
+            if self.open_tags[index][0] == tag:
+                del self.open_tags[index:]
+                break
+        if self.hidden:
             return
         if tag in BLOCK_TAGS:
             self._separate()
 
     def handle_data(self, data: str) -> None:
-        if not self.hidden_tags:
+        if not self.hidden:
             self.parts.append(data)
-
-
-def html_text(content: str) -> str:
-    """The text nodes of a raw HTML fragment as a reader sees them."""
-    parser = _TextExtractor()
-    parser.feed(content)
-    parser.close()
-    return "".join(parser.parts)
 
 
 def without_frontmatter(text: str) -> str:
@@ -236,7 +231,7 @@ def scan_document(text: str) -> tuple[list[tuple[int, str]], int]:
                 paragraphs.append((pending_line, "".join(parser.parts[start:])))
                 pending_line = None
         elif token.type in {"fence", "code_block"}:
-            if not parser.hidden_tags:
+            if not parser.hidden:
                 parser.handle_data(token.content)
         elif token.type == "html_block":
             parser.feed(token.content)
@@ -554,3 +549,24 @@ def test_the_placement_guard_rejects_a_pointer_outside_the_kickoff_section() -> 
     )
     problems = placement_problems(text)
     assert any("must sit under the kickoff-prompt heading" in problem for problem in problems), problems
+
+
+def test_the_placement_guard_keeps_an_outer_hidden_block_hidden_after_an_inner_one_closes() -> None:
+    hidden = (
+        f"<div hidden>\n\n<div>\n\n{POINTER_SENTENCE}\n\n</div>\n\n"
+        f"{POINTER_SENTENCE}\n\n</div>"
+    )
+    problems = placement_problems(skill_document(hidden))
+    assert any("exactly one paragraph of visible prose (found 0" in problem for problem in problems), problems
+
+
+def test_the_placement_guard_counts_a_pointer_in_an_image_alt_html_image() -> None:
+    duplicated = f'{POINTER_SENTENCE}\n\n![outer <img alt="{POINTER}">](outer.png)'
+    problems = placement_problems(skill_document(duplicated))
+    assert any("must appear once in visible text (found 2" in problem for problem in problems), problems
+
+
+def test_the_placement_guard_counts_a_pointer_in_a_nested_image_alt() -> None:
+    duplicated = f"{POINTER_SENTENCE}\n\n![outer ![inner {POINTER}](inner.png)](outer.png)"
+    problems = placement_problems(skill_document(duplicated))
+    assert any("must appear once in visible text (found 2" in problem for problem in problems), problems
