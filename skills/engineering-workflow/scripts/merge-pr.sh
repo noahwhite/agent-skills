@@ -26,6 +26,11 @@
 # A relative --approvals path is resolved against the directory the helper was invoked from.
 set -euo pipefail
 
+# The helper's own capture files. They start empty so the cleanup trap can never be pointed at a
+# path an inherited environment variable of the same name supplied.
+CHECKS_ERR_FILE=""
+GH_STDERR_FILE=""
+
 PROG="merge-pr.sh"
 # Regexes live in variables: bash 3.2, which macOS ships, parses `[[ x =~ $re ]]` but chokes on
 # some literal patterns, so every match below goes through one of these.
@@ -85,13 +90,18 @@ merged_unverified() {
 
 # Every value this helper prints that came from outside (a check name or state, a review URL, a
 # command's output) is folded to one line first, so no remote or proxy text can forge a second
-# `Result:` line in the transcript. Control characters other than tab, CR and LF cannot start a
-# line and are left alone.
+# `Result:` line in the transcript. CR, LF and TAB become spaces; every other C0 control, DEL, and
+# the Unicode line separators U+2028, U+2029 and U+0085 are removed, so a terminal escape cannot
+# repaint the summary either.
 one_line() {
   local value="$1"
   value="${value//$'\r'/ }"
   value="${value//$'\n'/ }"
   value="${value//$'\t'/ }"
+  value="${value//$'\342\200\250'/ }" # U+2028 line separator
+  value="${value//$'\342\200\251'/ }" # U+2029 paragraph separator
+  value="${value//$'\302\205'/ }"     # U+0085 next line
+  value="$(printf '%s' "$value" | tr -d '\000-\037\177')"
   printf '%s' "$value"
 }
 
@@ -356,6 +366,11 @@ record_author = review.get("record_author")
 if record_author is not None and not isinstance(record_author, str):
     print(f"merge-pr.sh: review.record_author must be a string in {path}", file=sys.stderr)
     sys.exit(13)
+if isinstance(record_author, str) and not record_author:
+    # An explicitly empty value is not the same as an absent one: the schema's login pattern cannot
+    # match "", and silently falling back to the ambient account would merge under another identity.
+    print(f"merge-pr.sh: review.record_author is empty in {path}", file=sys.stderr)
+    sys.exit(13)
 if record_author:
     import re
 
@@ -395,7 +410,7 @@ GH_STDERR_FILE="$(mktemp)" || {
   exit 10
 }
 trap 'rm -f -- "${GH_STDERR_FILE:-}" "${CHECKS_ERR_FILE:-}"' EXIT
-PR_JSON="$(gh_quiet pr view "$NUMBER" --json number,url,state,isDraft,mergeable,mergeStateStatus,headRefOid,mergeCommit,mergedAt)" \
+PR_JSON="$(gh_quiet pr view "$NUMBER" --json number,url,state,isDraft,mergeable,mergeStateStatus,headRefOid,baseRefName,mergeCommit,mergedAt)" \
   || refuse 12 "Could not read PR #$NUMBER with gh pr view: $(gh_stderr_detail)"
 json_field() { printf '%s' "$1" | jq -r "$2"; }
 PR_URL="$(json_field "$PR_JSON" .url)" \
@@ -412,6 +427,9 @@ IS_DRAFT="$(json_field "$PR_JSON" .isDraft)" \
   || refuse 12 "Could not read PR #$NUMBER with gh pr view: the response was not readable JSON"
 PR_NUMBER="$(json_field "$PR_JSON" .number)" \
   || refuse 12 "Could not read PR #$NUMBER with gh pr view: the response was not readable JSON"
+BASE_REF="$(json_field "$PR_JSON" .baseRefName)" \
+  || refuse 12 "Could not read PR #$NUMBER with gh pr view: the response was not readable JSON"
+[ -n "$BASE_REF" ] || refuse 12 "PR #$NUMBER carries no base branch name"
 [ "$PR_NUMBER" = "$NUMBER" ] || refuse 12 "gh pr view returned a different PR number than #$NUMBER"
 if [[ ! "$PR_URL" =~ $PR_URL_RE ]]; then
   refuse 12 "Could not derive owner/repo and number from the PR URL ($PR_URL)"
@@ -475,6 +493,21 @@ if [ -n "$REVIEWS_JSON" ]; then
   if [ "$UNUSABLE_COUNT" != 0 ]; then
     refuse 15 "$UNUSABLE_COUNT matching review-of-record marker(s) on PR #$NUMBER carry no usable submitted_at timestamp, so the latest matching review cannot be ordered"
   fi
+  # Two reviews tied at the latest submitted_at cannot be ordered; refusing is the only fail-closed
+  # reading of "select the greatest submitted_at".
+  TIE_COUNT="$(
+    printf '%s\n' "$REVIEWS_JSON" | jq -s -r --arg author "$AUTHOR" '
+      [ .[]
+        | select(.state == "COMMENTED")
+        | select((.body // "") | startswith("Review of record"))
+        | select(((.author // "") | ascii_downcase) == ($author | ascii_downcase)) ]
+      | if length == 0 then 0
+        else (.[-1].submitted_at as $latest | map(select(.submitted_at == $latest)) | length) end
+    '
+  )" || refuse 15 "Could not order the reviews of record of PR #$NUMBER"
+  if [ "$TIE_COUNT" != 0 ] && [ "$TIE_COUNT" != 1 ]; then
+    refuse 15 "$TIE_COUNT matching review-of-record marker(s) on PR #$NUMBER share the latest submitted_at, so the review of record cannot be ordered"
+  fi
   SELECTED="$(
     printf '%s\n' "$REVIEWS_JSON" | jq -s --arg author "$AUTHOR" '
       [ .[]
@@ -533,7 +566,7 @@ esac
 EXCLUDED_MARKERS="$(
   printf '%s\n' "$REVIEWS_JSON" | jq -s -r --arg sel "$EXCLUDE_KEY" '
     [ .[] | select((.body // "") | startswith("Review of record")) | select(((.id // .html_url // "") | tostring) != $sel) ]
-    | .[] | "Excluded marker review: \((.author // "-") | tostring | gsub("[\\r\\n\\t]"; " ")) \((.html_url // "-") | tostring | gsub("[\\r\\n\\t]"; " ")) \((.commit_id // "-") | tostring | gsub("[\\r\\n\\t]"; " "))"
+    | .[] | "Excluded marker review: \((.author // "-") | tostring | gsub("[\u0001-\u001f\u007f\u2028\u2029\u0085]"; " ")) \((.html_url // "-") | tostring | gsub("[\u0001-\u001f\u007f\u2028\u2029\u0085]"; " ")) \((.commit_id // "-") | tostring | gsub("[\u0001-\u001f\u007f\u2028\u2029\u0085]"; " "))"
   '
 )" || refuse 15 "Could not list the excluded marker reviews of PR #$NUMBER"
 
@@ -564,6 +597,116 @@ if [ "$REVIEWED_FIRSTLINE_SHA" != "$HEAD" ]; then
   refuse 15 "the review of record ($REVIEW_URL) names $REVIEWED_FIRSTLINE_SHA on its first line, but the live head of PR #$NUMBER is $HEAD"
 fi
 
+# The manager-approval handshake: once the brief assigns merge approval to a manager, the merge
+# runs only after a matching APPROVE for the live head is recorded.
+if [ -n "$APPROVALS" ]; then
+  [ -f "$APPROVALS" ] || refuse 18 "the approvals file $APPROVALS does not exist"
+  # references/merge-approval.md: a record is one complete newline-terminated line; a reader that
+  # sees a trailing partial line ignores it, the first decision for the (request id, head) pair in
+  # file order wins, and a conflicting later decision is reported.
+  trim_field() {
+    local value="$1"
+    value="${value#"${value%%[![:space:]]*}"}"
+    value="${value%"${value##*[![:space:]]}"}"
+    printf '%s' "$value"
+  }
+  is_utc_timestamp() {
+    # Real calendar validation in pure bash (no GNU date), so the helper stays portable: the shape
+    # alone is not enough, because 2026-99-99T99:99:99Z matches it.
+    local value="$1" year month day hour minute second days
+    [[ "$value" =~ $UTC_TIMESTAMP_RE ]] || return 1
+    year=$((10#${BASH_REMATCH[1]}))
+    month=$((10#${BASH_REMATCH[2]}))
+    day=$((10#${BASH_REMATCH[3]}))
+    hour=$((10#${BASH_REMATCH[4]}))
+    minute=$((10#${BASH_REMATCH[5]}))
+    second=$((10#${BASH_REMATCH[6]}))
+    [ "$month" -ge 1 ] && [ "$month" -le 12 ] || return 1
+    [ "$hour" -le 23 ] && [ "$minute" -le 59 ] && [ "$second" -le 59 ] || return 1
+    case "$month" in
+      1 | 3 | 5 | 7 | 8 | 10 | 12) days=31 ;;
+      4 | 6 | 9 | 11) days=30 ;;
+      2)
+        if { [ $((year % 4)) -eq 0 ] && [ $((year % 100)) -ne 0 ]; } || [ $((year % 400)) -eq 0 ]; then
+          days=29
+        else
+          days=28
+        fi
+        ;;
+      *) return 1 ;;
+    esac
+    [ "$day" -ge 1 ] && [ "$day" -le "$days" ]
+  }
+  # references/merge-approval.md: the engineer asks with a REQUEST for the request ID, the PR URL,
+  # the full head SHA, the review-of-record URL and a green CI state, and only then can a manager
+  # decision for that same ID and head authorize the merge. A decision whose head differs from the
+  # request's is invalid, and a decision with no valid request before it approves nothing.
+  REQUEST_SEEN=0
+  MALFORMED=0
+  DECISION=""
+  CONFLICT=""
+  while IFS= read -r LINE; do
+    IFS='|' read -r -a FIELD <<<"$LINE"
+    [ "${#FIELD[@]}" -ge 3 ] || continue
+    VERDICT="$(trim_field "${FIELD[0]}")"
+    RECORD_ID="$(trim_field "${FIELD[1]}")"
+    [ "$RECORD_ID" = "$REQUEST_ID" ] || continue
+    case "$VERDICT" in
+      REQUEST)
+        [ "${#FIELD[@]}" -eq 7 ] || continue
+        [ "$(trim_field "${FIELD[2]}")" = "$PR_URL" ] || continue
+        [ "$(trim_field "${FIELD[3]}")" = "$HEAD" ] || continue
+        [ "$(trim_field "${FIELD[4]}")" = "$REVIEW_URL" ] || continue
+        [ "$(trim_field "${FIELD[5]}")" = "green" ] || continue
+        is_utc_timestamp "$(trim_field "${FIELD[6]}")" || continue
+        REQUEST_SEEN=1
+        continue
+        ;;
+      APPROVE)
+        MALFORMED=1
+        [ "$REQUEST_SEEN" = 1 ] || continue
+        [ "${#FIELD[@]}" -eq 5 ] || continue
+        [ "$(trim_field "${FIELD[2]}")" = "$HEAD" ] || continue
+        [ -n "$(trim_field "${FIELD[3]}")" ] || continue
+        is_utc_timestamp "$(trim_field "${FIELD[4]}")" || continue
+        CURRENT="APPROVE"
+        ;;
+      BOUNCE)
+        MALFORMED=1
+        [ "$REQUEST_SEEN" = 1 ] || continue
+        [ "${#FIELD[@]}" -eq 6 ] || continue
+        [ "$(trim_field "${FIELD[2]}")" = "$HEAD" ] || continue
+        [ -n "$(trim_field "${FIELD[3]}")" ] || continue
+        [ -n "$(trim_field "${FIELD[4]}")" ] || continue
+        is_utc_timestamp "$(trim_field "${FIELD[5]}")" || continue
+        CURRENT="BOUNCE $(trim_field "${FIELD[4]}")"
+        ;;
+      *) continue ;;
+    esac
+    if [ -z "$DECISION" ]; then
+      DECISION="$CURRENT"
+    elif [ "$CURRENT" != "$DECISION" ]; then
+      CONFLICT="first ${DECISION%% *}, later ${CURRENT%% *}"
+    fi
+  done <"$APPROVALS"
+  if [ "$MALFORMED" = 1 ]; then
+    printf 'Warning: a malformed decision record for %s at head %s was ignored; under references/merge-approval.md it is not a decision\n' \
+      "$REQUEST_ID" "$HEAD" >&2
+  fi
+  if [ -n "$CONFLICT" ]; then
+    printf 'Warning: conflicting decisions for %s at head %s in %s: %s; the first decision stands\n' \
+      "$REQUEST_ID" "$HEAD" "$APPROVALS" "$CONFLICT" >&2
+  fi
+  if [ "$REQUEST_SEEN" != 1 ]; then
+    refuse 18 "no valid REQUEST for $REQUEST_ID at head $HEAD in file $APPROVALS: the request must name this PR, this head, the selected review of record and a green CI state before any decision can authorize a merge"
+  fi
+  case "$DECISION" in
+    APPROVE) ;;
+    BOUNCE*) refuse 18 "the manager bounced $REQUEST_ID at $HEAD: ${DECISION#BOUNCE }" ;;
+    *) refuse 18 "no APPROVE recorded for $REQUEST_ID at head $HEAD in $APPROVALS" ;;
+  esac
+fi
+
 # A merge needs an open PR, no draft, a mergeable branch and no blocking merge state.
 if [ "$PR_STATE" != "OPEN" ]; then
   refuse 16 "PR #$NUMBER is in state $PR_STATE, not OPEN"
@@ -584,6 +727,35 @@ CHECKS_OUT=""
 CHECKS_ERR=""
 CHECKS_STATUS=0
 CHECKS_NONE=0
+
+# "No checks reported on the branch" is not proof that nothing is required: a required check that
+# has not reported yet is not green (AC4). Confirm against the base branch's own configuration
+# before treating an empty head as nothing to be non-green. Prints yes or no; any failure to read
+# the configuration returns non-zero, and the caller refuses rather than guessing.
+base_requires_checks() {
+  local rules protection
+  rules="$(gh_quiet api "repos/$SLUG/rules/branches/$BASE_REF")" || return 2
+  if printf '%s' "$rules" | jq -e '[.[] | select(.type == "required_status_checks")] | length > 0' >/dev/null 2>&1; then
+    printf 'yes'
+    return 0
+  fi
+  if protection="$(gh_quiet api "repos/$SLUG/branches/$BASE_REF/protection/required_status_checks")"; then
+    if printf '%s' "$protection" | jq -e '(((.contexts // []) | length) + ((.checks // []) | length)) > 0' >/dev/null 2>&1; then
+      printf 'yes'
+    else
+      printf 'no'
+    fi
+    return 0
+  fi
+  case "$(gh_stderr_detail)" in
+    *404* | *"Not Found"*)
+      printf 'no'
+      return 0
+      ;;
+  esac
+  return 2
+}
+
 CHECKS_ERR_FILE="$(mktemp)" || refuse 14 "could not create a file for the required-checks stderr of PR #$NUMBER"
 CHECKS_OUT="$(gh pr checks "$NUMBER" --required --json name,state 2>"$CHECKS_ERR_FILE")" || CHECKS_STATUS=$?
 CHECKS_ERR="$(cat -- "$CHECKS_ERR_FILE")"
@@ -606,7 +778,17 @@ elif [ "$CHECKS_STATUS" = 1 ]; then
     refuse 14 "Could not read the required checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS): $(gh_detail "$CHECKS_ERR$CHECKS_OUT")"
   fi
   case "$CHECKS_ERR" in
-    "no required checks reported on the '"*"' branch" | "no checks reported on the '"*"' branch")
+    "no required checks reported on the '"*"' branch")
+      # The base configures no required checks at all, so nothing can be non-green.
+      CHECKS_JSON='[]'
+      CHECKS_NONE=1
+      ;;
+    "no checks reported on the '"*"' branch")
+      BASE_REQUIRED="$(base_requires_checks)" \
+        || refuse 14 "no checks have reported on head $HEAD and the required-check configuration of $BASE_REF could not be read, so the head cannot be judged green"
+      if [ "$BASE_REQUIRED" = "yes" ]; then
+        refuse 14 "no checks have reported on head $HEAD while $BASE_REF requires required checks; a required check awaiting its first report is not green"
+      fi
       CHECKS_JSON='[]'
       CHECKS_NONE=1
       ;;
@@ -623,9 +805,9 @@ if [ "$CHECKS_COUNT" = "0" ]; then
   printf 'Check: none\n'
 else
   # @tsv escapes tab, CR and LF inside a check name, so a remote-controlled name can never print a
-  # second line, let alone a forged `Result:` one.
+  # second line; one_line then removes the remaining controls and the Unicode separators.
   while IFS=$'\t' read -r CHECK_NAME CHECK_STATE; do
-    printf 'Check: %s=%s\n' "$CHECK_NAME" "$CHECK_STATE"
+    printf 'Check: %s=%s\n' "$(one_line "$CHECK_NAME")" "$(one_line "$CHECK_STATE")"
   done < <(printf '%s' "$CHECKS_JSON" | jq -r '.[] | [.name, .state] | @tsv')
 fi
 # Only a clean read can authorize a merge; exit 8 still carries the states, and they are reported in
@@ -673,109 +855,6 @@ case "$RECHECK_MERGE_STATE" in
   *) refuse 16 "PR #$NUMBER is in merge state $RECHECK_MERGE_STATE after the checks read" ;;
 esac
 
-# The manager-approval handshake: once the brief assigns merge approval to a manager, the merge
-# runs only after a matching APPROVE for the live head is recorded.
-if [ -n "$APPROVALS" ]; then
-  [ -f "$APPROVALS" ] || refuse 18 "the approvals file $APPROVALS does not exist"
-  # references/merge-approval.md: a record is one complete newline-terminated line; a reader that
-  # sees a trailing partial line ignores it, the first decision for the (request id, head) pair in
-  # file order wins, and a conflicting later decision is reported.
-  trim_field() {
-    local value="$1"
-    value="${value#"${value%%[![:space:]]*}"}"
-    value="${value%"${value##*[![:space:]]}"}"
-    printf '%s' "$value"
-  }
-  is_utc_timestamp() {
-    # Real calendar validation in pure bash (no GNU date), so the helper stays portable: the shape
-    # alone is not enough, because 2026-99-99T99:99:99Z matches it.
-    local value="$1" year month day hour minute second days
-    [[ "$value" =~ $UTC_TIMESTAMP_RE ]] || return 1
-    year=$((10#${BASH_REMATCH[1]}))
-    month=$((10#${BASH_REMATCH[2]}))
-    day=$((10#${BASH_REMATCH[3]}))
-    hour=$((10#${BASH_REMATCH[4]}))
-    minute=$((10#${BASH_REMATCH[5]}))
-    second=$((10#${BASH_REMATCH[6]}))
-    [ "$month" -ge 1 ] && [ "$month" -le 12 ] || return 1
-    [ "$hour" -le 23 ] && [ "$minute" -le 59 ] && [ "$second" -le 59 ] || return 1
-    case "$month" in
-      1 | 3 | 5 | 7 | 8 | 10 | 12) days=31 ;;
-      4 | 6 | 9 | 11) days=30 ;;
-      2)
-        if { [ $((year % 4)) -eq 0 ] && [ $((year % 100)) -ne 0 ]; } || [ $((year % 400)) -eq 0 ]; then
-          days=29
-        else
-          days=28
-        fi
-        ;;
-      *) return 1 ;;
-    esac
-    [ "$day" -ge 1 ] && [ "$day" -le "$days" ]
-  }
-  # references/merge-approval.md: the engineer asks with a REQUEST for the request ID, the PR URL,
-  # the full head SHA, the review-of-record URL and a green CI state, and only then can a manager
-  # decision for that same ID and head authorize the merge. A decision whose head differs from the
-  # request's is invalid, and a decision with no valid request before it approves nothing.
-  REQUEST_SEEN=0
-  DECISION=""
-  CONFLICT=""
-  while IFS= read -r LINE; do
-    IFS='|' read -r -a FIELD <<<"$LINE"
-    [ "${#FIELD[@]}" -ge 3 ] || continue
-    VERDICT="$(trim_field "${FIELD[0]}")"
-    RECORD_ID="$(trim_field "${FIELD[1]}")"
-    [ "$RECORD_ID" = "$REQUEST_ID" ] || continue
-    case "$VERDICT" in
-      REQUEST)
-        [ "${#FIELD[@]}" -eq 7 ] || continue
-        [ "$(trim_field "${FIELD[2]}")" = "$PR_URL" ] || continue
-        [ "$(trim_field "${FIELD[3]}")" = "$HEAD" ] || continue
-        [ "$(trim_field "${FIELD[4]}")" = "$REVIEW_URL" ] || continue
-        [ "$(trim_field "${FIELD[5]}")" = "green" ] || continue
-        is_utc_timestamp "$(trim_field "${FIELD[6]}")" || continue
-        REQUEST_SEEN=1
-        continue
-        ;;
-      APPROVE)
-        [ "$REQUEST_SEEN" = 1 ] || continue
-        [ "${#FIELD[@]}" -eq 5 ] || continue
-        [ "$(trim_field "${FIELD[2]}")" = "$HEAD" ] || continue
-        [ -n "$(trim_field "${FIELD[3]}")" ] || continue
-        is_utc_timestamp "$(trim_field "${FIELD[4]}")" || continue
-        CURRENT="APPROVE"
-        ;;
-      BOUNCE)
-        [ "$REQUEST_SEEN" = 1 ] || continue
-        [ "${#FIELD[@]}" -eq 6 ] || continue
-        [ "$(trim_field "${FIELD[2]}")" = "$HEAD" ] || continue
-        [ -n "$(trim_field "${FIELD[3]}")" ] || continue
-        [ -n "$(trim_field "${FIELD[4]}")" ] || continue
-        is_utc_timestamp "$(trim_field "${FIELD[5]}")" || continue
-        CURRENT="BOUNCE $(trim_field "${FIELD[4]}")"
-        ;;
-      *) continue ;;
-    esac
-    if [ -z "$DECISION" ]; then
-      DECISION="$CURRENT"
-    elif [ "$CURRENT" != "$DECISION" ]; then
-      CONFLICT="first ${DECISION%% *}, later ${CURRENT%% *}"
-    fi
-  done <"$APPROVALS"
-  if [ -n "$CONFLICT" ]; then
-    printf 'Warning: conflicting decisions for %s at head %s in %s: %s; the first decision stands\n' \
-      "$REQUEST_ID" "$HEAD" "$APPROVALS" "$CONFLICT" >&2
-  fi
-  if [ "$REQUEST_SEEN" != 1 ]; then
-    refuse 18 "no valid REQUEST for $REQUEST_ID at head $HEAD in file $APPROVALS: the request must name this PR, this head, the selected review of record and a green CI state before any decision can authorize a merge"
-  fi
-  case "$DECISION" in
-    APPROVE) ;;
-    BOUNCE*) refuse 18 "the manager bounced $REQUEST_ID at $HEAD: ${DECISION#BOUNCE }" ;;
-    *) refuse 18 "no APPROVE recorded for $REQUEST_ID at head $HEAD in $APPROVALS" ;;
-  esac
-fi
-
 # The human merge owner performs the merge itself.
 if [ "$MERGE_OWNER" = "human" ]; then
   printf 'Result: merge-ready; profile.review.merge_owner is human, so no merge command was run\n'
@@ -801,6 +880,8 @@ esac
 MERGE_OUT=""
 MERGE_STATUS=0
 MERGE_OUT="$(gh_quiet pr merge "$NUMBER" --match-head-commit "$HEAD" "$METHOD_FLAG")" || MERGE_STATUS=$?
+# Keep the merge attempt's own diagnosis before the confirmation read overwrites the capture file.
+MERGE_STDERR_DETAIL="$(gh_stderr_detail)"
 
 # Success only once GitHub reports the PR merged, at the reviewed head; a queued merge is not a
 # merge. The read runs after every attempt, so a client error that arrives after GitHub accepted the
@@ -814,7 +895,7 @@ CONFIRM_STATE="$(printf '%s' "$CONFIRM_JSON" | jq -r '.state // empty' 2>/dev/nu
 CONFIRM_HEAD="$(printf '%s' "$CONFIRM_JSON" | jq -r '.headRefOid // empty' 2>/dev/null)" || CONFIRM_HEAD=""
 MERGE_COMMIT="$(printf '%s' "$CONFIRM_JSON" | jq -r '.mergeCommit.oid // empty' 2>/dev/null)" || MERGE_COMMIT=""
 if [ "$MERGE_STATUS" != 0 ] && [ "$CONFIRM_STATE" != "MERGED" ]; then
-  refuse 17 "gh pr merge $NUMBER --match-head-commit $HEAD $METHOD_FLAG failed (exit $MERGE_STATUS): $(gh_detail "$MERGE_OUT") $(gh_stderr_detail)"
+  refuse 17 "gh pr merge $NUMBER --match-head-commit $HEAD $METHOD_FLAG failed (exit $MERGE_STATUS): $(gh_detail "$MERGE_OUT") ${MERGE_STDERR_DETAIL:-}"
 fi
 [ "$CONFIRM_STATE" = "MERGED" ] \
   || unconfirmed 17 "the merge was submitted, but PR #$NUMBER is in state $CONFIRM_STATE, not MERGED yet (a queued merge is not a success; re-read the PR before any retry)"

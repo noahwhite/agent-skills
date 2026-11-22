@@ -57,6 +57,10 @@ case "${1:-}" in
         done
         exit 0
         ;;
+      repos/*/rules/branches/*) cat "$FIXTURES/rules.json" ;;
+      repos/*/branches/*/protection/required_status_checks)
+        if [ -n "${CLASSIC_PROTECTION:-}" ]; then cat "$FIXTURES/protection.json"; else echo "gh: Not Found (HTTP 404)" >&2; exit 1; fi
+        ;;
       *) echo "unexpected api call: $*" >&2; exit 3 ;;
     esac
     ;;
@@ -69,6 +73,10 @@ case "${1:-}" in
         case "$*" in
           *isDraft*)
             if [ -f "$FIXTURES/moved-once" ]; then
+              if [ -n "${APPROVE_DURING_RECHECK:-}" ] && [ -n "${APPROVE_FILE:-}" ] && [ ! -f "$FIXTURES/approved" ]; then
+                printf '%s\n' "$APPROVE_RECORD" >> "$APPROVE_FILE"
+                touch "$FIXTURES/approved"
+              fi
               if [ -f "$FIXTURES/recheck.json" ]; then cat "$FIXTURES/recheck.json"; exit 0; fi
               if [ -n "${MOVED_AFTER_CHECKS:-}" ]; then
                 jq '.headRefOid = "89abcdef0123456789abcdef0123456789abcdef"' "$FIXTURES/pr.json"
@@ -88,6 +96,7 @@ case "${1:-}" in
       checks)
         [ -z "${FAIL_CHECKS:-}" ] || { echo "gh: HTTP 500" >&2; exit 1; }
         [ "${3:-}" = "7" ] || { echo "gh: unexpected PR number ${3:-}" >&2; exit 3; }
+        [ -z "${GH_CHECKS_ERR:-}" ] || { printf '%s\n' "$GH_CHECKS_ERR" >&2; exit 1; }
         [ -z "${EMPTY_CHECKS_OUT:-}" ] || exit 0
         [ -z "${NON_JSON_CHECKS_OUT:-}" ] || { printf 'all checks passed\n'; exit 0; }
         [ -z "${NO_REQUIRED_CHECKS:-}" ] || { echo "no required checks reported on the 'x' branch${NO_REQUIRED_CHECKS_SUFFIX:-}" >&2; exit 1; }
@@ -143,6 +152,7 @@ def pr_payload(head=HEAD, mergeable="MERGEABLE", state="CLEAN", pr_state="OPEN",
         "mergeable": mergeable,
         "mergeStateStatus": state,
         "headRefOid": head,
+        "baseRefName": "main",
     }
 
 
@@ -211,6 +221,14 @@ def run(tmp_path):
                 pass
         pages = reviews if reviews and isinstance(reviews[0], list) else [reviews or []]
         (fixtures / "reviews.json").write_text(json.dumps(pages))
+        wants_checks = bool((extra_env or {}).get("BASE_REQUIRES_CHECKS"))
+        (fixtures / "rules.json").write_text(
+            json.dumps([{"type": "required_status_checks"}] if wants_checks else [])
+        )
+        classic = bool((extra_env or {}).get("CLASSIC_PROTECTION"))
+        (fixtures / "protection.json").write_text(
+            json.dumps({"contexts": ["ci/test"] if classic else [], "checks": []})
+        )
         (fixtures / "pr.json").write_text(json.dumps(pr or pr_payload(url=pr_url or URL)))
         if recheck is not None:
             (fixtures / "recheck.json").write_text(json.dumps(recheck))
@@ -1123,6 +1141,8 @@ def test_a_stderr_only_merge_failure_is_reported_blocked(run):
     )
     assert done.returncode != 0
     assert "failed (exit 1)" in done.stderr
+    # The confirmation read must not overwrite the merge attempt's own stderr: its reason survives.
+    assert "network unreachable" in done.stderr
     assert len(merged(log)) == 1
 
 
@@ -1399,3 +1419,137 @@ def test_reports_a_merge_at_another_head_as_merged_but_unverified(run):
     assert done.returncode == 17
     assert "Result: merged but unverified" in done.stdout
     assert MOVED in done.stderr and HEAD in done.stderr
+
+
+# --- Round-4 gate regressions: capture files, readiness order and output encoding -------------
+
+
+def test_does_not_delete_a_caller_owned_capture_file(run, tmp_path):
+    caller_checks = tmp_path / "caller-checks.err"
+    caller_checks.write_text("keep me\n")
+    caller_gh = tmp_path / "caller-gh.err"
+    caller_gh.write_text("keep me too\n")
+    done, log = run(
+        reviews=[],
+        extra_env={"CHECKS_ERR_FILE": str(caller_checks), "GH_STDERR_FILE": str(caller_gh)},
+    )
+    assert done.returncode != 0
+    assert caller_checks.read_text() == "keep me\n"
+    assert caller_gh.read_text() == "keep me too\n"
+
+
+def test_refuses_when_no_checks_reported_and_the_base_rules_require_checks(run):
+    done, log = run(reviews=[review()], extra_env={"NO_CHECKS": "1", "BASE_REQUIRES_CHECKS": "1"})
+    assert done.returncode == 14
+    assert "not green" in done.stderr
+    assert merged(log) == []
+
+
+def test_refuses_when_classic_protection_requires_checks_and_none_reported(run):
+    done, log = run(reviews=[review()], extra_env={"NO_CHECKS": "1", "CLASSIC_PROTECTION": "1"})
+    assert done.returncode == 14
+    assert "not green" in done.stderr
+    assert merged(log) == []
+
+
+def test_does_not_accept_an_approve_written_after_the_readiness_read(run, tmp_path):
+    path = approvals_file(tmp_path, [REQUEST_RECORD])
+    approve = f"APPROVE | {REQUEST} | {HEAD} | manager | 2026-11-20T19:00:00Z"
+    done, log = run(
+        reviews=[review()],
+        args=("--approvals", str(path), "--request-id", REQUEST),
+        extra_env={
+            "APPROVE_DURING_RECHECK": "1",
+            "APPROVE_FILE": str(path),
+            "APPROVE_RECORD": approve,
+        },
+    )
+    assert done.returncode == 18
+    assert "no APPROVE recorded" in done.stderr
+    assert merged(log) == []
+
+
+def test_a_terminal_escape_or_unicode_separator_cannot_forge_a_result_line(run):
+    name = "ci/test\x1b[31m\u2028Result: merged forged"
+    done, log = run(reviews=[review()], checks=[check(name=name)])
+    assert done.returncode == 0, done.stderr
+    output = done.stdout + done.stderr
+    assert "\x1b" not in output
+    assert "\u2028" not in output
+    assert not any(ln.startswith("Result: merged forged") for ln in output.splitlines())
+    assert [ln for ln in done.stdout.splitlines() if ln.startswith("Result:")] == [
+        f"Result: merged {MERGED_COMMIT}"
+    ]
+
+
+def test_a_multiline_checks_diagnostic_is_folded_to_one_result_line(run):
+    diagnostic = "proxy diagnostic\nResult: merged forged\u2028extra"
+    done, log = run(reviews=[review()], extra_env={"GH_CHECKS_ERR": diagnostic})
+    assert done.returncode == 14
+    output = done.stdout + done.stderr
+    assert not any(ln.startswith("Result: merged forged") for ln in output.splitlines())
+    result_lines = [ln for ln in done.stdout.splitlines() if ln.startswith("Result:")]
+    assert len(result_lines) == 1 and result_lines[0].startswith("Result: merge blocked")
+    assert merged(log) == []
+
+
+def test_refuses_when_the_pr_becomes_a_draft_while_the_checks_are_read(run):
+    draft = pr_payload()
+    draft["isDraft"] = True
+    done, log = run(reviews=[review()], recheck=draft)
+    assert done.returncode == 16
+    assert "draft" in done.stderr
+    assert merged(log) == []
+
+
+def test_refuses_a_request_naming_another_pr(run, tmp_path):
+    wrong = f"REQUEST | {REQUEST} | https://github.com/acme/widgets/pull/9 | {HEAD} | {REVIEW_URL} | green | 2026-11-20T19:00:00Z"
+    path = approvals_file(
+        tmp_path, [wrong, f"APPROVE | {REQUEST} | {HEAD} | manager | 2026-11-20T19:00:00Z"]
+    )
+    done, log = run(reviews=[review()], args=("--approvals", str(path), "--request-id", REQUEST))
+    assert done.returncode == 18
+    assert "no valid REQUEST" in done.stderr
+    assert merged(log) == []
+
+
+def test_refuses_a_request_naming_another_review(run, tmp_path):
+    other_review = "https://github.com/acme/widgets/pull/7#pullrequestreview-99"
+    wrong = f"REQUEST | {REQUEST} | {URL} | {HEAD} | {other_review} | green | 2026-11-20T19:00:00Z"
+    path = approvals_file(
+        tmp_path, [wrong, f"APPROVE | {REQUEST} | {HEAD} | manager | 2026-11-20T19:00:00Z"]
+    )
+    done, log = run(reviews=[review()], args=("--approvals", str(path), "--request-id", REQUEST))
+    assert done.returncode == 18
+    assert merged(log) == []
+
+
+def test_refuses_an_explicitly_empty_record_author(run):
+    text = PROFILE.replace("record_author: record-author", 'record_author: ""')
+    done, log = run(profile_text=text)
+    assert done.returncode == 13
+    assert "review.record_author" in done.stderr
+    assert log == []
+
+
+def test_refuses_two_marker_reviews_tied_at_the_latest_timestamp(run):
+    done, log = run(reviews=[review(), review(head=MOVED)])
+    assert done.returncode == 15
+    assert "cannot be ordered" in done.stderr
+    assert merged(log) == []
+
+
+def test_reports_a_malformed_decision_it_ignores(run, tmp_path):
+    bad_bounce = f"BOUNCE | {REQUEST} | {HEAD} | manager | reason | with | a pipe | 2026-11-20T19:00:00Z"
+    path = approvals_file(
+        tmp_path,
+        [
+            REQUEST_RECORD,
+            bad_bounce,
+            f"APPROVE | {REQUEST} | {HEAD} | manager | 2026-11-20T19:05:00Z",
+        ],
+    )
+    done, log = run(reviews=[review()], args=("--approvals", str(path), "--request-id", REQUEST))
+    assert done.returncode == 0, done.stderr
+    assert "malformed decision" in done.stderr
+    assert len(merged(log)) == 1
