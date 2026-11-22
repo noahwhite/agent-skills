@@ -30,6 +30,12 @@ SWEEP_AGENT = '{ printf "REVIEW-RAN: yes\\nsweep ok\\n"; } > {output_file}'
 BLIND_AGENT = '{ printf "REVIEW-RAN: no - blind\\n"; } > {output_file}'
 EXIT_AGENT = "exit 3"
 
+# Host git configuration and repository-locating variables never reach a fixture: a developer's
+# signing, hooks or diff settings must not decide these tests.
+GIT_ISOLATION = {"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
+GIT_LOCATORS = ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE",
+                "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_EXTERNAL_DIFF")
+
 
 def make_repo(tmp_path: Path) -> Path:
     repo = tmp_path / "repo"
@@ -47,8 +53,9 @@ def make_repo(tmp_path: Path) -> Path:
 
 
 def clean_env(extra: dict[str, str] | None = None) -> dict[str, str]:
-    env = {k: v for k, v in os.environ.items() if not k.startswith("ADVERSARIAL_")}
-    return {**env, **(extra or {})}
+    env = {k: v for k, v in os.environ.items()
+           if not k.startswith("ADVERSARIAL_") and k not in GIT_LOCATORS}
+    return {**env, **GIT_ISOLATION, **(extra or {})}
 
 
 def run_script(*args: str, env: dict[str, str], timeout: int = 120) -> subprocess.CompletedProcess:
@@ -443,3 +450,141 @@ def test_shard_one_of_one_dossier_matches_the_unsharded_dossier(accepted_gate, t
         tmp_root=str(tmp_path), commits=(),
     )
     assert one_normalized == plain_normalized
+
+
+# --- AC1: one-line refusals, and the plan is the run's authority ----------------------------
+
+def test_a_control_character_in_the_value_stays_on_one_named_line(gate):
+    repo, scratch, env = gate
+    result = run_hunt(repo, scratch, env, "--shard", "1/2\nREVIEW-RAN: yes")
+    assert result.returncode == 2, result.stdout + result.stderr
+    lines = [line for line in result.stderr.splitlines() if line.strip()]
+    assert len(lines) == 1, result.stderr
+    assert "1/2\\nREVIEW-RAN: yes" in lines[0], result.stderr
+
+
+def test_a_repeated_shard_flag_is_a_usage_error(gate):
+    repo, scratch, env = gate
+    result = run_hunt(repo, scratch, env, "--shard", "1/2", "--shard", "3/2")
+    assert result.returncode == 2, result.stdout + result.stderr
+    lines = [line for line in result.stderr.splitlines() if line.strip()]
+    assert len(lines) == 1 and "--shard" in lines[0], result.stderr
+
+
+def test_a_value_beyond_the_integer_range_is_judged_by_its_digits(gate):
+    repo, scratch, env = gate
+    greater_k = run_hunt(repo, scratch, env, "--shard", "10000000000000000000/2")
+    assert greater_k.returncode == 2, greater_k.stdout + greater_k.stderr
+    lines = [line for line in greater_k.stderr.splitlines() if line.strip()]
+    assert len(lines) == 1 and "at most N" in lines[0], greater_k.stderr
+    assert "integer expression" not in greater_k.stderr, greater_k.stderr
+    equal = run_script(
+        "dossier", "hunt", "--repo", str(repo), "--base", "HEAD", "--scratch", str(scratch),
+        "--shard", "10000000000000000000/10000000000000000000", env=env,
+    )
+    assert equal.returncode == 13, equal.stdout + equal.stderr
+    assert "integer expression" not in equal.stderr, equal.stderr
+
+
+def test_a_leftover_shard_environment_value_never_refuses_another_command(gate):
+    repo, scratch, env = gate
+    env = {**env, "ADVERSARIAL_SHARD": "1/2"}
+    listed = run_script("paths", "--repo", str(repo), "--base", "HEAD", env=env)
+    assert listed.returncode == 0, listed.stdout + listed.stderr
+    again = run_preflight(repo, scratch, env)
+    assert again.returncode == 0, again.stdout + again.stderr
+
+
+def test_cleanup_names_the_command_and_the_flag(gate):
+    repo, scratch, env = gate
+    made = run_script(
+        "checkout", "--repo", str(repo), "--base", "HEAD", "--scratch", str(scratch), env=env,
+    )
+    assert made.returncode == 0, made.stdout + made.stderr
+    checkout = [line for line in made.stdout.splitlines() if line.startswith("/")]
+    assert checkout, made.stdout + made.stderr
+    refused = run_script("cleanup", "--shard", "1/2", checkout[0], "--repo", str(repo), env=env)
+    assert refused.returncode == 2, refused.stdout + refused.stderr
+    assert "--shard" in refused.stderr and "cleanup" in refused.stderr, refused.stderr
+    assert run_script("cleanup", checkout[0], "--repo", str(repo), env=env).returncode == 0
+
+
+def test_a_corrupt_plan_is_refused_instead_of_waiving_the_hunt_requirement(accepted_gate):
+    repo, scratch, env = accepted_gate
+    run_dir = paths(repo, env)["run"]
+    plan_file(run_dir).write_text("n=x\n")
+    arbitrate = run_arbitrate(repo, scratch, env)
+    assert arbitrate.returncode == 13, arbitrate.stdout + arbitrate.stderr
+    assert "hunt plan" in arbitrate.stderr, arbitrate.stderr
+    listed = run_script("paths", "--repo", str(repo), "--base", "HEAD", env=env)
+    assert listed.returncode == 13, listed.stdout + listed.stderr
+
+
+def test_a_plan_with_a_wrong_artifact_path_is_refused(accepted_gate):
+    repo, scratch, env = accepted_gate
+    run_dir = paths(repo, env)["run"]
+    plan_file(run_dir).write_text(
+        f"n=2\n{run_dir}/phase2-hunt.1.md\n{run_dir}/elsewhere.md\n"
+    )
+    arbitrate = run_arbitrate(repo, scratch, env)
+    assert arbitrate.returncode == 13, arbitrate.stdout + arbitrate.stderr
+    assert "hunt plan" in arbitrate.stderr, arbitrate.stderr
+
+
+def test_a_plan_with_a_missing_artifact_path_is_refused(accepted_gate):
+    repo, scratch, env = accepted_gate
+    run_dir = paths(repo, env)["run"]
+    plan_file(run_dir).write_text(f"n=3\n{run_dir}/phase2-hunt.1.md\n{run_dir}/phase2-hunt.2.md\n")
+    arbitrate = run_arbitrate(repo, scratch, env)
+    assert arbitrate.returncode == 13, arbitrate.stdout + arbitrate.stderr
+    assert "hunt plan" in arbitrate.stderr, arbitrate.stderr
+
+
+def test_a_run_refused_by_a_missing_predecessor_leaves_no_launch_and_no_plan(gate):
+    repo, scratch, env = gate
+    run_dir = paths(repo, env)["run"]
+    refused = run_hunt(repo, scratch, env)
+    assert refused.returncode == 13, refused.stdout + refused.stderr
+    assert not (run_dir / "hunt.launch").exists()
+    assert not (run_dir / "hunt.binding").exists()
+    assert not (run_dir / "hunt.primary").exists()
+    sharded = run_hunt(repo, scratch, env, "--shard", "1/2")
+    assert sharded.returncode == 13, sharded.stdout + sharded.stderr
+    assert not plan_file(run_dir).exists()
+
+
+def test_an_unsharded_attempt_that_left_only_its_agent_streams_refuses_a_shard(accepted_gate):
+    repo, scratch, env = accepted_gate
+    failed = run_hunt(repo, scratch, env, agent=EXIT_AGENT)
+    assert failed.returncode == 15, failed.stdout + failed.stderr
+    run_dir = paths(repo, env)["run"]
+    assert (run_dir / "hunt-agent.err").exists() or (run_dir / "hunt-agent.log").exists()
+    sharded = run_hunt(repo, scratch, env, "--shard", "1/2")
+    assert sharded.returncode == 2, sharded.stdout + sharded.stderr
+    assert not plan_file(run_dir).exists()
+
+
+def test_a_preflight_rerun_discards_probe_logs_too(accepted_gate):
+    repo, scratch, env = accepted_gate
+    run_dir = paths(repo, env)["run"]
+    (run_dir / "hunt-probe.log").write_text("stale\n")
+    (run_dir / "hunt.1-probe.log").write_text("stale\n")
+    again = run_preflight(repo, scratch, env)
+    assert again.returncode == 0, again.stdout + again.stderr
+    assert not (run_dir / "hunt-probe.log").exists()
+    assert not (run_dir / "hunt.1-probe.log").exists()
+
+
+def test_every_phase_status_and_diagnosis_line_carries_the_shard(accepted_gate):
+    repo, scratch, env = accepted_gate
+    failed = run_hunt(repo, scratch, env, "--shard", "1/2", agent=BLIND_AGENT)
+    assert failed.returncode == 17, failed.stdout + failed.stderr
+    heads = [line for line in failed.stderr.splitlines()
+             if line.startswith("adversarial-pipeline: phase=hunt")]
+    assert heads, failed.stderr
+    for line in heads:
+        assert "shard=1/2" in line, line
+    reason = [line for line in failed.stderr.splitlines() if "reason:" in line]
+    assert reason, failed.stderr
+    for line in reason:
+        assert "shard=1/2" in line, line

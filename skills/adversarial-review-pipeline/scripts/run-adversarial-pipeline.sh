@@ -45,10 +45,12 @@
 #
 # Sharded hunt: `run hunt`, `dossier hunt` and `record hunt` accept `--shard K/N`. K and N are
 # decimal integers with 1 <= K <= N and no leading zero; N = 1 is accepted only as `--shard 1/1`.
-# Every other value is a usage error (exit 2) with one stderr line naming it. `--shard` on sweep or
-# arbitrate, or on any command other than run, dossier or record, is a usage error (exit 2) naming
-# the command and the flag. `record hunt` must be passed the same `--shard` as `dossier hunt`,
-# exactly as for `--spec` and `--no-sweep`; a different shard finds no launch and exits 15.
+# Every other value is a usage error (exit 2) with one stderr line naming it, and so is `--shard`
+# given more than once. `--shard` on sweep or arbitrate, or on any command other than run, dossier
+# or record, is a usage error (exit 2) naming the command and the flag; the ADVERSARIAL_SHARD
+# default applies only to those hunt commands, so a leftover value never refuses another command.
+# `record hunt` must be passed the same `--shard` as `dossier hunt`, exactly as for `--spec` and
+# `--no-sweep`; a different shard finds no launch and exits 15.
 # With N >= 2 the invocation writes <run dir>/phase2-hunt.<k>.md and never writes or accepts
 # phase2-hunt.md for that run; its stamp and its binding carry the line shard=<k>/<n>. Each shard
 # owns its run-state files beside its artifact, suffixed with the shard index - hunt.<k>.launch,
@@ -68,7 +70,10 @@
 # unsharded hunt today. When the plan is sharded, `paths` prints one `hunt.<k> <path>` line per
 # recorded shard in shard order in place of the single `hunt` line, `dossier hunt`'s save-path
 # line names the shard's artifact, and `dossier-sizes.md` lists one `hunt.<k>: <bytes> bytes` line
-# per shard in shard order in place of the single `hunt` line. With no `--shard`, or with
+# per shard in shard order in place of the single `hunt` line. A plan that exists is the run's
+# authority: a first line that is not n=<count> of at least two, or a path line that is not that
+# shard's phase2-hunt.<k>.md, is refused with exit 13 naming the plan, never read as an absent plan.
+# With no `--shard`, or with
 # `--shard 1/1`, the artifact path, the stamp, the binding, the phase's file set and the `paths`
 # output are exactly today's, and the dossier is identical to today's once each occurrence of its
 # own checkout path is normalised. A later `run arbitrate` requires every recorded hunt shard to
@@ -353,7 +358,13 @@ cmd="${1:-}"; [ -n "$cmd" ] || usage; shift
 phase=""; target=""
 case "$cmd" in
   dossier|run|record) phase="${1:-}"; [ -n "$phase" ] || usage; shift ;;
-  cleanup) target="${1:-}"; [ -n "$target" ] || usage; shift; target="$(abspath "$target")" ;;
+  cleanup)
+    # A leading dash is a flag, not the checkout path: the option parser then names it properly.
+    case "${1:-}" in
+      -*) ;;
+      *) target="${1:-}"; [ -n "$target" ] || usage; shift; target="$(abspath "$target")" ;;
+    esac
+    ;;
   preflight|checkout|paths|checklist) ;;
   -h|--help|help) usage ;;
   *) echo "ERROR: unknown command '$cmd'" >&2; usage ;;
@@ -370,9 +381,14 @@ TIMEOUT="${ADVERSARIAL_TIMEOUT:-900}"
 MODEL="${ADVERSARIAL_MODEL:-}"
 MODEL_SET=0
 ARBITER_AGENT="${ADVERSARIAL_AGENT:-}"
+# The env equivalent is a default for the commands that take the flag, so a leftover value never
+# refuses a command that does not read it (the same rule ADVERSARIAL_MODEL follows).
 SHARD="${ADVERSARIAL_SHARD:-}"
 SHARD_SET=0
-if [ -n "$SHARD" ]; then SHARD_SET=1; fi
+SHARD_SEEN=0
+case "$cmd" in
+  run|dossier|record) if [ "$phase" = "hunt" ] && [ -n "$SHARD" ]; then SHARD_SET=1; fi ;;
+esac
 PROBE_CMD="${ADVERSARIAL_PROBE_CMD:-}"
 PROBE_TIMEOUT="${ADVERSARIAL_PROBE_TIMEOUT:-30}"
 PROBE_SET=0
@@ -398,7 +414,7 @@ while [ $# -gt 0 ]; do
         --model) MODEL="$2"; MODEL_SET=1 ;;
         --probe-cmd) PROBE_CMD="$2"; PROBE_SET=1 ;;
         --probe-timeout) PROBE_TIMEOUT="$2" ;;
-        --shard) SHARD="$2"; SHARD_SET=1 ;;
+        --shard) SHARD_SEEN=$(( SHARD_SEEN + 1 )); SHARD="$2"; SHARD_SET=1 ;;
       esac
       shift 2 ;;
     --no-sweep) NO_SWEEP=1; shift ;;
@@ -445,18 +461,29 @@ case "$ARBITER_AGENT" in
 esac
 # --shard is the hunt's shard selector: grammar here, plan validation once the run directory is known.
 SHARD_K="" SHARD_N="" SHARDED=0
+if [ "$SHARD_SEEN" -gt 1 ]; then
+  die 2 "--shard given $SHARD_SEEN times; pass it once"
+fi
 if [ "$SHARD_SET" -eq 1 ]; then
   case "$cmd" in
     run|dossier|record) ;;
     *) die 2 "--shard is not valid for the $cmd command; it applies to run hunt, dossier hunt and record hunt" ;;
   esac
   [ "$phase" = "hunt" ] || die 2 "--shard is not valid for the $phase phase of $cmd; it applies to hunt only"
+  # AC1 wants one stderr line that names the offending value: escape anything that could forge a line.
+  SHARD_SHOWN="${SHARD//$'\n'/\\n}"
+  SHARD_SHOWN="${SHARD_SHOWN//$'\r'/\\r}"
+  SHARD_SHOWN="${SHARD_SHOWN//$'\t'/\\t}"
+  SHARD_SHOWN="$(printf '%s' "$SHARD_SHOWN" | tr -c '[:print:]' '?')"
   [[ "$SHARD" =~ ^([1-9][0-9]*)/([1-9][0-9]*)$ ]] \
-    || die 2 "--shard value '$SHARD' is invalid: expected K/N with decimal integers 1 <= K <= N and no leading zero"
+    || die 2 "--shard value '$SHARD_SHOWN' is invalid: expected K/N with decimal integers 1 <= K <= N and no leading zero"
   SHARD_K="${BASH_REMATCH[1]}"
   SHARD_N="${BASH_REMATCH[2]}"
-  [ "$SHARD_K" -le "$SHARD_N" ] \
-    || die 2 "--shard value '$SHARD' is invalid: K must be at least 1 and at most N"
+  # Canonical decimals with no leading zero compare by length, then lexically: no integer range.
+  if [ "${#SHARD_K}" -gt "${#SHARD_N}" ] \
+    || { [ "${#SHARD_K}" -eq "${#SHARD_N}" ] && [ "$SHARD_K" \> "$SHARD_N" ]; }; then
+    die 2 "--shard value '$SHARD_SHOWN' is invalid: K must be at least 1 and at most N"
+  fi
 fi
 # The label is printed by every command, so any character that could forge a field or a line is
 # mapped to '_' here; the model id's own shell metacharacters are still quoted whole into the probe.
@@ -570,16 +597,35 @@ state_key() {  # $1 phase -> the file-name prefix for this invocation's run-stat
   esac
 }
 
-plan_exists() { [ -s "$HUNT_PLAN" ] && [ "$(head -n 1 -- "$HUNT_PLAN" | cut -c1-2)" = "n=" ]; }
-plan_n() { head -n 1 -- "$HUNT_PLAN" | sed 's/^n=//'; }
+plan_exists() { [ -e "$HUNT_PLAN" ]; }
 plan_paths() { tail -n +2 -- "$HUNT_PLAN"; }
 
-# Has this run already hunted unsharded? Its artifact and the state files its launch and dossier
-# leave behind are the markers; the plan file's absence alone is also a fresh run.
+# Reads and validates the run's hunt plan, setting PLAN_N. A plan that exists is the run's
+# authority, so a plan that is not the recorded shape is a state error rather than an absent plan:
+# it never silently waives the shard prerequisites.
+plan_read() {
+  local line count=0
+  PLAN_N="$(head -n 1 -- "$HUNT_PLAN" | sed -n 's/^n=\([1-9][0-9]*\)$/\1/p')"
+  [ -n "$PLAN_N" ] \
+    || die 13 "the run's hunt plan $HUNT_PLAN is corrupt: its first line is not n=<count>; re-run the preflight (or the sweep) to discard it"
+  [ "$PLAN_N" != "1" ] \
+    || die 13 "the run's hunt plan $HUNT_PLAN records n=1, but a sharded plan records at least two shards; re-run the preflight (or the sweep) to discard it"
+  while IFS= read -r line; do
+    count=$(( count + 1 ))
+    [ "$line" = "$RUN_DIR/phase2-hunt.$count.md" ] \
+      || die 13 "the run's hunt plan $HUNT_PLAN is corrupt: the artifact path on line $(( count + 1 )) is not shard $count's $RUN_DIR/phase2-hunt.$count.md; re-run the preflight (or the sweep) to discard it"
+  done < <(plan_paths)
+  [ "$count" = "$PLAN_N" ] \
+    || die 13 "the run's hunt plan $HUNT_PLAN is corrupt: it records n=$PLAN_N but carries $count artifact paths; re-run the preflight (or the sweep) to discard it"
+}
+
+# Has this run already hunted unsharded? Its artifact, every state file its launch, dossier and
+# agent left behind, and the plan file's absence are the markers.
 hunt_unsharded_state_exists() {
   local f
   for f in "$PHASE2" "$PHASE2.stamp" "$RUN_DIR/hunt.launch" "$RUN_DIR/hunt.binding" \
-           "$RUN_DIR/hunt.primary" "$RUN_DIR/hunt.dossier"; do
+           "$RUN_DIR/hunt.primary" "$RUN_DIR/hunt.dossier" "$RUN_DIR/hunt.model" \
+           "$RUN_DIR/hunt-agent.err" "$RUN_DIR/hunt-agent.log" "$RUN_DIR/hunt-probe.log"; do
     if [ -e "$f" ]; then return 0; fi
   done
   return 1
@@ -587,22 +633,21 @@ hunt_unsharded_state_exists() {
 
 # Validates the invocation against the run's plan and decides whether it is sharded.
 shard_plan_validate() {
-  local n
   if plan_exists; then
-    n="$(plan_n)"
-    if [ "$SHARD_SET" -eq 0 ] || [ "$SHARD_N" -eq 1 ]; then
-      die 2 "this run's hunt plan records n=$n shards; pass --shard K/$n (K from 1 to $n) to run, dossier or record a shard"
+    plan_read
+    if [ "$SHARD_SET" -eq 0 ] || [ "$SHARD_N" = "1" ]; then
+      die 2 "this run's hunt plan records n=$PLAN_N shards; pass --shard K/$PLAN_N (K from 1 to $PLAN_N) to run, dossier or record a shard"
     fi
-    [ "$SHARD_N" -eq "$n" ] \
-      || die 2 "--shard $SHARD_K/$SHARD_N conflicts with this run's recorded hunt plan n=$n; pass --shard K/$n"
+    [ "$SHARD_N" = "$PLAN_N" ] \
+      || die 2 "--shard $SHARD_K/$SHARD_N conflicts with this run's recorded hunt plan n=$PLAN_N; pass --shard K/$PLAN_N"
     SHARDED=1
   elif hunt_unsharded_state_exists; then
-    if [ "$SHARD_SET" -eq 1 ] && [ "$SHARD_N" -ge 2 ]; then
+    if [ "$SHARD_SET" -eq 1 ] && [ "$SHARD_N" != "1" ]; then
       die 2 "--shard $SHARD_K/$SHARD_N conflicts with this run's unsharded hunt; a sharded plan must start the run's first hunt"
     fi
     SHARDED=0
   else
-    if [ "$SHARD_SET" -eq 1 ] && [ "$SHARD_N" -ge 2 ]; then SHARDED=1; else SHARDED=0; fi
+    if [ "$SHARD_SET" -eq 1 ] && [ "$SHARD_N" != "1" ]; then SHARDED=1; else SHARDED=0; fi
   fi
   if [ "$SHARDED" -eq 1 ]; then SHARD_LABEL=" shard=$SHARD_K/$SHARD_N"; else SHARD_LABEL=""; fi
 }
@@ -628,7 +673,8 @@ remove_all_hunt() {
     "$RUN_DIR"/phase2-hunt.[0-9]*.md "$RUN_DIR"/phase2-hunt.[0-9]*.md.stamp \
     "$RUN_DIR"/hunt.[0-9]*.launch "$RUN_DIR"/hunt.[0-9]*.binding \
     "$RUN_DIR"/hunt.[0-9]*.primary "$RUN_DIR"/hunt.[0-9]*.dossier \
-    "$RUN_DIR"/hunt.[0-9]*.model "$RUN_DIR"/hunt.[0-9]*-agent.err "$RUN_DIR"/hunt.[0-9]*-agent.log
+    "$RUN_DIR"/hunt.[0-9]*.model "$RUN_DIR"/hunt.[0-9]*-agent.err "$RUN_DIR"/hunt.[0-9]*-agent.log \
+    "$RUN_DIR"/hunt-probe.log "$RUN_DIR"/hunt.[0-9]*-probe.log
 }
 
 artifact_for() {
@@ -700,7 +746,7 @@ require_predecessors() {  # $1 = phase
   local p k n
   for p in $(deps_of "$1"); do
     if [ "$p" = "hunt" ] && plan_exists; then
-      n="$(plan_n)"
+      plan_read; n="$PLAN_N"
       for (( k=1; k <= n; k++ )); do
         SHARDED=1; SHARD_K="$k"; SHARD_N="$n"
         accepted hunt \
@@ -1067,10 +1113,10 @@ PHASE_ACCEPTED=0  # set once `run` has accepted its phase; a later signal then l
 on_signal() {  # $1 exit code: an interrupted gate orphans neither its process group nor its state
   kill_guarded
   if [ "$PHASE_ACCEPTED" -eq 1 ]; then
-    printf 'adversarial-pipeline: interrupted (exit %s) after the phase was accepted; it stays accepted\n' "$1" >&2
+    printf 'adversarial-pipeline: phase=%s%s interrupted (exit %s) after the phase was accepted; it stays accepted\n' "$phase" "$SHARD_LABEL" "$1" >&2
     exit "$1"
   fi
-  printf 'adversarial-pipeline: interrupted (exit %s); this phase is not accepted\n' "$1" >&2
+  printf 'adversarial-pipeline: phase=%s%s interrupted (exit %s); this phase is not accepted\n' "$phase" "$SHARD_LABEL" "$1" >&2
   if [ -n "${phase:-}" ] && [ -n "${RUN_DIR:-}" ] && [ -d "$RUN_DIR" ]; then
     key="$(state_key "$phase")"
     rm -f -- "$RUN_DIR/$key.launch" "$RUN_DIR/$key.binding" "$RUN_DIR/$key.primary" \
@@ -1164,7 +1210,7 @@ diagnose_phase() {  # $1 phase, $2 exit code, $3 reason (already captured), $4 r
   key="$(state_key "$phase_name")"
   printf 'adversarial-pipeline: phase=%s%s exit=%s model=%s\n' "$phase_name" "$SHARD_LABEL" "$code" "${MODEL_LABEL:-not-supplied}" >&2
   if [ -n "$reason" ]; then
-    printf 'adversarial-pipeline: reason: %s\n' "${reason#ERROR: }" >&2
+    printf 'adversarial-pipeline: phase=%s%s reason: %s\n' "$phase_name" "$SHARD_LABEL" "${reason#ERROR: }" >&2
   fi
   if [ -n "$report" ]; then
     emit_tail "adversarial-pipeline: report tail" "$report"
@@ -1516,7 +1562,7 @@ dossier_sizes_text() {
       continue
     fi
     if [ "$p" = "hunt" ] && plan_exists; then
-      n="$(plan_n)"
+      plan_read; n="$PLAN_N"
       for (( k=1; k <= n; k++ )); do
         side="$RUN_DIR/hunt.$k.dossier"
         sidecar_read "$side"; bytes="$SIDE_BYTES"
@@ -2124,18 +2170,18 @@ case "$cmd" in
     install_run_signal_traps
     trap on_run_exit EXIT
     # From here the phase attempt is real, so every exit reports completion; a missing predecessor is
-    # one of those failures, not a refusal before the attempt starts. A re-run discards this phase's
-    # previous acceptance and every later phase before anything can fail, so no early failure can
-    # leave an older report acceptable. The primary-checkout baseline is taken before the probe, so a
-    # probe that writes into the checkout cannot hide inside it, and stale logs go first: a diagnosis
-    # must never show a previous attempt's streams as this attempt's.
+    # one of those failures, not a refusal before the attempt starts. The predecessor check runs
+    # before this phase's own state is written, so a refused attempt leaves no launch, binding or
+    # primary behind for a later `record` to accept. The primary-checkout baseline is taken before
+    # the probe, so a probe that writes into the checkout cannot hide inside it, and stale logs go
+    # first: a diagnosis must never show a previous attempt's streams as this attempt's.
+    require_predecessors "$phase"
     begin_phase "$phase"
     bind_phase "$phase"
     out="$(artifact_for "$phase")"
     errlog="$RUN_DIR/$(state_key "$phase")-agent.err"
     agentlog="$RUN_DIR/$(state_key "$phase")-agent.log"
     rm -f -- "$errlog" "$agentlog"
-    require_predecessors "$phase"
     init_scratch
     dossier="$SCRATCH/$(state_key "$phase")-dossier.md"
     if [ "$SECONDS" -ge "$(( PHASE_START + TIMEOUT ))" ]; then
@@ -2151,7 +2197,7 @@ case "$cmd" in
         fail_phase 18 "the primary checkout ($ROOT) changed while the availability check for the $phase phase ran; this phase is not accepted. Inspect 'git status' there."
       fi
     fi
-    printf 'adversarial-pipeline: phase=%s model=%s; %s\n' "$phase" "$MODEL_LABEL" "$availability_state" >&2
+    printf 'adversarial-pipeline: phase=%s%s model=%s; %s\n' "$phase" "$SHARD_LABEL" "$MODEL_LABEL" "$availability_state" >&2
     # Every phase gets its own throwaway checkout; no agent ever runs in the primary checkout. It
     # exists before the dossier is written, because the dossier names it on its CHECKOUT: line.
     CHECKOUT_DEADLINE="$phase_deadline"
@@ -2237,6 +2283,7 @@ case "$cmd" in
     printf 'run %s\npreflight %s\nsuite_log %s\nsweep %s\n' \
       "$RUN_DIR" "$PHASE0" "$SUITE_LOG" "$PHASE1"
     if plan_exists; then
+      plan_read
       plan_k=1
       while IFS= read -r plan_path; do
         printf 'hunt.%s %s\n' "$plan_k" "$plan_path"
