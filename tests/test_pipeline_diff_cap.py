@@ -254,9 +254,12 @@ def assert_capped(g: dict, phase: str, flow: str, truncated_paths: list[str]) ->
     assert next(paths, None) is None, "fewer truncated sections than expected"
     marker_lines = [line for line in lines_of(dossier) if line.startswith(b"<!-- TRUNCATED:")]
     assert len(marker_lines) == len(truncated_paths), "not exactly one marker per section"
-    # the diffstat is git's own `git diff --stat` under the same config the script ran with
-    assert blueprint_of(dossier) == git_bytes(g["repo"], "diff", "--stat", f"{BASE_REF}...HEAD",
-                                              env=g["env"]), "the diffstat changed"
+    # the diffstat is git's own `git diff --stat` under the options the script pins for determinism
+    # (AC7 of SKL-411), so a hostile user config cannot change what the arbiter reads
+    assert blueprint_of(dossier) == git_bytes(
+        g["repo"], "diff", "--stat", "--no-ext-diff", "--no-color",
+        "--src-prefix=a/", "--dst-prefix=b/", "--no-textconv", f"{BASE_REF}...HEAD",
+        env=g["env"]), "the diffstat changed"
     return dossier
 
 

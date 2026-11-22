@@ -248,7 +248,8 @@ def test_paths_and_dossier_sizes_list_one_line_per_shard(accepted_gate):
     assert files["hunt.2"] == run_dir / "phase2-hunt.2.md"
     listed = run_script("paths", "--repo", str(repo), "--base", "HEAD", env=env)
     assert [line.split(" ", 1)[0] for line in listed.stdout.splitlines()] == [
-        "run", "preflight", "suite_log", "sweep", "hunt.1", "hunt.2", "arbitrate", "dossier_sizes",
+        "run", "preflight", "suite_log", "sweep", "hunt.1", "hunt.2", "arbitrate",
+        "reuse_hits", "reuse_misses", "dossier_sizes",
     ], listed.stdout
     sizes = (run_dir / "dossier-sizes.md").read_text().splitlines()
     hunt_lines = [line for line in sizes if line.startswith("hunt")]
@@ -625,3 +626,30 @@ def test_every_phase_status_and_diagnosis_line_carries_the_shard(accepted_gate):
     assert reason, failed.stderr
     for line in reason:
         assert "shard=1/2" in line, line
+
+
+# --- A sharded run and the identical-tree reuse: it never donates --------------------------------
+
+def test_a_sharded_run_donates_no_reuse_and_never_reads_as_lapsed(tmp_path):
+    repo, scratch, env = new_gate(tmp_path)
+    sweep = run_sweep(repo, scratch, env)
+    assert sweep.returncode == 0, sweep.stdout + sweep.stderr
+    for k in (1, 2):
+        hunt = run_hunt(repo, scratch, env, "--shard", f"{k}/2")
+        assert hunt.returncode == 0, hunt.stdout + hunt.stderr
+    arb = run_arbitrate(repo, scratch, env)
+    assert arb.returncode == 0, arb.stdout + arb.stderr
+    # A new head with the identical tree. The sharded run keeps a shard set rather than one hunt
+    # artifact, so it cannot donate: the next run misses and launches, rather than refusing at
+    # exit 13 as a producing run whose acceptance lapsed.
+    subprocess.run(["git", "commit", "-q", "--allow-empty", "-m", "same tree"], cwd=repo,
+                   check=True, capture_output=True, env=env)
+    pre = run_preflight(repo, scratch, env)
+    assert pre.returncode == 0, pre.stdout + pre.stderr
+    marker = tmp_path / "sweep.launched"
+    launched = (f"touch {marker}; {{ printf \"REVIEW-RAN: yes\\nsweep ok\\n\"; }} > {{output_file}}")
+    again = run_sweep(repo, scratch, env, agent=launched)
+    assert again.returncode == 0, again.stdout + again.stderr
+    assert marker.exists(), "the sweep was not launched against the identical tree"
+    reuse_lines = [line for line in again.stderr.splitlines() if line.startswith("reuse: ")]
+    assert reuse_lines == ["reuse: miss reason=no accepted run"], again.stderr

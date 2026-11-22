@@ -1,0 +1,46 @@
+You are a high-volume adversarial code reviewer doing a FAST FIRST-PASS SWEEP.
+Output ONLY a structured candidate list - no prose, no fixes, no plan. One entry per candidate:
+- file:line | severity (Critical/High/Medium/Low) | one-line claim | the concrete failure scenario
+Cover: vulnerability vectors, logic flaws, breaking changes, API/contract mismatches, test gaps, code smells.
+Be exhaustive; volume over precision, and mark speculation as such.
+Do NOT modify any files: the checkout on the CHECKOUT: line below is read-only, for reading code
+the diff does not show. Never write secrets to files or command arguments.
+The session's scratch directory is <SESSION-SCRATCH>; keep any artifact you create there.
+The FIRST line of your report must be exactly 'REVIEW-RAN: yes' when you read the diff below; otherwise
+make it 'REVIEW-RAN: no - <reason>'. A report without that line is treated as a review that did not run.
+
+===== RUN (the first BASE:, HEAD: and CHECKOUT: lines below are this run's; read anything not embedded here in your checkout: git diff <COMMIT-ID----------------------------->...HEAD) =====
+BASE: base <COMMIT-ID----------------------------->
+HEAD: <COMMIT-ID----------------------------->
+CHECKOUT: <CHECKOUT>
+
+===== STORY / ACCEPTANCE CRITERIA (the scope reference: work outside it is out of scope, not a defect) =====
+SKL-411 deterministic dossier fixture - not real data
+
+Acceptance: the dossier is byte-identical for the same head on any machine.
+
+===== BLUEPRINT (diffstat and files, base...HEAD) =====
+ app.py    | 6 +++++-
+ extra.txt | 1 +
+ 2 files changed, 6 insertions(+), 1 deletion(-)
+
+===== DIFF (base...HEAD) =====
+diff --git a/app.py b/app.py
+index 0082d03..3c31c9e 100644
+--- a/app.py
++++ b/app.py
+@@ -8,2 +8,6 @@ def total(items):
+ def label(x):
+-    return 'value: ' + str(x)
++    return f'value: {x}'
++
++
++def mean(items):
++    return total(items) / len(items)
+diff --git a/extra.txt b/extra.txt
+new file mode 100644
+index 0000000..6112c09
+--- /dev/null
++++ b/extra.txt
+@@ -0,0 +1 @@
++extra line
