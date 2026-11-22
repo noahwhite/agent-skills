@@ -39,15 +39,18 @@ done
 
 case "${1:-}" in
   api)
-    case "${2:-}" in
-      user)
-        [ -z "${FAIL_USER:-}" ] || { echo "gh: authentication required" >&2; exit 1; }
-        printf '%s\n' "${LOGIN:-}"
-        exit 0
-        ;;
-      --paginate)
+    apipath=""
+    for a in "$@"; do
+      case "$a" in repos/*) apipath="$a" ;; esac
+    done
+    if [ -z "$apipath" ] && [ "${2:-}" = "user" ]; then
+      [ -z "${FAIL_USER:-}" ] || { echo "gh: authentication required" >&2; exit 1; }
+      printf '%s\n' "${LOGIN:-}"
+      exit 0
+    fi
+    case "$apipath" in
+      "$REVIEWS_PATH")
         [ -z "${FAIL_REVIEWS:-}" ] || { echo "gh: HTTP 500" >&2; exit 1; }
-        [ "${3:-}" = "$REVIEWS_PATH" ] || { echo "unexpected api path: ${3:-}" >&2; exit 3; }
         for ((p = 0; p < $(jq length "$FIXTURES/reviews.json"); p++)); do
           if [ -n "$filter" ]; then
             jq ".[$p]" "$FIXTURES/reviews.json" | jq -c "$filter"
@@ -57,18 +60,20 @@ case "${1:-}" in
         done
         exit 0
         ;;
-      repos/*/rules/branches/*)
+      */rules/branches/*)
         if [ -n "${MALFORMED_RULES:-}" ]; then printf 'not json\n'; else cat "$FIXTURES/rules.json"; fi
         ;;
-      repos/*/branches/*/protection/required_status_checks)
+      */protection/required_status_checks)
         if [ -n "${CLASSIC_PROTECTION:-}" ]; then
           if [ -n "${MALFORMED_PROTECTION:-}" ]; then printf '[]\n'; else cat "$FIXTURES/protection.json"; fi
         else
-          echo "gh: Not Found (HTTP 404)" >&2; exit 1
+          echo "gh: Not Found (HTTP 404)" >&2
+          exit 1
         fi
         ;;
       *) echo "unexpected api call: $*" >&2; exit 3 ;;
     esac
+    exit 0
     ;;
   pr)
     [ -z "${GH_REPO:-}" ] || { echo "gh: GH_REPO selects another repository" >&2; exit 3; }
@@ -76,6 +81,12 @@ case "${1:-}" in
       view)
         [ -z "${FAIL_PR:-}" ] || { echo "gh: no pull requests found" >&2; exit 1; }
         [ "${3:-}" = "7" ] || { echo "gh: unexpected PR number ${3:-}" >&2; exit 3; }
+        fields=""
+        prev=""
+        for a in "$@"; do
+          if [ "$prev" = "--json" ]; then fields="$a"; fi
+          prev="$a"
+        done
         case "$*" in
           *isDraft*)
             if [ -f "$FIXTURES/moved-once" ]; then
@@ -83,20 +94,25 @@ case "${1:-}" in
                 printf '%s\n' "$APPROVE_RECORD" >> "$APPROVE_FILE"
                 touch "$FIXTURES/approved"
               fi
-              if [ -f "$FIXTURES/recheck.json" ]; then cat "$FIXTURES/recheck.json"; exit 0; fi
-              if [ -n "${MOVED_AFTER_CHECKS:-}" ]; then
-                jq '.headRefOid = "89abcdef0123456789abcdef0123456789abcdef"' "$FIXTURES/pr.json"
+              if [ -f "$FIXTURES/recheck.json" ]; then
+                src="$FIXTURES/recheck.json"
+              elif [ -n "${MOVED_AFTER_CHECKS:-}" ]; then
+                jq '.headRefOid = "89abcdef0123456789abcdef0123456789abcdef"' "$FIXTURES/pr.json" > "$FIXTURES/moved.json"
+                src="$FIXTURES/moved.json"
               else
-                cat "$FIXTURES/pr.json"
+                src="$FIXTURES/pr.json"
               fi
             else
               touch "$FIXTURES/moved-once"
-              cat "$FIXTURES/pr.json"
+              src="$FIXTURES/pr.json"
             fi
             ;;
-          *mergeCommit*) cat "$FIXTURES/confirm.json" ;;
+          *mergeCommit*) src="$FIXTURES/confirm.json" ;;
           *) echo "unexpected pr view: $*" >&2; exit 3 ;;
         esac
+        # Serve only the fields the caller asked for: a test cannot pass on a field the helper
+        # never requested.
+        jq -c --arg f "$fields" 'with_entries(select(.key as $k | ($f | split(",")) | index($k)))' "$src"
         exit 0
         ;;
       checks)
@@ -105,11 +121,23 @@ case "${1:-}" in
         [ -z "${GH_CHECKS_ERR:-}" ] || { printf '%s\n' "$GH_CHECKS_ERR" >&2; exit 1; }
         [ -z "${EMPTY_CHECKS_OUT:-}" ] || exit 0
         [ -z "${NON_JSON_CHECKS_OUT:-}" ] || { printf 'all checks passed\n'; exit 0; }
-        [ -z "${NO_REQUIRED_CHECKS:-}" ] || { echo "no required checks reported on the 'x' branch${NO_REQUIRED_CHECKS_SUFFIX:-}" >&2; exit 1; }
         [ -z "${NO_CHECKS:-}" ] || { echo "no checks reported on the 'x' branch" >&2; exit 1; }
         [ -z "${WARN_CHECKS:-}" ] || echo "warning: something happened" >&2
+        required=0
+        for a in "$@"; do
+          if [ "$a" = "--required" ]; then required=1; fi
+        done
+        if [ "$required" = 1 ]; then
+          if [ -n "${NO_REQUIRED_CHECKS:-}" ] || [ -z "${REQUIRED_CONTEXTS:-}" ]; then
+            echo "no required checks reported on the 'x' branch${NO_REQUIRED_CHECKS_SUFFIX:-}" >&2
+            exit 1
+          fi
+          jq -c --arg ctxs "$REQUIRED_CONTEXTS" \
+            '[ .[] | select(.name as $n | ($ctxs | split(",")) | index($n)) ]' "$FIXTURES/checks.json"
+          exit "${CHECKS_EXIT:-0}"
+        fi
         cat "$FIXTURES/checks.json"
-        exit "${CHECKS_EXIT:-0}"
+        exit 0
         ;;
       merge)
         if [ "${3:-}" = "--help" ]; then cat "$FIXTURES/merge-help.txt"; exit 0; fi
@@ -228,18 +256,19 @@ def run(tmp_path):
         pages = reviews if reviews and isinstance(reviews[0], list) else [reviews or []]
         (fixtures / "reviews.json").write_text(json.dumps(pages))
         contexts = [c for c in ((extra_env or {}).get("REQUIRED_CONTEXTS") or "").split(",") if c]
-        (fixtures / "rules.json").write_text(
-            json.dumps(
-                [
-                    {
-                        "type": "required_status_checks",
-                        "parameters": {"required_status_checks": [{"context": c} for c in contexts]},
-                    }
-                ]
-                if contexts
-                else []
-            )
+        rules_page = (
+            [
+                {
+                    "type": "required_status_checks",
+                    "parameters": {"required_status_checks": [{"context": c} for c in contexts]},
+                }
+            ]
+            if contexts
+            else []
         )
+        if (extra_env or {}).get("RULES_AS_PAGES"):
+            rules_page = [rules_page]
+        (fixtures / "rules.json").write_text(json.dumps(rules_page))
         classic = bool((extra_env or {}).get("CLASSIC_PROTECTION"))
         (fixtures / "protection.json").write_text(
             json.dumps({"contexts": ["ci/test"] if classic else [], "checks": []})
@@ -894,7 +923,11 @@ def test_reports_a_conflict_and_honours_a_first_bounce(run, tmp_path):
 
 
 def test_reads_the_required_checks_from_stdout_when_gh_warns_on_stderr(run):
-    done, log = run(reviews=[review()], extra_env={"WARN_CHECKS": "1"})
+    done, log = run(
+        reviews=[review()],
+        checks=[check("ci/test", "SUCCESS")],
+        extra_env={"WARN_CHECKS": "1", "REQUIRED_CONTEXTS": "ci/test"},
+    )
     assert done.returncode == 0, done.stderr
     assert "warning: something happened" not in done.stdout
     assert len(merged(log)) == 1
@@ -1054,7 +1087,7 @@ def test_refuses_a_near_miss_no_required_checks_diagnostic(run):
         extra_env={"NO_REQUIRED_CHECKS": "1", "NO_REQUIRED_CHECKS_SUFFIX": " (cached)"},
     )
     assert done.returncode != 0
-    assert "Could not read the checks" in done.stderr
+    assert "Could not read the required checks" in done.stderr
     assert merged(log) == []
 
 
@@ -1141,11 +1174,29 @@ def test_refuses_a_marker_review_it_cannot_order_with_a_named_error(run):
     assert merged(log) == []
 
 
-def test_refuses_a_checks_read_that_exited_eight_even_when_every_state_is_success(run):
-    done, log = run(reviews=[review()], checks_exit=8)
-    assert done.returncode != 0
-    assert "not read cleanly" in done.stderr
+def test_a_checks_read_with_a_transport_error_is_refused(run):
+    # Exit 8 is gh telling the caller some check is not green, which is ordinary; a JSON read is
+    # judged by the configured required contexts instead. Any other status is a read failure.
+    done, log = run(
+        reviews=[review()],
+        checks=[check("ci/test", "SUCCESS")],
+        checks_exit=4,
+        extra_env={"REQUIRED_CONTEXTS": "ci/test"},
+    )
+    assert done.returncode == 14
+    assert "Could not read the required checks" in done.stderr
     assert merged(log) == []
+
+
+def test_an_exit_eight_with_the_required_contexts_green_can_merge(run):
+    done, log = run(
+        reviews=[review()],
+        checks=[check("ci/test", "SUCCESS"), check("ci/optional", "FAILURE")],
+        checks_exit=8,
+        extra_env={"REQUIRED_CONTEXTS": "ci/test"},
+    )
+    assert done.returncode == 0, done.stderr
+    assert len(merged(log)) == 1
 
 
 def test_refuses_a_confirmation_at_a_different_head(run):
@@ -1666,3 +1717,58 @@ def test_refuses_an_approvals_path_that_is_not_a_regular_file(run, tmp_path):
     assert done.returncode == 18
     assert "not a regular file" in done.stderr
     assert merged(log) == []
+
+
+def test_reads_slurped_rule_pages(run):
+    done, log = run(
+        reviews=[review()],
+        checks=[check("ci/test", "SUCCESS")],
+        extra_env={"REQUIRED_CONTEXTS": "ci/test", "RULES_AS_PAGES": "1"},
+    )
+    assert done.returncode == 0, done.stderr
+    assert "Check: ci/test=SUCCESS" in done.stdout
+    assert len(merged(log)) == 1
+
+
+def test_unions_ruleset_and_classic_protection_requirements(run):
+    # Both sources can require checks on one branch; a green ruleset check must not hide a missing
+    # classic one.
+    done, log = run(
+        reviews=[review()],
+        checks=[check("ci/build", "SUCCESS")],
+        extra_env={"REQUIRED_CONTEXTS": "ci/build", "CLASSIC_PROTECTION": "1"},
+    )
+    assert done.returncode == 14
+    assert "ci/test" in done.stderr
+    assert "have not reported" in done.stderr
+    assert merged(log) == []
+
+
+@pytest.mark.parametrize("order", ["failure-first", "success-first"])
+def test_a_same_named_failing_result_is_never_masked(run, order):
+    results = [check("ci/test", "FAILURE"), check("ci/test", "SUCCESS")]
+    if order == "success-first":
+        results.reverse()
+    done, log = run(reviews=[review()], checks=results, extra_env={"REQUIRED_CONTEXTS": "ci/test"})
+    assert done.returncode == 14
+    assert "ci/test" in done.stderr
+    assert merged(log) == []
+
+
+def test_refuses_an_explicitly_null_record_author(run):
+    text = PROFILE.replace("record_author: record-author", "record_author:")
+    done, log = run(profile_text=text)
+    assert done.returncode == 13
+    assert "review.record_author" in done.stderr
+    assert log == []
+
+
+def test_a_valid_approval_leaves_stderr_clean(run, tmp_path):
+    path = approvals_file(
+        tmp_path,
+        [REQUEST_RECORD, f"APPROVE | {REQUEST} | {HEAD} | manager | 2026-11-20T19:00:00Z"],
+    )
+    done, log = run(reviews=[review()], args=("--approvals", str(path), "--request-id", REQUEST))
+    assert done.returncode == 0, done.stderr
+    assert done.stderr == ""
+    assert len(merged(log)) == 1

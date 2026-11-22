@@ -108,9 +108,8 @@ one_line() {
 # A command's own output, folded to one line and capped, for a refusal that carries the diagnosis
 # without letting that output forge a result line or flood the transcript.
 gh_detail() {
-  local text
-  text="$(one_line "$1")"
-  printf '%s' "${text:0:300}"
+  # Folded to one line and never cut at a byte offset: a byte cut can split a multibyte character.
+  one_line "$1"
 }
 
 # gh's own stderr is captured rather than let through raw: a proxy or server error is external text
@@ -362,6 +361,9 @@ if merge_owner == "human" and merge_method not in ("squash", "merge", "rebase"):
     # reason to withhold the verified merge-ready report.
     merge_method = ""
 
+if "record_author" in review and review["record_author"] is None:
+    print(f"merge-pr.sh: review.record_author is null in {path}", file=sys.stderr)
+    sys.exit(13)
 record_author = review.get("record_author")
 if record_author is not None and not isinstance(record_author, str):
     print(f"merge-pr.sh: review.record_author must be a string in {path}", file=sys.stderr)
@@ -646,10 +648,13 @@ if [ -n "$APPROVALS" ]; then
   # decision for that same ID and head authorize the merge. A decision whose head differs from the
   # request's is invalid, and a decision with no valid request before it approves nothing.
   REQUEST_SEEN=0
-  MALFORMED=0
   DECISION=""
+  DECISION_VERDICT=""
   CONFLICT=""
+  RECORD_NO=0
+  MALFORMED_LINES=""
   while IFS= read -r LINE; do
+    RECORD_NO=$((RECORD_NO + 1))
     IFS='|' read -r -a FIELD <<<"$LINE"
     [ "${#FIELD[@]}" -ge 3 ] || continue
     VERDICT="$(trim_field "${FIELD[0]}")"
@@ -657,45 +662,54 @@ if [ -n "$APPROVALS" ]; then
     [ "$RECORD_ID" = "$REQUEST_ID" ] || continue
     case "$VERDICT" in
       REQUEST)
-        [ "${#FIELD[@]}" -eq 7 ] || continue
-        [ "$(trim_field "${FIELD[2]}")" = "$PR_URL" ] || continue
-        [ "$(trim_field "${FIELD[3]}")" = "$HEAD" ] || continue
-        [ "$(trim_field "${FIELD[4]}")" = "$REVIEW_URL" ] || continue
-        [ "$(trim_field "${FIELD[5]}")" = "green" ] || continue
-        is_utc_timestamp "$(trim_field "${FIELD[6]}")" || continue
+        if [ "${#FIELD[@]}" -ne 7 ] ||
+          [ "$(trim_field "${FIELD[2]}")" != "$PR_URL" ] ||
+          [ "$(trim_field "${FIELD[3]}")" != "$HEAD" ] ||
+          [ "$(trim_field "${FIELD[4]}")" != "$REVIEW_URL" ] ||
+          [ "$(trim_field "${FIELD[5]}")" != "green" ] ||
+          ! is_utc_timestamp "$(trim_field "${FIELD[6]}")"; then
+          continue
+        fi
         REQUEST_SEEN=1
         continue
         ;;
       APPROVE)
-        MALFORMED=1
-        [ "$REQUEST_SEEN" = 1 ] || continue
-        [ "${#FIELD[@]}" -eq 5 ] || continue
-        [ "$(trim_field "${FIELD[2]}")" = "$HEAD" ] || continue
-        [ -n "$(trim_field "${FIELD[3]}")" ] || continue
-        is_utc_timestamp "$(trim_field "${FIELD[4]}")" || continue
+        if [ "$REQUEST_SEEN" != 1 ] ||
+          [ "${#FIELD[@]}" -ne 5 ] ||
+          [ "$(trim_field "${FIELD[2]}")" != "$HEAD" ] ||
+          [ -z "$(trim_field "${FIELD[3]}")" ] ||
+          ! is_utc_timestamp "$(trim_field "${FIELD[4]}")"; then
+          MALFORMED_LINES="$MALFORMED_LINES $RECORD_NO"
+          continue
+        fi
         CURRENT="APPROVE"
+        CURRENT_VERDICT="APPROVE"
         ;;
       BOUNCE)
-        MALFORMED=1
-        [ "$REQUEST_SEEN" = 1 ] || continue
-        [ "${#FIELD[@]}" -eq 6 ] || continue
-        [ "$(trim_field "${FIELD[2]}")" = "$HEAD" ] || continue
-        [ -n "$(trim_field "${FIELD[3]}")" ] || continue
-        [ -n "$(trim_field "${FIELD[4]}")" ] || continue
-        is_utc_timestamp "$(trim_field "${FIELD[5]}")" || continue
+        if [ "$REQUEST_SEEN" != 1 ] ||
+          [ "${#FIELD[@]}" -ne 6 ] ||
+          [ "$(trim_field "${FIELD[2]}")" != "$HEAD" ] ||
+          [ -z "$(trim_field "${FIELD[3]}")" ] ||
+          [ -z "$(trim_field "${FIELD[4]}")" ] ||
+          ! is_utc_timestamp "$(trim_field "${FIELD[5]}")"; then
+          MALFORMED_LINES="$MALFORMED_LINES $RECORD_NO"
+          continue
+        fi
         CURRENT="BOUNCE $(trim_field "${FIELD[4]}")"
+        CURRENT_VERDICT="BOUNCE"
         ;;
       *) continue ;;
     esac
     if [ -z "$DECISION" ]; then
       DECISION="$CURRENT"
-    elif [ "$CURRENT" != "$DECISION" ]; then
-      CONFLICT="first ${DECISION%% *}, later ${CURRENT%% *}"
+      DECISION_VERDICT="$CURRENT_VERDICT"
+    elif [ "$CURRENT_VERDICT" != "$DECISION_VERDICT" ]; then
+      CONFLICT="first $DECISION_VERDICT, later $CURRENT_VERDICT"
     fi
   done <"$APPROVALS"
-  if [ "$MALFORMED" = 1 ]; then
-    printf 'Warning: a malformed decision record for %s at head %s was ignored; under references/merge-approval.md it is not a decision\n' \
-      "$(one_line "$REQUEST_ID")" "$HEAD" >&2
+  if [ -n "$MALFORMED_LINES" ]; then
+    printf 'Warning: malformed decision record(s) for %s at head %s were ignored (record number(s):%s); under references/merge-approval.md they are not decisions\n' \
+      "$(one_line "$REQUEST_ID")" "$HEAD" "$MALFORMED_LINES" >&2
   fi
   if [ -n "$CONFLICT" ]; then
     printf 'Warning: conflicting decisions for %s at head %s in %s: %s; the first decision stands\n' \
@@ -726,85 +740,167 @@ case "$MERGE_STATE" in
   *) refuse 16 "PR #$NUMBER is in merge state $MERGE_STATE" ;;
 esac
 
-CHECKS_JSON=""
-CHECKS_OUT=""
-CHECKS_ERR=""
+CHECKS_ALL=""
 CHECKS_STATUS=0
 CHECKS_EMPTY=0
+SERVER_REQUIRED=""
+SERVER_REQUIRED_NONE=0
+POLICY_CONTEXTS=""
+POLICY_CLASSIC_UNREADABLE=0
 
-# The required context names come from the base branch's own configuration, not from the results:
-# a required check that has not reported yet must never read as green (AC4). Rulesets are read
-# first, then classic protection, both on the PR's host and with the branch percent-encoded as one
-# path segment. Prints one context name per line; fails on any read or parse error, so an
-# unreadable policy is never mistaken for an empty one.
-base_required_contexts() {
-  local encoded rules from_rules protection
+# Every page of the applicable rules, flattened (--slurp returns one array per page), then the
+# classic protection configuration as well: both can impose required checks on one branch, so the
+# union is what counts. Prints one context name per line. Exit 0 when both sources are fully read
+# (404 is documented absence of classic protection); 3 when the classic source exists but cannot be
+# read with this token, so the caller knows the union is incomplete; anything else is a hard read or
+# parse failure that must not be mistaken for an empty policy.
+policy_required_contexts() {
+  local encoded rules from_rules protection from_protection all name seen classic=0
   encoded="$(printf '%s' "$BASE_REF" | jq -rn --arg v "$BASE_REF" '$v|@uri')" || return 2
-  rules="$(gh_quiet api "repos/$SLUG/rules/branches/$encoded" --hostname "$HOST")" || return 2
+  rules="$(gh_quiet api --paginate --slurp "repos/$SLUG/rules/branches/$encoded" --hostname "$HOST")" || return 2
   printf '%s' "$rules" | jq -e 'type == "array"' >/dev/null 2>&1 || return 2
-  from_rules="$(printf '%s' "$rules" | jq -r '[ .[] | select(.type == "required_status_checks") | .parameters.required_status_checks[]?.context ] | .[]')" || return 2
-  if [ -n "$from_rules" ]; then
-    printf '%s\n' "$from_rules"
-    return 0
+  rules="$(printf '%s' "$rules" | jq -c '[ .[] | if type == "array" then .[] else . end ]')" || return 2
+  # A recognized required-checks rule whose list is not an array is a policy this helper cannot
+  # certify, not an empty one.
+  if printf '%s' "$rules" | jq -e '[ .[] | select(.type == "required_status_checks") | select((.parameters.required_status_checks | type) != "array") ] | length > 0' >/dev/null 2>&1; then
+    return 2
   fi
+  from_rules="$(printf '%s' "$rules" | jq -r '[ .[] | select(.type == "required_status_checks") | .parameters.required_status_checks[].context ] | .[]')" || return 2
+  from_protection=""
   if protection="$(gh_quiet api "repos/$SLUG/branches/$encoded/protection/required_status_checks" --hostname "$HOST")"; then
     printf '%s' "$protection" | jq -e 'type == "object"' >/dev/null 2>&1 || return 2
-    printf '%s' "$protection" | jq -r '[ (.contexts // [])[], (.checks // [])[].context ] | .[]' || return 2
-    return 0
+    printf '%s' "$protection" | jq -e '(.contexts | type) == "array" or (.checks | type) == "array"' >/dev/null 2>&1 || return 2
+    from_protection="$(printf '%s' "$protection" | jq -r '[ (.contexts // [])[], (.checks // [])[].context ] | .[]')" || return 2
+  else
+    case "$(gh_stderr_detail)" in
+      "gh: Not Found (HTTP 404)") : ;;
+      *"(HTTP 403)"*) classic=1 ;;
+      *) return 2 ;;
+    esac
   fi
-  case "$(gh_stderr_detail)" in
-    *404* | *"Not Found"*) return 0 ;;
-  esac
-  return 2
+  all=""
+  if [ -n "$from_rules" ]; then all="$from_rules"; fi
+  if [ -n "$from_protection" ]; then
+    if [ -n "$all" ]; then all="$all
+$from_protection"; else all="$from_protection"; fi
+  fi
+  seen=""
+  while IFS= read -r name; do
+    [ -n "$name" ] || continue
+    case "$seen" in
+      *"|$name|"*) continue ;;
+    esac
+    seen="$seen|$name|"
+    printf '%s\n' "$name"
+  done <<<"$all"
+  [ "$classic" = 0 ] || return 3
+  return 0
 }
 
 CHECKS_ERR_FILE="$(mktemp)" || refuse 14 "could not create a file for the checks stderr of PR #$NUMBER"
-CHECKS_OUT="$(gh pr checks "$NUMBER" --json name,state 2>"$CHECKS_ERR_FILE")" || CHECKS_STATUS=$?
+
+# GitHub's own required set for this head (rulesets and classic protection included, computed
+# server-side). A check the server requires but that has not reported is not in this list, which is
+# why the readable branch policy is unioned in below.
+SERVER_OUT="$(gh pr checks "$NUMBER" --required --json name,state 2>"$CHECKS_ERR_FILE")" || CHECKS_STATUS=$?
+SERVER_ERR="$(cat -- "$CHECKS_ERR_FILE")"
+case "$CHECKS_STATUS" in
+  0 | 1 | 8) ;;
+  *) refuse 14 "Could not read the required checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS): $(gh_detail "$SERVER_ERR$SERVER_OUT")" ;;
+esac
+if [ -n "$SERVER_OUT" ]; then
+  case "$SERVER_OUT" in
+    \[*) SERVER_REQUIRED="$(printf '%s' "$SERVER_OUT" | jq -r '.[].name' 2>/dev/null)" || refuse 14 "the required checks of PR #$NUMBER were not readable JSON" ;;
+    *) refuse 14 "Could not read the required checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS): $(gh_detail "$SERVER_ERR$SERVER_OUT")" ;;
+  esac
+else
+  case "$CHECKS_STATUS" in
+    0) refuse 14 "Could not read the required checks of PR #$NUMBER: gh pr checks exited 0 with no output" ;;
+    1 | 8)
+      if [[ "$SERVER_ERR" != *$'\n'* ]]; then
+        case "$SERVER_ERR" in
+          "no required checks reported on the '"*"' branch" | "no checks reported on the '"*"' branch") SERVER_REQUIRED_NONE=1 ;;
+          *) refuse 14 "Could not read the required checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS): $(gh_detail "$SERVER_ERR")" ;;
+        esac
+      else
+        refuse 14 "Could not read the required checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS): $(gh_detail "$SERVER_ERR")"
+      fi
+      ;;
+    *) refuse 14 "Could not read the required checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS): $(gh_detail "$SERVER_ERR")" ;;
+  esac
+fi
+
+# The states of every check reported on the head.
+CHECKS_STATUS=0
+CHECKS_ALL="$(gh pr checks "$NUMBER" --json name,state 2>"$CHECKS_ERR_FILE")" || CHECKS_STATUS=$?
 CHECKS_ERR="$(cat -- "$CHECKS_ERR_FILE")"
 rm -f -- "$CHECKS_ERR_FILE"
 case "$CHECKS_STATUS" in
   0 | 1 | 8) ;;
-  *) refuse 14 "Could not read the checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS): $(gh_detail "$CHECKS_ERR$CHECKS_OUT")" ;;
+  *) refuse 14 "Could not read the checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS): $(gh_detail "$CHECKS_ERR$CHECKS_ALL")" ;;
 esac
-if [ -n "$CHECKS_OUT" ]; then
-  case "$CHECKS_OUT" in
-    \[*) CHECKS_JSON="$CHECKS_OUT" ;;
-    *) refuse 14 "Could not read the checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS): $(gh_detail "$CHECKS_ERR$CHECKS_OUT")" ;;
-  esac
-elif [ "$CHECKS_STATUS" = 1 ]; then
-  # gh prints one of these two diagnostics on stderr and exits 1 when the head has no check
-  # contexts to report. Only that whole single-line value means "nothing reported"; a warning or a
-  # multiline failure never does, because a `*` in a case pattern would otherwise span lines.
-  if [[ "$CHECKS_ERR" == *$'\n'* ]]; then
-    refuse 14 "Could not read the checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS): $(gh_detail "$CHECKS_ERR$CHECKS_OUT")"
-  fi
-  case "$CHECKS_ERR" in
-    "no required checks reported on the '"*"' branch" | "no checks reported on the '"*"' branch")
-      CHECKS_JSON='[]'
-      CHECKS_EMPTY=1
-      ;;
-    *) refuse 14 "Could not read the checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS): $(gh_detail "$CHECKS_ERR$CHECKS_OUT")" ;;
+if [ -n "$CHECKS_ALL" ]; then
+  case "$CHECKS_ALL" in
+    \[*) : ;;
+    *) refuse 14 "Could not read the checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS): $(gh_detail "$CHECKS_ERR$CHECKS_ALL")" ;;
   esac
 else
-  refuse 14 "Could not read the checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS): $(gh_detail "$CHECKS_ERR$CHECKS_OUT")"
+  case "$CHECKS_STATUS" in
+    0) refuse 14 "Could not read the checks of PR #$NUMBER: gh pr checks exited 0 with no output" ;;
+    1 | 8)
+      if [[ "$CHECKS_ERR" != *$'\n'* ]]; then
+        case "$CHECKS_ERR" in
+          "no checks reported on the '"*"' branch" | "no required checks reported on the '"*"' branch")
+            CHECKS_ALL='[]'
+            CHECKS_EMPTY=1
+            ;;
+          *) refuse 14 "Could not read the checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS): $(gh_detail "$CHECKS_ERR")" ;;
+        esac
+      else
+        refuse 14 "Could not read the checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS): $(gh_detail "$CHECKS_ERR")"
+      fi
+      ;;
+    *) refuse 14 "Could not read the checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS): $(gh_detail "$CHECKS_ERR")" ;;
+  esac
 fi
-CHECKS_COUNT="$(printf '%s' "$CHECKS_JSON" | jq -r 'if type == "array" then length else "invalid" end')" \
-  || refuse 14 "the checks of PR #$NUMBER were not readable JSON"
-[ "$CHECKS_COUNT" != "invalid" ] \
+printf '%s' "$CHECKS_ALL" | jq -e 'type == "array"' >/dev/null 2>&1 \
   || refuse 14 "the checks of PR #$NUMBER were not a JSON array"
-if [ "$CHECKS_STATUS" != 0 ] && [ "$CHECKS_EMPTY" = 0 ]; then
-  refuse 14 "the checks of PR #$NUMBER were not read cleanly (gh pr checks exited $CHECKS_STATUS): $(gh_detail "$CHECKS_ERR$CHECKS_OUT")"
+
+POLICY_STATUS=0
+POLICY_CONTEXTS="$(policy_required_contexts)" || POLICY_STATUS=$?
+case "$POLICY_STATUS" in
+  0) ;;
+  3) POLICY_CLASSIC_UNREADABLE=1 ;;
+  *) refuse 14 "could not read the required-check configuration of $BASE_REF on $HOST/$SLUG, so the head cannot be judged green: $(gh_stderr_detail)" ;;
+esac
+if [ "$POLICY_CLASSIC_UNREADABLE" = 1 ]; then
+  printf 'Policy: classic branch protection is not readable with this token (HTTP 403); required checks come from gh pr checks --required and the branch rules\n'
 fi
-REQUIRED_CONTEXTS="$(base_required_contexts)" \
-  || refuse 14 "could not read the required-check configuration of $BASE_REF on $HOST/$SLUG, so the head cannot be judged green: $(gh_stderr_detail)"
-if [ -z "$REQUIRED_CONTEXTS" ]; then
+
+# Union of the server-required names and the configured contexts, each once.
+REQUIRED_UNION=""
+SEEN_NAMES=""
+add_name() {
+  local n="$1"
+  [ -n "$n" ] || return 0
+  case "$SEEN_NAMES" in
+    *"|$n|"*) return 0 ;;
+  esac
+  SEEN_NAMES="$SEEN_NAMES|$n|"
+  if [ -n "$REQUIRED_UNION" ]; then REQUIRED_UNION="$REQUIRED_UNION
+$n"; else REQUIRED_UNION="$n"; fi
+}
+while IFS= read -r SERVER_NAME; do add_name "$SERVER_NAME"; done <<<"$SERVER_REQUIRED"
+while IFS= read -r POLICY_NAME; do add_name "$POLICY_NAME"; done <<<"$POLICY_CONTEXTS"
+
+if [ -z "$REQUIRED_UNION" ]; then
   printf 'Check: none\n'
 else
   MISSING_CONTEXTS=""
   NON_GREEN=""
   while IFS= read -r REQUIRED_NAME; do
     [ -n "$REQUIRED_NAME" ] || continue
-    REQUIRED_STATE="$(printf '%s' "$CHECKS_JSON" | jq -r --arg n "$REQUIRED_NAME" '[ .[] | select(.name == $n) | .state ] | if length == 0 then "MISSING" else .[-1] end')" \
+    REQUIRED_STATE="$(printf '%s' "$CHECKS_ALL" | jq -r --arg n "$REQUIRED_NAME" '[ .[] | select(.name == $n) | .state ] | if length == 0 then "MISSING" elif ([ .[] | select(. != "SUCCESS") ] | length) == 0 then "SUCCESS" else join(",") end')" \
       || refuse 14 "the checks of PR #$NUMBER were not readable JSON"
     printf 'Check: %s=%s\n' "$(one_line "$REQUIRED_NAME")" "$(one_line "$REQUIRED_STATE")"
     case "$REQUIRED_STATE" in
@@ -812,7 +908,7 @@ else
       MISSING) MISSING_CONTEXTS="$MISSING_CONTEXTS$(one_line "$REQUIRED_NAME"); " ;;
       *) NON_GREEN="$NON_GREEN$(one_line "$REQUIRED_NAME")=$(one_line "$REQUIRED_STATE"), " ;;
     esac
-  done <<<"$REQUIRED_CONTEXTS"
+  done <<<"$REQUIRED_UNION"
   if [ -n "$MISSING_CONTEXTS" ]; then
     refuse 14 "required check(s) on head $HEAD have not reported, so they are not green: $MISSING_CONTEXTS"
   fi
@@ -826,7 +922,7 @@ fi
 # whole readiness state, not just the SHA, and refuse on any change, on both the agent and the human
 # paths: --match-head-commit bounds only the head, so the human path has no merge attempt to catch a
 # base-only change.
-MOVED_JSON="$(gh_quiet pr view "$NUMBER" --json headRefOid,state,isDraft,mergeable,mergeStateStatus)" \
+MOVED_JSON="$(gh_quiet pr view "$NUMBER" --json headRefOid,baseRefName,state,isDraft,mergeable,mergeStateStatus)" \
   || refuse 16 "Could not re-read PR #$NUMBER after the checks read: $(gh_stderr_detail)"
 RECHECK_HEAD="$(printf '%s' "$MOVED_JSON" | jq -r '.headRefOid // empty')" \
   || refuse 16 "Could not read the live head of PR #$NUMBER after the checks read"
