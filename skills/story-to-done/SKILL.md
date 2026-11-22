@@ -103,6 +103,10 @@ Read each of these at the step that needs it:
 
 Where this file and a capability file disagree, the capability file wins.
 
+## Kickoff prompt
+
+For an orchestration-heavy run - one that spawns a senior engineer and at least one QA agent - Lite mode plus the 12-minute batched-poll cadence is the default, and [assets/kickoff-prompt.md](assets/kickoff-prompt.md) holds the caller prompt that starts it.
+
 ## Metrics
 
 Only when `metrics` is on, read [references/metrics.md](references/metrics.md) right after step 0 creates the todo list: it is the single home for what a `story-to-done` run collects and reports, and this file does not restate it.
