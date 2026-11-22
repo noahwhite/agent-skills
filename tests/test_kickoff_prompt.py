@@ -49,15 +49,8 @@ def flat(text: str) -> str:
     return " ".join(text.split())
 
 
-def visible_text(token) -> str:
-    """The text of an inline token as a reader sees it.
-
-    One extractor reads prose, inline code, line breaks, an image's alt text and raw inline HTML,
-    so a hidden HTML subtree hides any later text in the same paragraph. A soft or hard line break
-    becomes one space, so a rewrapped sentence still reads as one sentence. An HTML comment or a
-    link attribute is invisible.
-    """
-    parser = _TextExtractor()
+def _feed_inline(parser: "_TextExtractor", token) -> None:
+    """Feed one inline token to a shared extractor, so hidden state spans the document."""
     for child in token.children or []:
         if child.type in {"text", "code_inline"}:
             parser.handle_data(child.content)
@@ -73,8 +66,6 @@ def visible_text(token) -> str:
             )
         elif child.type == "html_inline":
             parser.feed(child.content)
-    parser.close()
-    return "".join(parser.parts)
 
 
 def asset_document(
@@ -171,10 +162,11 @@ class _TextExtractor(HTMLParser):
             self.parts.append(" ")
 
     def _start(self, tag: str, attrs) -> None:
-        if tag not in VOID_TAGS and (
-            tag in HIDDEN_TAGS or any(name == "hidden" for name, _ in attrs)
-        ):
-            self.hidden_tags.append(tag)
+        hidden = tag in HIDDEN_TAGS or any(name == "hidden" for name, _ in attrs)
+        if hidden:
+            if tag not in VOID_TAGS:
+                self.hidden_tags.append(tag)
+            return
         if self.hidden_tags:
             return
         if tag == "img":
@@ -212,23 +204,6 @@ def html_text(content: str) -> str:
     return "".join(parser.parts)
 
 
-def visible_mentions(text: str) -> int:
-    """Occurrences of the asset path in anything a reader sees.
-
-    Prose, code blocks, image alt text and non-comment raw HTML count; HTML comments, hidden
-    subtrees, link destinations and link titles do not.
-    """
-    count = 0
-    for token in MARKDOWN.parse(text):
-        if token.type == "inline":
-            count += visible_text(token).count(POINTER)
-        elif token.type in {"fence", "code_block"}:
-            count += token.content.count(POINTER)
-        elif token.type == "html_block":
-            count += html_text(token.content).count(POINTER)
-    return count
-
-
 def without_frontmatter(text: str) -> str:
     """The text with any leading YAML frontmatter blanked out, line numbers preserved."""
     lines = text.splitlines()
@@ -240,23 +215,61 @@ def without_frontmatter(text: str) -> str:
     return text
 
 
+def scan_document(text: str) -> tuple[list[tuple[int, str]], int]:
+    """The top-level paragraphs a reader sees and the asset-path count, in one pass.
+
+    A single extractor spans the whole document, so a raw HTML element that opens and closes
+    around a paragraph hides that paragraph, and a hidden element hides everything it contains.
+    Each paragraph is (source line, visible text); a paragraph inside a hidden subtree has empty
+    text, so it never counts as the pointer and never contributes to the path count.
+    """
+    parser = _TextExtractor()
+    paragraphs: list[tuple[int, str]] = []
+    pending_line: int | None = None
+    for token in MARKDOWN.parse(text):
+        if token.type == "paragraph_open":
+            pending_line = token.map[0] if token.map else -1
+        elif token.type == "inline":
+            start = len(parser.parts)
+            _feed_inline(parser, token)
+            if pending_line is not None:
+                paragraphs.append((pending_line, "".join(parser.parts[start:])))
+                pending_line = None
+        elif token.type in {"fence", "code_block"}:
+            if not parser.hidden_tags:
+                parser.handle_data(token.content)
+        elif token.type == "html_block":
+            parser.feed(token.content)
+    return paragraphs, "".join(parser.parts).count(POINTER)
+
+
+def kickoff_range(text: str) -> tuple[int, int] | None:
+    """Source line span of the kickoff-prompt section, ending at the next level-2 heading."""
+    tokens = MARKDOWN.parse(text)
+    start: int | None = None
+    for index, token in enumerate(tokens):
+        if token.type != "heading_open" or token.tag != "h2" or token.level != 0:
+            continue
+        if start is not None:
+            return (start, token.map[0])
+        content = tokens[index + 1].content if tokens[index + 1].type == "inline" else ""
+        if flat(content) == "Kickoff prompt":
+            start = token.map[0]
+    return None if start is None else (start, len(text.splitlines()))
+
+
 def placement_problems(text: str) -> list[str]:
     """Reasons SKILL.md breaks AC2's placement rule, judged on what a CommonMark reader sees.
 
-    The pointer must be exactly one paragraph of visible prose, the asset path must be named
-    once in visible text, and the sentence must sit outside the step 1 to step 5 sections.
-    YAML frontmatter is metadata, not prose, so a sentence only there does not count.
+    The pointer must be exactly one paragraph of visible prose in the kickoff-prompt section, the
+    asset path must be named once in visible text, and the sentence must sit outside the step 1 to
+    step 5 sections. YAML frontmatter is metadata, not prose, so a sentence only there does not
+    count, and neither does one inside a hidden HTML subtree.
     """
     text = without_frontmatter(text)
-    tokens = MARKDOWN.parse(text)
-    paragraphs = [
-        (token.map[0] if token.map else -1, visible_text(token))
-        for index, token in enumerate(tokens)
-        if token.type == "inline" and tokens[index - 1].type == "paragraph_open"
-    ]
+    paragraphs, path_count = scan_document(text)
     pointer_lines = [line for line, visible in paragraphs if POINTER_PROSE in flat(visible)]
     exact_lines = [line for line, visible in paragraphs if flat(visible) == POINTER_PROSE]
-    path_count = visible_mentions(text)
     problems: list[str] = []
     if len(pointer_lines) != 1:
         problems.append(
@@ -267,10 +280,16 @@ def placement_problems(text: str) -> list[str]:
         problems.append("the pointer paragraph must be exactly the one sentence")
     if path_count != 1:
         problems.append(f"the asset path must appear once in visible text (found {path_count})")
+    kickoff = kickoff_range(text)
     for line in pointer_lines:
         if any(start <= line < end for start, end in step_ranges(text)):
             problems.append(
                 "the kickoff pointer must sit outside the step 1 to step 5 sections "
+                f"(line {line + 1})"
+            )
+        if kickoff is None or not (kickoff[0] <= line < kickoff[1]):
+            problems.append(
+                "the kickoff pointer must sit under the kickoff-prompt heading "
                 f"(line {line + 1})"
             )
     return problems
@@ -514,3 +533,24 @@ def test_the_placement_guard_does_not_join_a_path_across_a_details_boundary() ->
     split = "assets/kickoff-prompt"
     text = skill_document(f"{POINTER_SENTENCE}\n\n<details>{split}</details>.md")
     assert placement_problems(text) == []
+
+
+def test_the_placement_guard_rejects_a_pointer_wrapped_in_a_hidden_block() -> None:
+    hidden = f"<div hidden>\n\n{POINTER_SENTENCE}\n\n</div>"
+    problems = placement_problems(skill_document(hidden))
+    assert any("exactly one paragraph of visible prose (found 0" in problem for problem in problems), problems
+
+
+def test_the_placement_guard_ignores_a_hidden_image_alt() -> None:
+    pointer = f'{POINTER_SENTENCE} <img hidden alt="{POINTER}">'
+    assert placement_problems(skill_document(pointer)) == []
+
+
+def test_the_placement_guard_rejects_a_pointer_outside_the_kickoff_section() -> None:
+    steps = "\n\n".join(f"## {number}. Step {number}\n\nStep {number} body." for number in range(1, 6))
+    text = (
+        "# Title\n\n## Kickoff prompt\n\nNothing here.\n\n## Metrics\n\n"
+        f"{POINTER_SENTENCE}\n\n{steps}\n"
+    )
+    problems = placement_problems(text)
+    assert any("must sit under the kickoff-prompt heading" in problem for problem in problems), problems
