@@ -456,11 +456,21 @@ def test_an_unreadable_hunt_launch_is_refused_and_never_read_as_empty(accepted_g
     report.write_text("REVIEW-RAN: yes\nplain\n")
     # An unreadable marker carrying a valid selection is a state error, never "no flag".
     launch.chmod(0)
-    refused = run_script("record", "hunt", "--repo", str(repo), "--base", "HEAD", env=env)
-    launch.chmod(0o644)
-    assert refused.returncode == 15, refused.stdout + refused.stderr
-    assert "launch marker" in refused.stderr, refused.stderr
-    assert not Path(f"{report}.stamp").exists()
+    denied = True
+    try:
+        with launch.open("rb") as probe:
+            probe.read(1)
+        denied = False
+    except PermissionError:
+        denied = True
+    try:
+        if denied:
+            refused = run_script("record", "hunt", "--repo", str(repo), "--base", "HEAD", env=env)
+            assert refused.returncode == 15, refused.stdout + refused.stderr
+            assert "launch marker" in refused.stderr, refused.stderr
+            assert not Path(f"{report}.stamp").exists()
+    finally:
+        launch.chmod(0o644)
     # A marker without its trailing newline is the same selection, not a broken one.
     launch.write_bytes(launch.read_bytes().rstrip(b"\n"))
     report.write_text("REVIEW-RAN: yes\nplain\n")
@@ -482,12 +492,12 @@ def test_a_malformed_launch_marker_is_refused_with_a_bounded_sanitised_diagnosis
     # Anything but the one printable selection line is an unusable state, not a selection.
     for marker in (b"shard=none\nTRAIL\n", b"shard=none\n\n", b"shard=none\x00\n",
                    b"shard=none\x00", b"shard=none\r\n", b"shard=no\x1be\n",
-                   b"shard=none" + b"x" * 55, b"shard=none" + b"x" * 60):
+                   b"shard=none \n", b"shard=none" + b"x" * 55, b"shard=none" + b"x" * 60):
         launch.write_bytes(marker)
         report.write_text("REVIEW-RAN: yes\nplain\n")
         refused = run_script("record", "hunt", "--repo", str(repo), "--base", "HEAD", env=env)
         assert refused.returncode == 15, (marker, refused.stdout + refused.stderr)
-        assert "not exactly one short selection line" in refused.stderr, refused.stderr
+        assert "not exactly the one selection line the launcher wrote" in refused.stderr, refused.stderr
         assert not Path(f"{report}.stamp").exists()
     # A printable marker naming another selection is a mismatch that names both values.
     launch.write_bytes(b"shard=1/1\n")
@@ -557,10 +567,14 @@ def test_a_flagged_dossier_recorded_with_its_flag_matches_the_unsharded_record(a
     plain_binding = (run_dir / "hunt.binding").read_bytes()
     plain_primary = (run_dir / "hunt.primary").read_bytes()
     plain_files = sorted(path.name for path in run_dir.iterdir())
+    sweep_artifact = (run_dir / "phase1-sweep.md").read_bytes()
     assert run_script("cleanup", str(plain_checkout), "--repo", str(repo), env=env).returncode == 0
 
     sweep = run_sweep(repo, scratch, env)
     assert sweep.returncode == 0, sweep.stdout + sweep.stderr
+    # Re-running the sweep rewrites its artifact; restoring the bytes keeps every bound input
+    # identical, so the two records can be compared byte for byte.
+    (run_dir / "phase1-sweep.md").write_bytes(sweep_artifact)
     flagged_dossier = run_script(
         "dossier", "hunt", "--repo", str(repo), "--base", "HEAD", "--scratch", str(scratch),
         "--shard", "1/1", env=env,
@@ -574,13 +588,9 @@ def test_a_flagged_dossier_recorded_with_its_flag_matches_the_unsharded_record(a
     flagged_stamp = Path(f"{report}.stamp").read_bytes()
     flagged_binding = (run_dir / "hunt.binding").read_bytes()
 
-    def without_deps(text: bytes) -> list[str]:
-        return [line for line in text.decode().splitlines() if not line.startswith("dep.")]
-
-    # Byte-identical to the unsharded record, apart from a predecessor artifact that a sweep
-    # re-run rewrote; the selection never enters the stamp or the binding.
-    assert without_deps(flagged_stamp) == without_deps(plain_stamp)
-    assert without_deps(flagged_binding) == without_deps(plain_binding)
+    # Byte-identical to the unsharded record: the selection never enters the stamp or the binding.
+    assert flagged_stamp == plain_stamp
+    assert flagged_binding == plain_binding
     assert sorted(path.name for path in run_dir.iterdir()) == plain_files
     assert (run_dir / "hunt.primary").read_bytes() == plain_primary
     assert not (run_dir / "hunt.shards").exists()
