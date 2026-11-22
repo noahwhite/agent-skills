@@ -211,6 +211,14 @@ The file holds one `<bash glob> | <review item>` per line; `#` comments and blan
 "$PIPELINE" run hunt --base "$BASE" --model "<profile.review.pre_pr.hunter model>" --spec "$SPEC" --scratch "$scratch" --agent-cmd "<template>"
 ```
 
+### Sharded hunt
+
+`run hunt`, `dossier hunt` and `record hunt` accept `--shard K/N`, a decimal `1 <= K <= N` with no leading zero; `N = 1` is accepted only as `--shard 1/1`, and any other value is a usage error (exit 2). `--shard` on sweep or arbitrate, or on any command other than run, dossier or record, is a usage error too. Pass `record hunt` the same `--shard` as `dossier hunt`, exactly as for `--spec` and `--no-sweep`.
+
+One `run` invocation is one shard. With `N >= 2` the shard's artifact is `<run dir>/phase2-hunt.<k>.md` (never `phase2-hunt.md` for that run), and its run-state files are `hunt.<k>.launch`, `hunt.<k>.binding`, `hunt.<k>.primary`, `hunt.<k>.dossier`, `hunt.<k>-agent.err` and `hunt.<k>-agent.log`. The first sharded invocation records the run's plan in `<run dir>/hunt.shards`: `n=<n>` then each shard's artifact path, one per line. `paths` prints one `hunt.<k> <path>` line per shard, and `dossier-sizes.md` one `hunt.<k>: <bytes> bytes` line per shard. `--shard 1/1` and an unsharded run are identical to today's names and dossier.
+
+Run shards sequentially, one `run` per shard, in shard order. The driver stops at the first non-zero exit and launches no later shard and no `arbitrate` phase; a failed shard leaves its own stamp absent and every other shard's acceptance standing, and a later `run arbitrate` then refuses at exit 13 naming the unaccepted shard. Re-running the preflight, or the sweep when the run uses one, removes the plan and every shard artifact and state file.
+
 The hunter works in a throwaway detached worktree of the **unfixed** head, never the working tree.
 Its dossier asks for both jobs and demands execution rather than reasoning:
 
