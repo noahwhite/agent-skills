@@ -12,13 +12,12 @@ instead of authoring the structure.
 The verdict and evidence cells are left empty, because a generated verdict would be an authored
 result. A relative `--evidence-dir` resolves against the working directory's checkout root, and the
 profile schema and spelling policy come from the checkout that owns the destination. An existing
-README is refused before any label is validated, with one line naming it, and the README is then
-published through opened directory descriptors that refuse every symlink component, without
-overwriting anything, so a concurrent writer, a dangling symlink and a symlinked directory are
-refused too, and an orderly failed write removes its temporary file and never leaves a README
-behind. An abrupt kill can strand the temporary file, and a partial README left by a failed direct
-copy must be removed by hand. A key outside ^[A-Z][A-Z0-9]+-[0-9]+$, an empty `--evidence-dir`, and
-a story key the doc-lint rejects all exit 1 naming what is wrong.
+README is refused before any label is validated, with one line naming it, and the new README is
+then created exclusively through opened directory descriptors that refuse every symlink component,
+without overwriting anything, so a concurrent writer, a dangling symlink, a symlinked directory and
+a non-regular entry at the README path are refused too. A write that fails partway leaves a partial
+README, which must be removed by hand before a retry. A key outside ^[A-Z][A-Z0-9]+-[0-9]+$, an
+empty `--evidence-dir`, and a story key the doc-lint rejects all exit 1 naming what is wrong.
 
 A label is written as one table cell of literal text: its line breaks fold to spaces, runs of
 whitespace collapse, and every Markdown punctuation character is backslash-escaped, so a cell can
@@ -71,17 +70,14 @@ PROFILE_REF_RE = re.compile(
 ESCAPE_RE = re.compile(r"\\([!-/:-@\[-`{-~])")
 # The Markdown punctuation a literal cell escapes, so the reader renders the text unchanged.
 LITERAL_ESCAPES = set("\\`*_[<>&|~$]")
-# A sentence ends at `.`, `!` or `?` before whitespace or the end; a closing quote or bracket after
-# the terminator does not hide the boundary.
-SENTENCE_END_RE = re.compile(r"[.!?][\"'\u2019\u201d)\]]*(?=\s|$)")
-# Common abbreviations whose dot is not a sentence boundary when the sentence continues in lowercase;
-# a capital or digit after the dot is read as the start of a new sentence.
-ABBREVIATION_RE = re.compile(r"\b(?i:e\.g|i\.e|etc|vs|fig|mr|mrs|ms|dr)\.(?=\s+[a-z0-9]|\s*$)")
-# Link errors that mean the filesystem cannot publish a hard link, where an exclusive copy is the fallback.
-LINK_UNSUPPORTED = {errno.EPERM, errno.EXDEV, errno.EMLINK}
-for _name in ("EOPNOTSUPP", "ENOTSUP"):
-    if hasattr(errno, _name):
-        LINK_UNSUPPORTED.add(getattr(errno, _name))
+# A sentence ends at `.`, `!` or `?` before whitespace or the end, and at the full-width full stop
+# wherever it appears; a closing quote or bracket after the terminator does not hide the boundary.
+SENTENCE_END_RE = re.compile(r"(?:[。]|[.!?][\"'\u2019\u201d)\]]*(?=\s|$))")
+# Two-letter abbreviations whose dot never ends a sentence.
+NEVER_BOUNDARY_RE = re.compile(r"\b(?i:e\.g|i\.e)\.")
+# Words whose dot is not a sentence boundary when the sentence continues in lowercase; a capital or
+# digit after the dot is read as the start of a new sentence.
+ABBREVIATION_RE = re.compile(r"\b(?i:etc|vs|fig|mr|mrs|ms|dr)\.(?=\s+[a-z0-9]|\s*$)")
 # O_PATH opens a directory for use as a `dir_fd` without requiring read permission on it.
 PATH_FLAGS = getattr(os, "O_PATH", os.O_RDONLY)
 
@@ -98,7 +94,12 @@ def print_path(path: Path) -> None:
     """Print the created path, escaping any character the standard output cannot encode."""
     line = str(path.absolute())
     encoding = getattr(sys.stdout, "encoding", None) or "utf-8"
-    sys.stdout.write(line.encode(encoding, "backslashreplace").decode(encoding) + "\n")
+    try:
+        sys.stdout.write(line.encode(encoding, "backslashreplace").decode(encoding) + "\n")
+        sys.stdout.flush()
+    except BrokenPipeError:
+        # The README is published; a dead reader must not turn success into a failure report.
+        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
 
 
 def metadata_lines(path: str | None) -> list[str]:
@@ -168,8 +169,10 @@ def resolve_evidence_dir(root: Path, value: str) -> Path:
 def local_schema(root: Path) -> tuple[dict | None, str | None]:
     """The target repository's profile schema, or None when it has none, with any read problem."""
     candidate = root / "profile" / "schema.json"
-    if not candidate.is_file():
+    if not os.path.lexists(candidate):
         return None, None
+    if not candidate.is_file():
+        return None, f"error: {one_line(str(candidate))} is not a regular file"
     try:
         schema = json.loads(candidate.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
@@ -294,7 +297,9 @@ def mask_sentence_noise(text: str) -> str:
             trailing = ""
         return "profile" + trailing
 
-    return ABBREVIATION_RE.sub(lambda match: match.group(0)[:-1], PROFILE_REF_RE.sub(reference, text))
+    return ABBREVIATION_RE.sub(
+        lambda match: match.group(0)[:-1], NEVER_BOUNDARY_RE.sub("abbreviation", PROFILE_REF_RE.sub(reference, text))
+    )
 
 
 def more_than_one_sentence(label: str) -> bool:
@@ -357,11 +362,13 @@ def open_directory(path: Path, *, create: bool) -> tuple[int | None, str | None]
 
 def existing_target_problem(descriptor: int, target: Path) -> str | None:
     """The refusal when `target` already exists under `descriptor`, or None when it does not."""
+    path = one_line(str(target.absolute()))
     try:
         info = os.stat(target.name, dir_fd=descriptor, follow_symlinks=False)
     except FileNotFoundError:
         return None
-    path = one_line(str(target.absolute()))
+    except OSError as exc:
+        return f"error: cannot inspect {path}: {exc.strerror or exc}"
     if stat.S_ISLNK(info.st_mode):
         return f"error: {path} is a symlink; refusing to follow it"
     if not stat.S_ISREG(info.st_mode):
@@ -383,7 +390,7 @@ def target_problem(target: Path) -> str | None:
 
 
 def publish(target: Path, text: str) -> bool:
-    """Publish `text` at `target` without overwriting anything, or report why not."""
+    """Create `text` at `target` exclusively, or report why not."""
     try:
         data = text.encode("utf-8")
     except UnicodeError:
@@ -393,79 +400,43 @@ def publish(target: Path, text: str) -> bool:
     if descriptor is None:
         print(f"error: {problem}", file=sys.stderr)
         return False
-    temp = f".qa-evidence-{os.getpid()}-{os.urandom(6).hex()}.tmp"
-    created = False
     try:
         problem = existing_target_problem(descriptor, target)
         if problem is not None:
             print(problem, file=sys.stderr)
             return False
         try:
-            handle = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=descriptor)
-            created = True
+            handle = os.open(
+                target.name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=descriptor
+            )
+        except FileExistsError:
+            print(
+                existing_target_problem(descriptor, target)
+                or f"error: {one_line(str(target.absolute()))} already exists; refusing to overwrite it",
+                file=sys.stderr,
+            )
+            return False
         except OSError as exc:
             print(f"error: cannot write {one_line(str(target.absolute()))}: {exc.strerror or exc}", file=sys.stderr)
             return False
+        failure: OSError | None = None
         try:
             view = memoryview(data)
             while view:
                 view = view[os.write(handle, view):]
-        except OSError as exc:
-            print(f"error: cannot write {one_line(str(target.absolute()))}: {exc.strerror or exc}", file=sys.stderr)
-            return False
+        except OSError as write_error:
+            failure = write_error
         finally:
             os.close(handle)
-        try:
-            os.link(temp, target.name, src_dir_fd=descriptor, dst_dir_fd=descriptor, follow_symlinks=False)
-        except FileExistsError:
-            print(existing_target_problem(descriptor, target) or f"error: {one_line(str(target.absolute()))} already exists; refusing to overwrite it", file=sys.stderr)
+        if failure is not None:
+            print(
+                f"error: cannot write {one_line(str(target.absolute()))}: {failure.strerror or failure}; "
+                "a partial README may remain and must be removed by hand",
+                file=sys.stderr,
+            )
             return False
-        except OSError as exc:
-            if exc.errno not in LINK_UNSUPPORTED:
-                print(f"error: cannot write {one_line(str(target.absolute()))}: {exc.strerror or exc}", file=sys.stderr)
-                return False
-            # The filesystem cannot publish a hard link: create the target exclusively and copy, so an
-            # existing README is still never overwritten and an orderly failure removes our own file.
-            try:
-                direct = os.open(
-                    target.name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=descriptor
-                )
-            except FileExistsError:
-                print(
-                    existing_target_problem(descriptor, target)
-                    or f"error: {one_line(str(target.absolute()))} already exists; refusing to overwrite it",
-                    file=sys.stderr,
-                )
-                return False
-            except OSError as fallback_error:
-                print(
-                    f"error: cannot write {one_line(str(target.absolute()))}: {fallback_error.strerror or fallback_error}",
-                    file=sys.stderr,
-                )
-                return False
-            failure: OSError | None = None
-            try:
-                view = memoryview(data)
-                while view:
-                    view = view[os.write(direct, view):]
-            except OSError as write_error:
-                failure = write_error
-            finally:
-                os.close(direct)
-            if failure is not None:
-                print(
-                    f"error: cannot write {one_line(str(target.absolute()))}: {failure.strerror or failure}; "
-                    "a partial README may remain and must be removed by hand",
-                    file=sys.stderr,
-                )
-                return False
         return True
     finally:
-        if created:
-            try:
-                os.unlink(temp, dir_fd=descriptor)
-            except OSError:
-                pass
         os.close(descriptor)
 
 

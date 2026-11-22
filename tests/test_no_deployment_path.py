@@ -641,11 +641,12 @@ def test_qa_added_blocks_appear_once_in_order() -> None:
 # SKL-182 re-baselined it for its changes outside the blocks: the "Await the gate" bullet in section 5,
 # the incomplete line in the completion summary and the todo-tracking index line; tests/test_qa_await_gate.py
 # pins the first two, and the index line is pinned only by this hash.
-# SKL-386 re-baselined it for its one change outside the blocks: the new section 5 bullet that names the
+# SKL-386 re-baselined it for its changes outside the blocks: the new section 5 bullet that names the
 # evidence skeleton generator, and its arbiter-ruled rewordings: the target worktree as the working
-# directory, the ordered retry after a refusal, the schema qualification, the symlink distinction, and
-# the re-check before editing an existing README.
-QA_BASE_SHA256 = "0787c08d678a887c65da9b0e386e36c1f7753aa7bd483c9109e1d5051b12d55d"
+# directory, the ordered retry after a refusal, the schema qualification, the symlink distinction, the
+# re-check before editing an existing README, the inspection of a partial README left by a failed
+# write, and the quoting rule for a directory or skill path holding an apostrophe.
+QA_BASE_SHA256 = "dc82fe52fcc51e417897875d3575ef11dc65e4b3be6a0ef9071fefbb443c1d50"
 
 
 def test_qa_text_outside_the_added_blocks_is_unchanged() -> None:

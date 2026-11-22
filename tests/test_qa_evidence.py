@@ -6,7 +6,6 @@ and evidence instead of authoring the structure. The lint assertions reuse the d
 `tests/test_skills.py` rather than restating them, so the skeleton stays safe as that lint grows.
 """
 
-import errno
 import importlib.util
 import json
 import os
@@ -361,14 +360,16 @@ def test_a_readme_that_appears_before_the_write_is_never_overwritten(tmp_path, m
     generator = load_generator()
     concurrent = "# written by the other invocation\n"
     readme = tmp_path / "docs" / "qa-evidence" / "SKL-386" / "README.md"
-    real_link = os.link
+    real_check = generator.existing_target_problem
 
-    def racing_link(source, destination, *args, **kwargs):
-        readme.parent.mkdir(parents=True, exist_ok=True)
-        readme.write_text(concurrent, encoding="utf-8")
-        return real_link(source, destination, *args, **kwargs)
+    def racing_check(descriptor, target):
+        problem = real_check(descriptor, target)
+        if problem is None:
+            readme.parent.mkdir(parents=True, exist_ok=True)
+            readme.write_text(concurrent, encoding="utf-8")
+        return problem
 
-    monkeypatch.setattr(generator.os, "link", racing_link)
+    monkeypatch.setattr(generator, "existing_target_problem", racing_check)
     code = generator.main(["--key", "SKL-386", "--evidence-dir", str(tmp_path / "docs" / "qa-evidence")])
     assert code == 1
     assert readme.read_text(encoding="utf-8") == concurrent
@@ -474,7 +475,7 @@ def test_an_empty_evidence_dir_is_refused(tmp_path):
     assert tree_state(tmp_path) == before
 
 
-def test_a_failed_write_leaves_no_readme_and_a_retry_succeeds(tmp_path, monkeypatch):
+def test_a_failed_write_leaves_a_partial_readme_that_a_retry_refuses(tmp_path, monkeypatch):
     generator = load_generator()
     target = tmp_path / "docs" / "qa-evidence" / "SKL-386" / "README.md"
 
@@ -483,9 +484,10 @@ def test_a_failed_write_leaves_no_readme_and_a_retry_succeeds(tmp_path, monkeypa
 
     monkeypatch.setattr(generator.os, "write", failing_write)
     assert generator.publish(target, "# SKL-386 QA evidence\n") is False
-    assert not target.exists()
-    assert list(target.parent.glob(".qa-evidence-*")) == []
+    assert target.exists()
     monkeypatch.undo()
+    assert generator.publish(target, "# SKL-386 QA evidence\n") is False
+    target.unlink()
     assert generator.publish(target, "# SKL-386 QA evidence\n") is True
     assert target.read_text(encoding="utf-8") == "# SKL-386 QA evidence\n"
 
@@ -978,32 +980,23 @@ def test_a_broken_schema_is_ignored_when_no_label_names_a_reference(tmp_path):
     assert (tmp_path / "docs" / "qa-evidence" / "SKL-386" / "README.md").is_file()
 
 
-def test_a_filesystem_without_hard_links_still_publishes(tmp_path, monkeypatch):
-    generator = load_generator()
-    target = tmp_path / "docs" / "qa-evidence" / "SKL-386" / "README.md"
-
-    def refusing_link(*_args, **_kwargs):
-        raise OSError(errno.EPERM, "Operation not permitted")
-
-    monkeypatch.setattr(generator.os, "link", refusing_link)
-    assert generator.publish(target, "# SKL-386 QA evidence\n") is True
-    assert target.read_text(encoding="utf-8") == "# SKL-386 QA evidence\n"
-    assert list(target.parent.glob(".qa-evidence-*")) == []
-
-
-def test_the_hard_link_fallback_never_overwrites_a_concurrent_readme(tmp_path, monkeypatch):
+def test_a_concurrent_writer_that_wins_the_create_is_not_overwritten(tmp_path, monkeypatch):
     generator = load_generator()
     target = tmp_path / "docs" / "qa-evidence" / "SKL-386" / "README.md"
     target.parent.mkdir(parents=True)
     concurrent = "# written by the other invocation\n"
+    real_check = generator.existing_target_problem
 
-    def racing_link(*_args, **_kwargs):
-        target.write_text(concurrent, encoding="utf-8")
-        raise OSError(errno.EPERM, "Operation not permitted")
+    def racing_check(descriptor, path):
+        problem = real_check(descriptor, path)
+        if problem is None:
+            path.write_text(concurrent, encoding="utf-8")
+        return problem
 
-    monkeypatch.setattr(generator.os, "link", racing_link)
+    monkeypatch.setattr(generator, "existing_target_problem", racing_check)
     assert generator.publish(target, "# ours\n") is False
     assert target.read_text(encoding="utf-8") == concurrent
+    assert list(target.parent.glob(".qa-evidence-*")) == []
 
 
 def test_a_non_utf8_path_still_reports_success(tmp_path):
@@ -1106,29 +1099,6 @@ def test_a_regular_readme_under_a_symlinked_ancestor_is_refused_as_unsafe(tmp_pa
     assert readme.read_text(encoding="utf-8") == "# handwritten\n"
 
 
-def test_a_failed_fallback_write_keeps_another_writers_readme(tmp_path, monkeypatch):
-    generator = load_generator()
-    target = tmp_path / "docs" / "qa-evidence" / "SKL-386" / "README.md"
-    real_write = generator.os.write
-    calls = {"count": 0}
-
-    def refusing_link(*_args, **_kwargs):
-        raise OSError(errno.EPERM, "Operation not permitted")
-
-    def failing_second_write(handle, data):
-        calls["count"] += 1
-        if calls["count"] == 2:
-            target.unlink()
-            target.write_text("# concurrent writer\n", encoding="utf-8")
-            raise OSError(errno.ENOSPC, "No space left on device")
-        return real_write(handle, data)
-
-    monkeypatch.setattr(generator.os, "link", refusing_link)
-    monkeypatch.setattr(generator.os, "write", failing_second_write)
-    assert generator.publish(target, "# ours\n") is False
-    assert target.read_text(encoding="utf-8") == "# concurrent writer\n"
-
-
 def test_a_quoted_second_sentence_is_refused(tmp_path):
     label = 'AC1 - "First sentence." "Second sentence."'
     res = run(tmp_path, "--key", "SKL-386", "--item", label)
@@ -1219,6 +1189,59 @@ def test_an_unsupported_path_is_refused(tmp_path):
     res = run(tmp_path, "--key", "SKL-386", "--path", "deployed-ish")
     assert res.returncode == 2, res.stderr
     assert tree_state(tmp_path) == before
+
+
+@pytest.mark.parametrize("abbreviation", ["e.g.", "i.e."])
+def test_a_two_letter_abbreviation_never_ends_a_sentence(tmp_path, abbreviation):
+    label = f"AC1 - parse {abbreviation} Config maps"
+    res = run(tmp_path, "--key", "SKL-386", "--item", label)
+    assert res.returncode == 0, res.stderr
+
+
+def test_a_full_width_full_stop_separates_sentences(tmp_path):
+    label = "AC1 - first sentence\u3002second sentence\u3002"
+    res = run(tmp_path, "--key", "SKL-386", "--item", label)
+    assert res.returncode == 1, res.stderr
+    assert "more than one sentence" in res.stderr
+
+
+def test_a_non_regular_schema_path_is_refused(tmp_path):
+    (tmp_path / "profile").mkdir()
+    (tmp_path / "profile" / "schema.json").mkdir()
+    res = run_in(tmp_path, "--key", "SKL-386", "--item", "AC1 - profile.any.key is set")
+    assert res.returncode == 1, res.stderr
+    assert len(res.stderr.splitlines()) == 1, res.stderr
+    assert "not a regular file" in res.stderr
+    assert not (tmp_path / "docs").exists()
+
+
+def test_an_unsearchable_story_directory_is_a_one_line_refusal(tmp_path):
+    story = tmp_path / "docs" / "qa-evidence" / "SKL-386"
+    story.mkdir(parents=True)
+    story.chmod(0o600)
+    try:
+        res = run(tmp_path, "--key", "SKL-386")
+        assert res.returncode == 1, res.stderr
+        assert len(res.stderr.splitlines()) == 1, res.stderr
+    finally:
+        story.chmod(0o700)
+
+
+def test_a_closed_stdout_pipe_still_creates_the_readme(tmp_path):
+    read_fd, write_fd = os.pipe()
+    os.close(read_fd)
+    try:
+        res = subprocess.run(
+            [sys.executable, str(SCRIPT), "--key", "SKL-386"],
+            cwd=tmp_path,
+            stdout=write_fd,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+    finally:
+        os.close(write_fd)
+    assert res.returncode == 0, res.stderr
+    assert (tmp_path / "docs" / "qa-evidence" / "SKL-386" / "README.md").is_file()
 
 
 def test_an_abbreviated_option_is_refused(tmp_path):
