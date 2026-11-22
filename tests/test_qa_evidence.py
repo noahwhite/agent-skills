@@ -1311,6 +1311,33 @@ def test_a_key_with_a_trailing_path_component_is_refused(tmp_path):
         assert tree_state(tmp_path) == {}
 
 
+def test_a_refusal_creates_no_directory_for_a_missing_parent_component(tmp_path):
+    evidence = tmp_path / "evidence"
+    readme = evidence / "SKL-386" / "README.md"
+    readme.parent.mkdir(parents=True)
+    readme.write_text("# handwritten\n", encoding="utf-8")
+    before = tree_state(tmp_path)
+    res = run(tmp_path, "--key", "SKL-386", "--evidence-dir", "unused/../evidence")
+    assert res.returncode == 1, res.stderr
+    assert len(res.stderr.splitlines()) == 1, res.stderr
+    assert tree_state(tmp_path) == before
+    assert not (tmp_path / "unused").exists()
+
+
+def test_a_git_file_marks_a_linked_worktree_as_the_checkout(tmp_path):
+    worktree = tmp_path / "worktree"
+    worktree.mkdir()
+    (worktree / ".git").write_text("gitdir: /elsewhere/.git/worktrees/x\n", encoding="utf-8")
+    (worktree / "profile").mkdir()
+    (worktree / "profile" / "schema.json").write_text(
+        (ROOT / "profile" / "schema.json").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    label = "AC1 - profile.not.a.key is set"
+    res = run_in(worktree, "--key", "SKL-386", "--item", label)
+    assert res.returncode == 1, res.stderr
+    assert not (worktree / "docs").exists()
+
+
 def test_a_symlink_before_a_parent_component_is_refused(tmp_path):
     nested = tmp_path / "nested"
     (nested / "child").mkdir(parents=True)
@@ -1331,10 +1358,12 @@ def test_a_missing_item_value_is_not_read_as_the_next_option(tmp_path):
     assert not (tmp_path / "docs").exists()
 
 
-def test_an_acronym_before_a_proper_noun_is_not_a_sentence_end(tmp_path):
-    label = "AC1 - the U.S. Congress passes the bill"
-    res = run(tmp_path, "--key", "SKL-386", "--item", label)
-    assert res.returncode == 0, res.stderr
+def test_an_acronym_before_a_capitalized_word_is_a_sentence_end(tmp_path):
+    for label in ("AC1 - the U.S. Congress passes the bill", "AC1 - Deploy to the U.S. Restart the service."):
+        res = run(tmp_path, "--key", "SKL-386", "--item", label)
+        assert res.returncode == 1, res.stderr
+        assert "more than one sentence" in res.stderr
+    assert not (tmp_path / "docs").exists()
 
 
 def test_a_standalone_dot_before_a_capital_is_a_sentence_end(tmp_path):

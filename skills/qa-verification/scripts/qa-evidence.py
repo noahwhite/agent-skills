@@ -78,17 +78,16 @@ SENTENCE_END_RE = re.compile(r"(?:[。｡？！؟]|[.!?][\"'\u2019\u201d)\]]*(?=
 # A dot that never ends a sentence: an abbreviation or title that never ends one, a title before a
 # name, an abbreviation that continues in lowercase, a standalone path argument, an initial in a
 # sequence of initials or an acronym, or a numbered item or decimal that continues in lowercase.
-# Words that commonly start a sentence; a capitalized one after an acronym's dot marks a boundary.
-SENTENCE_STARTERS = (
-    r"(?:The|Then|This|That|These|Those|It|Its|If|When|After|Before|However|But|And|Also|Next|Finally"
-    r"|First|Second|Third|Now|Here|There|We|They|He|She|You|A|An)"
-)
+# A dot that never ends a sentence: an abbreviation or title that never ends one, an abbreviation
+# that continues in lowercase, an initial in a sequence of initials, a standalone path argument or a
+# numbered item or decimal that continues in lowercase. An acronym before a capitalized word is
+# treated as a sentence end, because nothing distinguishes a proper name from a new sentence.
 NEVER_BOUNDARY_RE = re.compile(
     r"\b(?i:etc|vs|fig|a\.m|p\.m)\.(?=\s+[a-z0-9])"
     r"|\b(?i:e\.g|i\.e|mr|mrs|prof)\."
     r"|(?<!\d )\b(?i:ms|dr|st|gen|col|sr|jr)\.(?=\s+[A-Z])"
     r"|\b[A-Z]\.(?=\s+[A-Z]\.)"
-    r"|(?<=[A-Z]\.)[A-Z]\.(?!\s+" + SENTENCE_STARTERS + r"\b)"
+    r"|(?<=[A-Z]\.)[A-Z]\.(?=\s+[a-z0-9]|\s*$)"
     r"|(?<=[A-Z]\.\s)[A-Z]\.(?=\s+[A-Z][a-z])"
     r"|(?<=\s)\.(?=\s+[a-z0-9]|\s*$)"
     r"|\b\d+\.(?=\s+[a-z0-9])"
@@ -371,6 +370,32 @@ def skeleton(key: str, items: list[str], path: str | None) -> str:
     return "\n".join(lines) + "\n"
 
 
+def check_components(path: Path) -> str | None:
+    """The refusal when a component of `path` that exists is a symlink or not a directory, else None."""
+    if not path.is_absolute():
+        return f"error: {one_line(str(path))} is not absolute"
+    descriptor = os.open("/", PATH_FLAGS | os.O_DIRECTORY)
+    try:
+        for part in path.parts[1:]:
+            try:
+                child = os.open(part, PATH_FLAGS | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=descriptor)
+            except FileNotFoundError:
+                return None
+            if not stat.S_ISDIR(os.fstat(child).st_mode):
+                os.close(child)
+                os.close(descriptor)
+                return f"error: cannot open {one_line(str(path))}: a path component is a file or symlink"
+            os.close(descriptor)
+            descriptor = child
+    except OSError as exc:
+        os.close(descriptor)
+        if exc.errno in (errno.ELOOP, errno.ENOTDIR):
+            return f"error: cannot open {one_line(str(path))}: a path component is a file or symlink"
+        return f"error: cannot open {one_line(str(path))}: {exc.strerror or exc}"
+    os.close(descriptor)
+    return None
+
+
 def open_directory(path: Path, *, create: bool) -> tuple[int | None, str | None]:
     """Open `path` one component at a time, never following a symlink, creating it when asked."""
     if not path.is_absolute():
@@ -420,7 +445,11 @@ def existing_target_problem(descriptor: int, target: Path) -> str | None:
 
 def target_problem(target: Path) -> str | None:
     """The refusal when `target` already exists on a safe path or sits on an unsafe one, else None."""
-    descriptor, problem = open_directory(target.parent, create=False)
+    problem = check_components(target.parent)
+    if problem is not None:
+        return problem
+    resolved = Path(os.path.normpath(target.parent))
+    descriptor, problem = open_directory(resolved, create=False)
     if problem is not None:
         return problem
     if descriptor is None:
@@ -438,7 +467,7 @@ def publish(target: Path, text: str) -> bool:
     except UnicodeError:
         print(f"error: the skeleton for {one_line(str(target))} cannot be encoded as UTF-8", file=sys.stderr)
         return False
-    descriptor, problem = open_directory(target.parent, create=True)
+    descriptor, problem = open_directory(Path(os.path.normpath(target.parent)), create=True)
     if descriptor is None:
         print(problem, file=sys.stderr)
         return False
@@ -494,8 +523,9 @@ def normalize_argv(argv: list[str]) -> list[str]:
     normalized = []
     index = 0
     while index < len(argv):
-        value_follows = index + 1 < len(argv) and argv[index + 1] not in OPTIONS
-        if argv[index] in ("--key", "--item", "--evidence-dir") and value_follows:
+        following = argv[index + 1] if index + 1 < len(argv) else None
+        option_like = following is not None and following.startswith("--") and following.split("=")[0] in OPTIONS
+        if argv[index] in ("--key", "--item", "--evidence-dir") and following is not None and not option_like:
             normalized.append(f"{argv[index]}={argv[index + 1]}")
             index += 2
             continue

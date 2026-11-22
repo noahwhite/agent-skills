@@ -646,8 +646,9 @@ def test_qa_added_blocks_appear_once_in_order() -> None:
 # directory, the ordered retry after a refusal, the schema qualification, the symlink distinction, the
 # re-check before editing an existing README, the inspection of a partial README left by a failed
 # write, the quoting rule for a directory or skill path holding an apostrophe, the one --path with
-# one --item per label wording, and the split refusal description.
-QA_BASE_SHA256 = "186fe6bf5f7cb33a9eceede15fec1942dee9af3f84835f2e2909487966f9fb80"
+# one --item per label wording, the split refusal description, the stop-and-report rule for an
+# unsafe path, and the British-spelling rule qualified by destination ownership.
+QA_BASE_SHA256 = "04d593a39ec47234f7ab133041e64d070848975d78339f2abb17664e4f805588"
 
 
 def test_qa_text_outside_the_added_blocks_is_unchanged() -> None:
