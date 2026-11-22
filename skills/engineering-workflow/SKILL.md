@@ -256,7 +256,7 @@ Only once step 9 holds.
 
 The merge is one invocation, `bash <skill dir>/scripts/merge-pr.sh <PR number> --repo <consumer repo>`, where `<consumer repo>` is the local checkout directory of the repository under review: it reads the PR's reviews, reads the required checks, verifies the review of record against the live head, and merges with the reviewed head as the expected-head condition, or refuses and reports the merge blocked; when `profile.review.merge_owner` is `human` it stops without a merge and prints the verified merge-ready summary instead.
 It runs the merge guard in `references/code-review.md`, so do not repeat the reviews read or the checks read by hand, except on the per-PR review waiver path below, which keeps its own sequence.
-The helper needs `bash`, `git`, `gh`, `jq`, and `python3` with PyYAML importable in that interpreter's own environment (system or virtualenv site-packages; it runs isolated, so a user-site-only install is refused), and it checks and names each of those before it reads anything; it also uses the standard core utilities (`mktemp`, `dirname`, `cat`, `rm` and `date`).
+The helper needs `bash` (3.2 or later), `git`, `gh`, `jq`, and `python3` with PyYAML importable in that interpreter's own environment (system or virtualenv site-packages; it runs isolated, so a user-site-only install is refused), and it checks and names each of those before it reads anything; it also uses the standard core utilities (`mktemp`, `cat`, `rm` and `tr`).
 
 If the brief assigns merge approval to a manager, follow [references/merge-approval.md](references/merge-approval.md) before any merge.
 If the brief does not give the approvals-file path or the wake address the runtime needs, stop and report the engagement blocked on the missing metadata; do not fall through to autonomous merge.
@@ -283,7 +283,8 @@ Never merge with failing required checks or before the review of record is clean
 An update-branch after the review, even one that brings in only base changes, is a new head: review the delta before merging.
 
 Under the explicit per-PR review waiver in [references/code-review.md](references/code-review.md) (The gate) there is no review of record, so the helper refuses.
-That path keeps its hand-written sequence: record the head SHA the PR has when the user gives the instruction, read the PR and its required checks (`gh pr view <n> --json headRefOid,mergeable,mergeStateStatus` and `gh pr checks <n> --required`), then merge carrying that full SHA as the expected-head condition, `gh pr merge <n> --match-head-commit <full SHA>` plus the merge-method flag.
+That path keeps the existing hand-written merge: record the head SHA the PR has when the user gives the instruction, then merge carrying that full SHA as the expected-head condition, following that file's merge-guard steps and its waiver paragraphs exactly.
+The manager-approval gate above and the human-owner stop apply to that path unchanged.
 
 ## 11. Deploy and verify
 

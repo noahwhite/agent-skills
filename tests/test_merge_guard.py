@@ -326,11 +326,16 @@ def test_engineering_workflow_step_ten_names_the_merge_helper_on_every_merge_pat
     assert "stops without a merge" in human
 
 
-def test_engineering_workflow_step_ten_keeps_only_the_waiver_hand_written() -> None:
+def test_engineering_workflow_step_ten_leaves_only_a_referenced_waiver_merge() -> None:
     body = section(skill("engineering-workflow"), "10. Merge")
-    assert body.count("gh pr merge") == 1
-    waiver = next(ln for ln in body.splitlines() if ln.startswith("That path keeps its hand-written sequence:"))
-    assert "gh pr merge <n> --match-head-commit <full SHA>" in waiver
+    # AC1: step 10 names the one helper invocation and no hand-written gh sequence, the existing
+    # per-PR review waiver included: that path points at the merge guard's own waiver paragraphs.
+    assert body.count("gh pr merge") == 0
+    for command in ("gh pr view", "gh pr checks", "gh api", "gh pr merge"):
+        assert command not in body, command
+    waiver = next(ln for ln in body.splitlines() if ln.startswith("That path keeps the existing hand-written merge:"))
+    assert "following that file's merge-guard steps and its waiver paragraphs exactly" in waiver
+    assert "The manager-approval gate above and the human-owner stop apply to that path unchanged." in body
     assert "The owner performs the merge" in body
 
 

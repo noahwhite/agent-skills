@@ -15,8 +15,9 @@
 # Output: the PR number and URL, the live and reviewed head SHAs, the review URL, the check states,
 # the marker reviews it excluded, and the merge or refusal result.
 #
-# Prerequisites, each checked before any GitHub call: bash, git, gh, jq, python3 with PyYAML, and
-# the core utilities it calls (mktemp, dirname, cat, rm and date).
+# Prerequisites: bash 3.2 or later, git, gh, jq, python3 with PyYAML, and the standard core
+# utilities (mktemp, cat, rm and tr). The helper checks bash, git, gh, jq and python3 before any
+# GitHub call and names the missing one.
 # Repository selection comes from --repo (or the current directory) alone: the helper clears every
 # inherited GIT_* variable, plus GH_REPO and GH_HOST, before it resolves the repository, so no
 # caller environment can move the root, the profile lookup or the repository gh targets.
@@ -24,6 +25,14 @@
 set -euo pipefail
 
 PROG="merge-pr.sh"
+# Regexes live in variables: bash 3.2, which macOS ships, parses `[[ x =~ $re ]]` but chokes on
+# some literal patterns, so every match below goes through one of these.
+PR_URL_RE='^https?://([^/]+)/([^/]+/[^/]+)/pull/([0-9]+)/?$'
+NUMERIC_RE='^[0-9]+$'
+LOWER_SHA_RE='^[0-9a-f]{40}$'
+MIXED_SHA_RE='^[0-9A-Fa-f]{40}$'
+REVIEW_LINE_RE='^Review of record ([0-9A-Fa-f]{40})$'
+UTC_TIMESTAMP_RE='^([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})Z$'
 NUMBER=""
 REPO=""
 APPROVALS=""
@@ -119,7 +128,7 @@ while [ $# -gt 0 ]; do
 done
 
 [ -n "$NUMBER" ] || usage
-[[ "$NUMBER" =~ ^[0-9]+$ ]] || die 2 "the PR number must be numeric, got '$NUMBER'"
+[[ "$NUMBER" =~ $NUMERIC_RE ]] || die 2 "the PR number must be numeric, got '$NUMBER'"
 # Option presence is tracked separately from its value: an empty manager argument is a usage error,
 # never an implicit "no approval needed".
 if [ "$APPROVALS_SET" = 1 ] && [ -z "$APPROVALS" ]; then
@@ -134,7 +143,8 @@ fi
 if [ "$REQUEST_ID_SET" = 1 ]; then
   # references/merge-approval.md: the request ID is REQ-<story-key>-PR<number>-<n> with <n> from 1,
   # so it names the PR it authorizes; an ID naming another PR can never approve this merge.
-  [[ "$REQUEST_ID" =~ ^REQ-.+-PR${NUMBER}-[1-9][0-9]*$ ]] \
+  REQUEST_ID_RE="^REQ-.+-PR${NUMBER}-[1-9][0-9]*$"
+  [[ "$REQUEST_ID" =~ $REQUEST_ID_RE ]] \
     || die 2 "--request-id must name PR #$NUMBER as REQ-<story-key>-PR${NUMBER}-<n> with <n> from 1, got '$REQUEST_ID'"
 fi
 
@@ -195,29 +205,50 @@ cd "$ROOT"
 # candidate is skipped; a candidate that exists but cannot be read as a file fails closed rather
 # than letting a lower-priority profile decide the merge policy.
 #
-# An inaccessible location is never read as absent (references/profile.md, Fail closed): `-e` is
-# false both for a file that is not there and for a path whose parent cannot be searched, so the
-# nearest existing ancestor decides which of the two happened, and a failed lookup refuses naming
-# the candidate before any GitHub call.
+# An inaccessible location is never read as absent (references/profile.md, Fail closed): a plain
+# file test is false both for a file that is not there and for a path whose lookup failed, so the
+# lookup is done by the interpreter that already reads the profile. It distinguishes "not there"
+# from every other error, symlink loops and permission denials included, and a failed lookup
+# refuses naming the candidate before any GitHub call.
 candidate_state() {
-  local candidate="$1" dir
-  if [ -e "$candidate" ] || [ -L "$candidate" ]; then
-    printf 'present'
-    return 0
-  fi
-  dir="$(dirname -- "$candidate")"
-  while [ -n "$dir" ] && [ "$dir" != "/" ] && [ "$dir" != "." ]; do
-    if [ -d "$dir" ]; then
-      if [ -x "$dir" ]; then
-        printf 'absent %s' "$dir"
-      else
-        printf 'unsearchable %s' "$dir"
-      fi
-      return 0
-    fi
-    dir="$(dirname -- "$dir")"
-  done
-  printf 'absent %s' "$dir"
+  python3 -I - "$1" <<'PY'
+import os
+import sys
+
+path = sys.argv[1]
+try:
+    os.lstat(path)
+except FileNotFoundError:
+    pass
+except OSError:
+    print("unsearchable " + os.path.dirname(path))
+    raise SystemExit
+else:
+    print("present")
+    raise SystemExit
+# The candidate itself is not there. Walk up to the nearest ancestor that can be statted: its own
+# lookup needs search permission on the chain above it, so any error other than "not found" means
+# the candidate could not be checked, never that it is absent.
+directory = os.path.dirname(path) or "."
+while True:
+    try:
+        os.stat(directory)
+    except FileNotFoundError:
+        parent = os.path.dirname(directory)
+        if not parent or parent == directory:
+            print("absent")
+            raise SystemExit
+        directory = parent
+        continue
+    except OSError:
+        print("unsearchable " + directory)
+        raise SystemExit
+    if os.access(directory, os.X_OK):
+        print("absent " + directory)
+    else:
+        print("unsearchable " + directory)
+    raise SystemExit
+PY
 }
 
 HOME_DIR="${HOME:-}"
@@ -318,7 +349,7 @@ PY
 }
 
 PROFILE_LINES="$(read_profile)" || {
-  printf 'Result: merge blocked: the consumer profile %s was rejected\n' "$PROFILE"
+  printf 'Result: merge blocked: the consumer profile %s was rejected\n' "$(one_line "$PROFILE")"
   exit 13
 }
 MERGE_OWNER=""
@@ -351,20 +382,20 @@ IS_DRAFT="$(json_field "$PR_JSON" .isDraft)" \
 PR_NUMBER="$(json_field "$PR_JSON" .number)" \
   || refuse 12 "Could not read PR #$NUMBER with gh pr view: the response was not readable JSON"
 [ "$PR_NUMBER" = "$NUMBER" ] || refuse 12 "gh pr view returned a different PR number than #$NUMBER"
-if [[ ! "$PR_URL" =~ ^https?://([^/]+)/([^/]+/[^/]+)/pull/([0-9]+)/?$ ]]; then
+if [[ ! "$PR_URL" =~ $PR_URL_RE ]]; then
   refuse 12 "Could not derive owner/repo and number from the PR URL ($PR_URL)"
 fi
 SLUG="${BASH_REMATCH[2]}"
 HOST="${BASH_REMATCH[1]}"
 [ "${BASH_REMATCH[3]}" = "$NUMBER" ] || refuse 12 "the PR URL ($PR_URL) is not PR #$NUMBER"
-[[ "$HEAD" =~ ^[0-9a-f]{40}$ ]] || refuse 12 "the PR head SHA read from GitHub is not a full commit SHA: '$HEAD'"
+[[ "$HEAD" =~ $LOWER_SHA_RE ]] || refuse 12 "the PR head SHA read from GitHub is not a full commit SHA: '$HEAD'"
 
 # The expected author of the review of record: review.record_author when set, else the login of
 # the authenticated account.
 AUTHOR="$RECORD_AUTHOR"
 if [ -z "$AUTHOR" ]; then
   AUTHOR="$(gh api user --jq .login --hostname "$HOST")" \
-    || refuse 15 "could not resolve the expected author: gh api user --jq .login --hostname $HOST failed"
+    || refuse 15 "could not resolve the expected author: review.record_author is unset and gh api user --jq .login --hostname $HOST failed"
 fi
 [ -n "$AUTHOR" ] \
   || refuse 15 "no expected author: review.record_author is unset and gh api user --jq .login returned nothing"
@@ -407,16 +438,27 @@ if [ -n "$SELECTED" ]; then
   REVIEW_SUBMITTED="$(json_field "$SELECTED" .submitted_at)" \
     || refuse 15 "the review of record selected on PR #$NUMBER was not readable JSON"
   # A matching marker review that cannot be ordered is refused by name, never reported as absent:
-  # claiming no review exists would hide the real cause. Only the documented UTC form is ordered,
-  # so a non-UTC timestamp is a refusal rather than a silent skip to an older review.
-  if [[ ! "$REVIEW_SUBMITTED" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]; then
-    refuse 15 "the review of record for PR #$NUMBER carries no usable submitted_at timestamp ('$(one_line "$REVIEW_SUBMITTED")'), so the latest matching review cannot be ordered"
+  # claiming no review exists would hide the real cause. Every matching review is validated before
+  # the sort, so an unusable timestamp is never silently dropped in favour of an older review.
+  UNUSABLE_TIMESTAMPS="$(
+    printf '%s\n' "$REVIEWS_JSON" | jq -s -r --arg author "$AUTHOR" --arg re "$UTC_TIMESTAMP_RE" '
+      [ .[]
+        | select(.state == "COMMENTED")
+        | select((.body // "") | startswith("Review of record"))
+        | select(((.author // "") | ascii_downcase) == ($author | ascii_downcase))
+        | select(((.submitted_at // "") | test($re)) | not)
+        | ((.submitted_at // "") | tostring | gsub("[\\r\\n\\t]"; " ")) ]
+      | join("; ")
+    '
+  )" || UNUSABLE_TIMESTAMPS=""
+  if [ -n "$UNUSABLE_TIMESTAMPS" ]; then
+    refuse 15 "a review of record marker for PR #$NUMBER carries no usable submitted_at timestamp ($UNUSABLE_TIMESTAMPS), so the latest matching review cannot be ordered"
   fi
   # The selected review is named in the summary and re-read by a human, so it must carry both a
   # full commit and its own URL; a missing one is a refusal, never the literal `null` in a summary.
-  [[ "$REVIEWED_COMMIT" =~ ^[0-9A-Fa-f]{40}$ ]] \
+  [[ "$REVIEWED_COMMIT" =~ $MIXED_SHA_RE ]] \
     || refuse 15 "the review of record selected on PR #$NUMBER carries no full commit_id ('$(one_line "$REVIEWED_COMMIT")')"
-  REVIEWED_COMMIT_LOWER="${REVIEWED_COMMIT,,}"
+  REVIEWED_COMMIT_LOWER="$(printf '%s' "$REVIEWED_COMMIT" | tr 'A-F' 'a-f')"
   case "$REVIEW_URL" in
     "" | "null" | "-")
       refuse 15 "the review of record selected on PR #$NUMBER carries no html_url, so it cannot be named or re-read"
@@ -428,8 +470,8 @@ if [ -n "$SELECTED" ]; then
     printf '%s' "$SELECTED" \
       | jq -r '.body | split("\n")[0] | sub("\r$"; "") | sub("^[[:space:]]+"; "") | sub("[[:space:]]+$"; "")'
   )" || FIRST_LINE=""
-  if [[ "$FIRST_LINE" =~ ^Review\ of\ record\ ([0-9a-f]{40})$ ]]; then
-    REVIEWED_FIRSTLINE_SHA="${BASH_REMATCH[1]}"
+  if [[ "$FIRST_LINE" =~ $REVIEW_LINE_RE ]]; then
+    REVIEWED_FIRSTLINE_SHA="$(printf '%s' "${BASH_REMATCH[1]}" | tr 'A-F' 'a-f')"
   else
     REVIEWED_FIRSTLINE_SHA=""
   fi
@@ -465,7 +507,7 @@ fi
 
 # The first line of the review of record must carry the reviewed head as a full SHA; a value in
 # that position is only ever printed after this check, so unrelated review text cannot leak out.
-[[ "$REVIEWED_FIRSTLINE_SHA" =~ ^[0-9a-f]{40}$ ]] \
+[[ "$REVIEWED_FIRSTLINE_SHA" =~ $LOWER_SHA_RE ]] \
   || refuse 15 "the review of record ($REVIEW_URL) does not carry a full head SHA on its first line"
 
 if [ "$REVIEWED_COMMIT_LOWER" != "$HEAD" ]; then
@@ -600,12 +642,31 @@ if [ -n "$APPROVALS" ]; then
     printf '%s' "$value"
   }
   is_utc_timestamp() {
-    local value="$1" parsed
-    [[ "$value" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]] || return 1
-    # The shape is not enough: 2026-99-99T99:99:99Z matches it. Re-render the instant and require
-    # the same text, so an impossible calendar date or clock time never counts as a decision.
-    parsed="$(date -u -d "$value" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)" || return 1
-    [ "$parsed" = "$value" ]
+    # Real calendar validation in pure bash (no GNU date), so the helper stays portable: the shape
+    # alone is not enough, because 2026-99-99T99:99:99Z matches it.
+    local value="$1" year month day hour minute second days
+    [[ "$value" =~ $UTC_TIMESTAMP_RE ]] || return 1
+    year=$((10#${BASH_REMATCH[1]}))
+    month=$((10#${BASH_REMATCH[2]}))
+    day=$((10#${BASH_REMATCH[3]}))
+    hour=$((10#${BASH_REMATCH[4]}))
+    minute=$((10#${BASH_REMATCH[5]}))
+    second=$((10#${BASH_REMATCH[6]}))
+    [ "$month" -ge 1 ] && [ "$month" -le 12 ] || return 1
+    [ "$hour" -le 23 ] && [ "$minute" -le 59 ] && [ "$second" -le 59 ] || return 1
+    case "$month" in
+      1 | 3 | 5 | 7 | 8 | 10 | 12) days=31 ;;
+      4 | 6 | 9 | 11) days=30 ;;
+      2)
+        if { [ $((year % 4)) -eq 0 ] && [ $((year % 100)) -ne 0 ]; } || [ $((year % 400)) -eq 0 ]; then
+          days=29
+        else
+          days=28
+        fi
+        ;;
+      *) return 1 ;;
+    esac
+    [ "$day" -ge 1 ] && [ "$day" -le "$days" ]
   }
   DECISION=""
   CONFLICT=""
@@ -693,7 +754,18 @@ fi
 [ "$CONFIRM_STATE" = "MERGED" ] \
   || unconfirmed 17 "the merge was submitted, but PR #$NUMBER is in state $CONFIRM_STATE, not MERGED yet (a queued merge is not a success; re-read the PR before any retry)"
 [ "$CONFIRM_HEAD" = "$HEAD" ] \
-  || refuse 17 "PR #$NUMBER merged head $CONFIRM_HEAD, not the reviewed head $HEAD"
-[ -n "$MERGE_COMMIT" ] || refuse 17 "PR #$NUMBER reports no merge commit after merging head $HEAD"
+  || refuse 17 "the merge attempt ran, but PR #$NUMBER reports merged head $CONFIRM_HEAD, not the reviewed head $HEAD"
+[[ "$MERGE_COMMIT" =~ $LOWER_SHA_RE ]] \
+  || refuse 17 "PR #$NUMBER reports no full merge commit after merging head $HEAD ('$(one_line "$MERGE_COMMIT")')"
+
+# Report the attempt and the observed state separately: a client error can arrive after GitHub
+# accepted the merge, and a MERGED PR is a fact about the PR, not proof that this call merged it.
+if [ "$MERGE_STATUS" != 0 ]; then
+  printf 'Merge attempt: gh pr merge exited %s (client error); GitHub reports PR #%s MERGED at the reviewed head %s\n' \
+    "$MERGE_STATUS" "$NUMBER" "$HEAD"
+else
+  printf 'Merge attempt: gh pr merge exited 0; GitHub reports PR #%s MERGED at the reviewed head %s\n' \
+    "$NUMBER" "$HEAD"
+fi
 
 printf 'Result: merged %s\n' "$MERGE_COMMIT"

@@ -88,6 +88,8 @@ case "${1:-}" in
       checks)
         [ -z "${FAIL_CHECKS:-}" ] || { echo "gh: HTTP 500" >&2; exit 1; }
         [ "${3:-}" = "7" ] || { echo "gh: unexpected PR number ${3:-}" >&2; exit 3; }
+        [ -z "${EMPTY_CHECKS_OUT:-}" ] || exit 0
+        [ -z "${NON_JSON_CHECKS_OUT:-}" ] || { printf 'all checks passed\n'; exit 0; }
         [ -z "${NO_REQUIRED_CHECKS:-}" ] || { echo "no required checks reported on the 'x' branch${NO_REQUIRED_CHECKS_SUFFIX:-}" >&2; exit 1; }
         [ -z "${NO_CHECKS:-}" ] || { echo "no checks reported on the 'x' branch" >&2; exit 1; }
         [ -z "${WARN_CHECKS:-}" ] || echo "warning: something happened" >&2
@@ -313,21 +315,11 @@ def test_a_pr_number_is_required(tmp_path):
     assert "usage" in (done.stdout + done.stderr).lower()
 
 
-def test_refuses_the_skills_repository_unless_repo_names_it(tmp_path):
-    skills = tmp_path / "skillsrepo"
-    (skills / "shared").mkdir(parents=True)
-    (skills / "skills.json").write_text("[]\n")
-    (skills / "shared" / "runtimes.md").write_text("map\n")
-    subprocess.run(["git", "init", "-q", str(skills)], check=True)
-    done = subprocess.run(
-        ["bash", str(SCRIPT), "7"],
-        cwd=str(skills),
-        capture_output=True,
-        text=True,
-        timeout=60,
-    )
+def test_refuses_the_skills_repository_unless_repo_names_it(run):
+    done, log = run(skills_repo=True, with_repo=False)
     assert done.returncode == 2
     assert "skills repository" in done.stderr
+    assert log == []
 
 
 def test_targets_the_skills_repository_when_repo_names_it_explicitly(run):
@@ -1235,3 +1227,43 @@ def test_the_record_author_constraints_follow_the_profile_schema():
     pattern = re.search(r"login = re\.compile\(r\"(.*?)\"\)", script)
     assert max_length and int(max_length.group(1)) == entry["maxLength"]
     assert pattern and pattern.group(1) == entry["pattern"].removeprefix("^").removesuffix("$")
+
+
+def test_refuses_an_empty_checks_read_that_exited_zero(run):
+    done, log = run(reviews=[review()], extra_env={"EMPTY_CHECKS_OUT": "1"})
+    assert done.returncode == 14
+    assert merged(log) == []
+
+
+def test_refuses_non_json_checks_output_that_exited_zero(run):
+    done, log = run(reviews=[review()], extra_env={"NON_JSON_CHECKS_OUT": "1"})
+    assert done.returncode == 14
+    assert merged(log) == []
+
+
+def test_the_helper_stays_within_bash_three_point_two_syntax():
+    # macOS ships bash 3.2: no lowercase/uppercase expansions, associative arrays, mapfile, or
+    # literal `=~` patterns (bash 3.2 parses `[[ x =~ $re ]]` but not every literal pattern).
+    text = SCRIPT.read_text()
+    for construct in (",,}", "^^}", "declare -A", "mapfile", "readarray", "|&", "&>>"):
+        assert construct not in text, construct
+    for line in text.splitlines():
+        if "=~" not in line or line.lstrip().startswith("#"):
+            continue
+        right = line.split("=~", 1)[1].strip()
+        assert right.startswith("$"), line
+
+
+def test_refuses_a_profile_candidate_behind_a_symlink_loop(run, tmp_path):
+    # A symlink loop makes every plain file test false; it is a failed lookup, never an absent
+    # candidate, or a lower-priority profile would decide who merges.
+    local = tmp_path / "consumer" / ".agent-skills"
+    local.symlink_to(local)
+    try:
+        done, log = run(profile_text=None, profile_path="none", reviews=[review()])
+    finally:
+        local.unlink()
+    assert done.returncode == 13
+    assert ".agent-skills/profile.yaml" in done.stderr
+    assert "could not be checked" in done.stderr
+    assert log == []
