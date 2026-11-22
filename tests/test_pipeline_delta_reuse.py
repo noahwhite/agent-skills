@@ -335,6 +335,11 @@ def test_reuse_refuses_at_exit_13_when_the_producing_run_no_longer_accepts(gate)
     assert result.returncode == 13, result.stdout + result.stderr
     assert "reuse: miss reason=acceptance lapsed" in result.stderr, result.stderr
     assert "sweep" in result.stderr and producing.name in result.stderr, result.stderr
+    # A refused reuse leaves no copied artifact and no provenance that `paths` could report as a hit.
+    listed = gate.paths().stdout
+    assert "reused sweep" not in listed, listed
+    artifacts = gate.artifacts()
+    assert not artifacts["sweep"].exists(), artifacts["sweep"]
 
 
 def test_reuse_covers_hunt_but_not_preflight_or_arbitrate(gate):
@@ -607,23 +612,166 @@ def test_delta_and_base_together_are_a_usage_error(gate):
     assert "do not also pass --base" in result.stderr, result.stderr
 
 
-def test_sweep_with_no_sweep_is_a_usage_error(gate):
+def test_sweep_still_runs_when_no_sweep_is_passed(gate):
+    """Compatibility: a driver that passes --no-sweep uniformly may still run an explicit sweep."""
     write_spec(gate)
-    result = gate.run_phase("sweep", report_agent(gate.scratch / "sweep.launched"),
-                            extra=("--no-sweep",))
-    assert result.returncode == 2, result.stdout + result.stderr
-    assert "cannot run with --no-sweep" in result.stderr, result.stderr
+    pre = gate.preflight()
+    assert pre.returncode == 0, pre.stdout + pre.stderr
+    marker = gate.scratch / "sweep.launched"
+    result = gate.run_phase("sweep", report_agent(marker), extra=("--no-sweep",))
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert marker.exists(), result.stderr
 
 
-def test_a_story_base_that_is_not_an_ancestor_is_refused(gate):
+def test_a_story_base_that_is_not_an_ancestor_is_kept_as_provenance(gate):
+    """A re-gate may name an integration tip the branch does not contain: it is provenance only."""
     write_spec(gate)
     _git(gate.repo, gate.env, "checkout", "-q", "base")
     _git(gate.repo, gate.env, "commit", "-q", "--allow-empty", "-m", "sibling")
     sibling = _git(gate.repo, gate.env, "rev-parse", "HEAD")
     _git(gate.repo, gate.env, "checkout", "-q", "-")
     result = gate.preflight(story_base=sibling)
+    assert result.returncode == 0, result.stdout + result.stderr
+    copy = gate.scratch / "sweep-dossier-copy.md"
+    result = gate.run_phase("sweep", capturing_agent(gate.scratch / "sweep.launched", copy),
+                            extra=("--story-base", sibling))
+    assert result.returncode == 0, result.stdout + result.stderr
+    dossier = copy.read_text()
+    assert f"STORY-BASE: {sibling} {sibling}" in dossier, dossier
+    head = _git(gate.repo, gate.env, "rev-parse", "HEAD")
+    base_sha = _git(gate.repo, gate.env, "rev-parse", "base^{commit}")
+    assert f"REVIEWED RANGE: {base_sha}...{head}" in dossier, dossier
+
+
+def test_an_inspection_command_neither_creates_nor_overwrites_a_story_base(gate):
+    """`paths` with another spec must not write the record a gate start wrote for its own spec."""
+    write_spec(gate)
+    pre = gate.preflight()
+    assert pre.returncode == 0, pre.stdout + pre.stderr
+    run_dir = gate.run_dir()
+    spec_one = hashlib.sha256(gate.spec.read_bytes()).hexdigest()
+    record = run_dir / f"story-base.{spec_one}"
+    assert record.is_file(), sorted(p.name for p in run_dir.iterdir())
+    before = record.read_bytes()
+    other = gate.scratch / "other-spec.txt"
+    other.write_text("a different spec\n")
+    listed = run_script("paths", "--repo", str(gate.repo), "--spec", str(other),
+                        "--base", "base", env=gate.env)
+    assert listed.returncode == 0, listed.stdout + listed.stderr
+    spec_two = hashlib.sha256(other.read_bytes()).hexdigest()
+    assert not (run_dir / f"story-base.{spec_two}").exists(), "an inspection wrote provenance"
+    assert record.read_bytes() == before, "an inspection overwrote another spec's provenance"
+
+
+def test_a_user_attributes_file_cannot_hide_a_textual_change(tmp_path):
+    env = fixed_env(tmp_path)
+    attrs = tmp_path / "user-attributes"
+    attrs.write_text("*.py -diff\n")
+    config = tmp_path / "user.gitconfig"
+    config.write_text(f"[core]\n\tattributesFile = {attrs}\n")
+    env["GIT_CONFIG_GLOBAL"] = str(config)
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, env, "init", "-q", "--initial-branch=main")
+    _git(repo, env, "config", "core.autocrlf", "false")
+    _git(repo, env, "config", "commit.gpgsign", "false")
+    (repo / "app.py").write_text(APP_BASE)
+    _git(repo, env, "add", "-A")
+    _git(repo, env, "commit", "-q", "-m", "base")
+    _git(repo, env, "tag", "base")
+    (repo / "app.py").write_text(APP_HEAD)
+    _git(repo, env, "add", "-A")
+    _git(repo, env, "commit", "-q", "-m", "head")
+    scratch = tmp_path / "session-scratch"
+    scratch.mkdir()
+    spec = tmp_path / "spec.txt"
+    spec.write_text(SPEC_TEXT)
+    result = run_script("preflight", "--full-suite", "off", "--repo", str(repo), "--base", "base",
+                        "--test-cmd", "true", "--scratch", str(scratch), env=env)
+    assert result.returncode == 0, result.stdout + result.stderr
+    result = run_script("dossier", "sweep", "--repo", str(repo), "--base", "base",
+                        "--spec", str(spec), "--scratch", str(scratch), env=env)
+    assert result.returncode == 0, result.stdout + result.stderr
+    dossier = Path(result.stdout.strip().splitlines()[-1]).read_text()
+    diff = dossier.split("===== DIFF (", 1)[1]
+    assert "def mean" in diff and "-    return 'value: ' + str(x)" in diff, diff
+    assert "Binary files" not in diff, "a user attributes file turned a textual change binary"
+
+
+def test_the_diffstat_keeps_gits_default_allocation_at_the_pinned_width(tmp_path):
+    """AC4: pinning the reference width must not change an ordinary non-delta diffstat."""
+    env = fixed_env(tmp_path)
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, env, "init", "-q", "--initial-branch=main")
+    _git(repo, env, "config", "core.autocrlf", "false")
+    _git(repo, env, "config", "commit.gpgsign", "false")
+    # 52 characters: git's default name column at 80 keeps it whole, while a fixed
+    # --stat-name-width=50 truncates it, so this row proves the default allocation is retained.
+    long_path = "src/" + "d" * 40 + "/file.py"
+    (repo / long_path).parent.mkdir(parents=True)
+    (repo / long_path).write_text("one\n" * 40)
+    (repo / "app.py").write_text(APP_BASE)
+    _git(repo, env, "add", "-A")
+    _git(repo, env, "commit", "-q", "-m", "base")
+    _git(repo, env, "tag", "base")
+    (repo / long_path).write_text("two\n" * 40)
+    (repo / "app.py").write_text(APP_HEAD)
+    _git(repo, env, "add", "-A")
+    _git(repo, env, "commit", "-q", "-m", "head")
+    scratch = tmp_path / "session-scratch"
+    scratch.mkdir()
+    spec = tmp_path / "spec.txt"
+    spec.write_text(SPEC_TEXT)
+    result = run_script("preflight", "--full-suite", "off", "--repo", str(repo), "--base", "base",
+                        "--test-cmd", "true", "--scratch", str(scratch), env=env)
+    assert result.returncode == 0, result.stdout + result.stderr
+    result = run_script("dossier", "sweep", "--repo", str(repo), "--base", "base",
+                        "--spec", str(spec), "--scratch", str(scratch), env=env)
+    assert result.returncode == 0, result.stdout + result.stderr
+    dossier = Path(result.stdout.strip().splitlines()[-1]).read_text()
+    blueprint = dossier.split("===== BLUEPRINT", 1)[1].split("\n\n", 1)[0]
+    blueprint = blueprint.split("\n", 1)[1].rstrip("\n")
+    plain = _git(repo, env, "diff", "--stat", "--stat-width=80", "base...HEAD")
+    assert blueprint.lstrip() == plain.lstrip(), (
+        f"dossier blueprint:\n{blueprint}\nplain git:\n{plain}")
+
+
+def test_a_spec_less_invocation_cannot_contradict_the_recorded_story_base(gate):
+    write_spec(gate)
+    assert gate.preflight().returncode == 0
+    base_sha = _git(gate.repo, gate.env, "rev-parse", "base^{commit}")
+    _git(gate.repo, gate.env, "checkout", "-q", "base")
+    _git(gate.repo, gate.env, "commit", "-q", "--allow-empty", "-m", "sibling")
+    sibling = _git(gate.repo, gate.env, "rev-parse", "HEAD")
+    _git(gate.repo, gate.env, "checkout", "-q", "-")
+    assert sibling != base_sha
+    result = run_script("preflight", "--full-suite", "off", "--repo", str(gate.repo),
+                        "--base", "base", "--story-base", sibling, "--scratch", str(gate.scratch),
+                        env=gate.env)
     assert result.returncode == 12, result.stdout + result.stderr
-    assert "is not an ancestor of HEAD" in result.stderr, result.stderr
+    assert "already records story base" in result.stderr, result.stderr
+
+
+def test_a_spec_edit_at_the_same_run_keeps_the_delta_header(gate):
+    """A spec edit reuses the same base/head run directory, which already pins the story base."""
+    write_spec(gate)
+    gate.accept_full_run("base")
+    base_sha = _git(gate.repo, gate.env, "rev-parse", "base^{commit}")
+    head_b = _git(gate.repo, gate.env, "rev-parse", "HEAD")
+    commit_change(gate.repo, gate.env, "three\n")
+    head_c = _git(gate.repo, gate.env, "rev-parse", "HEAD")
+    assert gate.preflight(base=head_b).returncode == 0
+    write_spec(gate, "an edited spec at the same base and head\n")
+    assert gate.preflight(base=head_b).returncode == 0
+    copy = gate.scratch / "edited-spec-dossier.md"
+    result = gate.run_phase("sweep", capturing_agent(gate.scratch / "sweep.launched", copy),
+                            base=head_b)
+    assert result.returncode == 0, result.stdout + result.stderr
+    dossier = copy.read_text()
+    assert f"STORY-BASE: base {base_sha}" in dossier, dossier
+    assert f"DELTA-BASE: {head_b} {head_b}" in dossier, dossier
+    assert f"REVIEWED RANGE: {head_b}...{head_c}" in dossier, dossier
 
 
 def test_a_producer_that_depends_on_this_run_is_not_reused(gate):

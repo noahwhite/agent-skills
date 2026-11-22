@@ -263,8 +263,10 @@ A re-gate after a fix may review only the delta since the last accepted head: pa
 the last accepted run>`, or `--delta`, which resolves that head from the run store (an already
 accepted HEAD resolves to its own run; with no accepted ancestor it exits 12 and changes no run
 state). `--story-base REF` names the story's own base when it differs from the delta base, and the
-arbitrate dossier then names both bases and the reviewed range. The first gate of a story still
-passes `--base origin/<integration branch>`.
+arbitrate dossier then names both bases and the reviewed range. The story base is provenance, not a
+diff range, so it need not be an ancestor of HEAD; it is recorded once per spec at a gate start
+(`preflight` or a phase `run`) and an inspection command only reads it, so `paths --spec <other>`
+cannot rewrite it. The first gate of a story still passes `--base origin/<integration branch>`.
 
 When an accepted run for the same spec has the same tree identity
 (`<mergeBaseTree>-<headTree>-<specSha>`), `run sweep` and `run hunt` accept its artifact without
@@ -273,8 +275,12 @@ phase prints exactly one `reuse:` line on stderr - `reuse: hit <identity> from r
 `reuse: miss reason=<no accepted run|spec mismatch|identity mismatch|acceptance lapsed>` - and
 `paths` prints `reuse_hits <n>`, `reuse_misses <n>` and one `reused <phase> <identity> <producing
 run>` line per reused phase. Preflight always runs fresh and arbitration is never reused, so a
-stale trace cannot stand in for either. The identity is content-addressed, so the diff options
-pinned for deterministic dossiers do not affect it.
+stale trace cannot stand in for either. A sharded hunt is a shard set rather than one artifact, so a
+sharded `run hunt --shard K/N` always launches and prints no reuse line, while the run's ordinary
+sweep still donates and a sharded run is still a valid delta base and reuse producer.
+A reuse that fails after its copy is undone, so `paths` never reports a hit that did not happen.
+The identity is content-addressed, so the diff options pinned for deterministic dossiers do not
+affect it.
 
 ### Arbiter identity and retained rounds
 

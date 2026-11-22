@@ -262,8 +262,7 @@ def assert_capped(g: dict, phase: str, flow: str, truncated_paths: list[str]) ->
         "-c", "diff.orderFile=/dev/null", "diff", "--stat", "--no-ext-diff", "--no-color",
         "--src-prefix=a/", "--dst-prefix=b/", "--no-textconv", "--find-renames",
         "--submodule=short", "--inter-hunk-context=0", "--diff-algorithm=myers",
-        "--no-indent-heuristic", "--stat-width=80", "--stat-name-width=50",
-        "--stat-graph-width=30", f"{BASE_REF}...HEAD",
+        "--no-indent-heuristic", "--stat-width=80", f"{BASE_REF}...HEAD",
         env=g["env"]), "the diffstat changed"
     return dossier
 
@@ -650,8 +649,15 @@ def failing_unified_diff_env(g: dict) -> dict[str, str]:
     wrapper = fakebin / "git"
     wrapper.write_text(
         "#!/usr/bin/env bash\n"
-        'args=("$@"); while [ "${#args[@]}" -ge 2 ] && [ "${args[0]}" = "-c" ]; do args=("${args[@]:2}"); done\n'
-        'if [ "${args[0]}" = diff ] && [ "${args[1]}" = --no-ext-diff ]; then echo "capped diff refused" >&2; exit 3; fi\n'
+        'args=("$@")\n'
+        'while [ "${#args[@]}" -ge 1 ]; do\n'
+        '  case "${args[0]}" in\n'
+        '    --git-dir=*) args=("${args[@]:1}") ;;\n'
+        '    -c) [ "${#args[@]}" -ge 2 ] && args=("${args[@]:2}") || break ;;\n'
+        '    *) break ;;\n'
+        '  esac\n'
+        'done\n'
+        'if [ "${args[0]:-}" = diff ] && [ "${args[1]:-}" = --no-ext-diff ]; then echo "capped diff refused" >&2; exit 3; fi\n'
         f'exec "{real_git}" "$@"\n'
     )
     wrapper.chmod(0o755)
