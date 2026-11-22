@@ -5,9 +5,25 @@
 #
 #   bash scripts/pre-push-check.sh [--base REF] [--list]
 #
-# A passing run covers the exact HEAD being pushed: re-run it whenever HEAD changes.
+# A passing run certifies the exact HEAD being pushed: when the index differs from HEAD the checks
+# run against a clean snapshot of HEAD, and HEAD is re-checked whenever it changes.
 # Exit status: 0 every check passed, 1 at least one check failed, 2 an input, git or startup error.
 set -uo pipefail
+
+die() {
+  printf 'pre-push-check: error: %s\n' "$1" >&2
+  exit 2
+}
+
+# The elapsed-time arithmetic needs GNU date, and the empty-array expansion needs bash 4.4.
+if [ "${BASH_VERSINFO[0]}" -lt 4 ] ||
+  { [ "${BASH_VERSINFO[0]}" -eq 4 ] && [ "${BASH_VERSINFO[1]}" -lt 4 ]; }; then
+  die "bash 4.4 or newer is required (found $BASH_VERSION)"
+fi
+stamp=$(date +%s%N) || die "date +%s%N failed"
+case $stamp in
+  '' | *[!0-9]*) die "GNU date with +%s%N is required for elapsed seconds" ;;
+esac
 
 root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd) || exit 2
 cd -- "$root" || exit 2
@@ -17,8 +33,12 @@ list=false
 fallback=tests/test_skills.py
 
 # The path-to-module table: at most one test module per path, matched exactly. A path with no row
-# here is unmapped and runs the fallback module. It is also printed by --help.
+# is unmapped and runs the fallback module, except that a tests/test_*.py path maps to itself.
+# It is also printed by --help.
 table=(
+  '.agent-skills/profile.yaml tests/test_profiles.py'
+  '.github/workflows/ci.yml tests/test_gate_integrity.py'
+  '.github/workflows/gate-base.yml tests/test_gate_integrity.py'
   'profile/example.yaml tests/test_profiles.py'
   'profile/schema.json tests/test_profiles.py'
   'scripts/eval_suite.py tests/test_eval_suite.py'
@@ -47,64 +67,6 @@ table=(
   'skills/story-to-done/scripts/render-brief.py tests/test_render_brief.py'
   'skills/story-to-done/scripts/select-path.py tests/test_select_path.py'
   'skills/story-to-done/scripts/todo-enforce.py tests/test_todo_enforce.py'
-  'tests/test_cleanup.py tests/test_cleanup.py'
-  'tests/test_delegated_briefs.py tests/test_delegated_briefs.py'
-  'tests/test_eval_suite.py tests/test_eval_suite.py'
-  'tests/test_full_suite_mutations.py tests/test_full_suite_mutations.py'
-  'tests/test_full_suite_switch.py tests/test_full_suite_switch.py'
-  'tests/test_gate_integrity.py tests/test_gate_integrity.py'
-  'tests/test_git_identity_rule.py tests/test_git_identity_rule.py'
-  'tests/test_leak_scan.py tests/test_leak_scan.py'
-  'tests/test_linear_filing_skills.py tests/test_linear_filing_skills.py'
-  'tests/test_memory_retirement.py tests/test_memory_retirement.py'
-  'tests/test_memory_rules_in_skills.py tests/test_memory_rules_in_skills.py'
-  'tests/test_merge_approval.py tests/test_merge_approval.py'
-  'tests/test_merge_guard.py tests/test_merge_guard.py'
-  'tests/test_metrics.py tests/test_metrics.py'
-  'tests/test_no_deployment_path.py tests/test_no_deployment_path.py'
-  'tests/test_one_green_signal.py tests/test_one_green_signal.py'
-  'tests/test_one_pass_evidence.py tests/test_one_pass_evidence.py'
-  'tests/test_opencode_session_usage.py tests/test_opencode_session_usage.py'
-  'tests/test_opencode_v2_guidance.py tests/test_opencode_v2_guidance.py'
-  'tests/test_pending_ruling_case.py tests/test_pending_ruling_case.py'
-  'tests/test_persona_architect.py tests/test_persona_architect.py'
-  'tests/test_persona_release_manager.py tests/test_persona_release_manager.py'
-  'tests/test_persona_scrum_master.py tests/test_persona_scrum_master.py'
-  'tests/test_pipeline_arbiter_identity.py tests/test_pipeline_arbiter_identity.py'
-  'tests/test_pipeline_diff_cap.py tests/test_pipeline_diff_cap.py'
-  'tests/test_pipeline_dossier_checkout.py tests/test_pipeline_dossier_checkout.py'
-  'tests/test_pipeline_dossier_fixture.py tests/test_pipeline_dossier_fixture.py'
-  'tests/test_pipeline_dossier_sidecars.py tests/test_pipeline_dossier_sidecars.py'
-  'tests/test_pipeline_dossier_sizes.py tests/test_pipeline_dossier_sizes.py'
-  'tests/test_pipeline_exclusion.py tests/test_pipeline_exclusion.py'
-  'tests/test_pipeline_failfast.py tests/test_pipeline_failfast.py'
-  'tests/test_pipeline_scratch.py tests/test_pipeline_scratch.py'
-  'tests/test_pr_status.py tests/test_pr_status.py'
-  'tests/test_pre_push_check.py tests/test_pre_push_check.py'
-  'tests/test_profiles.py tests/test_profiles.py'
-  'tests/test_prune_candidates.py tests/test_prune_candidates.py'
-  'tests/test_qa_await_gate.py tests/test_qa_await_gate.py'
-  'tests/test_qa_pending_owner_ruling.py tests/test_qa_pending_owner_ruling.py'
-  'tests/test_qa_round_cap.py tests/test_qa_round_cap.py'
-  'tests/test_read_source_rule.py tests/test_read_source_rule.py'
-  'tests/test_record_author.py tests/test_record_author.py'
-  'tests/test_render_brief.py tests/test_render_brief.py'
-  'tests/test_resolve_model_role.py tests/test_resolve_model_role.py'
-  'tests/test_review_checklist.py tests/test_review_checklist.py'
-  'tests/test_scope_ownership_rule.py tests/test_scope_ownership_rule.py'
-  'tests/test_scratch_directory.py tests/test_scratch_directory.py'
-  'tests/test_seat_enabled.py tests/test_seat_enabled.py'
-  'tests/test_select_path.py tests/test_select_path.py'
-  'tests/test_shared_github.py tests/test_shared_github.py'
-  'tests/test_shared_linear.py tests/test_shared_linear.py'
-  'tests/test_shell_command_rule.py tests/test_shell_command_rule.py'
-  'tests/test_signing_key.py tests/test_signing_key.py'
-  'tests/test_skills.py tests/test_skills.py'
-  'tests/test_smoke_opencode.py tests/test_smoke_opencode.py'
-  'tests/test_story_refinement.py tests/test_story_refinement.py'
-  'tests/test_story_to_done.py tests/test_story_to_done.py'
-  'tests/test_todo_enforce.py tests/test_todo_enforce.py'
-  'tests/test_todo_tracking.py tests/test_todo_tracking.py'
 )
 
 usage() {
@@ -117,15 +79,18 @@ the focused test module for each changed path. Run it first with --list to see t
 
 Change set:
   the union of the staged paths (git diff --cached --name-only) and the committed branch diff
-  (git diff --name-only <merge-base>...HEAD), sorted and de-duplicated.
+  (git diff --name-only <merge-base>...HEAD), sorted and de-duplicated. Rename detection is
+  off, so a rename is reported as a deletion plus an addition and both paths are selected.
   The base ref defaults to origin/main and --base REF overrides it. On the first push of a
   new topic branch the remote branch does not exist yet, and origin/main is still the base:
   the committed half is origin/main...HEAD.
-  Unstaged modifications to tracked files are refused by name, so the set is deterministic.
+  Unstaged modifications to tracked files are refused by name, so the set is deterministic,
+  and so are assume-unchanged and skip-worktree entries, which would hide one.
   Untracked files are not in the change set.
   An empty change set is reported explicitly, and the doc and vendor checks still run.
-  Stray files in the checkout can affect the doc lint, because it scans the working tree, so
-  run the check in a clean checkout when its result matters.
+  Stray files in the checkout can affect the doc lint, because it reads the working tree, so
+  run the check in a clean checkout when its result matters. When the index differs from HEAD
+  the checks run against a clean snapshot of HEAD instead, so a pass always covers HEAD.
 
 Checks, in order, each continuing past a failure:
   tests/test_skills.py::test_no_em_dash
@@ -142,8 +107,11 @@ EOF
   done
   cat <<EOF
 
-  every other path is unmapped: it prints "focused: no module for <path>" and runs the
-  fallback module $fallback.
+  a changed tests/test_*.py path maps to itself; every other path is unmapped: it prints
+  "focused: no module for <path>" and runs the fallback module $fallback. A selected module
+  that is absent from the revision under test is named and skipped.
+EOF
+  cat <<'EOF'
 
 Flags:
   --base REF   base ref for the committed diff (default origin/main)
@@ -155,14 +123,10 @@ Output: one line per check with its label and its elapsed seconds, one FAIL line
 check with its command and its output, and a total line.
 Exit status: 0 every check passed, 1 at least one check failed, 2 an error (an unresolvable
 base ref, invalid input, or a check that cannot start).
+Requires bash 4.4 or newer and GNU date; another runtime is one named error with exit 2.
 
 A passing run is required for the exact HEAD being pushed: re-run it whenever HEAD changes.
 EOF
-}
-
-die() {
-  printf 'pre-push-check: error: %s\n' "$1" >&2
-  exit 2
 }
 
 module_for() {
@@ -173,6 +137,12 @@ module_for() {
       return 0
     fi
   done
+  case $path in
+    tests/test_*.py)
+      printf '%s\n' "$path"
+      return 0
+      ;;
+  esac
   return 1
 }
 
@@ -208,13 +178,17 @@ done
 git rev-parse --git-dir > /dev/null 2>&1 || die "not in a git repository"
 git rev-parse --verify --quiet --end-of-options "$base^{commit}" > /dev/null 2>&1 ||
   die "unresolvable base ref $base"
-if [ -n "$(git diff --name-only)" ]; then
-  die "unstaged modifications to tracked files (stage or revert them first): $(git diff --name-only | tr '\n' ' ')"
-fi
+head_sha=$(git rev-parse --verify HEAD) || die "HEAD is unresolvable"
+unstaged=$(git diff --name-only) || die "git diff --name-only failed"
+[ -z "$unstaged" ] ||
+  die "unstaged modifications to tracked files (stage or revert them first): $(printf '%s' "$unstaged" | tr '\n' ' ')"
+hidden=$(git ls-files -v) || die "git ls-files -v failed"
+hidden_paths=$(printf '%s\n' "$hidden" | sed -n '/^[a-zS] /s/^..//p')
+[ -z "$hidden_paths" ] ||
+  die "assume-unchanged or skip-worktree entries hide working-tree state (clear them first): $(printf '%s' "$hidden_paths" | tr '\n' ' ')"
 
-staged=$(git diff --cached --name-only) || die "git diff --cached --name-only failed"
-committed=$(git diff --name-only "$base...HEAD") || die "unresolvable base ref $base"
-
+staged=$(git diff --cached --name-only --no-renames) || die "git diff --cached --name-only failed"
+committed=$(git diff --name-only --no-renames "$base...HEAD") || die "unresolvable base ref $base"
 changes=$(printf '%s\n%s\n' "$staged" "$committed" | sed '/^$/d' | sort -u)
 
 modules=()
@@ -261,6 +235,36 @@ if $list; then
   exit 0
 fi
 
+# The checks read the tree they run in, so a staged change would let a passing run cover content
+# that is not HEAD. With a staged change they run in a clean snapshot of HEAD instead.
+check_in=.
+snapshot=
+cleanup() {
+  if [ -n "$snapshot" ]; then
+    git worktree remove --force -- "$snapshot/head" > /dev/null 2>&1
+    rm -rf -- "$snapshot"
+  fi
+}
+trap cleanup EXIT
+trap 'exit 130' INT TERM HUP
+git diff --cached --quiet
+staged_status=$?
+case $staged_status in
+  0) ;;
+  1)
+    snapshot=$(mktemp -d) || die "could not create a snapshot directory"
+    git worktree add --detach --quiet "$snapshot/head" HEAD ||
+      die "could not create a clean snapshot worktree of HEAD $head_sha"
+    check_in=$snapshot/head
+    printf 'note: the index differs from HEAD %s; the checks run against a clean snapshot of HEAD\n' "$head_sha"
+    ;;
+  *) die "git diff --cached --quiet failed" ;;
+esac
+
+pytest_ready=$(cd -- "$check_in" && uv run --locked pytest --version 2>&1) ||
+  die "cannot start the pytest checks: ${pytest_ready:-uv run --locked pytest failed}"
+command -v python3 > /dev/null 2>&1 || die "cannot start the vendor check: python3 is not on PATH"
+
 if [ -z "$changes" ]; then
   printf 'change set: empty\n'
 else
@@ -287,7 +291,7 @@ run_check() {
   shift
   local start out code
   start=$(date +%s%N)
-  out=$("$@" 2>&1)
+  out=$(cd -- "$check_in" && "$@" 2>&1)
   code=$?
   checked=$((checked + 1))
   if [ "$code" -eq 126 ] || [ "$code" -eq 127 ]; then
@@ -305,17 +309,17 @@ run_check() {
   fi
 }
 
-check() {
-  run_check "$@"
-}
-
-check 'tests/test_skills.py::test_no_em_dash' uv run --locked pytest -q tests/test_skills.py::test_no_em_dash
-check 'tests/test_skills.py::test_clean_and_neutral_use_the_canonical_phrase' \
+run_check 'tests/test_skills.py::test_no_em_dash' uv run --locked pytest -q tests/test_skills.py::test_no_em_dash
+run_check 'tests/test_skills.py::test_clean_and_neutral_use_the_canonical_phrase' \
   uv run --locked pytest -q tests/test_skills.py::test_clean_and_neutral_use_the_canonical_phrase
-check 'vendor: scripts/vendor_shared.py --check' python3 scripts/vendor_shared.py --check
+run_check 'vendor: scripts/vendor_shared.py --check' python3 scripts/vendor_shared.py --check
 if [ -n "$modules" ]; then
   while IFS= read -r module; do
-    check "$module" uv run --locked pytest -q "$module"
+    if [ ! -f "$check_in/$module" ]; then
+      printf 'focused: module %s is not present in the revision under test; skipped\n' "$module"
+      continue
+    fi
+    run_check "$module" uv run --locked pytest -q "$module"
   done <<< "$modules"
 fi
 
