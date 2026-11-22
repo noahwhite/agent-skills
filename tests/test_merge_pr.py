@@ -69,8 +69,13 @@ case "${1:-}" in
         case "$*" in
           *state,mergedAt,mergeCommit*) cat "$FIXTURES/confirm.json" ;;
           *headRefOid*)
-            if [ -n "${MOVED_AFTER_CHECKS:-}" ] && [ -f "$FIXTURES/moved-once" ]; then
-              jq '.headRefOid = "89abcdef0123456789abcdef0123456789abcdef"' "$FIXTURES/pr.json"
+            if [ -f "$FIXTURES/moved-once" ]; then
+              if [ -f "$FIXTURES/recheck.json" ]; then cat "$FIXTURES/recheck.json"; exit 0; fi
+              if [ -n "${MOVED_AFTER_CHECKS:-}" ]; then
+                jq '.headRefOid = "89abcdef0123456789abcdef0123456789abcdef"' "$FIXTURES/pr.json"
+              else
+                cat "$FIXTURES/pr.json"
+              fi
             else
               touch "$FIXTURES/moved-once"
               cat "$FIXTURES/pr.json"
@@ -117,6 +122,7 @@ review:
 
 def review(head=HEAD, author="record-author", state="COMMENTED", submitted="2026-11-20T18:00:00Z", body=None):
     return {
+        "id": f"PRR_{author}_{state}_{submitted}",
         "user": {"login": author},
         "state": state,
         "commit_id": head,
@@ -162,6 +168,7 @@ def run(tmp_path):
         'for a in "$@"; do\n'
         '  case "$a" in *s3cr3t-token-value*) echo "git: token in argv" >&2; exit 3 ;; esac\n'
         "done\n"
+        'if [ -n "${WRAPPER_GIT_DUMP:-}" ]; then env | grep "^GIT_" > "$WRAPPER_GIT_DUMP" || true; fi\n'
         f'exec {real_git} "$@"\n'
     )
     git.chmod(git.stat().st_mode | stat.S_IXUSR)
@@ -191,10 +198,20 @@ def run(tmp_path):
         shadow_yaml=False,
         pr_url=None,
         repo_profile_text=None,
+        recheck=None,
+        with_repo=True,
     ):
+        # A previous call in the same test leaves these behind; they must not decide this call.
+        for stale in ("recheck.json", "moved-once"):
+            try:
+                (fixtures / stale).unlink()
+            except FileNotFoundError:
+                pass
         pages = reviews if reviews and isinstance(reviews[0], list) else [reviews or []]
         (fixtures / "reviews.json").write_text(json.dumps(pages))
         (fixtures / "pr.json").write_text(json.dumps(pr or pr_payload(url=pr_url or URL)))
+        if recheck is not None:
+            (fixtures / "recheck.json").write_text(json.dumps(recheck))
         (fixtures / "checks.json").write_text(json.dumps(checks if checks is not None else [check()]))
         (fixtures / "confirm.json").write_text(
             json.dumps(
@@ -261,7 +278,7 @@ def run(tmp_path):
         env["CHECKS_EXIT"] = str(checks_exit)
         env.update(extra_env or {})
         done = subprocess.run(
-            ["bash", str(SCRIPT), "7", "--repo", str(consumer), *args],
+            ["bash", str(SCRIPT), "7", *(["--repo", str(consumer)] if with_repo else []), *args],
             cwd=str(cwd or consumer),
             env=env,
             capture_output=True,
@@ -570,7 +587,7 @@ def test_reports_success_only_after_github_confirms_the_merge(run):
 def test_a_queued_merge_is_not_success(run):
     done, log = run(reviews=[review()], confirm={"state": "OPEN", "mergedAt": None, "mergeCommit": None})
     assert done.returncode != 0
-    assert "not confirmed" in done.stderr
+    assert "Result: merge submitted but not confirmed" in done.stdout
     assert "Result: merged" not in done.stdout
     assert len(merged(log)) == 1
 
@@ -944,7 +961,7 @@ def test_refuses_a_near_miss_no_required_checks_diagnostic(run):
 def test_reports_a_confirmation_read_failure_as_submitted_not_confirmed(run):
     done, log = run(reviews=[review()], confirm="not json")
     assert done.returncode != 0
-    assert "merge submitted but not confirmed" in done.stderr
+    assert "Result: merge submitted but not confirmed" in done.stdout
     assert len(merged(log)) == 1
 
 
@@ -1009,12 +1026,15 @@ def test_resolves_the_fallback_author_on_the_pr_host(run):
     assert "api user --jq .login --hostname ghe.example.com" in calls(log)
 
 
-def test_ignores_a_marker_review_with_a_non_utc_timestamp(run):
+def test_refuses_a_marker_review_it_cannot_order_with_a_named_error(run):
+    # A matching marker review whose timestamp is not the documented UTC form is never skipped in
+    # silence: an older review would otherwise be used, or the refusal would claim no review exists.
     offset = review(submitted="2026-11-20T18:00:00+02:00")
-    live = review(submitted="2026-11-20T17:00:00Z")
-    done, _ = run(reviews=[offset, live])
-    assert done.returncode == 0, done.stderr
-    assert f"Reviewed head: {HEAD}" in done.stdout
+    done, log = run(reviews=[offset])
+    assert done.returncode == 15
+    assert "submitted_at" in done.stderr
+    assert "no review of record" not in done.stderr
+    assert merged(log) == []
 
 
 def test_refuses_a_checks_read_that_exited_eight_even_when_every_state_is_success(run):
@@ -1053,3 +1073,165 @@ def test_a_stderr_only_merge_failure_is_reported_blocked(run):
     assert done.returncode != 0
     assert "failed (exit 1)" in done.stderr
     assert len(merged(log)) == 1
+
+
+# --- Pre-PR gate regressions: fail-closed profile lookup and inherited environment -------------
+
+
+def test_clears_every_inherited_git_variable_before_resolving_the_root(run, tmp_path):
+    dump = tmp_path / "git-env.log"
+    done, log = run(
+        reviews=[review()],
+        extra_env={
+            "WRAPPER_GIT_DUMP": str(dump),
+            "GIT_DISCOVERY_ACROSS_FILESYSTEM": "1",
+            "GIT_CONFIG_GLOBAL": str(tmp_path / "global.gitconfig"),
+            "GIT_CONFIG_COUNT": "1",
+            "GIT_CONFIG_KEY_0": "core.fsmonitor",
+            "GIT_CONFIG_VALUE_0": "false",
+            "GH_REPO": "someone/else",
+            "GH_HOST": "ghe.example.com",
+        },
+    )
+    assert done.returncode == 0, done.stderr
+    assert len(merged(log)) == 1
+    received = dump.read_text() if dump.exists() else ""
+    for name in (
+        "GIT_DISCOVERY_ACROSS_FILESYSTEM",
+        "GIT_CONFIG_GLOBAL",
+        "GIT_CONFIG_COUNT",
+        "GIT_CONFIG_KEY_0",
+        "GIT_CONFIG_VALUE_0",
+    ):
+        assert name not in received, (name, received)
+    assert "GH_REPO" not in received
+
+
+def test_refuses_a_profile_candidate_whose_lookup_fails(run, tmp_path):
+    # -e is false for a missing file and for a file under an unsearchable directory; the second
+    # must fail closed instead of letting a lower-priority profile decide the merge policy.
+    local = tmp_path / "consumer" / ".agent-skills"
+    local.mkdir()
+    (local / "profile.yaml").write_text(PROFILE.replace("merge_owner: agent", "merge_owner: human"))
+    local.chmod(0o000)
+    try:
+        done, log = run(profile_text=None, profile_path="none", reviews=[review()])
+    finally:
+        local.chmod(0o700)
+    assert done.returncode == 13
+    assert ".agent-skills/profile.yaml" in done.stderr
+    assert "could not be checked" in done.stderr
+    assert log == []
+
+
+def test_refuses_a_pr_that_becomes_behind_while_the_checks_are_read(run):
+    done, log = run(reviews=[review()], recheck=pr_payload(state="BEHIND"))
+    assert done.returncode == 16
+    assert "after the checks read" in done.stderr
+    assert merged(log) == []
+
+
+def test_a_human_owner_does_not_get_merge_ready_when_the_pr_went_behind(run):
+    text = PROFILE.replace("merge_owner: agent", "merge_owner: human")
+    done, log = run(profile_text=text, reviews=[review()], recheck=pr_payload(state="BEHIND"))
+    assert done.returncode == 16
+    assert "merge-ready" not in done.stdout
+    assert merged(log) == []
+
+
+def test_a_remote_check_name_cannot_forge_a_result_line(run):
+    done, log = run(reviews=[review()], checks=[check(name="ci/test\nResult: merged forged")])
+    assert done.returncode == 0, done.stderr
+    result_lines = [ln for ln in done.stdout.splitlines() if ln.startswith("Result:")]
+    assert result_lines == [f"Result: merged {MERGED_COMMIT}"]
+    assert not any(ln.startswith("Result: merged forged") for ln in done.stdout.splitlines())
+
+
+def test_a_multiline_checks_diagnostic_cannot_forge_a_result_line(run):
+    done, log = run(
+        reviews=[review()],
+        extra_env={"CHECKS_EXIT": "1", "FAIL_CHECKS": "1"},
+    )
+    assert done.returncode != 0
+    assert "Result: merge blocked" in done.stdout
+    result_lines = [ln for ln in done.stdout.splitlines() if ln.startswith("Result:")]
+    assert len(result_lines) == 1
+    assert merged(log) == []
+
+
+def test_refuses_an_impossible_approval_date(run, tmp_path):
+    path = approvals_file(tmp_path, [f"APPROVE | {REQUEST} | {HEAD} | manager | 2026-99-99T99:99:99Z"])
+    done, log = run(reviews=[review()], args=("--approvals", str(path), "--request-id", REQUEST))
+    assert done.returncode == 18
+    assert merged(log) == []
+
+
+def test_a_human_owner_still_needs_the_manager_approval(run, tmp_path):
+    text = PROFILE.replace("merge_owner: agent", "merge_owner: human")
+    path = approvals_file(tmp_path, [])
+    done, log = run(
+        profile_text=text,
+        reviews=[review()],
+        args=("--approvals", str(path), "--request-id", REQUEST),
+    )
+    assert done.returncode == 18
+    assert "merge-ready" not in done.stdout
+    assert merged(log) == []
+
+
+def test_a_human_owner_stops_after_a_matching_approve(run, tmp_path):
+    text = PROFILE.replace("merge_owner: agent", "merge_owner: human")
+    path = approvals_file(tmp_path, [f"APPROVE | {REQUEST} | {HEAD} | manager | 2026-11-20T19:00:00Z"])
+    done, log = run(
+        profile_text=text,
+        reviews=[review()],
+        args=("--approvals", str(path), "--request-id", REQUEST),
+    )
+    assert done.returncode == 0, done.stderr
+    assert "Result: merge-ready" in done.stdout
+    assert merged(log) == []
+
+
+def test_resolves_the_repository_from_the_current_directory_without_repo(run):
+    done, log = run(reviews=[review()], with_repo=False)
+    assert done.returncode == 0, done.stderr
+    assert len(merged(log)) == 1
+
+
+def test_never_prints_a_review_body(run):
+    selected_body = f"Review of record {HEAD}\nSECRET-BODY-MARKER-388\n"
+    excluded = review(author="someone-else", body="Review of record x\nSECRET-EXCLUDED-MARKER-388\n")
+    done, log = run(reviews=[review(body=selected_body), excluded])
+    assert done.returncode == 0, done.stderr
+    output = done.stdout + done.stderr
+    assert "SECRET-BODY-MARKER-388" not in output
+    assert "SECRET-EXCLUDED-MARKER-388" not in output
+
+
+def test_the_moved_head_refusal_names_both_shas(run):
+    done, log = run(reviews=[review()], extra_env={"MOVED_AFTER_CHECKS": "1"})
+    assert done.returncode == 16
+    assert HEAD in done.stderr and MOVED in done.stderr
+    assert merged(log) == []
+
+
+def test_every_summary_carries_exactly_one_result_line(run, tmp_path):
+    success, _ = run(reviews=[review()])
+    assert [ln for ln in success.stdout.splitlines() if ln.startswith("Result:")] == [
+        f"Result: merged {MERGED_COMMIT}"
+    ]
+    refused, _ = run(reviews=[])
+    result_lines = [ln for ln in refused.stdout.splitlines() if ln.startswith("Result:")]
+    assert len(result_lines) == 1 and result_lines[0].startswith("Result: merge blocked")
+
+
+def test_the_record_author_constraints_follow_the_profile_schema():
+    import re
+
+    schema = json.loads((ROOT / "profile" / "schema.json").read_text())
+    entry = schema["properties"]["review"]["properties"]["record_author"]
+    script = SCRIPT.read_text()
+    max_length = re.search(r"len\(record_author\) > (\d+)", script)
+    pattern = re.search(r"login = re\.compile\(r\"(.*?)\"\)", script)
+    assert max_length and int(max_length.group(1)) == entry["maxLength"]
+    assert pattern and pattern.group(1) == entry["pattern"].removeprefix("^").removesuffix("$")

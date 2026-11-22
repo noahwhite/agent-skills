@@ -256,7 +256,7 @@ Only once step 9 holds.
 
 The merge is one invocation, `bash <skill dir>/scripts/merge-pr.sh <PR number> --repo <consumer repo>`, where `<consumer repo>` is the local checkout directory of the repository under review: it reads the PR's reviews, reads the required checks, verifies the review of record against the live head, and merges with the reviewed head as the expected-head condition, or refuses and reports the merge blocked; when `profile.review.merge_owner` is `human` it stops without a merge and prints the verified merge-ready summary instead.
 It runs the merge guard in `references/code-review.md`, so do not repeat the reviews read or the checks read by hand, except on the per-PR review waiver path below, which keeps its own sequence.
-The helper needs `bash`, `git`, `gh`, `jq`, and `python3` with PyYAML importable in that interpreter's own environment (system or virtualenv site-packages; it runs isolated, so a user-site-only install is refused), and it names the missing one before it reads anything.
+The helper needs `bash`, `git`, `gh`, `jq`, and `python3` with PyYAML importable in that interpreter's own environment (system or virtualenv site-packages; it runs isolated, so a user-site-only install is refused), and it checks and names each of those before it reads anything; it also uses the standard core utilities (`mktemp`, `dirname`, `cat`, `rm` and `date`).
 
 If the brief assigns merge approval to a manager, follow [references/merge-approval.md](references/merge-approval.md) before any merge.
 If the brief does not give the approvals-file path or the wake address the runtime needs, stop and report the engagement blocked on the missing metadata; do not fall through to autonomous merge.
