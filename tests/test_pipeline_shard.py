@@ -404,12 +404,18 @@ def test_a_sharded_hunt_refuses_a_marker_naming_another_selection(accepted_gate)
     checkout, _ = dossier_of(dossier)
     (run_dir / "phase2-hunt.1.md").write_text("REVIEW-RAN: yes\nshard one\n")
     (run_dir / "hunt.1.launch").write_bytes(b"shard=none\n")
+    state_before = {path.name: path.read_bytes()
+                    for path in sorted(run_dir.iterdir()) if path.is_file()}
     refused = run_script(
         "record", "hunt", "--repo", str(repo), "--base", "HEAD", "--shard", "1/2", env=env,
     )
     assert refused.returncode == 13, refused.stdout + refused.stderr
     assert "records 'shard=none'" in refused.stderr and "selects 'shard=1/2'" in refused.stderr, refused.stderr
+    assert "dossier hunt --shard 1/2" in refused.stderr, refused.stderr
     assert not Path(f"{run_dir / 'phase2-hunt.1.md'}.stamp").exists()
+    state_after = {path.name: path.read_bytes()
+                   for path in sorted(run_dir.iterdir()) if path.is_file()}
+    assert state_after == state_before
     assert run_script("cleanup", str(checkout), "--repo", str(repo), env=env).returncode == 0
 
 
@@ -476,12 +482,12 @@ def test_a_malformed_launch_marker_is_refused_with_a_bounded_sanitised_diagnosis
     # Anything but the one printable selection line is an unusable state, not a selection.
     for marker in (b"shard=none\nTRAIL\n", b"shard=none\n\n", b"shard=none\x00\n",
                    b"shard=none\x00", b"shard=none\r\n", b"shard=no\x1be\n",
-                   b"shard=none" + b"x" * 60):
+                   b"shard=none" + b"x" * 55, b"shard=none" + b"x" * 60):
         launch.write_bytes(marker)
         report.write_text("REVIEW-RAN: yes\nplain\n")
         refused = run_script("record", "hunt", "--repo", str(repo), "--base", "HEAD", env=env)
         assert refused.returncode == 15, (marker, refused.stdout + refused.stderr)
-        assert "not exactly one selection line" in refused.stderr, refused.stderr
+        assert "not exactly one short selection line" in refused.stderr, refused.stderr
         assert not Path(f"{report}.stamp").exists()
     # A printable marker naming another selection is a mismatch that names both values.
     launch.write_bytes(b"shard=1/1\n")
@@ -549,6 +555,7 @@ def test_a_flagged_dossier_recorded_with_its_flag_matches_the_unsharded_record(a
     assert plain_record.returncode == 0, plain_record.stdout + plain_record.stderr
     plain_stamp = Path(f"{report}.stamp").read_bytes()
     plain_binding = (run_dir / "hunt.binding").read_bytes()
+    plain_primary = (run_dir / "hunt.primary").read_bytes()
     plain_files = sorted(path.name for path in run_dir.iterdir())
     assert run_script("cleanup", str(plain_checkout), "--repo", str(repo), env=env).returncode == 0
 
@@ -575,6 +582,7 @@ def test_a_flagged_dossier_recorded_with_its_flag_matches_the_unsharded_record(a
     assert without_deps(flagged_stamp) == without_deps(plain_stamp)
     assert without_deps(flagged_binding) == without_deps(plain_binding)
     assert sorted(path.name for path in run_dir.iterdir()) == plain_files
+    assert (run_dir / "hunt.primary").read_bytes() == plain_primary
     assert not (run_dir / "hunt.shards").exists()
     assert run_script("cleanup", str(flagged_checkout), "--repo", str(repo), env=env).returncode == 0
 
@@ -626,7 +634,11 @@ def test_a_failed_shard_uses_the_unsharded_exit_code_and_keeps_its_sibling(tmp_p
     assert not (run_dir / "hunt.1.launch").exists()
     assert not (run_dir / "phase2-hunt.1.md.stamp").exists()
     assert (run_dir / "phase2-hunt.2.md.stamp").read_bytes() == sibling_stamp
-    assert "shard=" not in failed.stderr.replace("shard=1/2", ""), failed.stderr
+    phase_lines = [line for line in failed.stderr.splitlines()
+                   if line.startswith("adversarial-pipeline: phase=hunt")]
+    assert phase_lines, failed.stderr
+    for line in phase_lines:
+        assert "shard=1/2" in line, line
     arbitrate = run_arbitrate(repo, scratch, env)
     assert arbitrate.returncode == 13, arbitrate.stdout + arbitrate.stderr
     assert "1/2" in arbitrate.stderr and "hunt" in arbitrate.stderr, arbitrate.stderr
@@ -634,7 +646,11 @@ def test_a_failed_shard_uses_the_unsharded_exit_code_and_keeps_its_sibling(tmp_p
     plain_repo, plain_scratch, plain_env = accepted_hunt_gate(tmp_path / "unsharded")
     plain_failed = run_hunt(plain_repo, plain_scratch, plain_env, agent=BLIND_AGENT)
     assert plain_failed.returncode == failed.returncode, plain_failed.stdout + plain_failed.stderr
-    assert "shard=" not in plain_failed.stderr, plain_failed.stderr
+    plain_phase_lines = [line for line in plain_failed.stderr.splitlines()
+                         if line.startswith("adversarial-pipeline: phase=hunt")]
+    assert plain_phase_lines, plain_failed.stderr
+    for line in plain_phase_lines:
+        assert "shard=" not in line, line
 
 
 def test_a_non_zero_agent_exit_is_the_same_code_sharded_and_unsharded(tmp_path):

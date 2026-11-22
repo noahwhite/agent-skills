@@ -52,8 +52,9 @@
 # `record hunt` must be passed the same `--shard` as `dossier hunt`, exactly as for `--spec` and
 # `--no-sweep`. The launch file records that exact selection (`shard=<k>/<n>`, or `shard=none` when
 # the flag was omitted), because `--shard 1/1` and an omitted flag share a byte-identical binding;
-# a missing, empty or unreadable launch is a state error (exit 15), `record` refuses a launch whose
-# selection differs (exit 13), and a different shard index finds no launch and exits 15.
+# a missing, empty, unreadable or malformed launch is a state error (exit 15), `record` refuses a
+# launch whose selection differs (exit 13), and a record for another shard index finds no launch of
+# its own and exits 15.
 # With N >= 2 the invocation writes <run dir>/phase2-hunt.<k>.md and never writes or accepts
 # phase2-hunt.md for that run; its stamp and its binding carry the line shard=<k>/<n>. Each shard
 # owns its run-state files beside its artifact, suffixed with the shard index - hunt.<k>.launch,
@@ -870,7 +871,7 @@ sandbox_error_in() {
 }
 
 accept_phase() {  # $1 = phase, $2 = stderr log or "": validate a freshly written artifact, then stamp it
-  local art key launched expected size stripped; art="$(artifact_for "$1")"; key="$(state_key "$1")"
+  local art key launched expected size stripped dossier_hint; art="$(artifact_for "$1")"; key="$(state_key "$1")"
   [ -f "$RUN_DIR/$key.launch" ] && [ -f "$RUN_DIR/$key.binding" ] && [ -f "$RUN_DIR/$key.primary" ] \
     || die 15 "no launch for $1 in this run (never started, discarded by a later re-run of an earlier phase, or an arbitration already accepted); write its dossier with 'dossier $1' first."
   if [ "$(cat -- "$RUN_DIR/$key.binding")" != "$(binding_text "$1")" ]; then
@@ -883,18 +884,21 @@ accept_phase() {  # $1 = phase, $2 = stderr log or "": validate a freshly writte
   if [ "$1" = "hunt" ]; then
     launched=""
     expected="$(launch_text "$1")"
+    dossier_hint="dossier hunt"
+    if [ "$SHARDED" -eq 1 ]; then dossier_hint="dossier hunt --shard $SHARD_K/$SHARD_N"; fi
     size="$(wc -c < "$RUN_DIR/$key.launch" 2>/dev/null)" || size=0
     IFS= read -r -n 64 launched < "$RUN_DIR/$key.launch" 2>/dev/null || true
     # Exactly one short printable line, with or without its trailing newline: anything else is
     # unusable state, never a selection.
     stripped="$(LC_ALL=C tr -d '[:print:]\n' < "$RUN_DIR/$key.launch" 2>/dev/null | wc -c)" || stripped=0
-    if [ "$stripped" != "0" ] \
+    if [ "$size" -gt 64 ] \
+      || [ "$stripped" != "0" ] \
       || [ -z "$launched" ] \
       || { [ "$size" != "${#launched}" ] && [ "$size" != "$(( ${#launched} + 1 ))" ]; }; then
-      die 15 "the hunt launch marker $RUN_DIR/$key.launch is missing, empty, unreadable or not exactly one selection line; start the hunt phase again with 'dossier hunt'."
+      die 15 "the hunt launch marker $RUN_DIR/$key.launch is missing, empty, unreadable or not exactly one short selection line; start the hunt phase again with '$dossier_hint'."
     fi
     if [ "$launched" != "$expected" ]; then
-      die 13 "the hunt launch records '$launched' but this record invocation selects '$expected'; record the dossier's selection (--shard K/N, or no --shard with ADVERSARIAL_SHARD unset when it recorded shard=none), or start the hunt phase again with 'dossier hunt'."
+      die 13 "the hunt launch records '$launched' but this record invocation selects '$expected'; record the dossier's selection (--shard K/N, or no --shard with ADVERSARIAL_SHARD unset when it recorded shard=none), or start the hunt phase again with '$dossier_hint'."
     fi
   fi
   [ -s "$art" ] || die 15 "the $1 agent produced no report ($art is missing or empty)."
