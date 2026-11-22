@@ -95,6 +95,10 @@ As a [role], I want [feature/capability], so that [business value].
 
 - [ ] All acceptance criteria met
 - [ ] Unit/integration tests written & passing
+  Full-suite evidence is satisfied once per PR head, by the local `uv run --locked pytest -q` run or by that head's passing CI "Repository tests" step, never both.
+  Credit the CI step only when it ran on the current PR head or on a verified identical tree: record the head and either the local result or the CI run link with the tested SHA, and run the local suite when equivalence cannot be verified.
+  Both signals are required when the PR changes `.github/workflows/`, the pytest configuration (`pyproject.toml`'s pytest section, `pytest.ini`, a `conftest.py`), `uv.lock`, or any file under `tests/`; the dedup covers the `pytest -q` step only, so `ruff check .`, the leak scan and `skills-ref validate` stay required and the preflight `full_suite` setting is untouched.
+  Required GitHub checks, focused tests, the pre-PR preflight, and any story criterion requiring both signals are unchanged: no required check is added or removed, and this rewrites no acceptance criterion on any other story.
 - [ ] Independently reviewed (see **Review Policy**)
 - [ ] Docs updated (if applicable)
 - [ ] Verified in a deployed environment (if needed)

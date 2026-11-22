@@ -91,6 +91,10 @@ State the slice sequence and the first slice before coding.
 3. REFACTOR without changing behavior.
 4. Run the focused tests.
 5. Run broader validation periodically and before the PR.
+   Full-suite evidence is satisfied once per PR head, by the local `uv run --locked pytest -q` run or by that head's passing CI "Repository tests" step, never both.
+   Credit the CI step only when it ran on the current PR head or on a verified identical tree: record the head and either the local result or the CI run link with the tested SHA, and run the local suite when equivalence cannot be verified.
+   Both signals are required when the PR changes `.github/workflows/`, the pytest configuration (`pyproject.toml`'s pytest section, `pytest.ini`, a `conftest.py`), `uv.lock`, or any file under `tests/`; the dedup covers the `pytest -q` step only, so `ruff check .`, the leak scan and `skills-ref validate` stay required and the preflight `full_suite` setting is untouched.
+   Required GitHub checks, focused tests, the pre-PR preflight, and any story criterion requiring both signals are unchanged: no required check is added or removed, and this rewrites no acceptance criterion on any other story.
 
 If the architecture makes strict TDD impractical for a slice, say why.
 Preserve existing tests and conventions.
@@ -171,6 +175,10 @@ Reviewers never modify code; only the implementing agent or the loop's fixer com
 ## 5. Prepare the PR
 
 1. Run the complete applicable test suite, plus the repository's formatters, linters, type checks, static analysis and build.
+   Full-suite evidence is satisfied once per PR head, by the local `uv run --locked pytest -q` run or by that head's passing CI "Repository tests" step, never both.
+   Credit the CI step only when it ran on the current PR head or on a verified identical tree: record the head and either the local result or the CI run link with the tested SHA, and run the local suite when equivalence cannot be verified.
+   Both signals are required when the PR changes `.github/workflows/`, the pytest configuration (`pyproject.toml`'s pytest section, `pytest.ini`, a `conftest.py`), `uv.lock`, or any file under `tests/`; the dedup covers the `pytest -q` step only, so `ruff check .`, the leak scan and `skills-ref validate` stay required and the preflight `full_suite` setting is untouched.
+   Required GitHub checks, focused tests, the pre-PR preflight, and any story criterion requiring both signals are unchanged: no required check is added or removed, and this rewrites no acceptance criterion on any other story.
 2. Inspect `git diff origin/<integration branch>...HEAD` after a fetch.
 3. Confirm there are no unrelated changes and no secrets.
 4. Self-review against the acceptance criteria, and against step 1, "Triage the story", item 5 "Apply the scope rules" ([references/linear.md](references/linear.md) "Acceptance criteria and scope", [references/engineering-practice.md](references/engineering-practice.md) "Make minimal, durable changes"): no acceptance criterion changed on any story, no skip keyed on another story, and every discovered requirement or unmet criterion taken through one of the two exits those sections state.
@@ -234,6 +242,10 @@ The PR is merge-ready only when all are true:
 - Every legitimate Medium finding is handled or justified.
 - The review of record completed at the current head, every valid finding is fixed, and its `--comment` PR review is posted and visible.
 - All required checks are green.
+  Full-suite evidence is satisfied once per PR head, by the local `uv run --locked pytest -q` run or by that head's passing CI "Repository tests" step, never both.
+  Credit the CI step only when it ran on the current PR head or on a verified identical tree: record the head and either the local result or the CI run link with the tested SHA, and run the local suite when equivalence cannot be verified.
+  Both signals are required when the PR changes `.github/workflows/`, the pytest configuration (`pyproject.toml`'s pytest section, `pytest.ini`, a `conftest.py`), `uv.lock`, or any file under `tests/`; the dedup covers the `pytest -q` step only, so `ruff check .`, the leak scan and `skills-ref validate` stay required and the preflight `full_suite` setting is untouched.
+  Required GitHub checks, focused tests, the pre-PR preflight, and any story criterion requiring both signals are unchanged: no required check is added or removed, and this rewrites no acceptance criterion on any other story.
 - The branch holds only intended changes, targets `profile.git.integration_branch`, and is mergeable.
 
 Any change to the head after the review of record, including the fixes for its findings and an update-branch, makes the review stale: review the new head (a delta review suffices) before merging.
