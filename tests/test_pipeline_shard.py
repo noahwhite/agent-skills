@@ -220,6 +220,7 @@ def test_a_sharded_hunt_writes_its_own_artifact_state_and_plan(gate):
     assert (run_dir / "phase2-hunt.md").exists() is False
     for path in shard_state(run_dir, "1"):
         assert path.exists(), path
+    assert (run_dir / "hunt.1.launch").read_bytes() == b"shard=1/2\n"
     for path in shard_state(run_dir, "2"):
         assert not path.exists(), path
     plan = plan_file(run_dir)
@@ -351,10 +352,15 @@ def test_record_hunt_refuses_a_shard_selection_the_dossier_did_not_use(accepted_
     )
     checkout, _ = dossier_of(dossier)
     report.write_text("REVIEW-RAN: yes\none of one\n")
+    state_before = {path.name: path.read_bytes()
+                    for path in sorted(run_dir.iterdir()) if path.is_file()}
     plain = run_script("record", "hunt", "--repo", str(repo), "--base", "HEAD", env=env)
     assert plain.returncode == 13, plain.stdout + plain.stderr
     assert "records 'shard=1/1'" in plain.stderr and "selects 'shard=none'" in plain.stderr, plain.stderr
     assert not Path(f"{report}.stamp").exists()
+    state_after = {path.name: path.read_bytes()
+                   for path in sorted(run_dir.iterdir()) if path.is_file()}
+    assert state_after == state_before
     assert launch.read_bytes() == b"shard=1/1\n", launch.read_bytes()
     recorded = run_script(
         "record", "hunt", "--repo", str(repo), "--base", "HEAD", "--shard", "1/1", env=env,
@@ -396,12 +402,36 @@ def test_an_unreadable_hunt_launch_is_refused_and_never_read_as_empty(accepted_g
     )
     checkout, _ = dossier_of(dossier)
     report.write_text("REVIEW-RAN: yes\nplain\n")
-    # A regular file whose read always fails: refused as a state error, never accepted as "no flag".
-    launch.unlink()
-    launch.symlink_to("/proc/self/mem")
+    # An unreadable marker carrying a valid selection is a state error, never "no flag".
+    launch.chmod(0)
     refused = run_script("record", "hunt", "--repo", str(repo), "--base", "HEAD", env=env)
+    launch.chmod(0o644)
     assert refused.returncode == 15, refused.stdout + refused.stderr
     assert "launch marker" in refused.stderr, refused.stderr
+    assert not Path(f"{report}.stamp").exists()
+    # A marker without its trailing newline is the same selection, not a broken one.
+    launch.write_bytes(launch.read_bytes().rstrip(b"\n"))
+    report.write_text("REVIEW-RAN: yes\nplain\n")
+    recorded = run_script("record", "hunt", "--repo", str(repo), "--base", "HEAD", env=env)
+    assert recorded.returncode == 0, recorded.stdout + recorded.stderr
+    assert Path(f"{report}.stamp").exists()
+    assert run_script("cleanup", str(checkout), "--repo", str(repo), env=env).returncode == 0
+
+
+def test_an_oversized_launch_marker_cannot_flood_the_diagnosis(accepted_gate):
+    repo, scratch, env = accepted_gate
+    run_dir = paths(repo, env)["run"]
+    report = run_dir / "phase2-hunt.md"
+    launch = run_dir / "hunt.launch"
+    dossier = run_script(
+        "dossier", "hunt", "--repo", str(repo), "--base", "HEAD", "--scratch", str(scratch), env=env,
+    )
+    checkout, _ = dossier_of(dossier)
+    launch.write_bytes(b"shard=1/1\n" + b"A" * (4 * 1024 * 1024))
+    report.write_text("REVIEW-RAN: yes\nplain\n")
+    refused = run_script("record", "hunt", "--repo", str(repo), "--base", "HEAD", env=env)
+    assert refused.returncode == 13, refused.stdout + refused.stderr
+    assert len(refused.stderr.encode()) < 4096, len(refused.stderr.encode())
     assert not Path(f"{report}.stamp").exists()
     assert run_script("cleanup", str(checkout), "--repo", str(repo), env=env).returncode == 0
 

@@ -880,12 +880,15 @@ accept_phase() {  # $1 = phase, $2 = stderr log or "": validate a freshly writte
   # to one short line and the recorded value is sanitised, so a tampered marker can neither forge a
   # diagnosis line nor make the refusal unbounded.
   if [ "$1" = "hunt" ]; then
-    if ! IFS= read -r -n 64 launched < "$RUN_DIR/$key.launch" 2>/dev/null || [ -z "$launched" ]; then
+    launched=""
+    # One short line, with or without its trailing newline; anything less is an unusable state.
+    IFS= read -r -n 64 launched < "$RUN_DIR/$key.launch" 2>/dev/null || true
+    if [ -z "$launched" ]; then
       die 15 "the hunt launch marker $RUN_DIR/$key.launch is missing, empty or unreadable; start the hunt phase again."
     fi
     if [ "$launched" != "$(launch_text "$1")" ]; then
       launched_arg="$(printf '%s' "$launched" | LC_ALL=C tr -c '[:print:]' '?')"
-      die 13 "the hunt launch records '$launched_arg' but this record invocation selects '$(launch_text "$1" | LC_ALL=C tr -d '\n')'; pass the --shard the dossier was written with (or the same ADVERSARIAL_SHARD), or start the hunt phase again."
+      die 13 "the hunt launch records '$launched_arg' but this record invocation selects '$(launch_text "$1" | LC_ALL=C tr -d '\n')'; record the dossier's selection (--shard K/N, or omit the flag when it recorded shard=none), or start the hunt phase again."
     fi
   fi
   [ -s "$art" ] || die 15 "the $1 agent produced no report ($art is missing or empty)."
