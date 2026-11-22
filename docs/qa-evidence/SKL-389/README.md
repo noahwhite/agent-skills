@@ -6,7 +6,7 @@
 - Environment, deployed build and fixtures: not applicable; this repository deploys nothing.
 - Implementation PR: https://github.com/noahwhite/agent-skills/pull/389.
 - Implementation reviewed head: `1a7c39ed3a289445ad965b480aff9d63d8231724`.
-- [Per-item structured assertions attached to the story](https://uploads.linear.app/7fbfc592-b1ef-432c-96af-87e5111c541e/5f29f681-04e0-4964-82b9-789c83b812f2/9226d278-a1ba-49d8-a292-52f1352d3b1d).
+- Tracker attachment: `SKL-389 QA round 1 structured assertions` (`assertions.txt`), cited by the QA evidence comment below.
 - [QA evidence comment](https://linear.app/officina-pub/issue/SKL-389/user-story-put-lite-mode-and-the-batched-poll-cadence-in-the-kickoff#comment-5b91d6ae).
 
 ## Verdicts
@@ -48,4 +48,4 @@ Screenshots are not required on this no-deployment path; the attachment preserve
 The runtime has no hosted-evidence capability.
 No incidental product defect, failed item or pending acceptance-basis ruling was observed.
 This verifies the prompt contract, not runtime polling compliance or ACU savings.
-The QA comment holds the closing state decision; this evidence records no story-body or criterion changes.
+The QA comment is the record for the closing state decision once the evidence PR merges; this evidence records no story-body or criterion changes.
