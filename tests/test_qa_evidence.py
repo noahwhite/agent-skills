@@ -840,13 +840,14 @@ def test_a_schema_that_is_not_an_object_is_refused(tmp_path):
 
 
 def test_the_cell_renders_the_label_as_literal_text(tmp_path):
-    label = "AC1 - **bold** and `code` and [link](guide.md)"
+    label = "AC1 - **bold** and `code` and [link](guide.md) and _emphasis_ and <b>bold</b>"
     res = run(tmp_path, "--key", "SKL-386", "--item", label)
     assert res.returncode == 0, res.stderr
     text = (tmp_path / "docs" / "qa-evidence" / "SKL-386" / "README.md").read_text(encoding="utf-8")
     parser = MarkdownIt("commonmark").enable("table")
     html = parser.render(text)
-    assert f"<td>{label}</td>" in html, html
+    expected = label.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    assert f"<td>{expected}</td>" in html, html
 
 
 def test_a_dash_leading_item_reaches_validation_in_the_space_form(tmp_path):
@@ -1226,6 +1227,8 @@ def test_another_script_terminator_separates_sentences(tmp_path, terminator):
     [
         "AC1 - greet Mr. Smith.",
         "AC1 - cite J. R. Hartley.",
+        "AC1 - the U.S. policy holds.",
+        "AC1 - files at 9 a.m. sharp.",
         "AC1 - 1. the generator writes the skeleton",
         "AC1 - step 4. the readme is refused",
         "AC1 - item 2. the table lists every label",
@@ -1234,6 +1237,14 @@ def test_another_script_terminator_separates_sentences(tmp_path, terminator):
 def test_a_title_in_an_initial_or_a_numbered_item_is_not_a_sentence_end(tmp_path, label):
     res = run(tmp_path, "--key", "SKL-386", "--item", label)
     assert res.returncode == 0, res.stderr
+
+
+def test_an_option_letter_does_not_hide_a_second_sentence(tmp_path):
+    label = "AC1 - Use option A. Restart the service."
+    res = run(tmp_path, "--key", "SKL-386", "--item", label)
+    assert res.returncode == 1, res.stderr
+    assert "more than one sentence" in res.stderr
+    assert not (tmp_path / "docs").exists()
 
 
 @pytest.mark.parametrize("control", ["\x1b", "\x07", "\x08"])

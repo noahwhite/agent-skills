@@ -23,11 +23,11 @@ A label is written as one table cell of literal text: its line breaks fold to sp
 whitespace collapse, and the Markdown punctuation that could open a table cell, a heading or inline
 markup is backslash-escaped, so a cell can never add a column, a row, a heading or inline markup.
 The generator's own verdict-word rule is stricter than the repository doc-lint's `stray_terms`: it
-refuses an empty label, a label holding a control character, an invisible format character or more
-than one sentence, and one whose visible text carries U+2014, a stray term, a verdict word, a
-runtime-specific term, the British spelling of artifact outside the evidence tree that lint
-exempts, or an unresolvable `profile.` reference (checked against the target repository's own
-`profile/schema.json` when it has a schema).
+refuses an empty label, a label holding a control character that survives whitespace folding, an
+invisible format character or more than one sentence, and one whose visible text carries U+2014, a
+stray term, a verdict word, a runtime-specific term, the British spelling of artifact outside the
+evidence tree that lint exempts, or an unresolvable `profile.` reference (checked against the target
+repository's own `profile/schema.json` when it has a schema).
 
 It reads no tracker, makes no network call and needs no credential.
 """
@@ -75,13 +75,15 @@ LITERAL_ESCAPES = set("\\`*_[<>&|~$]")
 # A sentence ends at `.`, `!` or `?` before whitespace, the end or a closing quote, and at the
 # full-width and Arabic forms, which need no following space.
 SENTENCE_END_RE = re.compile(r"(?:[。｡？！؟]|[.!?][\"'\u2019\u201d)\]]*(?=\s|$))")
-# A dot that never ends a sentence: a two-letter abbreviation continuing in lowercase, an
-# abbreviation or title that never ends one, an initial before a name, or a numbered item or
-# decimal that continues in lowercase.
+# A dot that never ends a sentence: an abbreviation or title that never ends one, an abbreviation
+# that continues in lowercase, an initial in a sequence of initials or an acronym, or a numbered
+# item or decimal that continues in lowercase.
 NEVER_BOUNDARY_RE = re.compile(
-    r"\b(?i:etc|vs|fig)\.(?=\s+[a-z0-9])"
+    r"\b(?i:etc|vs|fig|a\.m|p\.m)\.(?=\s+[a-z0-9])"
     r"|\b(?i:e\.g|i\.e|mr|mrs|ms|dr|prof|sr|jr|st|gen|col)\."
-    r"|\b[A-Z]\.(?=\s+(?:[A-Z]\.|[A-Z][a-z]))"
+    r"|\b[A-Z]\.(?=\s+[A-Z]\.)"
+    r"|(?<=[A-Z]\.)[A-Z]\."
+    r"|(?<=[A-Z]\.\s)[A-Z]\.(?=\s+[A-Z][a-z])"
     r"|\b\d+\.(?=\s+[a-z0-9])"
 )
 # O_PATH opens a directory for use as a `dir_fd` without requiring read permission on it.
