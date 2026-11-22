@@ -5,8 +5,9 @@
 #
 #   bash scripts/pre-push-check.sh [--base REF] [--list]
 #
-# A passing run certifies the exact HEAD being pushed: when the index differs from HEAD the checks
-# run against a clean snapshot of HEAD, and HEAD is re-checked whenever it changes.
+# A passing run covers the tracked content of the exact HEAD being pushed: the run prints that
+# HEAD, refuses to pass when HEAD moved during the run, and checks a clean snapshot of HEAD when
+# the index differs from it. Re-run it whenever HEAD changes.
 # Exit status: 0 every check passed, 1 at least one check failed, 2 an input, git or startup error.
 set -uo pipefail
 
@@ -14,19 +15,6 @@ die() {
   printf 'pre-push-check: error: %s\n' "$1" >&2
   exit 2
 }
-
-# The elapsed-time arithmetic needs GNU date, and the empty-array expansion needs bash 4.4.
-if [ "${BASH_VERSINFO[0]}" -lt 4 ] ||
-  { [ "${BASH_VERSINFO[0]}" -eq 4 ] && [ "${BASH_VERSINFO[1]}" -lt 4 ]; }; then
-  die "bash 4.4 or newer is required (found $BASH_VERSION)"
-fi
-stamp=$(date +%s%N) || die "date +%s%N failed"
-case $stamp in
-  '' | *[!0-9]*) die "GNU date with +%s%N is required for elapsed seconds" ;;
-esac
-
-root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd) || exit 2
-cd -- "$root" || exit 2
 
 base=origin/main
 list=false
@@ -79,8 +67,9 @@ the focused test module for each changed path. Run it first with --list to see t
 
 Change set:
   the union of the staged paths (git diff --cached --name-only) and the committed branch diff
-  (git diff --name-only <merge-base>...HEAD), sorted and de-duplicated. Rename detection is
-  off, so a rename is reported as a deletion plus an addition and both paths are selected.
+  (git diff --name-only <merge-base>...HEAD), read as NUL-delimited raw paths, sorted and
+  de-duplicated. Rename detection is off, so a rename is reported as a deletion plus an
+  addition and both paths are selected.
   The base ref defaults to origin/main and --base REF overrides it. On the first push of a
   new topic branch the remote branch does not exist yet, and origin/main is still the base:
   the committed half is origin/main...HEAD.
@@ -95,7 +84,7 @@ Change set:
 Checks, in order, each continuing past a failure:
   tests/test_skills.py::test_no_em_dash
   tests/test_skills.py::test_clean_and_neutral_use_the_canonical_phrase
-  python3 scripts/vendor_shared.py --check
+  uv run --locked python scripts/vendor_shared.py --check
   each selected module
 
 Path to test module:
@@ -109,7 +98,8 @@ EOF
 
   a changed tests/test_*.py path maps to itself; every other path is unmapped: it prints
   "focused: no module for <path>" and runs the fallback module $fallback. A selected module
-  that is absent from the revision under test is named and skipped.
+  that is absent from the revision under test is named and skipped, but the two doc lints and
+  the vendored-copy check are required, so the run is a named startup error without them.
 EOF
   cat <<'EOF'
 
@@ -122,7 +112,7 @@ Flags:
 Output: one line per check with its label and its elapsed seconds, one FAIL line per failed
 check with its command and its output, and a total line.
 Exit status: 0 every check passed, 1 at least one check failed, 2 an error (an unresolvable
-base ref, invalid input, or a check that cannot start).
+base ref, invalid input, a check that cannot start, or HEAD moving during the run).
 Requires bash 4.4 or newer and GNU date; another runtime is one named error with exit 2.
 
 A passing run is required for the exact HEAD being pushed: re-run it whenever HEAD changes.
@@ -175,10 +165,27 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+# The elapsed-time arithmetic needs GNU date, and the empty-array expansion needs bash 4.4.
+if [ "${BASH_VERSINFO[0]}" -lt 4 ] ||
+  { [ "${BASH_VERSINFO[0]}" -eq 4 ] && [ "${BASH_VERSINFO[1]}" -lt 4 ]; }; then
+  die "bash 4.4 or newer is required (found $BASH_VERSION)"
+fi
+stamp=$(date +%s%N) || die "date +%s%N failed"
+case $stamp in
+  '' | *[!0-9]*) die "GNU date with +%s%N is required for elapsed seconds" ;;
+esac
+
+root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd) || exit 2
+cd -- "$root" || exit 2
+# An inherited pytest option must not turn a run into collection only.
+unset PYTEST_ADDOPTS
+
 git rev-parse --git-dir > /dev/null 2>&1 || die "not in a git repository"
 git rev-parse --verify --quiet --end-of-options "$base^{commit}" > /dev/null 2>&1 ||
   die "unresolvable base ref $base"
 head_sha=$(git rev-parse --verify HEAD) || die "HEAD is unresolvable"
+git merge-base "$base" "$head_sha" > /dev/null 2>&1 ||
+  die "no merge base between $base and HEAD $head_sha"
 unstaged=$(git diff --name-only) || die "git diff --name-only failed"
 [ -z "$unstaged" ] ||
   die "unstaged modifications to tracked files (stage or revert them first): $(printf '%s' "$unstaged" | tr '\n' ' ')"
@@ -187,20 +194,36 @@ hidden_paths=$(printf '%s\n' "$hidden" | sed -n '/^[a-zS] /s/^..//p')
 [ -z "$hidden_paths" ] ||
   die "assume-unchanged or skip-worktree entries hide working-tree state (clear them first): $(printf '%s' "$hidden_paths" | tr '\n' ' ')"
 
-staged=$(git diff --cached --name-only --no-renames) || die "git diff --cached --name-only failed"
-committed=$(git diff --name-only --no-renames "$base...HEAD") || die "unresolvable base ref $base"
-changes=$(printf '%s\n%s\n' "$staged" "$committed" | sed '/^$/d' | sort -u)
+work=$(mktemp -d) || die "could not create a temporary directory"
+snapshot=
+cleanup() {
+  if [ -n "$snapshot" ]; then
+    git worktree remove --force -- "$snapshot" > /dev/null 2>&1
+  fi
+  rm -rf -- "$work"
+}
+trap cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+git diff --cached --name-only -z --no-renames > "$work/staged" ||
+  die "git diff --cached --name-only failed"
+git diff --name-only -z --no-renames "$base...$head_sha" > "$work/committed" ||
+  die "git diff --name-only $base...HEAD failed"
+cat -- "$work/staged" "$work/committed" | sort -z -u > "$work/changes" ||
+  die "could not sort the change set"
+path_count=$(tr -cd '\0' < "$work/changes" | wc -c | tr -d ' ')
 
 modules=()
 unmapped=()
-while IFS= read -r path; do
-  [ -n "$path" ] || continue
+while IFS= read -r -d '' path; do
   if module=$(module_for "$path"); then
     modules+=("$module")
   else
     unmapped+=("$path")
   fi
-done <<< "$changes"
+done < "$work/changes"
 
 modules=$(printf '%s\n' "${modules[@]}" | sed '/^$/d' | sort -u)
 if [ ${#unmapped[@]} -gt 0 ]; then
@@ -208,14 +231,18 @@ if [ ${#unmapped[@]} -gt 0 ]; then
 fi
 
 if $list; then
-  if [ -z "$changes" ]; then
+  printf 'HEAD: %s\n' "$head_sha"
+  if [ "$path_count" = 0 ]; then
     printf 'change set: empty\n'
   else
     printf 'change set:\n'
-    while IFS= read -r path; do
+    while IFS= read -r -d '' path; do
       printf '  %s\n' "$path"
-    done <<< "$changes"
+    done < "$work/changes"
   fi
+  git diff --cached --quiet
+  [ $? -eq 1 ] &&
+    printf 'note: the index differs from HEAD %s; a run would check a clean snapshot of HEAD\n' "$head_sha"
   printf 'selected modules:\n'
   if [ -z "$modules" ]; then
     printf '  none\n'
@@ -235,27 +262,24 @@ if $list; then
   exit 0
 fi
 
+run_start=$(date +%s%N)
+
 # The checks read the tree they run in, so a staged change would let a passing run cover content
-# that is not HEAD. With a staged change they run in a clean snapshot of HEAD instead.
+# that is not HEAD. With a staged change they run in a clean snapshot of HEAD instead, reusing the
+# checkout's environment when it has one so every staged run does not rebuild it.
 check_in=.
-snapshot=
-cleanup() {
-  if [ -n "$snapshot" ]; then
-    git worktree remove --force -- "$snapshot/head" > /dev/null 2>&1
-    rm -rf -- "$snapshot"
-  fi
-}
-trap cleanup EXIT
-trap 'exit 130' INT TERM HUP
 git diff --cached --quiet
 staged_status=$?
 case $staged_status in
   0) ;;
   1)
-    snapshot=$(mktemp -d) || die "could not create a snapshot directory"
-    git worktree add --detach --quiet "$snapshot/head" HEAD ||
+    snapshot=$work/head
+    git -c core.hooksPath=/dev/null worktree add --detach --quiet "$snapshot" "$head_sha" ||
       die "could not create a clean snapshot worktree of HEAD $head_sha"
-    check_in=$snapshot/head
+    check_in=$snapshot
+    if [ -d "$root/.venv" ]; then
+      export UV_PROJECT_ENVIRONMENT="$root/.venv"
+    fi
     printf 'note: the index differs from HEAD %s; the checks run against a clean snapshot of HEAD\n' "$head_sha"
     ;;
   *) die "git diff --cached --quiet failed" ;;
@@ -263,15 +287,19 @@ esac
 
 pytest_ready=$(cd -- "$check_in" && uv run --locked pytest --version 2>&1) ||
   die "cannot start the pytest checks: ${pytest_ready:-uv run --locked pytest failed}"
-command -v python3 > /dev/null 2>&1 || die "cannot start the vendor check: python3 is not on PATH"
+[ -f "$check_in/tests/test_skills.py" ] ||
+  die "cannot start the doc lint checks: tests/test_skills.py is not in the revision under test"
+[ -f "$check_in/scripts/vendor_shared.py" ] ||
+  die "cannot start the vendor check: scripts/vendor_shared.py is not in the revision under test"
 
-if [ -z "$changes" ]; then
+printf 'HEAD: %s\n' "$head_sha"
+if [ "$path_count" = 0 ]; then
   printf 'change set: empty\n'
 else
-  printf 'change set: %s path(s)\n' "$(printf '%s\n' "$changes" | wc -l | tr -d ' ')"
-  while IFS= read -r path; do
+  printf 'change set: %s path(s)\n' "$path_count"
+  while IFS= read -r -d '' path; do
     printf '  %s\n' "$path"
-  done <<< "$changes"
+  done < "$work/changes"
 fi
 for path in "${unmapped[@]}"; do
   printf 'focused: no module for %s\n' "$path"
@@ -279,7 +307,6 @@ done
 
 checked=0
 failed=0
-run_start=$(date +%s%N)
 
 elapsed() {
   local ns=$(($(date +%s%N) - $1))
@@ -294,9 +321,6 @@ run_check() {
   out=$(cd -- "$check_in" && "$@" 2>&1)
   code=$?
   checked=$((checked + 1))
-  if [ "$code" -eq 126 ] || [ "$code" -eq 127 ]; then
-    die "cannot start $label: ${out:-exit $code}"
-  fi
   if [ "$code" -eq 0 ]; then
     printf 'ok %s (%ss)\n' "$label" "$(elapsed "$start")"
     return
@@ -312,7 +336,8 @@ run_check() {
 run_check 'tests/test_skills.py::test_no_em_dash' uv run --locked pytest -q tests/test_skills.py::test_no_em_dash
 run_check 'tests/test_skills.py::test_clean_and_neutral_use_the_canonical_phrase' \
   uv run --locked pytest -q tests/test_skills.py::test_clean_and_neutral_use_the_canonical_phrase
-run_check 'vendor: scripts/vendor_shared.py --check' python3 scripts/vendor_shared.py --check
+run_check 'vendor: uv run --locked python scripts/vendor_shared.py --check' \
+  uv run --locked python scripts/vendor_shared.py --check
 if [ -n "$modules" ]; then
   while IFS= read -r module; do
     if [ ! -f "$check_in/$module" ]; then
@@ -325,4 +350,7 @@ fi
 
 printf 'total: %d checks, %d failed, %ss\n' "$checked" "$failed" "$(elapsed "$run_start")"
 [ "$failed" -eq 0 ] || exit 1
+current=$(git rev-parse --verify HEAD) || die "HEAD became unresolvable during the run"
+[ "$current" = "$head_sha" ] ||
+  die "HEAD moved from $head_sha to $current during the run; re-run the check for the new HEAD"
 exit 0
