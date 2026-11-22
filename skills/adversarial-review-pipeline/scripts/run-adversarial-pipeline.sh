@@ -296,9 +296,10 @@
 # Exit codes: 0 ok / PASS, 1 preflight FAIL, 2 usage, 3 preflight INCOMPLETE, 11 not a git repo,
 # 12 bad base, 13 missing or invalid prior artifact, or a phase's inputs (spec, --shard, --no-sweep,
 # a predecessor artifact) changed since its dossier was written, 14 cleanup refused, 15 agent command
-# failed, wrote no fresh report, or left a phase launch marker that is missing, empty or unreadable,
-# 17 agent ran blind (sandbox error on its stderr, or no `REVIEW-RAN: yes`
-# first line), 18 the agent changed the primary checkout, 19 the phase was killed by --timeout,
+# failed, wrote no fresh report, or left a hunt launch marker that is missing, empty, unreadable or
+# not exactly the one selection line it wrote, 17 agent ran blind (sandbox error on its stderr, or no
+# `REVIEW-RAN: yes` first line), 18 the agent changed the primary checkout, 19 the phase was killed by
+# --timeout,
 # 20 the phase's availability check failed before any agent ran, 21 the arbitrate phase could not
 # write its identity lines or retain its accepted report (not accepted), 22 the review checklist or
 # the changed paths could not be read (checklist, dossier sweep). An accepted arbitration report that
@@ -869,32 +870,29 @@ sandbox_error_in() {
 }
 
 accept_phase() {  # $1 = phase, $2 = stderr log or "": validate a freshly written artifact, then stamp it
-  local art key launched launched_arg extra; art="$(artifact_for "$1")"; key="$(state_key "$1")"
+  local art key launched launched_arg expected size; art="$(artifact_for "$1")"; key="$(state_key "$1")"
   [ -f "$RUN_DIR/$key.launch" ] && [ -f "$RUN_DIR/$key.binding" ] && [ -f "$RUN_DIR/$key.primary" ] \
     || die 15 "no launch for $1 in this run (never started, discarded by a later re-run of an earlier phase, or an arbitration already accepted); write its dossier with 'dossier $1' first."
   if [ "$(cat -- "$RUN_DIR/$key.binding")" != "$(binding_text "$1")" ]; then
     die 13 "the $1 inputs changed since its dossier was written (spec, --shard, --no-sweep or a predecessor artifact); start the $1 phase again."
   fi
   # `--shard 1/1` and an omitted flag share a binding byte for byte, so the hunt's launch carries the
-  # exact selection the dossier was written for: a record must repeat it exactly. The read is bounded
-  # to one short line and the recorded value is sanitised, so a tampered marker can neither forge a
-  # diagnosis line nor make the refusal unbounded.
+  # exact selection the dossier was written for: a record must repeat it exactly, and the marker must
+  # be exactly that one selection line (an optional trailing newline allowed). The printed value is
+  # sanitised, so a tampered marker can neither forge a diagnosis line nor make the refusal unbounded.
   if [ "$1" = "hunt" ]; then
     launched=""
-    extra=""
-    # One short line, with or without its trailing newline; anything less is an unusable state.
+    expected="$(launch_text "$1")"
+    size="$(wc -c < "$RUN_DIR/$key.launch" 2>/dev/null)" || size=0
     IFS= read -r -n 64 launched < "$RUN_DIR/$key.launch" 2>/dev/null || true
-    if [ -z "$launched" ]; then
-      die 15 "the hunt launch marker $RUN_DIR/$key.launch is missing, empty or unreadable; start the hunt phase again."
+    # Exactly one short line, with or without its trailing newline: anything else is unusable state.
+    if [ -z "$launched" ] \
+      || { [ "$size" != "${#launched}" ] && [ "$size" != "$(( ${#launched} + 1 ))" ]; }; then
+      die 15 "the hunt launch marker $RUN_DIR/$key.launch is missing, empty, unreadable or not exactly one selection line; start the hunt phase again with 'dossier hunt'."
     fi
-    # The marker is exactly one selection line; content after it means the file is not ours.
-    IFS= read -r -n 1 extra < <(tail -n +2 -- "$RUN_DIR/$key.launch" 2>/dev/null) || true
-    if [ -n "$extra" ]; then
-      die 15 "the hunt launch marker $RUN_DIR/$key.launch carries more than its selection line; start the hunt phase again."
-    fi
-    if [ "$launched" != "$(launch_text "$1")" ]; then
+    if [ "$launched" != "$expected" ]; then
       launched_arg="$(printf '%s' "$launched" | LC_ALL=C tr -c '[:print:]' '?')"
-      die 13 "the hunt launch records '$launched_arg' but this record invocation selects '$(launch_text "$1" | LC_ALL=C tr -d '\n')'; record the dossier's selection (--shard K/N, or omit the flag when it recorded shard=none), or start the hunt phase again."
+      die 13 "the hunt launch records '$launched_arg' but this record invocation selects '$expected'; record the dossier's selection (--shard K/N, or no --shard with ADVERSARIAL_SHARD unset when it recorded shard=none), or start the hunt phase again with 'dossier hunt'."
     fi
   fi
   [ -s "$art" ] || die 15 "the $1 agent produced no report ($art is missing or empty)."
@@ -2184,7 +2182,13 @@ case "$cmd" in
     echo "CHECKOUT: $checkout" >&2
     echo "Work only in that checkout (never the primary checkout); the $phase dossier names it too. Remove it with 'cleanup $checkout' once the phase is recorded." >&2
     shard_hint=""
-    if [ "$phase" = "hunt" ]; then shard_hint=" and the same --shard"; fi
+    if [ "$phase" = "hunt" ]; then
+      if [ "$SHARD_SET" -eq 1 ]; then
+        shard_hint=" and the same --shard $SHARD_K/$SHARD_N (or the same ADVERSARIAL_SHARD)"
+      else
+        shard_hint=" and no --shard (this dossier recorded shard=none; clear ADVERSARIAL_SHARD too)"
+      fi
+    fi
     echo "Save the $phase report to $(artifact_for "$phase"), then run 'record $phase' with the same --base, --spec and --no-sweep${shard_hint}." >&2
     printf '%s\n' "$dossier"
     trap - EXIT

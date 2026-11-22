@@ -351,6 +351,7 @@ def test_record_hunt_refuses_a_shard_selection_the_dossier_did_not_use(accepted_
         "--shard", "1/1", env=env,
     )
     checkout, _ = dossier_of(dossier)
+    assert "the same --shard 1/1" in dossier.stderr, dossier.stderr
     report.write_text("REVIEW-RAN: yes\none of one\n")
     state_before = {path.name: path.read_bytes()
                     for path in sorted(run_dir.iterdir()) if path.is_file()}
@@ -377,6 +378,7 @@ def test_record_hunt_refuses_a_shard_selection_the_dossier_did_not_use(accepted_
         "dossier", "hunt", "--repo", str(repo), "--base", "HEAD", "--scratch", str(scratch), env=env,
     )
     checkout, _ = dossier_of(dossier)
+    assert "no --shard (this dossier recorded shard=none" in dossier.stderr, dossier.stderr
     assert launch.read_bytes() == b"shard=none\n", launch.read_bytes()
     report.write_text("REVIEW-RAN: yes\nplain\n")
     flagged = run_script(
@@ -427,25 +429,27 @@ def test_a_malformed_launch_marker_is_refused_with_a_bounded_sanitised_diagnosis
         "dossier", "hunt", "--repo", str(repo), "--base", "HEAD", "--scratch", str(scratch), env=env,
     )
     checkout, _ = dossier_of(dossier)
-    # A marker with a second line is not this run's marker.
-    launch.write_bytes(b"shard=none\x1b[2K\nTRAIL\n")
-    report.write_text("REVIEW-RAN: yes\nplain\n")
-    refused = run_script("record", "hunt", "--repo", str(repo), "--base", "HEAD", env=env)
-    assert refused.returncode == 15, refused.stdout + refused.stderr
-    assert "more than its selection line" in refused.stderr, refused.stderr
-    assert not Path(f"{report}.stamp").exists()
-    # A wrong selection carrying a terminal escape prints it neutralised, never raw.
-    launch.write_bytes(b"shard=1/1\x1b[2K\n")
-    report.write_text("REVIEW-RAN: yes\nplain\n")
-    escaped = run_script("record", "hunt", "--repo", str(repo), "--base", "HEAD", env=env)
-    assert escaped.returncode == 13, escaped.stdout + escaped.stderr
-    assert "\x1b" not in escaped.stderr, escaped.stderr
-    assert "records 'shard=1/1?[2K'" in escaped.stderr, escaped.stderr
-    # A huge marker: the diagnosis stays bounded and shows no raw control byte.
+    # Anything but the one selection line is an unusable state, not a selection.
+    for marker in (b"shard=none\nTRAIL\n", b"shard=none\n\n", b"shard=none\x00\n"):
+        launch.write_bytes(marker)
+        report.write_text("REVIEW-RAN: yes\nplain\n")
+        refused = run_script("record", "hunt", "--repo", str(repo), "--base", "HEAD", env=env)
+        assert refused.returncode == 15, (marker, refused.stdout + refused.stderr)
+        assert "not exactly one selection line" in refused.stderr, refused.stderr
+        assert not Path(f"{report}.stamp").exists()
+    # A wrong selection of the right shape prints its value neutralised, never raw.
+    for marker, shown in ((b"shard=no\x1be\n", "shard=no?e"), (b"shard=none\r\n", "shard=none?")):
+        launch.write_bytes(marker)
+        report.write_text("REVIEW-RAN: yes\nplain\n")
+        escaped = run_script("record", "hunt", "--repo", str(repo), "--base", "HEAD", env=env)
+        assert escaped.returncode == 13, (marker, escaped.stdout + escaped.stderr)
+        assert "\x1b" not in escaped.stderr and "\r" not in escaped.stderr, escaped.stderr
+        assert f"records '{shown}'" in escaped.stderr, escaped.stderr
+    # A huge marker: the diagnosis stays bounded.
     launch.write_bytes(b"A" * (4 * 1024 * 1024))
     report.write_text("REVIEW-RAN: yes\nplain\n")
     huge = run_script("record", "hunt", "--repo", str(repo), "--base", "HEAD", env=env)
-    assert huge.returncode == 13, huge.stdout + huge.stderr
+    assert huge.returncode == 15, huge.stdout + huge.stderr
     assert len(huge.stderr.encode()) < 4096, len(huge.stderr.encode())
     assert not Path(f"{report}.stamp").exists()
     assert run_script("cleanup", str(checkout), "--repo", str(repo), env=env).returncode == 0

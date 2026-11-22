@@ -106,7 +106,7 @@ Launching a phase depends on the profile agent's `runtime`:
   If the dossier cannot be written, the command removes that checkout itself before it exits.
   Spawn a clean, neutral subagent (its whole brief is the dossier) with the agent's model, tell it to read the dossier and work only in that checkout, and save its final report to the phase's artifact path (`paths` prints them).
   The sweep and the arbiter treat the checkout as read-only; only the hunter mutates its own.
-  Then run `record <phase>` with the same `--base`, `--spec` and `--no-sweep` as the dossier (for arbitration, also the arbiter's `--model` and `--agent`, see "Arbiter identity and retained rounds"); it reads the script's own run state, not a scratch directory.
+  Then run `record <phase>` with the same `--base`, `--spec` and `--no-sweep` as the dossier (for a hunt, also the same `--shard`, or no `--shard` when the dossier recorded `shard=none` and no `--shard` was passed; for arbitration, also the arbiter's `--model` and `--agent`, see "Arbiter identity and retained rounds"); it reads the script's own run state, not a scratch directory.
   It accepts the report only if it is non-empty, newer than the dossier, starts with `REVIEW-RAN: yes`, its inputs still match the dossier's, and the tripwire saw no change to the primary checkout since the dossier was written.
   Remove the checkout with `cleanup <path>` once the phase is recorded; it removes only a checkout the script created and registered, and refuses any other path.
 
