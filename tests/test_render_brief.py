@@ -290,6 +290,114 @@ def test_reference_mentions_are_absolute_and_exist(scratch):
         assert "`references/" not in text, name
 
 
+# SKL-410 AC3: every rendered role brief physically carries the permissions its skill grants, quoted
+# from that skill with `path:line`, beside the prohibitions the shared rules fragment states.
+
+
+def permission_summary(role: str) -> str:
+    skill = {"engineer": "engineering-workflow", "qa": "qa-verification"}[role]
+    return (
+        f"- Your permissions, quoted from the skill that governs you, sit beside the prohibitions above: you tick "
+        f"the boxes you verified, move the states `{skill}` assigns, open your own PR, and post the review of record."
+    )
+
+
+PERMISSIONS = {
+    "engineer": (
+        (
+            "skills/engineering-workflow/references/linear.md",
+            45,
+            "Ticking the Acceptance Criteria and Definition of Done checkboxes in the description is the completion "
+            "record.",
+        ),
+        (
+            "skills/engineering-workflow/references/linear.md",
+            50,
+            "When every item is objectively satisfied, tick the boxes and set done in the same act.",
+        ),
+        (
+            "skills/engineering-workflow/references/linear.md",
+            40,
+            "Move an issue to in progress the moment its branch is created, before writing code.",
+        ),
+        (
+            "skills/engineering-workflow/SKILL.md",
+            297,
+            "Move the story to `profile.tracker.states.in_deployment_review` (never on merge alone).",
+        ),
+        (
+            "skills/engineering-workflow/references/github.md",
+            78,
+            "Open a PR only once the branch is cleanly based on its target.",
+        ),
+        (
+            "skills/engineering-workflow/SKILL.md",
+            232,
+            "Post the review of record on the PR as one PR review",
+        ),
+    ),
+    "qa": (
+        ("skills/qa-verification/SKILL.md", 170, "Tick the boxes you verified."),
+        (
+            "skills/qa-verification/references/linear.md",
+            45,
+            "Ticking the Acceptance Criteria and Definition of Done checkboxes in the description is the completion "
+            "record.",
+        ),
+        (
+            "skills/qa-verification/references/linear.md",
+            39,
+            "Once every AC and DoD item is ticked and verified in the environment, move the issue to done.",
+        ),
+        ("skills/qa-verification/SKILL.md", 142, "Ship it through the normal branch and PR flow"),
+        (
+            "skills/qa-verification/SKILL.md",
+            142,
+            "signed when `profile.git.signed_commits` is true, and verify the signature after pushing.",
+        ),
+        (
+            "skills/qa-verification/SKILL.md",
+            138,
+            "If `profile.qa.evidence_dir` is unset, the project does not keep in-repo evidence; skip this step and say "
+            "so in the report.",
+        ),
+        ("skills/qa-verification/SKILL.md", 155, "post the review of record on the PR"),
+    ),
+}
+
+
+@pytest.mark.parametrize("role", sorted(PERMISSIONS))
+def test_every_permission_citation_names_the_line_that_states_it(role):
+    """The quotes are checked against the skill the role loads, so a reworded quote fails here as well."""
+    for path, number, quote in PERMISSIONS[role]:
+        lines = (ROOT / path).read_text(encoding="utf-8").splitlines()
+        assert quote in lines[number - 1], f"{path}:{number} does not state {quote!r}"
+
+
+@pytest.mark.parametrize("role", sorted(PERMISSIONS))
+def test_every_rendered_brief_carries_the_quoted_permission_lines(role, scratch):
+    """Rendered through the real renderer: absent or reworded permission lines fail both the quote and the citation."""
+    renders = {name: text for name, (_, text) in all_renders(scratch).items() if name.startswith(role)}
+    assert renders, role
+    for name, text in renders.items():
+        text = normalize(text, scratch)
+        assert text.count(permission_summary(role)) == 1, name
+        for path, number, quote in PERMISSIONS[role]:
+            assert f'"{quote}"' in text, (name, quote)
+            assert f"`{path}:{number}`" in text, (name, path, number)
+
+
+@pytest.mark.parametrize("role", sorted(PERMISSIONS))
+def test_role_permissions_sit_beside_the_prohibitions(role, scratch):
+    """The permission block follows the shared prohibitions and precedes the role's own path fragment."""
+    for name, (_, text) in all_renders(scratch).items():
+        if not name.startswith(role):
+            continue
+        text = normalize(text, scratch)
+        for rule in RULES.values():
+            assert text.index(rule) < text.index(permission_summary(role)), name
+
+
 # AC3 One source
 
 
@@ -342,17 +450,18 @@ def pin(text: str, scratch: str) -> str:
 
 
 # SKL-357 re-pinned both QA digests for the waiting-handback bullet in brief-qa.md, and pinned the other renders.
-# Fixed inputs: story ABC-123, round 1, environment `dev`.
-DEPLOYED_QA_SHA256 = "e014ba2c8f79c83455b632bff598a92baffdafd605cc816d3a227eccb08c8277"
+# Fixed inputs: story ABC-123, round 1, environment `dev`. SKL-410 re-pinned all six for the role permission lines.
+DEPLOYED_QA_SHA256 = "4ea89fcf8fdb2acc7ed11f9835efe42515f1cf9f3dd369d3b80152345a8729fa"
 # Fixed inputs: story ABC-123, round 1, the two LINKS above.
-SPIKE_QA_SHA256 = "c54650b59adf54cc751e5437942bfe235c71187da28cf9ca360f794efa4d47a3"
+SPIKE_QA_SHA256 = "9bd2658d9d9d4ed8c57217a9d2ee0bed4781421b68f981a2cf750258a3621d8b"
 # Fixed inputs: story ABC-123, round 1, commit SHA above.
-NO_DEPLOYMENT_QA_SHA256 = "5ce1b9bca9d508934d526a615f754aceec4b93f3530c0266606c3a39eb068c3e"
-# Fixed inputs: story ABC-123, one engineer render per path. SKL-346 re-pinned all three for the arbitration ledger.
+NO_DEPLOYMENT_QA_SHA256 = "08849ba5f7f8087601d8243410b546e22e111b5b7390534b515b7cc8304f9ebe"
+# Fixed inputs: story ABC-123, one engineer render per path. SKL-346 pinned them for the ledger; SKL-410 re-pinned
+# all three for the role permission lines.
 ENGINEER_SHA256 = {
-    "deployed": "a4ce47a63b64c8637a027f5596d372c886f68d9a00baea5e96a03c9f41ff3f3f",
-    "no-deployment": "4f8ff97431c64742412df63f7356b3569d3889c04b3b1d9b786f1c5bf63b0a13",
-    "spike": "68a4f6cb3a276beb95596cc8b00dbb15b62ae9c0212c4c7f6ca30433cced8277",
+    "deployed": "157b775bf7818ce40419ffb9222bcd1e182d939219fe1435cc43dabe7345d08d",
+    "no-deployment": "12f1cd6d82f75386af4ce2ae61af2147cffc3229cac7d934ce4af6a545c1cdd2",
+    "spike": "39ffa085e0dc5db5e186a7172e5e926ec09cd7abcd41a4036bba9394ae8dff82",
 }
 
 

@@ -134,7 +134,12 @@ def plan(ns: argparse.Namespace) -> tuple[str, str, list[str], dict]:
     if ns.role == "engineer":
         not_taken(ns, ("--round", "--environment", "--commit", "--link"), "an engineer render")
         sub = "senior-engineer"
-        templates = ["brief-engineer.md", "brief-rules.md", f"brief-engineer-{ns.path}.md"]
+        templates = [
+            "brief-engineer.md",
+            "brief-rules.md",
+            "brief-engineer-permissions.md",
+            f"brief-engineer-{ns.path}.md",
+        ]
     else:
         if ns.round is None:
             refuse("missing --round")
@@ -164,7 +169,7 @@ def plan(ns: argparse.Namespace) -> tuple[str, str, list[str], dict]:
                 if not has_host(link):
                     refuse("invalid --link: the URL names no host")
             values["target"] = "\n".join(ns.link)
-        templates = ["brief-qa.md", "brief-rules.md", fragment]
+        templates = ["brief-qa.md", "brief-rules.md", "brief-qa-permissions.md", fragment]
 
     role_dir = checked_scratch(ns.scratch, sub)
     return role_dir, f"{sub}-brief.md", templates, values
