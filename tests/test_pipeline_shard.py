@@ -296,6 +296,13 @@ def test_a_plan_conflict_is_a_usage_error_that_changes_nothing(accepted_gate):
         assert plan_file(run_dir).read_bytes() == plan_before, extra
         assert Path(f"{files['hunt.1']}.stamp").read_bytes() == stamp_before, extra
         assert (run_dir / "phase2-hunt.1.md").exists(), extra
+    # `record` reads the same plan and refuses a conflicting count the same way.
+    conflicting = run_script(
+        "record", "hunt", "--repo", str(repo), "--base", "HEAD", "--shard", "1/3", env=env,
+    )
+    assert conflicting.returncode == 2, conflicting.stdout + conflicting.stderr
+    assert plan_file(run_dir).read_bytes() == plan_before
+    assert Path(f"{files['hunt.1']}.stamp").read_bytes() == stamp_before
 
 
 def test_an_unsharded_hunt_then_a_shard_is_a_usage_error(accepted_gate):
@@ -402,6 +409,7 @@ def test_a_sharded_hunt_refuses_a_marker_naming_another_selection(accepted_gate)
         "--shard", "1/2", env=env,
     )
     checkout, _ = dossier_of(dossier)
+    assert "the same --shard 1/2" in dossier.stderr, dossier.stderr
     (run_dir / "phase2-hunt.1.md").write_text("REVIEW-RAN: yes\nshard one\n")
     (run_dir / "hunt.1.launch").write_bytes(b"shard=none\n")
     state_before = {path.name: path.read_bytes()
@@ -471,6 +479,8 @@ def test_an_unreadable_hunt_launch_is_refused_and_never_read_as_empty(accepted_g
             assert not Path(f"{report}.stamp").exists()
     finally:
         launch.chmod(0o644)
+    if not denied:
+        pytest.skip("this process can read a mode-000 file, so the denial cannot be established")
     # A marker without its trailing newline is the same selection, not a broken one.
     launch.write_bytes(launch.read_bytes().rstrip(b"\n"))
     report.write_text("REVIEW-RAN: yes\nplain\n")
@@ -492,13 +502,17 @@ def test_a_malformed_launch_marker_is_refused_with_a_bounded_sanitised_diagnosis
     # Anything but the one printable selection line is an unusable state, not a selection.
     for marker in (b"shard=none\nTRAIL\n", b"shard=none\n\n", b"shard=none\x00\n",
                    b"shard=none\x00", b"shard=none\r\n", b"shard=no\x1be\n",
-                   b"shard=none \n", b"shard=none" + b"x" * 55, b"shard=none" + b"x" * 60):
+                   b"shard=none \n", b"shard=3/2\n", b"shard=none" + b"x" * 55,
+                   b"shard=none" + b"x" * 60):
+        sidecar = run_dir / "hunt.dossier"
+        sidecar_before = sidecar.read_bytes() if sidecar.exists() else None
         launch.write_bytes(marker)
         report.write_text("REVIEW-RAN: yes\nplain\n")
         refused = run_script("record", "hunt", "--repo", str(repo), "--base", "HEAD", env=env)
         assert refused.returncode == 15, (marker, refused.stdout + refused.stderr)
         assert "not exactly the one selection line the launcher wrote" in refused.stderr, refused.stderr
         assert not Path(f"{report}.stamp").exists()
+        assert (sidecar.read_bytes() if sidecar.exists() else None) == sidecar_before, marker
     # A printable marker naming another selection is a mismatch that names both values.
     launch.write_bytes(b"shard=1/1\n")
     report.write_text("REVIEW-RAN: yes\nplain\n")
@@ -880,7 +894,7 @@ def test_a_preflight_rerun_discards_probe_logs_too(accepted_gate):
     assert not (run_dir / "hunt.1-probe.log").exists()
 
 
-def test_every_phase_status_and_diagnosis_line_carries_the_shard(accepted_gate):
+def test_every_phase_status_and_diagnosis_line_carries_the_shard(accepted_gate, tmp_path):
     repo, scratch, env = accepted_gate
     failed = run_hunt(repo, scratch, env, "--shard", "1/2", agent=BLIND_AGENT)
     assert failed.returncode == 17, failed.stdout + failed.stderr
@@ -888,8 +902,17 @@ def test_every_phase_status_and_diagnosis_line_carries_the_shard(accepted_gate):
              if line.startswith("adversarial-pipeline: phase=hunt")]
     assert heads, failed.stderr
     for line in heads:
-        assert "shard=1/2" in line, line
+        assert [field for field in line.split() if field.startswith("shard=")] == ["shard=1/2"], line
     reason = [line for line in failed.stderr.splitlines() if "reason:" in line]
     assert reason, failed.stderr
     for line in reason:
-        assert "shard=1/2" in line, line
+        assert [field for field in line.split() if field.startswith("shard=")] == ["shard=1/2"], line
+
+    plain_repo, plain_scratch, plain_env = accepted_hunt_gate(tmp_path / "plain-status")
+    plain_failed = run_hunt(plain_repo, plain_scratch, plain_env, agent=BLIND_AGENT)
+    assert plain_failed.returncode == 17, plain_failed.stdout + plain_failed.stderr
+    plain_heads = [line for line in plain_failed.stderr.splitlines()
+                   if line.startswith("adversarial-pipeline: phase=hunt")]
+    assert plain_heads, plain_failed.stderr
+    for line in plain_heads:
+        assert [field for field in line.split() if field.startswith("shard=")] == [], line

@@ -222,7 +222,7 @@ With `N >= 2` the shard's artifact is `<run dir>/phase2-hunt.<k>.md` (never `pha
 The first sharded invocation records the run's plan in `<run dir>/hunt.shards`: `n=<n>` then each shard's artifact path, one per line.
 `paths` prints one `hunt.<k> <path>` line per shard, and `dossier-sizes.md` one `hunt.<k>: <bytes> bytes` line per shard.
 `--shard 1/1` and an unsharded run are identical to today's names and dossier.
-A hunt dossier written by an earlier version of this script left `hunt.launch` empty, so it has no recorded selection and its hunt phase must be written again before it can be recorded.
+A hunt dossier written by an earlier version of this script left `hunt.launch` (or `hunt.<k>.launch`) empty, so it has no recorded selection and its hunt phase must be written again before it can be recorded.
 
 Run shards sequentially, one `run` per shard, in shard order.
 The driver stops at the first non-zero exit and launches no later shard and no `arbitrate` phase; a failed shard leaves its own stamp absent and every other shard's acceptance standing, and a later `run arbitrate` then refuses at exit 13 naming the unaccepted shard.

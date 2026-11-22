@@ -363,6 +363,12 @@ probe_names_model() {
   return 1
 }
 abspath() { realpath -m -- "$1"; }
+# Canonical decimals with no leading zero compare by length, then lexically: no integer range.
+dec_le() {  # $1 $2 -> 0 when $1 <= $2
+  [ "${#1}" -lt "${#2}" ] && return 0
+  [ "${#1}" -gt "${#2}" ] && return 1
+  [ "$1" = "$2" ] || [[ "$1" < "$2" ]]
+}
 
 cmd="${1:-}"; [ -n "$cmd" ] || usage; shift
 phase=""; target=""
@@ -491,11 +497,8 @@ if [ "$SHARD_SET" -eq 1 ]; then
     || die 2 "--shard value '$SHARD_SHOWN' is invalid: expected K/N with decimal integers 1 <= K <= N and no leading zero"
   SHARD_K="${BASH_REMATCH[1]}"
   SHARD_N="${BASH_REMATCH[2]}"
-  # Canonical decimals with no leading zero compare by length, then lexically: no integer range.
-  if [ "${#SHARD_K}" -gt "${#SHARD_N}" ] \
-    || { [ "${#SHARD_K}" -eq "${#SHARD_N}" ] && [ "$SHARD_K" \> "$SHARD_N" ]; }; then
-    die 2 "--shard value '$SHARD_SHOWN' is invalid: K must be at least 1 and at most N"
-  fi
+  dec_le "$SHARD_K" "$SHARD_N" \
+    || die 2 "--shard value '$SHARD_SHOWN' is invalid: K must be at least 1 and at most N"
 fi
 # The label is printed by every command, so any character that could forge a field or a line is
 # mapped to '_' here; the model id's own shell metacharacters are still quoted whole into the probe.
@@ -871,7 +874,7 @@ sandbox_error_in() {
 }
 
 accept_phase() {  # $1 = phase, $2 = stderr log or "": validate a freshly written artifact, then stamp it
-  local art key launched expected got_hex line_hex dossier_hint; art="$(artifact_for "$1")"; key="$(state_key "$1")"
+  local art key launched expected marker_hex marker_ok dossier_hint; art="$(artifact_for "$1")"; key="$(state_key "$1")"
   [ -f "$RUN_DIR/$key.launch" ] && [ -f "$RUN_DIR/$key.binding" ] && [ -f "$RUN_DIR/$key.primary" ] \
     || die 15 "no launch for $1 in this run (never started, discarded by a later re-run of an earlier phase, or an arbitration already accepted); write its dossier with 'dossier $1' first."
   if [ "$(cat -- "$RUN_DIR/$key.binding")" != "$(binding_text "$1")" ]; then
@@ -880,21 +883,29 @@ accept_phase() {  # $1 = phase, $2 = stderr log or "": validate a freshly writte
   # `--shard 1/1` and an omitted flag share a binding byte for byte, so the hunt's launch carries the
   # exact selection the dossier was written for: a record must repeat it exactly. The marker is the
   # one selection line the launcher writes, with or without its trailing newline; anything else - a
-  # second line, a NUL, an unreadable or oversized file - is unusable state, never a selection. The
-  # comparison is byte-exact and reads at most 65 bytes, so a tampered marker cannot forge a line,
-  # cannot make the refusal unbounded, and a wrong shape can never be read as another selection.
+  # second line, a NUL, a K > N, an unreadable or oversized file - is unusable state, never a
+  # selection. Both reads are byte-bounded (66 bytes) and the comparison is exact in hex, so the
+  # check never reads a whole file, can never forge a diagnosis line, and reserves exit 13 for a
+  # selection the launcher could have written.
   if [ "$1" = "hunt" ]; then
+    marker_ok=0
     launched=""
     expected="$(launch_text "$1")"
     dossier_hint="dossier hunt"
     if [ "$SHARDED" -eq 1 ]; then dossier_hint="dossier hunt --shard $SHARD_K/$SHARD_N"; fi
-    IFS= read -r -n 65 launched < "$RUN_DIR/$key.launch" 2>/dev/null || true
-    got_hex="$(head -c 65 -- "$RUN_DIR/$key.launch" 2>/dev/null | od -An -tx1 | tr -d ' \n')" || got_hex=""
-    line_hex="$(printf '%s\n' "$launched" | od -An -tx1 | tr -d ' \n')"
-    if [ -z "$launched" ] \
-      || ! [[ "$launched" =~ ^shard=(none|[1-9][0-9]*/[1-9][0-9]*)$ ]] \
-      || { [ "$got_hex" != "$line_hex" ] \
-           && [ "$got_hex" != "$(printf '%s' "$launched" | od -An -tx1 | tr -d ' \n')" ]; }; then
+    marker_hex="$(head -c 66 -- "$RUN_DIR/$key.launch" 2>/dev/null | od -An -tx1 | tr -d ' \n')" || marker_hex=""
+    launched="$(head -c 65 -- "$RUN_DIR/$key.launch" 2>/dev/null | head -n 1)" || launched=""
+    if [ -n "$launched" ] \
+      && { [ "$marker_hex" = "$(printf '%s\n' "$launched" | od -An -tx1 | tr -d ' \n')" ] \
+           || [ "$marker_hex" = "$(printf '%s' "$launched" | od -An -tx1 | tr -d ' \n')" ]; }; then
+      case "$launched" in
+        shard=none) marker_ok=1 ;;
+        shard=[1-9]*)
+          if [[ "$launched" =~ ^shard=([1-9][0-9]*)/([1-9][0-9]*)$ ]] \
+            && dec_le "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}"; then marker_ok=1; fi ;;
+      esac
+    fi
+    if [ "$marker_ok" -eq 0 ]; then
       die 15 "the hunt launch marker $RUN_DIR/$key.launch is missing, empty, unreadable or not exactly the one selection line the launcher wrote; start the hunt phase again with '$dossier_hint'."
     fi
     if [ "$launched" != "$expected" ]; then
