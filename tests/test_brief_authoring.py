@@ -187,10 +187,27 @@ def test_every_citation_names_the_line_that_carries_its_quotation() -> None:
 
 
 def test_each_permission_is_quoted_from_the_receiving_roles_skill() -> None:
-    """The section's citations are exactly the required ones: no missing permission, no extra."""
-    found = {(path, quote) for quote, path, _ in citations()}
-    assert found == set(REQUIRED_CITATIONS), (
-        f"missing: {sorted(set(REQUIRED_CITATIONS) - found)}; unexpected: {sorted(found - set(REQUIRED_CITATIONS))}"
+    """The section's citations are exactly the required ones: no missing, no extra, no duplicate."""
+    found = sorted((path, quote) for quote, path, _ in citations())
+    assert found == sorted(REQUIRED_CITATIONS), (
+        f"missing: {sorted(set(REQUIRED_CITATIONS) - set(found))}; "
+        f"unexpected: {sorted(set(found) - set(REQUIRED_CITATIONS))}"
+    )
+
+
+def test_no_citation_quotes_a_degenerate_fragment() -> None:
+    """A truncated quotation must fail loudly rather than resolve against one character."""
+    for quote, path, number in citations():
+        assert len(quote) >= 8 and " " in quote, f"{path}:{number} quotes a degenerate fragment: {quote!r}"
+
+
+def test_the_ac2_actor_and_prohibition_come_from_one_line() -> None:
+    """The admissibility example's actor and text are one source line; a different rule cannot supply one."""
+    by_quote = {quote: (path, number) for quote, path, number in citations()}
+    actor, prohibition = "An implementing engineer", "never rewords an AC"
+    assert actor in by_quote and prohibition in by_quote, by_quote
+    assert by_quote[actor] == by_quote[prohibition], (
+        f"the actor and the prohibition cite different lines: {by_quote[actor]} vs {by_quote[prohibition]}"
     )
 
 
