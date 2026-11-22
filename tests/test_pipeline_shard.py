@@ -338,6 +338,48 @@ def test_dossier_and_record_hunt_take_the_same_shard(accepted_gate):
     assert run_script("cleanup", str(checkout), "--repo", str(repo), env=env).returncode == 0
 
 
+def test_record_hunt_refuses_a_shard_selection_the_dossier_did_not_use(accepted_gate):
+    repo, scratch, env = accepted_gate
+    run_dir = paths(repo, env)["run"]
+    report = run_dir / "phase2-hunt.md"
+
+    # A dossier written as `--shard 1/1` is recorded only as `--shard 1/1`.
+    dossier = run_script(
+        "dossier", "hunt", "--repo", str(repo), "--base", "HEAD", "--scratch", str(scratch),
+        "--shard", "1/1", env=env,
+    )
+    checkout, _ = dossier_of(dossier)
+    report.write_text("REVIEW-RAN: yes\none of one\n")
+    plain = run_script("record", "hunt", "--repo", str(repo), "--base", "HEAD", env=env)
+    assert plain.returncode == 13, plain.stdout + plain.stderr
+    assert not Path(f"{report}.stamp").exists()
+    recorded = run_script(
+        "record", "hunt", "--repo", str(repo), "--base", "HEAD", "--shard", "1/1", env=env,
+    )
+    assert recorded.returncode == 0, recorded.stdout + recorded.stderr
+    assert Path(f"{report}.stamp").exists()
+    assert run_script("cleanup", str(checkout), "--repo", str(repo), env=env).returncode == 0
+
+    # And an unsharded dossier is recorded only without the flag.
+    sweep = run_sweep(repo, scratch, env)
+    assert sweep.returncode == 0, sweep.stdout + sweep.stderr
+    dossier = run_script(
+        "dossier", "hunt", "--repo", str(repo), "--base", "HEAD", "--scratch", str(scratch), env=env,
+    )
+    checkout, _ = dossier_of(dossier)
+    report.write_text("REVIEW-RAN: yes\nplain\n")
+    flagged = run_script(
+        "record", "hunt", "--repo", str(repo), "--base", "HEAD", "--shard", "1/1", env=env,
+    )
+    assert flagged.returncode == 13, flagged.stdout + flagged.stderr
+    assert not Path(f"{report}.stamp").exists()
+    recorded = run_script("record", "hunt", "--repo", str(repo), "--base", "HEAD", env=env)
+    assert recorded.returncode == 0, recorded.stdout + recorded.stderr
+    assert not any(line.startswith("shard=") for line in
+                   (run_dir / "hunt.binding").read_text().splitlines())
+    assert run_script("cleanup", str(checkout), "--repo", str(repo), env=env).returncode == 0
+
+
 def test_rerunning_the_preflight_removes_the_plan_and_every_shard_file(accepted_gate):
     repo, scratch, env = accepted_gate
     for k in (1, 2):

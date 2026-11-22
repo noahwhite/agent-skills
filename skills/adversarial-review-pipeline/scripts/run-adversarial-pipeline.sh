@@ -50,7 +50,10 @@
 # or record, is a usage error (exit 2) naming the command and the flag; the ADVERSARIAL_SHARD
 # default applies only to those hunt commands, so a leftover value never refuses another command.
 # `record hunt` must be passed the same `--shard` as `dossier hunt`, exactly as for `--spec` and
-# `--no-sweep`; a different shard finds no launch and exits 15.
+# `--no-sweep`. The launch file records that exact selection (`shard=<k>/<n>` when the flag was
+# given, nothing when it was omitted), because `--shard 1/1` and an omitted flag share a byte-identical
+# binding; `record` refuses a launch whose selection differs (exit 13), and a different shard index
+# finds no launch and exits 15.
 # With N >= 2 the invocation writes <run dir>/phase2-hunt.<k>.md and never writes or accepts
 # phase2-hunt.md for that run; its stamp and its binding carry the line shard=<k>/<n>. Each shard
 # owns its run-state files beside its artifact, suffixed with the shard index - hunt.<k>.launch,
@@ -729,6 +732,16 @@ binding_text() {  # $1 = phase
   done
 }
 
+# The launch records the exact invocation a dossier was written for where the binding cannot see the
+# difference: `--shard 1/1` and an omitted flag are unsharded and share a byte-identical binding
+# (AC1's parity clause), so the launch itself carries the flag selection.
+launch_text() {  # $1 = phase -> what the launch file records; empty unless the hunt flag was given
+  if [ "$1" = "hunt" ] && [ "$SHARD_SET" -eq 1 ]; then printf 'shard=%s/%s\n' "$SHARD_K" "$SHARD_N"; fi
+}
+shard_choice_label() {  # -> the selection this invocation passes, as the operator wrote it
+  if [ "$SHARD_SET" -eq 1 ]; then printf '%s' "--shard $SHARD_K/$SHARD_N"; else printf '%s' "no --shard"; fi
+}
+
 # The stamp is the binding plus the artifact's own content.
 stamp_text() {  # $1 = phase
   printf 'sha256=%s\n' "$(sha_of "$(artifact_for "$1")")"
@@ -794,7 +807,7 @@ begin_phase() {  # $1 = phase: drop stale output and later phases, bind the inpu
   drop_own_output "$1"
   shard_plan_write || die 2 "could not write the hunt plan $HUNT_PLAN; the $1 phase never started."
   invalidate_downstream "$1"   # also rebuilds the size log, after this phase's own removal
-  : > "$RUN_DIR/$key.launch"
+  launch_text "$1" > "$RUN_DIR/$key.launch"
 }
 
 bind_phase() {  # $1 = phase: record the inputs its dossier was built from and the primary checkout
@@ -854,6 +867,15 @@ accept_phase() {  # $1 = phase, $2 = stderr log or "": validate a freshly writte
     || die 15 "no launch for $1 in this run (never started, discarded by a later re-run of an earlier phase, or an arbitration already accepted); write its dossier with 'dossier $1' first."
   if [ "$(cat -- "$RUN_DIR/$key.binding")" != "$(binding_text "$1")" ]; then
     die 13 "the $1 inputs changed since its dossier was written (spec, --shard, --no-sweep or a predecessor artifact); start the $1 phase again."
+  fi
+  # `--shard 1/1` and an omitted flag share a binding byte for byte, so the launch carries the exact
+  # selection the dossier was written for: a record must repeat it exactly.
+  local launched launched_arg
+  launched="$(cat -- "$RUN_DIR/$key.launch")"
+  if [ "$launched" != "$(launch_text "$1")" ]; then
+    launched_arg="no --shard"
+    if [ -n "$launched" ]; then launched_arg="--shard ${launched#shard=}"; fi
+    die 13 "the hunt was launched as '$launched_arg' but this record invocation passes '$(shard_choice_label)'; pass the same --shard as 'dossier hunt', or start the hunt phase again."
   fi
   [ -s "$art" ] || die 15 "the $1 agent produced no report ($art is missing or empty)."
   if [ "$RUN_DIR/$key.launch" -nt "$art" ]; then

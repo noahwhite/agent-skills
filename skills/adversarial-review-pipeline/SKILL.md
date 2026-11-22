@@ -215,7 +215,7 @@ The file holds one `<bash glob> | <review item>` per line; `#` comments and blan
 
 `run hunt`, `dossier hunt` and `record hunt` accept `--shard K/N`, a decimal `1 <= K <= N` with no leading zero; `N = 1` is accepted only as `--shard 1/1`, and any other value is a usage error (exit 2).
 `--shard` on sweep or arbitrate, or on any command other than run, dossier or record, is a usage error too.
-Pass `record hunt` the same `--shard` as `dossier hunt`, exactly as for `--spec` and `--no-sweep`.
+Pass `record hunt` the same `--shard` as `dossier hunt`, exactly as for `--spec` and `--no-sweep`; an omitted flag and `--shard 1/1` are not interchangeable at record time, and a mismatch is refused at exit 13 without stamping the report.
 
 One `run` invocation is one shard.
 With `N >= 2` the shard's artifact is `<run dir>/phase2-hunt.<k>.md` (never `phase2-hunt.md` for that run), and its run-state files are `hunt.<k>.launch`, `hunt.<k>.binding`, `hunt.<k>.primary`, `hunt.<k>.dossier`, `hunt.<k>-agent.err` and `hunt.<k>-agent.log`.
