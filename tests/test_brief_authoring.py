@@ -84,7 +84,8 @@ PINS = {"AC1": AC1, "AC2": AC2, "AC3": AC3, "AC4": AC4, "AC5": AC5}
 
 # Every citation in the section has the form `<quoted wording>` at `<path>:<line>`.
 CITATION = re.compile(r"`([^`]+)` at `([^`]+\.md):(\d+)`")
-CITATION_PATH = re.compile(r"`[^`]+\.md:\d+`")
+# A citation token in any shape, backticked or not; each one must belong to a parsed quotation.
+CITATION_TOKEN = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_./-]*\.md:\d+")
 
 # Each permission the section grants, with the quote and the file that states it for that role.
 # The file is the skill of the role the brief is written for, never the coordinator's own copy.
@@ -103,8 +104,12 @@ REQUIRED_CITATIONS = (
         "skills/qa-verification/references/linear.md",
         "Once every AC and DoD item is ticked and verified in the environment, move the issue to done.",
     ),
-    ("skills/engineering-workflow/SKILL.md", "gh pr create --base"),
+    ("skills/engineering-workflow/references/github.md", "Open a PR only once the branch is cleanly based on its target."),
     ("skills/qa-verification/SKILL.md", "Ship it through the normal branch and PR flow"),
+    (
+        "skills/qa-verification/SKILL.md",
+        "the project does not keep in-repo evidence; skip this step and say so in the report.",
+    ),
     ("skills/engineering-workflow/SKILL.md", "Post the review of record on the PR as one PR review"),
     ("skills/qa-verification/SKILL.md", "post the review of record on the PR"),
     # AC2's example: the actor and the prohibition, both on the cited line.
@@ -145,13 +150,12 @@ def test_no_pinned_rule_sentence_carries_a_line_number(ac: str) -> None:
         )
 
 
-def test_every_citation_is_a_parsed_quotation() -> None:
-    """No bare `path:line` can sit in the section without a quotation it claims to carry."""
-    text = body()
-    raw = set(CITATION_PATH.findall(text))
-    parsed = {f"`{path}:{number}`" for _, path, number in citations()}
+def test_every_citation_token_is_a_parsed_quotation() -> None:
+    """No citation may sit in the section in any shape without the quotation it claims to carry."""
+    raw = set(CITATION_TOKEN.findall(body()))
+    parsed = {f"{path}:{number}" for _, path, number in citations()}
     assert parsed, "the section cites nothing"
-    assert raw == parsed, f"unpaired citations: {sorted(raw - parsed)}"
+    assert raw == parsed, f"unpaired citation tokens: {sorted(raw - parsed)}"
 
 
 def test_every_citation_names_the_line_that_carries_its_quotation() -> None:
@@ -170,9 +174,11 @@ def test_every_citation_names_the_line_that_carries_its_quotation() -> None:
 
 
 def test_each_permission_is_quoted_from_the_receiving_roles_skill() -> None:
+    """The section's citations are exactly the required ones: no missing permission, no extra."""
     found = {(path, quote) for quote, path, _ in citations()}
-    missing = [citation for citation in REQUIRED_CITATIONS if citation not in found]
-    assert not missing, f"missing permission quotations: {missing}"
+    assert found == set(REQUIRED_CITATIONS), (
+        f"missing: {sorted(set(REQUIRED_CITATIONS) - found)}; unexpected: {sorted(found - set(REQUIRED_CITATIONS))}"
+    )
 
 
 def test_the_tick_permission_is_still_in_the_qa_skill_and_quoted_into_the_section() -> None:
