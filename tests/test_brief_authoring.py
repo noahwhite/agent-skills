@@ -46,20 +46,21 @@ AC1 = (
     "Any boundary carried into a brief is quoted from its source with `path:line` rather than paraphrased.",
 )
 
-# AC2: the test the SKL-389 stall exposed. The first example is admissible, the second is not,
-# because ticking a box edits DoD text, which the skills direct.
+# AC2: the test the SKL-389 stall exposed. The first example is admissible only as a label for a
+# source that names its actor and its text; the second is not, because ticking a box edits DoD text.
 AC2 = (
     "A prohibition is admissible only when it names the actor it binds and the skill text it comes from.",
-    '"Never reword an acceptance criterion" is admissible, because it names the implementing engineer '
-    'and quotes `references/linear.md`; "never edit the DoD text" is not, because ticking a box edits '
-    "DoD text.",
+    '"Never reword an acceptance criterion" labels the admissible case, because its source names the '
+    'actor it binds and the text it forbids; "never edit the DoD text" is not admissible, because '
+    "ticking a box edits DoD text.",
 )
 
-# AC3: a role brief names permissions beside prohibitions, and each one is quoted from its source.
+# AC3: a role brief names permissions beside prohibitions, and each one is quoted from the receiving
+# role's skill with its citation. The role-specific quotations live outside the pins, below.
 AC3 = (
     "Every role brief names what the role may do as well as what it may not: it ticks the boxes it "
     "verified, moves the states its skill assigns, opens its own PR, and posts the review of record.",
-    "Each permission's wording is quoted from the file that states it, with its `path:line`.",
+    "Each permission is quoted from the skill of the role the brief is written for, with its `path:line`.",
 )
 
 # AC4: the tick is the product owner's acceptance record, delegated and never removed.
@@ -103,12 +104,32 @@ def test_each_rule_sentence_appears_exactly_once_in_the_skill(ac: str) -> None:
 def test_no_pinned_rule_sentence_carries_a_line_number(ac: str) -> None:
     """A pin must survive an edit above the line a citation names, so a citation is never pinned."""
     for sentence in PINS[ac]:
-        assert not re.search(r"\.md:\d+|\bline \d+\b", sentence), f"{ac}: pinned with a line number: {sentence}"
+        assert not re.search(r"\.md:\d+|\bline \d+\b", sentence, re.IGNORECASE), (
+            f"{ac}: pinned with a line number: {sentence}"
+        )
 
 
-def test_the_section_cites_each_quoted_boundary_by_path_and_line() -> None:
+# Every citation in the section has the form `<quoted wording>` at `<path>:<line>`. Resolving each one
+# from the prose keeps the citation honest without hard-coding a line number in this test: an edit
+# above a cited line moves the wording, this test fails, and the number is corrected in the prose.
+CITATION = re.compile(r"`([^`]+)` at `([^`]+\.md):(\d+)`")
+
+
+def test_every_citation_names_the_line_that_carries_its_quotation() -> None:
+    citations = CITATION.findall(body())
+    assert len(citations) >= 6, f"too few citations to be the section's set: {citations}"
+    problems = []
+    for quote, path, number in citations:
+        lines = (ROOT / path).read_text(encoding="utf-8").splitlines()
+        at = int(number)
+        if not 1 <= at <= len(lines) or quote not in lines[at - 1]:
+            problems.append(f"{path}:{number} does not carry {quote!r}")
+    assert not problems, problems
+
+
+def test_the_section_quotes_the_two_files_ac3_names() -> None:
     text = body()
-    for path in ("skills/qa-verification/SKILL.md", "references/linear.md"):
+    for path in ("skills/qa-verification/SKILL.md", "skills/story-to-done/references/linear.md"):
         assert re.search(re.escape(path) + r":\d+", text), f"no `{path}:<line>` citation in {SECTION!r}"
 
 

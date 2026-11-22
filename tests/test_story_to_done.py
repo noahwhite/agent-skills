@@ -2220,10 +2220,15 @@ def test_readme_row_says_the_summary_is_posted_read_back_and_given_in_the_closin
 
 POST_WORDS = re.compile(r"\bpost(?:s|ed|ing)?\b|\bcomments?\b", re.IGNORECASE)
 
-# The role-permission sentence of the brief-authoring section, pinned in tests/test_brief_authoring.py.
-BRIEF_ROLE_PERMISSION = (
+BRIEF_AUTHORING = "Brief authoring"
+# The brief-authoring lines that name a role's own post. Each is anchored to its home section below,
+# like every other allowed line, so the section cannot become coordinator-facing prose unnoticed.
+BRIEF_PERMISSION_LINES = (
     "- Every role brief names what the role may do as well as what it may not: it ticks the boxes it "
-    "verified, moves the states its skill assigns, opens its own PR, and posts the review of record."
+    "verified, moves the states its skill assigns, opens its own PR, and posts the review of record.",
+    "  The senior engineer's review of record reads `Post the review of record on the PR as one PR "
+    "review` at `skills/engineering-workflow/SKILL.md:232`; the QA agent's reads `post the review of "
+    "record on the PR` at `skills/qa-verification/SKILL.md:155`.",
 )
 
 
@@ -2236,14 +2241,13 @@ def test_only_the_on_path_lines_tell_the_coordinator_to_post_or_comment() -> Non
         **{line: "Metrics" for line in METRICS_POSTING},
         METRICS_STEP0: "0. Track everything on a todo list",
         BOUNDARIES_ONLY_WRITE: "Boundaries",
+        **{line: BRIEF_AUTHORING for line in BRIEF_PERMISSION_LINES},
     }
     for line, heading in on_path.items():
         home = metrics_section() if heading == "Metrics" else section(text, heading)
         assert line in home.splitlines(), f"an on-path post line left its section: {line}"
     # The owner-wait rule reads the story's comments and names a comment as owner input; it posts none.
-    # The brief-authoring rule names a role's own permissions, including the review of record that
-    # role posts in its own skill; the coordinator posts none of them.
-    allowed = {"- " + OFF_PATH, METRICS_POINTER, BRIEF_ROLE_PERMISSION, *on_path, *OWNER_WAIT_RULE}
+    allowed = {"- " + OFF_PATH, METRICS_POINTER, *on_path, *OWNER_WAIT_RULE}
     merge_rule = "needs a delta review posted before merging"
     for line in [*body.splitlines(), *PROTOCOL.read_text().splitlines()]:
         if line in allowed:
