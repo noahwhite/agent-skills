@@ -394,6 +394,25 @@ def test_record_hunt_refuses_a_shard_selection_the_dossier_did_not_use(accepted_
     assert run_script("cleanup", str(checkout), "--repo", str(repo), env=env).returncode == 0
 
 
+def test_a_sharded_hunt_refuses_a_marker_naming_another_selection(accepted_gate):
+    repo, scratch, env = accepted_gate
+    run_dir = paths(repo, env)["run"]
+    dossier = run_script(
+        "dossier", "hunt", "--repo", str(repo), "--base", "HEAD", "--scratch", str(scratch),
+        "--shard", "1/2", env=env,
+    )
+    checkout, _ = dossier_of(dossier)
+    (run_dir / "phase2-hunt.1.md").write_text("REVIEW-RAN: yes\nshard one\n")
+    (run_dir / "hunt.1.launch").write_bytes(b"shard=none\n")
+    refused = run_script(
+        "record", "hunt", "--repo", str(repo), "--base", "HEAD", "--shard", "1/2", env=env,
+    )
+    assert refused.returncode == 13, refused.stdout + refused.stderr
+    assert "records 'shard=none'" in refused.stderr and "selects 'shard=1/2'" in refused.stderr, refused.stderr
+    assert not Path(f"{run_dir / 'phase2-hunt.1.md'}.stamp").exists()
+    assert run_script("cleanup", str(checkout), "--repo", str(repo), env=env).returncode == 0
+
+
 def test_an_environment_supplied_selection_is_recorded_and_required(accepted_gate):
     repo, scratch, env = accepted_gate
     run_dir = paths(repo, env)["run"]
@@ -456,7 +475,8 @@ def test_a_malformed_launch_marker_is_refused_with_a_bounded_sanitised_diagnosis
     checkout, _ = dossier_of(dossier)
     # Anything but the one printable selection line is an unusable state, not a selection.
     for marker in (b"shard=none\nTRAIL\n", b"shard=none\n\n", b"shard=none\x00\n",
-                   b"shard=none\x00", b"shard=none\r\n", b"shard=no\x1be\n"):
+                   b"shard=none\x00", b"shard=none\r\n", b"shard=no\x1be\n",
+                   b"shard=none" + b"x" * 60):
         launch.write_bytes(marker)
         report.write_text("REVIEW-RAN: yes\nplain\n")
         refused = run_script("record", "hunt", "--repo", str(repo), "--base", "HEAD", env=env)
