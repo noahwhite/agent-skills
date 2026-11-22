@@ -76,12 +76,10 @@ LITERAL_ESCAPES = set("\\`*_[<>&|~$]")
 # full-width and Arabic forms, which need no following space.
 SENTENCE_END_RE = re.compile(r"(?:[。｡？！؟]|[.!?][\"'\u2019\u201d)\]]*(?=\s|$))")
 # A dot that never ends a sentence: an abbreviation or title that never ends one, a title before a
-# name, an abbreviation that continues in lowercase, a standalone path argument, an initial in a
-# sequence of initials or an acronym, or a numbered item or decimal that continues in lowercase.
-# A dot that never ends a sentence: an abbreviation or title that never ends one, an abbreviation
-# or acronym that continues in lowercase, an initial in a sequence of initials, a standalone path
-# argument, or a numbered item or decimal that continues in lowercase. A dot before a capitalized
-# word is a sentence end, because nothing distinguishes a proper name from a new sentence.
+# capitalized name, an abbreviation that continues in lowercase, an initial in a sequence of
+# initials, a standalone path argument, or a numbered item or decimal that continues in lowercase.
+# Any other dot before a capitalized word is a sentence end, because nothing distinguishes a proper
+# name from a new sentence.
 NEVER_BOUNDARY_RE = re.compile(
     r"\b(?i:etc|vs|fig|a\.m|p\.m)\.(?=\s+[a-z0-9])"
     r"|\b(?i:e\.g|i\.e|mr|mrs|prof)\."

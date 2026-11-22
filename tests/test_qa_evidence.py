@@ -198,7 +198,7 @@ def test_refuses_an_existing_readme_and_leaves_it_byte_identical(tmp_path):
     assert tree_state(tmp_path) == before
 
 
-@pytest.mark.parametrize("key", ["../escape", "SKL-abc", "skl-1"])
+@pytest.mark.parametrize("key", ["../escape", "SKL-abc", "skl-1", "SKLx-1"])
 def test_rejects_a_key_that_is_not_a_story_key_and_writes_nothing(tmp_path, key):
     res = run(tmp_path, "--key", key, "--item", "AC1")
     assert res.returncode == 1
@@ -1304,7 +1304,7 @@ def test_a_property_that_references_an_array_definition_is_refused(tmp_path):
 
 
 def test_a_key_with_a_trailing_path_component_is_refused(tmp_path):
-    for key in ("SKL-386/README", "SKL-386/../SKL-1", "SKLx-1"):
+    for key in ("SKL-386/README", "SKL-386/../SKL-1"):
         res = run(tmp_path, "--key", key)
         assert res.returncode == 1, res.stderr
         assert len(res.stderr.splitlines()) == 1, res.stderr
