@@ -70,29 +70,41 @@ PROFILE_REF_RE = re.compile(
 ESCAPE_RE = re.compile(r"\\([!-/:-@\[-`{-~])")
 # The Markdown punctuation a literal cell escapes, so the reader renders the text unchanged.
 LITERAL_ESCAPES = set("\\`*_[<>&|~$]")
-# A sentence ends at `.`, `!` or `?` before whitespace or the end, and at the full-width full stop
-# wherever it appears; a closing quote or bracket after the terminator does not hide the boundary.
-SENTENCE_END_RE = re.compile(r"(?:[。]|[.!?][\"'\u2019\u201d)\]]*(?=\s|$))")
-# Two-letter abbreviations whose dot never ends a sentence.
-NEVER_BOUNDARY_RE = re.compile(r"\b(?i:e\.g|i\.e)\.")
-# Words whose dot is not a sentence boundary when the sentence continues in lowercase; a capital or
-# digit after the dot is read as the start of a new sentence.
-ABBREVIATION_RE = re.compile(r"\b(?i:etc|vs|fig|mr|mrs|ms|dr)\.(?=\s+[a-z0-9]|\s*$)")
+# A sentence ends at `.`, `!` or `?` before whitespace, the end or a closing quote, and at the
+# full-width and Arabic forms, which need no following space.
+SENTENCE_END_RE = re.compile(r"(?:[。｡？！؟]|[.!?][\"'\u2019\u201d)\]]*(?=\s|$))")
+# A dot that never ends a sentence: a two-letter abbreviation continuing in lowercase, an
+# abbreviation or title that never ends one, an initial, or a numbered item or decimal.
+NEVER_BOUNDARY_RE = re.compile(
+    r"\b(?i:etc|vs)\.(?=\s+[a-z0-9])"
+    r"|\b(?i:e\.g|i\.e|mr|mrs|ms|dr|prof|sr|jr|st|gen|col|fig)\."
+    r"|\b[A-Z]\.(?=\s)"
+    r"|\b\d+\.(?=\s)"
+)
 # O_PATH opens a directory for use as a `dir_fd` without requiring read permission on it.
 PATH_FLAGS = getattr(os, "O_PATH", os.O_RDONLY)
 
 
 def one_line(text: str) -> str:
-    """A diagnostic fragment that can never break the single stderr line it sits in."""
-    text = text.replace("\r", "\\r").replace("\n", "\\n")
-    for separator in ("\u000b", "\u000c", "\u001c", "\u001d", "\u001e", "\u2028", "\u2029", "\u0085"):
-        text = text.replace(separator, f"\\u{ord(separator):04x}")
-    return text
+    """A diagnostic fragment that can never break one line or reach a terminal as a control sequence."""
+    pieces = []
+    for char in text:
+        if char == "\r":
+            pieces.append("\\r")
+        elif char == "\n":
+            pieces.append("\\n")
+        elif ord(char) < 0x20 or 0x7f <= ord(char) <= 0x9f or char in "\u2028\u2029":
+            pieces.append(f"\\u{ord(char):04x}")
+        else:
+            pieces.append(char)
+    return "".join(pieces)
 
 
 def print_path(path: Path) -> None:
-    """Print the created path, escaping any character the standard output cannot encode."""
-    line = str(path.absolute())
+    """Print the created path, escaping any character the standard output cannot show literally."""
+    if sys.stdout is None:
+        return
+    line = one_line(str(path.absolute()))
     encoding = getattr(sys.stdout, "encoding", None) or "utf-8"
     try:
         sys.stdout.write(line.encode(encoding, "backslashreplace").decode(encoding) + "\n")
@@ -288,7 +300,7 @@ def key_content_problem(key: str, *, spelling: bool) -> str | None:
 
 
 def mask_sentence_noise(text: str) -> str:
-    """`text` with references and abbreviations masked, so only real sentence boundaries remain."""
+    """`text` with the dots that never end a sentence masked, so only real boundaries remain."""
     def reference(match) -> str:
         ref = match.group(1)
         trailing = ref[len(ref.rstrip(".")):]
@@ -297,9 +309,7 @@ def mask_sentence_noise(text: str) -> str:
             trailing = ""
         return "profile" + trailing
 
-    return ABBREVIATION_RE.sub(
-        lambda match: match.group(0)[:-1], NEVER_BOUNDARY_RE.sub("abbreviation", PROFILE_REF_RE.sub(reference, text))
-    )
+    return NEVER_BOUNDARY_RE.sub(lambda match: match.group(0)[:-1], PROFILE_REF_RE.sub(reference, text))
 
 
 def more_than_one_sentence(label: str) -> bool:
@@ -313,6 +323,8 @@ def label_problem(label: str, *, schema: dict | None, spelling: bool) -> str | N
     """Why a cleaned label cannot be written into the skeleton, or None when it can."""
     if not label:
         return "is empty"
+    if any(ord(char) < 0x20 or 0x7f <= ord(char) <= 0x9f for char in label):
+        return "carries a control character"
     if more_than_one_sentence(label):
         return "holds more than one sentence"
     for text in (label, visible_text(label)):
@@ -475,7 +487,11 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     evidence = resolve_evidence_dir(root, args.evidence_dir)
-    destination_root = checkout_root(evidence) or root
+    try:
+        destination_root = checkout_root(evidence) or root
+    except OSError as exc:
+        print(f"error: cannot inspect {one_line(str(evidence))}: {exc.strerror or exc}", file=sys.stderr)
+        return 1
     target = evidence / args.key / "README.md"
     problem = target_problem(target)
     if problem is not None:
@@ -495,11 +511,16 @@ def main(argv: list[str] | None = None) -> int:
             print(schema_problem, file=sys.stderr)
             return 1
     labels = []
-    for raw in args.items:
+    for position, raw in enumerate(args.items, start=1):
         label = clean_label(raw)
+        try:
+            label.encode("utf-8")
+        except UnicodeError:
+            print(f"error: item label {position} {one_line(repr(raw))} cannot be encoded as UTF-8", file=sys.stderr)
+            return 1
         problem = label_problem(label, schema=schema, spelling=spelling)
         if problem is not None:
-            print(f"error: item label {one_line(repr(raw))} cannot be written: it {problem}", file=sys.stderr)
+            print(f"error: item label {position} {one_line(repr(raw))} cannot be written: it {problem}", file=sys.stderr)
             return 1
         labels.append(label)
 

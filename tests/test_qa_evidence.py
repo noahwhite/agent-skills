@@ -75,6 +75,11 @@ def run_in(cwd: Path, *args: str) -> subprocess.CompletedProcess:
     )
 
 
+def directory_permissions_apply() -> bool:
+    """Whether this process is subject to directory permission checks (root and some sandboxes are not)."""
+    return not hasattr(os, "geteuid") or os.geteuid() != 0
+
+
 def load_generator():
     """The generator as a module, so a test can interpose between its checks and its write."""
     spec = importlib.util.spec_from_file_location("qa_evidence", SCRIPT)
@@ -257,6 +262,8 @@ def test_each_prose_line_holds_one_sentence(tmp_path, path):
     prose = [line for line in text.splitlines() if line.strip() and not line.startswith(("#", "|"))]
     for line in prose:
         assert len(SENTENCE_END.findall(line)) <= 1, line
+    for row in table_rows(text):
+        assert len(SENTENCE_END.findall(row_cells(row)[0])) <= 1, row
 
 
 @pytest.mark.parametrize(
@@ -1205,6 +1212,73 @@ def test_a_full_width_full_stop_separates_sentences(tmp_path):
     assert "more than one sentence" in res.stderr
 
 
+@pytest.mark.parametrize("terminator", ["\uff1f", "\uff01", "\u061f", "\uff61"])
+def test_another_script_terminator_separates_sentences(tmp_path, terminator):
+    label = f"AC1 - first{terminator}second{terminator}"
+    res = run(tmp_path, "--key", "SKL-386", "--item", label)
+    assert res.returncode == 1, res.stderr
+    assert "more than one sentence" in res.stderr
+    assert not (tmp_path / "docs").exists()
+
+
+@pytest.mark.parametrize(
+    "label",
+    [
+        "AC1 - greet Mr. Smith.",
+        "AC1 - cite J. R. Hartley.",
+        "AC1 - 1. the generator writes the skeleton",
+        "AC1 - step 4. the readme is refused",
+        "AC1 - item 2. the table lists every label",
+    ],
+)
+def test_a_title_in_an_initial_or_a_numbered_item_is_not_a_sentence_end(tmp_path, label):
+    res = run(tmp_path, "--key", "SKL-386", "--item", label)
+    assert res.returncode == 0, res.stderr
+
+
+@pytest.mark.parametrize("control", ["\x1b", "\x07", "\x08"])
+def test_a_control_character_in_a_label_is_refused(tmp_path, control):
+    label = f"AC1 - the {control}[31mred button"
+    res = run(tmp_path, "--key", "SKL-386", "--item", label)
+    assert res.returncode == 1, res.stderr
+    assert len(res.stderr.splitlines()) == 1, res.stderr
+    assert "control character" in res.stderr
+    assert not (tmp_path / "docs").exists()
+
+
+def test_a_control_character_in_a_path_cannot_reach_the_terminal(tmp_path):
+    evidence = "ev\x1b[31mRED"
+    readme = tmp_path / evidence / "SKL-386" / "README.md"
+    readme.parent.mkdir(parents=True)
+    readme.write_text("# handwritten\n", encoding="utf-8")
+    res = run(tmp_path, "--key", "SKL-386", "--evidence-dir", evidence)
+    assert res.returncode == 1, res.stderr
+    assert len(res.stderr.splitlines()) == 1, res.stderr
+    assert "\x1b" not in res.stderr
+    assert readme.read_text(encoding="utf-8") == "# handwritten\n"
+
+
+def test_a_stdout_closed_at_startup_still_creates_the_readme(tmp_path):
+    command = f"'{sys.executable}' '{SCRIPT}' --key SKL-386 1>&-"
+    res = subprocess.run(["bash", "-c", command], cwd=tmp_path, capture_output=True, text=True)
+    assert res.returncode == 0, res.stderr
+    assert (tmp_path / "docs" / "qa-evidence" / "SKL-386" / "README.md").is_file()
+
+
+@pytest.mark.skipif(not directory_permissions_apply(), reason="this process bypasses directory permissions")
+def test_an_unsearchable_evidence_directory_is_a_one_line_refusal(tmp_path):
+    evidence = tmp_path / "evidence"
+    evidence.mkdir()
+    evidence.chmod(0o600)
+    try:
+        res = run(tmp_path, "--key", "SKL-386", "--evidence-dir", str(evidence))
+        assert res.returncode == 1, res.stderr
+        assert len(res.stderr.splitlines()) == 1, res.stderr
+        assert "evidence" in res.stderr
+    finally:
+        evidence.chmod(0o700)
+
+
 def test_a_non_regular_schema_path_is_refused(tmp_path):
     (tmp_path / "profile").mkdir()
     (tmp_path / "profile" / "schema.json").mkdir()
@@ -1215,6 +1289,7 @@ def test_a_non_regular_schema_path_is_refused(tmp_path):
     assert not (tmp_path / "docs").exists()
 
 
+@pytest.mark.skipif(not directory_permissions_apply(), reason="this process bypasses directory permissions")
 def test_an_unsearchable_story_directory_is_a_one_line_refusal(tmp_path):
     story = tmp_path / "docs" / "qa-evidence" / "SKL-386"
     story.mkdir(parents=True)
