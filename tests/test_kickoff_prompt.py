@@ -35,11 +35,13 @@ EXPECTED_BLOCK = "\n".join(
 
 POINTER_SENTENCE = (
     f"For an orchestration-heavy run - one that spawns {ROLE_REQUIREMENT} - Lite mode plus the "
-    f"{CADENCE_MINUTES}-minute batched-poll cadence is the default, and `assets/kickoff-prompt.md` "
-    "holds the caller prompt that starts it."
+    f"{CADENCE_MINUTES}-minute batched-poll cadence is the default, and "
+    f"[{POINTER}]({POINTER}) holds the caller prompt that starts it."
 )
-# What a CommonMark reader sees for the sentence: inline code loses its backticks.
-POINTER_PROSE = " ".join(POINTER_SENTENCE.replace("`", "").split())
+# What a CommonMark reader sees for the sentence: a link renders as its text.
+POINTER_PROSE = " ".join(
+    POINTER_SENTENCE.replace(f"[{POINTER}]({POINTER})", POINTER).split()
+)
 
 MARKDOWN = MarkdownIt("commonmark")
 STEP_HEADING = re.compile(r"^[1-5]\. ")
@@ -216,10 +218,12 @@ def scan_document(text: str) -> tuple[list[tuple[int, str]], int]:
     A single extractor spans the whole document, so a raw HTML element that opens and closes
     around a paragraph hides that paragraph, and a hidden element hides everything it contains.
     Each paragraph is (source line, visible text); a paragraph inside a hidden subtree has empty
-    text, so it never counts as the pointer and never contributes to the path count.
+    text, so it never counts as the pointer and never contributes to the path count. Occurrences
+    are counted per Markdown block, so text from separate blocks is never spliced into one path.
     """
     parser = _TextExtractor()
     paragraphs: list[tuple[int, str]] = []
+    count = 0
     pending_line: int | None = None
     for token in MARKDOWN.parse(text):
         if token.type == "paragraph_open":
@@ -227,39 +231,28 @@ def scan_document(text: str) -> tuple[list[tuple[int, str]], int]:
         elif token.type == "inline":
             start = len(parser.parts)
             _feed_inline(parser, token)
+            visible = "".join(parser.parts[start:])
+            count += visible.count(POINTER)
             if pending_line is not None:
-                paragraphs.append((pending_line, "".join(parser.parts[start:])))
+                paragraphs.append((pending_line, visible))
                 pending_line = None
         elif token.type in {"fence", "code_block"}:
             if not parser.hidden:
-                parser.handle_data(token.content)
+                count += token.content.count(POINTER)
         elif token.type == "html_block":
+            start = len(parser.parts)
             parser.feed(token.content)
-    return paragraphs, "".join(parser.parts).count(POINTER)
-
-
-def kickoff_range(text: str) -> tuple[int, int] | None:
-    """Source line span of the kickoff-prompt section, ending at the next level-2 heading."""
-    tokens = MARKDOWN.parse(text)
-    start: int | None = None
-    for index, token in enumerate(tokens):
-        if token.type != "heading_open" or token.tag != "h2" or token.level != 0:
-            continue
-        if start is not None:
-            return (start, token.map[0])
-        content = tokens[index + 1].content if tokens[index + 1].type == "inline" else ""
-        if flat(content) == "Kickoff prompt":
-            start = token.map[0]
-    return None if start is None else (start, len(text.splitlines()))
+            count += "".join(parser.parts[start:]).count(POINTER)
+    return paragraphs, count
 
 
 def placement_problems(text: str) -> list[str]:
     """Reasons SKILL.md breaks AC2's placement rule, judged on what a CommonMark reader sees.
 
-    The pointer must be exactly one paragraph of visible prose in the kickoff-prompt section, the
-    asset path must be named once in visible text, and the sentence must sit outside the step 1 to
-    step 5 sections. YAML frontmatter is metadata, not prose, so a sentence only there does not
-    count, and neither does one inside a hidden HTML subtree.
+    The pointer must be exactly one paragraph of visible prose, the asset path must be named once
+    in visible text, and the sentence must sit outside the step 1 to step 5 sections. YAML
+    frontmatter is metadata, not prose, so a sentence only there does not count, and neither does
+    one inside a hidden HTML subtree.
     """
     text = without_frontmatter(text)
     paragraphs, path_count = scan_document(text)
@@ -275,16 +268,10 @@ def placement_problems(text: str) -> list[str]:
         problems.append("the pointer paragraph must be exactly the one sentence")
     if path_count != 1:
         problems.append(f"the asset path must appear once in visible text (found {path_count})")
-    kickoff = kickoff_range(text)
     for line in pointer_lines:
         if any(start <= line < end for start, end in step_ranges(text)):
             problems.append(
                 "the kickoff pointer must sit outside the step 1 to step 5 sections "
-                f"(line {line + 1})"
-            )
-        if kickoff is None or not (kickoff[0] <= line < kickoff[1]):
-            problems.append(
-                "the kickoff pointer must sit under the kickoff-prompt heading "
                 f"(line {line + 1})"
             )
     return problems
@@ -541,14 +528,10 @@ def test_the_placement_guard_ignores_a_hidden_image_alt() -> None:
     assert placement_problems(skill_document(pointer)) == []
 
 
-def test_the_placement_guard_rejects_a_pointer_outside_the_kickoff_section() -> None:
-    steps = "\n\n".join(f"## {number}. Step {number}\n\nStep {number} body." for number in range(1, 6))
-    text = (
-        "# Title\n\n## Kickoff prompt\n\nNothing here.\n\n## Metrics\n\n"
-        f"{POINTER_SENTENCE}\n\n{steps}\n"
-    )
-    problems = placement_problems(text)
-    assert any("must sit under the kickoff-prompt heading" in problem for problem in problems), problems
+def test_the_placement_guard_does_not_join_a_path_across_paragraphs() -> None:
+    split = "assets/kickoff-prompt"
+    text = skill_document(f"{POINTER_SENTENCE}\n\n{split}\n\n.md")
+    assert placement_problems(text) == []
 
 
 def test_the_placement_guard_keeps_an_outer_hidden_block_hidden_after_an_inner_one_closes() -> None:

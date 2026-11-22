@@ -105,7 +105,7 @@ Where this file and a capability file disagree, the capability file wins.
 
 ## Kickoff prompt
 
-For an orchestration-heavy run - one that spawns a senior engineer and at least one QA agent - Lite mode plus the 12-minute batched-poll cadence is the default, and `assets/kickoff-prompt.md` holds the caller prompt that starts it.
+For an orchestration-heavy run - one that spawns a senior engineer and at least one QA agent - Lite mode plus the 12-minute batched-poll cadence is the default, and [assets/kickoff-prompt.md](assets/kickoff-prompt.md) holds the caller prompt that starts it.
 
 ## Metrics
 
