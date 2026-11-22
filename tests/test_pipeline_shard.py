@@ -40,21 +40,26 @@ GIT_LOCATORS = ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE",
 def make_repo(tmp_path: Path) -> Path:
     repo = tmp_path / "repo"
     repo.mkdir(parents=True)
+    # The fixture's own commits carry the same isolation as the script it drives: a host's signing
+    # or hooks configuration must never decide whether this module runs.
     for command in (
         ["git", "init", "-q"],
         ["git", "config", "user.email", "agent-skills@example.com"],
         ["git", "config", "user.name", "agent-skills"],
     ):
-        subprocess.run(command, cwd=repo, check=True, capture_output=True)
+        subprocess.run(command, cwd=repo, check=True, capture_output=True, env=clean_env())
     (repo / "tracked.txt").write_text("one\n")
-    subprocess.run(["git", "add", "tracked.txt"], cwd=repo, check=True, capture_output=True)
-    subprocess.run(["git", "commit", "-qm", "init"], cwd=repo, check=True, capture_output=True)
+    subprocess.run(["git", "add", "tracked.txt"], cwd=repo, check=True, capture_output=True,
+                   env=clean_env())
+    subprocess.run(["git", "commit", "-qm", "init"], cwd=repo, check=True, capture_output=True,
+                   env=clean_env())
     return repo
 
 
 def clean_env(extra: dict[str, str] | None = None) -> dict[str, str]:
     env = {k: v for k, v in os.environ.items()
-           if not k.startswith("ADVERSARIAL_") and k not in GIT_LOCATORS}
+           if not k.startswith("ADVERSARIAL_") and not k.startswith("GIT_CONFIG")
+           and k not in GIT_LOCATORS}
     return {**env, **GIT_ISOLATION, **(extra or {})}
 
 
