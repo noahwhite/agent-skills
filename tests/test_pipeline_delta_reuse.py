@@ -116,18 +116,22 @@ class Gate:
     def _base_args(self, base: str | None, delta: bool) -> list[str]:
         return ["--delta"] if delta else ["--base", base]
 
-    def preflight(self, base: str | None = "base", delta: bool = False) -> subprocess.CompletedProcess:
-        return run_script(
-            "preflight", "--full-suite", "off", "--repo", str(self.repo), "--spec", str(self.spec),
-            "--scratch", str(self.scratch), *self._base_args(base, delta), env=self.env,
-        )
+    def preflight(self, base: str | None = "base", delta: bool = False,
+                  story_base: str | None = None) -> subprocess.CompletedProcess:
+        args = ["preflight", "--full-suite", "off", "--repo", str(self.repo), "--spec", str(self.spec),
+                "--scratch", str(self.scratch), *self._base_args(base, delta)]
+        if story_base:
+            args += ["--story-base", story_base]
+        return run_script(*args, env=self.env)
 
     def run_phase(self, phase: str, agent: str, base: str | None = "base", delta: bool = False,
-                  extra: tuple[str, ...] = ()) -> subprocess.CompletedProcess:
+                  extra: tuple[str, ...] = (), story_base: str | None = None) -> subprocess.CompletedProcess:
         args = ["run", phase, "--repo", str(self.repo), "--scratch", str(self.scratch),
                 "--agent-cmd", agent, "--model", "test/model", "--spec", str(self.spec)]
         if phase == "arbitrate":
             args += ["--agent", "Test Arbiter"]
+        if story_base:
+            args += ["--story-base", story_base]
         args += list(extra)
         args += self._base_args(base, delta)
         return run_script(*args, env=self.env)
@@ -256,7 +260,7 @@ def test_a_delta_dossier_names_both_bases_and_reviews_only_the_delta_range(gate)
     assert f"DELTA-BASE: {head_b} {head_b}" in dossier, dossier
     assert f"REVIEWED RANGE: {head_b}...{head_c}" in dossier, dossier
     diff = dossier.split("===== DIFF (", 1)[1]
-    assert "three" in diff and "-one" not in diff, diff
+    assert "-two" in diff and "+three" in diff and "-one" not in diff, diff
     # The first gate's run is the source of the story base, not a delta run itself.
     first_dossier = (first / "phase1-sweep.md").read_text()
     assert "STORY-BASE:" not in first_dossier, first_dossier
@@ -366,6 +370,125 @@ def test_every_phase_prints_exactly_one_reuse_line(gate):
     assert len([line for line in sweep.stderr.splitlines() if line.startswith("reuse: ")]) == 1, sweep.stderr
 
 
+# --- Remediation of the pre-PR gate round 1 -------------------------------------------------------
+
+def test_delta_at_an_accepted_current_head_names_the_existing_run(gate):
+    """An already accepted HEAD resolves to its own run, never an empty H-H successor."""
+    write_spec(gate)
+    producing = gate.accept_full_run("base")
+    first = gate.paths(delta=True)
+    assert first.returncode == 0, first.stdout + first.stderr
+    run = next(line.split(" ", 1)[1] for line in first.stdout.splitlines() if line.startswith("run "))
+    assert Path(run) == producing
+    again = gate.paths(delta=True)
+    assert again.returncode == 0, again.stdout + again.stderr
+    assert again.stdout == first.stdout
+
+
+def test_delta_honours_an_explicit_story_base(gate):
+    """--delta must not overwrite an explicit --story-base with the inherited one."""
+    write_spec(gate)
+    gate.accept_full_run("base")
+    head_b = _git(gate.repo, gate.env, "rev-parse", "HEAD")
+    commit_change(gate.repo, gate.env, "three\n")
+    # The inherited story base is `base` (A); name the delta base itself instead, so a delta header
+    # would only appear if the inherited value won.
+    pre = gate.preflight(delta=True, story_base=head_b)
+    assert pre.returncode == 0, pre.stdout + pre.stderr
+    copy = gate.scratch / "sweep-dossier-copy.md"
+    sweep = gate.run_phase("sweep", capturing_agent(gate.scratch / "reuse-sweep.launched", copy),
+                           delta=True, story_base=head_b)
+    assert sweep.returncode == 0, sweep.stdout + sweep.stderr
+    dossier = copy.read_text()
+    assert "STORY-BASE:" not in dossier, dossier
+    assert f"BASE: {head_b} {head_b}" in dossier, dossier
+
+
+def test_a_base_older_than_the_previous_accepted_head_reviews_that_range(gate):
+    write_spec(gate)
+    gate.accept_full_run("base")
+    base_a = _git(gate.repo, gate.env, "rev-parse", "base^{commit}")
+    head_b = _git(gate.repo, gate.env, "rev-parse", "HEAD")
+    commit_change(gate.repo, gate.env, "three\n")
+    Gate(gate.repo, gate.scratch, gate.env, gate.spec).accept_full_run(head_b)
+    head_e = commit_change(gate.repo, gate.env, "four\n")
+    pre = gate.preflight(base=head_b)
+    assert pre.returncode == 0, pre.stdout + pre.stderr
+    copy = gate.scratch / "sweep-dossier-copy.md"
+    sweep = gate.run_phase("sweep", capturing_agent(gate.scratch / "reuse-sweep.launched", copy),
+                           base=head_b)
+    assert sweep.returncode == 0, sweep.stdout + sweep.stderr
+    dossier = copy.read_text()
+    assert f"STORY-BASE: base {base_a}" in dossier, dossier
+    assert f"DELTA-BASE: {head_b} {head_b}" in dossier, dossier
+    assert f"REVIEWED RANGE: {head_b}...{head_e}" in dossier, dossier
+
+
+def test_the_miss_reasons_identity_mismatch_and_spec_mismatch_are_reported(gate):
+    write_spec(gate, "spec one\n")
+    gate.accept_full_run("base")
+    # A one-byte change is an identity mismatch.
+    commit_change(gate.repo, gate.env, "twO\n")
+    assert gate.preflight().returncode == 0
+    sweep = gate.run_phase("sweep", report_agent(gate.scratch / "reuse-sweep.launched"))
+    assert sweep.returncode == 0, sweep.stdout + sweep.stderr
+    assert reuse_line(sweep.stderr) == "reuse: miss reason=identity mismatch", sweep.stderr
+    # The same tree with a different spec is a spec mismatch.
+    commit_empty(gate.repo, gate.env)
+    write_spec(gate, "spec two\n")
+    assert gate.preflight().returncode == 0
+    sweep = gate.run_phase("sweep", report_agent(gate.scratch / "reuse-sweep-2.launched"))
+    assert sweep.returncode == 0, sweep.stdout + sweep.stderr
+    assert reuse_line(sweep.stderr) == "reuse: miss reason=spec mismatch", sweep.stderr
+
+
+def test_a_hit_refused_by_a_missing_local_preflight_is_not_counted(gate):
+    write_spec(gate)
+    gate.accept_full_run("base")
+    commit_empty(gate.repo, gate.env)
+    result = gate.run_phase("sweep", report_agent(gate.scratch / "reuse-sweep.launched"))
+    assert result.returncode == 13, result.stdout + result.stderr
+    assert "reuse: hit" not in result.stderr, result.stderr
+    listed = gate.paths().stdout
+    assert "reuse_hits 0" in listed, listed
+    assert "reused sweep" not in listed, listed
+
+
+def test_a_no_sweep_hunt_is_not_reused_into_a_sweep_run(gate):
+    write_spec(gate)
+    assert gate.preflight().returncode == 0
+    assert gate.run_phase("hunt", report_agent(gate.scratch / "producing-hunt.launched"),
+                          extra=("--no-sweep",)).returncode == 0
+    assert gate.run_phase("arbitrate",
+                          report_agent(gate.scratch / "producing-arbitrate.launched",
+                                       "REVIEW-RAN: yes\nverdict\n"),
+                          extra=("--no-sweep",)).returncode == 0
+    commit_empty(gate.repo, gate.env)
+    assert gate.preflight().returncode == 0
+    sweep = gate.run_phase("sweep", report_agent(gate.scratch / "reuse-sweep.launched"))
+    assert sweep.returncode == 0, sweep.stdout + sweep.stderr
+    hunt_marker = gate.scratch / "reuse-hunt.launched"
+    hunt = gate.run_phase("hunt", report_agent(hunt_marker))
+    assert hunt.returncode == 0, hunt.stdout + hunt.stderr
+    assert hunt_marker.exists(), "a no-sweep hunt was reused into a sweep run"
+    assert reuse_line(hunt.stderr).startswith("reuse: miss reason="), hunt.stderr
+
+
+def test_a_reused_phase_refuses_when_its_producer_lapses(gate):
+    write_spec(gate)
+    producing = gate.accept_full_run("base")
+    commit_empty(gate.repo, gate.env)
+    assert gate.preflight().returncode == 0
+    assert gate.run_phase("sweep", report_agent(gate.scratch / "reuse-sweep.launched")).returncode == 0
+    assert gate.run_phase("hunt", report_agent(gate.scratch / "reuse-hunt.launched")).returncode == 0
+    (producing / "phase0-preflight.md.stamp").unlink()
+    result = gate.run_phase("arbitrate",
+                            report_agent(gate.scratch / "reuse-arbitrate.launched",
+                                         "REVIEW-RAN: yes\nverdict\n"))
+    assert result.returncode == 13, result.stdout + result.stderr
+    assert producing.name in result.stderr, result.stderr
+
+
 # --- AC7 / AC4: deterministic dossier input -------------------------------------------------------
 
 def sweep_dossier_bytes(gate: Gate) -> bytes:
@@ -381,14 +504,22 @@ def test_hostile_git_config_leaves_the_dossier_and_identity_unchanged(tmp_path):
     default_env = fixed_env(tmp_path / "default")
     hostile_env = fixed_env(tmp_path / "hostile")
     config = tmp_path / "hostile.gitconfig"
+    # diff.quotePath is the key the story names; core.quotePath is the key git actually reads.
     config.write_text(
         "[diff]\n\talgorithm = patience\n\tnoprefix = true\n\tquotePath = false\n\tcontext = 5\n"
+        "[core]\n\tquotePath = false\n"
     )
     hostile_env["GIT_CONFIG_GLOBAL"] = str(config)
+
+    def add_unicode(repo: Path, env: dict[str, str]) -> None:
+        (repo / "café.txt").write_text("accented\n")
+        _git(repo, env, "add", "-A")
+        _git(repo, env, "commit", "-q", "-m", "unicode path")
 
     def build(env: dict[str, str], root: Path) -> Gate:
         root.mkdir()
         repo, _ = make_repo(root, env)
+        add_unicode(repo, env)
         scratch = root / "session-scratch"
         scratch.mkdir()
         spec = root / "spec.txt"
@@ -455,6 +586,9 @@ APP_HEAD = (
 
 
 def test_the_non_delta_sweep_dossier_is_byte_identical_to_the_pre_change_script(tmp_path):
+    # GOLDEN was captured from the pre-change script at origin/main 554ddb6, before this change:
+    # the same deterministic repository, `preflight --full-suite off` then `dossier sweep`, with the
+    # checkout/scratch paths and commit ids normalized. It is not regenerated from this script.
     env = fixed_env(tmp_path)
     repo = tmp_path / "repo"
     repo.mkdir()

@@ -24,7 +24,9 @@
 #   run-adversarial-pipeline.sh checkout --base REF [--scratch DIR]   # an extra throwaway detached worktree at HEAD
 #   run-adversarial-pipeline.sh cleanup <checkout-path>               # removes a checkout this script made
 #   run-adversarial-pipeline.sh paths --base REF                      # prints this run's artifact paths,
-#                               # then a final 'dossier_sizes <path>' line naming the size log
+#                               # then 'reuse_hits <n>' and 'reuse_misses <n>', one
+#                               # 'reused <phase> <identity> <producing run>' line per reused phase,
+#                               # and a final 'dossier_sizes <path>' line naming the size log
 #   run-adversarial-pipeline.sh checklist --base REF                  # prints the review checklist items
 #                               # for the paths changed in REF...HEAD (see "Review checklist")
 # Every command also takes --repo DIR. Every command except cleanup takes its run's base as
@@ -85,16 +87,20 @@
 # does not carry `--shard`; one shard is one invocation.
 #
 # Delta base and reuse: a re-gate may pass the head of the last accepted run as --base, or pass
-# --delta and let the script resolve that head from the run store. `--delta` takes the accepted run
-# whose head is an ancestor of HEAD, whose arbitrate stamp records this invocation's spec= value,
-# and whose head is a descendant of every other such candidate's head; equally maximal (divergent)
-# candidates break on the latest head committer date, then on the run directory name in LC_ALL=C
-# order (the greatest of each). An accepted run is one whose arbitrate phase satisfies the existing
-# rule (a non-empty report, not older than its launch, a stamp equal to the recomputed stamp, the
-# first line 'REVIEW-RAN: yes', and every predecessor accepted). With no candidate, --delta exits
-# 12 and changes no run state; it never falls back to the story base. The first gate of a story
-# passes the story base with --base. The run and its acceptance are keyed on (base, HEAD, spec), so
-# a delta run has its own run directory and its own stamps.
+# --delta and let the script resolve that head from the run store. When HEAD itself already has an
+# accepted run for this spec, --delta resolves to that run's own base, so evidence retrieval and a
+# forced re-gate name the existing run instead of an empty successor. Otherwise `--delta` takes the
+# accepted run whose head is a proper ancestor of HEAD, whose arbitrate stamp records this
+# invocation's spec= value, and whose head is a descendant of every other such candidate's head;
+# equally maximal (divergent) candidates break on the latest head committer date, then on the run
+# directory name in LC_ALL=C order (the greatest of each). An accepted run is one whose arbitrate
+# phase satisfies the existing rule (a non-empty report, not older than its launch, a stamp equal to
+# the recomputed stamp, the first line 'REVIEW-RAN: yes', and every predecessor accepted, including
+# the producing run of a reused phase). With no candidate, --delta exits 12 and changes no run
+# state; it never falls back to the story base. The first gate of a story passes the story base with
+# --base. The run and its acceptance are keyed on (base, HEAD, spec), so a delta run has its own run
+# directory and its own stamps. The story base is recorded once in the run directory and never
+# rewritten; a conflicting explicit --story-base is refused.
 #
 # The arbitrate dossier names both the story base and the run's base (the delta base) and states
 # the reviewed commit range whenever the two differ. A non-delta run emits no such lines, so its
@@ -110,15 +116,20 @@
 # `reused=<identity>` and `reused_run=<producing run dir>`, and no launch marker is written. Only
 # those two model phases are reusable; the preflight always runs fresh (its acceptance is bound to
 # the head tree), and arbitrate is never reused. A sharded hunt invocation is never reused either:
-# its artifacts are a shard set, and it prints no reuse line. Reuse never marks a phase accepted that was not
-# accepted before: a producing run whose acceptance no longer holds is refused at exit 13 naming
-# the phase and that run. Each phase prints exactly one 'reuse:' line on stderr -
+# its artifacts are a shard set, and it prints no reuse line. A hunt is reused only from a producing
+# run with the same --no-sweep mode and, when the sweep is enabled, the same accepted sweep
+# artifact, because a hunt verifies the sweep report it actually read. Reuse never marks a phase
+# accepted that was not accepted before: only a run that completed arbitration is a candidate (a
+# never-accepted attempt is ignored), and a producing run whose acceptance no longer holds -
+# including one that lapses after the reuse - refuses at exit 13 naming the phase and that run.
+# Each phase prints exactly one 'reuse:' line on stderr -
 #   reuse: hit <identity> from run <producing run dir>
 # or
 #   reuse: miss reason=<no accepted run|spec mismatch|identity mismatch|acceptance lapsed>
-# and the preflight and arbitrate phases print their miss line too, so a reuse that does not fire
-# is visible. The `paths` output carries the hit and miss counts and one
-# `reused <phase> <identity> <producing run dir>` line per reused phase.
+# and the preflight and arbitrate phases print their miss line too (they are never reused, so their
+# reason is 'no accepted run'), so a reuse that does not fire is visible. The `paths` output carries
+# the hit and miss counts and one `reused <phase> <identity> <producing run dir>` line per reused
+# phase.
 #
 # Isolation: every model phase runs in its own throwaway detached worktree at HEAD ({checkout},
 # also the command's working directory), never in the primary checkout. The checkout exists before
@@ -187,8 +198,9 @@
 # color.ui, diff.noprefix, diff.mnemonicPrefix, diff.submodule, diff.algorithm or
 # diff.indentHeuristic setting cannot hide a section boundary from the splitter, which streams the
 # diff one section at a time. The diffstat pins --no-ext-diff, --no-color, the a/ and b/ prefixes
-# and --no-textconv for the same reason. These pins are for determinism, never for the reuse
-# identity: the identity is content-addressed by tree OIDs and stays the same without them.
+# and --no-textconv for the same reason, and every diff and diffstat call pins core.quotePath=true
+# so a non-ASCII path is quoted the same way everywhere. These pins are for determinism, never for
+# the reuse identity: the identity is content-addressed by tree OIDs and stays the same without them.
 # The splitter needs python3, which the preflight checks.
 #
 # Size sidecars: every completed dossier write, on `run` or `dossier`, leaves `<phase>.dossier` in the
@@ -418,6 +430,7 @@ esac
 
 REPO="${ADVERSARIAL_REPO:-}"
 BASE="${ADVERSARIAL_BASE:-}"
+BASE_SET=0
 STORY_BASE="${ADVERSARIAL_STORY_BASE:-}"
 STORY_BASE_SET=0
 if [ -n "$STORY_BASE" ]; then STORY_BASE_SET=1; fi
@@ -453,7 +466,7 @@ while [ $# -gt 0 ]; do
       case "$1" in
         --full-suite) FULL_SUITE="$2"; FULL_SUITE_SET=1 ;;
         --repo) REPO="$2" ;;
-        --base) BASE="$2" ;;
+        --base) BASE="$2"; BASE_SET=1 ;;
         --story-base) STORY_BASE="$2"; STORY_BASE_SET=1 ;;
         --spec) SPEC_FILE="$2" ;;
         --test-cmd) TEST_CMD="$2" ;;
@@ -477,7 +490,7 @@ case "$DELTA" in
   0|1) ;;
   *) die 2 "--delta (ADVERSARIAL_DELTA) must be 1 or 0, not '$DELTA'." ;;
 esac
-if [ "$DELTA" -eq 1 ] && [ -n "$BASE" ]; then
+if [ "$DELTA" -eq 1 ] && [ "$BASE_SET" -eq 1 ]; then
   die 2 "--delta resolves the base from the run store; do not also pass --base."
 fi
 if [ "$FULL_SUITE_SET" -eq 1 ]; then
@@ -639,6 +652,19 @@ HEAD_SHA="$(git rev-parse --verify 'HEAD^{commit}')" || die 11 "could not resolv
 # Hashed through stdin: sha256sum escapes the digest of a named file whose path holds a backslash or newline.
 sha_of() { sha256sum < "$1" | cut -d' ' -f1; }
 
+# The hex width of this repository's commit IDs (SHA-1 40, SHA-256 64), so a run directory name is
+# recognised in either object format.
+case "$(git rev-parse --show-object-format 2>/dev/null || echo sha1)" in
+  sha256) HEX_LEN=64 ;;
+  *) HEX_LEN=40 ;;
+esac
+RUN_NAME_RE="^([0-9a-f]{${HEX_LEN}})-([0-9a-f]{${HEX_LEN}})$"
+
+# Does $1 sort after $2 in the AC's LC_ALL=C order? (Bash's [[ > ]] uses the ambient locale.)
+name_greater() {
+  [ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | LC_ALL=C sort | tail -n 1)" = "$1" ]
+}
+
 artifact_name() {  # $1 = phase -> its file name inside a run directory
   case "$1" in
     preflight) echo phase0-preflight.md ;;
@@ -693,12 +719,11 @@ run_field() {  # $1 run dir, $2 field name
   return 1
 }
 
-# The existing acceptance rule, recomputed against a named run: non-empty, the stamp equal to the
-# recomputed stamp, the first line REVIEW-RAN: yes, and every predecessor accepted. A model phase's
-# launch, when it is still there, must not be newer than the artifact; the arbitrate launch is
-# consumed on acceptance, so its stamp is the durable check.
-phase_accepted_in_run() {  # $1 run dir, $2 base, $3 head, $4 spec, $5 no_sweep, $6 phase
-  local rd="$1" b="$2" h="$3" s="$4" ns="$5" ph="$6" art first p
+# The stamp-level acceptance of one phase, without predecessor recursion: non-empty, the first line
+# for a model phase, the launch (when still present) not newer than the artifact, and the stamp equal
+# to the recomputed stamp. Used to tell "was accepted, now lapsed" from "never accepted".
+phase_stamped_in_run() {  # $1 run dir, $2 base, $3 head, $4 spec, $5 no_sweep, $6 phase
+  local rd="$1" b="$2" h="$3" s="$4" ns="$5" ph="$6" art first
   art="$rd/$(artifact_name "$ph")"
   [ -s "$art" ] && [ -f "$art.stamp" ] || return 1
   if [ "$ph" != "preflight" ]; then
@@ -709,8 +734,49 @@ phase_accepted_in_run() {  # $1 run dir, $2 base, $3 head, $4 spec, $5 no_sweep,
     [ "$first" = "REVIEW-RAN: yes" ] || return 1
   fi
   [ "$(cat -- "$art.stamp")" = "$(stamp_text_for "$rd" "$b-$h" "$s" "$ns" "$ph")" ] || return 1
+}
+
+# A reused phase is accepted only while its recorded producing run still accepts the copied bytes.
+# Follows a reuse chain with a depth bound, so a cycle or a broken link is a lapse, never a loop.
+reuse_provenance_ok() {  # $1 run dir, $2 phase, $3 depth
+  local rd="$1" ph="$2" depth="${3:-0}" prod prod_dir src_base src_head src_spec src_ns
+  [ -f "$rd/$ph.reuse" ] || return 0
+  [ "$depth" -le 8 ] || return 1
+  prod="$(sed -n 's/^run=//p' "$rd/$ph.reuse" | head -n 1)"
+  [ -n "$prod" ] || return 1
+  [[ "$prod" =~ $RUN_NAME_RE ]] || return 1
+  prod_dir="$OUT_BASE/runs/$prod"
+  [ -d "$prod_dir" ] || return 1
+  src_base="${BASH_REMATCH[1]}"; src_head="${BASH_REMATCH[2]}"
+  src_spec="$(run_field "$prod_dir" spec)" || return 1
+  src_ns="$(run_field "$prod_dir" no_sweep)" || src_ns=0
+  [ -f "$prod_dir/$(artifact_name "$ph")" ] || return 1
+  [ "$(sha_of "$rd/$(artifact_name "$ph")")" = "$(sha_of "$prod_dir/$(artifact_name "$ph")")" ] || return 1
+  phase_accepted_in_run "$prod_dir" "$src_base" "$src_head" "$src_spec" "$src_ns" "$ph" $(( depth + 1 ))
+}
+
+# Did a run ever complete arbitration at this head? A retained, immutable arbitration copy is the
+# durable evidence, so a deleted or stale artifact is a lapse rather than a never-accepted attempt.
+run_was_accepted() {  # $1 run directory, $2 head SHA
+  local f
+  [ -d "${ARBITRATION_ROUNDS:-}" ] || return 1
+  for f in "$ARBITRATION_ROUNDS"/round-*-"$2"-*.md; do
+    [ -e "$f" ] && return 0
+  done
+  return 1
+}
+
+# The existing acceptance rule, recomputed against a named run: non-empty, the stamp equal to the
+# recomputed stamp, the first line REVIEW-RAN: yes, every predecessor accepted, and, for a reused
+# phase, its producing run still accepting the copied bytes. A model phase's launch, when it is
+# still there, must not be newer than the artifact; the arbitrate launch is consumed on acceptance,
+# so its stamp is the durable check.
+phase_accepted_in_run() {  # $1 run dir, $2 base, $3 head, $4 spec, $5 no_sweep, $6 phase, $7 depth
+  local rd="$1" b="$2" h="$3" s="$4" ns="$5" ph="$6" depth="${7:-0}" p
+  phase_stamped_in_run "$rd" "$b" "$h" "$s" "$ns" "$ph" || return 1
+  reuse_provenance_ok "$rd" "$ph" "$depth" || return 1
   for p in $(deps_of_ns "$ph" "$ns"); do
-    phase_accepted_in_run "$rd" "$b" "$h" "$s" "$ns" "$p" || return 1
+    phase_accepted_in_run "$rd" "$b" "$h" "$s" "$ns" "$p" "$depth" || return 1
   done
 }
 
@@ -748,54 +814,77 @@ run_story_base_ref() {  # $1 run dir, $2 the run's base ref
   printf '%s\n' "$2"
 }
 
-# --delta: the accepted run whose head is an ancestor of HEAD, whose arbitrate stamp records this
-# spec, and whose head is a descendant of every other candidate's head; equally maximal candidates
-# break on the latest head committer date, then the greatest run directory name in LC_ALL=C order.
-# Sets BASE, BASE_SHA, STORY_BASE and STORY_BASE_SHA. No candidate exits 12 before any run state.
+# --delta: if HEAD itself already has an accepted run for this spec, resolve to that run's base, so
+# evidence retrieval and a forced re-gate name the existing run instead of an empty successor.
+# Otherwise take the accepted run whose head is a proper ancestor of HEAD and whose arbitrate stamp
+# records this spec, keeping those whose head is a descendant of every other candidate's head;
+# equally maximal (divergent) candidates break on the latest head committer date, then the greatest
+# run directory name in LC_ALL=C order. Sets BASE, BASE_SHA, STORY_BASE and STORY_BASE_SHA. No
+# candidate exits 12 before any run state.
 resolve_delta_base() {
   local rundir name base head spec ns date
-  local -a candidates=() maximal=()
+  local -a cand_heads=() cand_dirs=() max_idx=()
+  local cur_dir="" cur_base="" cur_date="" cur_name=""
   for rundir in "$OUT_BASE"/runs/*; do
     [ -d "$rundir" ] || continue
     name="$(basename -- "$rundir")"
-    [[ "$name" =~ ^([0-9a-f]{40})-([0-9a-f]{40})$ ]] || continue
+    [[ "$name" =~ $RUN_NAME_RE ]] || continue
     base="${BASH_REMATCH[1]}"; head="${BASH_REMATCH[2]}"
     git rev-parse --verify -q "${head}^{commit}" >/dev/null || continue
     spec="$(run_field "$rundir" spec)" || continue
     [ "$spec" = "$SPEC_SHA" ] || continue
     ns="$(run_field "$rundir" no_sweep)" || ns=0
     phase_accepted_in_run "$rundir" "$base" "$head" "$spec" "$ns" arbitrate || continue
+    date="$(git show -s --format=%ct "$head" 2>/dev/null)" || continue
+    if [ "$head" = "$HEAD_SHA" ]; then
+      if [ -z "$cur_dir" ] || [ "$date" -gt "$cur_date" ] \
+        || { [ "$date" -eq "$cur_date" ] && name_greater "$name" "$cur_name"; }; then
+        cur_dir="$rundir"; cur_base="$base"; cur_date="$date"; cur_name="$name"
+      fi
+      continue
+    fi
     git merge-base --is-ancestor "$head" "$HEAD_SHA" 2>/dev/null || continue
-    candidates+=("$head $rundir")
+    cand_heads+=("$head"); cand_dirs+=("$rundir")
   done
-  if [ "${#candidates[@]}" -eq 0 ]; then
+  if [ -n "$cur_dir" ]; then
+    BASE_SHA="$cur_base"; BASE="$BASE_SHA"
+    if [ "$STORY_BASE_SET" -eq 0 ]; then
+      STORY_BASE_SHA="$(run_story_base "$cur_dir" "$cur_base")"
+      STORY_BASE="$(run_story_base_ref "$cur_dir" "$cur_base")"
+    fi
+    return 0
+  fi
+  if [ "${#cand_heads[@]}" -eq 0 ]; then
     die 12 "--delta found no accepted run whose head is an ancestor of HEAD and whose spec matches; pass --base <head> instead"
   fi
-  local c ch cd d dh ancestor
-  for c in "${candidates[@]}"; do
-    ch="${c%% *}"; cd="${c#* }"
+  local i j ancestor
+  for i in "${!cand_heads[@]}"; do
     ancestor=0
-    for d in "${candidates[@]}"; do
-      dh="${d%% *}"
-      [ "$ch" = "$dh" ] && continue
-      if git merge-base --is-ancestor "$ch" "$dh" 2>/dev/null; then ancestor=1; break; fi
+    for j in "${!cand_heads[@]}"; do
+      [ "$i" = "$j" ] && continue
+      if git merge-base --is-ancestor "${cand_heads[$i]}" "${cand_heads[$j]}" 2>/dev/null; then
+        ancestor=1; break
+      fi
     done
-    [ "$ancestor" -eq 0 ] && maximal+=("$c")
+    [ "$ancestor" -eq 0 ] && max_idx+=("$i")
   done
-  local best="" best_date="" best_name=""
-  for c in "${maximal[@]}"; do
-    ch="${c%% *}"; cd="${c#* }"
-    date="$(git show -s --format=%ct "$ch")"
-    name="$(basename -- "$cd")"
-    if [ -z "$best" ] || [ "$date" -gt "$best_date" ] \
-      || { [ "$date" -eq "$best_date" ] && [[ "$name" > "$best_name" ]]; }; then
-      best="$cd"; best_date="$date"; best_name="$name"
+  local best="${max_idx[0]}" best_date best_name date_i name_i
+  best_date="$(git show -s --format=%ct "${cand_heads[$best]}" 2>/dev/null || echo 0)"
+  best_name="$(basename -- "${cand_dirs[$best]}")"
+  for i in "${max_idx[@]:1}"; do
+    date_i="$(git show -s --format=%ct "${cand_heads[$i]}" 2>/dev/null)" || continue
+    name_i="$(basename -- "${cand_dirs[$i]}")"
+    if [ "$date_i" -gt "$best_date" ] \
+      || { [ "$date_i" -eq "$best_date" ] && name_greater "$name_i" "$best_name"; }; then
+      best="$i"; best_date="$date_i"; best_name="$name_i"
     fi
   done
-  BASE_SHA="${best_name##*-}"
+  BASE_SHA="${cand_heads[$best]}"
   BASE="$BASE_SHA"
-  STORY_BASE_SHA="$(run_story_base "$best" "${best_name%%-*}")"
-  STORY_BASE="$(run_story_base_ref "$best" "${best_name%%-*}")"
+  if [ "$STORY_BASE_SET" -eq 0 ]; then
+    STORY_BASE_SHA="$(run_story_base "${cand_dirs[$best]}" "${best_name%%-*}")"
+    STORY_BASE="$(run_story_base_ref "${cand_dirs[$best]}" "${best_name%%-*}")"
+  fi
 }
 
 # A --base at an accepted run's head inherits that run's story base, so a re-gate names both bases.
@@ -804,16 +893,16 @@ lookup_story_base() {  # $1 base SHA -> "<story sha> <story ref>", or fail
   for rundir in "$OUT_BASE"/runs/*; do
     [ -d "$rundir" ] || continue
     name="$(basename -- "$rundir")"
-    [[ "$name" =~ ^([0-9a-f]{40})-([0-9a-f]{40})$ ]] || continue
+    [[ "$name" =~ $RUN_NAME_RE ]] || continue
     base="${BASH_REMATCH[1]}"; head="${BASH_REMATCH[2]}"
     [ "$head" = "$1" ] || continue
     spec="$(run_field "$rundir" spec)" || continue
     [ "$spec" = "$SPEC_SHA" ] || continue
     ns="$(run_field "$rundir" no_sweep)" || ns=0
     phase_accepted_in_run "$rundir" "$base" "$head" "$spec" "$ns" arbitrate || continue
-    date="$(git show -s --format=%ct "$head")"
+    date="$(git show -s --format=%ct "$head" 2>/dev/null)" || continue
     if [ -z "$best" ] || [ "$date" -gt "$best_date" ] \
-      || { [ "$date" -eq "$best_date" ] && [[ "$name" > "$best_name" ]]; }; then
+      || { [ "$date" -eq "$best_date" ] && name_greater "$name" "$best_name"; }; then
       best="$rundir"; best_date="$date"; best_name="$name"
     fi
   done
@@ -830,11 +919,13 @@ else
   BASE_SHA="$(git rev-parse --verify -q "${BASE}^{commit}")" || die 12 "base ref '$BASE' does not exist (fetch it first)."
 fi
 
-# The story base: an explicit --story-base wins; then the accepted run the base came from; else the
-# base itself. A story base that is not an ancestor of HEAD is not a story base for this run.
+# The story base: an explicit --story-base wins and must be an ancestor of HEAD; then the accepted
+# run the base came from; else the base itself.
 if [ "$STORY_BASE_SET" -eq 1 ]; then
   STORY_BASE_SHA="$(git rev-parse --verify -q "${STORY_BASE}^{commit}")" \
     || die 12 "story base ref '$STORY_BASE' does not exist (fetch it first)."
+  git merge-base --is-ancestor "$STORY_BASE_SHA" "$HEAD_SHA" 2>/dev/null \
+    || die 12 "story base '$STORY_BASE' (${STORY_BASE_SHA:0:12}) is not an ancestor of HEAD."
 fi
 if [ -z "${STORY_BASE_SHA:-}" ]; then
   if lookup="$(lookup_story_base "$BASE_SHA")"; then
@@ -842,15 +933,30 @@ if [ -z "${STORY_BASE_SHA:-}" ]; then
   fi
 fi
 if [ -z "${STORY_BASE_SHA:-}" ]; then STORY_BASE_SHA="$BASE_SHA"; STORY_BASE="$BASE"; fi
-if ! git merge-base --is-ancestor "$STORY_BASE_SHA" "$HEAD_SHA" 2>/dev/null; then
+if [ "$STORY_BASE_SET" -eq 0 ] \
+  && ! git merge-base --is-ancestor "$STORY_BASE_SHA" "$HEAD_SHA" 2>/dev/null; then
   STORY_BASE_SHA="$BASE_SHA"; STORY_BASE="$BASE"
 fi
-if [ "$STORY_BASE_SHA" = "$BASE_SHA" ]; then DELTA_ACTIVE=0; else DELTA_ACTIVE=1; fi
 
 RUN_ID="${BASE_SHA}-${HEAD_SHA}"
 RUN_DIR="$OUT_BASE/runs/$RUN_ID"
 mkdir -p "$RUN_DIR"
-printf 'sha=%s\nref=%s\n' "$STORY_BASE_SHA" "$STORY_BASE" > "$RUN_DIR/story-base"
+# The story base is recorded once per run and never rewritten; a conflicting explicit value is
+# refused, so one run cannot show two story bases.
+if [ -f "$RUN_DIR/story-base" ]; then
+  recorded="$(sed -n 's/^sha=//p' "$RUN_DIR/story-base" | head -n 1)"
+  if [ -n "$recorded" ] && [ "$recorded" != "$STORY_BASE_SHA" ]; then
+    if [ "$STORY_BASE_SET" -eq 1 ]; then
+      die 12 "this run already records story base $recorded; it cannot be changed to $STORY_BASE_SHA."
+    fi
+    STORY_BASE_SHA="$recorded"
+    STORY_BASE="$(sed -n 's/^ref=//p' "$RUN_DIR/story-base" | head -n 1)"
+  fi
+else
+  printf 'sha=%s\nref=%s\n' "$STORY_BASE_SHA" "$STORY_BASE" > "$RUN_DIR/story-base" \
+    || die 2 "could not record the story base in $RUN_DIR."
+fi
+if [ "$STORY_BASE_SHA" = "$BASE_SHA" ]; then DELTA_ACTIVE=0; else DELTA_ACTIVE=1; fi
 PHASE0="$RUN_DIR/phase0-preflight.md"
 SUITE_LOG="$RUN_DIR/phase0-suite.log"
 PHASE1="$RUN_DIR/phase1-sweep.md"
@@ -1001,15 +1107,16 @@ stamp() {  # $1 = phase: record that this run produced and accepted the phase's 
 }
 
 accepted() {  # $1 = phase -> 0 when its artifact is non-empty, stamped for this run and spec, and
-              # it and every predecessor it was built from are unchanged and accepted
+              # it, its producing run (when reused) and every predecessor are unchanged and accepted
   local art p; art="$(artifact_for "$1")"
   [ -s "$art" ] && [ -f "$art.stamp" ] || return 1
   [ "$(cat -- "$art.stamp")" = "$(stamp_text "$1")" ] || return 1
+  reuse_provenance_ok "$RUN_DIR" "$1" 0 || return 1
   for p in $(deps_of "$1"); do accepted "$p" || return 1; done
 }
 
 require_predecessors() {  # $1 = phase
-  local p k n
+  local p k n prod
   for p in $(deps_of "$1"); do
     if [ "$p" = "hunt" ] && plan_exists; then
       plan_read; n="$PLAN_N"
@@ -1021,7 +1128,12 @@ require_predecessors() {  # $1 = phase
       SHARDED=0
       continue
     fi
-    accepted "$p" || die 13 "the $1 phase needs an accepted $p artifact from this run (base ${BASE_SHA:0:12}, head ${HEAD_SHA:0:12}, this spec, same --no-sweep); run $p at this head first."
+    accepted "$p" && continue
+    if [ -f "$RUN_DIR/$p.reuse" ]; then
+      prod="$(sed -n 's/^run=//p' "$RUN_DIR/$p.reuse" | head -n 1)"
+      die 13 "the $1 phase needs an accepted $p artifact from this run, but its producing run ${prod:-unknown} no longer accepts the copied bytes (base ${BASE_SHA:0:12}, head ${HEAD_SHA:0:12}); repair that run or gate a new head."
+    fi
+    die 13 "the $1 phase needs an accepted $p artifact from this run (base ${BASE_SHA:0:12}, head ${HEAD_SHA:0:12}, this spec, same --no-sweep); run $p at this head first."
   done
 }
 
@@ -1060,24 +1172,28 @@ begin_phase() {  # $1 = phase: drop stale output and later phases, bind the inpu
 
 bind_phase() {  # $1 = phase: record the inputs its dossier was built from and the primary checkout
   local key; key="$(state_key "$1")"
-  binding_text "$1" > "$RUN_DIR/$key.binding"
-  primary_state > "$RUN_DIR/$key.primary"
+  binding_text "$1" > "$RUN_DIR/$key.binding" || return 1
+  primary_state > "$RUN_DIR/$key.primary" || return 1
 }
 
 # --- reuse of an identical tree (sweep and hunt only) --------------------------------------------
 # The one 'reuse:' line each phase prints, also kept in <phase>.reuse-line so `paths` can count.
 record_reuse_line() {  # $1 = phase, $2 = the line
-  printf '%s\n' "$2" > "$RUN_DIR/$1.reuse-line"
-  printf '%s\n' "$2" >&2
+  printf '%s\n' "$2" > "$RUN_DIR/$1.reuse-line" \
+    || die 2 "could not record the $1 reuse line in $RUN_DIR."
+  printf '%s\n' "$2" >&2 || true
 }
 
 # Decide whether $1 (sweep|hunt) can be reused. Sets REUSE_STATE (hit|miss), REUSE_IDENTITY,
 # REUSE_RUN (the producing run on a hit), REUSE_REASON (on a miss) and REUSE_LAPSED (the best run
-# whose matching identity no longer accepts). Precedence: a hit beats a lapsed run; a same-tree run
-# with another spec is a spec mismatch; any other run is an identity mismatch.
+# that was accepted once and no longer is). Only a run that completed arbitration is a candidate; a
+# never-accepted attempt is ignored, never a lapse. For hunt, the producing run must have the same
+# --no-sweep mode and, when the sweep is enabled, the same accepted sweep artifact, because a hunt
+# only verifies the sweep report it actually read.
 reuse_lookup() {  # $1 = phase
   local phase="$1" rundir name base head spec ns prefix cur_ident cur_prefix date
-  local saw_run=0 saw_tree=0 best_hit="" best_date="" best_name="" best_lapsed="" lapsed_date="" lapsed_name=""
+  local saw_run=0 saw_tree=0 saw_identity=0
+  local best_hit="" best_date="" best_name="" best_lapsed="" lapsed_date="" lapsed_name=""
   REUSE_STATE=miss REUSE_IDENTITY="" REUSE_RUN="" REUSE_REASON="" REUSE_LAPSED=""
   cur_ident="$(reuse_identity "$BASE_SHA" "$HEAD_SHA" "$SPEC_SHA")" || { REUSE_REASON="identity mismatch"; return 0; }
   cur_prefix="${cur_ident%-*}"
@@ -1085,7 +1201,7 @@ reuse_lookup() {  # $1 = phase
     [ -d "$rundir" ] || continue
     [ "$(abspath "$rundir")" = "$RUN_DIR" ] && continue
     name="$(basename -- "$rundir")"
-    [[ "$name" =~ ^([0-9a-f]{40})-([0-9a-f]{40})$ ]] || continue
+    [[ "$name" =~ $RUN_NAME_RE ]] || continue
     base="${BASH_REMATCH[1]}"; head="${BASH_REMATCH[2]}"
     git rev-parse --verify -q "${head}^{commit}" >/dev/null || continue
     # A run whose hunt plan is sharded keeps a shard set rather than one hunt artifact, so its
@@ -1095,28 +1211,41 @@ reuse_lookup() {  # $1 = phase
     prefix="$(tree_prefix_of "$base" "$head")" || continue
     saw_run=1
     [ "$prefix" = "$cur_prefix" ] || continue
-    saw_tree=1
     spec="$(run_field "$rundir" spec)" || continue
+    saw_tree=1
     [ "$spec" = "$SPEC_SHA" ] || continue
+    saw_identity=1
     ns="$(run_field "$rundir" no_sweep)" || ns=0
-    # A run that never produced this phase (--no-sweep) cannot donate it; that is not a lapse.
-    [ -f "$rundir/$(artifact_name "$phase")" ] || continue
-    date="$(git show -s --format=%ct "$head")"
+    # A --no-sweep run never produced a sweep, so it is not a source for one (and not a lapse).
+    if [ "$phase" = "sweep" ] && [ "$ns" -eq 1 ]; then continue; fi
+    if [ "$phase" = "hunt" ]; then
+      [ "$ns" = "$NO_SWEEP" ] || continue
+      if [ "$NO_SWEEP" -eq 0 ]; then
+        [ -f "$rundir/$(artifact_name sweep)" ] && [ -f "$RUN_DIR/$(artifact_name sweep)" ] || continue
+        [ "$(sha_of "$rundir/$(artifact_name sweep)")" = "$(sha_of "$RUN_DIR/$(artifact_name sweep)")" ] \
+          || continue
+      fi
+    fi
+    date="$(git show -s --format=%ct "$head" 2>/dev/null)" || continue
     if phase_accepted_in_run "$rundir" "$base" "$head" "$spec" "$ns" "$phase" \
       && phase_accepted_in_run "$rundir" "$base" "$head" "$spec" "$ns" arbitrate; then
       if [ -z "$best_hit" ] || [ "$date" -gt "$best_date" ] \
-        || { [ "$date" -eq "$best_date" ] && [[ "$name" > "$best_name" ]]; }; then
+        || { [ "$date" -eq "$best_date" ] && name_greater "$name" "$best_name"; }; then
         best_hit="$rundir"; best_date="$date"; best_name="$name"
       fi
-    elif [ -z "$best_lapsed" ] || [ "$date" -gt "$lapsed_date" ] \
-      || { [ "$date" -eq "$lapsed_date" ] && [[ "$name" > "$lapsed_name" ]]; }; then
-      best_lapsed="$rundir"; lapsed_date="$date"; lapsed_name="$name"
+    elif run_was_accepted "$rundir" "$head"; then
+      if [ -z "$best_lapsed" ] || [ "$date" -gt "$lapsed_date" ] \
+        || { [ "$date" -eq "$lapsed_date" ] && name_greater "$name" "$lapsed_name"; }; then
+        best_lapsed="$rundir"; lapsed_date="$date"; lapsed_name="$name"
+      fi
     fi
   done
   if [ -n "$best_hit" ]; then
     REUSE_STATE=hit; REUSE_RUN="$best_hit"; REUSE_IDENTITY="$cur_ident"
   elif [ -n "$best_lapsed" ]; then
     REUSE_REASON="acceptance lapsed"; REUSE_LAPSED="$best_lapsed"
+  elif [ "$saw_identity" -eq 1 ]; then
+    REUSE_REASON="identity mismatch"
   elif [ "$saw_tree" -eq 1 ]; then
     REUSE_REASON="spec mismatch"
   elif [ "$saw_run" -eq 1 ]; then
@@ -1127,6 +1256,7 @@ reuse_lookup() {  # $1 = phase
 }
 
 # Accept the producing run's artifact for this run, without accept_phase and without a launch marker.
+# Every write is checked: this runs inside a conditional, where Bash errexit is disabled.
 reuse_accept() {  # $1 = phase, $2 = producing run dir, $3 = identity
   local phase="$1" src="$2" ident="$3" art
   art="$(artifact_for "$phase")"
@@ -1135,26 +1265,33 @@ reuse_accept() {  # $1 = phase, $2 = producing run dir, $3 = identity
   invalidate_downstream "$phase"
   cp -- "$src/$(artifact_name "$phase")" "$art" \
     || die 15 "could not copy the reused $phase artifact from $src."
-  printf 'identity=%s\nrun=%s\n' "$ident" "$(basename -- "$src")" > "$RUN_DIR/$phase.reuse"
-  bind_phase "$phase"
-  stamp "$phase"
+  printf 'identity=%s\nrun=%s\n' "$ident" "$(basename -- "$src")" > "$RUN_DIR/$phase.reuse" \
+    || die 15 "could not record the reused $phase provenance in $RUN_DIR."
+  bind_phase "$phase" || die 15 "could not bind the reused $phase inputs in $RUN_DIR."
+  stamp "$phase" || die 15 "could not stamp the reused $phase artifact $art."
+  # The producing run's size sidecar is copied so the measurement log shows what was reused.
+  if [ -f "$src/$phase.dossier" ]; then
+    cp -- "$src/$phase.dossier" "$RUN_DIR/$phase.dossier" 2>/dev/null || true
+  fi
+  write_dossier_sizes
   echo "Phase $phase reused -> $art" >&2
 }
 
-# The run path's reuse attempt: prints exactly one reuse line and returns 0 on a hit. A producing
-# run whose acceptance lapsed refuses at exit 13 rather than falling through to a fresh launch.
+# The run path's reuse attempt: prints exactly one reuse line and returns 0 on a hit. The hit line
+# is written only after the copied artifact is accepted, so `paths` never counts a hit that did not
+# happen. A producing run whose acceptance lapsed refuses at exit 13 rather than falling through.
 try_reuse() {  # $1 = phase (sweep|hunt)
   local phase="$1"
   reuse_lookup "$phase"
   if [ "$REUSE_STATE" = "hit" ]; then
-    record_reuse_line "$phase" "reuse: hit $REUSE_IDENTITY from run $(basename -- "$REUSE_RUN")"
     require_predecessors "$phase"
-    reuse_accept "$phase" "$REUSE_RUN" "$REUSE_IDENTITY"
+    reuse_accept "$phase" "$REUSE_RUN" "$REUSE_IDENTITY" || die 15 "the $phase reuse from run $(basename -- "$REUSE_RUN") was not accepted."
+    record_reuse_line "$phase" "reuse: hit $REUSE_IDENTITY from run $(basename -- "$REUSE_RUN")"
     return 0
   fi
   record_reuse_line "$phase" "reuse: miss reason=$REUSE_REASON"
   if [ "$REUSE_REASON" = "acceptance lapsed" ]; then
-    die 13 "the $phase phase cannot reuse run $(basename -- "$REUSE_LAPSED"): that run no longer accepts its $phase artifact or a predecessor; run $phase fresh instead."
+    die 13 "the $phase phase cannot reuse run $(basename -- "$REUSE_LAPSED"): that run was accepted once and no longer accepts the copied bytes; repair that run or gate a new head."
   fi
   return 1
 }
@@ -1993,7 +2130,7 @@ emit_context() {  # $1 = the phase's checkout, $2 = 1 to embed the unified diff,
   if [ "${DELTA_ACTIVE:-0}" -eq 1 ]; then
     echo "STORY-BASE: ${STORY_BASE} ${STORY_BASE_SHA}"
     echo "DELTA-BASE: ${BASE} ${BASE_SHA}"
-    echo "REVIEWED RANGE: ${BASE_SHA}...${HEAD_SHA} (the delta since the story base ${STORY_BASE_SHA})"
+    echo "REVIEWED RANGE: ${BASE_SHA}...${HEAD_SHA} (the range this run reviewed; the story base is ${STORY_BASE_SHA})"
   fi
   echo "HEAD: ${HEAD_SHA}"
   echo "CHECKOUT: $1"
@@ -2002,7 +2139,7 @@ emit_context() {  # $1 = the phase's checkout, $2 = 1 to embed the unified diff,
   emit_spec
   echo
   echo "===== BLUEPRINT (diffstat and files, ${BASE}...HEAD) ====="
-  git diff --stat --no-ext-diff --no-color --src-prefix=a/ --dst-prefix=b/ --no-textconv "$BASE_SHA"..."$HEAD_SHA"
+  git -c core.quotePath=true diff --stat --no-ext-diff --no-color --src-prefix=a/ --dst-prefix=b/ --no-textconv "$BASE_SHA"..."$HEAD_SHA"
   if [ "$2" -eq 1 ]; then
     classify_exclusions
     if [ "${#EXCL_PATHS[@]}" -gt 0 ]; then
@@ -2017,7 +2154,7 @@ emit_context() {  # $1 = the phase's checkout, $2 = 1 to embed the unified diff,
     # pipefail makes a failing `git diff` (or splitter) fail this pipeline, hence the dossier write.
     # The pinned options keep every section starting at a plain `diff --git a/... b/...` line.
     if [ "${#EXCL_PATHS[@]}" -eq 0 ]; then
-      git diff --no-ext-diff --find-renames --unified=1 --no-color --src-prefix=a/ --dst-prefix=b/ \
+      git -c core.quotePath=true diff --no-ext-diff --find-renames --unified=1 --no-color --src-prefix=a/ --dst-prefix=b/ \
         --submodule=short --diff-algorithm=myers --no-indent-heuristic \
         "$BASE_SHA"..."$HEAD_SHA" | cap_diff_sections "$1"
     else
@@ -2041,7 +2178,7 @@ emit_kept_diff() {
       entry+=("$one"); size=$((size + ${#one}))
     done
     if [ "${#spec[@]}" -gt 0 ] && [ $((used + size)) -gt "$budget" ]; then
-      git diff --no-ext-diff --find-renames --unified=1 --no-color --src-prefix=a/ --dst-prefix=b/ \
+      git -c core.quotePath=true diff --no-ext-diff --find-renames --unified=1 --no-color --src-prefix=a/ --dst-prefix=b/ \
         --submodule=short --diff-algorithm=myers --no-indent-heuristic \
         "$BASE_SHA"..."$HEAD_SHA" -- "${spec[@]}"
       spec=(); used=0
@@ -2049,7 +2186,7 @@ emit_kept_diff() {
     spec+=("${entry[@]}"); used=$((used + size))
   done
   if [ "${#spec[@]}" -gt 0 ]; then
-    git diff --no-ext-diff --find-renames --unified=1 --no-color --src-prefix=a/ --dst-prefix=b/ \
+    git -c core.quotePath=true diff --no-ext-diff --find-renames --unified=1 --no-color --src-prefix=a/ --dst-prefix=b/ \
       --submodule=short --diff-algorithm=myers --no-indent-heuristic \
       "$BASE_SHA"..."$HEAD_SHA" -- "${spec[@]}"
   fi

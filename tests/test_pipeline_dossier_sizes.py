@@ -299,7 +299,8 @@ def test_a_removal_that_finds_no_sidecar_still_rebuilds_the_log(gate, flow):
     fakebin.mkdir()
     (fakebin / "git").write_text(
         "#!/usr/bin/env bash\n"
-        'if [ "$1" = diff ] && [ "$2" = --stat ]; then echo refused >&2; exit 3; fi\n'
+        'args=("$@"); while [ "${#args[@]}" -ge 2 ] && [ "${args[0]}" = "-c" ]; do args=("${args[@]:2}"); done\n'
+        'if [ "${args[0]}" = diff ] && [ "${args[1]}" = --stat ]; then echo refused >&2; exit 3; fi\n'
         f'exec "{real_git}" "$@"\n')
     (fakebin / "git").chmod(0o755)
     env = {**gate["env"], "PATH": f"{fakebin}:{gate['env']['PATH']}"}

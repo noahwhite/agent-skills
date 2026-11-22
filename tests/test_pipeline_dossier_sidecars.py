@@ -291,7 +291,8 @@ def failing_git_env(g: dict, first: str, second: str) -> dict[str, str]:
     real_git = subprocess.run(["bash", "-c", "command -v git"], capture_output=True,
                               text=True, check=True).stdout.strip()
     return fake_bin_env(g, "git", (
-        f'if [ "$1" = {first} ] && [ "$2" = {second} ]; then echo "refused" >&2; exit 3; fi\n'
+        'args=("$@"); while [ "${#args[@]}" -ge 2 ] && [ "${args[0]}" = "-c" ]; do args=("${args[@]:2}"); done\n'
+        f'if [ "${{args[0]}}" = {first} ] && [ "${{args[1]}}" = {second} ]; then echo "refused" >&2; exit 3; fi\n'
         f'exec "{real_git}" "$@"\n'))
 
 

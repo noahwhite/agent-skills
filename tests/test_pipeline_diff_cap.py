@@ -645,7 +645,8 @@ def failing_unified_diff_env(g: dict) -> dict[str, str]:
     wrapper = fakebin / "git"
     wrapper.write_text(
         "#!/usr/bin/env bash\n"
-        'if [ "$1" = diff ] && [ "$2" = --no-ext-diff ]; then echo "capped diff refused" >&2; exit 3; fi\n'
+        'args=("$@"); while [ "${#args[@]}" -ge 2 ] && [ "${args[0]}" = "-c" ]; do args=("${args[@]:2}"); done\n'
+        'if [ "${args[0]}" = diff ] && [ "${args[1]}" = --no-ext-diff ]; then echo "capped diff refused" >&2; exit 3; fi\n'
         f'exec "{real_git}" "$@"\n'
     )
     wrapper.chmod(0o755)
