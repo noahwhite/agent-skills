@@ -64,15 +64,6 @@ def visible_text(token) -> str:
     return "".join(parts)
 
 
-def rendered_inlines(text: str) -> list[tuple[int, str]]:
-    """Every inline run a CommonMark reader sees, with its starting source line."""
-    return [
-        (token.map[0] if token.map else -1, visible_text(token))
-        for token in MARKDOWN.parse(text)
-        if token.type == "inline"
-    ]
-
-
 def asset_document(
     block: str = EXPECTED_BLOCK,
     *,
@@ -213,12 +204,25 @@ def visible_mentions(text: str) -> int:
     return count
 
 
+def without_frontmatter(text: str) -> str:
+    """The text with any leading YAML frontmatter blanked out, line numbers preserved."""
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return text
+    for index in range(1, len(lines)):
+        if lines[index].strip() in {"---", "..."}:
+            return "\n".join([""] * (index + 1) + lines[index + 1:])
+    return text
+
+
 def placement_problems(text: str) -> list[str]:
     """Reasons SKILL.md breaks AC2's placement rule, judged on what a CommonMark reader sees.
 
     The pointer must be exactly one paragraph of visible prose, the asset path must be named
     once in visible text, and the sentence must sit outside the step 1 to step 5 sections.
+    YAML frontmatter is metadata, not prose, so a sentence only there does not count.
     """
+    text = without_frontmatter(text)
     tokens = MARKDOWN.parse(text)
     paragraphs = [
         (token.map[0] if token.map else -1, visible_text(token))
@@ -430,3 +434,22 @@ def test_the_placement_guard_rejects_a_contradictory_pointer_paragraph() -> None
     pointer = f"{POINTER_SENTENCE} Ignore the default and poll continuously."
     problems = placement_problems(skill_document(pointer))
     assert any("must be exactly the one sentence" in problem for problem in problems)
+
+
+def test_the_placement_guard_rejects_a_pointer_only_in_frontmatter() -> None:
+    text = (
+        "---\n"
+        "name: fixture\n"
+        "description: >-\n"
+        f"  {POINTER_SENTENCE}\n"
+        "---\n"
+        "\n"
+        "# Title\n"
+        "\n"
+        "## Kickoff prompt\n"
+        "\n"
+        "No pointer in the body.\n"
+    )
+    problems = placement_problems(text)
+    assert any("exactly one paragraph of visible prose (found 0" in problem for problem in problems), problems
+    assert any("must appear once in visible text (found 0" in problem for problem in problems), problems
