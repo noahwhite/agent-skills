@@ -67,8 +67,7 @@ case "${1:-}" in
         [ -z "${FAIL_PR:-}" ] || { echo "gh: no pull requests found" >&2; exit 1; }
         [ "${3:-}" = "7" ] || { echo "gh: unexpected PR number ${3:-}" >&2; exit 3; }
         case "$*" in
-          *state,mergedAt,mergeCommit*) cat "$FIXTURES/confirm.json" ;;
-          *headRefOid*)
+          *isDraft*)
             if [ -f "$FIXTURES/moved-once" ]; then
               if [ -f "$FIXTURES/recheck.json" ]; then cat "$FIXTURES/recheck.json"; exit 0; fi
               if [ -n "${MOVED_AFTER_CHECKS:-}" ]; then
@@ -81,6 +80,7 @@ case "${1:-}" in
               cat "$FIXTURES/pr.json"
             fi
             ;;
+          *mergeCommit*) cat "$FIXTURES/confirm.json" ;;
           *) echo "unexpected pr view: $*" >&2; exit 3 ;;
         esac
         exit 0
@@ -122,14 +122,14 @@ review:
 """
 
 
-def review(head=HEAD, author="record-author", state="COMMENTED", submitted="2026-11-20T18:00:00Z", body=None):
+def review(head=HEAD, author="record-author", state="COMMENTED", submitted="2026-11-20T18:00:00Z", body=None, url=None):
     return {
         "id": f"PRR_{author}_{state}_{submitted}",
         "user": {"login": author},
         "state": state,
         "commit_id": head,
         "submitted_at": submitted,
-        "html_url": REVIEW_URL,
+        "html_url": url or REVIEW_URL,
         "body": f"Review of record {head}\nreviewer and adjudicator\n" if body is None else body,
     }
 
@@ -648,26 +648,70 @@ def approvals_file(tmp_path, records):
 
 
 REQUEST = "REQ-SKL-388-PR7-1"
+REQUEST_RECORD = f"REQUEST | {REQUEST} | {URL} | {HEAD} | {REVIEW_URL} | green | 2026-11-20T19:00:00Z"
 
 
 def test_a_matching_approve_permits_the_merge(run, tmp_path):
-    path = approvals_file(tmp_path, [f"APPROVE | {REQUEST} | {HEAD} | manager | 2026-11-20T19:00:00Z"])
+    path = approvals_file(
+        tmp_path,
+        [REQUEST_RECORD, f"APPROVE | {REQUEST} | {HEAD} | manager | 2026-11-20T19:00:00Z"],
+    )
     done, log = run(reviews=[review()], args=("--approvals", str(path), "--request-id", REQUEST))
     assert done.returncode == 0, done.stderr
     assert len(merged(log)) == 1
 
 
 def test_refuses_without_a_matching_approve(run, tmp_path):
-    path = approvals_file(tmp_path, [f"APPROVE | {REQUEST} | {MOVED} | manager | 2026-11-20T19:00:00Z"])
+    path = approvals_file(
+        tmp_path,
+        [REQUEST_RECORD, f"APPROVE | {REQUEST} | {MOVED} | manager | 2026-11-20T19:00:00Z"],
+    )
     done, log = run(reviews=[review()], args=("--approvals", str(path), "--request-id", REQUEST))
     assert done.returncode != 0
     assert "APPROVE" in done.stderr and HEAD in done.stderr
     assert merged(log) == []
 
 
+def test_refuses_a_decision_with_no_request_in_the_file(run, tmp_path):
+    # references/merge-approval.md: a decision alone authorizes nothing; it is identified by its
+    # request ID and the head SHA the REQUEST named.
+    path = approvals_file(tmp_path, [f"APPROVE | {REQUEST} | {HEAD} | manager | 2026-11-20T19:00:00Z"])
+    done, log = run(reviews=[review()], args=("--approvals", str(path), "--request-id", REQUEST))
+    assert done.returncode == 18
+    assert "no valid REQUEST" in done.stderr
+    assert merged(log) == []
+
+
+def test_refuses_an_approve_when_the_request_named_another_head(run, tmp_path):
+    other_request = f"REQUEST | {REQUEST} | {URL} | {MOVED} | {REVIEW_URL} | green | 2026-11-20T19:00:00Z"
+    path = approvals_file(
+        tmp_path,
+        [other_request, f"APPROVE | {REQUEST} | {HEAD} | manager | 2026-11-20T19:00:00Z"],
+    )
+    done, log = run(reviews=[review()], args=("--approvals", str(path), "--request-id", REQUEST))
+    assert done.returncode == 18
+    assert "no valid REQUEST" in done.stderr
+    assert merged(log) == []
+
+
+def test_refuses_a_request_that_is_not_green(run, tmp_path):
+    pending = f"REQUEST | {REQUEST} | {URL} | {HEAD} | {REVIEW_URL} | pending | 2026-11-20T19:00:00Z"
+    path = approvals_file(
+        tmp_path,
+        [pending, f"APPROVE | {REQUEST} | {HEAD} | manager | 2026-11-20T19:00:00Z"],
+    )
+    done, log = run(reviews=[review()], args=("--approvals", str(path), "--request-id", REQUEST))
+    assert done.returncode == 18
+    assert merged(log) == []
+
+
 def test_refuses_a_bounced_request(run, tmp_path):
     path = approvals_file(
-        tmp_path, [f"BOUNCE | {REQUEST} | {HEAD} | manager | needs a delta review | 2026-11-20T19:00:00Z"]
+        tmp_path,
+        [
+            REQUEST_RECORD,
+            f"BOUNCE | {REQUEST} | {HEAD} | manager | needs a delta review | 2026-11-20T19:00:00Z",
+        ],
     )
     done, log = run(reviews=[review()], args=("--approvals", str(path), "--request-id", REQUEST))
     assert done.returncode != 0
@@ -741,12 +785,10 @@ def test_resolves_a_relative_approvals_path_from_the_invocation_directory(run, t
     consumer = tmp_path / "consumer"
     sub = consumer / "sub"
     sub.mkdir()
-    (sub / "approvals.txt").write_text(
-        f"BOUNCE | {REQUEST} | {HEAD} | manager | needs a delta review | 2026-11-20T19:00:00Z\n"
-    )
-    (consumer / "approvals.txt").write_text(
-        f"APPROVE | {REQUEST} | {HEAD} | manager | 2026-11-20T19:00:00Z\n"
-    )
+    bounce = f"BOUNCE | {REQUEST} | {HEAD} | manager | needs a delta review | 2026-11-20T19:00:00Z"
+    (sub / "approvals.txt").write_text(REQUEST_RECORD + "\n" + bounce + "\n")
+    approve = f"APPROVE | {REQUEST} | {HEAD} | manager | 2026-11-20T19:00:00Z"
+    (consumer / "approvals.txt").write_text(REQUEST_RECORD + "\n" + approve + "\n")
     done, log = run(
         reviews=[review()],
         args=("--approvals", "approvals.txt", "--request-id", REQUEST),
@@ -760,7 +802,7 @@ def test_resolves_a_relative_approvals_path_from_the_invocation_directory(run, t
 def test_ignores_an_unterminated_trailing_approval_line(run, tmp_path):
     path = tmp_path / "approvals.txt"
     # A complete-looking record with no trailing newline: a partial append the reader must ignore.
-    path.write_text(f"APPROVE | {REQUEST} | {HEAD} | manager | 2026-11-20T19:00:00Z")
+    path.write_text(REQUEST_RECORD + "\n" + f"APPROVE | {REQUEST} | {HEAD} | manager | 2026-11-20T19:00:00Z")
     done, log = run(reviews=[review()], args=("--approvals", str(path), "--request-id", REQUEST))
     assert done.returncode != 0
     assert "no APPROVE recorded" in done.stderr
@@ -771,6 +813,7 @@ def test_reports_conflicting_decisions_and_applies_the_first(run, tmp_path):
     path = approvals_file(
         tmp_path,
         [
+            REQUEST_RECORD,
             f"APPROVE | {REQUEST} | {HEAD} | manager | 2026-11-20T19:00:00Z",
             f"BOUNCE | {REQUEST} | {HEAD} | manager | changed my mind | 2026-11-20T19:05:00Z",
         ],
@@ -786,6 +829,7 @@ def test_reports_a_conflict_and_honours_a_first_bounce(run, tmp_path):
     path = approvals_file(
         tmp_path,
         [
+            REQUEST_RECORD,
             f"BOUNCE | {REQUEST} | {HEAD} | manager | not yet | 2026-11-20T19:00:00Z",
             f"APPROVE | {REQUEST} | {HEAD} | manager | 2026-11-20T19:05:00Z",
         ],
@@ -821,9 +865,20 @@ def test_lists_each_excluded_marker_review(run, tmp_path):
 
 
 def test_reads_the_reviews_from_the_pr_host(run):
-    done, log = run(reviews=[review()], pr_url="https://ghe.example.com/acme/widgets/pull/7")
+    host_review = review(url="https://ghe.example.com/acme/widgets/pull/7#pullrequestreview-11")
+    done, log = run(reviews=[host_review], pr_url="https://ghe.example.com/acme/widgets/pull/7")
     assert done.returncode == 0, done.stderr
     assert f"api --paginate {REVIEWS_END} --hostname ghe.example.com" in calls(log)
+
+
+def test_refuses_a_review_url_on_another_host(run):
+    # AC2 reads the reviews on the PR's own host, and the review of record is named and re-read from
+    # that host: a review URL pointing elsewhere is a refusal, never printed as this PR's review.
+    elsewhere = review(url="https://github.com/acme/widgets/pull/7#pullrequestreview-11")
+    done, log = run(reviews=[elsewhere], pr_url="https://ghe.example.com/acme/widgets/pull/7")
+    assert done.returncode == 15
+    assert "not on PR #7" in done.stderr
+    assert merged(log) == []
 
 
 def test_a_missing_jq_is_a_named_prerequisite_failure(tmp_path):
@@ -992,7 +1047,10 @@ def test_refuses_a_request_id_whose_sequence_starts_at_zero(run, tmp_path):
 
 
 def test_refuses_an_approval_without_a_utc_timestamp(run, tmp_path):
-    path = approvals_file(tmp_path, [f"APPROVE | {REQUEST} | {HEAD} | manager | 2026-11-20 19:00:00"])
+    path = approvals_file(
+        tmp_path,
+        [REQUEST_RECORD, f"APPROVE | {REQUEST} | {HEAD} | manager | 2026-11-20 19:00:00"],
+    )
     done, log = run(reviews=[review()], args=("--approvals", str(path), "--request-id", REQUEST))
     assert done.returncode != 0
     assert "no APPROVE recorded" in done.stderr
@@ -1008,9 +1066,10 @@ def test_the_explicit_profile_wins_over_the_repository_profile(run):
 
 def test_resolves_the_fallback_author_on_the_pr_host(run):
     text = "version: 1\ngit:\n  merge_method: squash\nreview:\n  merge_owner: agent\n"
+    host_review = review(url="https://ghe.example.com/acme/widgets/pull/7#pullrequestreview-11")
     done, log = run(
         profile_text=text,
-        reviews=[review()],
+        reviews=[host_review],
         login="record-author",
         pr_url="https://ghe.example.com/acme/widgets/pull/7",
     )
@@ -1099,6 +1158,7 @@ def test_clears_every_inherited_git_variable_before_resolving_the_root(run, tmp_
     assert "GH_REPO" not in received
 
 
+@pytest.mark.skipif(os.geteuid() == 0, reason="root can traverse a mode-000 directory")
 def test_refuses_a_profile_candidate_whose_lookup_fails(run, tmp_path):
     # -e is false for a missing file and for a file under an unsearchable directory; the second
     # must fail closed instead of letting a lower-priority profile decide the merge policy.
@@ -1152,7 +1212,10 @@ def test_a_multiline_checks_diagnostic_cannot_forge_a_result_line(run):
 
 
 def test_refuses_an_impossible_approval_date(run, tmp_path):
-    path = approvals_file(tmp_path, [f"APPROVE | {REQUEST} | {HEAD} | manager | 2026-99-99T99:99:99Z"])
+    path = approvals_file(
+        tmp_path,
+        [REQUEST_RECORD, f"APPROVE | {REQUEST} | {HEAD} | manager | 2026-99-99T99:99:99Z"],
+    )
     done, log = run(reviews=[review()], args=("--approvals", str(path), "--request-id", REQUEST))
     assert done.returncode == 18
     assert merged(log) == []
@@ -1173,7 +1236,10 @@ def test_a_human_owner_still_needs_the_manager_approval(run, tmp_path):
 
 def test_a_human_owner_stops_after_a_matching_approve(run, tmp_path):
     text = PROFILE.replace("merge_owner: agent", "merge_owner: human")
-    path = approvals_file(tmp_path, [f"APPROVE | {REQUEST} | {HEAD} | manager | 2026-11-20T19:00:00Z"])
+    path = approvals_file(
+        tmp_path,
+        [REQUEST_RECORD, f"APPROVE | {REQUEST} | {HEAD} | manager | 2026-11-20T19:00:00Z"],
+    )
     done, log = run(
         profile_text=text,
         reviews=[review()],
@@ -1267,3 +1333,69 @@ def test_refuses_a_profile_candidate_behind_a_symlink_loop(run, tmp_path):
     assert ".agent-skills/profile.yaml" in done.stderr
     assert "could not be checked" in done.stderr
     assert log == []
+
+
+def test_refuses_a_matching_review_with_an_object_timestamp(run):
+    weird = review()
+    weird["submitted_at"] = {"bad": True}
+    done, log = run(reviews=[weird])
+    assert done.returncode == 15
+    assert "submitted_at" in done.stderr
+    assert merged(log) == []
+
+
+def test_refuses_a_matching_review_with_a_missing_timestamp(run):
+    weird = review()
+    del weird["submitted_at"]
+    done, log = run(reviews=[weird])
+    assert done.returncode == 15
+    assert "submitted_at" in done.stderr
+    assert merged(log) == []
+
+
+def test_accepts_an_uppercase_commit_id_at_the_reviewed_head(run):
+    upper = review()
+    upper["commit_id"] = HEAD.upper()
+    done, log = run(reviews=[upper])
+    assert done.returncode == 0, done.stderr
+    assert len(merged(log)) == 1
+
+
+def test_reports_an_already_merged_pr_without_running_a_merge(run):
+    merged_pr = pr_payload(pr_state="MERGED")
+    merged_pr["mergeCommit"] = {"oid": MERGED_COMMIT}
+    merged_pr["mergedAt"] = "2026-11-20T19:00:00Z"
+    done, log = run(reviews=[review()], pr=merged_pr)
+    assert done.returncode == 0, done.stderr
+    assert f"Result: already merged {MERGED_COMMIT}" in done.stdout
+    assert merged(log) == []
+
+
+def test_reports_an_already_merged_pr_without_a_merge_commit_as_unverified(run):
+    merged_pr = pr_payload(pr_state="MERGED")
+    merged_pr["mergeCommit"] = None
+    done, log = run(reviews=[review()], pr=merged_pr)
+    assert done.returncode == 17
+    assert "Result: merged but unverified" in done.stdout
+    assert merged(log) == []
+
+
+def test_reports_a_merge_without_a_merge_commit_as_merged_but_unverified(run):
+    done, log = run(reviews=[review()], confirm={"state": "MERGED", "mergedAt": "2026-11-20T19:00:00Z", "mergeCommit": None, "headRefOid": HEAD})
+    assert done.returncode == 17
+    assert "Result: merged but unverified" in done.stdout
+    assert "Result: merge blocked" not in done.stdout
+    assert len(merged(log)) == 1
+
+
+def test_reports_a_merge_at_another_head_as_merged_but_unverified(run):
+    confirm = {
+        "state": "MERGED",
+        "mergedAt": "2026-11-20T19:00:00Z",
+        "mergeCommit": {"oid": MERGED_COMMIT},
+        "headRefOid": MOVED,
+    }
+    done, log = run(reviews=[review()], confirm=confirm)
+    assert done.returncode == 17
+    assert "Result: merged but unverified" in done.stdout
+    assert MOVED in done.stderr and HEAD in done.stderr

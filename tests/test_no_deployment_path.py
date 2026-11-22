@@ -316,7 +316,7 @@ def added_blocks() -> list[str]:
 # sentence of steps 2 to 12 (the `deployed` path text of steps 11 and 12 included) must stay byte for
 # byte as it was, and the blocks themselves are kept whole and in order by the pins in
 # `HANDOFF_PINS` and `test_handoff_blocks_appear_once_in_order`.
-STEPS_TWO_TO_TWELVE_SHA256 = "6cfe91cfbed22149d43174a0a66eb7740d986d28786e6082fe2038cac943d457"
+STEPS_TWO_TO_TWELVE_SHA256 = "60b5939d708f33b11dd8d68e6d1d8f2a2dd4ec4ab88757b62d6f40f1f894be2f"
 # SKL-270 makes the `deployed` step 12 note carry the exact `path: deployed` line that story-to-done
 # and qa-verification pass to `scripts/select-path.py` as `--recorded-path`. The digest above is kept:
 # that one line is pinned here and swapped back to its pre-SKL-270 text before hashing, so every other

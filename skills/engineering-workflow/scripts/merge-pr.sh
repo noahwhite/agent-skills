@@ -9,7 +9,9 @@
 # The target repository is the current directory's, or --repo DIR; never the script's own location.
 # The skills repository itself is refused unless --repo names it explicitly.
 # --approvals names the merge-approval handshake's approvals file, and --request-id the request the
-# manager approved; the merge runs only once a matching APPROVE for the live head is recorded.
+# manager approved; the merge runs only once the file holds a valid REQUEST for that ID, this PR,
+# the live head, the selected review of record and a green CI state, followed by a matching APPROVE
+# for the same ID and head.
 #
 # It uses the ambient gh auth and never puts a token in argv or in its output.
 # Output: the PR number and URL, the live and reviewed head SHAs, the review URL, the check states,
@@ -32,6 +34,7 @@ NUMERIC_RE='^[0-9]+$'
 LOWER_SHA_RE='^[0-9a-f]{40}$'
 MIXED_SHA_RE='^[0-9A-Fa-f]{40}$'
 REVIEW_LINE_RE='^Review of record ([0-9A-Fa-f]{40})$'
+REVIEW_URL_RE='^https?://([^/]+)/([^/]+/[^/]+)/pull/([0-9]+)#pullrequestreview-[0-9]+$'
 UTC_TIMESTAMP_RE='^([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})Z$'
 NUMBER=""
 REPO=""
@@ -48,7 +51,9 @@ usage() {
 die() {
   local status="$1"
   shift
-  echo "$PROG: $*" >&2
+  # One line on stderr too: a refusal's reason can quote remote text, and a raw newline there could
+  # forge a result-looking line in a transcript that merges both streams.
+  printf '%s: %s\n' "$PROG" "$(one_line "$*")" >&2
   exit "$status"
 }
 
@@ -66,6 +71,15 @@ unconfirmed() {
   local status="$1"
   shift
   printf 'Result: merge submitted but not confirmed: %s\n' "$(one_line "$*")"
+  die "$status" "$*"
+}
+
+# GitHub reports the PR merged, but the evidence is incomplete or inconsistent: the merge happened,
+# so the caller must not treat this as "nothing merged" and must not retry it.
+merged_unverified() {
+  local status="$1"
+  shift
+  printf 'Result: merged but unverified: %s\n' "$(one_line "$*")"
   die "$status" "$*"
 }
 
@@ -87,6 +101,18 @@ gh_detail() {
   local text
   text="$(one_line "$1")"
   printf '%s' "${text:0:300}"
+}
+
+# gh's own stderr is captured rather than let through raw: a proxy or server error is external text
+# and must not be able to print a result-looking line beside the helper's own. The captured text is
+# emitted only through gh_detail, and only when a call fails. The capture file is created once the
+# prerequisites are checked, so a missing prerequisite is still the first thing named.
+gh_quiet() {
+  gh "$@" 2>"${GH_STDERR_FILE:?gh stderr capture file}"
+}
+gh_stderr_detail() {
+  [ -n "${GH_STDERR_FILE:-}" ] && [ -f "$GH_STDERR_FILE" ] || return 0
+  gh_detail "$(cat -- "$GH_STDERR_FILE")"
 }
 
 while [ $# -gt 0 ]; do
@@ -364,8 +390,13 @@ while IFS='=' read -r key value; do
 done <<<"$PROFILE_LINES"
 
 # The live PR: number, URL, state, draft flag, mergeability, merge state and head SHA.
-PR_JSON="$(gh pr view "$NUMBER" --json number,url,state,isDraft,mergeable,mergeStateStatus,headRefOid)" \
-  || refuse 12 "Could not read PR #$NUMBER with gh pr view"
+GH_STDERR_FILE="$(mktemp)" || {
+  printf '%s: could not create a file for gh stderr\n' "$PROG" >&2
+  exit 10
+}
+trap 'rm -f -- "${GH_STDERR_FILE:-}" "${CHECKS_ERR_FILE:-}"' EXIT
+PR_JSON="$(gh_quiet pr view "$NUMBER" --json number,url,state,isDraft,mergeable,mergeStateStatus,headRefOid,mergeCommit,mergedAt)" \
+  || refuse 12 "Could not read PR #$NUMBER with gh pr view: $(gh_stderr_detail)"
 json_field() { printf '%s' "$1" | jq -r "$2"; }
 PR_URL="$(json_field "$PR_JSON" .url)" \
   || refuse 12 "Could not read PR #$NUMBER with gh pr view: the response was not readable JSON"
@@ -390,12 +421,25 @@ HOST="${BASH_REMATCH[1]}"
 [ "${BASH_REMATCH[3]}" = "$NUMBER" ] || refuse 12 "the PR URL ($PR_URL) is not PR #$NUMBER"
 [[ "$HEAD" =~ $LOWER_SHA_RE ]] || refuse 12 "the PR head SHA read from GitHub is not a full commit SHA: '$HEAD'"
 
+# A re-run after a queued merge landed finds the PR already merged. That is a satisfied end state,
+# not a blocked merge and not a new merge: report the observed state and run no merge command.
+if [ "$PR_STATE" = "MERGED" ]; then
+  ALREADY_COMMIT="$(json_field "$PR_JSON" .mergeCommit.oid)" || ALREADY_COMMIT=""
+  printf 'PR: %s %s\n' "$NUMBER" "$PR_URL"
+  printf 'Live head: %s\n' "$HEAD"
+  [[ "$ALREADY_COMMIT" =~ $LOWER_SHA_RE ]] \
+    || merged_unverified 17 "PR #$NUMBER is already MERGED but reports no full merge commit; re-read the PR by hand"
+  printf 'Merge attempt: none (this invocation ran no merge command)\n'
+  printf 'Result: already merged %s\n' "$ALREADY_COMMIT"
+  exit 0
+fi
+
 # The expected author of the review of record: review.record_author when set, else the login of
 # the authenticated account.
 AUTHOR="$RECORD_AUTHOR"
 if [ -z "$AUTHOR" ]; then
-  AUTHOR="$(gh api user --jq .login --hostname "$HOST")" \
-    || refuse 15 "could not resolve the expected author: review.record_author is unset and gh api user --jq .login --hostname $HOST failed"
+  AUTHOR="$(gh_quiet api user --jq .login --hostname "$HOST")" \
+    || refuse 15 "could not resolve the expected author: review.record_author is unset and gh api user --jq .login --hostname $HOST failed: $(gh_stderr_detail)"
 fi
 [ -n "$AUTHOR" ] \
   || refuse 15 "no expected author: review.record_author is unset and gh api user --jq .login returned nothing"
@@ -403,21 +447,41 @@ fi
 # The PR reviews, through the paginated reviews endpoint on the PR's own host (`gh api` does not
 # infer the host from the checkout's remote, unlike `gh pr view`).
 REVIEWS_JSON="$(
-  gh api --paginate "repos/$SLUG/pulls/$NUMBER/reviews" --hostname "$HOST" --jq \
+  gh_quiet api --paginate "repos/$SLUG/pulls/$NUMBER/reviews" --hostname "$HOST" --jq \
     '.[] | {id: .id, author: .user.login, state: .state, commit_id: .commit_id, submitted_at: .submitted_at, html_url: .html_url, body: .body}'
-)" || refuse 15 "Could not read the reviews of PR #$NUMBER with gh api --paginate"
+)" || refuse 15 "Could not read the reviews of PR #$NUMBER with gh api --paginate: $(gh_stderr_detail)"
 
 # Among the COMMENTED reviews whose body begins with 'Review of record', the expected author's,
-# with the greatest submitted_at.
+# with the greatest submitted_at. Every matching review's timestamp is audited first: an
+# unorderable timestamp is a refusal, never a silent skip to an older review and never a clean
+# audit, and a review whose submitted_at is not a string counts as unorderable rather than failing
+# the audit with a jq error that the caller could mistake for success.
 SELECTED=""
 if [ -n "$REVIEWS_JSON" ]; then
+  UNUSABLE_COUNT="$(
+    printf '%s\n' "$REVIEWS_JSON" | jq -s -r --arg author "$AUTHOR" --arg re "$UTC_TIMESTAMP_RE" '
+      [ .[]
+        | select(.state == "COMMENTED")
+        | select((.body // "") | startswith("Review of record"))
+        | select(((.author // "") | ascii_downcase) == ($author | ascii_downcase))
+        | select(if (.submitted_at | type) == "string"
+                 then ((.submitted_at | test($re)) | not)
+                 else true end) ]
+      | length
+    '
+  )" || refuse 15 "could not audit the submitted_at timestamps of the reviews of PR #$NUMBER"
+  [[ "$UNUSABLE_COUNT" =~ $NUMERIC_RE ]] \
+    || refuse 15 "could not audit the submitted_at timestamps of the reviews of PR #$NUMBER"
+  if [ "$UNUSABLE_COUNT" != 0 ]; then
+    refuse 15 "$UNUSABLE_COUNT matching review-of-record marker(s) on PR #$NUMBER carry no usable submitted_at timestamp, so the latest matching review cannot be ordered"
+  fi
   SELECTED="$(
     printf '%s\n' "$REVIEWS_JSON" | jq -s --arg author "$AUTHOR" '
       [ .[]
         | select(.state == "COMMENTED")
         | select((.body // "") | startswith("Review of record"))
         | select(((.author // "") | ascii_downcase) == ($author | ascii_downcase)) ]
-      | sort_by(.submitted_at // "")
+      | sort_by(.submitted_at)
       | if length == 0 then empty else .[-1] end
     '
   )" || refuse 15 "Could not select the review of record from the reviews of PR #$NUMBER"
@@ -435,35 +499,18 @@ if [ -n "$SELECTED" ]; then
     || refuse 15 "the review of record selected on PR #$NUMBER was not readable JSON"
   REVIEW_URL="$(json_field "$SELECTED" .html_url)" \
     || refuse 15 "the review of record selected on PR #$NUMBER was not readable JSON"
-  REVIEW_SUBMITTED="$(json_field "$SELECTED" .submitted_at)" \
-    || refuse 15 "the review of record selected on PR #$NUMBER was not readable JSON"
-  # A matching marker review that cannot be ordered is refused by name, never reported as absent:
-  # claiming no review exists would hide the real cause. Every matching review is validated before
-  # the sort, so an unusable timestamp is never silently dropped in favour of an older review.
-  UNUSABLE_TIMESTAMPS="$(
-    printf '%s\n' "$REVIEWS_JSON" | jq -s -r --arg author "$AUTHOR" --arg re "$UTC_TIMESTAMP_RE" '
-      [ .[]
-        | select(.state == "COMMENTED")
-        | select((.body // "") | startswith("Review of record"))
-        | select(((.author // "") | ascii_downcase) == ($author | ascii_downcase))
-        | select(((.submitted_at // "") | test($re)) | not)
-        | ((.submitted_at // "") | tostring | gsub("[\\r\\n\\t]"; " ")) ]
-      | join("; ")
-    '
-  )" || UNUSABLE_TIMESTAMPS=""
-  if [ -n "$UNUSABLE_TIMESTAMPS" ]; then
-    refuse 15 "a review of record marker for PR #$NUMBER carries no usable submitted_at timestamp ($UNUSABLE_TIMESTAMPS), so the latest matching review cannot be ordered"
-  fi
   # The selected review is named in the summary and re-read by a human, so it must carry both a
-  # full commit and its own URL; a missing one is a refusal, never the literal `null` in a summary.
+  # full commit and a URL on this PR's own host and repository; anything else is a refusal, never
+  # the literal `null` or a URL that points somewhere else in the summary.
   [[ "$REVIEWED_COMMIT" =~ $MIXED_SHA_RE ]] \
     || refuse 15 "the review of record selected on PR #$NUMBER carries no full commit_id ('$(one_line "$REVIEWED_COMMIT")')"
   REVIEWED_COMMIT_LOWER="$(printf '%s' "$REVIEWED_COMMIT" | tr 'A-F' 'a-f')"
-  case "$REVIEW_URL" in
-    "" | "null" | "-")
-      refuse 15 "the review of record selected on PR #$NUMBER carries no html_url, so it cannot be named or re-read"
-      ;;
-  esac
+  if [[ ! "$REVIEW_URL" =~ $REVIEW_URL_RE ]]; then
+    refuse 15 "the review of record selected on PR #$NUMBER carries no usable html_url ('$(one_line "$REVIEW_URL")')"
+  fi
+  if [ "${BASH_REMATCH[1]}" != "$HOST" ] || [ "${BASH_REMATCH[2]}" != "$SLUG" ] || [ "${BASH_REMATCH[3]}" != "$NUMBER" ]; then
+    refuse 15 "the review of record URL ('$(one_line "$REVIEW_URL")') is not on PR #$NUMBER at $HOST/$SLUG"
+  fi
   # references/code-review.md: the first line is exactly `Review of record <full head SHA>`; any
   # other text in that position is not a review of record.
   FIRST_LINE="$(
@@ -538,11 +585,9 @@ CHECKS_ERR=""
 CHECKS_STATUS=0
 CHECKS_NONE=0
 CHECKS_ERR_FILE="$(mktemp)" || refuse 14 "could not create a file for the required-checks stderr of PR #$NUMBER"
-trap 'rm -f -- "${CHECKS_ERR_FILE:-}"' EXIT
 CHECKS_OUT="$(gh pr checks "$NUMBER" --required --json name,state 2>"$CHECKS_ERR_FILE")" || CHECKS_STATUS=$?
 CHECKS_ERR="$(cat -- "$CHECKS_ERR_FILE")"
 rm -f -- "$CHECKS_ERR_FILE"
-trap - EXIT
 case "$CHECKS_STATUS" in
   0 | 1 | 8) ;;
   *) refuse 14 "Could not read the required checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS): $(gh_detail "$CHECKS_ERR$CHECKS_OUT")" ;;
@@ -601,8 +646,8 @@ fi
 # whole readiness state, not just the SHA, and refuse on any change, on both the agent and the human
 # paths: --match-head-commit bounds only the head, so the human path has no merge attempt to catch a
 # base-only change.
-MOVED_JSON="$(gh pr view "$NUMBER" --json headRefOid,state,isDraft,mergeable,mergeStateStatus)" \
-  || refuse 16 "Could not re-read PR #$NUMBER after the checks read"
+MOVED_JSON="$(gh_quiet pr view "$NUMBER" --json headRefOid,state,isDraft,mergeable,mergeStateStatus)" \
+  || refuse 16 "Could not re-read PR #$NUMBER after the checks read: $(gh_stderr_detail)"
 RECHECK_HEAD="$(printf '%s' "$MOVED_JSON" | jq -r '.headRefOid // empty')" \
   || refuse 16 "Could not read the live head of PR #$NUMBER after the checks read"
 RECHECK_STATE="$(printf '%s' "$MOVED_JSON" | jq -r '.state // empty')" \
@@ -668,6 +713,11 @@ if [ -n "$APPROVALS" ]; then
     esac
     [ "$day" -ge 1 ] && [ "$day" -le "$days" ]
   }
+  # references/merge-approval.md: the engineer asks with a REQUEST for the request ID, the PR URL,
+  # the full head SHA, the review-of-record URL and a green CI state, and only then can a manager
+  # decision for that same ID and head authorize the merge. A decision whose head differs from the
+  # request's is invalid, and a decision with no valid request before it approves nothing.
+  REQUEST_SEEN=0
   DECISION=""
   CONFLICT=""
   while IFS= read -r LINE; do
@@ -675,18 +725,30 @@ if [ -n "$APPROVALS" ]; then
     [ "${#FIELD[@]}" -ge 3 ] || continue
     VERDICT="$(trim_field "${FIELD[0]}")"
     RECORD_ID="$(trim_field "${FIELD[1]}")"
-    RECORD_HEAD="$(trim_field "${FIELD[2]}")"
     [ "$RECORD_ID" = "$REQUEST_ID" ] || continue
-    [ "$RECORD_HEAD" = "$HEAD" ] || continue
     case "$VERDICT" in
+      REQUEST)
+        [ "${#FIELD[@]}" -eq 7 ] || continue
+        [ "$(trim_field "${FIELD[2]}")" = "$PR_URL" ] || continue
+        [ "$(trim_field "${FIELD[3]}")" = "$HEAD" ] || continue
+        [ "$(trim_field "${FIELD[4]}")" = "$REVIEW_URL" ] || continue
+        [ "$(trim_field "${FIELD[5]}")" = "green" ] || continue
+        is_utc_timestamp "$(trim_field "${FIELD[6]}")" || continue
+        REQUEST_SEEN=1
+        continue
+        ;;
       APPROVE)
+        [ "$REQUEST_SEEN" = 1 ] || continue
         [ "${#FIELD[@]}" -eq 5 ] || continue
+        [ "$(trim_field "${FIELD[2]}")" = "$HEAD" ] || continue
         [ -n "$(trim_field "${FIELD[3]}")" ] || continue
         is_utc_timestamp "$(trim_field "${FIELD[4]}")" || continue
         CURRENT="APPROVE"
         ;;
       BOUNCE)
+        [ "$REQUEST_SEEN" = 1 ] || continue
         [ "${#FIELD[@]}" -eq 6 ] || continue
+        [ "$(trim_field "${FIELD[2]}")" = "$HEAD" ] || continue
         [ -n "$(trim_field "${FIELD[3]}")" ] || continue
         [ -n "$(trim_field "${FIELD[4]}")" ] || continue
         is_utc_timestamp "$(trim_field "${FIELD[5]}")" || continue
@@ -703,6 +765,9 @@ if [ -n "$APPROVALS" ]; then
   if [ -n "$CONFLICT" ]; then
     printf 'Warning: conflicting decisions for %s at head %s in %s: %s; the first decision stands\n' \
       "$REQUEST_ID" "$HEAD" "$APPROVALS" "$CONFLICT" >&2
+  fi
+  if [ "$REQUEST_SEEN" != 1 ]; then
+    refuse 18 "no valid REQUEST for $REQUEST_ID at head $HEAD in file $APPROVALS: the request must name this PR, this head, the selected review of record and a green CI state before any decision can authorize a merge"
   fi
   case "$DECISION" in
     APPROVE) ;;
@@ -721,7 +786,7 @@ fi
 # refuses here, and a rejected head change below is never retried without it. The already-captured
 # help is matched by a bash pattern: piping it into `grep -q` would let grep close the pipe early,
 # and `pipefail` would then turn a successful match into a false "unsupported" refusal.
-MERGE_HELP="$(gh pr merge --help)" || refuse 17 "could not read gh pr merge --help"
+MERGE_HELP="$(gh_quiet pr merge --help)" || refuse 17 "could not read gh pr merge --help: $(gh_stderr_detail)"
 case "$MERGE_HELP" in
   *--match-head-commit*) ;;
   *) refuse 17 "this gh cannot carry an expected-head condition (gh pr merge has no --match-head-commit)" ;;
@@ -735,28 +800,28 @@ esac
 
 MERGE_OUT=""
 MERGE_STATUS=0
-MERGE_OUT="$(gh pr merge "$NUMBER" --match-head-commit "$HEAD" "$METHOD_FLAG")" || MERGE_STATUS=$?
+MERGE_OUT="$(gh_quiet pr merge "$NUMBER" --match-head-commit "$HEAD" "$METHOD_FLAG")" || MERGE_STATUS=$?
 
 # Success only once GitHub reports the PR merged, at the reviewed head; a queued merge is not a
 # merge. The read runs after every attempt, so a client error that arrives after GitHub accepted the
 # merge is reported as the merge it is, and it never retries the mutation. The attempt's own exit
 # status, not its captured output, decides whether it failed.
-CONFIRM_JSON="$(gh pr view "$NUMBER" --json state,mergedAt,mergeCommit,headRefOid)" \
-  || unconfirmed 17 "could not re-read PR #$NUMBER after the merge command"
+CONFIRM_JSON="$(gh_quiet pr view "$NUMBER" --json state,mergedAt,mergeCommit,headRefOid)" \
+  || unconfirmed 17 "could not re-read PR #$NUMBER after the merge command: $(gh_stderr_detail)"
 CONFIRM_STATE="$(printf '%s' "$CONFIRM_JSON" | jq -r '.state // empty' 2>/dev/null)" || CONFIRM_STATE=""
 [ -n "$CONFIRM_STATE" ] \
   || unconfirmed 17 "could not read PR #$NUMBER after the merge command"
 CONFIRM_HEAD="$(printf '%s' "$CONFIRM_JSON" | jq -r '.headRefOid // empty' 2>/dev/null)" || CONFIRM_HEAD=""
 MERGE_COMMIT="$(printf '%s' "$CONFIRM_JSON" | jq -r '.mergeCommit.oid // empty' 2>/dev/null)" || MERGE_COMMIT=""
 if [ "$MERGE_STATUS" != 0 ] && [ "$CONFIRM_STATE" != "MERGED" ]; then
-  refuse 17 "gh pr merge $NUMBER --match-head-commit $HEAD $METHOD_FLAG failed (exit $MERGE_STATUS): $(gh_detail "$MERGE_OUT")"
+  refuse 17 "gh pr merge $NUMBER --match-head-commit $HEAD $METHOD_FLAG failed (exit $MERGE_STATUS): $(gh_detail "$MERGE_OUT") $(gh_stderr_detail)"
 fi
 [ "$CONFIRM_STATE" = "MERGED" ] \
   || unconfirmed 17 "the merge was submitted, but PR #$NUMBER is in state $CONFIRM_STATE, not MERGED yet (a queued merge is not a success; re-read the PR before any retry)"
 [ "$CONFIRM_HEAD" = "$HEAD" ] \
-  || refuse 17 "the merge attempt ran, but PR #$NUMBER reports merged head $CONFIRM_HEAD, not the reviewed head $HEAD"
+  || merged_unverified 17 "the merge attempt ran, and PR #$NUMBER reports merged head $CONFIRM_HEAD, not the reviewed head $HEAD"
 [[ "$MERGE_COMMIT" =~ $LOWER_SHA_RE ]] \
-  || refuse 17 "PR #$NUMBER reports no full merge commit after merging head $HEAD ('$(one_line "$MERGE_COMMIT")')"
+  || merged_unverified 17 "PR #$NUMBER reports MERGED but no full merge commit after merging head $HEAD ('$(one_line "$MERGE_COMMIT")')"
 
 # Report the attempt and the observed state separately: a client error can arrive after GitHub
 # accepted the merge, and a MERGED PR is a fact about the PR, not proof that this call merged it.
