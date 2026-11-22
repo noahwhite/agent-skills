@@ -870,7 +870,7 @@ sandbox_error_in() {
 }
 
 accept_phase() {  # $1 = phase, $2 = stderr log or "": validate a freshly written artifact, then stamp it
-  local art key launched launched_arg expected size; art="$(artifact_for "$1")"; key="$(state_key "$1")"
+  local art key launched expected size stripped; art="$(artifact_for "$1")"; key="$(state_key "$1")"
   [ -f "$RUN_DIR/$key.launch" ] && [ -f "$RUN_DIR/$key.binding" ] && [ -f "$RUN_DIR/$key.primary" ] \
     || die 15 "no launch for $1 in this run (never started, discarded by a later re-run of an earlier phase, or an arbitration already accepted); write its dossier with 'dossier $1' first."
   if [ "$(cat -- "$RUN_DIR/$key.binding")" != "$(binding_text "$1")" ]; then
@@ -878,21 +878,23 @@ accept_phase() {  # $1 = phase, $2 = stderr log or "": validate a freshly writte
   fi
   # `--shard 1/1` and an omitted flag share a binding byte for byte, so the hunt's launch carries the
   # exact selection the dossier was written for: a record must repeat it exactly, and the marker must
-  # be exactly that one selection line (an optional trailing newline allowed). The printed value is
-  # sanitised, so a tampered marker can neither forge a diagnosis line nor make the refusal unbounded.
+  # be exactly one printable selection line (an optional trailing newline allowed). A tampered marker
+  # can therefore neither forge a diagnosis line nor make the refusal unbounded.
   if [ "$1" = "hunt" ]; then
     launched=""
     expected="$(launch_text "$1")"
     size="$(wc -c < "$RUN_DIR/$key.launch" 2>/dev/null)" || size=0
     IFS= read -r -n 64 launched < "$RUN_DIR/$key.launch" 2>/dev/null || true
-    # Exactly one short line, with or without its trailing newline: anything else is unusable state.
-    if [ -z "$launched" ] \
+    # Exactly one short printable line, with or without its trailing newline: anything else is
+    # unusable state, never a selection.
+    stripped="$(LC_ALL=C tr -d '[:print:]\n' < "$RUN_DIR/$key.launch" 2>/dev/null | wc -c)" || stripped=0
+    if [ "$stripped" != "0" ] \
+      || [ -z "$launched" ] \
       || { [ "$size" != "${#launched}" ] && [ "$size" != "$(( ${#launched} + 1 ))" ]; }; then
       die 15 "the hunt launch marker $RUN_DIR/$key.launch is missing, empty, unreadable or not exactly one selection line; start the hunt phase again with 'dossier hunt'."
     fi
     if [ "$launched" != "$expected" ]; then
-      launched_arg="$(printf '%s' "$launched" | LC_ALL=C tr -c '[:print:]' '?')"
-      die 13 "the hunt launch records '$launched_arg' but this record invocation selects '$expected'; record the dossier's selection (--shard K/N, or no --shard with ADVERSARIAL_SHARD unset when it recorded shard=none), or start the hunt phase again with 'dossier hunt'."
+      die 13 "the hunt launch records '$launched' but this record invocation selects '$expected'; record the dossier's selection (--shard K/N, or no --shard with ADVERSARIAL_SHARD unset when it recorded shard=none), or start the hunt phase again with 'dossier hunt'."
     fi
   fi
   [ -s "$art" ] || die 15 "the $1 agent produced no report ($art is missing or empty)."

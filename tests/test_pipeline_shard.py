@@ -394,6 +394,31 @@ def test_record_hunt_refuses_a_shard_selection_the_dossier_did_not_use(accepted_
     assert run_script("cleanup", str(checkout), "--repo", str(repo), env=env).returncode == 0
 
 
+def test_an_environment_supplied_selection_is_recorded_and_required(accepted_gate):
+    repo, scratch, env = accepted_gate
+    run_dir = paths(repo, env)["run"]
+    report = run_dir / "phase2-hunt.md"
+    sharded_env = {**env, "ADVERSARIAL_SHARD": "1/1"}
+    dossier = run_script(
+        "dossier", "hunt", "--repo", str(repo), "--base", "HEAD", "--scratch", str(scratch),
+        env=sharded_env,
+    )
+    checkout, _ = dossier_of(dossier)
+    assert (run_dir / "hunt.launch").read_bytes() == b"shard=1/1\n"
+    report.write_text("REVIEW-RAN: yes\nenv\n")
+    # The environment supplies the selection as the flag does, so the same value must be repeated.
+    dropped = run_script("record", "hunt", "--repo", str(repo), "--base", "HEAD", env=env)
+    assert dropped.returncode == 13, dropped.stdout + dropped.stderr
+    assert "records 'shard=1/1'" in dropped.stderr and "selects 'shard=none'" in dropped.stderr, dropped.stderr
+    assert not Path(f"{report}.stamp").exists()
+    recorded = run_script(
+        "record", "hunt", "--repo", str(repo), "--base", "HEAD", env=sharded_env,
+    )
+    assert recorded.returncode == 0, recorded.stdout + recorded.stderr
+    assert Path(f"{report}.stamp").exists()
+    assert run_script("cleanup", str(checkout), "--repo", str(repo), env=env).returncode == 0
+
+
 def test_an_unreadable_hunt_launch_is_refused_and_never_read_as_empty(accepted_gate):
     repo, scratch, env = accepted_gate
     run_dir = paths(repo, env)["run"]
@@ -429,22 +454,21 @@ def test_a_malformed_launch_marker_is_refused_with_a_bounded_sanitised_diagnosis
         "dossier", "hunt", "--repo", str(repo), "--base", "HEAD", "--scratch", str(scratch), env=env,
     )
     checkout, _ = dossier_of(dossier)
-    # Anything but the one selection line is an unusable state, not a selection.
-    for marker in (b"shard=none\nTRAIL\n", b"shard=none\n\n", b"shard=none\x00\n"):
+    # Anything but the one printable selection line is an unusable state, not a selection.
+    for marker in (b"shard=none\nTRAIL\n", b"shard=none\n\n", b"shard=none\x00\n",
+                   b"shard=none\x00", b"shard=none\r\n", b"shard=no\x1be\n"):
         launch.write_bytes(marker)
         report.write_text("REVIEW-RAN: yes\nplain\n")
         refused = run_script("record", "hunt", "--repo", str(repo), "--base", "HEAD", env=env)
         assert refused.returncode == 15, (marker, refused.stdout + refused.stderr)
         assert "not exactly one selection line" in refused.stderr, refused.stderr
         assert not Path(f"{report}.stamp").exists()
-    # A wrong selection of the right shape prints its value neutralised, never raw.
-    for marker, shown in ((b"shard=no\x1be\n", "shard=no?e"), (b"shard=none\r\n", "shard=none?")):
-        launch.write_bytes(marker)
-        report.write_text("REVIEW-RAN: yes\nplain\n")
-        escaped = run_script("record", "hunt", "--repo", str(repo), "--base", "HEAD", env=env)
-        assert escaped.returncode == 13, (marker, escaped.stdout + escaped.stderr)
-        assert "\x1b" not in escaped.stderr and "\r" not in escaped.stderr, escaped.stderr
-        assert f"records '{shown}'" in escaped.stderr, escaped.stderr
+    # A printable marker naming another selection is a mismatch that names both values.
+    launch.write_bytes(b"shard=1/1\n")
+    report.write_text("REVIEW-RAN: yes\nplain\n")
+    mismatch = run_script("record", "hunt", "--repo", str(repo), "--base", "HEAD", env=env)
+    assert mismatch.returncode == 13, mismatch.stdout + mismatch.stderr
+    assert "records 'shard=1/1'" in mismatch.stderr and "selects 'shard=none'" in mismatch.stderr, mismatch.stderr
     # A huge marker: the diagnosis stays bounded.
     launch.write_bytes(b"A" * (4 * 1024 * 1024))
     report.write_text("REVIEW-RAN: yes\nplain\n")
