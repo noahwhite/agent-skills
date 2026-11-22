@@ -138,6 +138,17 @@
 # any was left out. It has no such heading when none matches. With the sweep skipped (--no-sweep),
 # no phase shows them.
 #
+# Acceptance-rule probes (AC9): the sweep and hunt dossiers carry an '===== ACCEPTANCE RULES ARE
+# BEHAVIOURAL PROBES' block, placed before the embedded context so it points at the criteria below it,
+# and each phase's report answers it: every explicitly stated behavioural rule in the story's acceptance
+# criteria is enumerated and exercised against the reviewed head by running the command or sequence the
+# rule names, and each is reported PASSED or FAILED with the command and the observation, never passed
+# from the diff or the documentation alone. A rule the code asserts, documents or claims but does not
+# enforce is an enforcement finding at blocking severity (High or Critical), never a low-severity
+# documentation finding. The sweep's checkout is read-only, so a rule it cannot exercise without
+# changing a file is reported FAILED with that reason and repeated as a candidate for the hunt. The
+# arbitrate dossier carries no such block: the correction is the sweep's and the hunt's only.
+#
 # Embedded diff: the sweep and hunt dossiers embed `git diff --no-ext-diff --unified=1` of the run's
 # range, and DIFF_CAP_BYTES (4096, in bytes of unified-diff text, per file and not a bound on the whole
 # diff) caps each file's section: its `diff --git` header, hunk headers and hunks together. A section at
@@ -1902,6 +1913,21 @@ emit_prior() {  # $1 = phase, $2 = text when that phase is intentionally absent 
   if accepted "$1"; then cat -- "$(artifact_for "$1")"; else echo "$2"; fi
 }
 
+# The acceptance-rule probe block every sweep and hunt dossier carries (see "Acceptance-rule probes" in
+# the header). Its first sentence points at the criteria, so it is emitted before the embedded context;
+# each phase adds its own sentence about where it may run the rules' commands and where the answers go.
+emit_rule_probes() {
+  echo "===== ACCEPTANCE RULES ARE BEHAVIOURAL PROBES ====="
+  echo "Every explicitly stated behavioural rule in the acceptance criteria below - each command, flag,"
+  echo "argument, sequence, exit code, file name and state change a criterion names - is a probe you run,"
+  echo "never a claim you judge: exercise each one against the reviewed head by running the command or"
+  echo "sequence the rule names, and report it PASSED or FAILED with the command you ran and what you"
+  echo "observed. Never pass a rule from reading the diff or the documentation alone."
+  echo "A rule the code asserts, documents or claims but does not enforce is an ENFORCEMENT finding at"
+  echo "blocking severity (High or Critical), naming the documented rule and the command that contradicts"
+  echo "it - never a low-severity documentation finding."
+}
+
 write_dossier() {  # $1 = phase, $2 = dossier path, $3 = the phase's checkout (exists already)
   local p="$1" out="$2" co="$3" items item kept dropped
   case "$p" in
@@ -1909,8 +1935,11 @@ write_dossier() {  # $1 = phase, $2 = dossier path, $3 = the phase's checkout (e
       items="$(checklist_items)"
       {
         echo "You are a high-volume adversarial code reviewer doing a FAST FIRST-PASS SWEEP."
-        echo "Output ONLY a structured candidate list - no prose, no fixes, no plan. One entry per candidate:"
+        echo "Output the structured candidate list, then the acceptance-rule probe table, and nothing else -"
+        echo "no prose, no fixes, no plan. One candidate entry per line:"
         echo "- file:line | severity (Critical/High/Medium/Low) | one-line claim | the concrete failure scenario"
+        echo "One probe line per acceptance rule, in the order the criteria state them:"
+        echo "RULE <n> | PASSED or FAILED | the rule in one line | the command you ran | what you observed"
         echo "Cover: vulnerability vectors, logic flaws, breaking changes, API/contract mismatches, test gaps, code smells."
         echo "Be exhaustive; volume over precision, and mark speculation as such."
         echo "Do NOT modify any files: the checkout on the CHECKOUT: line below is read-only, for reading code"
@@ -1918,6 +1947,11 @@ write_dossier() {  # $1 = phase, $2 = dossier path, $3 = the phase's checkout (e
         echo "The session's scratch directory is ${SESSION_SCRATCH:-$SCRATCH}; keep any artifact you create there."
         echo "The FIRST line of your report must be exactly 'REVIEW-RAN: yes' when you read the diff below; otherwise"
         echo "make it 'REVIEW-RAN: no - <reason>'. A report without that line is treated as a review that did not run."
+        echo
+        emit_rule_probes
+        echo "Your checkout is read-only: change no file in it. A rule whose check needs a file changed there"
+        echo "cannot be exercised by this phase: report it FAILED with that reason and repeat it as a candidate"
+        echo "for the hunt phase to exercise."
         echo
         emit_context "$co" 1
         if [ -n "$items" ]; then
@@ -1959,6 +1993,11 @@ write_dossier() {  # $1 = phase, $2 = dossier path, $3 = the phase's checkout (e
         echo "line of your report; never report a clean result for a review that could not run."
         echo "The FIRST line of your report must be exactly 'REVIEW-RAN: yes' when you read the diff below and ran your checks in the checkout; otherwise"
         echo "make it 'REVIEW-RAN: no - <reason>'. A report without that line is treated as a review that did not run."
+        echo
+        emit_rule_probes
+        echo "Mutate and revert inside your throwaway checkout as needed to exercise each rule, and put the"
+        echo "probe lines after your findings, one rule per line:"
+        echo "RULE <n> | PASSED or FAILED | the rule in one line | the command you ran | what you observed"
         echo
         echo "===== CANDIDATES (Phase 1 sweep) ====="
         emit_prior sweep "(sweep not configured - hunt only)"

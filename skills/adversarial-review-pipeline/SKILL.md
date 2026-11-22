@@ -201,6 +201,13 @@ Fix a FAIL before spending any model budget.
 The sweeper returns a structured candidate list, each entry with `file:line`, a severity, a one-line claim and a concrete failure scenario.
 Expect false positives; Phase 2 exists to remove them.
 
+### Acceptance rules are behavioural probes
+
+Every sweep and hunt dossier carries an `===== ACCEPTANCE RULES ARE BEHAVIOURAL PROBES` block, and both phases answer it.
+Each explicitly stated behavioural rule in the story's acceptance criteria - every command, flag, argument, sequence, exit code, file name and state change a criterion names - is enumerated and exercised against the reviewed head by running the command or sequence the rule names, and reported PASSED or FAILED with the command and the observation; a rule is never passed from the diff or the documentation alone.
+A rule the code asserts, documents or claims but does not enforce is an enforcement finding at blocking severity (`High` or `Critical`), naming the documented rule and the command that contradicts it - never a low-severity documentation finding.
+The sweep's checkout is read-only, so a rule whose check needs a file changed there is reported `FAILED` with that reason and repeated as a candidate for the hunt, which mutates and reverts its own throwaway checkout to exercise it.
+
 The sweep dossier ends with a `Review checklist` section: each item of `.agent-skills/review-checklist.txt`, read from the base, whose glob matches a changed path (`*` crosses `/`); `checklist --base "$BASE"` prints them.
 The file holds one `<bash glob> | <review item>` per line; `#` comments and blank lines are ignored.
 `--no-sweep` skips them.
@@ -210,6 +217,8 @@ The file holds one `<bash glob> | <review item>` per line; `#` comments and blan
 ```bash
 "$PIPELINE" run hunt --base "$BASE" --model "<profile.review.pre_pr.hunter model>" --spec "$SPEC" --scratch "$scratch" --agent-cmd "<template>"
 ```
+
+The hunt answers the same `ACCEPTANCE RULES ARE BEHAVIOURAL PROBES` block as the sweep: it enumerates every explicitly stated behavioural rule in the acceptance criteria, exercises each one in its throwaway checkout with the command or sequence the rule names (mutating and reverting as needed), and reports each PASSED or FAILED with the command and the observation after its findings, under the enforcement rule in "Acceptance rules are behavioural probes" above.
 
 ### Sharded hunt
 
