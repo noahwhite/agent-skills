@@ -1271,6 +1271,46 @@ def test_a_title_in_an_initial_or_a_numbered_item_is_not_a_sentence_end(tmp_path
     assert res.returncode == 0, res.stderr
 
 
+def test_a_full_width_terminator_after_a_reference_is_refused(tmp_path):
+    label = "AC1 - Check profile.qa.evidence_dir\u3002Then record the result."
+    res = run_in(tmp_path, "--key", "SKL-386", "--item", label)
+    assert res.returncode == 1, res.stderr
+    assert "more than one sentence" in res.stderr
+    assert not (tmp_path / "docs").exists()
+
+
+def test_a_leading_numbered_marker_is_not_a_sentence_end(tmp_path):
+    label = "2. The evidence PR is merged"
+    res = run(tmp_path, "--key", "SKL-386", "--item", label)
+    assert res.returncode == 0, res.stderr
+
+
+def test_a_property_that_references_an_array_definition_is_refused(tmp_path):
+    checkout = schema_checkout(tmp_path)
+    (checkout / "profile" / "schema.json").write_text(
+        json.dumps(
+            {
+                "type": "object",
+                "properties": {"items": {"$ref": "#/$defs/list"}},
+                "$defs": {"list": {"type": "array", "items": {"type": "string"}}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    label = "AC1 - profile.items[] is set"
+    res = run_in(checkout, "--key", "SKL-386", "--item", label)
+    assert res.returncode == 1, res.stderr
+    assert not (checkout / "docs").exists()
+
+
+def test_a_key_with_a_trailing_path_component_is_refused(tmp_path):
+    for key in ("SKL-386/README", "SKL-386/../SKL-1"):
+        res = run(tmp_path, "--key", key)
+        assert res.returncode == 1, res.stderr
+        assert len(res.stderr.splitlines()) == 1, res.stderr
+        assert tree_state(tmp_path) == {}
+
+
 def test_a_standalone_dot_before_a_capital_is_a_sentence_end(tmp_path):
     label = "AC1 - do this . Then push"
     res = run(tmp_path, "--key", "SKL-386", "--item", label)

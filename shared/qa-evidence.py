@@ -255,11 +255,13 @@ def schema_node(schema: dict, path: str):
             node = node["additionalProperties"]
         else:
             return None
-        node = deref(node, defs)
         if is_array:
-            if not isinstance(node, dict) or node.get("type") != "array" or "items" not in node:
+            if not isinstance(node, dict) or node.get("type") != "array":
                 return None
-            node = node["items"]
+            items = node.get("items")
+            if not isinstance(items, dict):
+                return None
+            node = items
         node = deref(node, defs)
     return node
 
@@ -328,12 +330,8 @@ def key_content_problem(key: str, *, spelling: bool) -> str | None:
 
 def mask_sentence_noise(text: str) -> str:
     """`text` with the dots that never end a sentence masked, so only real boundaries remain."""
-    def reference(match) -> str:
-        # The dots inside a reference are never followed by whitespace, so only its trailing
-        # sentence-final punctuation survives the mask.
-        return "profile" + match.group(1)[len(match.group(1).rstrip(".")):]
-
-    return NEVER_BOUNDARY_RE.sub(lambda match: match.group(0)[:-1], PROFILE_REF_RE.sub(reference, text))
+    text = re.sub(r"^\d+\.(?=\s)", lambda match: match.group(0)[:-1], text)
+    return NEVER_BOUNDARY_RE.sub(lambda match: match.group(0)[:-1], text)
 
 
 def more_than_one_sentence(label: str) -> bool:
