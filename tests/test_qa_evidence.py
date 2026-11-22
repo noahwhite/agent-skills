@@ -423,13 +423,25 @@ def test_a_label_carrying_a_runtime_term_is_refused(tmp_path, label):
     assert tree_state(tmp_path) == before
 
 
+def schema_checkout(tmp_path: Path) -> Path:
+    """A temporary checkout that carries this repository's own profile schema."""
+    checkout = tmp_path / "checkout"
+    (checkout / ".git").mkdir(parents=True)
+    (checkout / "profile").mkdir()
+    (checkout / "profile" / "schema.json").write_text(
+        (ROOT / "profile" / "schema.json").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    return checkout
+
+
 def test_a_label_carrying_an_unresolvable_profile_reference_is_refused(tmp_path):
+    checkout = schema_checkout(tmp_path)
     label = "AC3 - profile.not.a.key stays unset"
-    before = tree_state(tmp_path)
-    res = run_in(ROOT, "--key", "SKL-386", "--item", label, "--evidence-dir", str(tmp_path / "evidence"))
+    before = tree_state(checkout)
+    res = run_in(checkout, "--key", "SKL-386", "--item", label)
     assert res.returncode == 1
     assert len(res.stderr.splitlines()) == 1, res.stderr
-    assert tree_state(tmp_path) == before
+    assert tree_state(checkout) == before
 
 
 def test_a_label_carrying_a_resolvable_profile_reference_is_accepted(tmp_path):
@@ -437,19 +449,30 @@ def test_a_label_carrying_a_resolvable_profile_reference_is_accepted(tmp_path):
     assert profile_refs(label) == ["qa.evidence_dir"]
     schema = json.loads((ROOT / "profile" / "schema.json").read_text(encoding="utf-8"))
     assert "evidence_dir" in schema["properties"]["qa"]["properties"]
-    res = run_in(ROOT, "--key", "SKL-386", "--item", label, "--evidence-dir", str(tmp_path / "evidence"))
+    checkout = schema_checkout(tmp_path)
+    res = run_in(checkout, "--key", "SKL-386", "--item", label)
     assert res.returncode == 0, res.stderr
-    readme = tmp_path / "evidence" / "SKL-386" / "README.md"
+    readme = checkout / "docs" / "qa-evidence" / "SKL-386" / "README.md"
     assert row_cells(table_rows(readme.read_text(encoding="utf-8"))[0])[0] == label
 
 
 def test_british_spelling_is_refused_outside_the_evidence_tree(tmp_path):
     label = "AC1 - the " + BRITISH_ARTIFACT + " path"
     assert BRITISH_ARTIFACT in label.lower()
-    res = run_in(ROOT, "--key", "SKL-386", "--item", label, "--evidence-dir", str(tmp_path / "tmp-evidence"))
+    checkout = schema_checkout(tmp_path)
+    before = tree_state(checkout)
+    res = run_in(checkout, "--key", "SKL-386", "--item", label, "--evidence-dir", "notes/evidence")
     assert res.returncode == 1
     assert len(res.stderr.splitlines()) == 1, res.stderr
-    assert tree_state(tmp_path) == {}
+    assert tree_state(checkout) == before
+
+
+def test_an_external_destination_does_not_inherit_the_callers_schema(tmp_path):
+    label = "AC1 - profile.not.a.key is set"
+    destination = tmp_path / "outside"
+    res = run_in(ROOT, "--key", "SKL-386", "--item", label, "--evidence-dir", str(destination))
+    assert res.returncode == 0, res.stderr
+    assert (destination / "SKL-386" / "README.md").is_file()
 
 
 def test_british_spelling_is_accepted_inside_the_evidence_tree(tmp_path):
@@ -588,58 +611,65 @@ def test_a_profile_reference_the_lint_rejects_is_refused(tmp_path, ref):
     label = f"AC1 - profile.{ref} is set"
     lint_rejects = ref.startswith("extra") or not resolve_schema_path(ref)
     assert lint_rejects, ref
-    res = run_in(ROOT, "--key", "SKL-386", "--item", label, "--evidence-dir", str(tmp_path / "evidence"))
+    checkout = schema_checkout(tmp_path)
+    res = run_in(checkout, "--key", "SKL-386", "--item", label)
     assert res.returncode == 1, res.stderr
     assert len(res.stderr.splitlines()) == 1, res.stderr
-    assert tree_state(tmp_path) == {}
+    assert not (checkout / "docs").exists()
 
 
 def test_a_backtick_wrapped_unresolvable_reference_is_refused(tmp_path):
+    checkout = schema_checkout(tmp_path)
     label = "AC1 - `profile.not.a.key` is set"
-    res = run_in(ROOT, "--key", "SKL-386", "--item", label, "--evidence-dir", str(tmp_path / "evidence"))
+    res = run_in(checkout, "--key", "SKL-386", "--item", label)
     assert res.returncode == 1, res.stderr
     assert len(res.stderr.splitlines()) == 1, res.stderr
-    assert tree_state(tmp_path) == {}
+    assert not (checkout / "docs").exists()
 
 
 def test_a_dotted_identifier_inside_a_backtick_span_is_literal(tmp_path):
+    checkout = schema_checkout(tmp_path)
     label = "AC1 - `profile.qa.evidence_dir.` is set"
-    res = run_in(ROOT, "--key", "SKL-386", "--item", label, "--evidence-dir", str(tmp_path / "evidence"))
+    res = run_in(checkout, "--key", "SKL-386", "--item", label)
     assert res.returncode == 0, res.stderr
-    readme = tmp_path / "evidence" / "SKL-386" / "README.md"
+    readme = checkout / "docs" / "qa-evidence" / "SKL-386" / "README.md"
     assert row_cells(table_rows(readme.read_text(encoding="utf-8"))[0])[0] == label
 
 
 def test_an_html_attribute_reference_is_refused(tmp_path):
+    checkout = schema_checkout(tmp_path)
     label = 'AC1 - <img alt="profile.not.a.key"> is set'
-    res = run_in(ROOT, "--key", "SKL-386", "--item", label, "--evidence-dir", str(tmp_path / "evidence"))
+    res = run_in(checkout, "--key", "SKL-386", "--item", label)
     assert res.returncode == 1, res.stderr
     assert len(res.stderr.splitlines()) == 1, res.stderr
-    assert tree_state(tmp_path) == {}
+    assert not (checkout / "docs").exists()
 
 
 def test_a_link_wrapped_reference_is_literal_text(tmp_path):
+    checkout = schema_checkout(tmp_path)
     label = "AC1 - [profile.git.integration_branch](guide.md) is set"
-    res = run_in(ROOT, "--key", "SKL-386", "--item", label, "--evidence-dir", str(tmp_path / "evidence"))
+    res = run_in(checkout, "--key", "SKL-386", "--item", label)
     assert res.returncode == 1, res.stderr
     assert len(res.stderr.splitlines()) == 1, res.stderr
-    assert tree_state(tmp_path) == {}
+    assert not (checkout / "docs").exists()
 
 
 def test_a_reference_in_link_syntax_is_scanned_literally(tmp_path):
+    checkout = schema_checkout(tmp_path)
     label = "AC1 - [the guide](profile.not.a.key)"
-    res = run_in(ROOT, "--key", "SKL-386", "--item", label, "--evidence-dir", str(tmp_path / "evidence"))
+    res = run_in(checkout, "--key", "SKL-386", "--item", label)
     assert res.returncode == 1, res.stderr
     assert len(res.stderr.splitlines()) == 1, res.stderr
-    assert tree_state(tmp_path) == {}
+    assert not (checkout / "docs").exists()
 
 
 def test_an_emphasis_wrapped_reference_is_literal_text(tmp_path):
+    checkout = schema_checkout(tmp_path)
     label = "AC1 - **profile.git.integration_branch** is set"
-    res = run_in(ROOT, "--key", "SKL-386", "--item", label, "--evidence-dir", str(tmp_path / "evidence"))
+    res = run_in(checkout, "--key", "SKL-386", "--item", label)
     assert res.returncode == 1, res.stderr
     assert len(res.stderr.splitlines()) == 1, res.stderr
-    assert tree_state(tmp_path) == {}
+    assert not (checkout / "docs").exists()
 
 
 def test_a_trailing_doubled_dot_does_not_slip_through(tmp_path):
@@ -1237,6 +1267,34 @@ def test_another_script_terminator_separates_sentences(tmp_path, terminator):
 def test_a_title_in_an_initial_or_a_numbered_item_is_not_a_sentence_end(tmp_path, label):
     res = run(tmp_path, "--key", "SKL-386", "--item", label)
     assert res.returncode == 0, res.stderr
+
+
+def test_a_standalone_path_argument_is_not_a_sentence_end(tmp_path):
+    label = "AC7 - every changed tracked file passes ruff check . and pytest -q"
+    res = run(tmp_path, "--key", "SKL-386", "--item", label)
+    assert res.returncode == 0, res.stderr
+    readme = tmp_path / "docs" / "qa-evidence" / "SKL-386" / "README.md"
+    assert row_cells(table_rows(readme.read_text(encoding="utf-8"))[0])[0] == label
+
+
+def test_a_unit_title_is_not_a_sentence_end_but_the_next_sentence_is(tmp_path):
+    label = "AC1 - the response takes 200 ms. The build is green."
+    res = run(tmp_path, "--key", "SKL-386", "--item", label)
+    assert res.returncode == 1, res.stderr
+    assert "more than one sentence" in res.stderr
+    assert not (tmp_path / "docs").exists()
+
+
+def test_a_readme_symlink_to_an_existing_file_is_named_as_a_symlink(tmp_path):
+    destination = tmp_path / "handwritten.md"
+    destination.write_text("# handwritten\n", encoding="utf-8")
+    readme = tmp_path / "docs" / "qa-evidence" / "SKL-386" / "README.md"
+    readme.parent.mkdir(parents=True)
+    readme.symlink_to(destination)
+    res = run(tmp_path, "--key", "SKL-386")
+    assert res.returncode == 1, res.stderr
+    assert res.stderr == f"error: {readme} is a symlink; refusing to follow it\n"
+    assert destination.read_text(encoding="utf-8") == "# handwritten\n"
 
 
 def test_an_option_letter_does_not_hide_a_second_sentence(tmp_path):

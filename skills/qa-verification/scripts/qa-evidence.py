@@ -75,15 +75,17 @@ LITERAL_ESCAPES = set("\\`*_[<>&|~$]")
 # A sentence ends at `.`, `!` or `?` before whitespace, the end or a closing quote, and at the
 # full-width and Arabic forms, which need no following space.
 SENTENCE_END_RE = re.compile(r"(?:[。｡？！؟]|[.!?][\"'\u2019\u201d)\]]*(?=\s|$))")
-# A dot that never ends a sentence: an abbreviation or title that never ends one, an abbreviation
-# that continues in lowercase, an initial in a sequence of initials or an acronym, or a numbered
-# item or decimal that continues in lowercase.
+# A dot that never ends a sentence: an abbreviation or title that never ends one, a title before a
+# name, an abbreviation that continues in lowercase, a standalone path argument, an initial in a
+# sequence of initials or an acronym, or a numbered item or decimal that continues in lowercase.
 NEVER_BOUNDARY_RE = re.compile(
     r"\b(?i:etc|vs|fig|a\.m|p\.m)\.(?=\s+[a-z0-9])"
-    r"|\b(?i:e\.g|i\.e|mr|mrs|ms|dr|prof|sr|jr|st|gen|col)\."
+    r"|\b(?i:e\.g|i\.e|mr|mrs|prof)\."
+    r"|(?<!\d )\b(?i:ms|dr|st|gen|col|sr|jr)\.(?=\s+[A-Z])"
     r"|\b[A-Z]\.(?=\s+[A-Z]\.)"
     r"|(?<=[A-Z]\.)[A-Z]\."
     r"|(?<=[A-Z]\.\s)[A-Z]\.(?=\s+[A-Z][a-z])"
+    r"|(?<=\s)\.(?=\s|$)"
     r"|\b\d+\.(?=\s+[a-z0-9])"
 )
 # O_PATH opens a directory for use as a `dir_fd` without requiring read permission on it.
@@ -285,10 +287,24 @@ def refs_problem(schema: dict | None, text: str) -> str | None:
     return None
 
 
-def spelling_applies(root: Path, evidence: Path) -> bool:
-    """The spelling lint exempts frozen QA evidence, so it applies outside that tree only."""
+def destination_owner(root: Path, evidence: Path) -> Path | None:
+    """The checkout that owns `evidence`, or the working root when the destination sits inside it."""
+    owner = checkout_root(evidence)
+    if owner is not None:
+        return owner
     try:
-        relative = evidence.relative_to(root)
+        evidence.relative_to(root)
+    except ValueError:
+        return None
+    return root
+
+
+def spelling_applies(owner: Path | None, evidence: Path) -> bool:
+    """The spelling lint exempts frozen QA evidence, so it applies inside a checkout outside that tree."""
+    if owner is None:
+        return False
+    try:
+        relative = evidence.relative_to(owner)
     except ValueError:
         return True
     path = relative.as_posix()
@@ -503,7 +519,7 @@ def main(argv: list[str] | None = None) -> int:
 
     evidence = resolve_evidence_dir(root, args.evidence_dir)
     try:
-        destination_root = checkout_root(evidence) or root
+        owner = destination_owner(root, evidence)
     except OSError as exc:
         print(f"error: cannot inspect {one_line(str(evidence))}: {exc.strerror or exc}", file=sys.stderr)
         return 1
@@ -513,7 +529,7 @@ def main(argv: list[str] | None = None) -> int:
         print(problem, file=sys.stderr)
         return 1
 
-    spelling = spelling_applies(destination_root, evidence)
+    spelling = spelling_applies(owner, evidence)
     problem = key_content_problem(args.key, spelling=spelling)
     if problem is not None:
         print(problem, file=sys.stderr)
@@ -521,7 +537,7 @@ def main(argv: list[str] | None = None) -> int:
 
     schema: dict | None = None
     if any(ref_candidates(visible_text(clean_label(raw))) for raw in args.items):
-        schema, schema_problem = local_schema(destination_root)
+        schema, schema_problem = local_schema(owner) if owner is not None else (None, None)
         if schema_problem is not None:
             print(schema_problem, file=sys.stderr)
             return 1
