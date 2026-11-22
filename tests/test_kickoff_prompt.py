@@ -212,17 +212,18 @@ def without_frontmatter(text: str) -> str:
     return text
 
 
-def scan_document(text: str) -> tuple[list[tuple[int, str]], int]:
+def scan_document(text: str) -> tuple[list[tuple[int, str, str]], int]:
     """The top-level paragraphs a reader sees and the asset-path count, in one pass.
 
     A single extractor spans the whole document, so a raw HTML element that opens and closes
     around a paragraph hides that paragraph, and a hidden element hides everything it contains.
-    Each paragraph is (source line, visible text); a paragraph inside a hidden subtree has empty
-    text, so it never counts as the pointer and never contributes to the path count. Occurrences
-    are counted per Markdown block, so text from separate blocks is never spliced into one path.
+    Each paragraph is (source line, visible text, Markdown source); a paragraph inside a hidden
+    subtree has empty text, so it never counts as the pointer and never contributes to the path
+    count. Occurrences are counted per Markdown block, so text from separate blocks is never
+    spliced into one path.
     """
     parser = _TextExtractor()
-    paragraphs: list[tuple[int, str]] = []
+    paragraphs: list[tuple[int, str, str]] = []
     count = 0
     pending_line: int | None = None
     for token in MARKDOWN.parse(text):
@@ -234,7 +235,7 @@ def scan_document(text: str) -> tuple[list[tuple[int, str]], int]:
             visible = "".join(parser.parts[start:])
             count += visible.count(POINTER)
             if pending_line is not None:
-                paragraphs.append((pending_line, visible))
+                paragraphs.append((pending_line, visible, token.content))
                 pending_line = None
         elif token.type in {"fence", "code_block"}:
             if not parser.hidden:
@@ -246,26 +247,54 @@ def scan_document(text: str) -> tuple[list[tuple[int, str]], int]:
     return paragraphs, count
 
 
+def pointer_link_targets(source: str) -> list[str]:
+    """Destinations of Markdown links in a paragraph whose visible label is the asset path."""
+    targets: list[str] = []
+    for token in MARKDOWN.parse(source):
+        if token.type != "inline":
+            continue
+        children = token.children or []
+        for index, child in enumerate(children):
+            if child.type != "link_open":
+                continue
+            label: list[str] = []
+            depth = 0
+            for inner in children[index + 1:]:
+                if inner.type == "link_open":
+                    depth += 1
+                elif inner.type == "link_close":
+                    if depth == 0:
+                        break
+                    depth -= 1
+                elif inner.type in {"text", "code_inline"}:
+                    label.append(inner.content)
+            if "".join(label) == POINTER:
+                targets.append(child.attrGet("href") or "")
+    return targets
+
+
 def placement_problems(text: str) -> list[str]:
     """Reasons SKILL.md breaks AC2's placement rule, judged on what a CommonMark reader sees.
 
     The pointer must be exactly one paragraph of visible prose, the asset path must be named once
     in visible text, and the sentence must sit outside the step 1 to step 5 sections. YAML
     frontmatter is metadata, not prose, so a sentence only there does not count, and neither does
-    one inside a hidden HTML subtree.
+    one inside a hidden HTML subtree. A link labelled with the asset path must also target it.
     """
     text = without_frontmatter(text)
     paragraphs, path_count = scan_document(text)
-    pointer_lines = [line for line, visible in paragraphs if POINTER_PROSE in flat(visible)]
-    exact_lines = [line for line, visible in paragraphs if flat(visible) == POINTER_PROSE]
+    pointer_lines = [line for line, visible, _ in paragraphs if POINTER_PROSE in flat(visible)]
+    exact = [(line, source) for line, visible, source in paragraphs if flat(visible) == POINTER_PROSE]
     problems: list[str] = []
     if len(pointer_lines) != 1:
         problems.append(
             "the kickoff pointer must be exactly one paragraph of visible prose "
             f"(found {len(pointer_lines)} paragraphs carrying it)"
         )
-    elif len(exact_lines) != 1:
+    elif len(exact) != 1:
         problems.append("the pointer paragraph must be exactly the one sentence")
+    elif pointer_link_targets(exact[0][1]) != [POINTER]:
+        problems.append("the pointer link must target the asset path itself")
     if path_count != 1:
         problems.append(f"the asset path must appear once in visible text (found {path_count})")
     for line in pointer_lines:
@@ -433,7 +462,7 @@ def test_the_placement_guard_ignores_a_path_in_an_image_link_destination() -> No
     assert placement_problems(text) == []
 
 
-def test_the_placement_guard_counts_a_pointer_in_a_raw_html_attribute() -> None:
+def test_the_placement_guard_ignores_a_pointer_in_a_raw_html_href() -> None:
     text = skill_document(f'{POINTER_SENTENCE}\n\nSee <a href="{POINTER}">the prompt</a>.')
     assert placement_problems(text) == []
 
@@ -553,3 +582,10 @@ def test_the_placement_guard_counts_a_pointer_in_a_nested_image_alt() -> None:
     duplicated = f"{POINTER_SENTENCE}\n\n![outer ![inner {POINTER}](inner.png)](outer.png)"
     problems = placement_problems(skill_document(duplicated))
     assert any("must appear once in visible text (found 2" in problem for problem in problems), problems
+
+
+def test_the_placement_guard_rejects_a_pointer_linked_to_another_file() -> None:
+    pointer = POINTER_SENTENCE.replace(f"]({POINTER})", "](references/interim-handbacks.md)")
+    assert pointer != POINTER_SENTENCE
+    problems = placement_problems(skill_document(pointer))
+    assert any("must target the asset path itself" in problem for problem in problems), problems
