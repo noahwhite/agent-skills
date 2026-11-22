@@ -215,7 +215,9 @@ The file holds one `<bash glob> | <review item>` per line; `#` comments and blan
 
 `run hunt`, `dossier hunt` and `record hunt` accept `--shard K/N`, a decimal `1 <= K <= N` with no leading zero; `N = 1` is accepted only as `--shard 1/1`, and any other value is a usage error (exit 2).
 `--shard` on sweep or arbitrate, or on any command other than run, dossier or record, is a usage error too.
-Pass `record hunt` the same `--shard` as `dossier hunt`, exactly as for `--spec` and `--no-sweep`: an omitted flag and `--shard 1/1` both select the unsharded plan, but they must still be repeated exactly at record time, because the launch records which one wrote the dossier (`shard=<k>/<n>`, or `shard=none` for an omitted flag; `ADVERSARIAL_SHARD` supplies the same selection, so unset it for an unsharded record); a mismatch is refused at exit 13 without stamping the report, and a missing, empty, unreadable or malformed launch is refused at exit 15.
+Pass `record hunt` the same `--shard` as `dossier hunt`, exactly as for `--spec` and `--no-sweep`: an omitted flag and `--shard 1/1` both select the unsharded plan, but they must still be repeated exactly at record time, because the launch records which one wrote the dossier (`shard=<k>/<n>`, or `shard=none` for an omitted flag; `ADVERSARIAL_SHARD` supplies the same selection, so unset it for an unsharded record).
+A record reaches exit 13 only when it finds a usable launch whose selection differs; a plan-count conflict exits 2 first, and a record for a shard index with no launch of its own exits 15.
+A mismatch is refused at exit 13 without stamping the report, and a missing, empty, unreadable or malformed launch is refused at exit 15.
 
 One `run` invocation is one shard.
 With `N >= 2` the shard's artifact is `<run dir>/phase2-hunt.<k>.md` (never `phase2-hunt.md` for that run), and its run-state files are `hunt.<k>.launch`, `hunt.<k>.binding`, `hunt.<k>.primary`, `hunt.<k>.dossier`, `hunt.<k>-agent.err` and `hunt.<k>-agent.log`.

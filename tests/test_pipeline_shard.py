@@ -455,6 +455,29 @@ def test_a_sharded_hunt_refuses_a_marker_naming_another_selection(accepted_gate)
     assert run_script("cleanup", str(checkout), "--repo", str(repo), env=env).returncode == 0
 
 
+def test_a_failing_marker_encoder_is_refused_and_never_stamps(accepted_gate, tmp_path):
+    repo, scratch, env = accepted_gate
+    run_dir = paths(repo, env)["run"]
+    report = run_dir / "phase2-hunt.md"
+    dossier = run_script(
+        "dossier", "hunt", "--repo", str(repo), "--base", "HEAD", "--scratch", str(scratch), env=env,
+    )
+    checkout, _ = dossier_of(dossier)
+    # A broken od must fail closed, even though both encodings would otherwise be the empty string.
+    stub_dir = tmp_path / "stub-bin"
+    stub_dir.mkdir()
+    (stub_dir / "od").write_text("#!/bin/sh\nexit 1\n")
+    (stub_dir / "od").chmod(0o755)
+    broken_env = {**env, "PATH": f"{stub_dir}:{env.get('PATH', '')}"}
+    (run_dir / "hunt.launch").write_bytes(b"shard=none\nTRAIL\n")
+    report.write_text("REVIEW-RAN: yes\nplain\n")
+    refused = run_script("record", "hunt", "--repo", str(repo), "--base", "HEAD", env=broken_env)
+    assert refused.returncode == 15, refused.stdout + refused.stderr
+    assert "marker reader failed" in refused.stderr, refused.stderr
+    assert not Path(f"{report}.stamp").exists()
+    assert run_script("cleanup", str(checkout), "--repo", str(repo), env=env).returncode == 0
+
+
 def test_a_missing_launch_names_the_selection_the_caller_passed(accepted_gate):
     repo, scratch, env = accepted_gate
     run_dir = paths(repo, env)["run"]
@@ -515,6 +538,11 @@ def test_an_environment_supplied_selection_is_recorded_and_required(accepted_gat
     )
     assert recorded.returncode == 0, recorded.stdout + recorded.stderr
     assert Path(f"{report}.stamp").exists()
+    # The explicit flag names the same selection, so it records the same dossier.
+    explicit = run_script(
+        "record", "hunt", "--repo", str(repo), "--base", "HEAD", "--shard", "1/1", env=env,
+    )
+    assert explicit.returncode == 0, explicit.stdout + explicit.stderr
     assert run_script("cleanup", str(checkout), "--repo", str(repo), env=env).returncode == 0
 
 
@@ -538,14 +566,26 @@ def test_an_unreadable_hunt_launch_is_refused_and_never_read_as_empty(accepted_g
     except PermissionError:
         denied = True
     try:
-        if denied:
-            refused = run_script("record", "hunt", "--repo", str(repo), "--base", "HEAD", env=env)
-            assert refused.returncode == 15, refused.stdout + refused.stderr
-            assert "launch marker" in refused.stderr, refused.stderr
-            assert not Path(f"{report}.stamp").exists()
+        if not denied:
+            pytest.skip("this process can read a mode-000 file, so the denial cannot be established")
+        refused = run_script("record", "hunt", "--repo", str(repo), "--base", "HEAD", env=env)
+        assert refused.returncode == 15, refused.stdout + refused.stderr
+        assert "launch marker" in refused.stderr, refused.stderr
+        assert not Path(f"{report}.stamp").exists()
     finally:
         launch.chmod(0o644)
-    # A marker without its trailing newline is the same selection, not a broken one.
+        assert run_script("cleanup", str(checkout), "--repo", str(repo), env=env).returncode == 0
+
+
+def test_a_marker_without_its_trailing_newline_is_the_same_selection(accepted_gate):
+    repo, scratch, env = accepted_gate
+    run_dir = paths(repo, env)["run"]
+    report = run_dir / "phase2-hunt.md"
+    launch = run_dir / "hunt.launch"
+    dossier = run_script(
+        "dossier", "hunt", "--repo", str(repo), "--base", "HEAD", "--scratch", str(scratch), env=env,
+    )
+    checkout, _ = dossier_of(dossier)
     launch.write_bytes(launch.read_bytes().rstrip(b"\n"))
     report.write_text("REVIEW-RAN: yes\nplain\n")
     recorded = run_script("record", "hunt", "--repo", str(repo), "--base", "HEAD", env=env)

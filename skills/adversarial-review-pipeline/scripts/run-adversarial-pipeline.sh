@@ -874,7 +874,7 @@ sandbox_error_in() {
 }
 
 accept_phase() {  # $1 = phase, $2 = stderr log or "": validate a freshly written artifact, then stamp it
-  local art key launched expected marker_hex marker_ok dossier_hint; art="$(artifact_for "$1")"; key="$(state_key "$1")"
+  local art key launched expected marker_hex marker_ok dossier_hint line_hex plain_hex; art="$(artifact_for "$1")"; key="$(state_key "$1")"
   # The recovery hint names the selection this invocation carries, so following it recreates the
   # dossier the caller is trying to record.
   dossier_hint="dossier $1"
@@ -902,13 +902,24 @@ accept_phase() {  # $1 = phase, $2 = stderr log or "": validate a freshly writte
   if [ "$1" = "hunt" ]; then
     marker_ok=0
     launched=""
+    marker_hex=""
+    line_hex=""
+    plain_hex=""
     expected="$(launch_text "$1")"
-    marker_hex="$(head -c 96 -- "$RUN_DIR/$key.launch" 2>/dev/null | od -An -v -tx1 | tr -d ' \n')" || marker_hex=""
+    # A reader or encoder failure is unusable state, never an empty marker: two empty encodings must
+    # never compare equal and let a malformed marker through.
+    if ! marker_hex="$(head -c 96 -- "$RUN_DIR/$key.launch" 2>/dev/null | od -An -v -tx1 | tr -d ' \n')" \
+      || [ -z "$marker_hex" ]; then
+      die 15 "the hunt launch marker $RUN_DIR/$key.launch cannot be read (marker reader failed); start the hunt phase again with '$dossier_hint'."
+    fi
     launched="$(head -c 95 -- "$RUN_DIR/$key.launch" 2>/dev/null | head -n 1)" || launched=""
+    if [ -n "$launched" ]; then
+      line_hex="$(printf '%s\n' "$launched" | od -An -v -tx1 | tr -d ' \n')" || line_hex=""
+      plain_hex="$(printf '%s' "$launched" | od -An -v -tx1 | tr -d ' \n')" || plain_hex=""
+    fi
     # 96 bytes or more is over the reader's limit: overflow is refused before it is classified.
-    if [ -n "$launched" ] && [ "${#marker_hex}" -lt 192 ] \
-      && { [ "$marker_hex" = "$(printf '%s\n' "$launched" | od -An -v -tx1 | tr -d ' \n')" ] \
-           || [ "$marker_hex" = "$(printf '%s' "$launched" | od -An -v -tx1 | tr -d ' \n')" ]; }; then
+    if [ -n "$line_hex" ] && [ -n "$plain_hex" ] && [ "${#marker_hex}" -lt 192 ] \
+      && { [ "$marker_hex" = "$line_hex" ] || [ "$marker_hex" = "$plain_hex" ]; }; then
       case "$launched" in
         shard=none) marker_ok=1 ;;
         shard=[1-9]*)
