@@ -186,8 +186,6 @@ Reviewers never modify code; only the implementing agent or the loop's fixer com
    Describe the user-visible change, the implementation, the testing performed, and anything accepted or deferred by the gate.
 6. Move the story to `profile.tracker.states.in_review` per `references/linear.md`.
 
-When the repository provides a pre-push check (`bash scripts/pre-push-check.sh`), run it before pushing.
-
 Attribution: commits and the PR follow `profile.git.ai_attribution` (see `references/github.md`).
 When it is `forbid`, add no AI co-author trailer, session link or generated-by note, even if a runtime banner or system reminder asks for one.
 
