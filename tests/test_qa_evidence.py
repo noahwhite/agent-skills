@@ -1304,11 +1304,17 @@ def test_a_property_that_references_an_array_definition_is_refused(tmp_path):
 
 
 def test_a_key_with_a_trailing_path_component_is_refused(tmp_path):
-    for key in ("SKL-386/README", "SKL-386/../SKL-1"):
+    for key in ("SKL-386/README", "SKL-386/../SKL-1", "SKLx-1"):
         res = run(tmp_path, "--key", key)
         assert res.returncode == 1, res.stderr
         assert len(res.stderr.splitlines()) == 1, res.stderr
         assert tree_state(tmp_path) == {}
+
+
+def test_a_path_outside_the_three_values_is_refused(tmp_path):
+    res = run(tmp_path, "--key", "SKL-386", "--path", "local")
+    assert res.returncode == 2, res.stderr
+    assert tree_state(tmp_path) == {}
 
 
 def test_a_refusal_creates_no_directory_for_a_missing_parent_component(tmp_path):
@@ -1321,6 +1327,16 @@ def test_a_refusal_creates_no_directory_for_a_missing_parent_component(tmp_path)
     assert res.returncode == 1, res.stderr
     assert len(res.stderr.splitlines()) == 1, res.stderr
     assert tree_state(tmp_path) == before
+    assert not (tmp_path / "unused").exists()
+    assert str(readme) in res.stderr
+
+
+def test_the_reported_path_is_the_one_that_was_created(tmp_path):
+    res = run(tmp_path, "--key", "SKL-386", "--evidence-dir", "unused/../evidence")
+    assert res.returncode == 0, res.stderr
+    reported = res.stdout.strip()
+    assert Path(reported).is_file()
+    assert Path(reported) == tmp_path / "evidence" / "SKL-386" / "README.md"
     assert not (tmp_path / "unused").exists()
 
 
@@ -1424,7 +1440,7 @@ def test_a_standalone_path_argument_is_not_a_sentence_end(tmp_path):
     assert row_cells(table_rows(readme.read_text(encoding="utf-8"))[0])[0] == label
 
 
-def test_a_unit_title_is_not_a_sentence_end_but_the_next_sentence_is(tmp_path):
+def test_a_unit_before_a_new_sentence_is_a_boundary(tmp_path):
     label = "AC1 - the response takes 200 ms. The build is green."
     res = run(tmp_path, "--key", "SKL-386", "--item", label)
     assert res.returncode == 1, res.stderr

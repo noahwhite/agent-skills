@@ -79,9 +79,9 @@ SENTENCE_END_RE = re.compile(r"(?:[。｡？！؟]|[.!?][\"'\u2019\u201d)\]]*(?=
 # name, an abbreviation that continues in lowercase, a standalone path argument, an initial in a
 # sequence of initials or an acronym, or a numbered item or decimal that continues in lowercase.
 # A dot that never ends a sentence: an abbreviation or title that never ends one, an abbreviation
-# that continues in lowercase, an initial in a sequence of initials, a standalone path argument or a
-# numbered item or decimal that continues in lowercase. An acronym before a capitalized word is
-# treated as a sentence end, because nothing distinguishes a proper name from a new sentence.
+# or acronym that continues in lowercase, an initial in a sequence of initials, a standalone path
+# argument, or a numbered item or decimal that continues in lowercase. A dot before a capitalized
+# word is a sentence end, because nothing distinguishes a proper name from a new sentence.
 NEVER_BOUNDARY_RE = re.compile(
     r"\b(?i:etc|vs|fig|a\.m|p\.m)\.(?=\s+[a-z0-9])"
     r"|\b(?i:e\.g|i\.e|mr|mrs|prof)\."
@@ -380,6 +380,7 @@ def check_components(path: Path) -> str | None:
             try:
                 child = os.open(part, PATH_FLAGS | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=descriptor)
             except FileNotFoundError:
+                os.close(descriptor)
                 return None
             if not stat.S_ISDIR(os.fstat(child).st_mode):
                 os.close(child)
@@ -448,8 +449,7 @@ def target_problem(target: Path) -> str | None:
     problem = check_components(target.parent)
     if problem is not None:
         return problem
-    resolved = Path(os.path.normpath(target.parent))
-    descriptor, problem = open_directory(resolved, create=False)
+    descriptor, problem = open_directory(target.parent, create=False)
     if problem is not None:
         return problem
     if descriptor is None:
@@ -559,12 +559,18 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     evidence = resolve_evidence_dir(root, args.evidence_dir)
-    try:
-        owner = destination_owner(root, evidence)
-    except OSError as exc:
-        print(f"error: cannot inspect {one_line(str(evidence))}: {exc.strerror or exc}", file=sys.stderr)
+    supplied = evidence / args.key / "README.md"
+    problem = check_components(supplied.parent)
+    if problem is not None:
+        print(problem, file=sys.stderr)
         return 1
+    evidence = Path(os.path.normpath(evidence))
     target = evidence / args.key / "README.md"
+    try:
+        owner = destination_owner(root, target)
+    except OSError as exc:
+        print(f"error: cannot inspect {one_line(str(target.parent))}: {exc.strerror or exc}", file=sys.stderr)
+        return 1
     problem = target_problem(target)
     if problem is not None:
         print(problem, file=sys.stderr)
