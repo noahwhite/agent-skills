@@ -327,6 +327,14 @@ def test_unexpected_argument_is_a_named_error(repo, run):
     assert "pre-push-check: error: unexpected argument extra" in result.stderr
 
 
+def test_a_changed_test_module_runs_itself(repo, run):
+    stage(repo, "tests/test_skills.py", "def test_fixture():\n    assert True\n\n\ndef test_extra():\n    assert True\n")
+    result = run("--list", "--base", "main")
+    assert result.returncode == 0, result.stderr
+    assert "tests/test_skills.py" in result.stdout
+    assert "fallback: none" in result.stdout
+
+
 # --help
 
 
@@ -341,6 +349,7 @@ def test_help_states_checks_change_set_table_fallback_and_exit_codes(repo, run):
     assert "git diff --name-only <merge-base>...HEAD" in text
     assert "scripts/gate_integrity.py" in text
     assert "tests/test_gate_integrity.py" in text
+    assert "tests/test_pre_push_check.py -> tests/test_pre_push_check.py" in text
     assert "fallback module tests/test_skills.py" in text
     assert "Exit status: 0" in text
     assert "1 at least one check failed" in text
