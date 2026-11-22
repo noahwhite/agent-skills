@@ -502,6 +502,20 @@ def test_a_shard_count_the_shell_cannot_enumerate_never_leaves_a_plan(accepted_g
     assert plain.returncode == 0, plain.stdout + plain.stderr
 
 
+def test_a_shard_rerun_refused_by_its_predecessor_discards_its_own_acceptance(accepted_gate):
+    repo, scratch, env = accepted_gate
+    for k in (1, 2):
+        assert run_hunt(repo, scratch, env, "--shard", f"{k}/2").returncode == 0
+    run_dir = paths(repo, env)["run"]
+    (run_dir / "phase1-sweep.md").unlink()
+    refused = run_hunt(repo, scratch, env, "--shard", "1/2")
+    assert refused.returncode == 13, refused.stdout + refused.stderr
+    assert not (run_dir / "phase2-hunt.1.md").exists()
+    assert not (run_dir / "phase2-hunt.1.md.stamp").exists()
+    assert not (run_dir / "hunt.1.launch").exists()
+    assert (run_dir / "phase2-hunt.2.md.stamp").exists()
+
+
 def test_a_leftover_shard_environment_value_never_refuses_another_command(gate):
     repo, scratch, env = gate
     env = {**env, "ADVERSARIAL_SHARD": "1/2"}

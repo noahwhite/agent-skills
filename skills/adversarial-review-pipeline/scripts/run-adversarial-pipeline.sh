@@ -781,9 +781,17 @@ invalidate_downstream() {  # $1 = phase: a re-run discards every later phase, in
   write_dossier_sizes
 }
 
-begin_phase() {  # $1 = phase: drop stale output and later phases, bind the inputs, mark the launch time
+# A re-run discards this invocation's own previous output and attempt state before anything can
+# fail, so a refused attempt can never leave an older report acceptable.
+drop_own_output() {  # $1 = phase
   local art key; art="$(artifact_for "$1")"; key="$(state_key "$1")"
-  rm -f -- "$art" "$art.stamp" "$RUN_DIR/$key.dossier"
+  rm -f -- "$art" "$art.stamp" "$RUN_DIR/$key.dossier" \
+    "$RUN_DIR/$key.launch" "$RUN_DIR/$key.binding" "$RUN_DIR/$key.primary"
+}
+
+begin_phase() {  # $1 = phase: drop stale output and later phases, bind the inputs, mark the launch time
+  local key; key="$(state_key "$1")"
+  drop_own_output "$1"
   shard_plan_write || die 2 "could not write the hunt plan $HUNT_PLAN; the $1 phase never started."
   invalidate_downstream "$1"   # also rebuilds the size log, after this phase's own removal
   : > "$RUN_DIR/$key.launch"
@@ -2176,11 +2184,13 @@ case "$cmd" in
     install_run_signal_traps
     trap on_run_exit EXIT
     # From here the phase attempt is real, so every exit reports completion; a missing predecessor is
-    # one of those failures, not a refusal before the attempt starts. The predecessor check runs
-    # before this phase's own state is written, so a refused attempt leaves no launch, binding or
-    # primary behind for a later `record` to accept. The primary-checkout baseline is taken before
-    # the probe, so a probe that writes into the checkout cannot hide inside it, and stale logs go
-    # first: a diagnosis must never show a previous attempt's streams as this attempt's.
+    # one of those failures, not a refusal before the attempt starts. The attempt first drops this
+    # phase's own previous output, so a refused re-run can never leave an older report acceptable,
+    # and only then checks its predecessors, so no launch, binding or plan is written for an attempt
+    # that never starts. The primary-checkout baseline is taken before the probe, so a probe that
+    # writes into the checkout cannot hide inside it, and stale logs go first: a diagnosis must never
+    # show a previous attempt's streams as this attempt's.
+    drop_own_output "$phase"
     require_predecessors "$phase"
     begin_phase "$phase"
     bind_phase "$phase"
