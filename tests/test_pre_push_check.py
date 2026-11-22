@@ -22,16 +22,16 @@ ENV.update(GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1")
 UV_STUB = """#!/usr/bin/env bash
 printf '%s\\n' "$*" >> "$STUB_LOG"
 if [ -n "${PYTEST_ADDOPTS:-}" ]; then printf 'addopts:%s\\n' "$PYTEST_ADDOPTS" >> "$STUB_LOG"; fi
+if [ -n "${STUB_START_FAIL:-}" ] && [[ "$*" == *"$STUB_START_FAIL"* ]]; then
+  echo "error: Failed to spawn: $STUB_START_FAIL"
+  exit 127
+fi
 if [ "$1" = "run" ] && [ "$3" = "python" ]; then
   shift 3
   exec python3 "$@"
 fi
 if [ -n "${STUB_ADVANCE:-}" ] && [[ "$*" == *"--version"* ]]; then
   git -C "$STUB_REPO" commit --allow-empty -qm "advanced during the run"
-fi
-if [ -n "${STUB_START_FAIL:-}" ] && [[ "$*" == *"$STUB_START_FAIL"* ]]; then
-  echo "error: Failed to spawn: pytest"
-  exit 127
 fi
 if [ -n "${STUB_GREP:-}" ] && [[ "$*" == *" -q "* ]] && [ -n "${STUB_GREP_FILE:-}" ] && grep -qF -- "$STUB_GREP" "$STUB_GREP_FILE"; then
   echo "stub: found the forbidden text in $STUB_GREP_FILE"
@@ -102,6 +102,7 @@ def repo(tmp_path: Path) -> Path:
     write(repo, "scripts/leak_scan.py", "# fixture\n")
     write(repo, "tests/test_skills.py", "def test_fixture():\n    assert True\n")
     write(repo, "tests/test_gate_integrity.py", "def test_fixture():\n    assert True\n")
+    write(repo, "tests/test_leak_scan.py", "def test_fixture():\n    assert True\n")
     write(repo, "skills/x.md", "clean line\n")
     write(repo, "LICENSE", "fixture license\n")
     write(repo, "README.md", "# fixture\n")
@@ -138,6 +139,7 @@ def run(repo: Path, tmp_path: Path):
 
     call.log = log
     call.path = tmp_path
+    call.env = env
     return call
 
 
@@ -345,14 +347,40 @@ def test_workflow_and_profile_paths_map_to_their_guards(repo, run):
     assert "tests/test_gate_integrity.py" in result.stdout
 
 
-def test_a_committed_deletion_of_a_module_skips_it(repo, run):
+def test_a_committed_deletion_of_a_module_is_a_named_error(repo, run):
     topic(repo)
     git(repo, "rm", "-q", "tests/test_gate_integrity.py")
     commit(repo, "delete the module")
+    listed = run("--list", "--base", "main")
+    assert listed.returncode == 0, listed.stderr
+    assert "tests/test_gate_integrity.py is not present in HEAD" in listed.stdout
     result = run("--base", "main")
+    assert result.returncode == 2
+    assert "cannot start tests/test_gate_integrity.py" in result.stderr
+    assert "is not present in HEAD" in result.stderr
+
+
+def test_a_staged_new_test_module_is_a_named_error(repo, run):
+    stage(repo, "tests/test_new_probe.py", "def test_new_probe():\n    assert False\n")
+    result = run("--base", "main")
+    assert result.returncode == 2
+    assert "cannot start tests/test_new_probe.py" in result.stderr
+    assert "is not present in HEAD" in result.stderr
+
+
+def test_a_changed_vendor_generator_selects_the_drift_module(repo, run):
+    stage(repo, "scripts/vendor_shared.py", "# changed\n")
+    result = run("--list", "--base", "main")
     assert result.returncode == 0, result.stderr
-    assert "focused: module tests/test_gate_integrity.py is not present" in result.stdout
-    assert "run --locked pytest -q tests/test_gate_integrity.py\n" not in run.log.read_text()
+    assert "tests/test_resolve_model_role.py" in result.stdout
+
+
+def test_a_vendor_spawn_failure_is_a_named_error(repo, run):
+    stage(repo, "scripts/gate_integrity.py")
+    result = run("--base", "main", STUB_START_FAIL="python scripts/vendor_shared.py")
+    assert result.returncode == 2
+    assert "cannot start vendor: uv run --locked python scripts/vendor_shared.py --check" in result.stderr
+    assert "Failed to spawn" in result.stderr
 
 
 def test_a_committed_rename_selects_the_old_path_module(repo, run):
@@ -364,6 +392,22 @@ def test_a_committed_rename_selects_the_old_path_module(repo, run):
     assert "scripts/gate_integrity.py" in result.stdout
     assert "scripts/gate_renamed.py" in result.stdout
     assert "run --locked pytest -q tests/test_gate_integrity.py\n" in run.log.read_text()
+
+
+def test_a_symlinked_checkout_path_still_finds_the_repository(repo, run):
+    link = run.path / "link"
+    os.symlink(repo, link)
+    result = subprocess.run(
+        ["bash", str(link / "scripts" / "pre-push-check.sh"), "--list", "--base", "main"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env=run.env,
+        timeout=120,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "change set: empty" in result.stdout
 
 
 # Checks, reporting and exit statuses
@@ -546,10 +590,10 @@ def test_help_states_checks_change_set_table_fallback_and_exit_codes(repo, run):
     assert "2 an error" in text
     assert "origin/main" in text
     assert "first push" in text
-    assert "not only the change set" in text
-    assert "checked-out file can still fail it" in text
+    assert "a stray checked-out file that HEAD already carries can fail it" in text
     assert "exact HEAD being pushed" in text
     assert "throwaway worktree at HEAD" in text
+    assert "is a named startup error" in text
     assert "bash 4.4 or newer, git, uv, and the GNU date and sort" in text
     assert "assume-unchanged" in text
 

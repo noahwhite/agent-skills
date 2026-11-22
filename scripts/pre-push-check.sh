@@ -39,7 +39,7 @@ table=(
   'scripts/run-suite.sh tests/test_eval_suite.py'
   'scripts/smoke-opencode.sh tests/test_smoke_opencode.py'
   'scripts/smoke_opencode.py tests/test_smoke_opencode.py'
-  'scripts/vendor_shared.py tests/test_skills.py'
+  'scripts/vendor_shared.py tests/test_resolve_model_role.py'
   'shared/check-signing-key.sh tests/test_signing_key.py'
   'shared/github.md tests/test_shared_github.py'
   'shared/linear.md tests/test_shared_linear.py'
@@ -79,9 +79,10 @@ Change set:
   and so are assume-unchanged and skip-worktree entries, which would hide one.
   Untracked files are not in the change set.
   An empty change set is reported explicitly, and the doc and vendor checks still run.
-  The checks run in a throwaway worktree at HEAD, so only committed content is judged, and
-  the doc lint scans every eligible file in that tree, not only the change set: a stray
-  checked-out file can still fail it.
+  The checks run in a throwaway worktree at HEAD, so only committed content is judged and
+  staged, unstaged or untracked files in the caller's checkout cannot change the result.
+  The doc lint still scans every eligible file in that HEAD tree, not only the change set, so
+  a stray checked-out file that HEAD already carries can fail it.
 
 Checks, in order, each continuing past a failure:
   tests/test_skills.py::test_no_em_dash
@@ -100,8 +101,8 @@ EOF
 
   a changed tests/test_*.py path maps to itself; every other path is unmapped: it prints
   "focused: no module for <path>" and runs the fallback module $fallback. A selected module
-  that is absent from HEAD is named and skipped, but the two doc lints and the vendored-copy
-  check are required, so the run is a named startup error without them.
+  that is absent from HEAD is a named startup error, as are a missing doc lint module or
+  vendoring script.
 EOF
   cat <<'EOF'
 
@@ -174,8 +175,8 @@ if [ "${BASH_VERSINFO[0]}" -lt 4 ] ||
   die "bash 4.4 or newer is required (found $BASH_VERSION)"
 fi
 
-root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd) || exit 2
-cd -- "$root" || exit 2
+root=$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd) || die "cannot find the repository root"
+cd -P -- "$root" || die "cannot enter $root"
 # An inherited pytest option must not turn a run into collection only.
 unset PYTEST_ADDOPTS
 
@@ -255,6 +256,10 @@ if $list; then
     while IFS= read -r -d '' module; do
       printf '  %s\n' "$module"
     done < "$work/modulelist"
+    while IFS= read -r -d '' module; do
+      git cat-file -e "$head_sha:$module" 2> /dev/null ||
+        printf 'focused: module %s is not present in HEAD %s; a run refuses\n' "$module" "$head_sha"
+    done < "$work/modulelist"
   fi
   if [ ${#unmapped[@]} -gt 0 ]; then
     printf 'fallback: %s\n' "$fallback"
@@ -320,6 +325,12 @@ run_check() {
   start=$(date +%s%N) || die "date +%s%N failed during the run"
   out=$(cd -- "$snapshot" && "$@" 2>&1)
   code=$?
+  case $out in
+    *"Failed to spawn:"*) die "cannot start $label: $out" ;;
+  esac
+  if [ "$code" -eq 127 ]; then
+    die "cannot start $label: ${out:-exit 127}"
+  fi
   checked=$((checked + 1))
   elapsed "$start"
   if [ "$code" -eq 0 ]; then
@@ -341,10 +352,8 @@ run_check 'vendor: uv run --locked python scripts/vendor_shared.py --check' \
   uv run --locked python scripts/vendor_shared.py --check
 if [ "$module_count" -gt 0 ]; then
   while IFS= read -r -d '' module; do
-    if [ ! -f "$snapshot/$module" ]; then
-      printf 'focused: module %s is not present in HEAD %s; skipped\n' "$module" "$head_sha"
-      continue
-    fi
+    git cat-file -e "$head_sha:$module" 2> /dev/null ||
+      die "cannot start $module: it is not present in HEAD $head_sha"
     run_check "$module" uv run --locked pytest -q "$module"
   done < "$work/modulelist"
 fi
