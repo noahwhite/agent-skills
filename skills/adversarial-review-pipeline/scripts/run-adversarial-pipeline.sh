@@ -359,8 +359,10 @@ phase=""; target=""
 case "$cmd" in
   dossier|run|record) phase="${1:-}"; [ -n "$phase" ] || usage; shift ;;
   cleanup)
-    # A leading dash is a flag, not the checkout path: the option parser then names it properly.
+    # A leading dash is a flag, not the checkout path: name the flag the command does not take.
     case "${1:-}" in
+      --shard|--shard=*)
+        die 2 "--shard is not valid for the cleanup command; it applies to run hunt, dossier hunt and record hunt" ;;
       -*) ;;
       *) target="${1:-}"; [ -n "$target" ] || usage; shift; target="$(abspath "$target")" ;;
     esac
@@ -653,8 +655,10 @@ shard_plan_validate() {
 }
 
 # Records the run's hunt plan on the first sharded invocation; never rewrites an existing plan.
+# The plan is published only when it holds one artifact path per shard, so a count the shell cannot
+# enumerate is refused instead of leaving a plan no invocation can satisfy.
 shard_plan_write() {
-  local k tmp
+  local k tmp written
   [ "$SHARDED" -eq 1 ] || return 0
   plan_exists && return 0
   tmp="$(mktemp -p "$RUN_DIR" hunt.shards.XXXXXX)" || return 1
@@ -662,6 +666,8 @@ shard_plan_write() {
     printf 'n=%s\n' "$SHARD_N"
     for (( k=1; k <= SHARD_N; k++ )); do printf '%s\n' "$RUN_DIR/phase2-hunt.$k.md"; done
   } > "$tmp" || { rm -f -- "$tmp"; return 1; }
+  written="$(tail -n +2 -- "$tmp" | wc -l)"
+  if [ "$written" != "$SHARD_N" ]; then rm -f -- "$tmp"; return 1; fi
   mv -fT -- "$tmp" "$HUNT_PLAN" || { rm -f -- "$tmp"; return 1; }
 }
 

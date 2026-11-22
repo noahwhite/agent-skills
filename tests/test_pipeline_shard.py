@@ -151,7 +151,7 @@ def plan_file(run_dir: Path) -> Path:
 
 # --- AC1: the shard grammar and where the flag is allowed --------------------------------------
 
-@pytest.mark.parametrize("value", ["0/2", "3/2", "2/1", "1/0", "0/0", "01/2", "1.0/2", "two/3", ""])
+@pytest.mark.parametrize("value", ["0/2", "3/2", "2/1", "1/0", "0/0", "01/2", "1/02", "1.0/2", "two/3", ""])
 def test_an_invalid_shard_value_is_a_usage_error_naming_it(gate, value):
     repo, scratch, env = gate
     result = run_hunt(repo, scratch, env, "--shard", value)
@@ -183,7 +183,9 @@ def test_the_flag_is_refused_on_sweep_and_arbitrate(gate, argv):
         "--agent-cmd", HUNT_AGENT, "--shard", "1/2", env=env,
     )
     assert result.returncode == 2, result.stdout + result.stderr
-    assert "--shard" in result.stderr and argv[1] in result.stderr, result.stderr
+    lines = [line for line in result.stderr.splitlines() if line.strip()]
+    assert len(lines) == 1, result.stderr
+    assert "--shard is not valid for the " + argv[1] + " phase" in lines[0], result.stderr
 
 
 @pytest.mark.parametrize("argv", [("preflight",), ("paths",), ("checklist",), ("checkout",)])
@@ -194,7 +196,9 @@ def test_the_flag_is_refused_on_commands_that_take_no_phase(gate, argv):
         env=env,
     )
     assert result.returncode == 2, result.stdout + result.stderr
-    assert "--shard" in result.stderr and argv[0] in result.stderr, result.stderr
+    lines = [line for line in result.stderr.splitlines() if line.strip()]
+    assert len(lines) == 1, result.stderr
+    assert "--shard is not valid for the " + argv[0] + " command" in lines[0], result.stderr
 
 
 # --- AC1: plan, per-shard artifacts and state files -------------------------------------------
@@ -486,6 +490,18 @@ def test_a_value_beyond_the_integer_range_is_judged_by_its_digits(gate):
     assert "integer expression" not in equal.stderr, equal.stderr
 
 
+def test_a_shard_count_the_shell_cannot_enumerate_never_leaves_a_plan(accepted_gate):
+    repo, scratch, env = accepted_gate
+    run_dir = paths(repo, env)["run"]
+    result = run_hunt(repo, scratch, env, "--shard", "1/18446744073709551616")
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "could not write the hunt plan" in result.stderr.splitlines()[0], result.stderr
+    assert not plan_file(run_dir).exists()
+    assert not (run_dir / "hunt.1.launch").exists()
+    plain = run_hunt(repo, scratch, env)
+    assert plain.returncode == 0, plain.stdout + plain.stderr
+
+
 def test_a_leftover_shard_environment_value_never_refuses_another_command(gate):
     repo, scratch, env = gate
     env = {**env, "ADVERSARIAL_SHARD": "1/2"}
@@ -505,7 +521,9 @@ def test_cleanup_names_the_command_and_the_flag(gate):
     assert checkout, made.stdout + made.stderr
     refused = run_script("cleanup", "--shard", "1/2", checkout[0], "--repo", str(repo), env=env)
     assert refused.returncode == 2, refused.stdout + refused.stderr
-    assert "--shard" in refused.stderr and "cleanup" in refused.stderr, refused.stderr
+    lines = [line for line in refused.stderr.splitlines() if line.strip()]
+    assert len(lines) == 1, refused.stderr
+    assert "--shard is not valid for the cleanup command" in lines[0], refused.stderr
     assert run_script("cleanup", checkout[0], "--repo", str(repo), env=env).returncode == 0
 
 
