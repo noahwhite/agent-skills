@@ -169,6 +169,9 @@ def test_the_phase_dossier_makes_every_acceptance_rule_a_probe(gate, phase):
         in block, block
     assert "report it PASSED or FAILED with the command you ran and what you observed" in block, block
     assert "Never pass a rule from reading the diff or the documentation alone" in block, block
+    # the report's probe line format is part of the requirement, in both phases
+    assert "RULE <n> | PASSED or FAILED | the rule in one line | the command you ran | what you observed" \
+        in " ".join(dossier.split()), f"the {phase} dossier lost its probe-line format"
 
 
 @pytest.mark.parametrize("phase", ["sweep", "hunt"])
@@ -241,7 +244,15 @@ def test_the_skill_states_the_probe_rule_for_both_phases(phase):
     section = " ".join(skill_sections()[phase].split())
     assert "ACCEPTANCE RULES ARE BEHAVIOURAL PROBES" in section, \
         f"the {phase} section does not state the probe rule"
-    assert "exercise" in section and "PASSED or FAILED" in section, section
+    # the obligation itself, not only the topic: enumerate, exercise by running, report PASSED or FAILED
+    if phase == "sweep":
+        assert "is enumerated and exercised against the reviewed head by running the command or" in section, section
+        assert "reported PASSED or FAILED with the command and the observation" in section, section
+    else:
+        assert "exercises each one in its throwaway checkout with the command or sequence the rule names" \
+            in section, section
+        assert "reports each PASSED or FAILED with the command and the observation after its findings" \
+            in section, section
 
 
 def test_the_skill_states_the_enforcement_escalation():
