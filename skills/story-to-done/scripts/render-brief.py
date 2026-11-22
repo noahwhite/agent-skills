@@ -8,11 +8,13 @@
 
 PATH is spike, no-deployment or deployed. `--environment` is optional and only on a deployed QA render.
 
-The brief is assembled from the templates in the skill's assets directory (the role's base template, the
-shared rules fragment, then the role's per-path fragment). The tokens {{story}}, {{path}}, {{scratch}},
-{{round}} and {{target}} are replaced by exact string matching in one pass, so a value is never expanded
-again, and each backticked mention of a file in the skill's references directory becomes its absolute
-path. Nothing else in the template is syntax.
+The brief is assembled from the templates in the skill's assets directory: the role's base template, the
+shared rules fragment, the role's permissions fragment, the role's state-move fragment for the selected
+path, then the role's per-path fragment. The tokens {{story}}, {{path}}, {{scratch}}, {{round}} and
+{{target}} are replaced by exact string matching in one pass, so a value is never expanded again, and
+each backticked mention of a file in the skill's references directory outside a double-quoted quotation
+becomes its absolute path, so a quotation of a source sentence stays verbatim. Nothing else in the
+template is syntax.
 
 The output file is <scratch>/senior-engineer/senior-engineer-brief.md or
 <scratch>/qa-agent-round-<n>/qa-agent-round-<n>-brief.md. The role subdirectory must already exist. The file
@@ -134,10 +136,12 @@ def plan(ns: argparse.Namespace) -> tuple[str, str, list[str], dict]:
     if ns.role == "engineer":
         not_taken(ns, ("--round", "--environment", "--commit", "--link"), "an engineer render")
         sub = "senior-engineer"
+        state_move = "deployed" if ns.path == "deployed" else "handoff"
         templates = [
             "brief-engineer.md",
             "brief-rules.md",
             "brief-engineer-permissions.md",
+            f"brief-engineer-state-move-{state_move}.md",
             f"brief-engineer-{ns.path}.md",
         ]
     else:
@@ -169,7 +173,14 @@ def plan(ns: argparse.Namespace) -> tuple[str, str, list[str], dict]:
                 if not has_host(link):
                     refuse("invalid --link: the URL names no host")
             values["target"] = "\n".join(ns.link)
-        templates = ["brief-qa.md", "brief-rules.md", "brief-qa-permissions.md", fragment]
+        state_move = "deployed" if ns.path == "deployed" else "handoff"
+        templates = [
+            "brief-qa.md",
+            "brief-rules.md",
+            "brief-qa-permissions.md",
+            f"brief-qa-state-move-{state_move}.md",
+            fragment,
+        ]
 
     role_dir = checked_scratch(ns.scratch, sub)
     return role_dir, f"{sub}-brief.md", templates, values
@@ -188,9 +199,14 @@ def load(skill_dir: Path, names: list[str]) -> str:
 
 
 def substitute(text: str, values: dict, skill_dir: str) -> str:
-    """One left-to-right pass of exact matches: a replaced value is never scanned again."""
+    """One left-to-right pass of exact matches: a replaced value is never scanned again.
+
+    A backticked `references/` mention becomes an absolute path only outside a double-quoted
+    quotation, so a quoted source sentence is never rewritten.
+    """
     out = []
     i = 0
+    quoted = False
     while i < len(text):
         if text.startswith("{{", i):
             token = next((t for t in TOKENS if text.startswith("{{" + t + "}}", i)), None)
@@ -201,7 +217,12 @@ def substitute(text: str, values: dict, skill_dir: str) -> str:
             out.append(values[token])
             i += len(token) + 4
             continue
-        if text.startswith(REFERENCE_OPEN, i):
+        if text[i] == '"':
+            quoted = not quoted
+            out.append(text[i])
+            i += 1
+            continue
+        if not quoted and text.startswith(REFERENCE_OPEN, i):
             end = text.find("`", i + 1)
             name = text[i + len(REFERENCE_OPEN):end] if end != -1 else ""
             if REFERENCE_NAME.fullmatch(name):
