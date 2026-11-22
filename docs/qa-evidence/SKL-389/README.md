@@ -7,7 +7,7 @@
 - Implementation PR: https://github.com/noahwhite/agent-skills/pull/389.
 - Implementation reviewed head: `1a7c39ed3a289445ad965b480aff9d63d8231724`.
 - Tracker attachment: `SKL-389 QA round 1 structured assertions` (`assertions.txt`), cited by the QA evidence comment below.
-- [QA evidence comment](https://linear.app/officina-pub/issue/SKL-389/user-story-put-lite-mode-and-the-batched-poll-cadence-in-the-kickoff#comment-5b91d6ae).
+- QA evidence comment: identifier prefix `5b91d6ae`; read with `linear issue comment list SKL-389`.
 
 ## Verdicts
 
