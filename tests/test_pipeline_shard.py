@@ -380,6 +380,13 @@ def test_record_hunt_refuses_a_shard_selection_the_dossier_did_not_use(accepted_
     )
     assert recorded.returncode == 0, recorded.stdout + recorded.stderr
     assert Path(f"{report}.stamp").exists()
+    # A refused selection never disturbs an acceptance already recorded.
+    stamp_before = Path(f"{report}.stamp").read_bytes()
+    report_before = report.read_bytes()
+    again = run_script("record", "hunt", "--repo", str(repo), "--base", "HEAD", env=env)
+    assert again.returncode == 13, again.stdout + again.stderr
+    assert Path(f"{report}.stamp").read_bytes() == stamp_before
+    assert report.read_bytes() == report_before
     assert run_script("cleanup", str(checkout), "--repo", str(repo), env=env).returncode == 0
 
     # And an unsharded dossier is recorded only without the flag.
@@ -448,6 +455,25 @@ def test_a_sharded_hunt_refuses_a_marker_naming_another_selection(accepted_gate)
     assert run_script("cleanup", str(checkout), "--repo", str(repo), env=env).returncode == 0
 
 
+def test_an_empty_indexed_launch_marker_is_refused(accepted_gate):
+    repo, scratch, env = accepted_gate
+    run_dir = paths(repo, env)["run"]
+    dossier = run_script(
+        "dossier", "hunt", "--repo", str(repo), "--base", "HEAD", "--scratch", str(scratch),
+        "--shard", "1/2", env=env,
+    )
+    checkout, _ = dossier_of(dossier)
+    (run_dir / "hunt.1.launch").write_bytes(b"")
+    (run_dir / "phase2-hunt.1.md").write_text("REVIEW-RAN: yes\nshard one\n")
+    refused = run_script(
+        "record", "hunt", "--repo", str(repo), "--base", "HEAD", "--shard", "1/2", env=env,
+    )
+    assert refused.returncode == 15, refused.stdout + refused.stderr
+    assert "dossier hunt --shard 1/2" in refused.stderr, refused.stderr
+    assert not Path(f"{run_dir / 'phase2-hunt.1.md'}.stamp").exists()
+    assert run_script("cleanup", str(checkout), "--repo", str(repo), env=env).returncode == 0
+
+
 def test_an_environment_supplied_selection_is_recorded_and_required(accepted_gate):
     repo, scratch, env = accepted_gate
     run_dir = paths(repo, env)["run"]
@@ -500,8 +526,6 @@ def test_an_unreadable_hunt_launch_is_refused_and_never_read_as_empty(accepted_g
             assert not Path(f"{report}.stamp").exists()
     finally:
         launch.chmod(0o644)
-    if not denied:
-        pytest.skip("this process can read a mode-000 file, so the denial cannot be established")
     # A marker without its trailing newline is the same selection, not a broken one.
     launch.write_bytes(launch.read_bytes().rstrip(b"\n"))
     report.write_text("REVIEW-RAN: yes\nplain\n")

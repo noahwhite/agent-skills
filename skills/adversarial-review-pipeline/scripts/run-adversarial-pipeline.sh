@@ -875,10 +875,16 @@ sandbox_error_in() {
 
 accept_phase() {  # $1 = phase, $2 = stderr log or "": validate a freshly written artifact, then stamp it
   local art key launched expected marker_hex marker_ok dossier_hint; art="$(artifact_for "$1")"; key="$(state_key "$1")"
+  # The recovery hint names the selection this invocation carries, so following it recreates the
+  # dossier the caller is trying to record.
+  dossier_hint="dossier $1"
+  if [ "$1" = "hunt" ] && [ "$SHARD_SET" -eq 1 ]; then
+    dossier_hint="dossier hunt --shard $SHARD_K/$SHARD_N"
+  fi
   [ -f "$RUN_DIR/$key.launch" ] && [ -f "$RUN_DIR/$key.binding" ] && [ -f "$RUN_DIR/$key.primary" ] \
-    || die 15 "no launch for $1 in this run (never started, discarded by a later re-run of an earlier phase, or an arbitration already accepted); write its dossier with 'dossier $1' first."
+    || die 15 "no launch for $1 in this run (never started, discarded by a later re-run of an earlier phase, or an arbitration already accepted); write its dossier with '$dossier_hint' first."
   if [ "$(cat -- "$RUN_DIR/$key.binding")" != "$(binding_text "$1")" ]; then
-    die 13 "the $1 inputs changed since its dossier was written (spec, --shard, --no-sweep or a predecessor artifact); start the $1 phase again."
+    die 13 "the $1 inputs changed since its dossier was written (spec, --shard, --no-sweep or a predecessor artifact); start the $1 phase again with '$dossier_hint'."
   fi
   [ -s "$art" ] || die 15 "the $1 agent produced no report ($art is missing or empty)."
   if [ "$RUN_DIR/$key.launch" -nt "$art" ]; then
@@ -891,14 +897,12 @@ accept_phase() {  # $1 = phase, $2 = stderr log or "": validate a freshly writte
   # selection. Both reads are byte-bounded by a marker-reader limit (96 bytes, far above any
   # selection this launcher writes), and the comparison is exact in hex, so the check never reads a
   # whole file, can never forge a diagnosis line, and reserves exit 13 for a selection the launcher
-  # could have written. It runs after the report checks, so a missing or stale report is never
-  # reported as a selection problem.
+  # could have written. It runs after the report exists and is fresh, so a missing or stale report is
+  # never reported as a selection problem.
   if [ "$1" = "hunt" ]; then
     marker_ok=0
     launched=""
     expected="$(launch_text "$1")"
-    dossier_hint="dossier hunt"
-    if [ "$SHARDED" -eq 1 ]; then dossier_hint="dossier hunt --shard $SHARD_K/$SHARD_N"; fi
     marker_hex="$(head -c 96 -- "$RUN_DIR/$key.launch" 2>/dev/null | od -An -v -tx1 | tr -d ' \n')" || marker_hex=""
     launched="$(head -c 95 -- "$RUN_DIR/$key.launch" 2>/dev/null | head -n 1)" || launched=""
     # 96 bytes or more is over the reader's limit: overflow is refused before it is classified.
