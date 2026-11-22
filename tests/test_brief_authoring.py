@@ -7,7 +7,8 @@ completion tick is the product owner's acceptance record, and that a conflict be
 its role's skill is a finding rather than a judgement call.
 Each rule sentence is pinned verbatim here, and none of them carries a line number: the `path:line`
 citations sit in separate sentences, so an edit above a cited line cannot break a pin.
-The tick permission the section quotes stays pinned in `skills/qa-verification/SKILL.md`.
+Every citation in the section is a quotation resolved against the line it names, from the skill of
+the role that holds the permission, and the tick permission stays pinned in `skills/qa-verification/SKILL.md`.
 """
 
 import re
@@ -39,11 +40,12 @@ def body() -> str:
 
 
 # AC1: a brief constrains only its own role, never restates the coordinator's persona as a rule,
-# and quotes each boundary it carries rather than paraphrasing it.
+# takes its facts from the story and the run, and quotes each boundary it carries.
 AC1 = (
     "A brief constrains only the agent it is written for.",
     "A constraint taken from the coordinator's own persona is never restated as a rule for a role.",
     "Any boundary carried into a brief is quoted from its source with `path:line` rather than paraphrased.",
+    "Its facts come from the story and the run, never from a role's skill.",
 )
 
 # AC2: the test the SKL-389 stall exposed. The first example is admissible only as a label for a
@@ -80,6 +82,40 @@ AC5 = (
 
 PINS = {"AC1": AC1, "AC2": AC2, "AC3": AC3, "AC4": AC4, "AC5": AC5}
 
+# Every citation in the section has the form `<quoted wording>` at `<path>:<line>`.
+CITATION = re.compile(r"`([^`]+)` at `([^`]+\.md):(\d+)`")
+CITATION_PATH = re.compile(r"`[^`]+\.md:\d+`")
+
+# Each permission the section grants, with the quote and the file that states it for that role.
+# The file is the skill of the role the brief is written for, never the coordinator's own copy.
+REQUIRED_CITATIONS = (
+    ("skills/qa-verification/SKILL.md", TICK_SENTENCE),
+    (
+        "skills/qa-verification/references/linear.md",
+        "Ticking the Acceptance Criteria and Definition of Done checkboxes in the description is the "
+        "completion record.",
+    ),
+    (
+        "skills/engineering-workflow/references/linear.md",
+        "Move an issue to in progress the moment its branch is created, before writing code.",
+    ),
+    (
+        "skills/qa-verification/references/linear.md",
+        "Once every AC and DoD item is ticked and verified in the environment, move the issue to done.",
+    ),
+    ("skills/engineering-workflow/SKILL.md", "gh pr create --base"),
+    ("skills/qa-verification/SKILL.md", "Ship it through the normal branch and PR flow"),
+    ("skills/engineering-workflow/SKILL.md", "Post the review of record on the PR as one PR review"),
+    ("skills/qa-verification/SKILL.md", "post the review of record on the PR"),
+    # AC2's example: the actor and the prohibition, both on the cited line.
+    ("skills/engineering-workflow/references/linear.md", "An implementing engineer"),
+    ("skills/engineering-workflow/references/linear.md", "never rewords an AC"),
+)
+
+
+def citations() -> list[tuple[str, str, str]]:
+    return CITATION.findall(body())
+
 
 def test_the_brief_authoring_section_occurs_once() -> None:
     headings = re.findall(rf"^## {re.escape(SECTION)}\s*$", SKILL.read_text(encoding="utf-8"), re.MULTILINE)
@@ -109,28 +145,34 @@ def test_no_pinned_rule_sentence_carries_a_line_number(ac: str) -> None:
         )
 
 
-# Every citation in the section has the form `<quoted wording>` at `<path>:<line>`. Resolving each one
-# from the prose keeps the citation honest without hard-coding a line number in this test: an edit
-# above a cited line moves the wording, this test fails, and the number is corrected in the prose.
-CITATION = re.compile(r"`([^`]+)` at `([^`]+\.md):(\d+)`")
+def test_every_citation_is_a_parsed_quotation() -> None:
+    """No bare `path:line` can sit in the section without a quotation it claims to carry."""
+    text = body()
+    raw = set(CITATION_PATH.findall(text))
+    parsed = {f"`{path}:{number}`" for _, path, number in citations()}
+    assert parsed, "the section cites nothing"
+    assert raw == parsed, f"unpaired citations: {sorted(raw - parsed)}"
 
 
 def test_every_citation_names_the_line_that_carries_its_quotation() -> None:
-    citations = CITATION.findall(body())
-    assert len(citations) >= 6, f"too few citations to be the section's set: {citations}"
+    root = ROOT.resolve()
     problems = []
-    for quote, path, number in citations:
-        lines = (ROOT / path).read_text(encoding="utf-8").splitlines()
+    for quote, path, number in citations():
+        target = (ROOT / path).resolve()
+        if not target.is_relative_to(root) or not target.is_file():
+            problems.append(f"{path} is not a file of this repository")
+            continue
+        lines = target.read_text(encoding="utf-8").splitlines()
         at = int(number)
         if not 1 <= at <= len(lines) or quote not in lines[at - 1]:
             problems.append(f"{path}:{number} does not carry {quote!r}")
     assert not problems, problems
 
 
-def test_the_section_quotes_the_two_files_ac3_names() -> None:
-    text = body()
-    for path in ("skills/qa-verification/SKILL.md", "skills/story-to-done/references/linear.md"):
-        assert re.search(re.escape(path) + r":\d+", text), f"no `{path}:<line>` citation in {SECTION!r}"
+def test_each_permission_is_quoted_from_the_receiving_roles_skill() -> None:
+    found = {(path, quote) for quote, path, _ in citations()}
+    missing = [citation for citation in REQUIRED_CITATIONS if citation not in found]
+    assert not missing, f"missing permission quotations: {missing}"
 
 
 def test_the_tick_permission_is_still_in_the_qa_skill_and_quoted_into_the_section() -> None:

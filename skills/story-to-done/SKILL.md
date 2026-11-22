@@ -110,19 +110,20 @@ For an orchestration-heavy run - one that spawns a senior engineer and at least 
 ## Brief authoring
 
 A brief carries facts, constraints and permissions.
-Its facts come from the story and the run, never from a role's skill, and each constraint and permission in it is scoped to the role it is written for and quoted from the skill that governs that role.
+Its facts come from the story and the run, never from a role's skill.
+Each constraint and permission in it is scoped to the role it is written for and quoted from the skill that governs that role.
 
 - A brief constrains only the agent it is written for.
   A constraint taken from the coordinator's own persona is never restated as a rule for a role.
   Any boundary carried into a brief is quoted from its source with `path:line` rather than paraphrased.
 - A prohibition is admissible only when it names the actor it binds and the skill text it comes from.
   "Never reword an acceptance criterion" labels the admissible case, because its source names the actor it binds and the text it forbids; "never edit the DoD text" is not admissible, because ticking a box edits DoD text.
-  That source names `An implementing engineer` and says `never rewords an AC`, at `skills/story-to-done/references/linear.md:160`.
+  The actor is `An implementing engineer` at `skills/engineering-workflow/references/linear.md:160`, and the text it forbids is `never rewords an AC` at `skills/engineering-workflow/references/linear.md:160`.
 - Every role brief names what the role may do as well as what it may not: it ticks the boxes it verified, moves the states its skill assigns, opens its own PR, and posts the review of record.
   Each permission is quoted from the skill of the role the brief is written for, with its `path:line`.
-  The tick wording is `Tick the boxes you verified.` at `skills/qa-verification/SKILL.md:170`, and the record a tick writes is `Ticking the Acceptance Criteria and Definition of Done checkboxes in the description is the completion record.` at `skills/story-to-done/references/linear.md:45`.
-  The senior engineer's state move is `Move an issue to in progress the moment its branch is created, before writing code.` at `skills/story-to-done/references/linear.md:40`; the QA state move is `Once every AC and DoD item is ticked and verified in the environment, move the issue to done.` at `skills/story-to-done/references/linear.md:39`.
-  The senior engineer opens the integration PR in `Open a PR only once the branch is cleanly based on its target.` at `skills/story-to-done/references/github.md:78`; the QA agent ships the evidence PR in `Commit the evidence for every story you QA, not only when asked` at `skills/qa-verification/SKILL.md:137`, and only when `profile.qa.evidence_dir` is set.
+  The tick wording is `Tick the boxes you verified.` at `skills/qa-verification/SKILL.md:170`, and the record a tick writes is `Ticking the Acceptance Criteria and Definition of Done checkboxes in the description is the completion record.` at `skills/qa-verification/references/linear.md:45`.
+  The senior engineer's state move is `Move an issue to in progress the moment its branch is created, before writing code.` at `skills/engineering-workflow/references/linear.md:40`; the QA state move is `Once every AC and DoD item is ticked and verified in the environment, move the issue to done.` at `skills/qa-verification/references/linear.md:39`.
+  The senior engineer opens the integration PR with `gh pr create --base` at `skills/engineering-workflow/SKILL.md:185`; the QA agent, only when `profile.qa.evidence_dir` is set, ships the evidence PR in `Ship it through the normal branch and PR flow` at `skills/qa-verification/SKILL.md:142`.
   The senior engineer's review of record reads `Post the review of record on the PR as one PR review` at `skills/engineering-workflow/SKILL.md:232`; the QA agent's reads `post the review of record on the PR` at `skills/qa-verification/SKILL.md:155`.
 - The completion tick is the product owner's acceptance record, and the current skills delegate it to the agent that observed the behaviour, so a brief may qualify the tick but may never remove the permission.
   This changes no ownership: the product owner remains the authority on criteria, scope, estimates and closure.
@@ -130,7 +131,7 @@ Its facts come from the story and the run, never from a role's skill, and each c
   The coordinator escalates it to the owner, and neither resolves it silently in either direction.
 
 The coordinator applies these rules to every list item it carries from step 2 or step 3, and to any rendered draft of them, before dispatch.
-The linear citations name `skills/story-to-done/references/linear.md`, which `scripts/vendor_shared.py` generates from `shared/linear.md`.
+The linear and github citations name copies that `scripts/vendor_shared.py` generates from `shared/linear.md` and `shared/github.md`.
 
 ## Metrics
 

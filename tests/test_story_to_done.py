@@ -2221,33 +2221,46 @@ def test_readme_row_says_the_summary_is_posted_read_back_and_given_in_the_closin
 POST_WORDS = re.compile(r"\bpost(?:s|ed|ing)?\b|\bcomments?\b", re.IGNORECASE)
 
 BRIEF_AUTHORING = "Brief authoring"
-# The brief-authoring lines that name a role's own post. Each is anchored to its home section below,
-# like every other allowed line, so the section cannot become coordinator-facing prose unnoticed.
+CITATION_NUMBER = re.compile(r":\d+")
+
+
+def unpinned(line: str) -> str:
+    """A line with each citation's line number blanked, so a corrected citation never edits a test."""
+    return CITATION_NUMBER.sub(":NN", line)
+
+
+# The brief-authoring lines that name a role's own post. Each must live in that section, like every
+# other allowed line, and its citation numbers are matched without being pinned here.
 BRIEF_PERMISSION_LINES = (
     "- Every role brief names what the role may do as well as what it may not: it ticks the boxes it "
     "verified, moves the states its skill assigns, opens its own PR, and posts the review of record.",
     "  The senior engineer's review of record reads `Post the review of record on the PR as one PR "
-    "review` at `skills/engineering-workflow/SKILL.md:232`; the QA agent's reads `post the review of "
-    "record on the PR` at `skills/qa-verification/SKILL.md:155`.",
+    "review` at `skills/engineering-workflow/SKILL.md:NN`; the QA agent's reads `post the review of "
+    "record on the PR` at `skills/qa-verification/SKILL.md:NN`.",
 )
 
 
 def test_only_the_on_path_lines_tell_the_coordinator_to_post_or_comment() -> None:
     text = SKILL.read_text()
     body = text.split("\n---\n", 1)[1]
+    brief_home = {unpinned(line): line for line in section(text, BRIEF_AUTHORING).splitlines()}
+    brief_lines = []
+    for expected in BRIEF_PERMISSION_LINES:
+        found = brief_home.get(unpinned(expected))
+        assert found is not None, f"a brief-authoring role-permission line left its section: {expected}"
+        brief_lines.append(found)
     on_path = {
         METRICS_WRAPPER_INTRO: "Metrics",
         METRICS_END_INTRO: "Metrics",
         **{line: "Metrics" for line in METRICS_POSTING},
         METRICS_STEP0: "0. Track everything on a todo list",
         BOUNDARIES_ONLY_WRITE: "Boundaries",
-        **{line: BRIEF_AUTHORING for line in BRIEF_PERMISSION_LINES},
     }
     for line, heading in on_path.items():
         home = metrics_section() if heading == "Metrics" else section(text, heading)
         assert line in home.splitlines(), f"an on-path post line left its section: {line}"
     # The owner-wait rule reads the story's comments and names a comment as owner input; it posts none.
-    allowed = {"- " + OFF_PATH, METRICS_POINTER, *on_path, *OWNER_WAIT_RULE}
+    allowed = {"- " + OFF_PATH, METRICS_POINTER, *on_path, *OWNER_WAIT_RULE, *brief_lines}
     merge_rule = "needs a delta review posted before merging"
     for line in [*body.splitlines(), *PROTOCOL.read_text().splitlines()]:
         if line in allowed:
