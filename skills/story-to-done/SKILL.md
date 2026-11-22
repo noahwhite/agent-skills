@@ -107,6 +107,33 @@ Where this file and a capability file disagree, the capability file wins.
 
 For an orchestration-heavy run - one that spawns a senior engineer and at least one QA agent - Lite mode plus the 12-minute batched-poll cadence is the default, and [assets/kickoff-prompt.md](assets/kickoff-prompt.md) holds the caller prompt that starts it.
 
+## Brief authoring
+
+A brief carries facts, constraints and permissions.
+Its facts come from the story and the run, never from a role's skill.
+Each constraint and permission in it is scoped to the role it is written for and quoted from the skill that governs that role.
+
+- A brief constrains only the agent it is written for.
+  A constraint taken from the coordinator's own persona is never restated as a rule for a role.
+  Any boundary carried into a brief is quoted from its source with `path:line` rather than paraphrased.
+- A prohibition is admissible only when it names the actor it binds and the skill text it comes from.
+  "Never reword an acceptance criterion" labels the admissible case, because its source names the actor it binds and the text it forbids; "never edit the DoD text" is not admissible, because ticking a box edits DoD text.
+  The actor is "An implementing engineer" at `skills/engineering-workflow/references/linear.md:160`, and the text it forbids is "never rewords an AC" at `skills/engineering-workflow/references/linear.md:160`.
+- Every role brief names what the role may do as well as what it may not: it ticks the boxes it verified, moves the states its skill assigns, opens its own PR, and posts the review of record.
+  Each permission is quoted from the skill of the role the brief is written for, with its `path:line`.
+  The tick wording is "Tick the boxes you verified." at `skills/qa-verification/SKILL.md:170`, and the record a tick writes is "Ticking the Acceptance Criteria and Definition of Done checkboxes in the description is the completion record." at `skills/qa-verification/references/linear.md:45`.
+  The senior engineer's state move is "Move an issue to in progress the moment its branch is created, before writing code." at `skills/engineering-workflow/references/linear.md:40`; the QA state move is "Once every AC and DoD item is ticked and verified in the environment, move the issue to done." at `skills/qa-verification/references/linear.md:39`.
+  The senior engineer opens the integration PR only on the terms its skill sets, "Open a PR only once the branch is cleanly based on its target." at `skills/engineering-workflow/references/github.md:78`.
+  The QA agent ships the evidence PR when the project keeps in-repo evidence, "Ship it through the normal branch and PR flow in `references/github.md`, signed when `profile.git.signed_commits` is true, and verify the signature after pushing." at `skills/qa-verification/SKILL.md:142`, and skips it otherwise, "If `profile.qa.evidence_dir` is unset, the project does not keep in-repo evidence; skip this step and say so in the report." at `skills/qa-verification/SKILL.md:138`.
+  The senior engineer's review of record reads "Post the review of record on the PR as one PR review" at `skills/engineering-workflow/SKILL.md:232`; the QA agent's reads "post the review of record on the PR" at `skills/qa-verification/SKILL.md:155`.
+- The completion tick is the product owner's acceptance record, and the current skills delegate it to the agent that observed the behaviour, so a brief may qualify the tick but may never remove the permission.
+  This changes no ownership: the product owner remains the authority on criteria, scope, estimates and closure.
+- A role that finds a brief contradicting its skill reports the conflict and stops.
+  The coordinator escalates it to the owner, and neither resolves it silently in either direction.
+
+The coordinator applies these rules to every list item it carries from step 2 or step 3, and to any rendered draft of them, before dispatch.
+The linear and github citations name copies that `scripts/vendor_shared.py` generates from `shared/linear.md` and `shared/github.md`.
+
 ## Metrics
 
 Only when `metrics` is on, read [references/metrics.md](references/metrics.md) right after step 0 creates the todo list: it is the single home for what a `story-to-done` run collects and reports, and this file does not restate it.
