@@ -1129,6 +1129,98 @@ def test_a_failed_fallback_write_keeps_another_writers_readme(tmp_path, monkeypa
     assert target.read_text(encoding="utf-8") == "# concurrent writer\n"
 
 
+def test_a_quoted_second_sentence_is_refused(tmp_path):
+    label = 'AC1 - "First sentence." "Second sentence."'
+    res = run(tmp_path, "--key", "SKL-386", "--item", label)
+    assert res.returncode == 1, res.stderr
+    assert "more than one sentence" in res.stderr
+    assert not (tmp_path / "docs").exists()
+
+
+def test_a_profile_reference_before_a_second_sentence_does_not_hide_it(tmp_path):
+    label = "AC1 - set profile.git.integration_branch. Then push."
+    res = run(tmp_path, "--key", "SKL-386", "--item", label)
+    assert res.returncode == 1, res.stderr
+    assert "more than one sentence" in res.stderr
+    assert not (tmp_path / "docs").exists()
+
+
+def test_an_abbreviation_before_a_second_sentence_does_not_hide_it(tmp_path):
+    label = "AC1 - do this, etc. Then push."
+    res = run(tmp_path, "--key", "SKL-386", "--item", label)
+    assert res.returncode == 1, res.stderr
+    assert "more than one sentence" in res.stderr
+    assert not (tmp_path / "docs").exists()
+
+
+def test_a_write_only_story_directory_can_receive_the_readme(tmp_path):
+    story = tmp_path / "docs" / "qa-evidence" / "SKL-386"
+    story.mkdir(parents=True)
+    story.chmod(0o300)
+    try:
+        res = run(tmp_path, "--key", "SKL-386", "--item", "AC1 - one generator")
+        assert res.returncode == 0, res.stderr
+        assert (story / "README.md").is_file()
+    finally:
+        story.chmod(0o700)
+
+
+def test_a_schema_whose_properties_is_not_a_mapping_is_a_one_line_refusal(tmp_path):
+    (tmp_path / "profile").mkdir()
+    (tmp_path / "profile" / "schema.json").write_text('{"properties": null}', encoding="utf-8")
+    res = run_in(tmp_path, "--key", "SKL-386", "--item", "AC1 - profile.any.key is set")
+    assert res.returncode == 1, res.stderr
+    assert len(res.stderr.splitlines()) == 1, res.stderr
+    assert "profile.any.key" in res.stderr
+    assert not (tmp_path / "docs").exists()
+
+
+def test_a_profile_word_that_is_not_a_reference_does_not_load_the_schema(tmp_path):
+    (tmp_path / "profile").mkdir()
+    (tmp_path / "profile" / "schema.json").write_text("{ not json", encoding="utf-8")
+    res = run_in(tmp_path, "--key", "SKL-386", "--item", "AC1 - xprofile.broken and profile.md stay literal")
+    assert res.returncode == 0, res.stderr
+    assert (tmp_path / "docs" / "qa-evidence" / "SKL-386" / "README.md").is_file()
+
+
+def test_a_readme_directory_is_refused_as_a_non_regular_file(tmp_path):
+    readme = tmp_path / "docs" / "qa-evidence" / "SKL-386" / "README.md"
+    readme.mkdir(parents=True)
+    res = run(tmp_path, "--key", "SKL-386")
+    assert res.returncode == 1, res.stderr
+    assert len(res.stderr.splitlines()) == 1, res.stderr
+    assert "is not a regular file" in res.stderr
+    assert "already exists" not in res.stderr
+    assert readme.is_dir()
+
+
+def test_the_whole_skeleton_is_exactly_the_expected_text(tmp_path):
+    readme = generate(tmp_path, "SKL-386", ("AC1 - one generator", "AC2 - exact content"), path="deployed")
+    assert readme.read_text(encoding="utf-8") == (
+        "# SKL-386 QA evidence\n"
+        "\n"
+        "## QA round 1\n"
+        "\n"
+        "Date:\n"
+        "Fixtures:\n"
+        "Path: deployed\n"
+        "Environment:\n"
+        "Build:\n"
+        "\n"
+        "| Item | Verdict | Evidence |\n"
+        "| --- | --- | --- |\n"
+        "| AC1 - one generator |  |  |\n"
+        "| AC2 - exact content |  |  |\n"
+    )
+
+
+def test_an_unsupported_path_is_refused(tmp_path):
+    before = tree_state(tmp_path)
+    res = run(tmp_path, "--key", "SKL-386", "--path", "deployed-ish")
+    assert res.returncode == 2, res.stderr
+    assert tree_state(tmp_path) == before
+
+
 def test_an_abbreviated_option_is_refused(tmp_path):
     res = run(tmp_path, "--key", "SKL-386", "--pa", "spike")
     assert res.returncode == 2, res.stderr

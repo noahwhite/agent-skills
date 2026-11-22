@@ -70,15 +70,19 @@ PROFILE_REF_RE = re.compile(
 ESCAPE_RE = re.compile(r"\\([!-/:-@\[-`{-~])")
 # The Markdown punctuation a literal cell escapes, so the reader renders the text unchanged.
 LITERAL_ESCAPES = set("\\`*_[<>&|~$]")
-# A sentence ends at `.`, `!` or `?` before whitespace or the end; dots inside an identifier do not.
-SENTENCE_END_RE = re.compile(r"[.!?](?=\s|$)")
-# Common abbreviations whose dot is not a sentence boundary.
-ABBREVIATION_RE = re.compile(r"(?i)\b(?:e\.g|i\.e|etc|vs|fig|mr|mrs|ms|dr)\.(?=\s|$)")
+# A sentence ends at `.`, `!` or `?` before whitespace or the end; a closing quote or bracket after
+# the terminator does not hide the boundary.
+SENTENCE_END_RE = re.compile(r"[.!?][\"'\u2019\u201d)\]]*(?=\s|$)")
+# Common abbreviations whose dot is not a sentence boundary when the sentence continues in lowercase;
+# a capital or digit after the dot is read as the start of a new sentence.
+ABBREVIATION_RE = re.compile(r"\b(?i:e\.g|i\.e|etc|vs|fig|mr|mrs|ms|dr)\.(?=\s+[a-z0-9]|\s*$)")
 # Link errors that mean the filesystem cannot publish a hard link, where an exclusive copy is the fallback.
 LINK_UNSUPPORTED = {errno.EPERM, errno.EXDEV, errno.EMLINK}
 for _name in ("EOPNOTSUPP", "ENOTSUP"):
     if hasattr(errno, _name):
         LINK_UNSUPPORTED.add(getattr(errno, _name))
+# O_PATH opens a directory for use as a `dir_fd` without requiring read permission on it.
+PATH_FLAGS = getattr(os, "O_PATH", os.O_RDONLY)
 
 
 def one_line(text: str) -> str:
@@ -179,7 +183,10 @@ def deref(node, defs: dict):
     seen: set[str] = set()
     while isinstance(node, dict):
         if "$ref" in node:
-            name = node["$ref"].split("/")[-1]
+            ref = node["$ref"]
+            if not isinstance(ref, str):
+                return None
+            name = ref.split("/")[-1]
             if name in seen or name not in defs:
                 return None
             seen.add(name)
@@ -202,7 +209,9 @@ def deref(node, defs: dict):
 
 def schema_node(schema: dict, path: str):
     """The node `path` names in `schema`, or None when it does not resolve as the lint requires."""
-    defs = schema.get("$defs", {})
+    defs = schema.get("$defs")
+    if not isinstance(defs, dict):
+        defs = {}
     node = schema
     for part in path.split("."):
         is_array = part.endswith("[]")
@@ -210,8 +219,8 @@ def schema_node(schema: dict, path: str):
         node = deref(node, defs)
         if not isinstance(node, dict):
             return None
-        properties = node.get("properties", {})
-        if key in properties:
+        properties = node.get("properties")
+        if isinstance(properties, dict) and key in properties:
             node = properties[key]
         elif isinstance(node.get("additionalProperties"), dict):
             node = node["additionalProperties"]
@@ -274,13 +283,31 @@ def key_content_problem(key: str, *, spelling: bool) -> str | None:
     return None
 
 
+def mask_sentence_noise(text: str) -> str:
+    """`text` with references and abbreviations masked, so only real sentence boundaries remain."""
+    def reference(match) -> str:
+        ref = match.group(1)
+        trailing = ref[len(ref.rstrip(".")):]
+        following = match.string[match.end():].lstrip()[:1]
+        if trailing and (not following or following.islower() or following.isdigit()):
+            trailing = ""
+        return "profile" + trailing
+
+    return ABBREVIATION_RE.sub(lambda match: match.group(0)[:-1], PROFILE_REF_RE.sub(reference, text))
+
+
+def more_than_one_sentence(label: str) -> bool:
+    """Whether the text a reader sees holds more than one sentence, with abbreviations accounted for."""
+    prose = mask_sentence_noise(visible_text(label).rstrip())
+    ends = list(SENTENCE_END_RE.finditer(prose))
+    return len(ends) > 1 or bool(ends and ends[0].end() < len(prose))
+
+
 def label_problem(label: str, *, schema: dict | None, spelling: bool) -> str | None:
     """Why a cleaned label cannot be written into the skeleton, or None when it can."""
     if not label:
         return "is empty"
-    prose = PROFILE_REF_RE.sub("profile", ABBREVIATION_RE.sub("", label)).rstrip()
-    ends = list(SENTENCE_END_RE.finditer(prose))
-    if len(ends) > 1 or (ends and ends[0].end() < len(prose)):
+    if more_than_one_sentence(label):
         return "holds more than one sentence"
     for text in (label, visible_text(label)):
         problem = lint_problem(text, spelling=spelling)
@@ -300,11 +327,11 @@ def open_directory(path: Path, *, create: bool) -> tuple[int | None, str | None]
     """Open `path` one component at a time, never following a symlink, creating it when asked."""
     if not path.is_absolute():
         return None, f"{one_line(str(path))} is not absolute"
-    descriptor = os.open("/", os.O_RDONLY | os.O_DIRECTORY)
+    descriptor = os.open("/", PATH_FLAGS | os.O_DIRECTORY)
     try:
         for part in path.parts[1:]:
             try:
-                child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=descriptor)
+                child = os.open(part, PATH_FLAGS | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=descriptor)
             except FileNotFoundError:
                 if not create:
                     os.close(descriptor)
@@ -313,7 +340,10 @@ def open_directory(path: Path, *, create: bool) -> tuple[int | None, str | None]
                     os.mkdir(part, dir_fd=descriptor)
                 except FileExistsError:
                     pass
-                child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=descriptor)
+                child = os.open(part, PATH_FLAGS | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=descriptor)
+            if not stat.S_ISDIR(os.fstat(child).st_mode):
+                os.close(child)
+                raise OSError(errno.ENOTDIR, os.strerror(errno.ENOTDIR))
             os.close(descriptor)
             descriptor = child
     except OSError as exc:
@@ -324,6 +354,20 @@ def open_directory(path: Path, *, create: bool) -> tuple[int | None, str | None]
     return descriptor, None
 
 
+def existing_target_problem(descriptor: int, target: Path) -> str | None:
+    """The refusal when `target` already exists under `descriptor`, or None when it does not."""
+    try:
+        info = os.stat(target.name, dir_fd=descriptor, follow_symlinks=False)
+    except FileNotFoundError:
+        return None
+    path = one_line(str(target.absolute()))
+    if stat.S_ISLNK(info.st_mode):
+        return f"error: {path} is a symlink; refusing to follow it"
+    if not stat.S_ISREG(info.st_mode):
+        return f"error: {path} is not a regular file; refusing to use it"
+    return f"error: {path} already exists; refusing to overwrite it"
+
+
 def target_problem(target: Path) -> str | None:
     """The refusal when `target` already exists on a safe path or sits on an unsafe one, else None."""
     descriptor, problem = open_directory(target.parent, create=False)
@@ -332,14 +376,9 @@ def target_problem(target: Path) -> str | None:
     if descriptor is None:
         return None
     try:
-        info = os.stat(target.name, dir_fd=descriptor, follow_symlinks=False)
-    except FileNotFoundError:
-        return None
+        return existing_target_problem(descriptor, target)
     finally:
         os.close(descriptor)
-    if stat.S_ISLNK(info.st_mode):
-        return f"error: {one_line(str(target.absolute()))} is a symlink; refusing to follow it"
-    return f"error: {one_line(str(target.absolute()))} already exists; refusing to overwrite it"
 
 
 def publish(target: Path, text: str) -> bool:
@@ -356,12 +395,9 @@ def publish(target: Path, text: str) -> bool:
     temp = f".qa-evidence-{os.getpid()}-{os.urandom(6).hex()}.tmp"
     created = False
     try:
-        try:
-            os.stat(target.name, dir_fd=descriptor, follow_symlinks=False)
-        except FileNotFoundError:
-            pass
-        else:
-            print(f"error: {one_line(str(target.absolute()))} already exists; refusing to overwrite it", file=sys.stderr)
+        problem = existing_target_problem(descriptor, target)
+        if problem is not None:
+            print(problem, file=sys.stderr)
             return False
         try:
             handle = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=descriptor)
@@ -381,7 +417,7 @@ def publish(target: Path, text: str) -> bool:
         try:
             os.link(temp, target.name, src_dir_fd=descriptor, dst_dir_fd=descriptor, follow_symlinks=False)
         except FileExistsError:
-            print(f"error: {one_line(str(target.absolute()))} already exists; refusing to overwrite it", file=sys.stderr)
+            print(existing_target_problem(descriptor, target) or f"error: {one_line(str(target.absolute()))} already exists; refusing to overwrite it", file=sys.stderr)
             return False
         except OSError as exc:
             if exc.errno not in LINK_UNSUPPORTED:
@@ -395,7 +431,8 @@ def publish(target: Path, text: str) -> bool:
                 )
             except FileExistsError:
                 print(
-                    f"error: {one_line(str(target.absolute()))} already exists; refusing to overwrite it",
+                    existing_target_problem(descriptor, target)
+                    or f"error: {one_line(str(target.absolute()))} already exists; refusing to overwrite it",
                     file=sys.stderr,
                 )
                 return False
@@ -480,7 +517,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     schema: dict | None = None
-    if any("profile." in visible_text(clean_label(raw)) for raw in args.items):
+    if any(ref_candidates(visible_text(clean_label(raw))) for raw in args.items):
         schema, schema_problem = local_schema(destination_root)
         if schema_problem is not None:
             print(schema_problem, file=sys.stderr)
