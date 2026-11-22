@@ -52,16 +52,29 @@ def flat(text: str) -> str:
 def visible_text(token) -> str:
     """The text of an inline token as a reader sees it.
 
-    Text and inline code count; a soft or hard line break becomes one space, so a rewrapped
-    sentence still reads as one sentence. An HTML comment or a link attribute is invisible.
+    One extractor reads prose, inline code, line breaks, an image's alt text and raw inline HTML,
+    so a hidden HTML subtree hides any later text in the same paragraph. A soft or hard line break
+    becomes one space, so a rewrapped sentence still reads as one sentence. An HTML comment or a
+    link attribute is invisible.
     """
-    parts = []
+    parser = _TextExtractor()
     for child in token.children or []:
         if child.type in {"text", "code_inline"}:
-            parts.append(child.content)
+            parser.handle_data(child.content)
         elif child.type in {"softbreak", "hardbreak"}:
-            parts.append(" ")
-    return "".join(parts)
+            parser.handle_data(" ")
+        elif child.type == "image":
+            parser.handle_data(
+                "".join(
+                    part.content
+                    for part in (child.children or [])
+                    if part.type in {"text", "code_inline"}
+                )
+            )
+        elif child.type == "html_inline":
+            parser.feed(child.content)
+    parser.close()
+    return "".join(parser.parts)
 
 
 def asset_document(
@@ -126,46 +139,68 @@ def step_ranges(text: str) -> list[tuple[int, int]]:
 
 # Raw HTML tags that start a new block (and so separate text); every other tag is inline.
 BLOCK_TAGS = {
-    "address", "article", "aside", "blockquote", "br", "dd", "div", "dl", "dt", "figcaption",
-    "figure", "footer", "form", "h1", "h2", "h3", "h4", "h5", "h6", "header", "hr", "li", "main",
-    "nav", "ol", "p", "pre", "section", "table", "tbody", "td", "tfoot", "th", "thead", "tr", "ul",
+    "address", "article", "aside", "blockquote", "br", "dd", "details", "div", "dl", "dt",
+    "figcaption", "figure", "footer", "form", "h1", "h2", "h3", "h4", "h5", "h6", "header", "hr",
+    "li", "main", "nav", "ol", "p", "pre", "section", "summary", "table", "tbody", "td", "tfoot",
+    "th", "thead", "tr", "ul",
 }
+# Void elements never open a subtree, so a hidden attribute on one hides nothing after it.
+VOID_TAGS = {
+    "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source",
+    "track", "wbr",
+}
+# Elements whose contents a reader never sees.
+HIDDEN_TAGS = {"script", "style", "template"}
 
 
 class _TextExtractor(HTMLParser):
     """The text a reader sees in a raw HTML fragment.
 
     Adjacent inline tags concatenate without a space, block tags separate text, character
-    references are decoded, and comments, script and style contents are left out.
+    references are decoded, an image's alt text counts, and comments, script, style, template
+    contents and any hidden subtree are left out.
     """
 
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
         self.parts: list[str] = []
-        self.hidden = 0
+        self.hidden_tags: list[str] = []
 
     def _separate(self) -> None:
         if self.parts and not self.parts[-1].endswith(" "):
             self.parts.append(" ")
 
-    def handle_starttag(self, tag: str, attrs) -> None:
-        if tag in {"script", "style"}:
-            self.hidden += 1
+    def _start(self, tag: str, attrs) -> None:
+        if tag not in VOID_TAGS and (
+            tag in HIDDEN_TAGS or any(name == "hidden" for name, _ in attrs)
+        ):
+            self.hidden_tags.append(tag)
+        if self.hidden_tags:
+            return
+        if tag == "img":
+            alt = dict(attrs).get("alt")
+            if alt:
+                self.parts.append(alt)
         elif tag in BLOCK_TAGS:
             self._separate()
 
+    def handle_starttag(self, tag: str, attrs) -> None:
+        self._start(tag, attrs)
+
     def handle_startendtag(self, tag: str, attrs) -> None:
+        self._start(tag, attrs)
+
+    def handle_endtag(self, tag: str) -> None:
+        if self.hidden_tags and self.hidden_tags[-1] == tag:
+            self.hidden_tags.pop()
+            return
+        if self.hidden_tags:
+            return
         if tag in BLOCK_TAGS:
             self._separate()
 
-    def handle_endtag(self, tag: str) -> None:
-        if tag in {"script", "style"}:
-            self.hidden = max(0, self.hidden - 1)
-        elif tag in BLOCK_TAGS:
-            self._separate()
-
     def handle_data(self, data: str) -> None:
-        if not self.hidden:
+        if not self.hidden_tags:
             self.parts.append(data)
 
 
@@ -180,23 +215,13 @@ def html_text(content: str) -> str:
 def visible_mentions(text: str) -> int:
     """Occurrences of the asset path in anything a reader sees.
 
-    Prose, code blocks, rendered image alt text and non-comment raw HTML count; HTML comments,
-    link destinations and link titles do not.
+    Prose, code blocks, image alt text and non-comment raw HTML count; HTML comments, hidden
+    subtrees, link destinations and link titles do not.
     """
     count = 0
     for token in MARKDOWN.parse(text):
         if token.type == "inline":
             count += visible_text(token).count(POINTER)
-            for child in token.children or []:
-                if child.type == "image":
-                    alt = "".join(
-                        part.content
-                        for part in (child.children or [])
-                        if part.type in {"text", "code_inline"}
-                    )
-                    count += alt.count(POINTER)
-                elif child.type == "html_inline":
-                    count += html_text(child.content).count(POINTER)
         elif token.type in {"fence", "code_block"}:
             count += token.content.count(POINTER)
         elif token.type == "html_block":
@@ -207,10 +232,10 @@ def visible_mentions(text: str) -> int:
 def without_frontmatter(text: str) -> str:
     """The text with any leading YAML frontmatter blanked out, line numbers preserved."""
     lines = text.splitlines()
-    if not lines or lines[0].strip() != "---":
+    if not lines or lines[0].rstrip() != "---":
         return text
     for index in range(1, len(lines)):
-        if lines[index].strip() in {"---", "..."}:
+        if lines[index].rstrip() in {"---", "..."}:
             return "\n".join([""] * (index + 1) + lines[index + 1:])
     return text
 
@@ -453,3 +478,39 @@ def test_the_placement_guard_rejects_a_pointer_only_in_frontmatter() -> None:
     problems = placement_problems(text)
     assert any("exactly one paragraph of visible prose (found 0" in problem for problem in problems), problems
     assert any("must appear once in visible text (found 0" in problem for problem in problems), problems
+
+
+def test_the_placement_guard_reads_an_indented_marker_in_frontmatter_as_metadata() -> None:
+    frontmatter = (
+        "---\n"
+        "name: fixture\n"
+        "description: >-\n"
+        "  First line.\n"
+        "  ---\n"
+        f"  Also see {POINTER} in metadata.\n"
+        "---\n"
+        "\n"
+    )
+    assert placement_problems(frontmatter + skill_document()) == []
+
+
+def test_the_placement_guard_counts_a_pointer_in_a_raw_html_image_alt() -> None:
+    duplicated = f'{POINTER_SENTENCE}\n\nSee <img alt="{POINTER}">.'
+    problems = placement_problems(skill_document(duplicated))
+    assert any("must appear once in visible text (found 2" in problem for problem in problems)
+
+
+def test_the_placement_guard_ignores_a_pointer_inside_a_template() -> None:
+    text = skill_document(f"{POINTER_SENTENCE}\n\n<template>{POINTER}</template>")
+    assert placement_problems(text) == []
+
+
+def test_the_placement_guard_ignores_a_pointer_in_a_hidden_subtree() -> None:
+    text = skill_document(f"{POINTER_SENTENCE}\n\n<div hidden>{POINTER}</div>")
+    assert placement_problems(text) == []
+
+
+def test_the_placement_guard_does_not_join_a_path_across_a_details_boundary() -> None:
+    split = "assets/kickoff-prompt"
+    text = skill_document(f"{POINTER_SENTENCE}\n\n<details>{split}</details>.md")
+    assert placement_problems(text) == []
