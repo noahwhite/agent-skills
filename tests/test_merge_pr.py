@@ -238,6 +238,10 @@ def run(tmp_path):
     consumer = tmp_path / "consumer"
     consumer.mkdir()
     subprocess.run(["git", "init", "-q", str(consumer)], check=True)
+    subprocess.run(
+        ["git", "-C", str(consumer), "remote", "add", "origin", "https://github.com/acme/widgets.git"],
+        check=True,
+    )
     profile = tmp_path / "profile.yaml"
     log = tmp_path / "gh.log"
 
@@ -264,7 +268,11 @@ def run(tmp_path):
         recheck=None,
         with_repo=True,
         check_runs=None,
+        remote_url="https://github.com/acme/widgets.git",
     ):
+        subprocess.run(
+            ["git", "-C", str(consumer), "remote", "set-url", "origin", remote_url], check=True
+        )
         # A previous call in the same test leaves these behind; they must not decide this call.
         for stale in ("recheck.json", "moved-once"):
             try:
@@ -671,6 +679,7 @@ def test_refuses_a_pr_that_is_not_open(run):
 # --- Slice 4: the guarded merge, its confirmation, and the no-unguarded-retry rules -------------
 
 MERGE_PREFIX = f"pr merge 7 --match-head-commit {HEAD}"
+MERGE_SUFFIX = "--repo acme/widgets"
 
 
 @pytest.mark.parametrize("method,flag", [("squash", "--squash"), ("merge", "--merge"), ("rebase", "--rebase")])
@@ -678,7 +687,7 @@ def test_merges_with_the_expected_head_and_the_profile_merge_method(run, method,
     text = PROFILE.replace("merge_method: squash", f"merge_method: {method}")
     done, log = run(profile_text=text, reviews=[review()])
     assert done.returncode == 0, done.stderr
-    assert merged(log) == [f"{MERGE_PREFIX} {flag}"]
+    assert merged(log) == [f"{MERGE_PREFIX} {flag} {MERGE_SUFFIX}"]
 
 
 def test_reports_success_only_after_github_confirms_the_merge(run):
@@ -968,7 +977,7 @@ def test_reads_the_required_checks_from_stdout_when_gh_warns_on_stderr(run):
 
 def test_pins_the_checks_read_and_the_branch_policy_read(run):
     _, log = run(reviews=[review()])
-    assert "pr checks 7 --json name,state" in log
+    assert "pr checks 7 --json name,state --repo acme/widgets" in log
     assert "repos/acme/widgets/rules/branches/main --hostname github.com" in calls(log)
 
 
@@ -985,7 +994,11 @@ def test_lists_each_excluded_marker_review(run, tmp_path):
 
 def test_reads_the_reviews_from_the_pr_host(run):
     host_review = review(url="https://ghe.example.com/acme/widgets/pull/7#pullrequestreview-11")
-    done, log = run(reviews=[host_review], pr_url="https://ghe.example.com/acme/widgets/pull/7")
+    done, log = run(
+        reviews=[host_review],
+        pr_url="https://ghe.example.com/acme/widgets/pull/7",
+        remote_url="https://ghe.example.com/acme/widgets.git",
+    )
     assert done.returncode == 0, done.stderr
     assert f"api --paginate {REVIEWS_END} --hostname ghe.example.com" in calls(log)
 
@@ -994,7 +1007,11 @@ def test_refuses_a_review_url_on_another_host(run):
     # AC2 reads the reviews on the PR's own host, and the review of record is named and re-read from
     # that host: a review URL pointing elsewhere is a refusal, never printed as this PR's review.
     elsewhere = review(url="https://github.com/acme/widgets/pull/7#pullrequestreview-11")
-    done, log = run(reviews=[elsewhere], pr_url="https://ghe.example.com/acme/widgets/pull/7")
+    done, log = run(
+        reviews=[elsewhere],
+        pr_url="https://ghe.example.com/acme/widgets/pull/7",
+        remote_url="https://ghe.example.com/acme/widgets.git",
+    )
     assert done.returncode == 15
     assert "not on PR #7" in done.stderr
     assert merged(log) == []
@@ -1191,6 +1208,7 @@ def test_resolves_the_fallback_author_on_the_pr_host(run):
         reviews=[host_review],
         login="record-author",
         pr_url="https://ghe.example.com/acme/widgets/pull/7",
+        remote_url="https://ghe.example.com/acme/widgets.git",
     )
     assert done.returncode == 0, done.stderr
     assert "api user --jq .login --hostname ghe.example.com" in calls(log)
@@ -1260,8 +1278,8 @@ def test_a_stderr_only_merge_failure_is_reported_blocked(run):
     )
     assert done.returncode != 0
     assert "failed (exit 1)" in done.stderr
-    # The confirmation read must not overwrite the merge attempt's own stderr: its reason survives.
-    assert "network unreachable" in done.stderr
+    # The failed attempt's own text is external and is never echoed into either stream.
+    assert "network unreachable" not in done.stdout + done.stderr
     assert len(merged(log)) == 1
 
 
@@ -1505,8 +1523,9 @@ def test_reports_an_already_merged_pr_without_running_a_merge(run):
     merged_pr["mergeCommit"] = {"oid": MERGED_COMMIT}
     merged_pr["mergedAt"] = "2026-11-20T19:00:00Z"
     done, log = run(reviews=[review()], pr=merged_pr)
-    assert done.returncode == 0, done.stderr
-    assert f"Result: already merged {MERGED_COMMIT}" in done.stdout
+    assert done.returncode == 17
+    assert "Result: merged but unverified" in done.stdout
+    assert "verified neither the review of record nor the checks" in done.stderr
     assert merged(log) == []
 
 
@@ -1681,7 +1700,7 @@ def test_a_slashed_base_branch_is_percent_encoded_and_read_on_the_pr_host(run):
     pr = pr_payload(url="https://ghe.example.com/acme/widgets/pull/7")
     pr["baseRefName"] = "release/1.0"
     host_review = review(url="https://ghe.example.com/acme/widgets/pull/7#pullrequestreview-11")
-    done, log = run(reviews=[host_review], pr=pr)
+    done, log = run(reviews=[host_review], pr=pr, remote_url="https://ghe.example.com/acme/widgets.git")
     assert done.returncode == 0, done.stderr
     assert "rules/branches/release%2F1.0 --hostname ghe.example.com" in calls(log)
 
@@ -1840,7 +1859,7 @@ def test_an_app_bound_required_check_needs_a_run_from_that_app(run):
     done, log = run(
         reviews=[review()],
         checks=[check("ci/test", "SUCCESS")],
-        extra_env={"REQUIRED_CONTEXTS": "ci/test@15368"},
+        extra_env={"REQUIRED_CONTEXTS": "ci/test@15368", "SERVER_REQUIRED_CONTEXTS": ""},
         check_runs=[],
     )
     assert done.returncode == 14
@@ -1852,7 +1871,7 @@ def test_an_app_bound_required_check_passes_with_its_own_run(run):
     done, log = run(
         reviews=[review()],
         checks=[check("ci/test", "SUCCESS")],
-        extra_env={"REQUIRED_CONTEXTS": "ci/test@15368"},
+        extra_env={"REQUIRED_CONTEXTS": "ci/test@15368", "SERVER_REQUIRED_CONTEXTS": ""},
         check_runs=[{"name": "ci/test", "status": "completed", "conclusion": "success", "app": {"id": 15368}}],
     )
     assert done.returncode == 0, done.stderr
@@ -1884,11 +1903,11 @@ def test_an_unstable_pr_with_green_required_checks_merges(run):
     assert len(merged(log)) == 1
 
 
-def test_a_huge_diagnostic_is_bounded(run):
+def test_a_huge_diagnostic_is_never_echoed(run):
     huge = "x" * 100000
     done, log = run(reviews=[review()], extra_env={"GH_CHECKS_ERR": huge})
     assert done.returncode == 14
-    assert "[truncated]" in done.stderr
+    assert "xxxxx" not in done.stdout + done.stderr
     assert len(done.stderr) < 4000
     assert merged(log) == []
 
@@ -1925,4 +1944,82 @@ def test_a_missing_draft_flag_is_refused(run):
     done, log = run(reviews=[review()], pr=pr)
     assert done.returncode == 12
     assert "draft flag" in done.stderr
+    assert merged(log) == []
+
+
+# --- Round-8 gate regressions: canonical identity, no raw diagnostics, approval flags -----------
+
+
+def test_only_the_configured_reviewer_qualifies_and_no_login_lookup_happens(run):
+    ambient = review(author="ambient-user")
+    configured = review()
+    done, log = run(reviews=[ambient, configured], login="ambient-user")
+    assert done.returncode == 0, done.stderr
+    assert "api user" not in calls(log)
+    assert len(merged(log)) == 1
+
+
+def test_refuses_a_pr_that_lives_in_another_repository_than_the_checkout(run):
+    done, log = run(
+        reviews=[review()],
+        pr_url="https://github.com/other/repo/pull/7",
+        remote_url="https://github.com/acme/widgets.git",
+    )
+    assert done.returncode == 12
+    assert "refusing an ambiguous target" in done.stderr
+    assert merged(log) == []
+
+
+def test_refuses_a_fork_checkout_for_an_upstream_pr(run):
+    done, log = run(
+        reviews=[review()],
+        remote_url="https://github.com/fork/widgets.git",
+    )
+    assert done.returncode == 12
+    assert "refusing an ambiguous target" in done.stderr
+    assert merged(log) == []
+
+
+def test_a_review_url_host_is_compared_case_insensitively(run):
+    upper = review(url="https://GitHub.com/acme/widgets/pull/7#pullrequestreview-11")
+    done, log = run(reviews=[upper])
+    assert done.returncode == 0, done.stderr
+    assert len(merged(log)) == 1
+
+
+def test_an_app_bound_context_the_server_carries_is_accepted_from_a_status(run):
+    # A required context that GitHub's own required list carries is already evaluated by GitHub,
+    # including its app filter, so a legacy commit status satisfies it without a check run.
+    done, log = run(
+        reviews=[review()],
+        checks=[check("ci/test", "SUCCESS")],
+        extra_env={"REQUIRED_CONTEXTS": "ci/test@15368", "SERVER_REQUIRED_CONTEXTS": "ci/test"},
+    )
+    assert done.returncode == 0, done.stderr
+    assert len(merged(log)) == 1
+
+
+def test_repeated_approvals_options_are_usage_errors(run, tmp_path):
+    path = approvals_file(tmp_path, [REQUEST_RECORD])
+    done, log = run(
+        reviews=[review()],
+        args=("--approvals", str(path), "--request-id", REQUEST, "--approvals", str(path)),
+    )
+    assert done.returncode == 2
+    assert "--approvals may be given only once" in done.stderr
+    assert merged(log) == []
+    done, log = run(
+        reviews=[review()],
+        args=("--approvals", str(path), "--request-id", REQUEST, "--request-id", REQUEST),
+    )
+    assert done.returncode == 2
+    assert "--request-id may be given only once" in done.stderr
+    assert merged(log) == []
+
+
+def test_a_proxy_diagnostic_with_a_credential_marker_never_reaches_the_output(run):
+    marker = "authorization: Bearer s3cr3t-token-value"
+    done, log = run(reviews=[review()], extra_env={"GH_CHECKS_ERR": marker})
+    assert done.returncode == 14
+    assert "s3cr3t-token-value" not in done.stdout + done.stderr
     assert merged(log) == []

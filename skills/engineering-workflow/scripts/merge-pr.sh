@@ -29,7 +29,6 @@ set -euo pipefail
 # The helper's own capture files. They start empty so the cleanup trap can never be pointed at a
 # path an inherited environment variable of the same name supplied.
 CHECKS_ERR_FILE=""
-GH_STDERR_FILE=""
 
 PROG="merge-pr.sh"
 REPO_SET=0
@@ -37,6 +36,8 @@ REPO_SET=0
 # some literal patterns, so every match below goes through one of these.
 PR_URL_RE='^https?://([A-Za-z0-9][A-Za-z0-9.-]*)/([A-Za-z0-9._-]+/[A-Za-z0-9._-]+)/pull/([0-9]+)/?$'
 NUMERIC_RE='^[0-9]+$'
+HOST_RE='^[A-Za-z0-9][A-Za-z0-9.-]*$'
+SLUG_RE='^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$'
 LOWER_SHA_RE='^[0-9a-f]{40}$'
 MIXED_SHA_RE='^[0-9A-Fa-f]{40}$'
 REVIEW_LINE_RE='^Review of record ([0-9A-Fa-f]{40})$'
@@ -106,30 +107,12 @@ one_line() {
   printf '%s' "$value"
 }
 
-# A command's own output, folded to one line and capped, for a refusal that carries the diagnosis
-# without letting that output forge a result line or flood the transcript.
-gh_detail() {
-  # Folded to one line and bounded so a huge proxy body cannot flood a result line. The cut keeps
-  # whole characters and then drops the last partial word.
-  local text
-  text="$(one_line "$1")"
-  if [ "${#text}" -gt 1000 ]; then
-    text="${text:0:1000}"
-    text="${text% *} [truncated]"
-  fi
-  printf '%s' "$text"
-}
 
-# gh's own stderr is captured rather than let through raw: a proxy or server error is external text
-# and must not be able to print a result-looking line beside the helper's own. The captured text is
-# emitted only through gh_detail, and only when a call fails. The capture file is created once the
-# prerequisites are checked, so a missing prerequisite is still the first thing named.
+# gh's own stderr is discarded, never echoed: a proxy or server error is external text, and a
+# credential or a result-looking line in it must never reach the transcript. Refusals name the
+# operation, the PR number and gh's exit status only.
 gh_quiet() {
-  gh "$@" 2>"${GH_STDERR_FILE:?gh stderr capture file}"
-}
-gh_stderr_detail() {
-  [ -n "${GH_STDERR_FILE:-}" ] && [ -f "$GH_STDERR_FILE" ] || return 0
-  gh_detail "$(cat -- "$GH_STDERR_FILE")"
+  gh "$@" 2>/dev/null
 }
 
 while [ $# -gt 0 ]; do
@@ -145,6 +128,7 @@ while [ $# -gt 0 ]; do
       shift 2
       ;;
     --approvals)
+      [ "$APPROVALS_SET" = 0 ] || die 2 "--approvals may be given only once"
       [ $# -ge 2 ] || usage
       case "$2" in
         "" | --*) echo "ERROR: --approvals needs a file path" >&2; usage ;;
@@ -154,6 +138,7 @@ while [ $# -gt 0 ]; do
       shift 2
       ;;
     --request-id)
+      [ "$REQUEST_ID_SET" = 0 ] || die 2 "--request-id may be given only once"
       [ $# -ge 2 ] || usage
       case "$2" in
         "" | --*) echo "ERROR: --request-id needs the manager's request ID" >&2; usage ;;
@@ -244,6 +229,48 @@ else
   fi
 fi
 cd "$ROOT"
+
+# The one canonical host and repository: the checkout's origin remote. Every gh pr call is pinned to
+# it (GH_HOST plus an explicit --repo), and the PR's own URL must match it, so a fork checkout can
+# never have its PR commands silently resolve a different repository than the one the profile and
+# the reviewed commit belong to.
+REMOTE_URL="$(git config --get remote.origin.url 2>/dev/null)" \
+  || refuse 11 "the checkout at $ROOT has no origin remote, so the target repository cannot be fixed"
+case "$REMOTE_URL" in
+  https://* | http://*)
+    REMOTE_REST="${REMOTE_URL#*://}"
+    HOST="${REMOTE_REST%%/*}"
+    REMOTE_PATH="${REMOTE_REST#*/}"
+    ;;
+  ssh://*)
+    REMOTE_REST="${REMOTE_URL#ssh://}"
+    REMOTE_REST="${REMOTE_REST#*@}"
+    HOST="${REMOTE_REST%%/*}"
+    REMOTE_PATH="${REMOTE_REST#*/}"
+    ;;
+  *@*:*)
+    REMOTE_REST="${REMOTE_URL#*@}"
+    HOST="${REMOTE_REST%%:*}"
+    REMOTE_PATH="${REMOTE_REST#*:}"
+    ;;
+  *)
+    refuse 11 "the origin remote of $ROOT ($(one_line "$REMOTE_URL")) is not an https or ssh repository URL"
+    ;;
+esac
+REMOTE_PATH="${REMOTE_PATH#/}"
+REMOTE_PATH="${REMOTE_PATH%.git}"
+[[ "$HOST" =~ $HOST_RE ]] || refuse 11 "the origin remote of $ROOT names an unusable host"
+[[ "$REMOTE_PATH" =~ $SLUG_RE ]] || refuse 11 "the origin remote of $ROOT names an unusable repository path"
+SLUG="$REMOTE_PATH"
+HOST_LOWER="$(printf '%s' "$HOST" | tr 'A-Z' 'a-z')"
+SLUG_LOWER="$(printf '%s' "$SLUG" | tr 'A-Z' 'a-z')"
+
+# Every gh pr command runs against that identity, on that host, never one inferred from the remote.
+gh_pr() {
+  # stderr is discarded unless a caller names a capture file, so raw provider text never reaches
+  # this helper's own streams.
+  GH_HOST="$HOST" gh "$@" --repo "$SLUG" 2>"${GH_PR_STDERR:-/dev/null}"
+}
 
 # The consumer profile, at the three locations references/profile.md names, in documented order:
 # the explicit AGENT_SKILLS_PROFILE, then the repository's own, then the home one. An absent
@@ -417,13 +444,9 @@ while IFS='=' read -r key value; do
 done <<<"$PROFILE_LINES"
 
 # The live PR: number, URL, state, draft flag, mergeability, merge state and head SHA.
-GH_STDERR_FILE="$(mktemp)" || {
-  printf '%s: could not create a file for gh stderr\n' "$PROG" >&2
-  exit 10
-}
-trap 'rm -f -- "${GH_STDERR_FILE:-}" "${CHECKS_ERR_FILE:-}"' EXIT
-PR_JSON="$(gh_quiet pr view "$NUMBER" --json number,url,state,isDraft,mergeable,mergeStateStatus,headRefOid,baseRefName,mergeCommit,mergedAt)" \
-  || refuse 12 "Could not read PR #$NUMBER with gh pr view: $(gh_stderr_detail)"
+trap 'rm -f -- "${CHECKS_ERR_FILE:-}"' EXIT
+PR_JSON="$(gh_pr pr view "$NUMBER" --json number,url,state,isDraft,mergeable,mergeStateStatus,headRefOid,baseRefName,mergeCommit,mergedAt)" \
+  || refuse 12 "Could not read PR #$NUMBER with gh pr view (exit status of the read is reported by gh)"
 json_field() { printf '%s' "$1" | jq -r "$2"; }
 PR_URL="$(json_field "$PR_JSON" .url)" \
   || refuse 12 "Could not read PR #$NUMBER with gh pr view: the response was not readable JSON"
@@ -448,24 +471,24 @@ case "$IS_DRAFT" in
 esac
 [ "$PR_NUMBER" = "$NUMBER" ] || refuse 12 "gh pr view returned a different PR number than #$NUMBER"
 if [[ ! "$PR_URL" =~ $PR_URL_RE ]]; then
-  refuse 12 "Could not derive owner/repo and number from the PR URL ($PR_URL)"
+  refuse 12 "the PR URL is not a well-formed pull request URL ('$(one_line "$PR_URL")')"
 fi
-SLUG="${BASH_REMATCH[2]}"
-HOST="${BASH_REMATCH[1]}"
+URL_HOST="$(printf '%s' "${BASH_REMATCH[1]}" | tr 'A-Z' 'a-z')"
+URL_SLUG="$(printf '%s' "${BASH_REMATCH[2]}" | tr 'A-Z' 'a-z')"
 [ "${BASH_REMATCH[3]}" = "$NUMBER" ] || refuse 12 "the PR URL ($PR_URL) is not PR #$NUMBER"
+[ "$URL_HOST" = "$HOST_LOWER" ] && [ "$URL_SLUG" = "$SLUG_LOWER" ] \
+  || refuse 12 "PR #$NUMBER lives at $(one_line "${BASH_REMATCH[1]}/${BASH_REMATCH[2]}"), not at the checkout's origin repository $HOST/$SLUG; refusing an ambiguous target"
 [[ "$HEAD" =~ $LOWER_SHA_RE ]] || refuse 12 "the PR head SHA read from GitHub is not a full commit SHA: '$HEAD'"
 
-# A re-run after a queued merge landed finds the PR already merged. That is a satisfied end state,
-# not a blocked merge and not a new merge: report the observed state and run no merge command.
+# A re-run after a queued merge landed finds the PR already merged. That is read-only: this
+# invocation verified neither the review of record nor the checks for that head, so it never
+# reports a verified merge, and it runs no merge command.
 if [ "$PR_STATE" = "MERGED" ]; then
   ALREADY_COMMIT="$(json_field "$PR_JSON" .mergeCommit.oid)" || ALREADY_COMMIT=""
   printf 'PR: %s %s\n' "$NUMBER" "$PR_URL"
   printf 'Live head: %s\n' "$HEAD"
-  [[ "$ALREADY_COMMIT" =~ $LOWER_SHA_RE ]] \
-    || merged_unverified 17 "PR #$NUMBER is already MERGED but reports no full merge commit; re-read the PR by hand"
   printf 'Merge attempt: none (this invocation ran no merge command)\n'
-  printf 'Result: already merged %s\n' "$ALREADY_COMMIT"
-  exit 0
+  merged_unverified 17 "PR #$NUMBER is already MERGED at ${ALREADY_COMMIT:-an unreported merge commit}, and this invocation verified neither the review of record nor the checks"
 fi
 
 # The expected author of the review of record: review.record_author when set, else the login of
@@ -473,7 +496,7 @@ fi
 AUTHOR="$RECORD_AUTHOR"
 if [ -z "$AUTHOR" ]; then
   AUTHOR="$(gh_quiet api user --jq .login --hostname "$HOST")" \
-    || refuse 15 "could not resolve the expected author: review.record_author is unset and gh api user --jq .login --hostname $HOST failed: $(gh_stderr_detail)"
+    || refuse 15 "could not resolve the expected author: review.record_author is unset and gh api user --jq .login --hostname $HOST failed"
 fi
 [ -n "$AUTHOR" ] \
   || refuse 15 "no expected author: review.record_author is unset and gh api user --jq .login returned nothing"
@@ -483,7 +506,7 @@ fi
 REVIEWS_JSON="$(
   gh_quiet api --paginate "repos/$SLUG/pulls/$NUMBER/reviews" --hostname "$HOST" --jq \
     '.[] | {id: .id, author: .user.login, state: .state, commit_id: .commit_id, submitted_at: .submitted_at, html_url: .html_url, body: .body}'
-)" || refuse 15 "Could not read the reviews of PR #$NUMBER with gh api --paginate: $(gh_stderr_detail)"
+)" || refuse 15 "Could not read the reviews of PR #$NUMBER with gh api --paginate"
 
 # Among the COMMENTED reviews whose body begins with 'Review of record', the expected author's,
 # with the greatest submitted_at. Every matching review's timestamp is audited first: an
@@ -560,7 +583,9 @@ if [ -n "$SELECTED" ]; then
   if [[ ! "$REVIEW_URL" =~ $REVIEW_URL_RE ]]; then
     refuse 15 "the review of record selected on PR #$NUMBER carries no usable html_url ('$(one_line "$REVIEW_URL")')"
   fi
-  if [ "${BASH_REMATCH[1]}" != "$HOST" ] || [ "${BASH_REMATCH[2]}" != "$SLUG" ] || [ "${BASH_REMATCH[3]}" != "$NUMBER" ]; then
+  REVIEW_HOST="$(printf '%s' "${BASH_REMATCH[1]}" | tr 'A-Z' 'a-z')"
+  REVIEW_SLUG="$(printf '%s' "${BASH_REMATCH[2]}" | tr 'A-Z' 'a-z')"
+  if [ "$REVIEW_HOST" != "$HOST_LOWER" ] || [ "$REVIEW_SLUG" != "$SLUG_LOWER" ] || [ "${BASH_REMATCH[3]}" != "$NUMBER" ]; then
     refuse 15 "the review of record URL ('$(one_line "$REVIEW_URL")') is not on PR #$NUMBER at $HOST/$SLUG"
   fi
   # references/code-review.md: the first line is exactly `Review of record <full head SHA>`; any
@@ -759,45 +784,34 @@ esac
 
 CHECKS_ALL=""
 CHECKS_STATUS=0
-CHECKS_EMPTY=0
-SERVER_REQUIRED=""
-SERVER_REQUIRED_NONE=0
-POLICY_CONTEXTS=""
-POLICY_CLASSIC_UNREADABLE=0
 
 # Every page of the applicable rules, flattened (--slurp returns one array per page), and the
 # branch's own protection configuration, read from the branch endpoint: both can impose required
-# checks on one branch, so the union counts. Each requirement is printed as
-# "<context><TAB><app-id>", with the app id empty when the policy does not name one. Exit 0 only
-# when every source is fully read and well formed; anything else is a hard failure, because an
-# unreadable policy must never read as an empty one.
+# checks on one branch, so the union counts. Prints a JSON array of {"context","app"} objects, with
+# app empty when the policy names no producer app. Exit 0 only when every source is fully read and
+# well formed; anything else is a hard failure, because an unreadable policy must never read as an
+# empty one.
 policy_required_contexts() {
   local encoded rules from_rules branch from_branch
   encoded="$(printf '%s' "$BASE_REF" | jq -rn --arg v "$BASE_REF" '$v|@uri')" || return 2
   rules="$(gh_quiet api --paginate --slurp "repos/$SLUG/rules/branches/$encoded" --hostname "$HOST")" || return 2
   printf '%s' "$rules" | jq -e 'type == "array"' >/dev/null 2>&1 || return 2
   rules="$(printf '%s' "$rules" | jq -c '[ .[] | if type == "array" then .[] else . end ]')" || return 2
-  # A recognized required-checks rule whose list is not an array is a policy this helper cannot
-  # certify, not an empty one.
   if printf '%s' "$rules" | jq -e '[ .[] | select(.type == "required_status_checks") | select((.parameters.required_status_checks | type) != "array") ] | length > 0' >/dev/null 2>&1; then
     return 2
   fi
-  from_rules="$(printf '%s' "$rules" | jq -r '[ .[] | select(.type == "required_status_checks") | .parameters.required_status_checks[] | [ .context, ((.integration_id // "") | tostring) ] | @tsv ] | .[]')" || return 2
+  from_rules="$(printf '%s' "$rules" | jq -c '[ .[] | select(.type == "required_status_checks") | .parameters.required_status_checks[] | {context: .context, app: ((.integration_id // "") | tostring)} ]')" || return 2
   branch="$(gh_quiet api "repos/$SLUG/branches/$encoded" --hostname "$HOST")" || return 2
   printf '%s' "$branch" | jq -e 'type == "object" and ((.protected | type) == "boolean")' >/dev/null 2>&1 || return 2
-  from_branch=""
+  from_branch='[]'
   if [ "$(printf '%s' "$branch" | jq -r '.protected')" = "true" ]; then
-    # A protected branch must expose its protection object and a readable required-status-checks
-    # shape; a bounded endpoint with no protection is handled by .protected being false.
     printf '%s' "$branch" | jq -e '(.protection | type) == "object" and ((.protection.required_status_checks | type) == "object" or .protection.required_status_checks == null)' >/dev/null 2>&1 || return 2
-    from_branch="$(printf '%s' "$branch" | jq -r '[
-        ((.protection.required_status_checks.contexts // [])[] | [ ., "" ] | @tsv),
-        ((.protection.required_status_checks.checks // [])[] | [ .context, ((.app_id // "") | tostring) ] | @tsv)
-      ] | .[]')" || return 2
+    from_branch="$(printf '%s' "$branch" | jq -c '[
+        ((.protection.required_status_checks.contexts // [])[] | {context: ., app: ""}),
+        ((.protection.required_status_checks.checks // [])[] | {context: .context, app: ((.app_id // "") | tostring)})
+      ]')" || return 2
   fi
-  if [ -n "$from_rules" ]; then printf '%s\n' "$from_rules"; fi
-  if [ -n "$from_branch" ]; then printf '%s\n' "$from_branch"; fi
-  return 0
+  jq -cn --argjson a "$from_rules" --argjson b "$from_branch" '$a + $b | unique_by([.context, .app])'
 }
 
 CHECKS_ERR_FILE="$(mktemp)" || refuse 14 "could not create a file for the checks stderr of PR #$NUMBER"
@@ -805,16 +819,17 @@ CHECKS_ERR_FILE="$(mktemp)" || refuse 14 "could not create a file for the checks
 # GitHub's own required set for this head (rulesets and classic protection included, computed
 # server-side). A check the server requires but that has not reported is not in this list, which is
 # why the readable branch policy is unioned in below.
-SERVER_OUT="$(gh pr checks "$NUMBER" --required --json name,state 2>"$CHECKS_ERR_FILE")" || CHECKS_STATUS=$?
+SERVER_OUT="$(GH_PR_STDERR="$CHECKS_ERR_FILE" gh_pr pr checks "$NUMBER" --required --json name,state)" || CHECKS_STATUS=$?
 SERVER_ERR="$(cat -- "$CHECKS_ERR_FILE")"
 case "$CHECKS_STATUS" in
   0 | 1 | 8) ;;
-  *) refuse 14 "Could not read the required checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS): $(gh_detail "$SERVER_ERR$SERVER_OUT")" ;;
+  *) refuse 14 "Could not read the required checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS)" ;;
 esac
+SERVER_REQUIRED_JSON='[]'
 if [ -n "$SERVER_OUT" ]; then
   case "$SERVER_OUT" in
-    \[*) SERVER_REQUIRED="$(printf '%s' "$SERVER_OUT" | jq -r '.[].name' 2>/dev/null)" || refuse 14 "the required checks of PR #$NUMBER were not readable JSON" ;;
-    *) refuse 14 "Could not read the required checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS): $(gh_detail "$SERVER_ERR$SERVER_OUT")" ;;
+    \[*) SERVER_REQUIRED_JSON="$(printf '%s' "$SERVER_OUT" | jq -c '[ .[].name ]' 2>/dev/null)" || refuse 14 "the required checks of PR #$NUMBER were not readable JSON" ;;
+    *) refuse 14 "Could not read the required checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS)" ;;
   esac
 else
   case "$CHECKS_STATUS" in
@@ -822,30 +837,30 @@ else
     1 | 8)
       if [[ "$SERVER_ERR" != *$'\n'* ]]; then
         case "$SERVER_ERR" in
-          "no required checks reported on the '"*"' branch" | "no checks reported on the '"*"' branch") SERVER_REQUIRED_NONE=1 ;;
-          *) refuse 14 "Could not read the required checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS): $(gh_detail "$SERVER_ERR")" ;;
+          "no required checks reported on the '"*"' branch" | "no checks reported on the '"*"' branch") : ;;
+          *) refuse 14 "Could not read the required checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS)" ;;
         esac
       else
-        refuse 14 "Could not read the required checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS): $(gh_detail "$SERVER_ERR")"
+        refuse 14 "Could not read the required checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS)"
       fi
       ;;
-    *) refuse 14 "Could not read the required checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS): $(gh_detail "$SERVER_ERR")" ;;
+    *) refuse 14 "Could not read the required checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS)" ;;
   esac
 fi
 
 # The states of every check reported on the head.
 CHECKS_STATUS=0
-CHECKS_ALL="$(gh pr checks "$NUMBER" --json name,state 2>"$CHECKS_ERR_FILE")" || CHECKS_STATUS=$?
+CHECKS_ALL="$(GH_PR_STDERR="$CHECKS_ERR_FILE" gh_pr pr checks "$NUMBER" --json name,state)" || CHECKS_STATUS=$?
 CHECKS_ERR="$(cat -- "$CHECKS_ERR_FILE")"
 rm -f -- "$CHECKS_ERR_FILE"
 case "$CHECKS_STATUS" in
   0 | 1 | 8) ;;
-  *) refuse 14 "Could not read the checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS): $(gh_detail "$CHECKS_ERR$CHECKS_ALL")" ;;
+  *) refuse 14 "Could not read the checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS)" ;;
 esac
 if [ -n "$CHECKS_ALL" ]; then
   case "$CHECKS_ALL" in
     \[*) : ;;
-    *) refuse 14 "Could not read the checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS): $(gh_detail "$CHECKS_ERR$CHECKS_ALL")" ;;
+    *) refuse 14 "Could not read the checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS)" ;;
   esac
 else
   case "$CHECKS_STATUS" in
@@ -853,74 +868,57 @@ else
     1 | 8)
       if [[ "$CHECKS_ERR" != *$'\n'* ]]; then
         case "$CHECKS_ERR" in
-          "no checks reported on the '"*"' branch" | "no required checks reported on the '"*"' branch")
-            CHECKS_ALL='[]'
-            CHECKS_EMPTY=1
-            ;;
-          *) refuse 14 "Could not read the checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS): $(gh_detail "$CHECKS_ERR")" ;;
+          "no checks reported on the '"*"' branch" | "no required checks reported on the '"*"' branch") CHECKS_ALL='[]' ;;
+          *) refuse 14 "Could not read the checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS)" ;;
         esac
       else
-        refuse 14 "Could not read the checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS): $(gh_detail "$CHECKS_ERR")"
+        refuse 14 "Could not read the checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS)"
       fi
       ;;
-    *) refuse 14 "Could not read the checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS): $(gh_detail "$CHECKS_ERR")" ;;
+    *) refuse 14 "Could not read the checks of PR #$NUMBER (gh pr checks exited $CHECKS_STATUS)" ;;
   esac
 fi
 printf '%s' "$CHECKS_ALL" | jq -e 'type == "array"' >/dev/null 2>&1 \
   || refuse 14 "the checks of PR #$NUMBER were not a JSON array"
 
-POLICY_ROWS="$(policy_required_contexts)" \
-  || refuse 14 "could not read the required-check configuration of $BASE_REF on $HOST/$SLUG, so the head cannot be judged green: $(gh_stderr_detail)"
+POLICY_JSON="$(policy_required_contexts)" \
+  || refuse 14 "could not read the required-check configuration of $BASE_REF on $HOST/$SLUG, so the head cannot be judged green"
 
-# The union of the server-required names (no app identity) and the policy pairs, deduplicated on the
-# exact pair. Exact comparison: a plain substring test would collapse names such as `a|b` and `b`.
-UNION_CONTEXTS=()
-UNION_APPS=()
-add_requirement() {
-  local ctx="$1" app="$2" i
-  [ -n "$ctx" ] || return 0
-  i=0
-  while [ "$i" -lt "${#UNION_CONTEXTS[@]}" ]; do
-    if [ "${UNION_CONTEXTS[$i]}" = "$ctx" ] && [ "${UNION_APPS[$i]}" = "$app" ]; then
-      return 0
-    fi
-    i=$((i + 1))
-  done
-  UNION_CONTEXTS+=("$ctx")
-  UNION_APPS+=("$app")
-}
-while IFS= read -r SERVER_NAME; do add_requirement "$SERVER_NAME" ""; done <<<"$SERVER_REQUIRED"
-while IFS=$'\t' read -r POLICY_NAME POLICY_APP; do add_requirement "$POLICY_NAME" "${POLICY_APP:-}"; done <<<"$POLICY_ROWS"
+# The union of the server-required names (no producer app) and the policy's requirements,
+# deduplicated on the exact (context, app) pair in JSON, so names holding separators or tabs cannot
+# collapse into one another.
+UNION_JSON="$(jq -cn --argjson server "$SERVER_REQUIRED_JSON" --argjson policy "$POLICY_JSON" \
+  '($server | map({context: ., app: ""})) + $policy | unique_by([.context, .app])')" \
+  || refuse 14 "the required-check union of PR #$NUMBER could not be computed"
 
-# A required check that names a producer app is only satisfied by a successful check run from that
-# app, so the check runs of the head are read once when any requirement names one.
-CHECK_RUNS=""
-NEED_APP=0
-for i in ${UNION_APPS[@]+"${UNION_APPS[@]}"}; do
-  [ -z "$i" ] || NEED_APP=1
-done
-if [ "$NEED_APP" = 1 ]; then
+# A required context that names a producer app and that GitHub's own required list does not carry
+# is satisfied only by a successful check run from that app; the check runs of the head are read
+# once when such a requirement exists.
+CHECK_RUNS='[]'
+if jq -e --argjson server "$SERVER_REQUIRED_JSON" '[ .[] | select(.app != "" and ((.context as $c | $server | index($c)) == null)) ] | length > 0' <<<"$UNION_JSON" >/dev/null 2>&1; then
   CHECK_RUNS="$(gh_quiet api --paginate --slurp "repos/$SLUG/commits/$HEAD/check-runs" --hostname "$HOST")" \
     || refuse 14 "a required check names a producer app, and the check runs of head $HEAD could not be read"
-  printf '%s' "$CHECK_RUNS" | jq -e 'type == "array"' >/dev/null 2>&1 \
-    || refuse 14 "the check runs of head $HEAD were not readable JSON"
   CHECK_RUNS="$(printf '%s' "$CHECK_RUNS" | jq -c '[ .[] | if type == "array" then .[] else . end ] | [ .[] | .check_runs[]? ]')" \
     || refuse 14 "the check runs of head $HEAD were not readable JSON"
 fi
 
-if [ "${#UNION_CONTEXTS[@]}" -eq 0 ]; then
+UNION_COUNT="$(printf '%s' "$UNION_JSON" | jq 'length')" \
+  || refuse 14 "the required-check union of PR #$NUMBER could not be read"
+if [ "$UNION_COUNT" -eq 0 ]; then
   printf 'Check: none\n'
 else
   MISSING_CONTEXTS=""
   NON_GREEN=""
-  i=0
-  while [ "$i" -lt "${#UNION_CONTEXTS[@]}" ]; do
-    REQUIRED_NAME="${UNION_CONTEXTS[$i]}"
-    REQUIRED_APP="${UNION_APPS[$i]}"
-    i=$((i + 1))
+  while IFS= read -r ROW; do
+    REQUIRED_NAME="$(printf '%s' "$ROW" | jq -r '.context')"
+    REQUIRED_APP="$(printf '%s' "$ROW" | jq -r '.app')"
     REQUIRED_STATE="$(printf '%s' "$CHECKS_ALL" | jq -r --arg n "$REQUIRED_NAME" '[ .[] | select(.name == $n) | .state ] | if length == 0 then "MISSING" elif ([ .[] | select(. != "SUCCESS") ] | length) == 0 then "SUCCESS" else join(",") end')" \
       || refuse 14 "the checks of PR #$NUMBER were not readable JSON"
-    if [ -n "$REQUIRED_APP" ]; then
+    SERVER_HAS_IT="$(jq -r --arg n "$REQUIRED_NAME" 'index($n) != null' <<<"$SERVER_REQUIRED_JSON")" \
+      || refuse 14 "the required checks of PR #$NUMBER were not readable JSON"
+    NEED_APP_EVIDENCE=0
+    if [ -n "$REQUIRED_APP" ] && [ "$SERVER_HAS_IT" != "true" ]; then NEED_APP_EVIDENCE=1; fi
+    if [ "$NEED_APP_EVIDENCE" = 1 ]; then
       APP_OK="$(printf '%s' "$CHECK_RUNS" | jq -r --arg n "$REQUIRED_NAME" --arg a "$REQUIRED_APP" '[ .[] | select(.name == $n and ((.app.id // "") | tostring) == $a and .conclusion == "success") ] | length')" \
         || refuse 14 "the check runs of head $HEAD were not readable JSON"
       if [ "$APP_OK" = 0 ]; then
@@ -937,7 +935,7 @@ else
       MISSING) MISSING_CONTEXTS="$MISSING_CONTEXTS$(one_line "$REQUIRED_NAME"); " ;;
       *) NON_GREEN="$NON_GREEN$(one_line "$REQUIRED_NAME")=$(one_line "$REQUIRED_STATE"), " ;;
     esac
-  done
+  done < <(printf '%s' "$UNION_JSON" | jq -c '.[]')
   if [ -n "$MISSING_CONTEXTS" ]; then
     refuse 14 "required check(s) on head $HEAD have not reported as green, so they are not green: $MISSING_CONTEXTS"
   fi
@@ -951,8 +949,8 @@ fi
 # whole readiness state, not just the SHA, and refuse on any change, on both the agent and the human
 # paths: --match-head-commit bounds only the head, so the human path has no merge attempt to catch a
 # base-only change.
-MOVED_JSON="$(gh_quiet pr view "$NUMBER" --json headRefOid,baseRefName,state,isDraft,mergeable,mergeStateStatus)" \
-  || refuse 16 "Could not re-read PR #$NUMBER after the checks read: $(gh_stderr_detail)"
+MOVED_JSON="$(gh_pr pr view "$NUMBER" --json headRefOid,baseRefName,state,isDraft,mergeable,mergeStateStatus)" \
+  || refuse 16 "Could not re-read PR #$NUMBER after the checks read"
 RECHECK_HEAD="$(printf '%s' "$MOVED_JSON" | jq -r '.headRefOid // empty')" \
   || refuse 16 "Could not read the live head of PR #$NUMBER after the checks read"
 RECHECK_BASE="$(printf '%s' "$MOVED_JSON" | jq -r '.baseRefName // empty')" \
@@ -994,7 +992,7 @@ fi
 # refuses here, and a rejected head change below is never retried without it. The already-captured
 # help is matched by a bash pattern: piping it into `grep -q` would let grep close the pipe early,
 # and `pipefail` would then turn a successful match into a false "unsupported" refusal.
-MERGE_HELP="$(gh_quiet pr merge --help)" || refuse 17 "could not read gh pr merge --help: $(gh_stderr_detail)"
+MERGE_HELP="$(gh_pr pr merge --help)" || refuse 17 "could not read gh pr merge --help"
 case "$MERGE_HELP" in
   *--match-head-commit*) ;;
   *) refuse 17 "this gh cannot carry an expected-head condition (gh pr merge has no --match-head-commit)" ;;
@@ -1008,23 +1006,22 @@ esac
 
 MERGE_OUT=""
 MERGE_STATUS=0
-MERGE_OUT="$(gh_quiet pr merge "$NUMBER" --match-head-commit "$HEAD" "$METHOD_FLAG")" || MERGE_STATUS=$?
+MERGE_OUT="$(gh_pr pr merge "$NUMBER" --match-head-commit "$HEAD" "$METHOD_FLAG")" || MERGE_STATUS=$?
 # Keep the merge attempt's own diagnosis before the confirmation read overwrites the capture file.
-MERGE_STDERR_DETAIL="$(gh_stderr_detail)"
 
 # Success only once GitHub reports the PR merged, at the reviewed head; a queued merge is not a
 # merge. The read runs after every attempt, so a client error that arrives after GitHub accepted the
 # merge is reported as the merge it is, and it never retries the mutation. The attempt's own exit
 # status, not its captured output, decides whether it failed.
-CONFIRM_JSON="$(gh_quiet pr view "$NUMBER" --json state,mergedAt,mergeCommit,headRefOid)" \
-  || unconfirmed 17 "could not re-read PR #$NUMBER after the merge command: $(gh_stderr_detail)"
+CONFIRM_JSON="$(gh_pr pr view "$NUMBER" --json state,mergedAt,mergeCommit,headRefOid)" \
+  || unconfirmed 17 "could not re-read PR #$NUMBER after the merge command"
 CONFIRM_STATE="$(printf '%s' "$CONFIRM_JSON" | jq -r '.state // empty' 2>/dev/null)" || CONFIRM_STATE=""
 [ -n "$CONFIRM_STATE" ] \
   || unconfirmed 17 "could not read PR #$NUMBER after the merge command"
 CONFIRM_HEAD="$(printf '%s' "$CONFIRM_JSON" | jq -r '.headRefOid // empty' 2>/dev/null)" || CONFIRM_HEAD=""
 MERGE_COMMIT="$(printf '%s' "$CONFIRM_JSON" | jq -r '.mergeCommit.oid // empty' 2>/dev/null)" || MERGE_COMMIT=""
 if [ "$MERGE_STATUS" != 0 ] && [ "$CONFIRM_STATE" != "MERGED" ]; then
-  refuse 17 "gh pr merge $NUMBER --match-head-commit $HEAD $METHOD_FLAG failed (exit $MERGE_STATUS): $(gh_detail "$MERGE_OUT") ${MERGE_STDERR_DETAIL:-}"
+  refuse 17 "gh pr merge $NUMBER --match-head-commit $HEAD $METHOD_FLAG failed (exit $MERGE_STATUS):  ${MERGE_STDERR_DETAIL:-}"
 fi
 [ "$CONFIRM_STATE" = "MERGED" ] \
   || unconfirmed 17 "the merge was submitted, but PR #$NUMBER is in state $CONFIRM_STATE, not MERGED yet (a queued merge is not a success; re-read the PR before any retry)"
