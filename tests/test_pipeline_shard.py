@@ -455,6 +455,25 @@ def test_a_sharded_hunt_refuses_a_marker_naming_another_selection(accepted_gate)
     assert run_script("cleanup", str(checkout), "--repo", str(repo), env=env).returncode == 0
 
 
+def test_a_missing_launch_names_the_selection_the_caller_passed(accepted_gate):
+    repo, scratch, env = accepted_gate
+    run_dir = paths(repo, env)["run"]
+    dossier = run_script(
+        "dossier", "hunt", "--repo", str(repo), "--base", "HEAD", "--scratch", str(scratch),
+        "--shard", "1/1", env=env,
+    )
+    checkout, _ = dossier_of(dossier)
+    (run_dir / "phase2-hunt.md").write_text("REVIEW-RAN: yes\none of one\n")
+    (run_dir / "hunt.launch").unlink()
+    missing = run_script(
+        "record", "hunt", "--repo", str(repo), "--base", "HEAD", "--shard", "1/1", env=env,
+    )
+    assert missing.returncode == 15, missing.stdout + missing.stderr
+    assert "dossier hunt --shard 1/1" in missing.stderr, missing.stderr
+    assert not Path(f"{run_dir / 'phase2-hunt.md'}.stamp").exists()
+    assert run_script("cleanup", str(checkout), "--repo", str(repo), env=env).returncode == 0
+
+
 def test_an_empty_indexed_launch_marker_is_refused(accepted_gate):
     repo, scratch, env = accepted_gate
     run_dir = paths(repo, env)["run"]
