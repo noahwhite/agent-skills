@@ -316,7 +316,12 @@ def added_blocks() -> list[str]:
 # sentence of steps 2 to 12 (the `deployed` path text of steps 11 and 12 included) must stay byte for
 # byte as it was, and the blocks themselves are kept whole and in order by the pins in
 # `HANDOFF_PINS` and `test_handoff_blocks_appear_once_in_order`.
-STEPS_TWO_TO_TWELVE_SHA256 = "cee26611557b072c8793290496ba3e03e33477d179e23ded2f04c511bc8a54cf"
+STEPS_TWO_TO_TWELVE_SHA256 = "3dbf9143c5a59c38e9ce2ce581fbf4c7b3235e2e497d6937d6c1da957355c3c1"
+# SKL-384 re-baselined this digest for the one pre-push sentence AC5 adds at the end of step 5
+# ("When the repository provides a pre-push check (`bash scripts/pre-push-check.sh`), run it before
+# pushing."), the same way SKL-387 re-baselined it for its one-green-signal rule lines: the sentence
+# is the only change, so every other byte of steps 2 to 12 still has to match, and a later edit to
+# that prose fails here again.
 # SKL-270 makes the `deployed` step 12 note carry the exact `path: deployed` line that story-to-done
 # and qa-verification pass to `scripts/select-path.py` as `--recorded-path`. The digest above is kept:
 # that one line is pinned here and swapped back to its pre-SKL-270 text before hashing, so every other

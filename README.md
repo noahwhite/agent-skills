@@ -217,6 +217,7 @@ Review roles run as subagents or as shell-launched CLIs (for example `codex exec
 
 ## Contributing
 
+- Before pushing, run `bash scripts/pre-push-check.sh`; it runs the em-dash and canonical-phrase doc lints, the vendoring check, and the test module each changed path maps to, and `--list` shows the selection without running anything.
 - Shared rules are written once in `shared/` and copied into each skill's `references/` by `scripts/vendor_shared.py`; `skills.json` lists which skill gets which file.
   Edit the source in `shared/`, then run `python3 scripts/vendor_shared.py`.
 - The model-role resolver `shared/resolve-model-role.py` is vendored the same way, beside the Markdown copies: `skills.json` lists it under `executables` for each skill whose scripts call it, and it lands in that skill's `scripts/`.
