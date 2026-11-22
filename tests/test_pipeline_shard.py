@@ -418,7 +418,7 @@ def test_an_unreadable_hunt_launch_is_refused_and_never_read_as_empty(accepted_g
     assert run_script("cleanup", str(checkout), "--repo", str(repo), env=env).returncode == 0
 
 
-def test_an_oversized_launch_marker_cannot_flood_the_diagnosis(accepted_gate):
+def test_a_malformed_launch_marker_is_refused_with_a_bounded_sanitised_diagnosis(accepted_gate):
     repo, scratch, env = accepted_gate
     run_dir = paths(repo, env)["run"]
     report = run_dir / "phase2-hunt.md"
@@ -427,11 +427,26 @@ def test_an_oversized_launch_marker_cannot_flood_the_diagnosis(accepted_gate):
         "dossier", "hunt", "--repo", str(repo), "--base", "HEAD", "--scratch", str(scratch), env=env,
     )
     checkout, _ = dossier_of(dossier)
-    launch.write_bytes(b"shard=1/1\n" + b"A" * (4 * 1024 * 1024))
+    # A marker with a second line is not this run's marker.
+    launch.write_bytes(b"shard=none\x1b[2K\nTRAIL\n")
     report.write_text("REVIEW-RAN: yes\nplain\n")
     refused = run_script("record", "hunt", "--repo", str(repo), "--base", "HEAD", env=env)
-    assert refused.returncode == 13, refused.stdout + refused.stderr
-    assert len(refused.stderr.encode()) < 4096, len(refused.stderr.encode())
+    assert refused.returncode == 15, refused.stdout + refused.stderr
+    assert "more than its selection line" in refused.stderr, refused.stderr
+    assert not Path(f"{report}.stamp").exists()
+    # A wrong selection carrying a terminal escape prints it neutralised, never raw.
+    launch.write_bytes(b"shard=1/1\x1b[2K\n")
+    report.write_text("REVIEW-RAN: yes\nplain\n")
+    escaped = run_script("record", "hunt", "--repo", str(repo), "--base", "HEAD", env=env)
+    assert escaped.returncode == 13, escaped.stdout + escaped.stderr
+    assert "\x1b" not in escaped.stderr, escaped.stderr
+    assert "records 'shard=1/1?[2K'" in escaped.stderr, escaped.stderr
+    # A huge marker: the diagnosis stays bounded and shows no raw control byte.
+    launch.write_bytes(b"A" * (4 * 1024 * 1024))
+    report.write_text("REVIEW-RAN: yes\nplain\n")
+    huge = run_script("record", "hunt", "--repo", str(repo), "--base", "HEAD", env=env)
+    assert huge.returncode == 13, huge.stdout + huge.stderr
+    assert len(huge.stderr.encode()) < 4096, len(huge.stderr.encode())
     assert not Path(f"{report}.stamp").exists()
     assert run_script("cleanup", str(checkout), "--repo", str(repo), env=env).returncode == 0
 
@@ -486,6 +501,7 @@ def test_a_flagged_dossier_recorded_with_its_flag_matches_the_unsharded_record(a
     assert plain_record.returncode == 0, plain_record.stdout + plain_record.stderr
     plain_stamp = Path(f"{report}.stamp").read_bytes()
     plain_binding = (run_dir / "hunt.binding").read_bytes()
+    plain_files = sorted(path.name for path in run_dir.iterdir())
     assert run_script("cleanup", str(plain_checkout), "--repo", str(repo), env=env).returncode == 0
 
     sweep = run_sweep(repo, scratch, env)
@@ -500,8 +516,17 @@ def test_a_flagged_dossier_recorded_with_its_flag_matches_the_unsharded_record(a
         "record", "hunt", "--repo", str(repo), "--base", "HEAD", "--shard", "1/1", env=env,
     )
     assert flagged_record.returncode == 0, flagged_record.stdout + flagged_record.stderr
-    assert Path(f"{report}.stamp").read_bytes() == plain_stamp
-    assert (run_dir / "hunt.binding").read_bytes() == plain_binding
+    flagged_stamp = Path(f"{report}.stamp").read_bytes()
+    flagged_binding = (run_dir / "hunt.binding").read_bytes()
+
+    def without_deps(text: bytes) -> list[str]:
+        return [line for line in text.decode().splitlines() if not line.startswith("dep.")]
+
+    # Byte-identical to the unsharded record, apart from a predecessor artifact that a sweep
+    # re-run rewrote; the selection never enters the stamp or the binding.
+    assert without_deps(flagged_stamp) == without_deps(plain_stamp)
+    assert without_deps(flagged_binding) == without_deps(plain_binding)
+    assert sorted(path.name for path in run_dir.iterdir()) == plain_files
     assert not (run_dir / "hunt.shards").exists()
     assert run_script("cleanup", str(flagged_checkout), "--repo", str(repo), env=env).returncode == 0
 
@@ -590,6 +615,7 @@ def test_shard_one_of_one_is_byte_identical_to_an_unsharded_run(accepted_gate):
     assert files["hunt"].read_bytes() == artifact
     assert Path(f"{files['hunt']}.stamp").read_bytes() == stamp
     assert (run_dir / "hunt.binding").read_bytes() == binding
+    assert (run_dir / "hunt.launch").read_bytes() == b"shard=1/1\n"
     assert not plan_file(run_dir).exists()
 
 

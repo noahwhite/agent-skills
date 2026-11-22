@@ -869,7 +869,7 @@ sandbox_error_in() {
 }
 
 accept_phase() {  # $1 = phase, $2 = stderr log or "": validate a freshly written artifact, then stamp it
-  local art key launched launched_arg; art="$(artifact_for "$1")"; key="$(state_key "$1")"
+  local art key launched launched_arg extra; art="$(artifact_for "$1")"; key="$(state_key "$1")"
   [ -f "$RUN_DIR/$key.launch" ] && [ -f "$RUN_DIR/$key.binding" ] && [ -f "$RUN_DIR/$key.primary" ] \
     || die 15 "no launch for $1 in this run (never started, discarded by a later re-run of an earlier phase, or an arbitration already accepted); write its dossier with 'dossier $1' first."
   if [ "$(cat -- "$RUN_DIR/$key.binding")" != "$(binding_text "$1")" ]; then
@@ -881,10 +881,16 @@ accept_phase() {  # $1 = phase, $2 = stderr log or "": validate a freshly writte
   # diagnosis line nor make the refusal unbounded.
   if [ "$1" = "hunt" ]; then
     launched=""
+    extra=""
     # One short line, with or without its trailing newline; anything less is an unusable state.
     IFS= read -r -n 64 launched < "$RUN_DIR/$key.launch" 2>/dev/null || true
     if [ -z "$launched" ]; then
       die 15 "the hunt launch marker $RUN_DIR/$key.launch is missing, empty or unreadable; start the hunt phase again."
+    fi
+    # The marker is exactly one selection line; content after it means the file is not ours.
+    IFS= read -r -n 1 extra < <(tail -n +2 -- "$RUN_DIR/$key.launch" 2>/dev/null) || true
+    if [ -n "$extra" ]; then
+      die 15 "the hunt launch marker $RUN_DIR/$key.launch carries more than its selection line; start the hunt phase again."
     fi
     if [ "$launched" != "$(launch_text "$1")" ]; then
       launched_arg="$(printf '%s' "$launched" | LC_ALL=C tr -c '[:print:]' '?')"
