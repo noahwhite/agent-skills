@@ -82,13 +82,15 @@ AC5 = (
 
 PINS = {"AC1": AC1, "AC2": AC2, "AC3": AC3, "AC4": AC4, "AC5": AC5}
 
-# Every citation in the section has the form `<quoted wording>` at `<path>:<line>`.
-CITATION = re.compile(r"`([^`]+)` at `([^`]+\.md):(\d+)`")
-# A citation token in any shape, backticked or not; each one must belong to a parsed quotation.
+# Every citation in the section has the form `"<quoted wording>" at `<path>:<line>``; a double-quoted
+# quotation can carry the code spans its source line contains.
+CITATION = re.compile(r'"([^"]+)" at `([^`]+\.md):(\d+)`')
+# A citation token in any shape, backticked or not; each occurrence must belong to a parsed quotation.
 CITATION_TOKEN = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_./-]*\.md:\d+")
 
-# Each permission the section grants, with the quote and the file that states it for that role.
-# The file is the skill of the role the brief is written for, never the coordinator's own copy.
+# Each permission the section grants, with the quote and the file that states it for that role,
+# plus the actor-and-text pair AC2's example names. The file is the skill of the role the brief is
+# written for, never the coordinator's own copy.
 REQUIRED_CITATIONS = (
     ("skills/qa-verification/SKILL.md", TICK_SENTENCE),
     (
@@ -104,11 +106,19 @@ REQUIRED_CITATIONS = (
         "skills/qa-verification/references/linear.md",
         "Once every AC and DoD item is ticked and verified in the environment, move the issue to done.",
     ),
-    ("skills/engineering-workflow/references/github.md", "Open a PR only once the branch is cleanly based on its target."),
-    ("skills/qa-verification/SKILL.md", "Ship it through the normal branch and PR flow"),
+    (
+        "skills/engineering-workflow/references/github.md",
+        "Open a PR only once the branch is cleanly based on its target.",
+    ),
     (
         "skills/qa-verification/SKILL.md",
-        "the project does not keep in-repo evidence; skip this step and say so in the report.",
+        "Ship it through the normal branch and PR flow in `references/github.md`, signed when "
+        "`profile.git.signed_commits` is true, and verify the signature after pushing.",
+    ),
+    (
+        "skills/qa-verification/SKILL.md",
+        "If `profile.qa.evidence_dir` is unset, the project does not keep in-repo evidence; skip this "
+        "step and say so in the report.",
     ),
     ("skills/engineering-workflow/SKILL.md", "Post the review of record on the PR as one PR review"),
     ("skills/qa-verification/SKILL.md", "post the review of record on the PR"),
@@ -150,12 +160,15 @@ def test_no_pinned_rule_sentence_carries_a_line_number(ac: str) -> None:
         )
 
 
-def test_every_citation_token_is_a_parsed_quotation() -> None:
-    """No citation may sit in the section in any shape without the quotation it claims to carry."""
-    raw = set(CITATION_TOKEN.findall(body()))
-    parsed = {f"{path}:{number}" for _, path, number in citations()}
+def test_every_citation_occurrence_is_a_parsed_quotation() -> None:
+    """Each `path:line` occurrence, in any shape, must sit inside its own parsed quotation."""
+    text = body()
+    tokens = [match.group(0) for match in CITATION_TOKEN.finditer(text)]
+    parsed = [f"{match.group(2)}:{match.group(3)}" for match in CITATION.finditer(text)]
     assert parsed, "the section cites nothing"
-    assert raw == parsed, f"unpaired citation tokens: {sorted(raw - parsed)}"
+    assert sorted(tokens) == sorted(parsed), (
+        f"citation tokens without their own quotation: {sorted(tokens)} vs {sorted(parsed)}"
+    )
 
 
 def test_every_citation_names_the_line_that_carries_its_quotation() -> None:

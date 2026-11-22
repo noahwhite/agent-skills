@@ -2234,9 +2234,9 @@ def unpinned(line: str) -> str:
 BRIEF_PERMISSION_LINES = (
     "- Every role brief names what the role may do as well as what it may not: it ticks the boxes it "
     "verified, moves the states its skill assigns, opens its own PR, and posts the review of record.",
-    "  The senior engineer's review of record reads `Post the review of record on the PR as one PR "
-    "review` at `skills/engineering-workflow/SKILL.md:NN`; the QA agent's reads `post the review of "
-    "record on the PR` at `skills/qa-verification/SKILL.md:NN`.",
+    "  The senior engineer's review of record reads \"Post the review of record on the PR as one PR "
+    "review\" at `skills/engineering-workflow/SKILL.md:NN`; the QA agent's reads \"post the review of "
+    "record on the PR\" at `skills/qa-verification/SKILL.md:NN`.",
 )
 
 
