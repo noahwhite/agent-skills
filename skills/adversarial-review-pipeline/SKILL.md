@@ -31,8 +31,8 @@ If a configured agent cannot run on this runtime, stop and say so (see `referenc
 | Phase | Agent | Job | Why this tier |
 |---|---|---|---|
 | 0 Preflight | none (deterministic) | Clean tree, every intended file committed, and, when the full-suite option is `on`, suite green in a detached worktree at HEAD | Free, seconds, catches a class no reviewer should spend tokens on |
-| 1 Sweep | `profile.review.pre_pr.sweeper` | Read the diffstat and the diff its dossier embeds (its read-only checkout holds anything not embedded), emit a raw candidate list with `file:line` and a concrete failure scenario | Large context at the lowest price; volume over precision |
-| 2 Verify and hunt | `profile.review.pre_pr.hunter` | For each candidate: mutate, run, report VERIFIED or REFUTED with the command and result; then hunt open-ended for new defects | The only phase that proves rather than asserts |
+| 1 Sweep | `profile.review.pre_pr.sweeper` | Read the diffstat and the diff its dossier embeds (its read-only checkout holds anything not embedded), emit a raw candidate list with `file:line` and a concrete failure scenario, and probe each acceptance rule as its dossier asks | Large context at the lowest price; volume over precision |
+| 2 Verify and hunt | `profile.review.pre_pr.hunter` | For each candidate: mutate, run, report VERIFIED or REFUTED with the command and result; then hunt open-ended for new defects; and probe each acceptance rule as its dossier asks | The only phase that proves rather than asserts |
 | 3 Arbitrate | `profile.review.pre_pr.arbiter` | From the diffstat, both phase reports and its own read-only checkout (its dossier embeds no diff): filter false positives, weigh empirical evidence over theory, catch cross-module regressions, name accepted risks, decide converged or not | Strongest reasoning, spent once on a pre-filtered bundle |
 | 4 Fix and re-verify | the implementing agent | Fix in-scope findings, re-run each proving mutant (it must now fail), one bounded re-verify | Closes the loop without unbounded ping-pong |
 
@@ -203,10 +203,10 @@ Expect false positives; Phase 2 exists to remove them.
 
 ### Acceptance rules are behavioural probes
 
-Every sweep and hunt dossier carries an `===== ACCEPTANCE RULES ARE BEHAVIOURAL PROBES` block, and both phases answer it.
-Each explicitly stated behavioural rule in the story's acceptance criteria - every command, flag, argument, sequence, exit code, file name and state change a criterion names - is enumerated and exercised against the reviewed head by running the command or sequence the rule names, and reported PASSED or FAILED with the command and the observation; a rule is never passed from the diff or the documentation alone.
+Every sweep and hunt dossier carries an `===== ACCEPTANCE RULES ARE BEHAVIOURAL PROBES` block instructing that phase to answer it; `tests/test_pipeline_acceptance_probes.py` asserts that both dossiers carry the requirement and its escalation rule.
+Each explicitly stated behavioural rule in the story's acceptance criteria - every command, flag, argument, sequence, exit code, file name and state change a criterion names - is enumerated and exercised against the reviewed head by running the command or sequence the rule names, and reported PASSED or FAILED with the command and the observation; a rule is never passed from the diff or the documentation alone, and the report states separately any rule that could not be exercised at all.
 A rule the code asserts, documents or claims but does not enforce is an enforcement finding at blocking severity (`High` or `Critical`), naming the documented rule and the command that contradicts it - never a low-severity documentation finding.
-The sweep's checkout is read-only, so a rule whose check needs a file changed there is reported `FAILED` with that reason and repeated as a candidate for the hunt, which mutates and reverts its own throwaway checkout to exercise it.
+The sweep keeps the checkout it reviews read-only: a rule whose command writes a file is exercised against a copy of that checkout the sweep makes under the session scratch directory, and a rule it still cannot exercise is repeated as a candidate for the hunt, which mutates and reverts its own throwaway checkout.
 
 The sweep dossier ends with a `Review checklist` section: each item of `.agent-skills/review-checklist.txt`, read from the base, whose glob matches a changed path (`*` crosses `/`); `checklist --base "$BASE"` prints them.
 The file holds one `<bash glob> | <review item>` per line; `#` comments and blank lines are ignored.
@@ -225,8 +225,8 @@ The hunt answers the same `ACCEPTANCE RULES ARE BEHAVIOURAL PROBES` block as the
 `run hunt`, `dossier hunt` and `record hunt` accept `--shard K/N`, a decimal `1 <= K <= N` with no leading zero; `N = 1` is accepted only as `--shard 1/1`, and any other value is a usage error (exit 2).
 `--shard` on sweep or arbitrate, or on any command other than run, dossier or record, is a usage error too.
 Pass `record hunt` the same `--shard` as `dossier hunt`, exactly as for `--spec` and `--no-sweep`: an omitted flag and `--shard 1/1` both select the unsharded plan, but they must still be repeated exactly at record time, because the launch records which one wrote the dossier (`shard=<k>/<n>`, or `shard=none` for an omitted flag; `ADVERSARIAL_SHARD` supplies the same selection, so unset it for an unsharded record).
-A record reaches exit 13 only when it finds a usable launch whose selection differs; a plan-count conflict exits 2 first, and a record for a shard index with no launch of its own exits 15.
-A mismatch is refused at exit 13 without stamping the report, and a missing, empty, unreadable or malformed launch is refused at exit 15.
+A record reaches exit 13 when it finds a usable launch and either the `--shard` selection differs from the one the launch recorded or another bound input changed since the dossier was written (spec, `--no-sweep` or a predecessor artifact); a plan-count conflict exits 2 first, and a record for a shard index with no launch of its own exits 15.
+A differing selection is refused at exit 13 without stamping the report, and a missing, empty, unreadable or malformed launch is refused at exit 15.
 
 One `run` invocation is one shard.
 With `N >= 2` the shard's artifact is `<run dir>/phase2-hunt.<k>.md` (never `phase2-hunt.md` for that run), and its run-state files are `hunt.<k>.launch`, `hunt.<k>.binding`, `hunt.<k>.primary`, `hunt.<k>.dossier`, `hunt.<k>-agent.err` and `hunt.<k>-agent.log`.

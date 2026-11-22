@@ -27,12 +27,27 @@ SCRIPT = SKILL_DIR / "scripts" / "run-adversarial-pipeline.sh"
 SKILL_MD = SKILL_DIR / "SKILL.md"
 BASE_REF = "base"
 BLOCK = "===== ACCEPTANCE RULES ARE BEHAVIOURAL PROBES ====="
+CRITERIA = "===== STORY / ACCEPTANCE CRITERIA"
 AC1 = "AC1 Shard invocation, unsharded by default."
+
+# Host git configuration and repository-locating variables never reach this module's fixture: a
+# developer's signing, hooks or diff settings must not decide it, and an exported GIT_DIR or
+# GIT_WORK_TREE must never redirect its commits into another repository.
+GIT_ISOLATION = {"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
+GIT_LOCATORS = ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE",
+                "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_EXTERNAL_DIFF")
+
+
+def clean_env(extra: dict[str, str] | None = None) -> dict[str, str]:
+    env = {k: v for k, v in os.environ.items()
+           if not k.startswith("ADVERSARIAL_") and not k.startswith("GIT_CONFIG")
+           and k not in GIT_LOCATORS}
+    return {**env, **GIT_ISOLATION, **(extra or {})}
 
 
 def git(repo: Path, *args: str) -> str:
     return subprocess.run(
-        ["git", *args], cwd=repo, check=True, capture_output=True, text=True,
+        ["git", *args], cwd=repo, check=True, capture_output=True, text=True, env=clean_env(),
     ).stdout.strip()
 
 
@@ -55,11 +70,6 @@ def make_two_commit_repo(tmp_path: Path) -> Path:
     git(repo, "add", "app.py")
     git(repo, "commit", "-qm", "head")
     return repo
-
-
-def clean_env(extra: dict[str, str] | None = None) -> dict[str, str]:
-    env = {k: v for k, v in os.environ.items() if not k.startswith("ADVERSARIAL_")}
-    return {**env, **(extra or {})}
 
 
 def run_script(*args: str, env: dict[str, str]) -> subprocess.CompletedProcess:
@@ -150,6 +160,9 @@ def test_the_phase_dossier_makes_every_acceptance_rule_a_probe(gate, phase):
     block = probe_block(dossier)
     # the criteria themselves are in the dossier, so there is something to enumerate
     assert AC1 in " ".join(dossier.split()), f"the {phase} dossier lost the acceptance criteria"
+    # the block points at "the acceptance criteria below", so it must precede them
+    assert dossier.index(BLOCK) < dossier.index(CRITERIA), \
+        f"the {phase} probe block no longer precedes the criteria it refers to"
     assert "Every explicitly stated behavioural rule in the acceptance criteria" in block, block
     assert "each command, flag, argument, sequence, exit code, file name and state change" in block, block
     assert "exercise each one against the reviewed head by running the command or sequence the rule names" \
@@ -173,10 +186,13 @@ def test_a_documented_but_unenforced_rule_is_escalated_not_filed_as_documentatio
             f"the {phase} block allows a documentation finding: {sentence}"
 
 
-def test_the_sweep_hands_a_rule_it_cannot_exercise_to_the_hunt(gate):
+def test_the_sweep_exercises_a_write_producing_rule_on_a_copy(gate):
     block = probe_block(run_dossier(gate, "sweep"))
-    assert "Your checkout is read-only: change no file in it" in block, block
-    assert "report it FAILED with that reason and repeat it as a candidate for the hunt phase" in block, block
+    assert "Your checkout is read-only: change no file in it, but run every rule's command" in block, block
+    assert "a copy of the reviewed checkout you make in your own directory under the session scratch directory" \
+        in block, block
+    assert "Report FAILED only for a rule the reviewed head fails" in block, block
+    assert "when a rule cannot be exercised at all, say that separately with the reason" in block, block
 
 
 def test_the_hunt_exercises_every_rule_in_its_throwaway_checkout(gate):
@@ -193,6 +209,7 @@ def test_the_dossier_flow_carries_the_probe_block(gate, phase):
     dossier, checkout = dossier_flow(gate, phase)
     assert "Every explicitly stated behavioural rule" in probe_block(dossier)
     assert "never a low-severity documentation finding" in probe_block(dossier)
+    assert dossier.index(BLOCK) < dossier.index(CRITERIA)
     cleaned = run_script("cleanup", checkout, "--repo", str(gate["repo"]), env=gate["env"])
     assert cleaned.returncode == 0, cleaned.stdout + cleaned.stderr
 

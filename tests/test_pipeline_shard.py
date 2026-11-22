@@ -512,6 +512,9 @@ def test_an_empty_indexed_launch_marker_is_refused(accepted_gate):
     )
     assert refused.returncode == 15, refused.stdout + refused.stderr
     assert "dossier hunt --shard 1/2" in refused.stderr, refused.stderr
+    # An empty marker is the legacy/truncated state, not a reader fault.
+    assert "missing or empty" in refused.stderr, refused.stderr
+    assert "marker reader failed" not in refused.stderr, refused.stderr
     assert not Path(f"{run_dir / 'phase2-hunt.1.md'}.stamp").exists()
     assert run_script("cleanup", str(checkout), "--repo", str(repo), env=env).returncode == 0
 

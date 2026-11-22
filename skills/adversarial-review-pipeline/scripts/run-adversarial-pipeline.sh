@@ -145,8 +145,9 @@
 # rule names, and each is reported PASSED or FAILED with the command and the observation, never passed
 # from the diff or the documentation alone. A rule the code asserts, documents or claims but does not
 # enforce is an enforcement finding at blocking severity (High or Critical), never a low-severity
-# documentation finding. The sweep's checkout is read-only, so a rule it cannot exercise without
-# changing a file is reported FAILED with that reason and repeated as a candidate for the hunt. The
+# documentation finding. The sweep keeps its own checkout read-only and runs a rule whose command
+# writes against a copy of that checkout it makes in the session scratch directory; a rule it cannot
+# exercise at all is named separately and repeated as a candidate for the hunt. The
 # arbitrate dossier carries no such block: the correction is the sweep's and the hunt's only.
 #
 # Embedded diff: the sweep and hunt dossiers embed `git diff --no-ext-diff --unified=1` of the run's
@@ -905,7 +906,8 @@ accept_phase() {  # $1 = phase, $2 = stderr log or "": validate a freshly writte
   # exact selection the dossier was written for: a record must repeat it exactly. The marker is the
   # one selection line the launcher writes, with or without its trailing newline; anything else - a
   # second line, a NUL, a K > N, an unreadable or oversized file - is unusable state, never a
-  # selection. Both reads are byte-bounded by a marker-reader limit (96 bytes, far above any
+  # selection. Both reads are byte-bounded by a marker-reader limit (a 96-byte read, so the whole
+  # marker is at most 95 bytes and a selection line at most 94 bytes plus its newline, far above any
   # selection this launcher writes), and the comparison is exact in hex, so the check never reads a
   # whole file, can never forge a diagnosis line, and reserves exit 13 for a selection the launcher
   # could have written. It runs after the report exists and is fresh, so a missing or stale report is
@@ -917,6 +919,11 @@ accept_phase() {  # $1 = phase, $2 = stderr log or "": validate a freshly writte
     line_hex=""
     plain_hex=""
     expected="$(launch_text "$1")"
+    # An empty launch is the state a pre-release dossier and a truncated file share, and it is not a
+    # reader fault: name it as the missing selection it is, so the operator re-writes the dossier.
+    if [ ! -s "$RUN_DIR/$key.launch" ]; then
+      die 15 "the hunt launch marker $RUN_DIR/$key.launch is missing or empty, so the dossier's selection was never recorded; start the hunt phase again with '$dossier_hint'."
+    fi
     # A reader or encoder failure is unusable state, never an empty marker: two empty encodings must
     # never compare equal and let a malformed marker through.
     if ! marker_hex="$(head -c 96 -- "$RUN_DIR/$key.launch" 2>/dev/null | od -An -v -tx1 | tr -d ' \n')" \
@@ -1949,9 +1956,11 @@ write_dossier() {  # $1 = phase, $2 = dossier path, $3 = the phase's checkout (e
         echo "make it 'REVIEW-RAN: no - <reason>'. A report without that line is treated as a review that did not run."
         echo
         emit_rule_probes
-        echo "Your checkout is read-only: change no file in it. A rule whose check needs a file changed there"
-        echo "cannot be exercised by this phase: report it FAILED with that reason and repeat it as a candidate"
-        echo "for the hunt phase to exercise."
+        echo "Your checkout is read-only: change no file in it, but run every rule's command. A rule whose command"
+        echo "writes a file is exercised against a copy of the reviewed checkout you make in your own directory"
+        echo "under the session scratch directory, never against the checkout itself. Report FAILED only for a"
+        echo "rule the reviewed head fails, with the command and what you observed; when a rule cannot be"
+        echo "exercised at all, say that separately with the reason and repeat it as a candidate for the hunt."
         echo
         emit_context "$co" 1
         if [ -n "$items" ]; then
