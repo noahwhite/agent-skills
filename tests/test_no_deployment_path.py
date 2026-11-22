@@ -645,8 +645,9 @@ def test_qa_added_blocks_appear_once_in_order() -> None:
 # evidence skeleton generator, and its arbiter-ruled rewordings: the target worktree as the working
 # directory, the ordered retry after a refusal, the schema qualification, the symlink distinction, the
 # re-check before editing an existing README, the inspection of a partial README left by a failed
-# write, and the quoting rule for a directory or skill path holding an apostrophe.
-QA_BASE_SHA256 = "dc82fe52fcc51e417897875d3575ef11dc65e4b3be6a0ef9071fefbb443c1d50"
+# write, the quoting rule for a directory or skill path holding an apostrophe, and the one --path
+# with one --item per label wording.
+QA_BASE_SHA256 = "39a84d13b1c0986e424aada03cedb618fe679dcffe3c009ef904609a5c213019"
 
 
 def test_qa_text_outside_the_added_blocks_is_unchanged() -> None:

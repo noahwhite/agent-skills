@@ -83,9 +83,9 @@ NEVER_BOUNDARY_RE = re.compile(
     r"|\b(?i:e\.g|i\.e|mr|mrs|prof)\."
     r"|(?<!\d )\b(?i:ms|dr|st|gen|col|sr|jr)\.(?=\s+[A-Z])"
     r"|\b[A-Z]\.(?=\s+[A-Z]\.)"
-    r"|(?<=[A-Z]\.)[A-Z]\."
+    r"|(?<=[A-Z]\.)[A-Z]\.(?=\s+[a-z0-9]|\s*$)"
     r"|(?<=[A-Z]\.\s)[A-Z]\.(?=\s+[A-Z][a-z])"
-    r"|(?<=\s)\.(?=\s|$)"
+    r"|(?<=\s)\.(?=\s+[a-z0-9]|\s*$)"
     r"|\b\d+\.(?=\s+[a-z0-9])"
 )
 # O_PATH opens a directory for use as a `dir_fd` without requiring read permission on it.
@@ -100,7 +100,7 @@ def one_line(text: str) -> str:
             pieces.append("\\r")
         elif char == "\n":
             pieces.append("\\n")
-        elif ord(char) < 0x20 or 0x7f <= ord(char) <= 0x9f or char in "\u2028\u2029":
+        elif ord(char) < 0x20 or 0x7f <= ord(char) <= 0x9f or char in "\u2028\u2029" or unicodedata.category(char) == "Cf":
             pieces.append(f"\\u{ord(char):04x}")
         else:
             pieces.append(char)
@@ -466,7 +466,11 @@ def publish(target: Path, text: str) -> bool:
         except OSError as write_error:
             failure = write_error
         finally:
-            os.close(handle)
+            try:
+                os.close(handle)
+            except OSError as close_error:
+                if failure is None:
+                    failure = close_error
         if failure is not None:
             print(
                 f"error: cannot write {one_line(str(target.absolute()))}: {failure.strerror or failure}; "

@@ -6,10 +6,12 @@ and evidence instead of authoring the structure. The lint assertions reuse the d
 `tests/test_skills.py` rather than restating them, so the skeleton stays safe as that lint grows.
 """
 
+import errno
 import importlib.util
 import json
 import os
 import re
+import stat
 import subprocess
 import sys
 from pathlib import Path
@@ -1267,6 +1269,56 @@ def test_another_script_terminator_separates_sentences(tmp_path, terminator):
 def test_a_title_in_an_initial_or_a_numbered_item_is_not_a_sentence_end(tmp_path, label):
     res = run(tmp_path, "--key", "SKL-386", "--item", label)
     assert res.returncode == 0, res.stderr
+
+
+def test_a_standalone_dot_before_a_capital_is_a_sentence_end(tmp_path):
+    label = "AC1 - do this . Then push"
+    res = run(tmp_path, "--key", "SKL-386", "--item", label)
+    assert res.returncode == 1, res.stderr
+    assert "more than one sentence" in res.stderr
+    assert not (tmp_path / "docs").exists()
+
+
+def test_an_acronym_before_a_capital_ends_the_sentence(tmp_path):
+    label = "AC1 - deploy to the U.S. Then check logs."
+    res = run(tmp_path, "--key", "SKL-386", "--item", label)
+    assert res.returncode == 1, res.stderr
+    assert "more than one sentence" in res.stderr
+    assert not (tmp_path / "docs").exists()
+
+
+def test_an_acronym_before_a_lowercase_word_is_not_a_sentence_end(tmp_path):
+    label = "AC1 - the U.S. policy holds."
+    res = run(tmp_path, "--key", "SKL-386", "--item", label)
+    assert res.returncode == 0, res.stderr
+
+
+def test_a_close_error_reports_the_partial_readme(tmp_path, monkeypatch):
+    generator = load_generator()
+    target = tmp_path / "docs" / "qa-evidence" / "SKL-386" / "README.md"
+    real_close = os.close
+
+    def failing_close(handle):
+        info = os.fstat(handle)
+        real_close(handle)
+        if stat.S_ISREG(info.st_mode):
+            raise OSError(errno.ENOSPC, "No space left on device")
+
+    monkeypatch.setattr(generator.os, "close", failing_close)
+    assert generator.publish(target, "# SKL-386 QA evidence\n") is False
+    monkeypatch.undo()
+    assert target.exists()
+
+
+def test_a_bidirectional_control_in_a_path_cannot_reorder_the_diagnostic(tmp_path):
+    evidence = "ev\u202eRED"
+    readme = tmp_path / evidence / "SKL-386" / "README.md"
+    readme.parent.mkdir(parents=True)
+    readme.write_text("# handwritten\n", encoding="utf-8")
+    res = run(tmp_path, "--key", "SKL-386", "--evidence-dir", evidence)
+    assert res.returncode == 1, res.stderr
+    assert "\u202e" not in res.stderr
+    assert "u202e" in res.stderr.lower()
 
 
 def test_a_standalone_path_argument_is_not_a_sentence_end(tmp_path):
