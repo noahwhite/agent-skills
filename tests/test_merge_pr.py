@@ -63,13 +63,25 @@ case "${1:-}" in
       */rules/branches/*)
         if [ -n "${MALFORMED_RULES:-}" ]; then printf 'not json\n'; else cat "$FIXTURES/rules.json"; fi
         ;;
-      */protection/required_status_checks)
-        if [ -n "${CLASSIC_PROTECTION:-}" ]; then
-          if [ -n "${MALFORMED_PROTECTION:-}" ]; then printf '[]\n'; else cat "$FIXTURES/protection.json"; fi
+      */check-runs)
+        slurped=0
+        for a in "$@"; do
+          if [ "$a" = "--slurp" ]; then slurped=1; fi
+        done
+        if [ "$slurped" = 1 ]; then
+          printf '['
+          cat "$FIXTURES/check-runs.json"
+          printf ']\n'
         else
-          echo "gh: Not Found (HTTP 404)" >&2
+          cat "$FIXTURES/check-runs.json"
+        fi
+        ;;
+      */branches/*)
+        if [ -n "${BRANCH_READ_FAIL:-}" ]; then
+          echo "gh: Resource not accessible by personal access token (HTTP 403)" >&2
           exit 1
         fi
+        cat "$FIXTURES/branch.json"
         ;;
       *) echo "unexpected api call: $*" >&2; exit 3 ;;
     esac
@@ -128,12 +140,17 @@ case "${1:-}" in
           if [ "$a" = "--required" ]; then required=1; fi
         done
         if [ "$required" = 1 ]; then
-          if [ -n "${NO_REQUIRED_CHECKS:-}" ] || [ -z "${REQUIRED_CONTEXTS:-}" ]; then
+          if [ -n "${SERVER_REQUIRED_CONTEXTS+set}" ]; then
+            ctxs="$SERVER_REQUIRED_CONTEXTS"
+          else
+            ctxs="${REQUIRED_CONTEXTS:-}"
+          fi
+          if [ -n "${NO_REQUIRED_CHECKS:-}" ] || [ -z "$ctxs" ]; then
             echo "no required checks reported on the 'x' branch${NO_REQUIRED_CHECKS_SUFFIX:-}" >&2
             exit 1
           fi
-          jq -c --arg ctxs "$REQUIRED_CONTEXTS" \
-            '[ .[] | select(.name as $n | ($ctxs | split(",")) | index($n)) ]' "$FIXTURES/checks.json"
+          jq -c --arg ctxs "$ctxs" \
+            '[ .[] | select(.name as $n | ($ctxs | split(",") | map(split("@")[0])) | index($n)) ]' "$FIXTURES/checks.json"
           exit "${CHECKS_EXIT:-0}"
         fi
         cat "$FIXTURES/checks.json"
@@ -167,7 +184,7 @@ review:
 
 def review(head=HEAD, author="record-author", state="COMMENTED", submitted="2026-11-20T18:00:00Z", body=None, url=None):
     return {
-        "id": f"PRR_{author}_{state}_{submitted}",
+        "id": f"PRR_{author}_{state}_{submitted}_{head}",
         "user": {"login": author},
         "state": state,
         "commit_id": head,
@@ -246,6 +263,7 @@ def run(tmp_path):
         repo_profile_text=None,
         recheck=None,
         with_repo=True,
+        check_runs=None,
     ):
         # A previous call in the same test leaves these behind; they must not decide this call.
         for stale in ("recheck.json", "moved-once"):
@@ -256,19 +274,34 @@ def run(tmp_path):
         pages = reviews if reviews and isinstance(reviews[0], list) else [reviews or []]
         (fixtures / "reviews.json").write_text(json.dumps(pages))
         contexts = [c for c in ((extra_env or {}).get("REQUIRED_CONTEXTS") or "").split(",") if c]
+        required = []
+        for c in contexts:
+            if "@" in c:
+                name, app = c.split("@", 1)
+                required.append({"context": name, "integration_id": int(app)})
+            else:
+                required.append({"context": c})
         rules_page = (
-            [
-                {
-                    "type": "required_status_checks",
-                    "parameters": {"required_status_checks": [{"context": c} for c in contexts]},
-                }
-            ]
-            if contexts
+            [{"type": "required_status_checks", "parameters": {"required_status_checks": required}}]
+            if required
             else []
         )
         if (extra_env or {}).get("RULES_AS_PAGES"):
             rules_page = [rules_page]
         (fixtures / "rules.json").write_text(json.dumps(rules_page))
+        classic = bool((extra_env or {}).get("CLASSIC_PROTECTION"))
+        malformed_protection = bool((extra_env or {}).get("MALFORMED_PROTECTION"))
+        if classic:
+            protection = "not-an-object" if malformed_protection else {
+                "required_status_checks": {"contexts": ["ci/test"], "checks": []}
+            }
+            branch = {"protected": True, "protection": protection if malformed_protection else {"required_status_checks": protection["required_status_checks"]}}
+        else:
+            branch = {"protected": False, "protection": None}
+        (fixtures / "branch.json").write_text(json.dumps(branch))
+        (fixtures / "check-runs.json").write_text(
+            json.dumps({"total_count": len(check_runs or []), "check_runs": check_runs or []})
+        )
         classic = bool((extra_env or {}).get("CLASSIC_PROTECTION"))
         (fixtures / "protection.json").write_text(
             json.dumps({"contexts": ["ci/test"] if classic else [], "checks": []})
@@ -1772,3 +1805,124 @@ def test_a_valid_approval_leaves_stderr_clean(run, tmp_path):
     assert done.returncode == 0, done.stderr
     assert done.stderr == ""
     assert len(merged(log)) == 1
+
+
+# --- Round-7 gate regressions: unreadable policy, exact dedup, producer apps -------------------
+
+
+def test_refuses_when_the_branch_policy_cannot_be_read(run):
+    done, log = run(reviews=[review()], extra_env={"BRANCH_READ_FAIL": "1"})
+    assert done.returncode == 14
+    assert "could not read the required-check configuration" in done.stderr
+    assert merged(log) == []
+
+
+def test_a_human_owner_does_not_get_merge_ready_when_the_policy_cannot_be_read(run):
+    text = PROFILE.replace("merge_owner: agent", "merge_owner: human")
+    done, log = run(profile_text=text, reviews=[review()], extra_env={"BRANCH_READ_FAIL": "1"})
+    assert done.returncode == 14
+    assert "merge-ready" not in done.stdout
+    assert merged(log) == []
+
+
+def test_distinct_required_names_are_not_collapsed_by_a_substring(run):
+    done, log = run(
+        reviews=[review()],
+        checks=[check("a|b", "SUCCESS"), check("b", "FAILURE")],
+        extra_env={"REQUIRED_CONTEXTS": "a|b,b"},
+    )
+    assert done.returncode == 14
+    assert "b=FAILURE" in done.stderr
+    assert merged(log) == []
+
+
+def test_an_app_bound_required_check_needs_a_run_from_that_app(run):
+    done, log = run(
+        reviews=[review()],
+        checks=[check("ci/test", "SUCCESS")],
+        extra_env={"REQUIRED_CONTEXTS": "ci/test@15368"},
+        check_runs=[],
+    )
+    assert done.returncode == 14
+    assert "MISSING-FROM-APP" in done.stdout
+    assert merged(log) == []
+
+
+def test_an_app_bound_required_check_passes_with_its_own_run(run):
+    done, log = run(
+        reviews=[review()],
+        checks=[check("ci/test", "SUCCESS")],
+        extra_env={"REQUIRED_CONTEXTS": "ci/test@15368"},
+        check_runs=[{"name": "ci/test", "status": "completed", "conclusion": "success", "app": {"id": 15368}}],
+    )
+    assert done.returncode == 0, done.stderr
+    assert "ci/test=SUCCESS (app 15368)" in done.stdout
+    assert len(merged(log)) == 1
+
+
+def test_a_required_check_only_the_server_lists_is_enforced(run):
+    done, log = run(
+        reviews=[review()],
+        checks=[check("ci/test", "FAILURE")],
+        extra_env={"SERVER_REQUIRED_CONTEXTS": "ci/test", "REQUIRED_CONTEXTS": ""},
+    )
+    assert done.returncode == 14
+    assert "ci/test=FAILURE" in done.stderr
+    assert merged(log) == []
+
+
+def test_an_unstable_pr_with_green_required_checks_merges(run):
+    unstable = pr_payload(state="UNSTABLE")
+    done, log = run(
+        reviews=[review()],
+        pr=unstable,
+        recheck=unstable,
+        checks=[check("ci/test", "SUCCESS"), check("ci/optional", "FAILURE")],
+        extra_env={"REQUIRED_CONTEXTS": "ci/test"},
+    )
+    assert done.returncode == 0, done.stderr
+    assert len(merged(log)) == 1
+
+
+def test_a_huge_diagnostic_is_bounded(run):
+    huge = "x" * 100000
+    done, log = run(reviews=[review()], extra_env={"GH_CHECKS_ERR": huge})
+    assert done.returncode == 14
+    assert "[truncated]" in done.stderr
+    assert len(done.stderr) < 4000
+    assert merged(log) == []
+
+
+def test_repeated_repo_options_are_a_usage_error(run):
+    done, log = run(reviews=[review()], args=("--repo", "/tmp"))
+    assert done.returncode == 2
+    assert "--repo may be given only once" in done.stderr
+    assert merged(log) == []
+
+
+def test_a_malformed_request_is_reported_with_its_own_record_number(run, tmp_path):
+    bad_request = "REQUEST | " + REQUEST + " | " + URL + " | " + HEAD + " | " + REVIEW_URL + " | pending | 2026-11-20T19:00:00Z"
+    path = approvals_file(
+        tmp_path,
+        [bad_request, f"APPROVE | {REQUEST} | {HEAD} | manager | 2026-11-20T19:00:00Z"],
+    )
+    done, log = run(reviews=[review()], args=("--approvals", str(path), "--request-id", REQUEST))
+    assert done.returncode == 18
+    assert "no valid REQUEST" in done.stderr
+    assert merged(log) == []
+
+
+def test_identical_review_records_are_not_a_tie(run):
+    one = review()
+    done, log = run(reviews=[one, dict(one)])
+    assert done.returncode == 0, done.stderr
+    assert len(merged(log)) == 1
+
+
+def test_a_missing_draft_flag_is_refused(run):
+    pr = pr_payload()
+    del pr["isDraft"]
+    done, log = run(reviews=[review()], pr=pr)
+    assert done.returncode == 12
+    assert "draft flag" in done.stderr
+    assert merged(log) == []

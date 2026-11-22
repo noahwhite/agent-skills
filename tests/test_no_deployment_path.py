@@ -345,8 +345,9 @@ def steps_two_to_twelve() -> str:
 
 
 # SKL-388 rewrites step 10 to name the one-call merge helper. Step 10 stays inside the digest: its
-# new text is part of the baseline below, and tests/test_merge_guard.py and tests/test_merge_pr.py
-# pin its sentences again, so deleting or reword a sentence of step 10 fails here as well as there.
+# new text is part of the baseline below, and tests/test_merge_guard.py pins its sentences again, so
+# deleting or rewording a sentence of step 10 fails here as well as there. tests/test_merge_pr.py
+# exercises the helper, not this Markdown.
 
 
 # SKL-387 states the one-green-signal rule in step 3 item 5, step 5 item 1 and the step 9

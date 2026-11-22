@@ -32,6 +32,7 @@ CHECKS_ERR_FILE=""
 GH_STDERR_FILE=""
 
 PROG="merge-pr.sh"
+REPO_SET=0
 # Regexes live in variables: bash 3.2, which macOS ships, parses `[[ x =~ $re ]]` but chokes on
 # some literal patterns, so every match below goes through one of these.
 PR_URL_RE='^https?://([A-Za-z0-9][A-Za-z0-9.-]*)/([A-Za-z0-9._-]+/[A-Za-z0-9._-]+)/pull/([0-9]+)/?$'
@@ -108,8 +109,15 @@ one_line() {
 # A command's own output, folded to one line and capped, for a refusal that carries the diagnosis
 # without letting that output forge a result line or flood the transcript.
 gh_detail() {
-  # Folded to one line and never cut at a byte offset: a byte cut can split a multibyte character.
-  one_line "$1"
+  # Folded to one line and bounded so a huge proxy body cannot flood a result line. The cut keeps
+  # whole characters and then drops the last partial word.
+  local text
+  text="$(one_line "$1")"
+  if [ "${#text}" -gt 1000 ]; then
+    text="${text:0:1000}"
+    text="${text% *} [truncated]"
+  fi
+  printf '%s' "$text"
 }
 
 # gh's own stderr is captured rather than let through raw: a proxy or server error is external text
@@ -127,6 +135,8 @@ gh_stderr_detail() {
 while [ $# -gt 0 ]; do
   case "$1" in
     --repo)
+      [ "$REPO_SET" = 0 ] || die 2 "--repo may be given only once"
+      REPO_SET=1
       [ $# -ge 2 ] || usage
       case "$2" in
         "" | --*) echo "ERROR: --repo needs a directory" >&2; usage ;;
@@ -431,7 +441,11 @@ PR_NUMBER="$(json_field "$PR_JSON" .number)" \
   || refuse 12 "Could not read PR #$NUMBER with gh pr view: the response was not readable JSON"
 BASE_REF="$(json_field "$PR_JSON" .baseRefName)" \
   || refuse 12 "Could not read PR #$NUMBER with gh pr view: the response was not readable JSON"
-[ -n "$BASE_REF" ] || refuse 12 "PR #$NUMBER carries no base branch name"
+[ -n "$BASE_REF" ] && [ "$BASE_REF" != "null" ] || refuse 12 "PR #$NUMBER carries no base branch name"
+case "$IS_DRAFT" in
+  true | false) ;;
+  *) refuse 12 "PR #$NUMBER carries no boolean draft flag ('$(one_line "$IS_DRAFT")')" ;;
+esac
 [ "$PR_NUMBER" = "$NUMBER" ] || refuse 12 "gh pr view returned a different PR number than #$NUMBER"
 if [[ ! "$PR_URL" =~ $PR_URL_RE ]]; then
   refuse 12 "Could not derive owner/repo and number from the PR URL ($PR_URL)"
@@ -503,6 +517,7 @@ if [ -n "$REVIEWS_JSON" ]; then
         | select(.state == "COMMENTED")
         | select((.body // "") | startswith("Review of record"))
         | select(((.author // "") | ascii_downcase) == ($author | ascii_downcase)) ]
+      | unique_by(.id)
       | if length == 0 then 0
         else (map(.submitted_at) | max) as $latest
           | map(select(.submitted_at == $latest)) | length end
@@ -517,6 +532,7 @@ if [ -n "$REVIEWS_JSON" ]; then
         | select(.state == "COMMENTED")
         | select((.body // "") | startswith("Review of record"))
         | select(((.author // "") | ascii_downcase) == ($author | ascii_downcase)) ]
+      | unique_by(.id)
       | sort_by(.submitted_at)
       | if length == 0 then empty else .[-1] end
     '
@@ -668,6 +684,7 @@ if [ -n "$APPROVALS" ]; then
           [ "$(trim_field "${FIELD[4]}")" != "$REVIEW_URL" ] ||
           [ "$(trim_field "${FIELD[5]}")" != "green" ] ||
           ! is_utc_timestamp "$(trim_field "${FIELD[6]}")"; then
+          MALFORMED_LINES="$MALFORMED_LINES $RECORD_NO"
           continue
         fi
         REQUEST_SEEN=1
@@ -748,14 +765,14 @@ SERVER_REQUIRED_NONE=0
 POLICY_CONTEXTS=""
 POLICY_CLASSIC_UNREADABLE=0
 
-# Every page of the applicable rules, flattened (--slurp returns one array per page), then the
-# classic protection configuration as well: both can impose required checks on one branch, so the
-# union is what counts. Prints one context name per line. Exit 0 when both sources are fully read
-# (404 is documented absence of classic protection); 3 when the classic source exists but cannot be
-# read with this token, so the caller knows the union is incomplete; anything else is a hard read or
-# parse failure that must not be mistaken for an empty policy.
+# Every page of the applicable rules, flattened (--slurp returns one array per page), and the
+# branch's own protection configuration, read from the branch endpoint: both can impose required
+# checks on one branch, so the union counts. Each requirement is printed as
+# "<context><TAB><app-id>", with the app id empty when the policy does not name one. Exit 0 only
+# when every source is fully read and well formed; anything else is a hard failure, because an
+# unreadable policy must never read as an empty one.
 policy_required_contexts() {
-  local encoded rules from_rules protection from_protection all name seen classic=0
+  local encoded rules from_rules branch from_branch
   encoded="$(printf '%s' "$BASE_REF" | jq -rn --arg v "$BASE_REF" '$v|@uri')" || return 2
   rules="$(gh_quiet api --paginate --slurp "repos/$SLUG/rules/branches/$encoded" --hostname "$HOST")" || return 2
   printf '%s' "$rules" | jq -e 'type == "array"' >/dev/null 2>&1 || return 2
@@ -765,35 +782,21 @@ policy_required_contexts() {
   if printf '%s' "$rules" | jq -e '[ .[] | select(.type == "required_status_checks") | select((.parameters.required_status_checks | type) != "array") ] | length > 0' >/dev/null 2>&1; then
     return 2
   fi
-  from_rules="$(printf '%s' "$rules" | jq -r '[ .[] | select(.type == "required_status_checks") | .parameters.required_status_checks[].context ] | .[]')" || return 2
-  from_protection=""
-  if protection="$(gh_quiet api "repos/$SLUG/branches/$encoded/protection/required_status_checks" --hostname "$HOST")"; then
-    printf '%s' "$protection" | jq -e 'type == "object"' >/dev/null 2>&1 || return 2
-    printf '%s' "$protection" | jq -e '(.contexts | type) == "array" or (.checks | type) == "array"' >/dev/null 2>&1 || return 2
-    from_protection="$(printf '%s' "$protection" | jq -r '[ (.contexts // [])[], (.checks // [])[].context ] | .[]')" || return 2
-  else
-    case "$(gh_stderr_detail)" in
-      "gh: Not Found (HTTP 404)") : ;;
-      *"(HTTP 403)"*) classic=1 ;;
-      *) return 2 ;;
-    esac
+  from_rules="$(printf '%s' "$rules" | jq -r '[ .[] | select(.type == "required_status_checks") | .parameters.required_status_checks[] | [ .context, ((.integration_id // "") | tostring) ] | @tsv ] | .[]')" || return 2
+  branch="$(gh_quiet api "repos/$SLUG/branches/$encoded" --hostname "$HOST")" || return 2
+  printf '%s' "$branch" | jq -e 'type == "object" and ((.protected | type) == "boolean")' >/dev/null 2>&1 || return 2
+  from_branch=""
+  if [ "$(printf '%s' "$branch" | jq -r '.protected')" = "true" ]; then
+    # A protected branch must expose its protection object and a readable required-status-checks
+    # shape; a bounded endpoint with no protection is handled by .protected being false.
+    printf '%s' "$branch" | jq -e '(.protection | type) == "object" and ((.protection.required_status_checks | type) == "object" or .protection.required_status_checks == null)' >/dev/null 2>&1 || return 2
+    from_branch="$(printf '%s' "$branch" | jq -r '[
+        ((.protection.required_status_checks.contexts // [])[] | [ ., "" ] | @tsv),
+        ((.protection.required_status_checks.checks // [])[] | [ .context, ((.app_id // "") | tostring) ] | @tsv)
+      ] | .[]')" || return 2
   fi
-  all=""
-  if [ -n "$from_rules" ]; then all="$from_rules"; fi
-  if [ -n "$from_protection" ]; then
-    if [ -n "$all" ]; then all="$all
-$from_protection"; else all="$from_protection"; fi
-  fi
-  seen=""
-  while IFS= read -r name; do
-    [ -n "$name" ] || continue
-    case "$seen" in
-      *"|$name|"*) continue ;;
-    esac
-    seen="$seen|$name|"
-    printf '%s\n' "$name"
-  done <<<"$all"
-  [ "$classic" = 0 ] || return 3
+  if [ -n "$from_rules" ]; then printf '%s\n' "$from_rules"; fi
+  if [ -n "$from_branch" ]; then printf '%s\n' "$from_branch"; fi
   return 0
 }
 
@@ -866,51 +869,77 @@ fi
 printf '%s' "$CHECKS_ALL" | jq -e 'type == "array"' >/dev/null 2>&1 \
   || refuse 14 "the checks of PR #$NUMBER were not a JSON array"
 
-POLICY_STATUS=0
-POLICY_CONTEXTS="$(policy_required_contexts)" || POLICY_STATUS=$?
-case "$POLICY_STATUS" in
-  0) ;;
-  3) POLICY_CLASSIC_UNREADABLE=1 ;;
-  *) refuse 14 "could not read the required-check configuration of $BASE_REF on $HOST/$SLUG, so the head cannot be judged green: $(gh_stderr_detail)" ;;
-esac
-if [ "$POLICY_CLASSIC_UNREADABLE" = 1 ]; then
-  printf 'Policy: classic branch protection is not readable with this token (HTTP 403); required checks come from gh pr checks --required and the branch rules\n'
+POLICY_ROWS="$(policy_required_contexts)" \
+  || refuse 14 "could not read the required-check configuration of $BASE_REF on $HOST/$SLUG, so the head cannot be judged green: $(gh_stderr_detail)"
+
+# The union of the server-required names (no app identity) and the policy pairs, deduplicated on the
+# exact pair. Exact comparison: a plain substring test would collapse names such as `a|b` and `b`.
+UNION_CONTEXTS=()
+UNION_APPS=()
+add_requirement() {
+  local ctx="$1" app="$2" i
+  [ -n "$ctx" ] || return 0
+  i=0
+  while [ "$i" -lt "${#UNION_CONTEXTS[@]}" ]; do
+    if [ "${UNION_CONTEXTS[$i]}" = "$ctx" ] && [ "${UNION_APPS[$i]}" = "$app" ]; then
+      return 0
+    fi
+    i=$((i + 1))
+  done
+  UNION_CONTEXTS+=("$ctx")
+  UNION_APPS+=("$app")
+}
+while IFS= read -r SERVER_NAME; do add_requirement "$SERVER_NAME" ""; done <<<"$SERVER_REQUIRED"
+while IFS=$'\t' read -r POLICY_NAME POLICY_APP; do add_requirement "$POLICY_NAME" "${POLICY_APP:-}"; done <<<"$POLICY_ROWS"
+
+# A required check that names a producer app is only satisfied by a successful check run from that
+# app, so the check runs of the head are read once when any requirement names one.
+CHECK_RUNS=""
+NEED_APP=0
+for i in ${UNION_APPS[@]+"${UNION_APPS[@]}"}; do
+  [ -z "$i" ] || NEED_APP=1
+done
+if [ "$NEED_APP" = 1 ]; then
+  CHECK_RUNS="$(gh_quiet api --paginate --slurp "repos/$SLUG/commits/$HEAD/check-runs" --hostname "$HOST")" \
+    || refuse 14 "a required check names a producer app, and the check runs of head $HEAD could not be read"
+  printf '%s' "$CHECK_RUNS" | jq -e 'type == "array"' >/dev/null 2>&1 \
+    || refuse 14 "the check runs of head $HEAD were not readable JSON"
+  CHECK_RUNS="$(printf '%s' "$CHECK_RUNS" | jq -c '[ .[] | if type == "array" then .[] else . end ] | [ .[] | .check_runs[]? ]')" \
+    || refuse 14 "the check runs of head $HEAD were not readable JSON"
 fi
 
-# Union of the server-required names and the configured contexts, each once.
-REQUIRED_UNION=""
-SEEN_NAMES=""
-add_name() {
-  local n="$1"
-  [ -n "$n" ] || return 0
-  case "$SEEN_NAMES" in
-    *"|$n|"*) return 0 ;;
-  esac
-  SEEN_NAMES="$SEEN_NAMES|$n|"
-  if [ -n "$REQUIRED_UNION" ]; then REQUIRED_UNION="$REQUIRED_UNION
-$n"; else REQUIRED_UNION="$n"; fi
-}
-while IFS= read -r SERVER_NAME; do add_name "$SERVER_NAME"; done <<<"$SERVER_REQUIRED"
-while IFS= read -r POLICY_NAME; do add_name "$POLICY_NAME"; done <<<"$POLICY_CONTEXTS"
-
-if [ -z "$REQUIRED_UNION" ]; then
+if [ "${#UNION_CONTEXTS[@]}" -eq 0 ]; then
   printf 'Check: none\n'
 else
   MISSING_CONTEXTS=""
   NON_GREEN=""
-  while IFS= read -r REQUIRED_NAME; do
-    [ -n "$REQUIRED_NAME" ] || continue
+  i=0
+  while [ "$i" -lt "${#UNION_CONTEXTS[@]}" ]; do
+    REQUIRED_NAME="${UNION_CONTEXTS[$i]}"
+    REQUIRED_APP="${UNION_APPS[$i]}"
+    i=$((i + 1))
     REQUIRED_STATE="$(printf '%s' "$CHECKS_ALL" | jq -r --arg n "$REQUIRED_NAME" '[ .[] | select(.name == $n) | .state ] | if length == 0 then "MISSING" elif ([ .[] | select(. != "SUCCESS") ] | length) == 0 then "SUCCESS" else join(",") end')" \
       || refuse 14 "the checks of PR #$NUMBER were not readable JSON"
-    printf 'Check: %s=%s\n' "$(one_line "$REQUIRED_NAME")" "$(one_line "$REQUIRED_STATE")"
+    if [ -n "$REQUIRED_APP" ]; then
+      APP_OK="$(printf '%s' "$CHECK_RUNS" | jq -r --arg n "$REQUIRED_NAME" --arg a "$REQUIRED_APP" '[ .[] | select(.name == $n and ((.app.id // "") | tostring) == $a and .conclusion == "success") ] | length')" \
+        || refuse 14 "the check runs of head $HEAD were not readable JSON"
+      if [ "$APP_OK" = 0 ]; then
+        printf 'Check: %s=%s (app %s)\n' "$(one_line "$REQUIRED_NAME")" "MISSING-FROM-APP" "$(one_line "$REQUIRED_APP")"
+        MISSING_CONTEXTS="$MISSING_CONTEXTS$(one_line "$REQUIRED_NAME") (app $(one_line "$REQUIRED_APP")); "
+        continue
+      fi
+      printf 'Check: %s=%s (app %s)\n' "$(one_line "$REQUIRED_NAME")" "$(one_line "$REQUIRED_STATE")" "$(one_line "$REQUIRED_APP")"
+    else
+      printf 'Check: %s=%s\n' "$(one_line "$REQUIRED_NAME")" "$(one_line "$REQUIRED_STATE")"
+    fi
     case "$REQUIRED_STATE" in
       SUCCESS) ;;
       MISSING) MISSING_CONTEXTS="$MISSING_CONTEXTS$(one_line "$REQUIRED_NAME"); " ;;
       *) NON_GREEN="$NON_GREEN$(one_line "$REQUIRED_NAME")=$(one_line "$REQUIRED_STATE"), " ;;
     esac
-  done <<<"$REQUIRED_UNION"
+  done
   if [ -n "$MISSING_CONTEXTS" ]; then
-    refuse 14 "required check(s) on head $HEAD have not reported, so they are not green: $MISSING_CONTEXTS"
+    refuse 14 "required check(s) on head $HEAD have not reported as green, so they are not green: $MISSING_CONTEXTS"
   fi
   if [ -n "$NON_GREEN" ]; then
     refuse 14 "the required checks on head $HEAD are not green: $NON_GREEN"
@@ -932,6 +961,8 @@ RECHECK_STATE="$(printf '%s' "$MOVED_JSON" | jq -r '.state // empty')" \
   || refuse 16 "Could not read the state of PR #$NUMBER after the checks read"
 RECHECK_DRAFT="$(printf '%s' "$MOVED_JSON" | jq -r '.isDraft | tostring')" \
   || refuse 16 "Could not read the draft flag of PR #$NUMBER after the checks read"
+[ "$RECHECK_DRAFT" = "true" ] || [ "$RECHECK_DRAFT" = "false" ] \
+  || refuse 16 "PR #$NUMBER carries no boolean draft flag after the checks read ('$(one_line "$RECHECK_DRAFT")')"
 RECHECK_MERGEABLE="$(printf '%s' "$MOVED_JSON" | jq -r '.mergeable // empty')" \
   || refuse 16 "Could not read the mergeability of PR #$NUMBER after the checks read"
 RECHECK_MERGE_STATE="$(printf '%s' "$MOVED_JSON" | jq -r '.mergeStateStatus // empty')" \
