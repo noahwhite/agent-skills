@@ -20,13 +20,14 @@ README, which must be removed by hand before a retry. A key outside ^[A-Z][A-Z0-
 empty `--evidence-dir`, and a story key the doc-lint rejects all exit 1 naming what is wrong.
 
 A label is written as one table cell of literal text: its line breaks fold to spaces, runs of
-whitespace collapse, and every Markdown punctuation character is backslash-escaped, so a cell can
-never add a column, a row, a heading or inline markup, and it renders exactly the label you passed.
+whitespace collapse, and the Markdown punctuation that could open a table cell, a heading or inline
+markup is backslash-escaped, so a cell can never add a column, a row, a heading or inline markup.
 The generator's own verdict-word rule is stricter than the repository doc-lint's `stray_terms`: it
-refuses an empty label, a label holding more than one sentence, and one whose visible text carries
-U+2014, a stray term, a verdict word, a runtime-specific term, the British spelling of artifact
-outside the evidence tree that lint exempts, or an unresolvable `profile.` reference (checked
-against the target repository's own `profile/schema.json` when it has a schema).
+refuses an empty label, a label holding a control character, an invisible format character or more
+than one sentence, and one whose visible text carries U+2014, a stray term, a verdict word, a
+runtime-specific term, the British spelling of artifact outside the evidence tree that lint
+exempts, or an unresolvable `profile.` reference (checked against the target repository's own
+`profile/schema.json` when it has a schema).
 
 It reads no tracker, makes no network call and needs no credential.
 """
@@ -38,6 +39,7 @@ import os
 import re
 import stat
 import sys
+import unicodedata
 from pathlib import Path
 
 DEFAULT_EVIDENCE_DIR = "docs/qa-evidence"
@@ -110,9 +112,12 @@ def print_path(path: Path) -> None:
     try:
         sys.stdout.write(line.encode(encoding, "backslashreplace").decode(encoding) + "\n")
         sys.stdout.flush()
-    except BrokenPipeError:
-        # The README is published; a dead reader must not turn success into a failure report.
-        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+    except OSError:
+        # The README is published; an output error must not turn success into a failure report.
+        try:
+            os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+        except OSError:
+            pass
 
 
 def metadata_lines(path: str | None) -> list[str]:
@@ -307,12 +312,9 @@ def key_content_problem(key: str, *, spelling: bool) -> str | None:
 def mask_sentence_noise(text: str) -> str:
     """`text` with the dots that never end a sentence masked, so only real boundaries remain."""
     def reference(match) -> str:
-        ref = match.group(1)
-        trailing = ref[len(ref.rstrip(".")):]
-        following = match.string[match.end():].lstrip()[:1]
-        if trailing and (not following or following.islower() or following.isdigit()):
-            trailing = ""
-        return "profile" + trailing
+        # The dots inside a reference are never followed by whitespace, so only its trailing
+        # sentence-final punctuation survives the mask.
+        return "profile" + match.group(1)[len(match.group(1).rstrip(".")):]
 
     return NEVER_BOUNDARY_RE.sub(lambda match: match.group(0)[:-1], PROFILE_REF_RE.sub(reference, text))
 
@@ -330,6 +332,8 @@ def label_problem(label: str, *, schema: dict | None, spelling: bool) -> str | N
         return "is empty"
     if any(ord(char) < 0x20 or 0x7f <= ord(char) <= 0x9f for char in label):
         return "carries a control character"
+    if any(unicodedata.category(char) == "Cf" for char in label):
+        return "carries an invisible format character"
     if more_than_one_sentence(label):
         return "holds more than one sentence"
     for text in (label, visible_text(label)):

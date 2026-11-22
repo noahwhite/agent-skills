@@ -564,7 +564,6 @@ VALID_REFS = (
     "review.*",
     "environments[].preauthorized",
     "git.integration_branch",
-    "git.integration_branch.",
 )
 INVALID_REFS = (
     "not.a.key",
@@ -1264,6 +1263,27 @@ def test_a_stdout_closed_at_startup_still_creates_the_readme(tmp_path):
     res = subprocess.run(["bash", "-c", command], cwd=tmp_path, capture_output=True, text=True)
     assert res.returncode == 0, res.stderr
     assert (tmp_path / "docs" / "qa-evidence" / "SKL-386" / "README.md").is_file()
+
+
+@pytest.mark.parametrize("label", [
+    "AC1 - set profile.git.integration_branch. then push.",
+    "AC1 - set profile.git.integration_branch. Then push.",
+    "AC1 - set profile.git.integration_branch. 2 files",
+])
+def test_a_reference_keeps_its_sentence_final_dot(tmp_path, label):
+    res = run(tmp_path, "--key", "SKL-386", "--item", label)
+    assert res.returncode == 1, res.stderr
+    assert "more than one sentence" in res.stderr
+
+
+@pytest.mark.parametrize("mark", ["\u200b", "\ufeff", "\u00ad", "\u200c", "\u202e"])
+def test_an_invisible_format_character_in_a_label_is_refused(tmp_path, mark):
+    label = f"AC1 - veri{mark}fied"
+    res = run(tmp_path, "--key", "SKL-386", "--item", label)
+    assert res.returncode == 1, res.stderr
+    assert len(res.stderr.splitlines()) == 1, res.stderr
+    assert "invisible format character" in res.stderr
+    assert not (tmp_path / "docs").exists()
 
 
 def test_a_numbered_item_that_starts_a_new_sentence_is_refused(tmp_path):
