@@ -79,7 +79,10 @@
 # With no `--shard`, or with
 # `--shard 1/1`, the artifact path, the stamp, the binding, the phase's file set and the `paths`
 # output are exactly today's, and the dossier is identical to today's once each occurrence of its
-# own checkout path is normalised. A later `run arbitrate` requires every recorded hunt shard to
+# own checkout path is normalised. The launch is the phase's one run-state file whose content
+# differs: an explicit `--shard 1/1` records `shard=1/1` there, the same files with no flag stay
+# exactly today's, and that recorded selection is what `record` enforces. A later `run arbitrate`
+# requires every recorded hunt shard to
 # be accepted and exits 13 naming the first unaccepted one. Chain mode's `--phases hunt,arbitrate`
 # does not carry `--shard`; one shard is one invocation.
 #
@@ -869,13 +872,16 @@ accept_phase() {  # $1 = phase, $2 = stderr log or "": validate a freshly writte
     die 13 "the $1 inputs changed since its dossier was written (spec, --shard, --no-sweep or a predecessor artifact); start the $1 phase again."
   fi
   # `--shard 1/1` and an omitted flag share a binding byte for byte, so the launch carries the exact
-  # selection the dossier was written for: a record must repeat it exactly.
+  # selection the dossier was written for: a record must repeat it exactly. A launch that exists but
+  # cannot be read is a state failure, never an empty selection.
   local launched launched_arg
-  launched="$(cat -- "$RUN_DIR/$key.launch")"
+  if ! launched="$(cat -- "$RUN_DIR/$key.launch" 2>/dev/null)"; then
+    die 15 "the $1 launch marker $RUN_DIR/$key.launch cannot be read; start the $1 phase again."
+  fi
   if [ "$launched" != "$(launch_text "$1")" ]; then
     launched_arg="no --shard"
     if [ -n "$launched" ]; then launched_arg="--shard ${launched#shard=}"; fi
-    die 13 "the hunt was launched as '$launched_arg' but this record invocation passes '$(shard_choice_label)'; pass the same --shard as 'dossier hunt', or start the hunt phase again."
+    die 13 "the hunt was launched as '$launched_arg' but this record invocation passes '$(shard_choice_label)'; pass the --shard the dossier was written with, or start the hunt phase again."
   fi
   [ -s "$art" ] || die 15 "the $1 agent produced no report ($art is missing or empty)."
   if [ "$RUN_DIR/$key.launch" -nt "$art" ]; then
