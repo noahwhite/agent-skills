@@ -50,10 +50,10 @@
 # or record, is a usage error (exit 2) naming the command and the flag; the ADVERSARIAL_SHARD
 # default applies only to those hunt commands, so a leftover value never refuses another command.
 # `record hunt` must be passed the same `--shard` as `dossier hunt`, exactly as for `--spec` and
-# `--no-sweep`. The launch file records that exact selection (`shard=<k>/<n>` when the flag was
-# given, nothing when it was omitted), because `--shard 1/1` and an omitted flag share a byte-identical
-# binding; `record` refuses a launch whose selection differs (exit 13), and a different shard index
-# finds no launch and exits 15.
+# `--no-sweep`. The launch file records that exact selection (`shard=<k>/<n>`, or `shard=none` when
+# the flag was omitted), because `--shard 1/1` and an omitted flag share a byte-identical binding;
+# a missing, empty or unreadable launch is a state error (exit 15), `record` refuses a launch whose
+# selection differs (exit 13), and a different shard index finds no launch and exits 15.
 # With N >= 2 the invocation writes <run dir>/phase2-hunt.<k>.md and never writes or accepts
 # phase2-hunt.md for that run; its stamp and its binding carry the line shard=<k>/<n>. Each shard
 # owns its run-state files beside its artifact, suffixed with the shard index - hunt.<k>.launch,
@@ -80,9 +80,9 @@
 # `--shard 1/1`, the artifact path, the stamp, the binding, the phase's file set and the `paths`
 # output are exactly today's, and the dossier is identical to today's once each occurrence of its
 # own checkout path is normalised. The launch is the phase's one run-state file whose content
-# differs: an explicit `--shard 1/1` records `shard=1/1` there, the same files with no flag stay
-# exactly today's, and that recorded selection is what `record` enforces. A later `run arbitrate`
-# requires every recorded hunt shard to
+# differs from today's: it records the hunt's selection (`shard=<k>/<n>`, or `shard=none` when the
+# flag was omitted), and that recorded selection is what `record` enforces. A later
+# `run arbitrate` requires every recorded hunt shard to
 # be accepted and exits 13 naming the first unaccepted one. Chain mode's `--phases hunt,arbitrate`
 # does not carry `--shard`; one shard is one invocation.
 #
@@ -737,9 +737,12 @@ binding_text() {  # $1 = phase
 
 # The launch records the exact invocation a dossier was written for where the binding cannot see the
 # difference: `--shard 1/1` and an omitted flag are unsharded and share a byte-identical binding
-# (AC1's parity clause), so the launch itself carries the flag selection.
-launch_text() {  # $1 = phase -> what the launch file records; empty unless the hunt flag was given
-  if [ "$1" = "hunt" ] && [ "$SHARD_SET" -eq 1 ]; then printf 'shard=%s/%s\n' "$SHARD_K" "$SHARD_N"; fi
+# (AC1's parity clause), so the launch itself carries the flag selection. `shard=none` is the
+# omitted flag, so a launch that is missing, empty or unreadable is a state error, never a selection.
+launch_text() {  # $1 = phase -> what the launch file records; only the hunt records a selection
+  if [ "$1" = "hunt" ]; then
+    if [ "$SHARD_SET" -eq 1 ]; then printf 'shard=%s/%s\n' "$SHARD_K" "$SHARD_N"; else printf 'shard=none\n'; fi
+  fi
 }
 shard_choice_label() {  # -> the selection this invocation passes, as the operator wrote it
   if [ "$SHARD_SET" -eq 1 ]; then printf '%s' "--shard $SHARD_K/$SHARD_N"; else printf '%s' "no --shard"; fi
@@ -865,23 +868,23 @@ sandbox_error_in() {
 }
 
 accept_phase() {  # $1 = phase, $2 = stderr log or "": validate a freshly written artifact, then stamp it
-  local art key; art="$(artifact_for "$1")"; key="$(state_key "$1")"
+  local art key launched launched_arg; art="$(artifact_for "$1")"; key="$(state_key "$1")"
   [ -f "$RUN_DIR/$key.launch" ] && [ -f "$RUN_DIR/$key.binding" ] && [ -f "$RUN_DIR/$key.primary" ] \
     || die 15 "no launch for $1 in this run (never started, discarded by a later re-run of an earlier phase, or an arbitration already accepted); write its dossier with 'dossier $1' first."
   if [ "$(cat -- "$RUN_DIR/$key.binding")" != "$(binding_text "$1")" ]; then
     die 13 "the $1 inputs changed since its dossier was written (spec, --shard, --no-sweep or a predecessor artifact); start the $1 phase again."
   fi
-  # `--shard 1/1` and an omitted flag share a binding byte for byte, so the launch carries the exact
-  # selection the dossier was written for: a record must repeat it exactly. A launch that exists but
-  # cannot be read is a state failure, never an empty selection.
-  local launched launched_arg
-  if ! launched="$(cat -- "$RUN_DIR/$key.launch" 2>/dev/null)"; then
-    die 15 "the $1 launch marker $RUN_DIR/$key.launch cannot be read; start the $1 phase again."
-  fi
-  if [ "$launched" != "$(launch_text "$1")" ]; then
-    launched_arg="no --shard"
-    if [ -n "$launched" ]; then launched_arg="--shard ${launched#shard=}"; fi
-    die 13 "the hunt was launched as '$launched_arg' but this record invocation passes '$(shard_choice_label)'; pass the --shard the dossier was written with, or start the hunt phase again."
+  # `--shard 1/1` and an omitted flag share a binding byte for byte, so the hunt's launch carries the
+  # exact selection the dossier was written for: a record must repeat it exactly. The recorded value
+  # is printed only after control characters are neutralised, so a tampered marker cannot forge a line.
+  if [ "$1" = "hunt" ]; then
+    if ! launched="$(cat -- "$RUN_DIR/$key.launch" 2>/dev/null)" || [ -z "$launched" ]; then
+      die 15 "the hunt launch marker $RUN_DIR/$key.launch is missing, empty or unreadable; start the hunt phase again."
+    fi
+    if [ "$launched" != "$(launch_text "$1")" ]; then
+      launched_arg="$(printf '%s' "$launched" | tr -c '[:print:]' '?')"
+      die 13 "the hunt launch records '$launched_arg' but this record invocation passes '$(shard_choice_label)'; pass the --shard the dossier was written with, or start the hunt phase again."
+    fi
   fi
   [ -s "$art" ] || die 15 "the $1 agent produced no report ($art is missing or empty)."
   if [ "$RUN_DIR/$key.launch" -nt "$art" ]; then
