@@ -899,12 +899,12 @@ accept_phase() {  # $1 = phase, $2 = stderr log or "": validate a freshly writte
     expected="$(launch_text "$1")"
     dossier_hint="dossier hunt"
     if [ "$SHARDED" -eq 1 ]; then dossier_hint="dossier hunt --shard $SHARD_K/$SHARD_N"; fi
-    marker_hex="$(head -c 96 -- "$RUN_DIR/$key.launch" 2>/dev/null | od -An -tx1 | tr -d ' \n')" || marker_hex=""
+    marker_hex="$(head -c 96 -- "$RUN_DIR/$key.launch" 2>/dev/null | od -An -v -tx1 | tr -d ' \n')" || marker_hex=""
     launched="$(head -c 95 -- "$RUN_DIR/$key.launch" 2>/dev/null | head -n 1)" || launched=""
     # 96 bytes or more is over the reader's limit: overflow is refused before it is classified.
     if [ -n "$launched" ] && [ "${#marker_hex}" -lt 192 ] \
-      && { [ "$marker_hex" = "$(printf '%s\n' "$launched" | od -An -tx1 | tr -d ' \n')" ] \
-           || [ "$marker_hex" = "$(printf '%s' "$launched" | od -An -tx1 | tr -d ' \n')" ]; }; then
+      && { [ "$marker_hex" = "$(printf '%s\n' "$launched" | od -An -v -tx1 | tr -d ' \n')" ] \
+           || [ "$marker_hex" = "$(printf '%s' "$launched" | od -An -v -tx1 | tr -d ' \n')" ]; }; then
       case "$launched" in
         shard=none) marker_ok=1 ;;
         shard=[1-9]*)

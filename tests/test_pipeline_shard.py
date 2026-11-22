@@ -528,7 +528,8 @@ def test_a_malformed_launch_marker_is_refused_with_a_bounded_sanitised_diagnosis
                    b"shard=none\x00", b"shard=none\r\n", b"shard=no\x1be\n",
                    b"shard=none \n", b"shard=3/2\n", b"shard=none" + b"x" * 55,
                    b"shard=none" + b"x" * 60, long_valid + b"\n" + b"JUNK\n",
-                   near_limit + b"\n" + b"J", near_limit + b"J"):
+                   near_limit + b"\n" + b"J", near_limit + b"J",
+                   near_limit + b"\n" + b"1" * 100):
         sidecar = run_dir / "hunt.dossier"
         sidecar_before = sidecar.read_bytes() if sidecar.exists() else None
         launch.write_bytes(marker)
