@@ -12,6 +12,7 @@ the role that holds the permission, and the tick permission stays pinned in `ski
 """
 
 import re
+from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -188,17 +189,12 @@ def test_every_citation_names_the_line_that_carries_its_quotation() -> None:
 
 def test_each_permission_is_quoted_from_the_receiving_roles_skill() -> None:
     """The section's citations are exactly the required ones: no missing, no extra, no duplicate."""
-    found = sorted((path, quote) for quote, path, _ in citations())
-    assert found == sorted(REQUIRED_CITATIONS), (
-        f"missing: {sorted(set(REQUIRED_CITATIONS) - set(found))}; "
-        f"unexpected: {sorted(set(found) - set(REQUIRED_CITATIONS))}"
-    )
-
-
-def test_no_citation_quotes_a_degenerate_fragment() -> None:
-    """A truncated quotation must fail loudly rather than resolve against one character."""
-    for quote, path, number in citations():
-        assert len(quote) >= 8 and " " in quote, f"{path}:{number} quotes a degenerate fragment: {quote!r}"
+    found = Counter((path, quote) for quote, path, _ in citations())
+    required = Counter(REQUIRED_CITATIONS)
+    assert found == required, {
+        "missing": sorted((required - found).items()),
+        "unexpected": sorted((found - required).items()),
+    }
 
 
 def test_the_ac2_actor_and_prohibition_come_from_one_line() -> None:
