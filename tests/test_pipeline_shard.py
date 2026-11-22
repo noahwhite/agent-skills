@@ -415,8 +415,8 @@ def test_a_sharded_hunt_refuses_a_marker_naming_another_selection(accepted_gate)
     )
     checkout, _ = dossier_of(dossier)
     assert "the same --shard 1/2" in dossier.stderr, dossier.stderr
-    (run_dir / "phase2-hunt.1.md").write_text("REVIEW-RAN: yes\nshard one\n")
     (run_dir / "hunt.1.launch").write_bytes(b"shard=none\n")
+    (run_dir / "phase2-hunt.1.md").write_text("REVIEW-RAN: yes\nshard one\n")
     state_before = {path.name: path.read_bytes()
                     for path in sorted(run_dir.iterdir()) if path.is_file()}
     refused = run_script(
@@ -429,6 +429,22 @@ def test_a_sharded_hunt_refuses_a_marker_naming_another_selection(accepted_gate)
     state_after = {path.name: path.read_bytes()
                    for path in sorted(run_dir.iterdir()) if path.is_file()}
     assert state_after == state_before
+    # A marker naming another index of the same plan is the same mismatch, and a marker without
+    # its trailing newline is the same selection.
+    (run_dir / "hunt.1.launch").write_bytes(b"shard=2/2\n")
+    (run_dir / "phase2-hunt.1.md").write_text("REVIEW-RAN: yes\nshard one\n")
+    other_index = run_script(
+        "record", "hunt", "--repo", str(repo), "--base", "HEAD", "--shard", "1/2", env=env,
+    )
+    assert other_index.returncode == 13, other_index.stdout + other_index.stderr
+    assert "records 'shard=2/2'" in other_index.stderr, other_index.stderr
+    (run_dir / "hunt.1.launch").write_bytes(b"shard=1/2")
+    (run_dir / "phase2-hunt.1.md").write_text("REVIEW-RAN: yes\nshard one\n")
+    recorded = run_script(
+        "record", "hunt", "--repo", str(repo), "--base", "HEAD", "--shard", "1/2", env=env,
+    )
+    assert recorded.returncode == 0, recorded.stdout + recorded.stderr
+    assert Path(f"{run_dir / 'phase2-hunt.1.md'}.stamp").exists()
     assert run_script("cleanup", str(checkout), "--repo", str(repo), env=env).returncode == 0
 
 
@@ -506,10 +522,13 @@ def test_a_malformed_launch_marker_is_refused_with_a_bounded_sanitised_diagnosis
     checkout, _ = dossier_of(dossier)
     # Anything but the one printable selection line is an unusable state, not a selection.
     long_valid = b"shard=1/" + b"1" * 57
+    near_limit = b"shard=1/" + b"1" * 86
+    assert len(near_limit) == 94
     for marker in (b"shard=none\nTRAIL\n", b"shard=none\n\n", b"shard=none\x00\n",
                    b"shard=none\x00", b"shard=none\r\n", b"shard=no\x1be\n",
                    b"shard=none \n", b"shard=3/2\n", b"shard=none" + b"x" * 55,
-                   b"shard=none" + b"x" * 60, long_valid + b"\n" + b"JUNK\n"):
+                   b"shard=none" + b"x" * 60, long_valid + b"\n" + b"JUNK\n",
+                   near_limit + b"\n" + b"J", near_limit + b"J"):
         sidecar = run_dir / "hunt.dossier"
         sidecar_before = sidecar.read_bytes() if sidecar.exists() else None
         launch.write_bytes(marker)
@@ -525,6 +544,17 @@ def test_a_malformed_launch_marker_is_refused_with_a_bounded_sanitised_diagnosis
     long_mismatch = run_script("record", "hunt", "--repo", str(repo), "--base", "HEAD", env=env)
     assert long_mismatch.returncode == 13, long_mismatch.stdout + long_mismatch.stderr
     assert f"records '{long_valid.decode()}'" in long_mismatch.stderr, long_mismatch.stderr
+    # The reader's limit is the boundary: 94-byte line plus newline is a mismatch, one more byte is overflow.
+    launch.write_bytes(near_limit + b"\n")
+    report.write_text("REVIEW-RAN: yes\nplain\n")
+    at_limit = run_script("record", "hunt", "--repo", str(repo), "--base", "HEAD", env=env)
+    assert at_limit.returncode == 13, at_limit.stdout + at_limit.stderr
+    # A missing report is reported as the missing report, never as a selection problem.
+    launch.write_bytes(b"shard=1/1\n")
+    report.unlink()
+    no_report = run_script("record", "hunt", "--repo", str(repo), "--base", "HEAD", env=env)
+    assert no_report.returncode == 15, no_report.stdout + no_report.stderr
+    assert "produced no report" in no_report.stderr, no_report.stderr
     # A printable marker naming another selection is a mismatch that names both values.
     launch.write_bytes(b"shard=1/1\n")
     report.write_text("REVIEW-RAN: yes\nplain\n")
@@ -592,6 +622,7 @@ def test_a_flagged_dossier_recorded_with_its_flag_matches_the_unsharded_record(a
     plain_stamp = Path(f"{report}.stamp").read_bytes()
     plain_binding = (run_dir / "hunt.binding").read_bytes()
     plain_primary = (run_dir / "hunt.primary").read_bytes()
+    plain_sidecar = (run_dir / "hunt.dossier").read_bytes()
     plain_files = sorted(path.name for path in run_dir.iterdir())
     sweep_artifact = (run_dir / "phase1-sweep.md").read_bytes()
     assert run_script("cleanup", str(plain_checkout), "--repo", str(repo), env=env).returncode == 0
@@ -619,6 +650,7 @@ def test_a_flagged_dossier_recorded_with_its_flag_matches_the_unsharded_record(a
     assert flagged_binding == plain_binding
     assert sorted(path.name for path in run_dir.iterdir()) == plain_files
     assert (run_dir / "hunt.primary").read_bytes() == plain_primary
+    assert (run_dir / "hunt.dossier").read_bytes().split(b"\nbytes=")[-1] == plain_sidecar.split(b"\nbytes=")[-1]
     assert not (run_dir / "hunt.shards").exists()
     assert run_script("cleanup", str(flagged_checkout), "--repo", str(repo), env=env).returncode == 0
 
