@@ -74,12 +74,13 @@ LITERAL_ESCAPES = set("\\`*_[<>&|~$]")
 # full-width and Arabic forms, which need no following space.
 SENTENCE_END_RE = re.compile(r"(?:[。｡？！؟]|[.!?][\"'\u2019\u201d)\]]*(?=\s|$))")
 # A dot that never ends a sentence: a two-letter abbreviation continuing in lowercase, an
-# abbreviation or title that never ends one, an initial, or a numbered item or decimal.
+# abbreviation or title that never ends one, an initial before a name, or a numbered item or
+# decimal that continues in lowercase.
 NEVER_BOUNDARY_RE = re.compile(
-    r"\b(?i:etc|vs)\.(?=\s+[a-z0-9])"
-    r"|\b(?i:e\.g|i\.e|mr|mrs|ms|dr|prof|sr|jr|st|gen|col|fig)\."
-    r"|\b[A-Z]\.(?=\s)"
-    r"|\b\d+\.(?=\s)"
+    r"\b(?i:etc|vs|fig)\.(?=\s+[a-z0-9])"
+    r"|\b(?i:e\.g|i\.e|mr|mrs|ms|dr|prof|sr|jr|st|gen|col)\."
+    r"|\b[A-Z]\.(?=\s+(?:[A-Z]\.|[A-Z][a-z]))"
+    r"|\b\d+\.(?=\s+[a-z0-9])"
 )
 # O_PATH opens a directory for use as a `dir_fd` without requiring read permission on it.
 PATH_FLAGS = getattr(os, "O_PATH", os.O_RDONLY)
@@ -157,9 +158,13 @@ def ref_candidates(text: str) -> list[str]:
 
 
 def checkout_root(start: Path) -> Path | None:
-    """The nearest ancestor of `start` with a `.git` entry, which is the checkout that owns it."""
+    """The nearest ancestor of `start` with a real `.git` entry, which is the checkout that owns it."""
     for candidate in (start, *start.parents):
-        if (candidate / ".git").exists():
+        try:
+            info = os.lstat(candidate / ".git")
+        except OSError:
+            continue
+        if not stat.S_ISLNK(info.st_mode):
             return candidate
     return None
 
@@ -344,7 +349,7 @@ def skeleton(key: str, items: list[str], path: str | None) -> str:
 def open_directory(path: Path, *, create: bool) -> tuple[int | None, str | None]:
     """Open `path` one component at a time, never following a symlink, creating it when asked."""
     if not path.is_absolute():
-        return None, f"{one_line(str(path))} is not absolute"
+        return None, f"error: {one_line(str(path))} is not absolute"
     descriptor = os.open("/", PATH_FLAGS | os.O_DIRECTORY)
     try:
         for part in path.parts[1:]:
@@ -367,8 +372,8 @@ def open_directory(path: Path, *, create: bool) -> tuple[int | None, str | None]
     except OSError as exc:
         os.close(descriptor)
         if exc.errno in (errno.ELOOP, errno.ENOTDIR):
-            return None, f"cannot open {one_line(str(path))}: a path component is a file or symlink"
-        return None, f"cannot open {one_line(str(path))}: {exc.strerror or exc}"
+            return None, f"error: cannot open {one_line(str(path))}: a path component is a file or symlink"
+        return None, f"error: cannot open {one_line(str(path))}: {exc.strerror or exc}"
     return descriptor, None
 
 
@@ -410,7 +415,7 @@ def publish(target: Path, text: str) -> bool:
         return False
     descriptor, problem = open_directory(target.parent, create=True)
     if descriptor is None:
-        print(f"error: {problem}", file=sys.stderr)
+        print(problem, file=sys.stderr)
         return False
     try:
         problem = existing_target_problem(descriptor, target)
@@ -477,8 +482,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--evidence-dir", default=DEFAULT_EVIDENCE_DIR, help="Evidence directory.")
     args = parser.parse_args(normalize_argv(sys.argv[1:] if argv is None else argv))
 
-    root = repository_root()
-    if not args.evidence_dir:
+    try:
+        root = repository_root()
+    except OSError as exc:
+        print(f"error: cannot read the working directory: {exc.strerror or exc}", file=sys.stderr)
+        return 1
+    if not args.evidence_dir.strip():
         print("error: --evidence-dir is empty", file=sys.stderr)
         return 1
     problem = key_syntax_problem(args.key)

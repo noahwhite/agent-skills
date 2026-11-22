@@ -474,9 +474,10 @@ def test_a_key_the_doc_lint_rejects_is_refused(tmp_path, key):
     assert tree_state(tmp_path) == before
 
 
-def test_an_empty_evidence_dir_is_refused(tmp_path):
+@pytest.mark.parametrize("value", ["", " ", "\t"])
+def test_an_empty_evidence_dir_is_refused(tmp_path, value):
     before = tree_state(tmp_path)
-    res = run(tmp_path, "--key", "SKL-386", "--evidence-dir", "")
+    res = run(tmp_path, "--key", "SKL-386", "--evidence-dir", value)
     assert res.returncode == 1
     assert len(res.stderr.splitlines()) == 1, res.stderr
     assert tree_state(tmp_path) == before
@@ -958,7 +959,7 @@ def test_a_readme_symlink_is_named_as_a_symlink(tmp_path):
     res = run(tmp_path, "--key", "SKL-386")
     assert res.returncode == 1
     assert len(res.stderr.splitlines()) == 1, res.stderr
-    assert "symlink" in res.stderr
+    assert res.stderr == f"error: {readme} is a symlink; refusing to follow it\n"
     assert not destination.exists()
 
 
@@ -1101,7 +1102,7 @@ def test_a_regular_readme_under_a_symlinked_ancestor_is_refused_as_unsafe(tmp_pa
     res = run(tmp_path, "--key", "SKL-386")
     assert res.returncode == 1, res.stderr
     assert len(res.stderr.splitlines()) == 1, res.stderr
-    assert "symlink" in res.stderr
+    assert res.stderr == f"error: cannot open {tmp_path / 'docs' / 'qa-evidence' / 'SKL-386'}: a path component is a file or symlink\n"
     assert "already exists" not in res.stderr
     assert readme.read_text(encoding="utf-8") == "# handwritten\n"
 
@@ -1265,6 +1266,41 @@ def test_a_stdout_closed_at_startup_still_creates_the_readme(tmp_path):
     assert (tmp_path / "docs" / "qa-evidence" / "SKL-386" / "README.md").is_file()
 
 
+def test_a_numbered_item_that_starts_a_new_sentence_is_refused(tmp_path):
+    label = "AC1 - set item 5. Then push"
+    res = run(tmp_path, "--key", "SKL-386", "--item", label)
+    assert res.returncode == 1, res.stderr
+    assert "more than one sentence" in res.stderr
+
+
+def test_a_figure_before_a_new_sentence_is_refused(tmp_path):
+    label = "AC1 - the first part ends here Fig. The second sentence runs on."
+    res = run(tmp_path, "--key", "SKL-386", "--item", label)
+    assert res.returncode == 1, res.stderr
+    assert "more than one sentence" in res.stderr
+
+
+def test_a_symlinked_git_marker_is_not_a_checkout_root(tmp_path):
+    outer = tmp_path / "outer"
+    (outer / ".git").mkdir(parents=True)
+    inner = outer / "inner"
+    inner.mkdir()
+    (inner / ".git").symlink_to(tmp_path / "elsewhere", target_is_directory=True)
+    res = run_in(inner, "--key", "SKL-386", "--item", "AC1 - one generator")
+    assert res.returncode == 0, res.stderr
+    assert (outer / "docs" / "qa-evidence" / "SKL-386" / "README.md").is_file()
+    assert not (inner / "docs").exists()
+
+
+def test_a_removed_working_directory_is_a_one_line_refusal(tmp_path):
+    gone = tmp_path / "gone"
+    gone.mkdir()
+    command = f"cd '{gone}' && rm -rf '{gone}' && exec '{sys.executable}' '{SCRIPT}' --key SKL-386"
+    res = subprocess.run(["bash", "-c", command], capture_output=True, text=True)
+    assert res.returncode == 1, res.stderr
+    assert len(res.stderr.splitlines()) == 1, res.stderr
+
+
 @pytest.mark.skipif(not directory_permissions_apply(), reason="this process bypasses directory permissions")
 def test_an_unsearchable_evidence_directory_is_a_one_line_refusal(tmp_path):
     evidence = tmp_path / "evidence"
@@ -1274,7 +1310,7 @@ def test_an_unsearchable_evidence_directory_is_a_one_line_refusal(tmp_path):
         res = run(tmp_path, "--key", "SKL-386", "--evidence-dir", str(evidence))
         assert res.returncode == 1, res.stderr
         assert len(res.stderr.splitlines()) == 1, res.stderr
-        assert "evidence" in res.stderr
+        assert res.stderr.startswith("error: ")
     finally:
         evidence.chmod(0o700)
 
