@@ -290,6 +290,8 @@ def test_a_plan_conflict_is_a_usage_error_that_changes_nothing(accepted_gate):
     run_dir = files["run"]
     plan_before = plan_file(run_dir).read_bytes()
     stamp_before = Path(f"{files['hunt.1']}.stamp").read_bytes()
+    state_before = {path.name: path.read_bytes()
+                    for path in sorted(run_dir.iterdir()) if path.is_file()}
     for extra in (("--shard", "1/3"), ("--shard", "2/3"), (), ("--shard", "1/1")):
         result = run_hunt(repo, scratch, env, *extra)
         assert result.returncode == 2, (extra, result.stdout + result.stderr)
@@ -303,6 +305,9 @@ def test_a_plan_conflict_is_a_usage_error_that_changes_nothing(accepted_gate):
     assert conflicting.returncode == 2, conflicting.stdout + conflicting.stderr
     assert plan_file(run_dir).read_bytes() == plan_before
     assert Path(f"{files['hunt.1']}.stamp").read_bytes() == stamp_before
+    state_after = {path.name: path.read_bytes()
+                   for path in sorted(run_dir.iterdir()) if path.is_file()}
+    assert state_after == state_before
 
 
 def test_an_unsharded_hunt_then_a_shard_is_a_usage_error(accepted_gate):
@@ -500,10 +505,11 @@ def test_a_malformed_launch_marker_is_refused_with_a_bounded_sanitised_diagnosis
     )
     checkout, _ = dossier_of(dossier)
     # Anything but the one printable selection line is an unusable state, not a selection.
+    long_valid = b"shard=1/" + b"1" * 57
     for marker in (b"shard=none\nTRAIL\n", b"shard=none\n\n", b"shard=none\x00\n",
                    b"shard=none\x00", b"shard=none\r\n", b"shard=no\x1be\n",
                    b"shard=none \n", b"shard=3/2\n", b"shard=none" + b"x" * 55,
-                   b"shard=none" + b"x" * 60):
+                   b"shard=none" + b"x" * 60, long_valid + b"\n" + b"JUNK\n"):
         sidecar = run_dir / "hunt.dossier"
         sidecar_before = sidecar.read_bytes() if sidecar.exists() else None
         launch.write_bytes(marker)
@@ -513,6 +519,12 @@ def test_a_malformed_launch_marker_is_refused_with_a_bounded_sanitised_diagnosis
         assert "not exactly the one selection line the launcher wrote" in refused.stderr, refused.stderr
         assert not Path(f"{report}.stamp").exists()
         assert (sidecar.read_bytes() if sidecar.exists() else None) == sidecar_before, marker
+    # A long but valid selection the launcher could have written is a mismatch, not malformed state.
+    launch.write_bytes(long_valid + b"\n")
+    report.write_text("REVIEW-RAN: yes\nplain\n")
+    long_mismatch = run_script("record", "hunt", "--repo", str(repo), "--base", "HEAD", env=env)
+    assert long_mismatch.returncode == 13, long_mismatch.stdout + long_mismatch.stderr
+    assert f"records '{long_valid.decode()}'" in long_mismatch.stderr, long_mismatch.stderr
     # A printable marker naming another selection is a mismatch that names both values.
     launch.write_bytes(b"shard=1/1\n")
     report.write_text("REVIEW-RAN: yes\nplain\n")

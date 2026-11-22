@@ -884,7 +884,8 @@ accept_phase() {  # $1 = phase, $2 = stderr log or "": validate a freshly writte
   # exact selection the dossier was written for: a record must repeat it exactly. The marker is the
   # one selection line the launcher writes, with or without its trailing newline; anything else - a
   # second line, a NUL, a K > N, an unreadable or oversized file - is unusable state, never a
-  # selection. Both reads are byte-bounded (66 bytes) and the comparison is exact in hex, so the
+  # selection. Both reads are byte-bounded (81 bytes, more than any selection the launcher can
+  # write), the comparison is exact in hex, and overflow is rejected before it is classified, so the
   # check never reads a whole file, can never forge a diagnosis line, and reserves exit 13 for a
   # selection the launcher could have written.
   if [ "$1" = "hunt" ]; then
@@ -893,8 +894,8 @@ accept_phase() {  # $1 = phase, $2 = stderr log or "": validate a freshly writte
     expected="$(launch_text "$1")"
     dossier_hint="dossier hunt"
     if [ "$SHARDED" -eq 1 ]; then dossier_hint="dossier hunt --shard $SHARD_K/$SHARD_N"; fi
-    marker_hex="$(head -c 66 -- "$RUN_DIR/$key.launch" 2>/dev/null | od -An -tx1 | tr -d ' \n')" || marker_hex=""
-    launched="$(head -c 65 -- "$RUN_DIR/$key.launch" 2>/dev/null | head -n 1)" || launched=""
+    marker_hex="$(head -c 81 -- "$RUN_DIR/$key.launch" 2>/dev/null | od -An -tx1 | tr -d ' \n')" || marker_hex=""
+    launched="$(head -c 80 -- "$RUN_DIR/$key.launch" 2>/dev/null | head -n 1)" || launched=""
     if [ -n "$launched" ] \
       && { [ "$marker_hex" = "$(printf '%s\n' "$launched" | od -An -tx1 | tr -d ' \n')" ] \
            || [ "$marker_hex" = "$(printf '%s' "$launched" | od -An -tx1 | tr -d ' \n')" ]; }; then
