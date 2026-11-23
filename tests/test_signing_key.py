@@ -604,6 +604,16 @@ def test_a_failed_check_changes_nothing_in_the_repository(rig):
     assert snapshot(rig) == before
 
 
+def default_signal_dispositions():
+    """Start the script with SIGHUP, SIGINT and SIGTERM at their defaults.
+
+    bash cannot trap a signal that was ignored when it started, so a suite launched with one of them ignored
+    (under nohup, or by a runner that ignores SIGHUP) would otherwise hang the interrupt tests until they time out.
+    """
+    for sig in (signal.SIGHUP, signal.SIGINT, signal.SIGTERM):
+        signal.signal(sig, signal.SIG_DFL)
+
+
 def temp_dir_after(rig, fingerprint):
     tmp = Path(tempfile.mkdtemp(dir=rig.root))
     res = run(["bash", str(SOURCE), fingerprint], env={**rig.env, "TMPDIR": str(tmp)}, cwd=rig.repo)
@@ -634,6 +644,7 @@ def test_an_interrupted_run_stops_the_signer_removes_its_temporary_directory_and
         stderr=subprocess.PIPE,
         text=True,
         start_new_session=True,
+        preexec_fn=default_signal_dispositions,
     )
     try:
         for _ in range(200):
@@ -682,6 +693,7 @@ def test_a_signal_during_cleanup_cannot_skip_the_removal_or_the_single_line(rig,
         stderr=subprocess.PIPE,
         text=True,
         start_new_session=True,
+        preexec_fn=default_signal_dispositions,
     )
     try:
         for _ in range(200):

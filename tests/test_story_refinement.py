@@ -2,7 +2,9 @@
 
 import ast
 import copy
+import functools
 import hashlib
+import os
 import inspect
 import json
 import re
@@ -1658,8 +1660,8 @@ CONSENSUS_CHECK_BRANCHES = (
     "The basis review in item 2 still runs on this branch, and nothing is written to the tracker and no "
     "pointing record is posted until it has run. "
     "When the highest and the lowest are more than one step apart (1 and 5, for example), or they differ and "
-    "either of them is outside the sequence, the discussion in item 3 and the re-vote in item 4 run, naming the "
-    "high and the low."
+    "either of them is outside the sequence, the discussion in item 3 and the re-vote in item 4 run, with the "
+    "high and the low voters speaking first."
 )
 
 
@@ -1719,7 +1721,9 @@ def test_step_four_one_step_apart_records_the_higher_value_and_skips() -> None:
 
 def test_step_four_more_than_one_step_apart_runs_the_discussion() -> None:
     item = process_items(STEP_FOUR)[0]
-    run_clause = "the discussion in item 3 and the re-vote in item 4 run, naming the high and the low."
+    run_clause = (
+        "the discussion in item 3 and the re-vote in item 4 run, with the high and the low voters speaking first."
+    )
     assert "(1 and 5, for example), or they differ and either of them is outside the sequence, " + run_clause in item
     assert item.count(run_clause) == 1, "the discussion must run on the wide branch only"
     assert "is the estimate" in item
@@ -5712,9 +5716,14 @@ ANONYMISED_DRAFT = [
     "authorship stripped: it names no voter, no SM/EM, no family, no model and no input file, and attributes no item "
     "to an input.",
     "Every list in the draft, such as the acceptance criteria, the risks and the amendments, takes an order the "
-    "facilitator draws at random, for example with `shuf`, and never one input's order.",
+    "facilitator draws at random, for example with `shuf`, independently of every input's order, so a draw that "
+    "happens to match one input's order stands.",
+    "The order inside one item whose sequence carries meaning, such as the steps of one acceptance criterion, is "
+    "kept.",
     "An amended draft takes a newly drawn order.",
     "The refinement comment's `Refined story snapshot:` line carries that draft.",
+    "Where that line records an immutable snapshot reference instead, the facilitator resolves the reference and "
+    "anonymises the text it resolves to under these same rules.",
 ]
 
 
@@ -5733,9 +5742,12 @@ def test_step_two_reconciles_and_amends_into_the_anonymised_draft() -> None:
 CODEBOOK_JUDGEMENT = [
     "The codebook is the Definition of Ready boxes the filing template has and the INVEST criteria, as Triage and "
     "Definition of Ready in [linear.md](linear.md) lists them.",
-    "Each accept-round brief carries the refinement comment id, the draft from that comment's `Refined story "
-    "snapshot:` line and the codebook verbatim, and nothing that attributes the draft: no voter input, no voter-input "
-    "line, no per-voter verdict and no family or model name.",
+    "Each accept-round brief carries the anonymised draft under a snapshot label that names no comment, no voter "
+    "and no input, and the codebook verbatim, with each Definition of Ready box copied in full from the filing "
+    "template.",
+    "It carries nothing that attributes the draft or leads to an attribution: no refinement comment id, no voter "
+    "input, no voter-input line, no per-voter verdict and no family or model name.",
+    "The facilitator alone keeps the mapping from the snapshot label to the refinement comment id.",
     "Every `OBJECT` names the codebook item the draft fails, with its blocking amendment.",
     "A blocking amendment is one that fixes a codebook item the draft fails.",
     "An `OBJECT` that names no codebook item is re-recorded once, in a launch that starts a new voter context; a "
@@ -5778,7 +5790,8 @@ INVEST_LINES = [
 ]
 CODEBOOK_RULES = [
     "- The refinement codebook is what an accept-round voter judges a refined draft against (story-refinement Step 2): "
-    "each Definition of Ready box the issue's filing template has, and the six INVEST criteria below.",
+    "each Definition of Ready box the issue's filing template has, in that template's full wording, and the six "
+    "INVEST criteria below.",
     "  An `OBJECT` names the codebook item the draft fails.",
     '  At the accept round the "Story is estimated" box is judged as Estimable, because pointing follows acceptance, '
     "and the blocker box is judged on what the draft records, so a recorded blocker that is not yet done keeps the "
@@ -5826,6 +5839,7 @@ def test_discussion_exchanges_assumptions_and_evidence() -> None:
 
 def test_discussion_no_longer_shares_the_values() -> None:
     assert "names only the high and the low" not in spaced(SKILL.read_text())
+    assert "naming the high and the low" not in spaced(SKILL.read_text())
     assert "names only the high and the low" not in spaced(RECORD.read_text())
 
 
@@ -5844,7 +5858,7 @@ POINTS_MEANING_SKILL = (
 )
 POINTS_MEANING_SHARED = [
     "- A story point is relative size and a split trigger, calibrated on the team's own history: the estimated "
-    "stories story-refinement reads as its anchor table.",
+    "stories that story-refinement reads as its anchor table.",
     "  It is not a forecast and not hours.",
 ]
 
@@ -5881,7 +5895,8 @@ VOTE_MOVEMENT = [
     "A voter's first vote is the value it recorded in Step 3 before any discussion or basis challenge, the blind "
     "re-run's value after a void; its re-vote value is the highest value of its accepted set, the lowest for a "
     "slice, or its Step 3 value when it records no consensus.",
-    "A vote that moved with no new fact cited is flagged `conformity` in the pointing record.",
+    "A vote that moved with no new fact cited is flagged `conformity` in the pointing record, whatever else moved "
+    "it, a retracted ground included; the flag is recorded apart from the reason the vote moved.",
     "The flag is informational and changes no consensus, no residual variance outcome, no estimate and no stop.",
     "The votes-per-voter lines of the Pointing record in [refinement-record.md](refinement-record.md) record each "
     "voter's first vote, assumptions, evidence cited and what moved its vote.",
@@ -5911,7 +5926,7 @@ def vote_line(engineer: str) -> str:
     return (
         f"  - Engineer {engineer}: first vote <value, or not recorded>; assumptions: <the assumptions its value rests "
         "on>; evidence cited: <each file, criterion, relation or anchor key, or none>; moved: <not moved | new fact: "
-        "<the fact cited> | retracted ground: <its kind> | conformity>"
+        "<the fact cited> | retracted ground: <its kind> | no new fact>; conformity: <flagged | not flagged>"
     )
 
 
@@ -5932,14 +5947,23 @@ def test_pointing_template_records_each_voter_first_vote_and_what_moved_it() -> 
         "On the votes-per-voter lines, a vote moved when the value that stands for that voter, its re-vote value or "
         "its basis-challenge replacement, differs from its first vote.",
         "`new fact` names the fact the voter cited that its Step 3 rationale did not, `retracted ground` names the "
-        "kind of off-basis ground whose retraction produced a replacement value, and `conformity` flags a vote that "
-        "moved with no new fact cited.",
+        "kind of off-basis ground whose retraction produced a replacement value, and `no new fact` marks a vote that "
+        "moved with neither; `conformity: flagged` marks every vote that moved with no new fact cited, a "
+        "retracted-ground move included, and every other vote is `not flagged`.",
         "The `conformity` flag is informational: it changes no consensus, no residual variance outcome, no estimate "
         "and no stop.",
     ],
 )
 def test_pointing_record_prose_defines_the_moved_values(sentence: str) -> None:
     assert sentence in spaced(prose(section(RECORD.read_text(), "Pointing record")))
+
+
+def test_read_first_lists_the_deliberation_reference() -> None:
+    assert (
+        "- [references/deliberation.md](references/deliberation.md) - the hand-written anonymised draft, codebook "
+        "judgement, evidence discussion and vote movement rules of Step 2 and Step 4."
+        in section(SKILL.read_text(), "Read first").splitlines()
+    )
 
 
 def test_records_section_lists_the_vote_record() -> None:
@@ -5997,11 +6021,44 @@ def removed_box_offenders(files: dict[str, str]) -> list[str]:
     ]
 
 
+# Tool and cache directories, and .claude, whose worktrees hold other branches' checkouts.
+DOR_SWEEP_SKIPPED_DIRS = {".git", ".venv", "node_modules", ".pytest_cache", ".ruff_cache", ".claude"}
+# Dated QA evidence records what was true at a past commit, so it may quote a removed box.
+DOR_SWEEP_HISTORICAL = ("docs/qa-evidence/",)
+
+
+@functools.cache
+def dor_sweep_tree() -> tuple[tuple[str, str], ...]:
+    """Every Markdown file in the repository, except tool directories and dated QA evidence."""
+    found = []
+    for directory, subdirectories, files in os.walk(ROOT):
+        subdirectories[:] = [name for name in subdirectories if name not in DOR_SWEEP_SKIPPED_DIRS]
+        for file in files:
+            path = Path(directory) / file
+            name = path.relative_to(ROOT).as_posix()
+            if path.suffix == ".md" and not name.startswith(DOR_SWEEP_HISTORICAL):
+                found.append((name, path.read_text()))
+    return tuple(sorted(found))
+
+
 def dor_sweep_files() -> dict[str, str]:
-    """Every Markdown file the skills, the shared sources and the repository root ship; historical QA evidence and
-    eval fixtures under docs/ and evals/ are records of past runs, not rules."""
-    paths = [*ROOT.glob("*.md"), *(ROOT / "skills").rglob("*.md"), *(ROOT / "shared").rglob("*.md")]
-    return {path.relative_to(ROOT).as_posix(): path.read_text() for path in sorted(paths)}
+    return dict(dor_sweep_tree())
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["README.md", "skills/linear-user-story/SKILL.md", "shared/linear.md", "docs/pruning-routine.md"],
+)
+def test_dor_sweep_reads_guidance_outside_the_skills(name: str) -> None:
+    """Discovery proof: the sweep reads guidance anywhere in the repository, not only skills/ and shared/."""
+    assert name in dor_sweep_files()
+
+
+def test_dor_sweep_skips_only_dated_qa_evidence() -> None:
+    files = dor_sweep_files()
+    assert not any(name.startswith(DOR_SWEEP_HISTORICAL) for name in files)
+    assert any(name.startswith("docs/") for name in files), "docs/ outside qa-evidence is swept"
+    assert any(name.startswith("spikes/") for name in files), "spikes/ is swept"
 
 
 def test_no_shipped_file_names_a_removed_definition_of_ready_box() -> None:
@@ -6012,7 +6069,7 @@ def test_no_shipped_file_names_a_removed_definition_of_ready_box() -> None:
 @pytest.mark.parametrize("box", REMOVED_DOR_BOXES)
 def test_removed_box_sweep_kills_each_restored_box(box: str) -> None:
     """Mutation proof: each removed box, restored to the template or the shared source, is flagged by the sweep."""
-    for name in ("skills/linear-user-story/SKILL.md", "shared/linear.md"):
+    for name in ("skills/linear-user-story/SKILL.md", "shared/linear.md", "docs/pruning-routine.md"):
         files = dor_sweep_files()
         assert name in files
         files[name] += f"\n- [ ] {box}\n"
@@ -6022,9 +6079,9 @@ def test_removed_box_sweep_kills_each_restored_box(box: str) -> None:
 @pytest.mark.parametrize(
     "line",
     [
-        "- A story's Definition of Ready has three boxes, as the `linear-user-story` template lists them: the story is "
-        "estimated, its acceptance criteria are testable, and no blocking stories or unresolved external dependencies "
-        "remain, with no other story owning its scope.",
+        "- A story's Definition of Ready has three boxes, in the order the `linear-user-story` template lists them: "
+        "its acceptance criteria are observable behaviour checked against the implementation, no blocking stories or "
+        "unresolved external dependencies remain and no other story owns its scope, and the story is estimated.",
         "  Triage still sets priority, but priority is not a Definition of Ready box.",
     ],
 )

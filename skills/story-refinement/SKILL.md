@@ -57,11 +57,11 @@ After reading `references/todo-tracking.md`, expand the list to the story-refine
 - [references/profile.md](references/profile.md) - find the profile and this skill's overlay right after the todo list is created, before any other file.
 - [references/todo-tracking.md](references/todo-tracking.md) - required: the list rules and the story-refinement seed list, with one item per voter input, accept round, point value, consensus check, basis-challenge round, discussion and re-vote when the check calls for them, split, and triage write.
   For a Bug, an Investigation or a Spike the list omits every Stage 2 item, as that seed line states.
-- [references/linear.md](references/linear.md) - the rule set for the story lifecycle, Definition of Ready, estimation, splitting, relations, and tooling gotchas.
-  Cite it for split mechanics; do not restate them here.
+- [references/linear.md](references/linear.md) - the rule set for the story lifecycle, Definition of Ready, estimation, splitting, relations, and tooling gotchas; cite it for split mechanics, and do not restate them here.
 - [references/engineering-practice.md](references/engineering-practice.md) - diagnose before changing, write meaningful tests, and keep changes minimal.
 - [references/runtimes.md](references/runtimes.md) - maps the capabilities named here (todo list, load a skill, spawn a subagent, run a shell command) to your runtime.
 - [references/refinement-record.md](references/refinement-record.md) - the hand-written refinement-comment and pointing-record templates, the record vocabulary, the comment headings, and the permitted and forbidden phrasing table.
+- [references/deliberation.md](references/deliberation.md) - the hand-written anonymised draft, codebook judgement, evidence discussion and vote movement rules of Step 2 and Step 4.
 - [references/exemplars-and-anchors.md](references/exemplars-and-anchors.md) - the hand-written exemplar lookup and anchor table rules of Step 1 item 4.
 - [references/repository-guards.md](references/repository-guards.md) - the hand-written repository guard check of Step 1 item 6.
 
@@ -262,7 +262,7 @@ A story point is relative size and a split trigger, calibrated on the team's own
      A value outside that sequence for the profile's scale has no step position, so two different values that involve one are more than one step apart; three identical values are identical, and Step 3 already re-records an off-sequence value before the reveal.
      When the three values are identical, or the highest and the lowest are one step apart (5 and 8 on `fibonacci`, for example), the highest of the three values is the estimate, the discussion in item 3 and the re-vote in item 4 are skipped, and the split rule in item 9 still applies to it.
      The basis review in item 2 still runs on this branch, and nothing is written to the tracker and no pointing record is posted until it has run.
-     When the highest and the lowest are more than one step apart (1 and 5, for example), or they differ and either of them is outside the sequence, the discussion in item 3 and the re-vote in item 4 run, naming the high and the low.
+     When the highest and the lowest are more than one step apart (1 and 5, for example), or they differ and either of them is outside the sequence, the discussion in item 3 and the re-vote in item 4 run, with the high and the low voters speaking first.
      Record the outcome in the pointing record as `Consensus check: <identical | one step | more than one step>`, so a skipped discussion and re-vote read as skipped and never as not run; the record's values block keeps the values recorded before the discussion, and a replacement value appears on its Challenges line and in the voter's file.
   2. Review every rationale recorded in Step 3 against the pointing basis, after the consensus check and before the estimate is written to the tracker and before the pointing record is posted, so a void never leaves a written estimate to unwind.
      This review is not the discussion: it runs on both branches, and the discussion in item 3 only carries the challenges it raises.

@@ -5,14 +5,18 @@ These hand-written rules govern how the voters' judgements are formed and shared
 ## Anonymised draft
 
 - The reconciled story of Step 2 item 1, and each amended refinement of Step 2 item 6, is one merged draft with authorship stripped: it names no voter, no SM/EM, no family, no model and no input file, and attributes no item to an input.
-- Every list in the draft, such as the acceptance criteria, the risks and the amendments, takes an order the facilitator draws at random, for example with `shuf`, and never one input's order.
+- Every list in the draft, such as the acceptance criteria, the risks and the amendments, takes an order the facilitator draws at random, for example with `shuf`, independently of every input's order, so a draw that happens to match one input's order stands.
+  The order inside one item whose sequence carries meaning, such as the steps of one acceptance criterion, is kept.
   An amended draft takes a newly drawn order.
 - The refinement comment's `Refined story snapshot:` line carries that draft.
+  Where that line records an immutable snapshot reference instead, the facilitator resolves the reference and anonymises the text it resolves to under these same rules.
 
 ## Codebook judgement
 
 - The codebook is the Definition of Ready boxes the filing template has and the INVEST criteria, as Triage and Definition of Ready in [linear.md](linear.md) lists them.
-- Each accept-round brief carries the refinement comment id, the draft from that comment's `Refined story snapshot:` line and the codebook verbatim, and nothing that attributes the draft: no voter input, no voter-input line, no per-voter verdict and no family or model name.
+- Each accept-round brief carries the anonymised draft under a snapshot label that names no comment, no voter and no input, and the codebook verbatim, with each Definition of Ready box copied in full from the filing template.
+  It carries nothing that attributes the draft or leads to an attribution: no refinement comment id, no voter input, no voter-input line, no per-voter verdict and no family or model name.
+  The facilitator alone keeps the mapping from the snapshot label to the refinement comment id.
 - Every `OBJECT` names the codebook item the draft fails, with its blocking amendment.
   A blocking amendment is one that fixes a codebook item the draft fails.
 - An `OBJECT` that names no codebook item is re-recorded once, in a launch that starts a new voter context; a second such answer from the same voter counts as a missing voter.
@@ -29,6 +33,6 @@ These hand-written rules govern how the voters' judgements are formed and shared
 
 - Each re-vote prompt carries this rule: the re-vote rationale names what moved the voter's vote, when its re-vote value differs from its first vote: the new fact it cites that its Step 3 rationale did not, or none.
 - A voter's first vote is the value it recorded in Step 3 before any discussion or basis challenge, the blind re-run's value after a void; its re-vote value is the highest value of its accepted set, the lowest for a slice, or its Step 3 value when it records no consensus.
-- A vote that moved with no new fact cited is flagged `conformity` in the pointing record.
+- A vote that moved with no new fact cited is flagged `conformity` in the pointing record, whatever else moved it, a retracted ground included; the flag is recorded apart from the reason the vote moved.
   The flag is informational and changes no consensus, no residual variance outcome, no estimate and no stop.
 - The votes-per-voter lines of the Pointing record in [refinement-record.md](refinement-record.md) record each voter's first vote, assumptions, evidence cited and what moved its vote.
