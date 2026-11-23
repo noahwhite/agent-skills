@@ -218,7 +218,8 @@
 # a user's stat-width config can change it and an ordinary non-delta diffstat stays what it was.
 # These pins are for determinism, never for the reuse identity: the identity is content-addressed by
 # tree OIDs and stays the same without them.
-# The splitter needs python3, which the preflight checks.
+# The splitter needs python3, which the preflight checks, and the isolated rendering needs git 2.43
+# or newer for --attr-source.
 #
 # Size sidecars: every completed dossier write, on `run` or `dossier`, leaves `<phase>.dossier` in the
 # run directory: a `path=<absolute dossier path>` line, a `bytes=<n>` line (`LC_ALL=C wc -c` of that
@@ -2406,7 +2407,11 @@ write_dossier_sizes() {
 DIFF_GIT=""
 DIFF_OBJECTS=""
 pinned_diff() {  # the arguments of one git diff invocation
+  # The host's global and system config is dropped as well, so a diff driver a committed attribute
+  # names cannot be defined as binary or given a textconv on one machine and not another: the
+  # rendering depends on the reviewed content and the explicit pins only.
   env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
+    GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_NOSYSTEM=1 \
     GIT_OBJECT_DIRECTORY="$DIFF_OBJECTS" GIT_ATTR_NOSYSTEM=1 \
     git --git-dir="$DIFF_GIT" --attr-source="$HEAD_SHA" -c core.attributesFile=/dev/null \
     -c core.quotePath=true -c core.abbrev=7 -c core.bigFileThreshold=512m \
@@ -2434,9 +2439,12 @@ emit_context() {  # $1 = the phase's checkout, $2 = 1 to embed the unified diff,
   DIFF_OBJECTS="$(git rev-parse --path-format=absolute --git-path objects)"
   DIFF_GIT="$diffdir/objects.git"
   # A partial clone fetches promised blobs lazily; the isolated repository has no promisor of its
-  # own, so materialize the range's objects through this repository first.
-  if [ -n "$(git config --get extensions.partialClone 2>/dev/null || true)" ]; then
-    git diff --numstat --no-ext-diff "$BASE_SHA"..."$HEAD_SHA" > /dev/null || true
+  # own, so materialize the range's objects through this repository first. A filtered clone may mark
+  # only its remote as a promisor, so both forms count, and a materialization failure fails the
+  # dossier write here rather than as an unreadable object later.
+  if [ -n "$(git config --get extensions.partialClone 2>/dev/null || true)" ] \
+    || [ -n "$(git config --get-regexp '^remote\..*\.promisor$' 2>/dev/null || true)" ]; then
+    git diff --numstat --no-ext-diff "$BASE_SHA"..."$HEAD_SHA" > /dev/null
   fi
   env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE -u GIT_OBJECT_DIRECTORY \
     git init -q --bare --template= --object-format="$(git rev-parse --show-object-format)" \

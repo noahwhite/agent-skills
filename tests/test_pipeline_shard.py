@@ -639,6 +639,10 @@ def test_a_sharded_run_whose_arbitration_lapsed_does_not_block_the_hunt(tmp_path
     arb = run_arbitrate(repo, scratch, env, "--no-sweep")
     assert arb.returncode == 0, arb.stdout + arb.stderr
     run_dir = paths(repo, env)["run"]
+    history = (run_dir / "arbitrate.accepted.log").read_text()
+    head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo, check=True,
+                          capture_output=True, text=True, env=env).stdout.strip()
+    assert f"head={head}" in history and "no_sweep=1" in history, history
     (run_dir / "phase3-arbitration.md.stamp").unlink()
     subprocess.run(["git", "commit", "-q", "--allow-empty", "-m", "same tree"], cwd=repo,
                    check=True, capture_output=True, env=env)

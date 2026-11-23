@@ -729,6 +729,40 @@ def test_a_committed_gitattributes_still_controls_the_embedded_diff(tmp_path):
     assert "Binary files" in diff and "def mean" not in diff, diff
 
 
+def test_a_host_diff_driver_cannot_turn_a_committed_text_path_binary(tmp_path):
+    """A committed attribute may name a driver, but the host's definition of it must not decide."""
+    env = fixed_env(tmp_path)
+    hostile = tmp_path / "host.gitconfig"
+    hostile.write_text("[diff \"evil\"]\n\tbinary = true\n")
+    env["GIT_CONFIG_GLOBAL"] = str(hostile)
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, env, "init", "-q", "--initial-branch=main")
+    _git(repo, env, "config", "core.autocrlf", "false")
+    _git(repo, env, "config", "commit.gpgsign", "false")
+    (repo / "app.py").write_text(APP_BASE)
+    (repo / ".gitattributes").write_text("app.py diff=evil\n")
+    _git(repo, env, "add", "-A")
+    _git(repo, env, "commit", "-q", "-m", "base")
+    _git(repo, env, "tag", "base")
+    (repo / "app.py").write_text(APP_HEAD)
+    _git(repo, env, "add", "-A")
+    _git(repo, env, "commit", "-q", "-m", "head")
+    scratch = tmp_path / "session-scratch"
+    scratch.mkdir()
+    spec = tmp_path / "spec.txt"
+    spec.write_text(SPEC_TEXT)
+    result = run_script("preflight", "--full-suite", "off", "--repo", str(repo), "--base", "base",
+                        "--test-cmd", "true", "--scratch", str(scratch), env=env)
+    assert result.returncode == 0, result.stdout + result.stderr
+    result = run_script("dossier", "sweep", "--repo", str(repo), "--base", "base",
+                        "--spec", str(spec), "--scratch", str(scratch), env=env)
+    assert result.returncode == 0, result.stdout + result.stderr
+    dossier = Path(result.stdout.strip().splitlines()[-1]).read_text()
+    diff = dossier.split("===== DIFF (", 1)[1]
+    assert "def mean" in diff and "Binary files" not in diff, diff
+
+
 def test_the_diffstat_keeps_gits_default_allocation_at_the_pinned_width(tmp_path):
     """AC4: pinning the reference width must not change an ordinary non-delta diffstat."""
     env = fixed_env(tmp_path)
