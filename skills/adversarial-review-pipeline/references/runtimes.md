@@ -87,6 +87,10 @@ If your runtime is not listed, map each capability to its closest equivalent and
   OpenCode V2 depth: [Config](https://opencode.ai/v2/docs/config) says `subagent_depth` "Defaults to `1`, so a subagent cannot start another subagent", so each hop below the primary session takes one level.
   A top-level spawner -> coordinator -> role -> reviewer chain needs `experimental.subagent_depth: 3`; when the spawner is itself a subagent, add one level per hop above it (4 when the spawner is a direct child of the primary session).
   The depth-2 example below stays for its use: a top-level coordinator whose delegated agent runs reviewers.
+- **Delegated working directory.** A delegated agent (a subagent) starts in the working directory of the session that spawns it, and no runtime in the map lets the delegating session set that directory to a chosen path.
+  The delegating session therefore creates the per-story worktree itself before the spawn and names its absolute path in the brief, and the delegated agent addresses every file and git command to that path, by absolute path or `git -C <path>`.
+  A runtime's own worktree isolation does not replace the per-story worktree, because it chooses its own branch, base and lifetime.
+  Removing the worktree is not part of the spawn and stays with the existing branch and worktree rules and the `cleanup` skill.
 - **Tracker writes from a subagent.** State only what was observed.
   On Claude Code, on 2026-10-21 a subagent's tracker write was denied by the auto-mode permission check, although a matching `permissions.allow` rule existed.
   The same write passed in a later session after the owner's own message in that session asked for PO tracker writes.

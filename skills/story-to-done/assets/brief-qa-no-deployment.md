@@ -1,1 +1,2 @@
+- On this path the closing move reads as "every condition in this file on a deploy or a deployed environment reads as verification against the merged commit, or, for a spike with no tracked-file change, against the deliverables the step 12 note links." at `skills/qa-verification/references/linear.md:33`.
 - The verification target, in place of an environment: the merged commit `{{target}}` on `profile.git.integration_branch`, which the `engineering-workflow` step 12 note names.

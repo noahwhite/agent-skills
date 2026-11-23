@@ -43,7 +43,8 @@
 # Each phase refuses to start unless its predecessors are accepted for the same run (exit 13):
 # sweep needs a PASS preflight; hunt needs the sweep; arbitrate needs the sweep and the hunt.
 # --no-sweep (no sweeper configured) drops the sweep from both requirements; pass it consistently.
-# The inputs (spec, --no-sweep, predecessor artifacts) are bound when the dossier is written; `record`
+# The inputs (spec, --no-sweep, predecessor artifacts, and for the hunt the identity of the emitted
+# prompt) are bound when the dossier is written; `record`
 # and `run` refuse a report whose inputs changed since then (exit 13), so pass `record` the same
 # --spec and --no-sweep as `dossier`.
 # Re-running a phase (or the preflight) discards every later phase: its acceptance, its launch and
@@ -56,7 +57,11 @@
 # or record, is a usage error (exit 2) naming the command and the flag; the ADVERSARIAL_SHARD
 # default applies only to those hunt commands, so a leftover value never refuses another command.
 # `record hunt` must be passed the same `--shard` as `dossier hunt`, exactly as for `--spec` and
-# `--no-sweep`; a different shard finds no launch and exits 15.
+# `--no-sweep`. The launch file records that exact selection (`shard=<k>/<n>`, or `shard=none` when
+# the flag was omitted), because `--shard 1/1` and an omitted flag share a byte-identical binding;
+# a missing, empty, unreadable or malformed launch is a state error (exit 15), `record` refuses a
+# launch whose selection differs (exit 13), and a record for another shard index finds no launch of
+# its own and exits 15.
 # With N >= 2 the invocation writes <run dir>/phase2-hunt.<k>.md and never writes or accepts
 # phase2-hunt.md for that run; its stamp and its binding carry the line shard=<k>/<n>. Each shard
 # owns its run-state files beside its artifact, suffixed with the shard index - hunt.<k>.launch,
@@ -82,7 +87,10 @@
 # With no `--shard`, or with
 # `--shard 1/1`, the artifact path, the stamp, the binding, the phase's file set and the `paths`
 # output are exactly today's, and the dossier is identical to today's once each occurrence of its
-# own checkout path is normalised. A later `run arbitrate` requires every recorded hunt shard to
+# own checkout path is normalised. The launch is the phase's one run-state file whose content
+# differs from today's: it records the hunt's selection (`shard=<k>/<n>`, or `shard=none` when the
+# flag was omitted), and that recorded selection is what `record` enforces. A later
+# `run arbitrate` requires every recorded hunt shard to
 # be accepted and exits 13 naming the first unaccepted one. Chain mode's `--phases hunt,arbitrate`
 # does not carry `--shard`; one shard is one invocation.
 #
@@ -188,6 +196,18 @@
 # heading: every whole item that fits in CHECKLIST_CAP_CHARS, in order, then a truncation notice if
 # any was left out. It has no such heading when none matches. With the sweep skipped (--no-sweep),
 # no phase shows them.
+#
+# Acceptance-rule probes (AC9): the sweep and hunt dossiers carry an '===== ACCEPTANCE RULES ARE
+# BEHAVIOURAL PROBES' block, placed before the embedded context so it points at the criteria below it,
+# and each phase's report answers it: every explicitly stated behavioural rule in the story's acceptance
+# criteria is enumerated and exercised against the reviewed head by running the command or sequence the
+# rule names, and each is reported PASSED or FAILED with the command and the observation, never passed
+# from the diff or the documentation alone. A rule the code asserts, documents or claims but does not
+# enforce is an enforcement finding at blocking severity (High or Critical), never a low-severity
+# documentation finding. The sweep keeps its own checkout read-only and runs a rule whose command
+# writes against a copy of that checkout it makes in the session scratch directory; a rule it cannot
+# exercise at all is named separately and repeated as a candidate for the hunt. The
+# arbitrate dossier carries no such block: the correction is the sweep's and the hunt's only.
 #
 # Embedded diff: the sweep and hunt dossiers embed `git diff --no-ext-diff --unified=1` of the run's
 # range, and DIFF_CAP_BYTES (4096, in bytes of unified-diff text, per file and not a bound on the whole
@@ -366,9 +386,12 @@
 # its contents into argv (argv is visible to other processes and one argument is capped at 128 KiB).
 #
 # Exit codes: 0 ok / PASS, 1 preflight FAIL, 2 usage, 3 preflight INCOMPLETE, 11 not a git repo,
-# 12 bad base, 13 missing or invalid prior artifact, 14 cleanup refused, 15 agent command failed
-# or wrote no fresh report, 17 agent ran blind (sandbox error on its stderr, or no `REVIEW-RAN: yes`
-# first line), 18 the agent changed the primary checkout, 19 the phase was killed by --timeout,
+# 12 bad base, 13 missing or invalid prior artifact, or a phase's inputs (spec, --shard, --no-sweep,
+# a predecessor artifact) changed since its dossier was written, 14 cleanup refused, 15 agent command
+# failed, wrote no fresh report, or left a hunt launch marker that is missing, empty, unreadable or
+# not exactly the one selection line it wrote, 17 agent ran blind (sandbox error on its stderr, or no
+# `REVIEW-RAN: yes` first line), 18 the agent changed the primary checkout, 19 the phase was killed by
+# --timeout,
 # 20 the phase's availability check failed before any agent ran, 21 the arbitrate phase could not
 # write its identity lines or retain its accepted report (not accepted), 22 the review checklist or
 # the changed paths could not be read (checklist, dossier sweep). An accepted arbitration report that
@@ -431,6 +454,12 @@ probe_names_model() {
   return 1
 }
 abspath() { realpath -m -- "$1"; }
+# Canonical decimals with no leading zero compare by length, then lexically: no integer range.
+dec_le() {  # $1 $2 -> 0 when $1 <= $2
+  [ "${#1}" -lt "${#2}" ] && return 0
+  [ "${#1}" -gt "${#2}" ] && return 1
+  [ "$1" = "$2" ] || [[ "$1" < "$2" ]]
+}
 
 cmd="${1:-}"; [ -n "$cmd" ] || usage; shift
 phase=""; target=""
@@ -573,11 +602,8 @@ if [ "$SHARD_SET" -eq 1 ]; then
     || die 2 "--shard value '$SHARD_SHOWN' is invalid: expected K/N with decimal integers 1 <= K <= N and no leading zero"
   SHARD_K="${BASH_REMATCH[1]}"
   SHARD_N="${BASH_REMATCH[2]}"
-  # Canonical decimals with no leading zero compare by length, then lexically: no integer range.
-  if [ "${#SHARD_K}" -gt "${#SHARD_N}" ] \
-    || { [ "${#SHARD_K}" -eq "${#SHARD_N}" ] && [ "$SHARD_K" \> "$SHARD_N" ]; }; then
-    die 2 "--shard value '$SHARD_SHOWN' is invalid: K must be at least 1 and at most N"
-  fi
+  dec_le "$SHARD_K" "$SHARD_N" \
+    || die 2 "--shard value '$SHARD_SHOWN' is invalid: K must be at least 1 and at most N"
 fi
 # The label is printed by every command, so any character that could forge a field or a line is
 # mapped to '_' here; the model id's own shell metacharacters are still quoted whole into the probe.
@@ -697,6 +723,113 @@ artifact_name() {  # $1 = phase -> its file name inside a run directory
   esac
 }
 
+# The acceptance-rule probe block every sweep and hunt dossier carries (see "Acceptance-rule probes" in
+# the header). Its first sentence points at the criteria, so it is emitted before the embedded context;
+# each phase adds its own sentence about where it may run the rules' commands and where the answers go.
+emit_rule_probes() {
+  echo "===== ACCEPTANCE RULES ARE BEHAVIOURAL PROBES ====="
+  echo "Every explicitly stated behavioural rule in the acceptance criteria below - each command, flag,"
+  echo "argument, sequence, exit code, file name and state change a criterion names - is a probe you run,"
+  echo "never a claim you judge: exercise each one against the reviewed head by running the command or"
+  echo "sequence the rule names, and report it PASSED or FAILED with the command you ran and what you"
+  echo "observed. Never pass a rule from reading the diff or the documentation alone."
+  echo "A rule the code asserts, documents or claims but does not enforce is an ENFORCEMENT finding at"
+  echo "blocking severity (High or Critical), naming the documented rule and the command that contradicts"
+  echo "it - never a low-severity documentation finding."
+}
+
+# The hunt's exploration budget (SKL-406): the hunt is bounded by what it explores, not by its input
+# payload. The mode, and only the mode, decides the candidate source: the script's --no-sweep flag.
+# Exactly one candidate-source sentence is emitted per mode, so a dossier never carries both. The
+# command count is a number, and tests/test_pipeline_hunt_budget.py pins every sentence in the
+# dossiers these functions write. $1 = 1 when a sweep report is embedded, 0 when --no-sweep ran no
+# sweep.
+HUNT_BUDGET_COMMANDS=40
+hunt_budget_lines() {  # $1 = 1 when the dossier embeds an accepted sweep report
+  local has_sweep="${1:-0}"
+  echo "EXPLORATION BUDGET - this hunt is bounded by its exploration, not by its input payload:"
+  if [ "$has_sweep" -eq 1 ]; then
+    echo "- Verify only the candidates listed in the sweep report, plus defects those candidates directly point at."
+  else
+    echo "- With no sweep report in this hunt-only run, derive the candidate list from the diff yourself, then verify only those candidates, plus defects they directly point at."
+  fi
+  echo "- Never run a repository-wide grep, find or rg; any search must be path-scoped to a path named in the diffstat or by a candidate."
+  echo "- At most ${HUNT_BUDGET_COMMANDS} shell commands in total."
+  echo "- Read only paths named in the diffstat unless a candidate names another path."
+  echo "- stop and report once the candidate list is exhausted rather than continuing to explore."
+  echo "- If the candidate list is empty, run one minimal check that the checkout is at the reviewed head and that the list is empty, report no findings with 'REVIEW-RAN: yes', and do not start further exploration."
+  echo "- Acceptance-rule probes share this command budget and this stop point; a rule you could not execute inside them is listed as 'NOT-REACHED - <n>: <reason>' with the rules, never PASSED or FAILED, before your final unchecked-candidate list."
+  echo "- Report VERIFIED or REFUTED only for a candidate you actually checked; a candidate you did not check is NOT-REACHED (budget spent)."
+  echo "- End your report with the list of candidates you did not check, or 'none'."
+}
+
+# The hunt prompt, one emission per mode. $2 is the per-run scratch directory the prompt names; it is
+# passed in so the prompt's identity never depends on where this invocation's scratch happens to be.
+hunt_prompt_text() {  # $1 = 1 when a sweep report is embedded, $2 = the scratch directory to name
+  local has_sweep="${1:-0}" scratch="$2"
+  echo "You are an empirical adversarial reviewer working in a THROWAWAY checkout of the unfixed head: the"
+  echo "one on the CHECKOUT: line below. You may edit files in that checkout to run experiments; never"
+  echo "commit, push, or touch any other tree."
+  echo "Never write secrets to files or command arguments."
+  printf "The session's scratch directory is %s; keep any artifact you create there.\n" "$scratch"
+  echo
+  if [ "$has_sweep" -eq 1 ]; then
+    echo "Job 1 - VERIFY. For each candidate in the sweep report below:"
+  else
+    echo "Job 1 - VERIFY. For each candidate you derive from the diff (see the exploration budget below):"
+  fi
+  echo "write and run a minimal adversarial check (mutate the code, run the relevant tests, revert) and"
+  echo "report VERIFIED with the exact command and observed result, or REFUTED with the observation that disproves it."
+  if [ "$has_sweep" -eq 1 ]; then
+    echo "Job 2 - HUNT only for defects those candidates directly point at, inside the exploration budget below: a"
+  else
+    echo "Job 2 - HUNT only for defects the candidates you derived directly point at, inside the exploration budget below: a"
+  fi
+  echo "change that applies wrongly, a gate that acts in the wrong environment, a test that passes"
+  echo "vacuously, a regression to shipped behaviour. Mutate and run to prove each one."
+  echo
+  hunt_budget_lines "$has_sweep"
+  echo
+  echo "Execute, do not just reason. Report each finding with file:line, severity, the command run and"
+  echo "the observed result. If your sandbox prevents reading or running anything, say so in the first"
+  echo "line of your report; never report a clean result for a review that could not run."
+  echo "The FIRST line of your report must be exactly 'REVIEW-RAN: yes' when you read the diff below and ran your checks in the checkout; otherwise"
+  echo "make it 'REVIEW-RAN: no - <reason>'. A report without that line is treated as a review that did not run."
+  echo
+  emit_rule_probes
+  echo "Mutate and revert inside your throwaway checkout as needed to exercise each rule, and put the"
+  echo "probe lines after your findings, one rule per line, and list a rule the budget did not reach as 'NOT-REACHED - <n>: <reason>' beside them:"
+  echo "RULE <n> | PASSED or FAILED | the rule in one line | the command you ran | what you observed"
+}
+
+# The candidate-list header and its static body line, one per mode, so "(Phase 1 sweep)" never heads
+# the hunt-only placeholder. In sweep mode the body the agent reads is the accepted sweep report
+# itself, which is bound as a predecessor; the fallback text is what the template fixes.
+hunt_candidates_header() {  # $1 = 1 when a sweep report is embedded
+  if [ "${1:-0}" -eq 1 ]; then
+    echo "===== CANDIDATES (Phase 1 sweep) ====="
+  else
+    echo "===== CANDIDATES (sweep not configured - hunt only) ====="
+  fi
+}
+hunt_candidates_body() {  # $1 = 1 when a sweep report is embedded
+  if [ "${1:-0}" -eq 1 ]; then
+    echo "(sweep not configured - hunt only)"
+  else
+    echo "(derive the candidate list from the diff, per the exploration budget above)"
+  fi
+}
+
+# The identity of the hunt prompt this script would emit for a mode. It covers the whole fixed prompt
+# text, the candidate-list header and body included, and not the run's scratch path, so it changes
+# exactly when the prompt changes.
+hunt_prompt_id() {  # $1 = 1 when a sweep report is embedded
+  # The sweep-mode body is the accepted sweep report, already bound as a predecessor, so the
+  # fallback body text is part of the identity only in hunt-only mode, where the agent reads it.
+  { hunt_prompt_text "${1:-0}" "@scratch@"; hunt_candidates_header "${1:-0}";
+    if [ "${1:-0}" -eq 0 ]; then hunt_candidates_body 0; fi; } | sha256sum | cut -d' ' -f1
+}
+
 deps_of_ns() {  # $1 = phase, $2 = the no_sweep value of the run -> its predecessors, one per line
   case "$1" in
     sweep) echo preflight ;;
@@ -711,6 +844,9 @@ binding_text_for() {  # $1 run dir, $2 run id, $3 spec sha, $4 no_sweep, $5 phas
   local rd="$1" runid="$2" spec="$3" ns="$4" ph="$5" shard="${6:-}" p dep ident prod n k
   printf 'run=%s\nphase=%s\n' "$runid" "$ph"
   if [ -n "$shard" ]; then printf 'shard=%s\n' "$shard"; fi
+  # SKL-406: the hunt's binding also carries the identity of the prompt its dossier emitted, so a
+  # change to that prompt un-accepts a recorded hunt through the existing inputs-changed path.
+  if [ "$ph" = "hunt" ]; then printf 'prompt=%s\n' "$(hunt_prompt_id "$(( 1 - ns ))")"; fi
   if [ "$ph" != "preflight" ]; then
     printf 'spec=%s\nno_sweep=%s\n' "$spec" "$ns"
     if [ -f "$rd/$ph.reuse" ]; then
@@ -1307,6 +1443,18 @@ invocation_shard() {  # $1 = phase
   if [ "$1" = "hunt" ] && [ "$SHARDED" -eq 1 ]; then printf '%s/%s\n' "$SHARD_K" "$SHARD_N"; fi
 }
 
+# The launch records the exact invocation a dossier was written for where the binding cannot see the
+# difference: `--shard 1/1` and an omitted flag are unsharded and share a byte-identical binding
+# (AC1's parity clause), so the launch itself carries the flag selection. `shard=none` is the
+# omitted flag, so a launch that is missing, empty or unreadable is a state error, never a selection:
+# a dossier written before this release, whose launch is empty, has no recorded selection and must be
+# written again.
+launch_text() {  # $1 = phase -> what the launch file records; only the hunt records a selection
+  if [ "$1" = "hunt" ]; then
+    if [ "$SHARD_SET" -eq 1 ]; then printf 'shard=%s/%s\n' "$SHARD_K" "$SHARD_N"; else printf 'shard=none\n'; fi
+  fi
+}
+
 # The stamp is the binding plus the artifact's own content.
 stamp_text() {  # $1 = phase
   stamp_text_for "$RUN_DIR" "$RUN_ID" "$SPEC_SHA" "$NO_SWEEP" "$1" "$(invocation_shard "$1")"
@@ -1390,7 +1538,7 @@ begin_phase() {  # $1 = phase: drop stale output and later phases, bind the inpu
   if [ "$1" = "arbitrate" ]; then preserve_arbitrate_acceptance; fi
   shard_plan_write || die 2 "could not write the hunt plan $HUNT_PLAN; the $1 phase never started."
   invalidate_downstream "$1"   # also rebuilds the size log, after this phase's own removal
-  : > "$RUN_DIR/$key.launch"
+  launch_text "$1" > "$RUN_DIR/$key.launch"
 }
 
 bind_phase() {  # $1 = phase: record the inputs its dossier was built from and the primary checkout
@@ -1649,15 +1797,81 @@ sandbox_error_in() {
 }
 
 accept_phase() {  # $1 = phase, $2 = stderr log or "": validate a freshly written artifact, then stamp it
-  local art key; art="$(artifact_for "$1")"; key="$(state_key "$1")"
+  local art key launched expected marker_hex marker_ok dossier_hint line_hex plain_hex inputs
+  art="$(artifact_for "$1")"; key="$(state_key "$1")"
+  # The recovery hint names the selection this invocation carries, so following it recreates the
+  # dossier the caller is trying to record.
+  dossier_hint="dossier $1"
+  if [ "$1" = "hunt" ] && [ "$SHARD_SET" -eq 1 ]; then
+    dossier_hint="dossier hunt --shard $SHARD_K/$SHARD_N"
+  fi
+  # The hunt binds one input no other phase does: the identity of its emitted prompt (SKL-406).
+  inputs="spec, --shard, --no-sweep or a predecessor artifact"
+  if [ "$1" = "hunt" ]; then inputs="spec, --shard, --no-sweep, the hunt prompt or a predecessor artifact"; fi
   [ -f "$RUN_DIR/$key.launch" ] && [ -f "$RUN_DIR/$key.binding" ] && [ -f "$RUN_DIR/$key.primary" ] \
-    || die 15 "no launch for $1 in this run (never started, discarded by a later re-run of an earlier phase, or an arbitration already accepted); write its dossier with 'dossier $1' first."
+    || die 15 "no launch for $1 in this run (never started, discarded by a later re-run of an earlier phase, or an arbitration already accepted); write its dossier with '$dossier_hint' first."
+  # `--shard 1/1` and an omitted flag share a binding byte for byte, so the hunt's launch carries the
+  # exact selection the dossier was written for: a record must repeat it exactly. The marker is the
+  # one selection line the launcher writes, with or without its trailing newline; anything else - a
+  # second line, a NUL, a K > N, an unreadable or oversized file - is unusable state, never a
+  # selection and never a changed input. Both reads are byte-bounded by a marker-reader limit (a
+  # 96-byte read, so the whole marker is at most 95 bytes and a selection line at most 94 bytes plus
+  # its newline, far above any selection this launcher writes), and the comparison is exact in hex,
+  # so the check never reads a whole file and can never forge a diagnosis line.
+  #
+  # The marker's usability is settled before the binding comparison, so exit 13 is reached only with
+  # a launch that records a selection; an empty, unreadable or malformed marker is exit 15 even when
+  # the inputs changed too, exactly as the header and SKILL.md describe. The selection comparison
+  # itself waits until the report exists and is fresh, so a missing or stale report is never reported
+  # as a selection problem.
+  launched=""
+  if [ "$1" = "hunt" ]; then
+    marker_ok=0
+    marker_hex=""
+    line_hex=""
+    plain_hex=""
+    # An empty launch is the state a pre-release dossier and a truncated file share, and it is not a
+    # reader fault: name it as the missing selection it is, so the operator re-writes the dossier.
+    if [ ! -s "$RUN_DIR/$key.launch" ]; then
+      die 15 "the hunt launch marker $RUN_DIR/$key.launch is missing or empty, so the dossier's selection was never recorded; start the hunt phase again with '$dossier_hint'."
+    fi
+    # A reader or encoder failure is unusable state, never an empty marker: two empty encodings must
+    # never compare equal and let a malformed marker through.
+    if ! marker_hex="$(head -c 96 -- "$RUN_DIR/$key.launch" 2>/dev/null | od -An -v -tx1 | tr -d ' \n')" \
+      || [ -z "$marker_hex" ]; then
+      die 15 "the hunt launch marker $RUN_DIR/$key.launch cannot be read (marker reader failed); start the hunt phase again with '$dossier_hint'."
+    fi
+    launched="$(head -c 95 -- "$RUN_DIR/$key.launch" 2>/dev/null | head -n 1)" || launched=""
+    if [ -n "$launched" ]; then
+      line_hex="$(printf '%s\n' "$launched" | od -An -v -tx1 | tr -d ' \n')" || line_hex=""
+      plain_hex="$(printf '%s' "$launched" | od -An -v -tx1 | tr -d ' \n')" || plain_hex=""
+    fi
+    # 96 bytes or more is over the reader's limit: overflow is refused before it is classified.
+    if [ -n "$line_hex" ] && [ -n "$plain_hex" ] && [ "${#marker_hex}" -lt 192 ] \
+      && { [ "$marker_hex" = "$line_hex" ] || [ "$marker_hex" = "$plain_hex" ]; }; then
+      case "$launched" in
+        shard=none) marker_ok=1 ;;
+        shard=[1-9]*)
+          if [[ "$launched" =~ ^shard=([1-9][0-9]*)/([1-9][0-9]*)$ ]] \
+            && dec_le "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}"; then marker_ok=1; fi ;;
+      esac
+    fi
+    if [ "$marker_ok" -eq 0 ]; then
+      die 15 "the hunt launch marker $RUN_DIR/$key.launch is missing, empty, unreadable or not exactly the one selection line the launcher wrote; start the hunt phase again with '$dossier_hint'."
+    fi
+  fi
   if [ "$(cat -- "$RUN_DIR/$key.binding")" != "$(binding_text "$1")" ]; then
-    die 13 "the $1 inputs changed since its dossier was written (spec, --shard, --no-sweep or a predecessor artifact); start the $1 phase again."
+    die 13 "the $1 inputs changed since its dossier was written ($inputs); start the $1 phase again with '$dossier_hint'."
   fi
   [ -s "$art" ] || die 15 "the $1 agent produced no report ($art is missing or empty)."
   if [ "$RUN_DIR/$key.launch" -nt "$art" ]; then
     die 15 "$art is older than this $1 launch; it was not written by this run."
+  fi
+  if [ "$1" = "hunt" ]; then
+    expected="$(launch_text "$1")"
+    if [ "$launched" != "$expected" ]; then
+      die 13 "the hunt launch records '$launched' but this record invocation selects '$expected'; record the dossier's selection (--shard K/N, or no --shard with ADVERSARIAL_SHARD unset when it recorded shard=none), or start the hunt phase again with '$dossier_hint'."
+    fi
   fi
   # A reviewer whose sandbox could not start reads nothing yet may still exit 0: never a false clean.
   # Sandbox errors are looked for only in the agent's own stderr; the report may quote such text.
@@ -2717,6 +2931,44 @@ emit_reused_phases() {
   done
 }
 
+# The prompt identity recorded in the accepted hunt's stamp - the stamp acceptance actually compared,
+# never a separate mutable binding file. A sharded run keeps one stamp per shard; every shard is
+# written from the same prompt, so the first stamp found is enough.
+recorded_hunt_prompt_id() {
+  local f
+  for f in "$(artifact_for hunt).stamp" "$RUN_DIR"/phase2-hunt.[0-9]*.md.stamp; do
+    if [ -f "$f" ]; then sed -n 's/^prompt=//p' -- "$f" | head -n 1; return 0; fi
+  done
+  return 0
+}
+
+# A hunt carries the budget only when its recorded prompt is this script's hunt prompt. With the
+# prompt identity in the binding, a prompt change un-accepts the recorded hunt before this runs, so
+# the fallback is the honest wording for a hunt whose binding cannot evidence the budget.
+hunt_has_budget() {
+  local recorded expected
+  recorded="$(recorded_hunt_prompt_id)"
+  [ -n "$recorded" ] || return 1
+  expected="$(hunt_prompt_id "$(( 1 - NO_SWEEP ))")"
+  [ "$recorded" = "$expected" ]
+}
+
+# The arbitrate dossier's one budget note (AC5). It claims the budget only when the recorded hunt
+# evidences it; otherwise it says the hunt predates the budget and that its silence is unbounded.
+hunt_budget_arbitrate_note() {
+  local source
+  if [ "$NO_SWEEP" -eq 0 ]; then
+    source="the candidates in the sweep report"
+  else
+    source="the candidates it derived from the diff"
+  fi
+  if hunt_has_budget; then
+    echo "Note: the recorded hunt ran under an exploration budget - at most ${HUNT_BUDGET_COMMANDS} shell commands per hunt invocation, verifying only ${source} plus defects those candidates directly point at, searching only path-scoped and reading only the diffstat's paths unless a candidate names another. A candidate it reports as NOT-REACHED (budget spent), or a rule it reports as NOT-REACHED, is omitted work, never coverage: credit only the checks the hunt report evidences, and read its silence as the bounded exploration this budget allows, not as full coverage."
+  else
+    echo "Note: the recorded hunt predates this exploration budget, so its prompt carried no command cap and no candidate-source rule. Its silence is not bounded exploration: treat an area it did not report on as unexplored, never as covered, and weigh that when reading its silence as coverage."
+  fi
+}
+
 write_dossier() {  # $1 = phase, $2 = dossier path, $3 = the phase's checkout (exists already)
   local p="$1" out="$2" co="$3" items item kept dropped
   case "$p" in
@@ -2724,8 +2976,11 @@ write_dossier() {  # $1 = phase, $2 = dossier path, $3 = the phase's checkout (e
       items="$(checklist_items)"
       {
         echo "You are a high-volume adversarial code reviewer doing a FAST FIRST-PASS SWEEP."
-        echo "Output ONLY a structured candidate list - no prose, no fixes, no plan. One entry per candidate:"
+        echo "Output the structured candidate list, then the acceptance-rule probe table, and nothing else -"
+        echo "no prose, no fixes, no plan. One candidate entry per line:"
         echo "- file:line | severity (Critical/High/Medium/Low) | one-line claim | the concrete failure scenario"
+        echo "One probe line per acceptance rule, in the order the criteria state them:"
+        echo "RULE <n> | PASSED or FAILED | the rule in one line | the command you ran | what you observed"
         echo "Cover: vulnerability vectors, logic flaws, breaking changes, API/contract mismatches, test gaps, code smells."
         echo "Be exhaustive; volume over precision, and mark speculation as such."
         echo "Do NOT modify any files: the checkout on the CHECKOUT: line below is read-only, for reading code"
@@ -2733,6 +2988,13 @@ write_dossier() {  # $1 = phase, $2 = dossier path, $3 = the phase's checkout (e
         echo "The session's scratch directory is ${SESSION_SCRATCH:-$SCRATCH}; keep any artifact you create there."
         echo "The FIRST line of your report must be exactly 'REVIEW-RAN: yes' when you read the diff below; otherwise"
         echo "make it 'REVIEW-RAN: no - <reason>'. A report without that line is treated as a review that did not run."
+        echo
+        emit_rule_probes
+        echo "Your checkout is read-only: change no file in it, but run every rule's command. A rule whose command"
+        echo "writes a file is exercised against a copy of the reviewed checkout you make in your own directory"
+        echo "under the session scratch directory, never against the checkout itself. Report FAILED only for a"
+        echo "rule the reviewed head fails, with the command and what you observed; when a rule cannot be"
+        echo "exercised at all, say that separately with the reason and repeat it as a candidate for the hunt."
         echo
         emit_context "$co" 1
         if [ -n "$items" ]; then
@@ -2756,27 +3018,14 @@ write_dossier() {  # $1 = phase, $2 = dossier path, $3 = the phase's checkout (e
       ;;
     hunt)
       {
-        echo "You are an empirical adversarial reviewer working in a THROWAWAY checkout of the unfixed head: the"
-        echo "one on the CHECKOUT: line below. You may edit files in that checkout to run experiments; never"
-        echo "commit, push, or touch any other tree."
-        echo "Never write secrets to files or command arguments."
-        echo "The session's scratch directory is ${SESSION_SCRATCH:-$SCRATCH}; keep any artifact you create there."
+        hunt_prompt_text "$(( 1 - NO_SWEEP ))" "${SESSION_SCRATCH:-$SCRATCH}"
         echo
-        echo "Job 1 - VERIFY. For each candidate below, write and run a minimal adversarial check (mutate the"
-        echo "code, run the relevant tests, revert) and report VERIFIED with the exact command and observed"
-        echo "result, or REFUTED with the observation that disproves it."
-        echo "Job 2 - HUNT open-ended for defects the candidate list missed: a change that applies wrongly, a"
-        echo "gate that acts in the wrong environment, a test that passes vacuously, a regression to shipped"
-        echo "behaviour. Mutate and run to prove each one."
-        echo
-        echo "Execute, do not just reason. Report each finding with file:line, severity, the command run and"
-        echo "the observed result. If your sandbox prevents reading or running anything, say so in the first"
-        echo "line of your report; never report a clean result for a review that could not run."
-        echo "The FIRST line of your report must be exactly 'REVIEW-RAN: yes' when you read the diff below and ran your checks in the checkout; otherwise"
-        echo "make it 'REVIEW-RAN: no - <reason>'. A report without that line is treated as a review that did not run."
-        echo
-        echo "===== CANDIDATES (Phase 1 sweep) ====="
-        emit_prior sweep "(sweep not configured - hunt only)"
+        hunt_candidates_header "$(( 1 - NO_SWEEP ))"
+        if [ "$NO_SWEEP" -eq 0 ]; then
+          emit_prior sweep "$(hunt_candidates_body 1)"
+        else
+          hunt_candidates_body 0
+        fi
         echo
         emit_context "$co" 1
       } > "$out"
@@ -2787,6 +3036,7 @@ write_dossier() {  # $1 = phase, $2 = dossier path, $3 = the phase's checkout (e
         echo "candidate list from a cheap sweep (Phase 1), empirical execution results (Phase 2), and a"
         echo "read-only checkout of the head under review on the CHECKOUT: line below: read the diff there with"
         echo "'git diff ${BASE_SHA}...HEAD', and any file you need. Do not edit, commit or push in it."
+        hunt_budget_arbitrate_note
         echo "1. Filter hallucinations, false positives and unexploitable edge cases. Weigh the EMPIRICAL"
         echo "   Phase-2 results over Phase-1 theory."
         echo "2. Surface cross-module logic inconsistencies, security bypasses and architectural regressions"
@@ -2816,7 +3066,11 @@ write_dossier() {  # $1 = phase, $2 = dossier path, $3 = the phase's checkout (e
         emit_reused_phases
         echo
         echo "===== PHASE 1 (sweep candidates) ====="
-        emit_prior sweep "(sweep not configured)"
+        if [ "$NO_SWEEP" -eq 0 ]; then
+          emit_prior sweep "(sweep not configured)"
+        else
+          echo "(sweep not configured)"
+        fi
         echo
         echo "===== PHASE 2 (empirical results) ====="
         emit_prior hunt "(no Phase-2 results)"
@@ -3037,7 +3291,13 @@ case "$cmd" in
     echo "CHECKOUT: $checkout" >&2
     echo "Work only in that checkout (never the primary checkout); the $phase dossier names it too. Remove it with 'cleanup $checkout' once the phase is recorded." >&2
     shard_hint=""
-    if [ "$phase" = "hunt" ]; then shard_hint=" and the same --shard"; fi
+    if [ "$phase" = "hunt" ]; then
+      if [ "$SHARD_SET" -eq 1 ]; then
+        shard_hint=" and the same --shard $SHARD_K/$SHARD_N (or the same ADVERSARIAL_SHARD)"
+      else
+        shard_hint=" and no --shard (this dossier recorded shard=none; clear ADVERSARIAL_SHARD too)"
+      fi
+    fi
     echo "Save the $phase report to $(artifact_for "$phase"), then run 'record $phase' with the same --base, --spec and --no-sweep${shard_hint}." >&2
     printf '%s\n' "$dossier"
     trap - EXIT

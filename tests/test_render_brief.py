@@ -175,6 +175,19 @@ def all_renders(scratch: str) -> dict[str, tuple[Path, str]]:
     }
 
 
+# A cited quotation span: only the quoted sentence and its citation are exempt from reference resolution.
+QUOTATION = re.compile(r'"[^"]*" at `[^`]+\.md:\d+`')
+
+
+@pytest.fixture(scope="module")
+def renders(tmp_path_factory) -> dict[str, str]:
+    """The seven role/path renders, produced once for the read-only assertions."""
+    base = os.path.realpath(tempfile.mkdtemp(prefix="renders", dir=tmp_path_factory.getbasetemp()))
+    for sub in ("senior-engineer", "qa-agent-round-1", "qa-agent-round-2"):
+        os.mkdir(os.path.join(base, sub))
+    return {name: text for name, (_, text) in all_renders(base).items()}
+
+
 # AC1 Render
 
 
@@ -279,15 +292,309 @@ def test_token_values_are_not_reexpanded(scratch):
     assert "https://example.com/{{story}}/{{round}}\n" in text
 
 
-def test_reference_mentions_are_absolute_and_exist(scratch):
+def test_reference_mentions_are_absolute_and_exist(renders):
+    """Navigational mentions are absolutized; a cited quotation span keeps its source's literal mention.
+
+    Only each line's cited span is masked, so a quote that opens and closes on different lines cannot
+    hide a navigational mention from this assertion.
+    """
     skill_dir = str(SKILL_DIR.resolve())
-    for name, (_, text) in all_renders(scratch).items():
-        mentions = re.findall(r"`([^`\s]*references/[a-z0-9-]+\.md)`", text)
+    for name, text in renders.items():
+        navigational = "\n".join(QUOTATION.sub("", line) for line in text.splitlines())
+        mentions = re.findall(r"`([^`\s]*references/[a-z0-9-]+\.md)`", navigational)
         assert mentions, name
         for mention in mentions:
             assert mention.startswith(skill_dir + "/references/"), (name, mention)
             assert Path(mention).is_file(), mention
-        assert "`references/" not in text, name
+        assert "`references/" not in navigational, name
+
+
+# SKL-410 AC3: every rendered role brief physically carries the permissions its skill grants, quoted
+# from that skill with `path:line`, beside the prohibitions the shared rules fragment states.
+
+
+def permission_summary(role: str) -> str:
+    skill = {"engineer": "engineering-workflow", "qa": "qa-verification"}[role]
+    return (
+        f"- Your permissions, quoted from the skill that governs you, sit beside the prohibitions above: you tick "
+        f"the boxes you verified, move the states `{skill}` assigns, open your own PR, and post the review of record."
+    )
+
+
+# The permission each role is granted, with the file that states it. The line number is not pinned here:
+# the rendered citation supplies it and `test_every_rendered_citation_...` resolves it against the source,
+# so a moved line is reported as moved while a reworded or mis-cited quote still fails.
+PERMISSIONS = {
+    "engineer": (
+        (
+            "skills/engineering-workflow/references/linear.md",
+            "Ticking the Acceptance Criteria and Definition of Done checkboxes in the description is the completion "
+            "record.",
+        ),
+        (
+            "skills/engineering-workflow/references/linear.md",
+            "First confirm the only unticked boxes are the items you verified; otherwise patch each verified line "
+            "individually.",
+        ),
+        (
+            "skills/engineering-workflow/references/linear.md",
+            "Move an issue to in progress the moment its branch is created, before writing code.",
+        ),
+        (
+            "skills/engineering-workflow/references/github.md",
+            "Open a PR only once the branch is cleanly based on its target.",
+        ),
+        (
+            "skills/engineering-workflow/SKILL.md",
+            "Post the review of record on the PR as one PR review with the comment event (`gh pr review <n> --comment "
+            "--body-file <file>`; first line `Review of record <full head SHA>`, then findings, verdict per finding, "
+            "fix commit per valid finding, the models used), never as an issue comment, **before** attempting the "
+            "merge.",
+        ),
+    ),
+    "qa": (
+        ("skills/qa-verification/SKILL.md", "Tick the boxes you verified."),
+        (
+            "skills/qa-verification/references/linear.md",
+            "Ticking the Acceptance Criteria and Definition of Done checkboxes in the description is the completion "
+            "record.",
+        ),
+        (
+            "skills/qa-verification/SKILL.md",
+            "Ship it through the normal branch and PR flow in `references/github.md`, signed when "
+            "`profile.git.signed_commits` is true, and verify the signature after pushing.",
+        ),
+        (
+            "skills/qa-verification/SKILL.md",
+            "If `profile.qa.evidence_dir` is unset, the project does not keep in-repo evidence; skip this step and say "
+            "so in the report.",
+        ),
+        (
+            "skills/qa-verification/SKILL.md",
+            "post the review of record on the PR as a `--comment` PR review before the merge, never after.",
+        ),
+    ),
+}
+
+# The state move each path assigns: the deployed briefs carry the deployed rule, the others the handoff rule.
+STATE_MOVES = {
+    ("engineer", "deployed"): (
+        "skills/engineering-workflow/SKILL.md",
+        "Move the story to `profile.tracker.states.in_deployment_review` (never on merge alone).",
+    ),
+    ("engineer", "no-deployment"): (
+        "skills/engineering-workflow/SKILL.md",
+        "Move the story to `profile.tracker.states.in_deployment_review`.",
+    ),
+    ("engineer", "spike"): (
+        "skills/engineering-workflow/SKILL.md",
+        "Move the story to `profile.tracker.states.in_deployment_review`.",
+    ),
+    # QA's closing move is one permission on every path; the path fragment beside it names the target that
+    # "in the environment" reads as on no-deployment and spike.
+    ("qa", "deployed"): (
+        "skills/qa-verification/references/linear.md",
+        "Once every AC and DoD item is ticked and verified in the environment, move the issue to done.",
+    ),
+    ("qa", "no-deployment"): (
+        "skills/qa-verification/references/linear.md",
+        "Once every AC and DoD item is ticked and verified in the environment, move the issue to done.",
+    ),
+    ("qa", "spike"): (
+        "skills/qa-verification/references/linear.md",
+        "Once every AC and DoD item is ticked and verified in the environment, move the issue to done.",
+    ),
+}
+
+# On no-deployment and spike, the closing move's "in the environment" is read as the path's target; the
+# interpretation is quoted beside the permission on those two paths only.
+INTERPRETATION = (
+    "skills/qa-verification/references/linear.md",
+    "every condition in this file on a deploy or a deployed environment reads as verification against the "
+    "merged commit, or, for a spike with no tracked-file change, against the deliverables the step 12 note links.",
+)
+PATH_QUOTES = {
+    ("qa", "no-deployment"): INTERPRETATION,
+    ("qa", "spike"): INTERPRETATION,
+}
+
+RENDER_PATH = {
+    "engineer-deployed": "deployed",
+    "engineer-no-deployment": "no-deployment",
+    "engineer-spike": "spike",
+    "qa-deployed": "deployed",
+    "qa-deployed-default": "deployed",
+    "qa-no-deployment": "no-deployment",
+    "qa-spike": "spike",
+}
+
+# The first line of each role's per-path fragment, so the ordering test can see both sides of the assembly.
+PATH_MARKER = {
+    "engineer-deployed": ENGINEER_HANDBACK["deployed"],
+    "engineer-no-deployment": ENGINEER_HANDBACK["no-deployment"],
+    "engineer-spike": SPIKE_MERGE_STEPS,
+    "qa-deployed": "- The environment under test: `dev`.",
+    "qa-deployed-default": "- The environment under test: none is named, so `qa-verification` picks its default.",
+    "qa-no-deployment": f"the merged commit `{SHA}` on `profile.git.integration_branch`",
+    "qa-spike": "The verification target, in place of an environment:",
+}
+
+PAIR = re.compile(r'"([^"]+)" at `([^`]+\.md):(\d+)`')
+
+
+def renders_for(role: str, renders: dict[str, str]) -> dict[str, str]:
+    return {name: text for name, text in renders.items() if name.startswith(role)}
+
+
+def assert_cited(name: str, text: str, path: str, quote: str) -> None:
+    """The rendered brief carries this exact quote with this exact file, and that file's line states it.
+
+    The line number is read from the rendered citation, never hand-pinned here; a citation rewritten
+    into a shape the parser does not read leaves no match, so an independent path check cannot mask it.
+    """
+    matches = [(found_path, number) for found_quote, found_path, number in PAIR.findall(text)
+               if found_quote == quote and found_path == path]
+    assert len(matches) == 1, f"{name}: expected one citation of {quote!r} at {path}, found {matches}"
+    lines = (ROOT / path).read_text(encoding="utf-8").splitlines()
+    number = int(matches[0][1])
+    assert quote in lines[number - 1], f"{name}: {path}:{number} does not state {quote!r}"
+
+
+@pytest.mark.parametrize("role", sorted(PERMISSIONS))
+def test_every_rendered_citation_names_the_line_that_carries_its_quote(role, renders):
+    """Every parsed citation in the brief resolves against the line it names."""
+    for name, text in renders_for(role, renders).items():
+        pairs = PAIR.findall(text)
+        assert pairs, name
+        for quote, path, number in pairs:
+            lines = (ROOT / path).read_text(encoding="utf-8").splitlines()
+            assert quote in lines[int(number) - 1], f"{name}: {path}:{number} does not state {quote!r}"
+
+
+@pytest.mark.parametrize("role", sorted(PERMISSIONS))
+def test_every_rendered_brief_carries_the_required_permissions(role, renders):
+    """Rendered through the real renderer: an absent, reworded or mis-cited permission line fails here."""
+    for name, text in renders_for(role, renders).items():
+        assert text.count(permission_summary(role)) == 1, name
+        for path, quote in PERMISSIONS[role]:
+            assert_cited(name, text, path, quote)
+
+
+@pytest.mark.parametrize("role", sorted(PERMISSIONS))
+def test_each_brief_moves_only_the_states_its_path_assigns(role, renders):
+    """The engineer's rule is selected by path; QA's closing move is required on every path."""
+    for name, text in renders_for(role, renders).items():
+        key = (role, RENDER_PATH[name])
+        expected_path, quote = STATE_MOVES[key]
+        assert_cited(name, text, expected_path, quote)
+        if key in PATH_QUOTES:
+            assert_cited(name, text, *PATH_QUOTES[key])
+        else:
+            assert INTERPRETATION[1] not in text, name
+        for (other_role, other_path), (_, other_quote) in STATE_MOVES.items():
+            if other_role == role and other_path != RENDER_PATH[name] and other_quote != quote:
+                assert other_quote not in text, (name, other_quote)
+
+
+@pytest.mark.parametrize("role", sorted(PERMISSIONS))
+def test_the_engineer_brief_grants_the_tick_without_assigning_closure(role, renders):
+    """The engineer's skill ends at deployment review, so no engineer brief sets done; QA's closing move stays QA's."""
+    for name, text in renders_for(role, renders).items():
+        assert "set done in the same act" not in text, name
+        if role == "engineer":
+            assert "move the issue to done" not in text, name
+        else:
+            assert "move the issue to done" in text, name
+
+
+@pytest.mark.parametrize("role", sorted(PERMISSIONS))
+def test_role_permissions_sit_beside_the_prohibitions(role, renders):
+    """Rules, then permissions, then the path's state move, then the path fragment: the documented order."""
+    for name, text in renders_for(role, renders).items():
+        # The shared rules are compared as their templates state them, so a resolved reference path is undone.
+        text = text.replace(str(SKILL_DIR.resolve()) + "/", "")
+        summary = text.index(permission_summary(role))
+        for rule in RULES.values():
+            assert text.index(rule) < summary, name
+        state_quote = STATE_MOVES[(role, RENDER_PATH[name])][1]
+        assert summary < text.index(f'"{state_quote}"'), name
+        assert text.index(f'"{state_quote}"') < text.index(PATH_MARKER[name]), name
+
+
+def test_a_stray_quote_cannot_suppress_a_navigational_reference(skill_copy, tmp_path_factory):
+    """An unrelated literal quote in one template must not stop the merge rule's reference resolving."""
+    rules = skill_copy / "assets" / "brief-rules.md"
+    rules.write_text('" an unrelated literal quote\n' + rules.read_text(encoding="utf-8"), encoding="utf-8")
+    base = os.path.realpath(tempfile.mkdtemp(prefix="stray", dir=tmp_path_factory.getbasetemp()))
+    os.mkdir(os.path.join(base, "senior-engineer"))
+    result = run("--role", "engineer", "--story", "ABC-123", "--path", "deployed", "--scratch", base,
+                 script=skill_copy / "scripts" / "render-brief.py")
+    assert result.returncode == 0, result.stderr
+    text = Path(base, "senior-engineer", "senior-engineer-brief.md").read_text(encoding="utf-8")
+    assert "`references/" not in text
+    assert str(skill_copy.resolve()) + "/references/code-review.md" in text
+
+
+MIXED_CITATION = '"Tick the boxes you verified." at `skills/qa-verification/SKILL.md:170`'
+SECOND_CITATION = (
+    '"First confirm the only unticked boxes are the items you verified; otherwise patch each verified line '
+    'individually." at `skills/engineering-workflow/references/linear.md:49`'
+)
+
+
+def mixed_line(position: str, reference: str) -> str:
+    link = f"`references/{reference}`"
+    if position == "before":
+        return f"- Review {link} then {MIXED_CITATION}."
+    if position == "between":
+        return f"- Review {MIXED_CITATION} then {link} then {SECOND_CITATION}."
+    if position == "after":
+        return f"- Review {MIXED_CITATION} then {link}."
+    raise ValueError(f"unknown mixed-line position: {position}")
+
+
+def append_mixed_line(skill_copy: Path, position: str, reference: str) -> None:
+    template = skill_copy / "assets" / "brief-engineer.md"
+    template.write_text(
+        template.read_text(encoding="utf-8") + mixed_line(position, reference) + "\n", encoding="utf-8"
+    )
+
+
+def mixed_scratch(tmp_path_factory) -> Path:
+    base = Path(os.path.realpath(tempfile.mkdtemp(prefix="mixed", dir=tmp_path_factory.getbasetemp())))
+    (base / "senior-engineer").mkdir()
+    return base
+
+
+@pytest.mark.parametrize("position", ["before", "between", "after"])
+def test_a_navigation_beside_a_cited_quotation_still_resolves(position, skill_copy, tmp_path_factory):
+    """Only the cited span is exempt: a reference before, between or after a citation becomes absolute."""
+    append_mixed_line(skill_copy, position, "code-review.md")
+    base = mixed_scratch(tmp_path_factory)
+    result = run("--role", "engineer", "--story", "ABC-123", "--path", "deployed", "--scratch", str(base),
+                 script=skill_copy / "scripts" / "render-brief.py")
+    assert result.returncode == 0, result.stderr
+    text = Path(base, "senior-engineer", "senior-engineer-brief.md").read_text(encoding="utf-8")
+    expected = mixed_line(position, "code-review.md").replace(
+        "`references/code-review.md`", f"`{skill_copy.resolve()}/references/code-review.md`"
+    )
+    assert expected in text
+    assert "`references/" not in text
+
+
+@pytest.mark.parametrize("position", ["before", "between", "after"])
+def test_a_missing_reference_beside_a_cited_quotation_still_fails(position, skill_copy, tmp_path_factory):
+    """A missing navigational reference before, between or after a citation is still refused."""
+    append_mixed_line(skill_copy, position, "no-such-file.md")
+    base = mixed_scratch(tmp_path_factory)
+    result = run("--role", "engineer", "--story", "ABC-123", "--path", "deployed", "--scratch", str(base),
+                 script=skill_copy / "scripts" / "render-brief.py")
+    assert result.returncode != 0
+    assert result.stdout == b""
+    err = result.stderr.decode()
+    assert err.endswith("\n") and err.count("\n") == 1, err
+    assert "no-such-file.md" in err
+    assert not (base / "senior-engineer" / "senior-engineer-brief.md").exists()
 
 
 # AC3 One source
@@ -342,17 +649,20 @@ def pin(text: str, scratch: str) -> str:
 
 
 # SKL-357 re-pinned both QA digests for the waiting-handback bullet in brief-qa.md, and pinned the other renders.
-# Fixed inputs: story ABC-123, round 1, environment `dev`.
-DEPLOYED_QA_SHA256 = "e014ba2c8f79c83455b632bff598a92baffdafd605cc816d3a227eccb08c8277"
+# Fixed inputs: story ABC-123, round 1, environment `dev`. SKL-410 re-pinned all six for the role permission
+# lines and their per-path state move.
+DEPLOYED_QA_SHA256 = "5ee2a2331e38e2887d38361864c9e6587c7dbcced8f93f1f6915a1fba9c2cf9c"
 # Fixed inputs: story ABC-123, round 1, the two LINKS above.
-SPIKE_QA_SHA256 = "c54650b59adf54cc751e5437942bfe235c71187da28cf9ca360f794efa4d47a3"
+SPIKE_QA_SHA256 = "6da5abdbedd48c85e929e54de532557459cbaebd69297f2efa5d88db079d6ef2"
 # Fixed inputs: story ABC-123, round 1, commit SHA above.
-NO_DEPLOYMENT_QA_SHA256 = "5ce1b9bca9d508934d526a615f754aceec4b93f3530c0266606c3a39eb068c3e"
-# Fixed inputs: story ABC-123, one engineer render per path. SKL-346 re-pinned all three for the arbitration ledger.
+NO_DEPLOYMENT_QA_SHA256 = "cb1e875107f7823661515ab7d71329c4329a8d9a8bde381a932ac84248242a10"
+# Fixed inputs: story ABC-123, one engineer render per path. SKL-346 pinned them for the ledger; SKL-410 re-pinned
+# all three for the role permission lines and their per-path state move. SKL-70 re-pinned all three because it moves
+# the engineering-workflow lines that the engineer brief assets cite.
 ENGINEER_SHA256 = {
-    "deployed": "a4ce47a63b64c8637a027f5596d372c886f68d9a00baea5e96a03c9f41ff3f3f",
-    "no-deployment": "4f8ff97431c64742412df63f7356b3569d3889c04b3b1d9b786f1c5bf63b0a13",
-    "spike": "68a4f6cb3a276beb95596cc8b00dbb15b62ae9c0212c4c7f6ca30433cced8277",
+    "deployed": "be02b61ee2a1f17b5bbc03c6d9c95acb5d639975bdc43dedbc8b69a19ebac397",
+    "no-deployment": "8d3cd5de22d49c00ad3c4ce19652ea2113883fd3a6e27575367339381466c7a3",
+    "spike": "eed08d625b3ecb30f9d62a13ec7546b0a2b2c405bdde80455d2a6e56326b2330",
 }
 
 

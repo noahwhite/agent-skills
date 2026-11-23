@@ -31,8 +31,8 @@ If a configured agent cannot run on this runtime, stop and say so (see `referenc
 | Phase | Agent | Job | Why this tier |
 |---|---|---|---|
 | 0 Preflight | none (deterministic) | Clean tree, every intended file committed, and, when the full-suite option is `on`, suite green in a detached worktree at HEAD | Free, seconds, catches a class no reviewer should spend tokens on |
-| 1 Sweep | `profile.review.pre_pr.sweeper` | Read the diffstat and the diff its dossier embeds (its read-only checkout holds anything not embedded), emit a raw candidate list with `file:line` and a concrete failure scenario | Large context at the lowest price; volume over precision |
-| 2 Verify and hunt | `profile.review.pre_pr.hunter` | For each candidate: mutate, run, report VERIFIED or REFUTED with the command and result; then hunt open-ended for new defects | The only phase that proves rather than asserts |
+| 1 Sweep | `profile.review.pre_pr.sweeper` | Read the diffstat and the diff its dossier embeds (its read-only checkout holds anything not embedded), emit a raw candidate list with `file:line` and a concrete failure scenario, and probe each acceptance rule as its dossier asks | Large context at the lowest price; volume over precision |
+| 2 Verify and hunt | `profile.review.pre_pr.hunter` | For each candidate: mutate, run, report VERIFIED or REFUTED with the command and result, and report NOT-REACHED (budget spent) for any it did not check; hunt only defects those candidates directly point at, inside the dossier's exploration budget; and probe each acceptance rule as its dossier asks | The only phase that proves rather than asserts |
 | 3 Arbitrate | `profile.review.pre_pr.arbiter` | From the diffstat, both phase reports and its own read-only checkout (its dossier embeds no diff): filter false positives, weigh empirical evidence over theory, catch cross-module regressions, name accepted risks, decide converged or not | Strongest reasoning, spent once on a pre-filtered bundle |
 | 4 Fix and re-verify | the implementing agent | Fix in-scope findings, re-run each proving mutant (it must now fail), one bounded re-verify | Closes the loop without unbounded ping-pong |
 
@@ -68,7 +68,7 @@ Every phase belongs to one run, keyed by the base and head commit SHAs, under `g
   It then stamps the report with the sha256 of the report, of the spec, and of every predecessor artifact its dossier was built from.
 - Each phase refuses to start (exit 13) unless its predecessors are accepted for the same run and the same spec: the sweep needs a PASS preflight, the hunt needs the sweep, and arbitration needs the sweep and the hunt.
   With no sweeper configured, pass `--no-sweep` to the hunt and to arbitration alike.
-- A phase's inputs (the spec, `--no-sweep`, and each predecessor artifact) are bound when its dossier is written; a report whose inputs changed since then is refused (exit 13).
+- A phase's inputs (the spec, `--no-sweep`, and each predecessor artifact, plus for the hunt the identity of its emitted prompt) are bound when its dossier is written; a report whose inputs changed since then is refused (exit 13).
 - Re-running a phase, or the preflight, discards every later phase, including a report still in flight (its `record` then exits 15), so arbitration never pairs a new sweep with an old hunt.
 - A new commit is a new run: every phase starts again from the preflight.
 - Every model phase runs in its own throwaway detached worktree at HEAD, the one its dossier names on its `CHECKOUT:` line; no agent runs in the primary checkout.
@@ -106,7 +106,7 @@ Launching a phase depends on the profile agent's `runtime`:
   If the dossier cannot be written, the command removes that checkout itself before it exits.
   Spawn a clean, neutral subagent (its whole brief is the dossier) with the agent's model, tell it to read the dossier and work only in that checkout, and save its final report to the phase's artifact path (`paths` prints them).
   The sweep and the arbiter treat the checkout as read-only; only the hunter mutates its own.
-  Then run `record <phase>` with the same `--base`, `--spec` and `--no-sweep` as the dossier (for arbitration, also the arbiter's `--model` and `--agent`, see "Arbiter identity and retained rounds"); it reads the script's own run state, not a scratch directory.
+  Then run `record <phase>` with the same `--base`, `--spec` and `--no-sweep` as the dossier (for a hunt, also the same `--shard`, or no `--shard` with `ADVERSARIAL_SHARD` unset when the dossier recorded `shard=none`; for arbitration, also the arbiter's `--model` and `--agent`, see "Arbiter identity and retained rounds"); it reads the script's own run state, not a scratch directory.
   It accepts the report only if it is non-empty, newer than the dossier, starts with `REVIEW-RAN: yes`, its inputs still match the dossier's, and the tripwire saw no change to the primary checkout since the dossier was written.
   Remove the checkout with `cleanup <path>` once the phase is recorded; it removes only a checkout the script created and registered, and refuses any other path.
 
@@ -201,6 +201,13 @@ Fix a FAIL before spending any model budget.
 The sweeper returns a structured candidate list, each entry with `file:line`, a severity, a one-line claim and a concrete failure scenario.
 Expect false positives; Phase 2 exists to remove them.
 
+### Acceptance rules are behavioural probes
+
+Every sweep and hunt dossier carries an `===== ACCEPTANCE RULES ARE BEHAVIOURAL PROBES` block instructing that phase to answer it; `tests/test_pipeline_acceptance_probes.py` asserts that both dossiers carry the requirement and its escalation rule.
+Each explicitly stated behavioural rule in the story's acceptance criteria - every command, flag, argument, sequence, exit code, file name and state change a criterion names - is enumerated and exercised against the reviewed head by running the command or sequence the rule names, and reported PASSED or FAILED with the command and the observation; a rule is never passed from the diff or the documentation alone, and the report states separately any rule that could not be exercised at all.
+A rule the code asserts, documents or claims but does not enforce is an enforcement finding at blocking severity (`High` or `Critical`), naming the documented rule and the command that contradicts it - never a low-severity documentation finding.
+The sweep keeps the checkout it reviews read-only: a rule whose command writes a file is exercised against a copy of that checkout the sweep makes under the session scratch directory, and a rule it still cannot exercise is repeated as a candidate for the hunt, which mutates and reverts its own throwaway checkout.
+
 The sweep dossier ends with a `Review checklist` section: each item of `.agent-skills/review-checklist.txt`, read from the base, whose glob matches a changed path (`*` crosses `/`); `checklist --base "$BASE"` prints them.
 The file holds one `<bash glob> | <review item>` per line; `#` comments and blank lines are ignored.
 `--no-sweep` skips them.
@@ -211,28 +218,37 @@ The file holds one `<bash glob> | <review item>` per line; `#` comments and blan
 "$PIPELINE" run hunt --base "$BASE" --model "<profile.review.pre_pr.hunter model>" --spec "$SPEC" --scratch "$scratch" --agent-cmd "<template>"
 ```
 
+The hunt answers the same `ACCEPTANCE RULES ARE BEHAVIOURAL PROBES` block as the sweep: it enumerates every explicitly stated behavioural rule in the acceptance criteria, exercises each one in its throwaway checkout with the command or sequence the rule names (mutating and reverting as needed), and reports each PASSED or FAILED with the command and the observation after its findings, under the enforcement rule in "Acceptance rules are behavioural probes" above.
+
 ### Sharded hunt
 
 `run hunt`, `dossier hunt` and `record hunt` accept `--shard K/N`, a decimal `1 <= K <= N` with no leading zero; `N = 1` is accepted only as `--shard 1/1`, and any other value is a usage error (exit 2).
 `--shard` on sweep or arbitrate, or on any command other than run, dossier or record, is a usage error too.
-Pass `record hunt` the same `--shard` as `dossier hunt`, exactly as for `--spec` and `--no-sweep`.
+Pass `record hunt` the same `--shard` as `dossier hunt`, exactly as for `--spec` and `--no-sweep`: an omitted flag and `--shard 1/1` both select the unsharded plan, but they must still be repeated exactly at record time, because the launch records which one wrote the dossier (`shard=<k>/<n>`, or `shard=none` for an omitted flag; `ADVERSARIAL_SHARD` supplies the same selection, so unset it for an unsharded record).
+A record reaches exit 13 when it finds a usable launch and either the `--shard` selection differs from the one the launch recorded or another bound input changed since the dossier was written (spec, `--no-sweep`, a predecessor artifact, or for the hunt the identity of its emitted prompt); a plan-count conflict exits 2 first, and a record for a shard index with no launch of its own exits 15.
+A differing selection is refused at exit 13 without stamping the report, and a missing, empty, unreadable or malformed launch is refused at exit 15.
 
 One `run` invocation is one shard.
 With `N >= 2` the shard's artifact is `<run dir>/phase2-hunt.<k>.md` (never `phase2-hunt.md` for that run), and its run-state files are `hunt.<k>.launch`, `hunt.<k>.binding`, `hunt.<k>.primary`, `hunt.<k>.dossier`, `hunt.<k>-agent.err` and `hunt.<k>-agent.log`.
 The first sharded invocation records the run's plan in `<run dir>/hunt.shards`: `n=<n>` then each shard's artifact path, one per line.
 `paths` prints one `hunt.<k> <path>` line per shard, and `dossier-sizes.md` one `hunt.<k>: <bytes> bytes` line per shard.
 `--shard 1/1` and an unsharded run are identical to today's names and dossier.
+A hunt dossier written by an earlier version of this script left `hunt.launch` (or `hunt.<k>.launch`) empty, so it has no recorded selection and its hunt phase must be written again before it can be recorded.
 
 Run shards sequentially, one `run` per shard, in shard order.
 The driver stops at the first non-zero exit and launches no later shard and no `arbitrate` phase; a failed shard leaves its own stamp absent and every other shard's acceptance standing, and a later `run arbitrate` then refuses at exit 13 naming the unaccepted shard.
 Re-running the preflight, or the sweep when the run uses one, removes the plan and every shard artifact and state file.
 
 The hunter works in a throwaway detached worktree of the **unfixed** head, never the working tree.
-Its dossier asks for both jobs and demands execution rather than reasoning:
+Its dossier carries an exploration budget and asks for both jobs, demanding execution rather than reasoning:
 
-1. **Verify**: for each Phase-1 candidate, write and run a minimal adversarial check (mutate, run the suite, revert) and report VERIFIED with the exact command and observed result, or REFUTED with the observation that disproves it.
-2. **Hunt** open-ended for defects the sweep missed: a change that applies wrongly, a gate that acts in the wrong environment, a test that passes vacuously, a regression to shipped behaviour.
+1. **Verify**: for each candidate the dossier hands it - the sweep report's candidates, or the list it derives from the diff when the run is hunt-only - write and run a minimal adversarial check (mutate, run the suite, revert) and report VERIFIED with the exact command and observed result, or REFUTED with the observation that disproves it.
+   An unchecked candidate is NOT-REACHED (budget spent): a candidate may be VERIFIED or REFUTED only if it was actually checked, and the report ends with the candidates it did not check, or `none`.
+2. **Hunt** only for defects the candidate list directly points at: a change that applies wrongly, a gate that acts in the wrong environment, a test that passes vacuously, a regression to shipped behaviour.
    Mutate to prove each.
+
+The budget is part of the dossier: verify only the listed candidates plus the defects they directly point at, never run a repository-wide `grep`, `find` or `rg` (path-scoped searches only), run at most 40 shell commands in total, read only paths named in the diffstat unless a candidate names another, and stop once the candidate list is exhausted rather than continuing to explore.
+The mode, set by `--no-sweep` and nothing else, decides the candidate source: a sweep run verifies the sweep report's candidates, and a hunt-only run derives the list from the diff itself.
 
 - A hunter whose sandbox could not start reads nothing yet may exit 0.
   A sandbox or permission error on the agent's stderr, or a report whose first line is not `REVIEW-RAN: yes`, is a failed phase, never a clean one (the script exits 17).

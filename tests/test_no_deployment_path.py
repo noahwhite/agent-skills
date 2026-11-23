@@ -326,6 +326,22 @@ DEPLOYED_NOTE = (
     "exactly `path: deployed`."
 )
 DEPLOYED_NOTE_BEFORE_SKL_270 = "2. Add a concise implementation and deployment note."
+# SKL-70 adds two step 2 lines: one accepts a worktree the brief names, one keeps a branch only behind its
+# base from a recut. The digest above is kept: both lines are pinned here (and in
+# tests/test_engineering_workflow_worktree.py) and cut out before hashing.
+WORKTREE_CLAUSE = (
+    "When the brief, or a later message resuming you, names a `worktree:` path, work in that worktree from then "
+    "on and leave any earlier one, run every repository command (git, tests, builds, scripts and `gh`) with "
+    "that worktree as the working directory or the repository argument, and cut no other story worktree, after "
+    "confirming that its branch is based on the base the branch rule in `references/github.md` selects "
+    "(`origin/<profile.git.integration_branch>` by default) and recutting it per the worktree rule in "
+    "`references/github.md` if it is not; without a `worktree:` line, cut the branch and worktree as the "
+    "sentence above states."
+)
+NO_RECUT_CLAUSE = (
+    "That confirmation is the base hard gate in `references/github.md`, which a branch that is only behind its "
+    "base still passes, so such a branch, including one that heads an open PR, is never recut."
+)
 # SKL-346 adds two lines to the Verify stage of step 4's Escalation section. The digest above is kept the
 # same way: those lines are pinned here and cut out before hashing, so every other byte still has to match.
 VERIFIER_LINES = (
@@ -367,6 +383,13 @@ def test_steps_two_to_twelve_outside_the_handoff_blocks_are_unchanged() -> None:
         text = text.replace(block, "", 1)
     assert text.count(f"\n{DEPLOYED_NOTE}\n") == 1, "step 12 must carry the `path: deployed` note line once"
     text = text.replace(f"\n{DEPLOYED_NOTE}\n", f"\n{DEPLOYED_NOTE_BEFORE_SKL_270}\n", 1)
+    step_two = section(SKILL.read_text(encoding="utf-8"), "2. Plan slices")
+    assert step_two.count(f"\n{WORKTREE_CLAUSE}\n") == 1, "step 2 must carry the SKL-70 worktree clause once"
+    assert text.count(f"\n{WORKTREE_CLAUSE}\n") == 1, "the SKL-70 worktree clause appears nowhere else"
+    text = text.replace(f"\n{WORKTREE_CLAUSE}\n", "\n", 1)
+    assert step_two.count(f"\n{NO_RECUT_CLAUSE}\n") == 1, "step 2 must carry the SKL-70 no-recut clause once"
+    assert text.count(f"\n{NO_RECUT_CLAUSE}\n") == 1, "the SKL-70 no-recut clause appears nowhere else"
+    text = text.replace(f"\n{NO_RECUT_CLAUSE}\n", "\n", 1)
     assert text.count(VERIFIER_LINES) == 1, "the Verify stage must carry the SKL-346 verifier line once"
     text = text.replace(VERIFIER_LINES, "", 1)
     assert hashlib.sha256(text.encode()).hexdigest() == STEPS_TWO_TO_TWELVE_SHA256

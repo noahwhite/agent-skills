@@ -220,6 +220,7 @@ def test_a_sharded_hunt_writes_its_own_artifact_state_and_plan(gate):
     assert (run_dir / "phase2-hunt.md").exists() is False
     for path in shard_state(run_dir, "1"):
         assert path.exists(), path
+    assert (run_dir / "hunt.1.launch").read_bytes() == b"shard=1/2\n"
     for path in shard_state(run_dir, "2"):
         assert not path.exists(), path
     plan = plan_file(run_dir)
@@ -290,12 +291,24 @@ def test_a_plan_conflict_is_a_usage_error_that_changes_nothing(accepted_gate):
     run_dir = files["run"]
     plan_before = plan_file(run_dir).read_bytes()
     stamp_before = Path(f"{files['hunt.1']}.stamp").read_bytes()
+    state_before = {path.name: path.read_bytes()
+                    for path in sorted(run_dir.iterdir()) if path.is_file()}
     for extra in (("--shard", "1/3"), ("--shard", "2/3"), (), ("--shard", "1/1")):
         result = run_hunt(repo, scratch, env, *extra)
         assert result.returncode == 2, (extra, result.stdout + result.stderr)
         assert plan_file(run_dir).read_bytes() == plan_before, extra
         assert Path(f"{files['hunt.1']}.stamp").read_bytes() == stamp_before, extra
         assert (run_dir / "phase2-hunt.1.md").exists(), extra
+    # `record` reads the same plan and refuses a conflicting count the same way.
+    conflicting = run_script(
+        "record", "hunt", "--repo", str(repo), "--base", "HEAD", "--shard", "1/3", env=env,
+    )
+    assert conflicting.returncode == 2, conflicting.stdout + conflicting.stderr
+    assert plan_file(run_dir).read_bytes() == plan_before
+    assert Path(f"{files['hunt.1']}.stamp").read_bytes() == stamp_before
+    state_after = {path.name: path.read_bytes()
+                   for path in sorted(run_dir.iterdir()) if path.is_file()}
+    assert state_after == state_before
 
 
 def test_an_unsharded_hunt_then_a_shard_is_a_usage_error(accepted_gate):
@@ -337,6 +350,422 @@ def test_dossier_and_record_hunt_take_the_same_shard(accepted_gate):
     assert Path(f"{report}.stamp").exists()
     assert "shard=1/2" in (run_dir / "hunt.1.binding").read_text().splitlines()
     assert run_script("cleanup", str(checkout), "--repo", str(repo), env=env).returncode == 0
+
+
+def test_record_hunt_refuses_a_shard_selection_the_dossier_did_not_use(accepted_gate):
+    repo, scratch, env = accepted_gate
+    run_dir = paths(repo, env)["run"]
+    report = run_dir / "phase2-hunt.md"
+    launch = run_dir / "hunt.launch"
+
+    # A dossier written as `--shard 1/1` is recorded only as `--shard 1/1`.
+    dossier = run_script(
+        "dossier", "hunt", "--repo", str(repo), "--base", "HEAD", "--scratch", str(scratch),
+        "--shard", "1/1", env=env,
+    )
+    checkout, _ = dossier_of(dossier)
+    assert "the same --shard 1/1" in dossier.stderr, dossier.stderr
+    report.write_text("REVIEW-RAN: yes\none of one\n")
+    state_before = {path.name: path.read_bytes()
+                    for path in sorted(run_dir.iterdir()) if path.is_file()}
+    plain = run_script("record", "hunt", "--repo", str(repo), "--base", "HEAD", env=env)
+    assert plain.returncode == 13, plain.stdout + plain.stderr
+    assert "records 'shard=1/1'" in plain.stderr and "selects 'shard=none'" in plain.stderr, plain.stderr
+    assert not Path(f"{report}.stamp").exists()
+    state_after = {path.name: path.read_bytes()
+                   for path in sorted(run_dir.iterdir()) if path.is_file()}
+    assert state_after == state_before
+    assert launch.read_bytes() == b"shard=1/1\n", launch.read_bytes()
+    recorded = run_script(
+        "record", "hunt", "--repo", str(repo), "--base", "HEAD", "--shard", "1/1", env=env,
+    )
+    assert recorded.returncode == 0, recorded.stdout + recorded.stderr
+    assert Path(f"{report}.stamp").exists()
+    # A refused selection never disturbs an acceptance already recorded.
+    stamp_before = Path(f"{report}.stamp").read_bytes()
+    report_before = report.read_bytes()
+    again = run_script("record", "hunt", "--repo", str(repo), "--base", "HEAD", env=env)
+    assert again.returncode == 13, again.stdout + again.stderr
+    assert Path(f"{report}.stamp").read_bytes() == stamp_before
+    assert report.read_bytes() == report_before
+    assert run_script("cleanup", str(checkout), "--repo", str(repo), env=env).returncode == 0
+
+    # And an unsharded dossier is recorded only without the flag.
+    sweep = run_sweep(repo, scratch, env)
+    assert sweep.returncode == 0, sweep.stdout + sweep.stderr
+    assert not launch.exists(), launch
+    dossier = run_script(
+        "dossier", "hunt", "--repo", str(repo), "--base", "HEAD", "--scratch", str(scratch), env=env,
+    )
+    checkout, _ = dossier_of(dossier)
+    assert "no --shard (this dossier recorded shard=none" in dossier.stderr, dossier.stderr
+    assert launch.read_bytes() == b"shard=none\n", launch.read_bytes()
+    report.write_text("REVIEW-RAN: yes\nplain\n")
+    flagged = run_script(
+        "record", "hunt", "--repo", str(repo), "--base", "HEAD", "--shard", "1/1", env=env,
+    )
+    assert flagged.returncode == 13, flagged.stdout + flagged.stderr
+    assert "records 'shard=none'" in flagged.stderr and "selects 'shard=1/1'" in flagged.stderr, flagged.stderr
+    assert not Path(f"{report}.stamp").exists()
+    recorded = run_script("record", "hunt", "--repo", str(repo), "--base", "HEAD", env=env)
+    assert recorded.returncode == 0, recorded.stdout + recorded.stderr
+    assert not any(line.startswith("shard=") for line in
+                   (run_dir / "hunt.binding").read_text().splitlines())
+    assert run_script("cleanup", str(checkout), "--repo", str(repo), env=env).returncode == 0
+
+
+def test_a_sharded_hunt_refuses_a_marker_naming_another_selection(accepted_gate):
+    repo, scratch, env = accepted_gate
+    run_dir = paths(repo, env)["run"]
+    dossier = run_script(
+        "dossier", "hunt", "--repo", str(repo), "--base", "HEAD", "--scratch", str(scratch),
+        "--shard", "1/2", env=env,
+    )
+    checkout, _ = dossier_of(dossier)
+    assert "the same --shard 1/2" in dossier.stderr, dossier.stderr
+    (run_dir / "hunt.1.launch").write_bytes(b"shard=none\n")
+    (run_dir / "phase2-hunt.1.md").write_text("REVIEW-RAN: yes\nshard one\n")
+    state_before = {path.name: path.read_bytes()
+                    for path in sorted(run_dir.iterdir()) if path.is_file()}
+    refused = run_script(
+        "record", "hunt", "--repo", str(repo), "--base", "HEAD", "--shard", "1/2", env=env,
+    )
+    assert refused.returncode == 13, refused.stdout + refused.stderr
+    assert "records 'shard=none'" in refused.stderr and "selects 'shard=1/2'" in refused.stderr, refused.stderr
+    assert "dossier hunt --shard 1/2" in refused.stderr, refused.stderr
+    assert not Path(f"{run_dir / 'phase2-hunt.1.md'}.stamp").exists()
+    state_after = {path.name: path.read_bytes()
+                   for path in sorted(run_dir.iterdir()) if path.is_file()}
+    assert state_after == state_before
+    # A marker naming another index of the same plan is the same mismatch, and a marker without
+    # its trailing newline is the same selection.
+    (run_dir / "hunt.1.launch").write_bytes(b"shard=2/2\n")
+    (run_dir / "phase2-hunt.1.md").write_text("REVIEW-RAN: yes\nshard one\n")
+    other_index = run_script(
+        "record", "hunt", "--repo", str(repo), "--base", "HEAD", "--shard", "1/2", env=env,
+    )
+    assert other_index.returncode == 13, other_index.stdout + other_index.stderr
+    assert "records 'shard=2/2'" in other_index.stderr, other_index.stderr
+    (run_dir / "hunt.1.launch").write_bytes(b"shard=1/2")
+    (run_dir / "phase2-hunt.1.md").write_text("REVIEW-RAN: yes\nshard one\n")
+    recorded = run_script(
+        "record", "hunt", "--repo", str(repo), "--base", "HEAD", "--shard", "1/2", env=env,
+    )
+    assert recorded.returncode == 0, recorded.stdout + recorded.stderr
+    assert Path(f"{run_dir / 'phase2-hunt.1.md'}.stamp").exists()
+    assert run_script("cleanup", str(checkout), "--repo", str(repo), env=env).returncode == 0
+
+
+def test_a_failing_marker_encoder_is_refused_and_never_stamps(accepted_gate, tmp_path):
+    repo, scratch, env = accepted_gate
+    run_dir = paths(repo, env)["run"]
+    report = run_dir / "phase2-hunt.md"
+    dossier = run_script(
+        "dossier", "hunt", "--repo", str(repo), "--base", "HEAD", "--scratch", str(scratch), env=env,
+    )
+    checkout, _ = dossier_of(dossier)
+    # A broken od must fail closed, even though both encodings would otherwise be the empty string.
+    stub_dir = tmp_path / "stub-bin"
+    stub_dir.mkdir()
+    (stub_dir / "od").write_text("#!/bin/sh\nexit 1\n")
+    (stub_dir / "od").chmod(0o755)
+    broken_env = {**env, "PATH": f"{stub_dir}:{env.get('PATH', '')}"}
+    (run_dir / "hunt.launch").write_bytes(b"shard=none\nTRAIL\n")
+    report.write_text("REVIEW-RAN: yes\nplain\n")
+    refused = run_script("record", "hunt", "--repo", str(repo), "--base", "HEAD", env=broken_env)
+    assert refused.returncode == 15, refused.stdout + refused.stderr
+    assert "marker reader failed" in refused.stderr, refused.stderr
+    assert not Path(f"{report}.stamp").exists()
+    assert run_script("cleanup", str(checkout), "--repo", str(repo), env=env).returncode == 0
+
+
+def test_a_missing_launch_names_the_selection_the_caller_passed(accepted_gate):
+    repo, scratch, env = accepted_gate
+    run_dir = paths(repo, env)["run"]
+    dossier = run_script(
+        "dossier", "hunt", "--repo", str(repo), "--base", "HEAD", "--scratch", str(scratch),
+        "--shard", "1/1", env=env,
+    )
+    checkout, _ = dossier_of(dossier)
+    (run_dir / "phase2-hunt.md").write_text("REVIEW-RAN: yes\none of one\n")
+    (run_dir / "hunt.launch").unlink()
+    missing = run_script(
+        "record", "hunt", "--repo", str(repo), "--base", "HEAD", "--shard", "1/1", env=env,
+    )
+    assert missing.returncode == 15, missing.stdout + missing.stderr
+    assert "dossier hunt --shard 1/1" in missing.stderr, missing.stderr
+    assert not Path(f"{run_dir / 'phase2-hunt.md'}.stamp").exists()
+    assert run_script("cleanup", str(checkout), "--repo", str(repo), env=env).returncode == 0
+
+
+def test_an_empty_indexed_launch_marker_is_refused(accepted_gate):
+    repo, scratch, env = accepted_gate
+    run_dir = paths(repo, env)["run"]
+    dossier = run_script(
+        "dossier", "hunt", "--repo", str(repo), "--base", "HEAD", "--scratch", str(scratch),
+        "--shard", "1/2", env=env,
+    )
+    checkout, _ = dossier_of(dossier)
+    (run_dir / "hunt.1.launch").write_bytes(b"")
+    (run_dir / "phase2-hunt.1.md").write_text("REVIEW-RAN: yes\nshard one\n")
+    refused = run_script(
+        "record", "hunt", "--repo", str(repo), "--base", "HEAD", "--shard", "1/2", env=env,
+    )
+    assert refused.returncode == 15, refused.stdout + refused.stderr
+    assert "dossier hunt --shard 1/2" in refused.stderr, refused.stderr
+    # An empty marker is the legacy/truncated state, not a reader fault.
+    assert "missing or empty" in refused.stderr, refused.stderr
+    assert "marker reader failed" not in refused.stderr, refused.stderr
+    assert not Path(f"{run_dir / 'phase2-hunt.1.md'}.stamp").exists()
+    assert run_script("cleanup", str(checkout), "--repo", str(repo), env=env).returncode == 0
+
+
+def test_an_unusable_marker_outranks_a_changed_binding(accepted_gate, tmp_path):
+    """Exit 13 is reserved for a usable launch: an empty marker is exit 15 even when inputs changed too."""
+    repo, scratch, env = accepted_gate
+    run_dir = paths(repo, env)["run"]
+    dossier = run_script(
+        "dossier", "hunt", "--repo", str(repo), "--base", "HEAD", "--scratch", str(scratch),
+        "--no-sweep", env=env,
+    )
+    checkout, _ = dossier_of(dossier)
+    report = run_dir / "phase2-hunt.md"
+    report.write_text("REVIEW-RAN: yes\nreport\n")
+    (run_dir / "hunt.launch").write_bytes(b"")
+    other_spec = tmp_path / "other-spec.md"
+    other_spec.write_text("a different story, so the binding differs\n")
+    refused = run_script(
+        "record", "hunt", "--repo", str(repo), "--base", "HEAD", "--no-sweep",
+        "--spec", str(other_spec), env=env,
+    )
+    assert refused.returncode == 15, refused.stdout + refused.stderr
+    assert "missing or empty" in refused.stderr, refused.stderr
+    assert "inputs changed since its dossier was written" not in refused.stderr, refused.stderr
+    assert not Path(f"{report}.stamp").exists()
+    assert run_script("cleanup", str(checkout), "--repo", str(repo), env=env).returncode == 0
+
+
+def test_an_environment_supplied_selection_is_recorded_and_required(accepted_gate):
+    repo, scratch, env = accepted_gate
+    run_dir = paths(repo, env)["run"]
+    report = run_dir / "phase2-hunt.md"
+    sharded_env = {**env, "ADVERSARIAL_SHARD": "1/1"}
+    dossier = run_script(
+        "dossier", "hunt", "--repo", str(repo), "--base", "HEAD", "--scratch", str(scratch),
+        env=sharded_env,
+    )
+    checkout, _ = dossier_of(dossier)
+    assert (run_dir / "hunt.launch").read_bytes() == b"shard=1/1\n"
+    report.write_text("REVIEW-RAN: yes\nenv\n")
+    # The environment supplies the selection as the flag does, so the same value must be repeated.
+    dropped = run_script("record", "hunt", "--repo", str(repo), "--base", "HEAD", env=env)
+    assert dropped.returncode == 13, dropped.stdout + dropped.stderr
+    assert "records 'shard=1/1'" in dropped.stderr and "selects 'shard=none'" in dropped.stderr, dropped.stderr
+    assert not Path(f"{report}.stamp").exists()
+    recorded = run_script(
+        "record", "hunt", "--repo", str(repo), "--base", "HEAD", env=sharded_env,
+    )
+    assert recorded.returncode == 0, recorded.stdout + recorded.stderr
+    assert Path(f"{report}.stamp").exists()
+    # The explicit flag names the same selection, so it records the same dossier.
+    explicit = run_script(
+        "record", "hunt", "--repo", str(repo), "--base", "HEAD", "--shard", "1/1", env=env,
+    )
+    assert explicit.returncode == 0, explicit.stdout + explicit.stderr
+    assert run_script("cleanup", str(checkout), "--repo", str(repo), env=env).returncode == 0
+
+
+def test_an_unreadable_hunt_launch_is_refused_and_never_read_as_empty(accepted_gate):
+    repo, scratch, env = accepted_gate
+    run_dir = paths(repo, env)["run"]
+    report = run_dir / "phase2-hunt.md"
+    launch = run_dir / "hunt.launch"
+    dossier = run_script(
+        "dossier", "hunt", "--repo", str(repo), "--base", "HEAD", "--scratch", str(scratch), env=env,
+    )
+    checkout, _ = dossier_of(dossier)
+    report.write_text("REVIEW-RAN: yes\nplain\n")
+    # An unreadable marker carrying a valid selection is a state error, never "no flag".
+    launch.chmod(0)
+    denied = True
+    try:
+        with launch.open("rb") as probe:
+            probe.read(1)
+        denied = False
+    except PermissionError:
+        denied = True
+    try:
+        if not denied:
+            pytest.skip("this process can read a mode-000 file, so the denial cannot be established")
+        refused = run_script("record", "hunt", "--repo", str(repo), "--base", "HEAD", env=env)
+        assert refused.returncode == 15, refused.stdout + refused.stderr
+        assert "launch marker" in refused.stderr, refused.stderr
+        assert not Path(f"{report}.stamp").exists()
+    finally:
+        launch.chmod(0o644)
+        assert run_script("cleanup", str(checkout), "--repo", str(repo), env=env).returncode == 0
+
+
+def test_a_marker_without_its_trailing_newline_is_the_same_selection(accepted_gate):
+    repo, scratch, env = accepted_gate
+    run_dir = paths(repo, env)["run"]
+    report = run_dir / "phase2-hunt.md"
+    launch = run_dir / "hunt.launch"
+    dossier = run_script(
+        "dossier", "hunt", "--repo", str(repo), "--base", "HEAD", "--scratch", str(scratch), env=env,
+    )
+    checkout, _ = dossier_of(dossier)
+    launch.write_bytes(launch.read_bytes().rstrip(b"\n"))
+    report.write_text("REVIEW-RAN: yes\nplain\n")
+    recorded = run_script("record", "hunt", "--repo", str(repo), "--base", "HEAD", env=env)
+    assert recorded.returncode == 0, recorded.stdout + recorded.stderr
+    assert Path(f"{report}.stamp").exists()
+    assert run_script("cleanup", str(checkout), "--repo", str(repo), env=env).returncode == 0
+
+
+def test_a_malformed_launch_marker_is_refused_with_a_bounded_sanitised_diagnosis(accepted_gate):
+    repo, scratch, env = accepted_gate
+    run_dir = paths(repo, env)["run"]
+    report = run_dir / "phase2-hunt.md"
+    launch = run_dir / "hunt.launch"
+    dossier = run_script(
+        "dossier", "hunt", "--repo", str(repo), "--base", "HEAD", "--scratch", str(scratch), env=env,
+    )
+    checkout, _ = dossier_of(dossier)
+    # Anything but the one printable selection line is an unusable state, not a selection.
+    long_valid = b"shard=1/" + b"1" * 57
+    near_limit = b"shard=1/" + b"1" * 86
+    assert len(near_limit) == 94
+    for marker in (b"shard=none\nTRAIL\n", b"shard=none\n\n", b"shard=none\x00\n",
+                   b"shard=none\x00", b"shard=none\r\n", b"shard=no\x1be\n",
+                   b"shard=none \n", b"shard=3/2\n", b"shard=none" + b"x" * 55,
+                   b"shard=none" + b"x" * 60, long_valid + b"\n" + b"JUNK\n",
+                   near_limit + b"\n" + b"J", near_limit + b"J",
+                   near_limit + b"\n" + b"1" * 100):
+        sidecar = run_dir / "hunt.dossier"
+        sidecar_before = sidecar.read_bytes() if sidecar.exists() else None
+        launch.write_bytes(marker)
+        report.write_text("REVIEW-RAN: yes\nplain\n")
+        refused = run_script("record", "hunt", "--repo", str(repo), "--base", "HEAD", env=env)
+        assert refused.returncode == 15, (marker, refused.stdout + refused.stderr)
+        assert "not exactly the one selection line the launcher wrote" in refused.stderr, refused.stderr
+        assert not Path(f"{report}.stamp").exists()
+        assert (sidecar.read_bytes() if sidecar.exists() else None) == sidecar_before, marker
+    # A long but valid selection the launcher could have written is a mismatch, not malformed state.
+    launch.write_bytes(long_valid + b"\n")
+    report.write_text("REVIEW-RAN: yes\nplain\n")
+    long_mismatch = run_script("record", "hunt", "--repo", str(repo), "--base", "HEAD", env=env)
+    assert long_mismatch.returncode == 13, long_mismatch.stdout + long_mismatch.stderr
+    assert f"records '{long_valid.decode()}'" in long_mismatch.stderr, long_mismatch.stderr
+    # The reader's limit is the boundary: 94-byte line plus newline is a mismatch, one more byte is overflow.
+    launch.write_bytes(near_limit + b"\n")
+    report.write_text("REVIEW-RAN: yes\nplain\n")
+    at_limit = run_script("record", "hunt", "--repo", str(repo), "--base", "HEAD", env=env)
+    assert at_limit.returncode == 13, at_limit.stdout + at_limit.stderr
+    # A missing report is reported as the missing report, never as a selection problem.
+    launch.write_bytes(b"shard=1/1\n")
+    report.unlink()
+    no_report = run_script("record", "hunt", "--repo", str(repo), "--base", "HEAD", env=env)
+    assert no_report.returncode == 15, no_report.stdout + no_report.stderr
+    assert "produced no report" in no_report.stderr, no_report.stderr
+    # A printable marker naming another selection is a mismatch that names both values.
+    launch.write_bytes(b"shard=1/1\n")
+    report.write_text("REVIEW-RAN: yes\nplain\n")
+    mismatch = run_script("record", "hunt", "--repo", str(repo), "--base", "HEAD", env=env)
+    assert mismatch.returncode == 13, mismatch.stdout + mismatch.stderr
+    assert "records 'shard=1/1'" in mismatch.stderr and "selects 'shard=none'" in mismatch.stderr, mismatch.stderr
+    # A huge marker: the diagnosis stays bounded.
+    launch.write_bytes(b"A" * (4 * 1024 * 1024))
+    report.write_text("REVIEW-RAN: yes\nplain\n")
+    huge = run_script("record", "hunt", "--repo", str(repo), "--base", "HEAD", env=env)
+    assert huge.returncode == 15, huge.stdout + huge.stderr
+    assert len(huge.stderr.encode()) < 4096, len(huge.stderr.encode())
+    assert not Path(f"{report}.stamp").exists()
+    assert run_script("cleanup", str(checkout), "--repo", str(repo), env=env).returncode == 0
+
+
+def test_an_emptied_launch_marker_is_refused_for_either_selection(accepted_gate):
+    repo, scratch, env = accepted_gate
+    run_dir = paths(repo, env)["run"]
+    report = run_dir / "phase2-hunt.md"
+    launch = run_dir / "hunt.launch"
+
+    # A truncated marker is not "the flag was omitted": it is refused, never read as the weaker form.
+    dossier = run_script(
+        "dossier", "hunt", "--repo", str(repo), "--base", "HEAD", "--scratch", str(scratch), env=env,
+    )
+    plain_checkout, _ = dossier_of(dossier)
+    report.write_text("REVIEW-RAN: yes\nplain\n")
+    launch.write_text("")
+    plain = run_script("record", "hunt", "--repo", str(repo), "--base", "HEAD", env=env)
+    assert plain.returncode == 15, plain.stdout + plain.stderr
+    assert not Path(f"{report}.stamp").exists()
+    assert run_script("cleanup", str(plain_checkout), "--repo", str(repo), env=env).returncode == 0
+
+    sweep = run_sweep(repo, scratch, env)
+    assert sweep.returncode == 0, sweep.stdout + sweep.stderr
+    dossier = run_script(
+        "dossier", "hunt", "--repo", str(repo), "--base", "HEAD", "--scratch", str(scratch),
+        "--shard", "1/1", env=env,
+    )
+    flagged_checkout, _ = dossier_of(dossier)
+    report.write_text("REVIEW-RAN: yes\none of one\n")
+    launch.write_text("\n")
+    flagged = run_script(
+        "record", "hunt", "--repo", str(repo), "--base", "HEAD", "--shard", "1/1", env=env,
+    )
+    assert flagged.returncode == 15, flagged.stdout + flagged.stderr
+    assert not Path(f"{report}.stamp").exists()
+    assert run_script("cleanup", str(flagged_checkout), "--repo", str(repo), env=env).returncode == 0
+
+
+def test_a_flagged_dossier_recorded_with_its_flag_matches_the_unsharded_record(accepted_gate):
+    repo, scratch, env = accepted_gate
+    run_dir = paths(repo, env)["run"]
+    report = run_dir / "phase2-hunt.md"
+    report_text = "REVIEW-RAN: yes\nparity\n"
+
+    plain_dossier = run_script(
+        "dossier", "hunt", "--repo", str(repo), "--base", "HEAD", "--scratch", str(scratch), env=env,
+    )
+    plain_checkout, _ = dossier_of(plain_dossier)
+    report.write_text(report_text)
+    plain_record = run_script("record", "hunt", "--repo", str(repo), "--base", "HEAD", env=env)
+    assert plain_record.returncode == 0, plain_record.stdout + plain_record.stderr
+    plain_stamp = Path(f"{report}.stamp").read_bytes()
+    plain_binding = (run_dir / "hunt.binding").read_bytes()
+    plain_primary = (run_dir / "hunt.primary").read_bytes()
+    plain_sidecar = (run_dir / "hunt.dossier").read_bytes()
+    plain_files = sorted(path.name for path in run_dir.iterdir())
+    sweep_artifact = (run_dir / "phase1-sweep.md").read_bytes()
+    assert run_script("cleanup", str(plain_checkout), "--repo", str(repo), env=env).returncode == 0
+
+    sweep = run_sweep(repo, scratch, env)
+    assert sweep.returncode == 0, sweep.stdout + sweep.stderr
+    # Re-running the sweep rewrites its artifact; restoring the bytes keeps every bound input
+    # identical, so the two records can be compared byte for byte.
+    (run_dir / "phase1-sweep.md").write_bytes(sweep_artifact)
+    flagged_dossier = run_script(
+        "dossier", "hunt", "--repo", str(repo), "--base", "HEAD", "--scratch", str(scratch),
+        "--shard", "1/1", env=env,
+    )
+    flagged_checkout, _ = dossier_of(flagged_dossier)
+    report.write_text(report_text)
+    flagged_record = run_script(
+        "record", "hunt", "--repo", str(repo), "--base", "HEAD", "--shard", "1/1", env=env,
+    )
+    assert flagged_record.returncode == 0, flagged_record.stdout + flagged_record.stderr
+    flagged_stamp = Path(f"{report}.stamp").read_bytes()
+    flagged_binding = (run_dir / "hunt.binding").read_bytes()
+
+    # Byte-identical to the unsharded record: the selection never enters the stamp or the binding.
+    assert flagged_stamp == plain_stamp
+    assert flagged_binding == plain_binding
+    assert sorted(path.name for path in run_dir.iterdir()) == plain_files
+    assert (run_dir / "hunt.primary").read_bytes() == plain_primary
+    assert (run_dir / "hunt.dossier").read_bytes().split(b"\nbytes=")[-1] == plain_sidecar.split(b"\nbytes=")[-1]
+    assert not (run_dir / "hunt.shards").exists()
+    assert run_script("cleanup", str(flagged_checkout), "--repo", str(repo), env=env).returncode == 0
 
 
 def test_rerunning_the_preflight_removes_the_plan_and_every_shard_file(accepted_gate):
@@ -386,7 +815,11 @@ def test_a_failed_shard_uses_the_unsharded_exit_code_and_keeps_its_sibling(tmp_p
     assert not (run_dir / "hunt.1.launch").exists()
     assert not (run_dir / "phase2-hunt.1.md.stamp").exists()
     assert (run_dir / "phase2-hunt.2.md.stamp").read_bytes() == sibling_stamp
-    assert "shard=" not in failed.stderr.replace("shard=1/2", ""), failed.stderr
+    phase_lines = [line for line in failed.stderr.splitlines()
+                   if line.startswith("adversarial-pipeline: phase=hunt")]
+    assert phase_lines, failed.stderr
+    for line in phase_lines:
+        assert "shard=1/2" in line, line
     arbitrate = run_arbitrate(repo, scratch, env)
     assert arbitrate.returncode == 13, arbitrate.stdout + arbitrate.stderr
     assert "1/2" in arbitrate.stderr and "hunt" in arbitrate.stderr, arbitrate.stderr
@@ -394,7 +827,11 @@ def test_a_failed_shard_uses_the_unsharded_exit_code_and_keeps_its_sibling(tmp_p
     plain_repo, plain_scratch, plain_env = accepted_hunt_gate(tmp_path / "unsharded")
     plain_failed = run_hunt(plain_repo, plain_scratch, plain_env, agent=BLIND_AGENT)
     assert plain_failed.returncode == failed.returncode, plain_failed.stdout + plain_failed.stderr
-    assert "shard=" not in plain_failed.stderr, plain_failed.stderr
+    plain_phase_lines = [line for line in plain_failed.stderr.splitlines()
+                         if line.startswith("adversarial-pipeline: phase=hunt")]
+    assert plain_phase_lines, plain_failed.stderr
+    for line in plain_phase_lines:
+        assert "shard=" not in line, line
 
 
 def test_a_non_zero_agent_exit_is_the_same_code_sharded_and_unsharded(tmp_path):
@@ -423,6 +860,7 @@ def test_shard_one_of_one_is_byte_identical_to_an_unsharded_run(accepted_gate):
     assert files["hunt"].read_bytes() == artifact
     assert Path(f"{files['hunt']}.stamp").read_bytes() == stamp
     assert (run_dir / "hunt.binding").read_bytes() == binding
+    assert (run_dir / "hunt.launch").read_bytes() == b"shard=1/1\n"
     assert not plan_file(run_dir).exists()
 
 
@@ -613,7 +1051,7 @@ def test_a_preflight_rerun_discards_probe_logs_too(accepted_gate):
     assert not (run_dir / "hunt.1-probe.log").exists()
 
 
-def test_every_phase_status_and_diagnosis_line_carries_the_shard(accepted_gate):
+def test_every_phase_status_and_diagnosis_line_carries_the_shard(accepted_gate, tmp_path):
     repo, scratch, env = accepted_gate
     failed = run_hunt(repo, scratch, env, "--shard", "1/2", agent=BLIND_AGENT)
     assert failed.returncode == 17, failed.stdout + failed.stderr
@@ -621,11 +1059,20 @@ def test_every_phase_status_and_diagnosis_line_carries_the_shard(accepted_gate):
              if line.startswith("adversarial-pipeline: phase=hunt")]
     assert heads, failed.stderr
     for line in heads:
-        assert "shard=1/2" in line, line
+        assert [field for field in line.split() if field.startswith("shard=")] == ["shard=1/2"], line
     reason = [line for line in failed.stderr.splitlines() if "reason:" in line]
     assert reason, failed.stderr
     for line in reason:
-        assert "shard=1/2" in line, line
+        assert [field for field in line.split() if field.startswith("shard=")] == ["shard=1/2"], line
+
+    plain_repo, plain_scratch, plain_env = accepted_hunt_gate(tmp_path / "plain-status")
+    plain_failed = run_hunt(plain_repo, plain_scratch, plain_env, agent=BLIND_AGENT)
+    assert plain_failed.returncode == 17, plain_failed.stdout + plain_failed.stderr
+    plain_heads = [line for line in plain_failed.stderr.splitlines()
+                   if line.startswith("adversarial-pipeline: phase=hunt")]
+    assert plain_heads, plain_failed.stderr
+    for line in plain_heads:
+        assert [field for field in line.split() if field.startswith("shard=")] == [], line
 
 
 # --- A sharded run and the identical-tree reuse: its ordinary sweep still donates -----------------
