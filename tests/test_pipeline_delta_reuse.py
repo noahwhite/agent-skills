@@ -1267,8 +1267,9 @@ APP_HEAD = (
 
 
 def test_the_non_delta_sweep_dossier_is_byte_identical_to_the_pre_change_script(tmp_path):
-    # GOLDEN was captured from the pre-change script at origin/main 554ddb6, before this change:
-    # the same deterministic repository, `preflight --full-suite off` then `dossier sweep`, with the
+    # GOLDEN was captured from the pre-change script - origin/main 73cc334, the base this change is
+    # merged onto, whose sweep prompt carries SKL-404's acceptance-rule probe block: the same
+    # deterministic repository, `preflight --full-suite off` then `dossier sweep`, with the
     # checkout/scratch paths and commit ids normalized. It is not regenerated from this script.
     env = fixed_env(tmp_path)
     repo = tmp_path / "repo"
