@@ -37,7 +37,8 @@
 # Each phase refuses to start unless its predecessors are accepted for the same run (exit 13):
 # sweep needs a PASS preflight; hunt needs the sweep; arbitrate needs the sweep and the hunt.
 # --no-sweep (no sweeper configured) drops the sweep from both requirements; pass it consistently.
-# The inputs (spec, --no-sweep, predecessor artifacts) are bound when the dossier is written; `record`
+# The inputs (spec, --no-sweep, predecessor artifacts, and for the hunt the identity of the emitted
+# prompt) are bound when the dossier is written; `record`
 # and `run` refuse a report whose inputs changed since then (exit 13), so pass `record` the same
 # --spec and --no-sweep as `dossier`.
 # Re-running a phase (or the preflight) discards every later phase: its acceptance, its launch and
@@ -889,13 +890,17 @@ sandbox_error_in() {
 }
 
 accept_phase() {  # $1 = phase, $2 = stderr log or "": validate a freshly written artifact, then stamp it
-  local art key launched expected marker_hex marker_ok dossier_hint line_hex plain_hex; art="$(artifact_for "$1")"; key="$(state_key "$1")"
+  local art key launched expected marker_hex marker_ok dossier_hint line_hex plain_hex inputs
+  art="$(artifact_for "$1")"; key="$(state_key "$1")"
   # The recovery hint names the selection this invocation carries, so following it recreates the
   # dossier the caller is trying to record.
   dossier_hint="dossier $1"
   if [ "$1" = "hunt" ] && [ "$SHARD_SET" -eq 1 ]; then
     dossier_hint="dossier hunt --shard $SHARD_K/$SHARD_N"
   fi
+  # The hunt binds one input no other phase does: the identity of its emitted prompt (SKL-406).
+  inputs="spec, --shard, --no-sweep or a predecessor artifact"
+  if [ "$1" = "hunt" ]; then inputs="spec, --shard, --no-sweep, the hunt prompt or a predecessor artifact"; fi
   [ -f "$RUN_DIR/$key.launch" ] && [ -f "$RUN_DIR/$key.binding" ] && [ -f "$RUN_DIR/$key.primary" ] \
     || die 15 "no launch for $1 in this run (never started, discarded by a later re-run of an earlier phase, or an arbitration already accepted); write its dossier with '$dossier_hint' first."
   # `--shard 1/1` and an omitted flag share a binding byte for byte, so the hunt's launch carries the
@@ -949,7 +954,7 @@ accept_phase() {  # $1 = phase, $2 = stderr log or "": validate a freshly writte
     fi
   fi
   if [ "$(cat -- "$RUN_DIR/$key.binding")" != "$(binding_text "$1")" ]; then
-    die 13 "the $1 inputs changed since its dossier was written (spec, --shard, --no-sweep or a predecessor artifact); start the $1 phase again with '$dossier_hint'."
+    die 13 "the $1 inputs changed since its dossier was written ($inputs); start the $1 phase again with '$dossier_hint'."
   fi
   [ -s "$art" ] || die 15 "the $1 agent produced no report ($art is missing or empty)."
   if [ "$RUN_DIR/$key.launch" -nt "$art" ]; then
@@ -1991,8 +1996,9 @@ hunt_prompt_text() {  # $1 = 1 when a sweep report is embedded, $2 = the scratch
   echo "RULE <n> | PASSED or FAILED | the rule in one line | the command you ran | what you observed"
 }
 
-# The candidate-list header the hunt dossier emits, one per mode, so "(Phase 1 sweep)" never heads
-# the hunt-only placeholder.
+# The candidate-list header and its static body line, one per mode, so "(Phase 1 sweep)" never heads
+# the hunt-only placeholder. In sweep mode the body the agent reads is the accepted sweep report
+# itself, which is bound as a predecessor; the fallback text is what the template fixes.
 hunt_candidates_header() {  # $1 = 1 when a sweep report is embedded
   if [ "${1:-0}" -eq 1 ]; then
     echo "===== CANDIDATES (Phase 1 sweep) ====="
@@ -2000,13 +2006,20 @@ hunt_candidates_header() {  # $1 = 1 when a sweep report is embedded
     echo "===== CANDIDATES (sweep not configured - hunt only) ====="
   fi
 }
+hunt_candidates_body() {  # $1 = 1 when a sweep report is embedded
+  if [ "${1:-0}" -eq 1 ]; then
+    echo "(sweep not configured - hunt only)"
+  else
+    echo "(derive the candidate list from the diff, per the exploration budget above)"
+  fi
+}
 
 # The identity of the hunt prompt this script would emit for a mode. It covers the whole fixed prompt
-# text, the candidate-list header included, and not the run's scratch path, so it changes exactly
-# when the prompt changes.
+# text, the candidate-list header and body included, and not the run's scratch path, so it changes
+# exactly when the prompt changes.
 hunt_prompt_id() {  # $1 = 1 when a sweep report is embedded
-  { hunt_prompt_text "${1:-0}" "@scratch@"; hunt_candidates_header "${1:-0}"; } \
-    | sha256sum | cut -d' ' -f1
+  { hunt_prompt_text "${1:-0}" "@scratch@"; hunt_candidates_header "${1:-0}";
+    hunt_candidates_body "${1:-0}"; } | sha256sum | cut -d' ' -f1
 }
 
 # The prompt identity recorded in the accepted hunt's binding. A sharded run keeps one binding per
@@ -2114,9 +2127,9 @@ write_dossier() {  # $1 = phase, $2 = dossier path, $3 = the phase's checkout (e
         echo
         hunt_candidates_header "$(( 1 - NO_SWEEP ))"
         if [ "$NO_SWEEP" -eq 0 ]; then
-          emit_prior sweep "(sweep not configured - hunt only)"
+          emit_prior sweep "$(hunt_candidates_body 1)"
         else
-          echo "(derive the candidate list from the diff, per the exploration budget above)"
+          hunt_candidates_body 0
         fi
         echo
         emit_context "$co" 1

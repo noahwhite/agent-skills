@@ -12,6 +12,7 @@ changing this test, and cannot give the sweep dossier a hunt budget.
 
 import os
 import re
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -53,6 +54,8 @@ NO_SWEEP_BUDGET_SENTENCES = (NO_SWEEP_SOURCE_SENTENCE, *SHARED_SENTENCES)
 # The mode-aware candidate-list header: (Phase 1 sweep) never heads the hunt-only placeholder.
 CANDIDATES_SWEEP_HEADER = "===== CANDIDATES (Phase 1 sweep) ====="
 CANDIDATES_HUNT_ONLY_HEADER = "===== CANDIDATES (sweep not configured - hunt only) ====="
+# The static body line a hunt-only dossier carries under that header, inside the prompt identity.
+HUNT_ONLY_BODY = "(derive the candidate list from the diff, per the exploration budget above)"
 
 # The two job sentences above the budget carry the same restriction, one variant per mode; without
 # them a later edit could restore an open-ended hunt beside a pinned budget block.
@@ -134,6 +137,11 @@ def run_script(env: dict[str, str], *args: str) -> subprocess.CompletedProcess:
                           capture_output=True, text=True, timeout=300)
 
 
+def run_pipeline(script: Path, env: dict[str, str], *args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(["bash", str(script), *args], cwd=str(ROOT), env=env,
+                          capture_output=True, text=True, timeout=300)
+
+
 def checked(result: subprocess.CompletedProcess, what: str) -> subprocess.CompletedProcess:
     assert result.returncode == 0, f"{what} exited {result.returncode}:\n{result.stdout}\n{result.stderr}"
     return result
@@ -183,6 +191,7 @@ def build_dossiers(tmp_path: Path, no_sweep: bool, predate: bool = False) -> dic
     extra = ["--no-sweep"] if no_sweep else []
     written = checked(run_script(env, "dossier", "arbitrate", *common, *extra), "dossier arbitrate")
     out["arbitrate"] = Path(written.stdout.strip().splitlines()[-1]).read_text()
+    out["_run"] = str(paths["run"])
     return out
 
 
@@ -278,6 +287,7 @@ def test_the_sweep_mode_hunt_carries_only_the_sweep_candidate_source(dossiers):
     assert SWEEP_REPORT.strip() in dossiers["hunt"]
     assert CANDIDATES_SWEEP_HEADER in dossiers["hunt"]
     assert CANDIDATES_HUNT_ONLY_HEADER not in dossiers["hunt"]
+    assert HUNT_ONLY_BODY not in dossiers["hunt"]
 
 
 def test_the_no_sweep_mode_hunt_carries_only_the_diff_candidate_source(no_sweep_dossiers):
@@ -286,8 +296,9 @@ def test_the_no_sweep_mode_hunt_carries_only_the_diff_candidate_source(no_sweep_
     assert SWEEP_SOURCE_SENTENCE not in prompt
     assert CANDIDATES_HUNT_ONLY_HEADER in no_sweep_dossiers["hunt"]
     assert CANDIDATES_SWEEP_HEADER not in no_sweep_dossiers["hunt"]
-    # The hunt-only header must never head a sweep placeholder.
+    # The hunt-only header must never head a sweep placeholder, and its body line is pinned.
     assert "(Phase 1 sweep)" not in no_sweep_dossiers["hunt"]
+    assert HUNT_ONLY_BODY in no_sweep_dossiers["hunt"]
 
 
 def test_the_hunt_dossier_binds_both_jobs_to_the_budget(dossiers):
@@ -344,20 +355,35 @@ def test_a_hunt_that_predates_the_budget_gets_the_predates_note(predating_dossie
 
 
 def test_a_changed_hunt_prompt_unaccepts_the_recorded_hunt(tmp_path):
-    # The hunt binding carries the emitted prompt's identity, so a prompt change is an inputs change
-    # at record time (exit 13) rather than a silently accepted report.
+    # A real prompt edit between the dossier and the record is an inputs change (exit 13), so the
+    # identity must track the prompt text: a constant id would accept this report silently.
     env, repo, _, common = start_run(tmp_path)
     paths = artifact_paths(repo, env)
-    written = checked(run_script(env, "dossier", "hunt", *common, "--no-sweep"), "dossier hunt")
+    edited = tmp_path / "pipeline.sh"
+    shutil.copy(SCRIPT, edited)
+    written = checked(run_pipeline(edited, env, "dossier", "hunt", *common, "--no-sweep"),
+                      "dossier hunt")
     assert Path(written.stdout.strip().splitlines()[-1]).exists()
     paths["hunt"].write_text(HUNT_REPORT)
-    binding = paths["run"] / "hunt.binding"
-    lines = [line for line in binding.read_text().splitlines() if not line.startswith("prompt=")]
-    binding.write_text("\n".join([*lines, "prompt=" + "0" * 64]) + "\n")
-    refused = run_script(env, "record", "hunt", "--repo", str(repo), "--base", BASE_REF,
-                         "--spec", str(common[common.index("--spec") + 1]), "--no-sweep")
+    text = edited.read_text()
+    assert f"HUNT_BUDGET_COMMANDS={COMMAND_COUNT}" in text
+    edited.write_text(text.replace(
+        f"HUNT_BUDGET_COMMANDS={COMMAND_COUNT}", f"HUNT_BUDGET_COMMANDS={int(COMMAND_COUNT) + 1}"))
+    refused = run_pipeline(edited, env, "record", "hunt", "--repo", str(repo), "--base", BASE_REF,
+                           "--spec", str(common[common.index("--spec") + 1]), "--no-sweep")
     assert refused.returncode == 13, refused.stdout + refused.stderr
     assert "inputs changed since its dossier was written" in refused.stderr
+    assert "the hunt prompt" in refused.stderr
+
+
+def test_only_the_hunt_binding_carries_the_prompt_identity(dossiers):
+    # AC4 permits exactly one binding addition: the hunt's. No other phase's binding changes.
+    run_dir = Path(dossiers["_run"])
+    hunt = (run_dir / "hunt.binding").read_text().splitlines()
+    assert sum(line.startswith("prompt=") for line in hunt) == 1
+    for phase in ("sweep", "arbitrate"):
+        lines = (run_dir / f"{phase}.binding").read_text().splitlines()
+        assert not any(line.startswith("prompt=") for line in lines), phase
 
 
 def test_the_hunt_binding_carries_the_prompt_identity(tmp_path):

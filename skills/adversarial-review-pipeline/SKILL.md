@@ -68,7 +68,7 @@ Every phase belongs to one run, keyed by the base and head commit SHAs, under `g
   It then stamps the report with the sha256 of the report, of the spec, and of every predecessor artifact its dossier was built from.
 - Each phase refuses to start (exit 13) unless its predecessors are accepted for the same run and the same spec: the sweep needs a PASS preflight, the hunt needs the sweep, and arbitration needs the sweep and the hunt.
   With no sweeper configured, pass `--no-sweep` to the hunt and to arbitration alike.
-- A phase's inputs (the spec, `--no-sweep`, and each predecessor artifact) are bound when its dossier is written; a report whose inputs changed since then is refused (exit 13).
+- A phase's inputs (the spec, `--no-sweep`, and each predecessor artifact, plus for the hunt the identity of its emitted prompt) are bound when its dossier is written; a report whose inputs changed since then is refused (exit 13).
 - Re-running a phase, or the preflight, discards every later phase, including a report still in flight (its `record` then exits 15), so arbitration never pairs a new sweep with an old hunt.
 - A new commit is a new run: every phase starts again from the preflight.
 - Every model phase runs in its own throwaway detached worktree at HEAD, the one its dossier names on its `CHECKOUT:` line; no agent runs in the primary checkout.
@@ -225,7 +225,7 @@ The hunt answers the same `ACCEPTANCE RULES ARE BEHAVIOURAL PROBES` block as the
 `run hunt`, `dossier hunt` and `record hunt` accept `--shard K/N`, a decimal `1 <= K <= N` with no leading zero; `N = 1` is accepted only as `--shard 1/1`, and any other value is a usage error (exit 2).
 `--shard` on sweep or arbitrate, or on any command other than run, dossier or record, is a usage error too.
 Pass `record hunt` the same `--shard` as `dossier hunt`, exactly as for `--spec` and `--no-sweep`: an omitted flag and `--shard 1/1` both select the unsharded plan, but they must still be repeated exactly at record time, because the launch records which one wrote the dossier (`shard=<k>/<n>`, or `shard=none` for an omitted flag; `ADVERSARIAL_SHARD` supplies the same selection, so unset it for an unsharded record).
-A record reaches exit 13 when it finds a usable launch and either the `--shard` selection differs from the one the launch recorded or another bound input changed since the dossier was written (spec, `--no-sweep` or a predecessor artifact); a plan-count conflict exits 2 first, and a record for a shard index with no launch of its own exits 15.
+A record reaches exit 13 when it finds a usable launch and either the `--shard` selection differs from the one the launch recorded or another bound input changed since the dossier was written (spec, `--no-sweep`, a predecessor artifact, or for the hunt the identity of its emitted prompt); a plan-count conflict exits 2 first, and a record for a shard index with no launch of its own exits 15.
 A differing selection is refused at exit 13 without stamping the report, and a missing, empty, unreadable or malformed launch is refused at exit 15.
 
 One `run` invocation is one shard.
