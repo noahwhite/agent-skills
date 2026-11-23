@@ -3,7 +3,7 @@ name: linear-user-story
 description: >-
   Create a Linear User Story (a feature, improvement, or user-facing change) to a fixed template - a
   `[User Story]` title prefix, the user-story label plus a type label, created in Backlog, and a Story Summary /
-  Acceptance Criteria / Additional Context / Definition of Ready / Definition of Done body. Uses the linear CLI
+  Acceptance Criteria / Additional Context / Verification / Definition of Ready / Definition of Done body. Uses the linear CLI
   first and the Linear MCP server only if the CLI fails. Use when asked to create, file, open, write, or draft a
   user story, feature story, or improvement story in Linear.
 license: Apache-2.0
@@ -52,8 +52,8 @@ After the story exists, triage and implementation follow the shared lifecycle in
 - **Assignee:** always `profile.tracker.assignee`, never a person's named seat the profile does not name.
 - **Estimate:** not set at creation; triage sets it.
 - **Acceptance Criteria:** an acceptance criterion that needs behavioural evidence must be one-pass producible, as [references/linear.md](references/linear.md) "Acceptance criteria and scope" states.
-  Write them lean as that section states: 3 to 5 per story, one rule and one observable outcome each, at most 25 words, with no command, step, window value or evidence instruction inside a criterion.
-  Name the runbook or test plan under Context and links, and the proving artifact under Verification.
+  Write them lean, as that section states: one rule and one observable outcome each, at most 25 words, and none of the execution detail that section keeps out of a criterion.
+  Link any runbook or test plan under Additional Context, and name the proving artifact and the command, run or record that produces it under Verification.
 - **Definition of Ready:** the "observable behaviour" box is checked against the rule that behavioural evidence must be one-pass producible, as [references/linear.md](references/linear.md) "Acceptance criteria and scope" states.
 
 ## Template (the description)
@@ -67,7 +67,7 @@ As a [role], I want [feature/capability], so that [business value].
 
 **✅ Acceptance Criteria**
 
-<!-- 3 to 5 criteria, one rule and one observable outcome each, at most 25 words, no commands, steps, window values or evidence instructions -->
+<!-- About 3 to 5 criteria, one rule and one observable outcome each, at most 25 words, no execution detail -->
 - [ ] [System or component] reaches [target state or metric] under [condition]
 - [ ] Given [precondition], when [event], then [one observable outcome]
 - [ ] On [failure condition], [system] [observable abort or recovery state]
