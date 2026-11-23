@@ -293,13 +293,14 @@ def test_token_values_are_not_reexpanded(scratch):
 
 
 def test_reference_mentions_are_absolute_and_exist(renders):
-    """Navigational mentions are absolutized; a cited quotation keeps its source's literal mention.
+    """Navigational mentions are absolutized; a cited quotation span keeps its source's literal mention.
 
-    A stray double quote cannot hide a navigational mention: only a cited quotation line is exempt.
+    Only each line's cited span is masked, so a quote that opens and closes on different lines cannot
+    hide a navigational mention from this assertion.
     """
     skill_dir = str(SKILL_DIR.resolve())
     for name, text in renders.items():
-        navigational = QUOTATION.sub("", text)
+        navigational = "\n".join(QUOTATION.sub("", line) for line in text.splitlines())
         mentions = re.findall(r"`([^`\s]*references/[a-z0-9-]+\.md)`", navigational)
         assert mentions, name
         for mention in mentions:
@@ -547,7 +548,9 @@ def mixed_line(position: str, reference: str) -> str:
         return f"- Review {link} then {MIXED_CITATION}."
     if position == "between":
         return f"- Review {MIXED_CITATION} then {link} then {SECOND_CITATION}."
-    return f"- Review {MIXED_CITATION} then {link}."
+    if position == "after":
+        return f"- Review {MIXED_CITATION} then {link}."
+    raise ValueError(f"unknown mixed-line position: {position}")
 
 
 def append_mixed_line(skill_copy: Path, position: str, reference: str) -> None:
@@ -572,8 +575,10 @@ def test_a_navigation_beside_a_cited_quotation_still_resolves(position, skill_co
                  script=skill_copy / "scripts" / "render-brief.py")
     assert result.returncode == 0, result.stderr
     text = Path(base, "senior-engineer", "senior-engineer-brief.md").read_text(encoding="utf-8")
-    assert MIXED_CITATION in text
-    assert str(skill_copy.resolve()) + "/references/code-review.md" in text
+    expected = mixed_line(position, "code-review.md").replace(
+        "`references/code-review.md`", f"`{skill_copy.resolve()}/references/code-review.md`"
+    )
+    assert expected in text
     assert "`references/" not in text
 
 
