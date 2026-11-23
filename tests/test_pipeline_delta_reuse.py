@@ -826,9 +826,65 @@ def test_a_host_rename_limit_does_not_change_exclusions_or_the_embedded_diff(tmp
     hostile_text = dossier_bytes(hostile_env, tmp_path / "hostile" / "run")
     assert default_text == hostile_text
     text = default_text.decode()
-    assert "===== EXCLUDED" in text and "dst-a.txt" in text and "dst-b.txt" in text, text
+    excluded = text.split("===== EXCLUDED", 1)[1].split("===== DIFF (", 1)[0]
+    rows = sorted(line for line in excluded.splitlines() if line.startswith('"'))
+    assert rows == [
+        '"dst-a.txt" | linguist-generated',
+        '"dst-b.txt" | linguist-generated',
+        '"gen-a.txt" | linguist-generated',
+        '"gen-b.txt" | linguist-generated',
+    ], rows
     diff = text.split("===== DIFF (", 1)[1]
     assert "line five changed" not in diff, diff
+    assert "diff --git a/.gitattributes b/.gitattributes" in diff, diff
+
+
+def test_rename_pairing_stays_exhaustive_above_a_bounded_host_limit(tmp_path):
+    """1100 edited renames: a host rename limit must not drop a generated destination from EXCLUDED."""
+    env = fixed_env(tmp_path)
+    config = tmp_path / "host.gitconfig"
+    config.write_text("[diff]\n\trenameLimit = 5\n")
+    env["GIT_CONFIG_GLOBAL"] = str(config)
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, env, "init", "-q", "--initial-branch=main")
+    _git(repo, env, "config", "core.autocrlf", "false")
+    _git(repo, env, "config", "commit.gpgsign", "false")
+    count = 1100
+
+    def body(i: int, edited: bool) -> str:
+        return "".join(f"file {i} line {n}{' changed' if edited and n == 5 else ''}\n"
+                       for n in range(1, 11))
+
+    for i in range(count):
+        (repo / f"src{i:04d}.txt").write_text(body(i, False))
+    _git(repo, env, "add", "-A")
+    _git(repo, env, "commit", "-q", "-m", "base")
+    _git(repo, env, "tag", "base")
+    rules = []
+    for i in range(count):
+        (repo / f"src{i:04d}.txt").rename(repo / f"dst{i:04d}.txt")
+        (repo / f"dst{i:04d}.txt").write_text(body(i, True))
+        rules.append(f"src{i:04d}.txt linguist-generated")
+    (repo / ".gitattributes").write_text("\n".join(rules) + "\n")
+    _git(repo, env, "add", "-A")
+    _git(repo, env, "commit", "-q", "-m", "renamed")
+    scratch = tmp_path / "session-scratch"
+    scratch.mkdir()
+    spec = tmp_path / "spec.txt"
+    spec.write_text(SPEC_TEXT)
+    pre = run_script("preflight", "--full-suite", "off", "--repo", str(repo), "--base", "base",
+                     "--test-cmd", "true", "--scratch", str(scratch), env=env)
+    assert pre.returncode == 0, pre.stdout + pre.stderr
+    result = run_script("dossier", "sweep", "--repo", str(repo), "--base", "base",
+                        "--spec", str(spec), "--scratch", str(scratch), env=env)
+    assert result.returncode == 0, result.stdout + result.stderr
+    text = Path(result.stdout.strip().splitlines()[-1]).read_text()
+    excluded = text.split("===== EXCLUDED", 1)[1].split("===== DIFF (", 1)[0]
+    rows = [line for line in excluded.splitlines() if line.startswith('"')]
+    assert len(rows) == 2 * count, f"{len(rows)} excluded rows, expected {2 * count}"
+    diff = text.split("===== DIFF (", 1)[1]
+    assert "line five changed" not in diff, "a generated destination's content reached the diff"
 
 
 def test_the_diffstat_keeps_gits_default_allocation_at_the_pinned_width(tmp_path):

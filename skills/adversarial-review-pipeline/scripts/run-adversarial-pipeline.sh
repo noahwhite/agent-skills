@@ -207,9 +207,10 @@
 # diff one section at a time. The diffstat pins --no-ext-diff, --no-color, the a/ and b/ prefixes,
 # --no-textconv, --find-renames, --submodule=short and the inter-hunk context for the same reason;
 # the embedded diff pins the same plus the algorithm and indent heuristic, and every diff and
-# diffstat call pins core.quotePath, core.abbrev, diff.renameLimit, diff.suppressBlankEmpty and
-# diff.orderFile so a non-ASCII path, an object id and the hunk/rename layout render the same way
-# everywhere. Every call runs in a bare throwaway git dir over this repository's object store, with
+# diffstat call pins core.quotePath, core.abbrev, diff.renameLimit (0, exhaustive: a bounded limit
+# would skip pairing above it and let a generated destination drop out of the EXCLUDED set),
+# diff.suppressBlankEmpty and diff.orderFile so a non-ASCII path, an object id and the
+# hunk/rename layout render the same way everywhere. Every call runs in a bare throwaway git dir over this repository's object store, with
 # the system attributes file off and core.attributesFile at /dev/null, so neither a user's
 # `*.py -diff` (or a textconv or diff driver it names), the system attributes file nor this clone's
 # .git/info/attributes can turn a textual change into a binary notice the reviewer never sees, while
@@ -2416,7 +2417,7 @@ pinned_diff() {  # the arguments of one git diff invocation
     GIT_OBJECT_DIRECTORY="$DIFF_OBJECTS" GIT_ATTR_NOSYSTEM=1 \
     git --git-dir="$DIFF_GIT" --attr-source="$HEAD_SHA" -c core.attributesFile=/dev/null \
     -c core.quotePath=true -c core.abbrev=7 -c core.bigFileThreshold=512m \
-    -c diff.renameLimit=1000 -c diff.suppressBlankEmpty=false -c diff.orderFile=/dev/null \
+    -c diff.renameLimit=0 -c diff.suppressBlankEmpty=false -c diff.orderFile=/dev/null \
     -c diff.statNameWidth=0 -c diff.statGraphWidth=0 "$@"
 }
 
@@ -2449,7 +2450,7 @@ emit_context() {  # $1 = the phase's checkout, $2 = 1 to embed the unified diff,
   filter_cfg="$(git config --get-regexp '^remote\..*\.partialclonefilter$' 2>/dev/null || true)"
   if [ -n "$(git config --get extensions.partialClone 2>/dev/null || true)" ] \
     || [ "$promisor" = "true" ] || [ -n "$filter_cfg" ]; then
-    git diff --numstat --no-ext-diff "$BASE_SHA"..."$HEAD_SHA" > /dev/null
+    git diff --numstat --no-ext-diff --no-textconv "$BASE_SHA"..."$HEAD_SHA" > /dev/null
   fi
   env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE -u GIT_OBJECT_DIRECTORY \
     git init -q --bare --template= --object-format="$(git rev-parse --show-object-format)" \
