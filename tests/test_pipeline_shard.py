@@ -249,7 +249,8 @@ def test_paths_and_dossier_sizes_list_one_line_per_shard(accepted_gate):
     assert files["hunt.2"] == run_dir / "phase2-hunt.2.md"
     listed = run_script("paths", "--repo", str(repo), "--base", "HEAD", env=env)
     assert [line.split(" ", 1)[0] for line in listed.stdout.splitlines()] == [
-        "run", "preflight", "suite_log", "sweep", "hunt.1", "hunt.2", "arbitrate", "dossier_sizes",
+        "run", "preflight", "suite_log", "sweep", "hunt.1", "hunt.2", "arbitrate",
+        "reuse_hits", "reuse_misses", "dossier_sizes",
     ], listed.stdout
     sizes = (run_dir / "dossier-sizes.md").read_text().splitlines()
     hunt_lines = [line for line in sizes if line.startswith("hunt")]
@@ -1072,3 +1073,97 @@ def test_every_phase_status_and_diagnosis_line_carries_the_shard(accepted_gate, 
     assert plain_heads, plain_failed.stderr
     for line in plain_heads:
         assert [field for field in line.split() if field.startswith("shard=")] == [], line
+
+
+# --- A sharded run and the identical-tree reuse: its ordinary sweep still donates -----------------
+
+def test_a_sharded_run_whose_arbitration_lapsed_does_not_block_the_hunt(tmp_path):
+    """A shard set never produced one hunt artifact, so it is no lapsed donor for a fresh hunt."""
+    repo, scratch, env = new_gate(tmp_path)
+    for k in (1, 2):
+        hunt = run_hunt(repo, scratch, env, "--shard", f"{k}/2", "--no-sweep")
+        assert hunt.returncode == 0, hunt.stdout + hunt.stderr
+    arb = run_arbitrate(repo, scratch, env, "--no-sweep")
+    assert arb.returncode == 0, arb.stdout + arb.stderr
+    run_dir = paths(repo, env)["run"]
+    history = (run_dir / "arbitrate.accepted.log").read_text()
+    head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo, check=True,
+                          capture_output=True, text=True, env=env).stdout.strip()
+    accepted = [line for line in history.splitlines() if f"head={head}" in line]
+    assert accepted, history
+    assert "spec=none" in accepted[0] and "no_sweep=1" in accepted[0], accepted[0]
+    (run_dir / "phase3-arbitration.md.stamp").unlink()
+    subprocess.run(["git", "commit", "-q", "--allow-empty", "-m", "same tree"], cwd=repo,
+                   check=True, capture_output=True, env=env)
+    pre = run_preflight(repo, scratch, env)
+    assert pre.returncode == 0, pre.stdout + pre.stderr
+    marker = tmp_path / "hunt.launched"
+    launched = (f"touch {marker}; {{ printf \"REVIEW-RAN: yes\\nhunt ok\\n\"; }} > {{output_file}}")
+    again = run_hunt(repo, scratch, env, "--no-sweep", agent=launched)
+    assert again.returncode == 0, again.stdout + again.stderr
+    assert marker.exists(), "the fresh hunt was refused as a lapse of a sharded run"
+    assert "acceptance lapsed" not in again.stderr, again.stderr
+
+
+def test_a_tampered_shard_artifact_is_refused(tmp_path):
+    """Each shard's stamp binds its own bytes, so editing a shard after acceptance refuses it."""
+    repo, scratch, env = new_gate(tmp_path)
+    assert run_sweep(repo, scratch, env).returncode == 0
+    for k in (1, 2):
+        hunt = run_hunt(repo, scratch, env, "--shard", f"{k}/2")
+        assert hunt.returncode == 0, hunt.stdout + hunt.stderr
+    run_dir = paths(repo, env)["run"]
+    stamp = (run_dir / "phase2-hunt.1.md.stamp").read_text()
+    assert not stamp.startswith("sha256=\n"), stamp
+    with (run_dir / "phase2-hunt.1.md").open("a") as handle:
+        handle.write("tampered\n")
+    arb = run_arbitrate(repo, scratch, env)
+    assert arb.returncode == 13, arb.stdout + arb.stderr
+    assert "1/2" in arb.stderr, arb.stderr
+
+
+def test_a_sharded_hunt_prints_one_reuse_miss_and_paths_counts_it(accepted_gate):
+    repo, scratch, env = accepted_gate
+    hunt = run_hunt(repo, scratch, env, "--shard", "1/2")
+    assert hunt.returncode == 0, hunt.stdout + hunt.stderr
+    lines = [line for line in hunt.stderr.splitlines() if line.startswith("reuse: ")]
+    assert lines == ["reuse: miss reason=no accepted run"], hunt.stderr
+    listed = run_script("paths", "--repo", str(repo), "--base", "HEAD", env=env)
+    assert listed.returncode == 0, listed.stdout + listed.stderr
+    # One miss each for the preflight, the sweep and the sharded hunt.
+    assert "reuse_misses 3" in listed.stdout, listed.stdout
+
+
+def test_a_sharded_runs_sweep_is_reused_at_an_identical_tree_and_delta_resolves_it(tmp_path):
+    repo, scratch, env = new_gate(tmp_path)
+    sweep = run_sweep(repo, scratch, env)
+    assert sweep.returncode == 0, sweep.stdout + sweep.stderr
+    for k in (1, 2):
+        hunt = run_hunt(repo, scratch, env, "--shard", f"{k}/2")
+        assert hunt.returncode == 0, hunt.stdout + hunt.stderr
+    arb = run_arbitrate(repo, scratch, env)
+    assert arb.returncode == 0, arb.stdout + arb.stderr
+    accepted_head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo, check=True,
+                                   capture_output=True, text=True, env=env).stdout.strip()
+    # A new head with the identical tree: the sharded run's arbitration accepts over its shard set,
+    # so its ordinary sweep is reusable even though the sharded hunt itself is not.
+    subprocess.run(["git", "commit", "-q", "--allow-empty", "-m", "same tree"], cwd=repo,
+                   check=True, capture_output=True, env=env)
+    pre = run_preflight(repo, scratch, env)
+    assert pre.returncode == 0, pre.stdout + pre.stderr
+    marker = tmp_path / "sweep.launched"
+    launched = (f"touch {marker}; {{ printf \"REVIEW-RAN: yes\\nsweep ok\\n\"; }} > {{output_file}}")
+    again = run_sweep(repo, scratch, env, agent=launched)
+    assert again.returncode == 0, again.stdout + again.stderr
+    assert not marker.exists(), "the sweep was launched instead of reused from the sharded run"
+    reuse_lines = [line for line in again.stderr.splitlines() if line.startswith("reuse: hit ")]
+    assert len(reuse_lines) == 1, again.stderr
+    # And the sharded run is a valid delta base: an accepted ancestor of the new head.
+    delta = run_script("paths", "--repo", str(repo), "--delta", env=env)
+    assert delta.returncode == 0, delta.stdout + delta.stderr
+    run_dir = Path(next(line.split(" ", 1)[1] for line in delta.stdout.splitlines()
+                        if line.startswith("run ")))
+    head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo, check=True,
+                          capture_output=True, text=True, env=env).stdout.strip()
+    assert run_dir.name.endswith(f"-{head}"), run_dir
+    assert accepted_head in run_dir.name, run_dir

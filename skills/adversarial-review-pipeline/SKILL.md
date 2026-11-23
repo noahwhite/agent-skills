@@ -273,6 +273,32 @@ Its dossier carries the story, the diffstat, both phase reports, the base and he
 The arbiter filters hallucinations and unexploitable edge cases, weighs Phase-2 empirical results over Phase-1 theory, surfaces cross-module and architectural regressions, writes the report, and states which categories it found clean.
 Its output is the gate's deliverable.
 
+### Delta re-gate and reuse
+
+A re-gate after a fix may review only the delta since the last accepted head: pass `--base <head of
+the last accepted run>`, or `--delta`, which resolves that head from the run store (an already
+accepted HEAD resolves to its own run; with no accepted ancestor it exits 12 and changes no run
+state). `--story-base REF` names the story's own base when it differs from the delta base, and the
+arbitrate dossier then names both bases and the reviewed range. The story base is provenance, not a
+diff range, so it need not be an ancestor of HEAD; it is recorded per spec at a gate start
+(`preflight` or a phase `run`), where an explicit `--story-base` is authoritative and rewrites that
+spec's record, while an inspection command only reads it: `paths --spec <other>` can neither create
+it nor override a recorded value. The first gate of a story still passes `--base origin/<integration branch>`.
+
+When an accepted run for the same spec has the same tree identity
+(`<mergeBaseTree>-<headTree>-<specSha>`), `run sweep` and `run hunt` accept its artifact without
+launching a model, and the stamp records `reused=<identity>` and `reused_run=<producing run>`. Every
+phase prints exactly one `reuse:` line on stderr - `reuse: hit <identity> from run <dir>` or
+`reuse: miss reason=<no accepted run|spec mismatch|identity mismatch|acceptance lapsed>` - and
+`paths` prints `reuse_hits <n>`, `reuse_misses <n>` and one `reused <phase> <identity> <producing
+run>` line per reused phase. Preflight always runs fresh and arbitration is never reused, so a
+stale trace cannot stand in for either. A sharded hunt is a shard set rather than one artifact, so a
+sharded `run hunt --shard K/N` always launches and prints its one `reuse:` line as a miss, while the
+run's ordinary sweep still donates and a sharded run is still a valid delta base and reuse producer.
+A reuse that fails after its copy is undone, so `paths` never reports a hit that did not happen.
+The identity is content-addressed, so the diff options pinned for deterministic dossiers do not
+affect it.
+
 ### Arbiter identity and retained rounds
 
 The script, not the model, records who arbitrated.

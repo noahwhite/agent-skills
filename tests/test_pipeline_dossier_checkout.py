@@ -349,7 +349,8 @@ def failing_git_env(g: dict, args: str) -> dict[str, str]:
     first, second = args.split()
     wrapper.write_text(
         "#!/usr/bin/env bash\n"
-        f'if [ "$1" = {first} ] && [ "$2" = {second} ]; then echo "{args} refused" >&2; exit 3; fi\n'
+        'args=("$@")\nwhile [ "${#args[@]}" -ge 1 ]; do case "${args[0]}" in --git-dir=*|--attr-source=*) args=("${args[@]:1}") ;; -c) [ "${#args[@]}" -ge 2 ] && args=("${args[@]:2}") || break ;; *) break ;; esac; done\n'
+        f'if [ "${{args[0]}}" = {first} ] && [ "${{args[1]}}" = {second} ]; then echo "{args} refused" >&2; exit 3; fi\n'
         f'exec "{real_git}" "$@"\n'
     )
     wrapper.chmod(0o755)

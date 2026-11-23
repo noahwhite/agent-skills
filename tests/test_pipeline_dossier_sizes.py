@@ -299,7 +299,8 @@ def test_a_removal_that_finds_no_sidecar_still_rebuilds_the_log(gate, flow):
     fakebin.mkdir()
     (fakebin / "git").write_text(
         "#!/usr/bin/env bash\n"
-        'if [ "$1" = diff ] && [ "$2" = --stat ]; then echo refused >&2; exit 3; fi\n'
+        'args=("$@")\nwhile [ "${#args[@]}" -ge 1 ]; do case "${args[0]}" in --git-dir=*|--attr-source=*) args=("${args[@]:1}") ;; -c) [ "${#args[@]}" -ge 2 ] && args=("${args[@]:2}") || break ;; *) break ;; esac; done\n'
+        'if [ "${args[0]}" = diff ] && [ "${args[1]}" = --stat ]; then echo refused >&2; exit 3; fi\n'
         f'exec "{real_git}" "$@"\n')
     (fakebin / "git").chmod(0o755)
     env = {**gate["env"], "PATH": f"{fakebin}:{gate['env']['PATH']}"}
@@ -337,8 +338,11 @@ def test_paths_prints_the_log_as_a_final_added_line(gate):
     lines = paths_output(gate)
     run = Path(lines[0].split(" ", 1)[1])
     assert run.is_absolute(), lines
+    # SKL-411 adds the reuse counts (and any reused-phase lines) before the log line, so the size
+    # log stays the final line.
     assert [line.split(" ", 1)[0] for line in lines] == [
-        "run", "preflight", "suite_log", "sweep", "hunt", "arbitrate", "dossier_sizes"], lines
+        "run", "preflight", "suite_log", "sweep", "hunt", "arbitrate",
+        "reuse_hits", "reuse_misses", "dossier_sizes"], lines
     assert lines[1:6] == [
         f"preflight {run}/phase0-preflight.md",
         f"suite_log {run}/phase0-suite.log",
@@ -346,7 +350,9 @@ def test_paths_prints_the_log_as_a_final_added_line(gate):
         f"hunt {run}/phase2-hunt.md",
         f"arbitrate {run}/phase3-arbitration.md",
     ], lines
-    assert lines[6] == f"dossier_sizes {run}/dossier-sizes.md", lines
+    assert lines[6] == "reuse_hits 0", lines
+    assert lines[7] == "reuse_misses 1", lines   # the fixture ran the preflight, which is never reused
+    assert lines[8] == f"dossier_sizes {run}/dossier-sizes.md", lines
 
 
 # --- invocations refused before begin_phase leave the log unchanged ------------------------------------
