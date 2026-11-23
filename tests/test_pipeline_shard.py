@@ -630,6 +630,28 @@ def test_every_phase_status_and_diagnosis_line_carries_the_shard(accepted_gate):
 
 # --- A sharded run and the identical-tree reuse: its ordinary sweep still donates -----------------
 
+def test_a_sharded_run_whose_arbitration_lapsed_does_not_block_the_hunt(tmp_path):
+    """A shard set never produced one hunt artifact, so it is no lapsed donor for a fresh hunt."""
+    repo, scratch, env = new_gate(tmp_path)
+    for k in (1, 2):
+        hunt = run_hunt(repo, scratch, env, "--shard", f"{k}/2", "--no-sweep")
+        assert hunt.returncode == 0, hunt.stdout + hunt.stderr
+    arb = run_arbitrate(repo, scratch, env, "--no-sweep")
+    assert arb.returncode == 0, arb.stdout + arb.stderr
+    run_dir = paths(repo, env)["run"]
+    (run_dir / "phase3-arbitration.md.stamp").unlink()
+    subprocess.run(["git", "commit", "-q", "--allow-empty", "-m", "same tree"], cwd=repo,
+                   check=True, capture_output=True, env=env)
+    pre = run_preflight(repo, scratch, env)
+    assert pre.returncode == 0, pre.stdout + pre.stderr
+    marker = tmp_path / "hunt.launched"
+    launched = (f"touch {marker}; {{ printf \"REVIEW-RAN: yes\\nhunt ok\\n\"; }} > {{output_file}}")
+    again = run_hunt(repo, scratch, env, "--no-sweep", agent=launched)
+    assert again.returncode == 0, again.stdout + again.stderr
+    assert marker.exists(), "the fresh hunt was refused as a lapse of a sharded run"
+    assert "acceptance lapsed" not in again.stderr, again.stderr
+
+
 def test_a_sharded_hunt_prints_one_reuse_miss_and_paths_counts_it(accepted_gate):
     repo, scratch, env = accepted_gate
     hunt = run_hunt(repo, scratch, env, "--shard", "1/2")

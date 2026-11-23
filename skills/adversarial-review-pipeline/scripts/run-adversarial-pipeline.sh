@@ -99,10 +99,11 @@
 # the producing run of a reused phase). With no candidate, --delta exits 12 and changes no run
 # state; it never falls back to the story base. The first gate of a story passes the story base with
 # --base. The run and its acceptance are keyed on (base, HEAD, spec), so a delta run has its own run
-# directory and its own stamps. The story base is recorded once in the run directory and never
-# rewritten; a conflicting explicit --story-base is refused (exit 12), and an explicit story base
-# that is not an ancestor of HEAD is refused too. An inherited ADVERSARIAL_BASE is overridden by an
-# explicit --delta; an explicit --base together with --delta is a usage error.
+# directory and its own stamps. The story base is provenance, not a diff range: it is recorded once
+# per spec in the run directory at a gate start and never rewritten, an explicit story base need not
+# be an ancestor of HEAD, and a conflicting explicit value is refused (exit 12). An inspection
+# command only reads it. An inherited ADVERSARIAL_BASE is overridden by an explicit --delta; an
+# explicit --base together with --delta is a usage error.
 #
 # The arbitrate dossier names both the story base and the run's base (the delta base) and states
 # the reviewed commit range whenever the two differ. A non-delta run emits no such lines, so its
@@ -118,7 +119,8 @@
 # `reused=<identity>` and `reused_run=<producing run dir>`, and no launch marker is written. Only
 # those two model phases are reusable; the preflight always runs fresh (its acceptance is bound to
 # the head tree), and arbitrate is never reused. A sharded hunt invocation is never reused either:
-# its artifacts are a shard set, and it prints no reuse line. A hunt is reused only from a producing
+# its artifacts are a shard set, so it launches fresh and prints its one `reuse:` line as a miss. A
+# hunt is reused only from a producing
 # run with the same --no-sweep mode and, when the sweep is enabled, the same accepted sweep
 # artifact, because a hunt verifies the sweep report it actually read. Reuse never marks a phase
 # accepted that was not accepted before: a run that completed arbitration appends to a durable
@@ -1394,6 +1396,10 @@ reuse_lookup() {  # $1 = phase
     [[ "$name" =~ $RUN_NAME_RE ]] || continue
     base="${BASH_REMATCH[1]}"; head="${BASH_REMATCH[2]}"
     git rev-parse --verify -q "${head}^{commit}" >/dev/null || continue
+    # A run whose hunt plan is sharded never wrote one unsharded hunt artifact, so it can donate its
+    # sweep but can neither donate a hunt nor read as a lapsed hunt producer. It is excluded before
+    # either the live-stamp or the historical-lapse classification can select it.
+    if [ "$phase" = "hunt" ] && [ -f "$rundir/hunt.shards" ]; then continue; fi
     prefix="$(tree_prefix_of "$base" "$head")" || continue
     saw_run=1
     [ "$prefix" = "$cur_prefix" ] || continue
@@ -1434,9 +1440,6 @@ reuse_lookup() {  # $1 = phase
       continue
     fi
     saw_identity=1
-    # A run whose hunt plan is sharded never wrote one unsharded hunt artifact, so it can donate its
-    # sweep but can neither donate a hunt nor read as a lapsed hunt producer.
-    if [ "$phase" = "hunt" ] && [ -f "$rundir/hunt.shards" ]; then continue; fi
     ns="$(run_field "$rundir" no_sweep)" || ns=0
     # A disabled or differently configured phase is not a source, and its producer never blocks this
     # phase as a lapse (a --no-sweep producer could never donate a sweep or a sweep-backed hunt).
@@ -2405,7 +2408,7 @@ DIFF_OBJECTS=""
 pinned_diff() {  # the arguments of one git diff invocation
   env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
     GIT_OBJECT_DIRECTORY="$DIFF_OBJECTS" GIT_ATTR_NOSYSTEM=1 \
-    git --git-dir="$DIFF_GIT" -c core.attributesFile=/dev/null \
+    git --git-dir="$DIFF_GIT" --attr-source="$HEAD_SHA" -c core.attributesFile=/dev/null \
     -c core.quotePath=true -c core.abbrev=7 -c core.bigFileThreshold=512m \
     -c diff.renameLimit=1000 -c diff.suppressBlankEmpty=false -c diff.orderFile=/dev/null \
     -c diff.statNameWidth=0 -c diff.statGraphWidth=0 "$@"
@@ -2430,6 +2433,11 @@ emit_context() {  # $1 = the phase's checkout, $2 = 1 to embed the unified diff,
   diffdir="$(mktemp -d -p "$SCRATCH" diff.XXXXXX)"
   DIFF_OBJECTS="$(git rev-parse --path-format=absolute --git-path objects)"
   DIFF_GIT="$diffdir/objects.git"
+  # A partial clone fetches promised blobs lazily; the isolated repository has no promisor of its
+  # own, so materialize the range's objects through this repository first.
+  if [ -n "$(git config --get extensions.partialClone 2>/dev/null || true)" ]; then
+    git diff --numstat --no-ext-diff "$BASE_SHA"..."$HEAD_SHA" > /dev/null || true
+  fi
   env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE -u GIT_OBJECT_DIRECTORY \
     git init -q --bare --template= --object-format="$(git rev-parse --show-object-format)" \
       --initial-branch=dossier "$DIFF_GIT"

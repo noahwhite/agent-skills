@@ -276,8 +276,8 @@ phase prints exactly one `reuse:` line on stderr - `reuse: hit <identity> from r
 `paths` prints `reuse_hits <n>`, `reuse_misses <n>` and one `reused <phase> <identity> <producing
 run>` line per reused phase. Preflight always runs fresh and arbitration is never reused, so a
 stale trace cannot stand in for either. A sharded hunt is a shard set rather than one artifact, so a
-sharded `run hunt --shard K/N` always launches and prints no reuse line, while the run's ordinary
-sweep still donates and a sharded run is still a valid delta base and reuse producer.
+sharded `run hunt --shard K/N` always launches and prints its one `reuse:` line as a miss, while the
+run's ordinary sweep still donates and a sharded run is still a valid delta base and reuse producer.
 A reuse that fails after its copy is undone, so `paths` never reports a hit that did not happen.
 The identity is content-addressed, so the diff options pinned for deterministic dossiers do not
 affect it.

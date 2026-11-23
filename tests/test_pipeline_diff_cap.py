@@ -652,7 +652,7 @@ def failing_unified_diff_env(g: dict) -> dict[str, str]:
         'args=("$@")\n'
         'while [ "${#args[@]}" -ge 1 ]; do\n'
         '  case "${args[0]}" in\n'
-        '    --git-dir=*) args=("${args[@]:1}") ;;\n'
+        '    --git-dir=*|--attr-source=*) args=("${args[@]:1}") ;;\n'
         '    -c) [ "${#args[@]}" -ge 2 ] && args=("${args[@]:2}") || break ;;\n'
         '    *) break ;;\n'
         '  esac\n'

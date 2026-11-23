@@ -698,6 +698,37 @@ def test_a_user_attributes_file_cannot_hide_a_textual_change(tmp_path):
     assert "Binary files" not in diff, "a user attributes file turned a textual change binary"
 
 
+def test_a_committed_gitattributes_still_controls_the_embedded_diff(tmp_path):
+    """The head's own .gitattributes stay the attribute source; only user and clone files are out."""
+    env = fixed_env(tmp_path)
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, env, "init", "-q", "--initial-branch=main")
+    _git(repo, env, "config", "core.autocrlf", "false")
+    _git(repo, env, "config", "commit.gpgsign", "false")
+    (repo / "app.py").write_text(APP_BASE)
+    (repo / ".gitattributes").write_text("app.py -diff\n")
+    _git(repo, env, "add", "-A")
+    _git(repo, env, "commit", "-q", "-m", "base")
+    _git(repo, env, "tag", "base")
+    (repo / "app.py").write_text(APP_HEAD)
+    _git(repo, env, "add", "-A")
+    _git(repo, env, "commit", "-q", "-m", "head")
+    scratch = tmp_path / "session-scratch"
+    scratch.mkdir()
+    spec = tmp_path / "spec.txt"
+    spec.write_text(SPEC_TEXT)
+    result = run_script("preflight", "--full-suite", "off", "--repo", str(repo), "--base", "base",
+                        "--test-cmd", "true", "--scratch", str(scratch), env=env)
+    assert result.returncode == 0, result.stdout + result.stderr
+    result = run_script("dossier", "sweep", "--repo", str(repo), "--base", "base",
+                        "--spec", str(spec), "--scratch", str(scratch), env=env)
+    assert result.returncode == 0, result.stdout + result.stderr
+    dossier = Path(result.stdout.strip().splitlines()[-1]).read_text()
+    diff = dossier.split("===== DIFF (", 1)[1]
+    assert "Binary files" in diff and "def mean" not in diff, diff
+
+
 def test_the_diffstat_keeps_gits_default_allocation_at_the_pinned_width(tmp_path):
     """AC4: pinning the reference width must not change an ordinary non-delta diffstat."""
     env = fixed_env(tmp_path)
