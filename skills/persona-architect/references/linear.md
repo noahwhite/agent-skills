@@ -86,8 +86,8 @@ The `linear` CLI (schpet/linear-cli) is the primary tool; the Linear MCP server 
   - Independent: the story can be built, reviewed and shipped without another story's unfinished work, or its blocked-by relations name that work.
   - Negotiable: the story states the outcome and leaves the implementation open wherever its acceptance criteria do not fix it.
   - Valuable: the story names who benefits and delivers a change they can observe.
-  - Estimable: the voters can size it under the pointing basis, and an unknown that blocks sizing is named as a risk.
-  - Small: the story fits under the split rule in Estimation and slicing, or the draft carries its split.
+  - Estimable: the draft states its scope fully enough that a voter could size it, and an unknown that blocks sizing is named as a risk.
+  - Small: the draft holds no part that delivers an outcome of its own and could ship as a separate story, or it carries the split that separates that part; an expected point value is never a Small failure, because the split rule in Estimation and slicing acts on the recorded estimate after pointing.
   - Testable: every acceptance criterion, where the filing template has them, states observable behaviour that a check can confirm.
 
   At the accept round the "Story is estimated" box is judged as Estimable, because pointing follows acceptance, and the blocker box is judged on what the draft records, so a recorded blocker that is not yet done keeps the story out of `profile.tracker.states.ready` without failing the draft.

@@ -1742,8 +1742,9 @@ SKIP_BRANCH_CHALLENGE = (
     "When the consensus check skips the discussion and the re-vote, this review runs as a basis-challenge round "
     "of its own: the facilitator launches each challenged voter once per round in a newly created voter context "
     "whose prompt lists every ground challenged for that voter and carries the story, the refinement comment id, "
-    "that voter's own recorded value and rationale, the Step 3 pointing basis and the Step 3 item 4 rationale "
-    "rule; an off-sequence replacement value is re-recorded in a second launch of that voter. That launch records "
+    "that voter's own recorded value and rationale, the Step 3 pointing basis, the Step 3 item 4 rationale rule "
+    "and the movement rule of Vote movement in [Deliberation](references/deliberation.md); an off-sequence "
+    "replacement value is re-recorded in a second launch of that voter. That launch records "
     "a replacement value for that voter only when the voter's basis does not support its recorded value, and "
     "otherwise the value that stands holds. An unresolved ground voids the round under the Anchoring guardrail, "
     "so no estimate and no split action survives an unresolved challenge."
@@ -5386,8 +5387,8 @@ SHORT_PATH_CONDITIONS = {
     ),
     "e": (
         "(e) ready-eligible: the story is in `profile.tracker.states.backlog`, its priority is set and its assignee is "
-        "`profile.tracker.assignee`, the blocker Definition of Ready box exists, and the other two Definition of "
-        'Ready boxes, "Story is estimated" and the "checked against the implementation" box, are already ticked.'
+        "`profile.tracker.assignee`, the blocker Definition of Ready box exists, and every other Definition of Ready "
+        "box on the issue is already ticked, a box an earlier template put there included."
     ),
 }
 SHORT_PATH_EVALUATION = (
@@ -5743,8 +5744,8 @@ CODEBOOK_JUDGEMENT = [
     "The codebook is the Definition of Ready boxes the filing template has and the INVEST criteria, as Triage and "
     "Definition of Ready in [linear.md](linear.md) lists them.",
     "Each accept-round brief carries the anonymised draft under a snapshot label that names no comment, no voter "
-    "and no input, and the codebook verbatim, with each Definition of Ready box copied in full from the filing "
-    "template.",
+    "and no input, and the codebook verbatim, the notes after its six INVEST criteria included, with each Definition "
+    "of Ready box copied in full from the filing template.",
     "It carries nothing that attributes the draft or leads to an attribution: no refinement comment id, no voter "
     "input, no voter-input line, no per-voter verdict and no family or model name.",
     "The facilitator alone keeps the mapping from the snapshot label to the refinement comment id.",
@@ -5782,9 +5783,11 @@ INVEST_LINES = [
     "  - Negotiable: the story states the outcome and leaves the implementation open wherever its acceptance criteria "
     "do not fix it.",
     "  - Valuable: the story names who benefits and delivers a change they can observe.",
-    "  - Estimable: the voters can size it under the pointing basis, and an unknown that blocks sizing is named as a "
-    "risk.",
-    "  - Small: the story fits under the split rule in Estimation and slicing, or the draft carries its split.",
+    "  - Estimable: the draft states its scope fully enough that a voter could size it, and an unknown that blocks "
+    "sizing is named as a risk.",
+    "  - Small: the draft holds no part that delivers an outcome of its own and could ship as a separate story, or it "
+    "carries the split that separates that part; an expected point value is never a Small failure, because the split "
+    "rule in Estimation and slicing acts on the recorded estimate after pointing.",
     "  - Testable: every acceptance criterion, where the filing template has them, states observable behaviour that a "
     "check can confirm.",
 ]
@@ -5890,11 +5893,13 @@ def test_step_four_re_vote_names_what_moved_the_vote() -> None:
 
 
 VOTE_MOVEMENT = [
-    "Each re-vote prompt carries this rule: the re-vote rationale names what moved the voter's vote, when its re-vote "
-    "value differs from its first vote: the new fact it cites that its Step 3 rationale did not, or none.",
+    "Each re-vote prompt and each basis-challenge prompt carries this rule: the rationale names what moved the "
+    "voter's vote, when the value that stands for it differs from its first vote: each new fact it cites that its "
+    "Step 3 rationale did not, each ground it retracted, or neither.",
     "A voter's first vote is the value it recorded in Step 3 before any discussion or basis challenge, the blind "
     "re-run's value after a void; its re-vote value is the highest value of its accepted set, the lowest for a "
-    "slice, or its Step 3 value when it records no consensus.",
+    "slice, or its Step 3 value when it records no consensus; its basis-challenge replacement is the value a "
+    "basis-challenge launch records in place of its recorded value.",
     "A vote that moved with no new fact cited is flagged `conformity` in the pointing record, whatever else moved "
     "it, a retracted ground included; the flag is recorded apart from the reason the vote moved.",
     "The flag is informational and changes no consensus, no residual variance outcome, no estimate and no stop.",
@@ -5925,8 +5930,9 @@ def test_each_deliberation_section_is_cited_from_its_step(heading: str, pointer:
 def vote_line(engineer: str) -> str:
     return (
         f"  - Engineer {engineer}: first vote <value, or not recorded>; assumptions: <the assumptions its value rests "
-        "on>; evidence cited: <each file, criterion, relation or anchor key, or none>; moved: <not moved | new fact: "
-        "<the fact cited> | retracted ground: <its kind> | no new fact>; conformity: <flagged | not flagged>"
+        "on>; evidence cited: <each file, criterion, relation or anchor key, or none>; moved: <not moved | one or both "
+        "of new fact: <the fact cited> and retracted ground: <its kind> | no new fact>; conformity: <flagged | not "
+        "flagged>"
     )
 
 
@@ -5947,9 +5953,10 @@ def test_pointing_template_records_each_voter_first_vote_and_what_moved_it() -> 
         "On the votes-per-voter lines, a vote moved when the value that stands for that voter, its re-vote value or "
         "its basis-challenge replacement, differs from its first vote.",
         "`new fact` names the fact the voter cited that its Step 3 rationale did not, `retracted ground` names the "
-        "kind of off-basis ground whose retraction produced a replacement value, and `no new fact` marks a vote that "
-        "moved with neither; `conformity: flagged` marks every vote that moved with no new fact cited, a "
-        "retracted-ground move included, and every other vote is `not flagged`.",
+        "kind of off-basis ground whose retraction produced a replacement value, a vote that moved with both "
+        "carries both, and `no new fact` marks a vote that moved with neither; `conformity: flagged` marks exactly "
+        "the votes that moved with no `new fact`, a move carrying only `retracted ground` included, and every other "
+        "vote is `not flagged`.",
         "The `conformity` flag is informational: it changes no consensus, no residual variance outcome, no estimate "
         "and no stop.",
     ],
@@ -6022,23 +6029,33 @@ def removed_box_offenders(files: dict[str, str]) -> list[str]:
 
 
 # Tool and cache directories, and .claude, whose worktrees hold other branches' checkouts.
-DOR_SWEEP_SKIPPED_DIRS = {".git", ".venv", "node_modules", ".pytest_cache", ".ruff_cache", ".claude"}
-# Dated QA evidence records what was true at a past commit, so it may quote a removed box.
-DOR_SWEEP_HISTORICAL = ("docs/qa-evidence/",)
+DOR_SWEEP_SKIPPED_DIRS = {".git", ".venv", "node_modules", ".pytest_cache", ".ruff_cache", "__pycache__", ".claude"}
+# The tests name each removed box on purpose, to prove it is gone.
+DOR_SWEEP_SKIPPED_TOP = "tests"
+
+
+def walk_dor_sweep(root: Path) -> tuple[tuple[str, str], ...]:
+    """Every text file under root, of any extension, except tool directories and the top-level tests directory."""
+    found = []
+    for directory, subdirectories, files in os.walk(root):
+        subdirectories[:] = [
+            name
+            for name in subdirectories
+            if name not in DOR_SWEEP_SKIPPED_DIRS and not (Path(directory) == root and name == DOR_SWEEP_SKIPPED_TOP)
+        ]
+        for file in files:
+            path = Path(directory) / file
+            try:
+                text = path.read_text()
+            except UnicodeDecodeError:
+                continue
+            found.append((path.relative_to(root).as_posix(), text))
+    return tuple(sorted(found))
 
 
 @functools.cache
 def dor_sweep_tree() -> tuple[tuple[str, str], ...]:
-    """Every Markdown file in the repository, except tool directories and dated QA evidence."""
-    found = []
-    for directory, subdirectories, files in os.walk(ROOT):
-        subdirectories[:] = [name for name in subdirectories if name not in DOR_SWEEP_SKIPPED_DIRS]
-        for file in files:
-            path = Path(directory) / file
-            name = path.relative_to(ROOT).as_posix()
-            if path.suffix == ".md" and not name.startswith(DOR_SWEEP_HISTORICAL):
-                found.append((name, path.read_text()))
-    return tuple(sorted(found))
+    return walk_dor_sweep(ROOT)
 
 
 def dor_sweep_files() -> dict[str, str]:
@@ -6047,18 +6064,35 @@ def dor_sweep_files() -> dict[str, str]:
 
 @pytest.mark.parametrize(
     "name",
-    ["README.md", "skills/linear-user-story/SKILL.md", "shared/linear.md", "docs/pruning-routine.md"],
+    [
+        "README.md",
+        "skills/linear-user-story/SKILL.md",
+        "shared/linear.md",
+        "docs/pruning-routine.md",
+        "docs/qa-evidence/SKL-215/README.md",
+        ".agent-skills/review-checklist.txt",
+        "profile/example.yaml",
+    ],
 )
-def test_dor_sweep_reads_guidance_outside_the_skills(name: str) -> None:
-    """Discovery proof: the sweep reads guidance anywhere in the repository, not only skills/ and shared/."""
+def test_dor_sweep_reads_every_text_file_outside_the_tests(name: str) -> None:
+    """Discovery proof: the sweep reads guidance anywhere in the repository, dated QA evidence and non-Markdown included."""
     assert name in dor_sweep_files()
 
 
-def test_dor_sweep_skips_only_dated_qa_evidence() -> None:
-    files = dor_sweep_files()
-    assert not any(name.startswith(DOR_SWEEP_HISTORICAL) for name in files)
-    assert any(name.startswith("docs/") for name in files), "docs/ outside qa-evidence is swept"
-    assert any(name.startswith("spikes/") for name in files), "spikes/ is swept"
+def test_dor_sweep_skips_the_tests() -> None:
+    assert not any(name.startswith("tests/") for name in dor_sweep_files())
+
+
+@pytest.mark.parametrize("name", ["docs/guide.md", "docs/notes.txt", "profile/team.yaml", "skills/x/evals/e.json"])
+def test_dor_sweep_walk_finds_a_restored_box_on_disk(tmp_path: Path, name: str) -> None:
+    """Mutation proof on the walk itself: a removed box written to disk is found, except under tests/ and .git/."""
+    for planted in (name, "tests/test_x.py", ".git/HEAD"):
+        path = tmp_path / planted
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(f"- [ ] {REMOVED_DOR_BOXES[3]}\n")
+    (tmp_path / "logo.png").write_bytes(b"\x89PNG\r\n\x1a\n\xff\xfe")
+    offenders = removed_box_offenders(dict(walk_dor_sweep(tmp_path)))
+    assert offenders == [f"{name}:1: {REMOVED_DOR_BOXES[3]}"]
 
 
 def test_no_shipped_file_names_a_removed_definition_of_ready_box() -> None:

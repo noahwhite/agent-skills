@@ -604,14 +604,19 @@ def test_a_failed_check_changes_nothing_in_the_repository(rig):
     assert snapshot(rig) == before
 
 
-def default_signal_dispositions():
-    """Start the script with SIGHUP, SIGINT and SIGTERM at their defaults.
-
-    bash cannot trap a signal that was ignored when it started, so a suite launched with one of them ignored
-    (under nohup, or by a runner that ignores SIGHUP) would otherwise hang the interrupt tests until they time out.
-    """
-    for sig in (signal.SIGHUP, signal.SIGINT, signal.SIGTERM):
-        signal.signal(sig, signal.SIG_DFL)
+# bash cannot trap a signal that was ignored when it started, so a suite launched with SIGHUP, SIGINT or SIGTERM
+# ignored (under nohup, or by a runner that ignores SIGHUP) would otherwise hang the interrupt tests until they time
+# out. This launcher resets them, and SIGPIPE and SIGXFSZ, which Python itself ignores at startup, then execs its
+# arguments in the same process, so the script keeps the launcher's pid and no Python runs between fork and exec.
+WITH_DEFAULT_SIGNALS = [
+    sys.executable,
+    "-I",
+    "-c",
+    "import os, signal, sys\n"
+    "for name in ('SIGHUP', 'SIGINT', 'SIGTERM', 'SIGPIPE', 'SIGXFSZ'):\n"
+    "    signal.signal(getattr(signal, name), signal.SIG_DFL)\n"
+    "os.execvp(sys.argv[1], sys.argv[1:])",
+]
 
 
 def temp_dir_after(rig, fingerprint):
@@ -637,14 +642,13 @@ def test_an_interrupted_run_stops_the_signer_removes_its_temporary_directory_and
     rig.config("user.signingkey", "key::" + rig.pub(rig.a))
     tmp = Path(tempfile.mkdtemp(dir=rig.root))
     proc = subprocess.Popen(
-        ["bash", str(SOURCE), rig.fp_a],
+        [*WITH_DEFAULT_SIGNALS, "bash", str(SOURCE), rig.fp_a],
         env={**rig.env, "TMPDIR": str(tmp)},
         cwd=rig.repo,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
         start_new_session=True,
-        preexec_fn=default_signal_dispositions,
     )
     try:
         for _ in range(200):
@@ -686,14 +690,13 @@ def test_a_signal_during_cleanup_cannot_skip_the_removal_or_the_single_line(rig,
     rm.chmod(0o755)
     tmp = Path(tempfile.mkdtemp(dir=rig.root))
     proc = subprocess.Popen(
-        ["bash", str(SOURCE), rig.fp_a],
+        [*WITH_DEFAULT_SIGNALS, "bash", str(SOURCE), rig.fp_a],
         env={**rig.env, "PATH": f"{shim}:{rig.env['PATH']}", "TMPDIR": str(tmp)},
         cwd=rig.repo,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
         start_new_session=True,
-        preexec_fn=default_signal_dispositions,
     )
     try:
         for _ in range(200):

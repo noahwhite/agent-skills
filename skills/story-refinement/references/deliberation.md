@@ -14,7 +14,7 @@ These hand-written rules govern how the voters' judgements are formed and shared
 ## Codebook judgement
 
 - The codebook is the Definition of Ready boxes the filing template has and the INVEST criteria, as Triage and Definition of Ready in [linear.md](linear.md) lists them.
-- Each accept-round brief carries the anonymised draft under a snapshot label that names no comment, no voter and no input, and the codebook verbatim, with each Definition of Ready box copied in full from the filing template.
+- Each accept-round brief carries the anonymised draft under a snapshot label that names no comment, no voter and no input, and the codebook verbatim, the notes after its six INVEST criteria included, with each Definition of Ready box copied in full from the filing template.
   It carries nothing that attributes the draft or leads to an attribution: no refinement comment id, no voter input, no voter-input line, no per-voter verdict and no family or model name.
   The facilitator alone keeps the mapping from the snapshot label to the refinement comment id.
 - Every `OBJECT` names the codebook item the draft fails, with its blocking amendment.
@@ -31,8 +31,8 @@ These hand-written rules govern how the voters' judgements are formed and shared
 
 ## Vote movement
 
-- Each re-vote prompt carries this rule: the re-vote rationale names what moved the voter's vote, when its re-vote value differs from its first vote: the new fact it cites that its Step 3 rationale did not, or none.
-- A voter's first vote is the value it recorded in Step 3 before any discussion or basis challenge, the blind re-run's value after a void; its re-vote value is the highest value of its accepted set, the lowest for a slice, or its Step 3 value when it records no consensus.
+- Each re-vote prompt and each basis-challenge prompt carries this rule: the rationale names what moved the voter's vote, when the value that stands for it differs from its first vote: each new fact it cites that its Step 3 rationale did not, each ground it retracted, or neither.
+- A voter's first vote is the value it recorded in Step 3 before any discussion or basis challenge, the blind re-run's value after a void; its re-vote value is the highest value of its accepted set, the lowest for a slice, or its Step 3 value when it records no consensus; its basis-challenge replacement is the value a basis-challenge launch records in place of its recorded value.
 - A vote that moved with no new fact cited is flagged `conformity` in the pointing record, whatever else moved it, a retracted ground included; the flag is recorded apart from the reason the vote moved.
   The flag is informational and changes no consensus, no residual variance outcome, no estimate and no stop.
 - The votes-per-voter lines of the Pointing record in [refinement-record.md](refinement-record.md) record each voter's first vote, assumptions, evidence cited and what moved its vote.
