@@ -8,11 +8,14 @@
 
 PATH is spike, no-deployment or deployed. `--environment` is optional and only on a deployed QA render.
 
-The brief is assembled from the templates in the skill's assets directory (the role's base template, the
-shared rules fragment, then the role's per-path fragment). The tokens {{story}}, {{path}}, {{scratch}},
-{{round}} and {{target}} are replaced by exact string matching in one pass, so a value is never expanded
-again, and each backticked mention of a file in the skill's references directory becomes its absolute
-path. Nothing else in the template is syntax.
+The brief is assembled from the templates in the skill's assets directory: the role's base template, the
+shared rules fragment, the role's permissions fragment, the role's state-move fragment for the selected
+path, then the role's per-path fragment. The tokens {{story}}, {{path}}, {{scratch}}, {{round}} and
+{{target}} are replaced by exact string matching in one pass, so a value is never expanded again, and
+each backticked mention of a file in the skill's references directory becomes its absolute path, except
+inside a cited quotation span (a quoted sentence followed by " at " and a backticked file and line
+number), so a quoted source sentence stays verbatim while every navigational mention, before or after
+it, still resolves and is still checked. Nothing else in the template is syntax.
 
 The output file is <scratch>/senior-engineer/senior-engineer-brief.md or
 <scratch>/qa-agent-round-<n>/qa-agent-round-<n>-brief.md. The role subdirectory must already exist. The file
@@ -49,6 +52,9 @@ LINK = re.compile(r"https://\S+")
 SCRATCH = re.compile(r"/[A-Za-z0-9._/-]+")
 REFERENCE_NAME = re.compile(r"[a-z0-9-]+\.md")
 REFERENCE_OPEN = "`references/"
+# A cited quotation span: a quoted sentence followed by the file and line it comes from. Only the span
+# is exempt from reference resolution; a navigational mention elsewhere on the same line still resolves.
+QUOTATION = re.compile(r'"[^"]*" at `[^`]+\.md:\d+`')
 
 
 class Refusal(Exception):
@@ -134,7 +140,15 @@ def plan(ns: argparse.Namespace) -> tuple[str, str, list[str], dict]:
     if ns.role == "engineer":
         not_taken(ns, ("--round", "--environment", "--commit", "--link"), "an engineer render")
         sub = "senior-engineer"
-        templates = ["brief-engineer.md", "brief-rules.md", f"brief-engineer-{ns.path}.md"]
+        # Only the engineer's deployment-review rule differs by path; QA's closing rule is shared.
+        state_move = "deployed" if ns.path == "deployed" else "handoff"
+        templates = [
+            "brief-engineer.md",
+            "brief-rules.md",
+            "brief-engineer-permissions.md",
+            f"brief-engineer-state-move-{state_move}.md",
+            f"brief-engineer-{ns.path}.md",
+        ]
     else:
         if ns.round is None:
             refuse("missing --round")
@@ -164,7 +178,13 @@ def plan(ns: argparse.Namespace) -> tuple[str, str, list[str], dict]:
                 if not has_host(link):
                     refuse("invalid --link: the URL names no host")
             values["target"] = "\n".join(ns.link)
-        templates = ["brief-qa.md", "brief-rules.md", fragment]
+        templates = [
+            "brief-qa.md",
+            "brief-rules.md",
+            "brief-qa-permissions.md",
+            "brief-qa-state-move.md",
+            fragment,
+        ]
 
     role_dir = checked_scratch(ns.scratch, sub)
     return role_dir, f"{sub}-brief.md", templates, values
@@ -183,31 +203,38 @@ def load(skill_dir: Path, names: list[str]) -> str:
 
 
 def substitute(text: str, values: dict, skill_dir: str) -> str:
-    """One left-to-right pass of exact matches: a replaced value is never scanned again."""
+    """One left-to-right pass of exact matches: a replaced value is never scanned again.
+
+    A backticked `references/` mention is rewritten everywhere except inside a cited quotation span,
+    so an unrelated literal quote never suppresses a navigational reference and a cited quotation is
+    never rewritten. The span, not a quote counter or the whole line, decides.
+    """
     out = []
-    i = 0
-    while i < len(text):
-        if text.startswith("{{", i):
-            token = next((t for t in TOKENS if text.startswith("{{" + t + "}}", i)), None)
-            if token is None:
-                refuse("a template holds an unknown token", 1)
-            if values[token] is None:
-                refuse(f"a template uses the {token} token, which this render does not take", 1)
-            out.append(values[token])
-            i += len(token) + 4
-            continue
-        if text.startswith(REFERENCE_OPEN, i):
-            end = text.find("`", i + 1)
-            name = text[i + len(REFERENCE_OPEN):end] if end != -1 else ""
-            if REFERENCE_NAME.fullmatch(name):
-                absolute = skill_dir + "/references/" + name
-                if not os.path.isfile(absolute):
-                    refuse(f"a template names a missing reference {name}", 1)
-                out.append("`" + absolute + "`")
-                i = end + 1
+    for line in text.splitlines(keepends=True):
+        quoted = [match.span() for match in QUOTATION.finditer(line)]
+        i = 0
+        while i < len(line):
+            if line.startswith("{{", i):
+                token = next((t for t in TOKENS if line.startswith("{{" + t + "}}", i)), None)
+                if token is None:
+                    refuse("a template holds an unknown token", 1)
+                if values[token] is None:
+                    refuse(f"a template uses the {token} token, which this render does not take", 1)
+                out.append(values[token])
+                i += len(token) + 4
                 continue
-        out.append(text[i])
-        i += 1
+            if not any(start <= i < end for start, end in quoted) and line.startswith(REFERENCE_OPEN, i):
+                end = line.find("`", i + 1)
+                name = line[i + len(REFERENCE_OPEN):end] if end != -1 else ""
+                if REFERENCE_NAME.fullmatch(name):
+                    absolute = skill_dir + "/references/" + name
+                    if not os.path.isfile(absolute):
+                        refuse(f"a template names a missing reference {name}", 1)
+                    out.append("`" + absolute + "`")
+                    i = end + 1
+                    continue
+            out.append(line[i])
+            i += 1
     return "".join(out)
 
 
