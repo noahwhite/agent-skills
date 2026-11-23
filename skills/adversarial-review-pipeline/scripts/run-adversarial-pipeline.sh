@@ -895,30 +895,26 @@ accept_phase() {  # $1 = phase, $2 = stderr log or "": validate a freshly writte
   fi
   [ -f "$RUN_DIR/$key.launch" ] && [ -f "$RUN_DIR/$key.binding" ] && [ -f "$RUN_DIR/$key.primary" ] \
     || die 15 "no launch for $1 in this run (never started, discarded by a later re-run of an earlier phase, or an arbitration already accepted); write its dossier with '$dossier_hint' first."
-  if [ "$(cat -- "$RUN_DIR/$key.binding")" != "$(binding_text "$1")" ]; then
-    die 13 "the $1 inputs changed since its dossier was written (spec, --shard, --no-sweep or a predecessor artifact); start the $1 phase again with '$dossier_hint'."
-  fi
-  [ -s "$art" ] || die 15 "the $1 agent produced no report ($art is missing or empty)."
-  if [ "$RUN_DIR/$key.launch" -nt "$art" ]; then
-    die 15 "$art is older than this $1 launch; it was not written by this run."
-  fi
   # `--shard 1/1` and an omitted flag share a binding byte for byte, so the hunt's launch carries the
   # exact selection the dossier was written for: a record must repeat it exactly. The marker is the
   # one selection line the launcher writes, with or without its trailing newline; anything else - a
   # second line, a NUL, a K > N, an unreadable or oversized file - is unusable state, never a
-  # selection. Both reads are byte-bounded by a marker-reader limit (a 96-byte read, so the whole
-  # marker is at most 95 bytes and a selection line at most 94 bytes plus its newline, far above any
-  # selection this launcher writes), and the comparison is exact in hex, so the check never reads a
-  # whole file, can never forge a diagnosis line, and reserves exit 13 for a selection the launcher
-  # could have written. It runs after the report exists and is fresh, so a missing or stale report is
-  # never reported as a selection problem.
+  # selection and never a changed input. Both reads are byte-bounded by a marker-reader limit (a
+  # 96-byte read, so the whole marker is at most 95 bytes and a selection line at most 94 bytes plus
+  # its newline, far above any selection this launcher writes), and the comparison is exact in hex,
+  # so the check never reads a whole file and can never forge a diagnosis line.
+  #
+  # The marker's usability is settled before the binding comparison, so exit 13 is reached only with
+  # a launch that records a selection; an empty, unreadable or malformed marker is exit 15 even when
+  # the inputs changed too, exactly as the header and SKILL.md describe. The selection comparison
+  # itself waits until the report exists and is fresh, so a missing or stale report is never reported
+  # as a selection problem.
+  launched=""
   if [ "$1" = "hunt" ]; then
     marker_ok=0
-    launched=""
     marker_hex=""
     line_hex=""
     plain_hex=""
-    expected="$(launch_text "$1")"
     # An empty launch is the state a pre-release dossier and a truncated file share, and it is not a
     # reader fault: name it as the missing selection it is, so the operator re-writes the dossier.
     if [ ! -s "$RUN_DIR/$key.launch" ]; then
@@ -948,6 +944,16 @@ accept_phase() {  # $1 = phase, $2 = stderr log or "": validate a freshly writte
     if [ "$marker_ok" -eq 0 ]; then
       die 15 "the hunt launch marker $RUN_DIR/$key.launch is missing, empty, unreadable or not exactly the one selection line the launcher wrote; start the hunt phase again with '$dossier_hint'."
     fi
+  fi
+  if [ "$(cat -- "$RUN_DIR/$key.binding")" != "$(binding_text "$1")" ]; then
+    die 13 "the $1 inputs changed since its dossier was written (spec, --shard, --no-sweep or a predecessor artifact); start the $1 phase again with '$dossier_hint'."
+  fi
+  [ -s "$art" ] || die 15 "the $1 agent produced no report ($art is missing or empty)."
+  if [ "$RUN_DIR/$key.launch" -nt "$art" ]; then
+    die 15 "$art is older than this $1 launch; it was not written by this run."
+  fi
+  if [ "$1" = "hunt" ]; then
+    expected="$(launch_text "$1")"
     if [ "$launched" != "$expected" ]; then
       die 13 "the hunt launch records '$launched' but this record invocation selects '$expected'; record the dossier's selection (--shard K/N, or no --shard with ADVERSARIAL_SHARD unset when it recorded shard=none), or start the hunt phase again with '$dossier_hint'."
     fi

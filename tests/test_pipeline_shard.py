@@ -519,6 +519,31 @@ def test_an_empty_indexed_launch_marker_is_refused(accepted_gate):
     assert run_script("cleanup", str(checkout), "--repo", str(repo), env=env).returncode == 0
 
 
+def test_an_unusable_marker_outranks_a_changed_binding(accepted_gate, tmp_path):
+    """Exit 13 is reserved for a usable launch: an empty marker is exit 15 even when inputs changed too."""
+    repo, scratch, env = accepted_gate
+    run_dir = paths(repo, env)["run"]
+    dossier = run_script(
+        "dossier", "hunt", "--repo", str(repo), "--base", "HEAD", "--scratch", str(scratch),
+        "--no-sweep", env=env,
+    )
+    checkout, _ = dossier_of(dossier)
+    report = run_dir / "phase2-hunt.md"
+    report.write_text("REVIEW-RAN: yes\nreport\n")
+    (run_dir / "hunt.launch").write_bytes(b"")
+    other_spec = tmp_path / "other-spec.md"
+    other_spec.write_text("a different story, so the binding differs\n")
+    refused = run_script(
+        "record", "hunt", "--repo", str(repo), "--base", "HEAD", "--no-sweep",
+        "--spec", str(other_spec), env=env,
+    )
+    assert refused.returncode == 15, refused.stdout + refused.stderr
+    assert "missing or empty" in refused.stderr, refused.stderr
+    assert "inputs changed since its dossier was written" not in refused.stderr, refused.stderr
+    assert not Path(f"{report}.stamp").exists()
+    assert run_script("cleanup", str(checkout), "--repo", str(repo), env=env).returncode == 0
+
+
 def test_an_environment_supplied_selection_is_recorded_and_required(accepted_gate):
     repo, scratch, env = accepted_gate
     run_dir = paths(repo, env)["run"]
