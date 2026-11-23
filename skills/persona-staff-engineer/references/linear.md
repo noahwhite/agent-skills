@@ -79,12 +79,27 @@ The `linear` CLI (schpet/linear-cli) is the primary tool; the Linear MCP server 
   An implementing engineer never moves an acceptance criterion between stories to resolve a cycle.
 - ⛔ Never move an issue with that box unticked to `profile.tracker.states.ready`.
   If only part is pickable, split the unblocked part into its own issue.
+- A story's Definition of Ready has three boxes, as the `linear-user-story` template lists them: the story is estimated, its acceptance criteria are testable, and no blocking stories or unresolved external dependencies remain, with no other story owning its scope.
+  Triage still sets priority, but priority is not a Definition of Ready box.
+- The refinement codebook is what an accept-round voter judges a refined draft against (story-refinement Step 2): each Definition of Ready box the issue's filing template has, and the six INVEST criteria below.
+  An `OBJECT` names the codebook item the draft fails.
+  - Independent: the story can be built, reviewed and shipped without another story's unfinished work, or its blocked-by relations name that work.
+  - Negotiable: the story states the outcome and leaves the implementation open wherever its acceptance criteria do not fix it.
+  - Valuable: the story names who benefits and delivers a change they can observe.
+  - Estimable: the voters can size it under the pointing basis, and an unknown that blocks sizing is named as a risk.
+  - Small: the story fits under the split rule in Estimation and slicing, or the draft carries its split.
+  - Testable: every acceptance criterion, where the filing template has them, states observable behaviour that a check can confirm.
+
+  At the accept round the "Story is estimated" box is judged as Estimable, because pointing follows acceptance, and the blocker box is judged on what the draft records, so a recorded blocker that is not yet done keeps the story out of `profile.tracker.states.ready` without failing the draft.
+  For a Bug, an Investigation or a Spike, which carries no estimate, Estimable does not apply, and Small is judged on the draft's `Scope signal:` reading, which the oversize split or the Spike re-file acts on after the accept round.
 - Say "refined" and "refinement", not "groomed" or "grooming".
 
 ## Estimation and slicing
 
 - Estimates use `profile.tracker.estimate_scale`.
   Only user stories and maintenance work get estimates; spikes carry a timebox instead, and bugs and investigations are unestimated.
+- A story point is relative size and a split trigger, calibrated on the team's own history: the estimated stories story-refinement reads as its anchor table.
+  It is not a forecast and not hours.
 - `linear issue view --json` omits `estimate`, as it omits relations, even when the issue carries one, and the plain view prints no estimate line.
   Read an estimate with `linear api 'query { issue(id: "ABC-123") { estimate } }'`, or through the Linear MCP `get_issue` with the `estimate` field.
   The team issue list renders it in its estimate column, which is a display path, not a read path for a script.

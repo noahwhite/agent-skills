@@ -1576,9 +1576,10 @@ def test_pointing_template_has_no_size_note() -> None:
 
 def test_pointing_template_notes_the_private_self_context_rule() -> None:
     assert (
-        "- Discussion: <high <value>, low <value>; or none when the discussion ran and recorded nothing; or "
-        "skipped, when the consensus check recorded the estimate; the shared content names only the high and the "
-        "low, while a voter's own recorded value and rationale are carried privately in that voter's prompt>"
+        "- Discussion: <high <value>, low <value>, and the assumptions and evidence exchanged, the high and the "
+        "low voters first, then the third; or none when the discussion ran and recorded nothing; or skipped, when "
+        "the consensus check recorded the estimate; the shared content carried no point value, while a voter's "
+        "own recorded value and rationale are carried privately in that voter's prompt>"
         in pointing_template()
     )
 
@@ -1633,7 +1634,8 @@ def test_step_three_sizing_context_is_in_complexity_terms() -> None:
 STEP_FOUR_ITEM_PREFIXES = [
     "Run the consensus check first, on the three values recorded in Step 3.",
     "Review every rationale recorded in Step 3 against the pointing basis,",
-    "Hold one discussion round that names only the high and the low, when the consensus check calls for it.",
+    "Hold one discussion round, when the consensus check calls for it, in which the voters exchange assumptions "
+    "and evidence, never point numbers,",
     "Run one re-vote, when the consensus check calls for it.",
     "When the re-vote ran, consensus is the highest value in the intersection of the three accepted sets.",
     "Residual variance: when the re-vote leaves no value shared by all three accepted sets,",
@@ -1680,7 +1682,7 @@ def test_step_four_identical_values_record_the_higher_value_and_skip() -> None:
         "line and in the voter's file."
     ) in item
     assert process_items(STEP_FOUR)[2].startswith(
-        "Hold one discussion round that names only the high and the low, when the consensus check calls for it."
+        "Hold one discussion round, when the consensus check calls for it,"
     ), "an unconditional discussion would make an identical round run one"
 
 
@@ -2263,9 +2265,9 @@ def test_record_has_the_accept_round_result_template_with_exactly_the_fields() -
         "",
         "- Refinement comment covered: <refinement comment id>",
         "- Round: <1 or 2>",
-        "- Engineer one (<family or model>): <ACCEPT or OBJECT>",
-        "- Engineer two (<family or model>): <ACCEPT or OBJECT>",
-        "- Engineer three (<family or model>): <ACCEPT or OBJECT>",
+        "- Engineer one (<family or model>): <ACCEPT, or OBJECT naming the codebook item the draft fails>",
+        "- Engineer two (<family or model>): <ACCEPT, or OBJECT naming the codebook item the draft fails>",
+        "- Engineer three (<family or model>): <ACCEPT, or OBJECT naming the codebook item the draft fails>",
         "- Outcome: <accepted, another round, or unpointed for a User Story; "
         "accepted, another round, or not accepted for a Bug, an Investigation or a Spike>",
         "- Blocking amendments: <each objecting voter's blocking amendments when any voter returned OBJECT; "
@@ -2822,11 +2824,8 @@ def test_triage_replaces_the_bare_priority_bullet() -> None:
         '"No priority" counts as unset and is never a decided value.',
         # AC2: the stop-and-ask path.
         "When the PO cannot decide, including when the team has no comparable prioritised story, the ceremony stops "
-        'with the priority unset and "Priority is clear" unticked, and reports `needs input` to the owner naming '
-        "the story",
+        "with the priority unset, and reports `needs input` to the owner naming the story",
         "The PO never guesses a priority.",
-        # AC4: the tick rule.
-        'The PO ticks "Priority is clear" only after the priority is read back and equals the decided value.',
         # AC4: the triage record the bullet points at.
         "The PO posts the Triage record from [references/refinement-record.md](references/refinement-record.md) "
         "as a triage write on every outcome, the priority stop included.",
@@ -2836,8 +2835,8 @@ def test_triage_priority_bullet_carries_the_phrase(phrase: str) -> None:
     assert phrase in priority_bullet()
 
 
-def test_triage_priority_bullet_orders_decide_apply_stop_then_tick() -> None:
-    """The decision precedes the write, the write precedes the stop path, and the tick comes after both."""
+def test_triage_priority_bullet_orders_decide_apply_then_stop() -> None:
+    """The decision precedes the write, and the write precedes the stop path."""
     bullet = priority_bullet()
     order = [
         "The PO decides, applies and reads back a priority before the invocation ends",
@@ -2845,7 +2844,6 @@ def test_triage_priority_bullet_orders_decide_apply_stop_then_tick() -> None:
         "The PO applies the priority and reads it back",
         "When the PO cannot decide",
         "The PO never guesses a priority.",
-        'The PO ticks "Priority is clear" only after the priority is read back',
     ]
     counts = {phrase: bullet.count(phrase) for phrase in order}
     assert all(count == 1 for count in counts.values()), counts
@@ -3307,7 +3305,8 @@ def test_step_one_inputs_and_reconciliation_take_the_template_as_it_is() -> None
     )
     assert (
         "- Refined story snapshot: <the complete refined story and ACs where the filing template has them, or an "
-        "immutable link/commit>" in template("Refinement comment").splitlines()
+        "immutable link/commit; the anonymised merged draft, with no authorship and every list in random order>"
+        in template("Refinement comment").splitlines()
     )
 
 
@@ -3760,13 +3759,9 @@ def test_pointing_steps_carry_no_unestimated_type_path(heading: str) -> None:
     assert not UNESTIMATED_TYPE_NAME.search(operative_step(heading)), heading
 
 
-def test_priority_box_rules_apply_only_where_the_template_has_the_box() -> None:
-    """B3/B4: the "Priority is clear" tick and untick are vacuous for the three unestimated templates."""
-    assert (
-        'Both "Priority is clear" rules apply only where the filing template has that Definition of Ready box; a '
-        "Bug, an Investigation or a Spike template has none, so for those types no box is ticked or left unticked."
-        in priority_bullet()
-    )
+def test_priority_bullet_names_no_priority_box() -> None:
+    """Priority is no longer a Definition of Ready box, so no rule ticks or leaves one unticked."""
+    assert "Priority is clear" not in priority_bullet()
 
 
 SHARED_METRICS = ROOT / "shared" / "metrics.md"
@@ -4631,7 +4626,13 @@ def test_no_assertion_slices_a_file_on_a_heading_or_fence() -> None:
     assert not found, found
 
 
-FENCE_READERS = {"template_block", "pointing_template", "filing_section", "test_section_drops_comments_and_skips_every_fence_kind"}
+FENCE_READERS = {
+    "template_block",
+    "pointing_template",
+    "filing_section",
+    "user_story_dor",
+    "test_section_drops_comments_and_skips_every_fence_kind",
+}
 
 
 def test_only_template_readers_keep_fenced_text() -> None:
@@ -5381,8 +5382,8 @@ SHORT_PATH_CONDITIONS = {
     ),
     "e": (
         "(e) ready-eligible: the story is in `profile.tracker.states.backlog`, its priority is set and its assignee is "
-        "`profile.tracker.assignee`, the blocker Definition of Ready box exists, and every other Definition of Ready "
-        "box is already ticked."
+        "`profile.tracker.assignee`, the blocker Definition of Ready box exists, and the other two Definition of "
+        'Ready boxes, "Story is estimated" and the "checked against the implementation" box, are already ticked.'
     ),
 }
 SHORT_PATH_EVALUATION = (
@@ -5691,3 +5692,341 @@ def test_closing_message_names_each_short_path_outcome() -> None:
         "or a [Short path](#short-path) outcome: `short path: moved to ready`, `short path: already ready` or "
         "`short path: excluded`)"
     ) in closing
+
+
+# Refinement research review: the anonymised accept round, the evidence discussion, what a point means, the per-voter
+# vote record and the three-box Definition of Ready.
+
+SHARED_LINEAR = ROOT / "shared" / "linear.md"
+USER_STORY = ROOT / "skills" / "linear-user-story" / "SKILL.md"
+DELIBERATION = ROOT / "skills" / "story-refinement" / "references" / "deliberation.md"
+DELIBERATION_LINK = "[Deliberation](references/deliberation.md)"
+
+
+def deliberation(heading: str) -> str:
+    return spaced(section(DELIBERATION.read_text(), heading))
+
+
+ANONYMISED_DRAFT = [
+    "The reconciled story of Step 2 item 1, and each amended refinement of Step 2 item 6, is one merged draft with "
+    "authorship stripped: it names no voter, no SM/EM, no family, no model and no input file, and attributes no item "
+    "to an input.",
+    "Every list in the draft, such as the acceptance criteria, the risks and the amendments, takes an order the "
+    "facilitator draws at random, for example with `shuf`, and never one input's order.",
+    "An amended draft takes a newly drawn order.",
+    "The refinement comment's `Refined story snapshot:` line carries that draft.",
+]
+
+
+@pytest.mark.parametrize("sentence", ANONYMISED_DRAFT)
+def test_deliberation_states_the_anonymised_draft(sentence: str) -> None:
+    assert sentence in deliberation("Anonymised draft")
+
+
+def test_step_two_reconciles_and_amends_into_the_anonymised_draft() -> None:
+    assert (
+        "Definition of Ready changes, and open risks; it, and each amended one in item 6, is one anonymised merged "
+        f"draft, as Anonymised draft in {DELIBERATION_LINK} states." in process_item(STEP_TWO, "The facilitator reconciles")
+    )
+
+
+CODEBOOK_JUDGEMENT = [
+    "The codebook is the Definition of Ready boxes the filing template has and the INVEST criteria, as Triage and "
+    "Definition of Ready in [linear.md](linear.md) lists them.",
+    "Each accept-round brief carries the refinement comment id, the draft from that comment's `Refined story "
+    "snapshot:` line and the codebook verbatim, and nothing that attributes the draft: no voter input, no voter-input "
+    "line, no per-voter verdict and no family or model name.",
+    "Every `OBJECT` names the codebook item the draft fails, with its blocking amendment.",
+    "A blocking amendment is one that fixes a codebook item the draft fails.",
+    "An `OBJECT` that names no codebook item is re-recorded once, in a launch that starts a new voter context; a "
+    "second such answer from the same voter counts as a missing voter.",
+    "The Accept round result comment carries each `OBJECT` with the codebook item it names.",
+]
+
+
+@pytest.mark.parametrize("sentence", CODEBOOK_JUDGEMENT)
+def test_deliberation_states_the_codebook_judgement(sentence: str) -> None:
+    assert sentence in deliberation("Codebook judgement")
+
+
+def test_accept_round_judges_the_anonymised_draft_against_the_codebook() -> None:
+    assert (
+        "Each of the three voters judges the same anonymised draft against the codebook and returns `ACCEPT` or "
+        f"`OBJECT`, under Codebook judgement in {DELIBERATION_LINK}."
+        in process_item(STEP_TWO, "Run the accept round on that exact refinement comment id.")
+    )
+
+
+def test_accept_round_inputs_name_the_codebook() -> None:
+    assert (
+        "the codebook in Triage and Definition of Ready in [references/linear.md](references/linear.md)"
+        in spaced(prose(operative_step(STEP_TWO)))
+    )
+
+
+INVEST_LINES = [
+    "  - Independent: the story can be built, reviewed and shipped without another story's unfinished work, or its "
+    "blocked-by relations name that work.",
+    "  - Negotiable: the story states the outcome and leaves the implementation open wherever its acceptance criteria "
+    "do not fix it.",
+    "  - Valuable: the story names who benefits and delivers a change they can observe.",
+    "  - Estimable: the voters can size it under the pointing basis, and an unknown that blocks sizing is named as a "
+    "risk.",
+    "  - Small: the story fits under the split rule in Estimation and slicing, or the draft carries its split.",
+    "  - Testable: every acceptance criterion, where the filing template has them, states observable behaviour that a "
+    "check can confirm.",
+]
+CODEBOOK_RULES = [
+    "- The refinement codebook is what an accept-round voter judges a refined draft against (story-refinement Step 2): "
+    "each Definition of Ready box the issue's filing template has, and the six INVEST criteria below.",
+    "  An `OBJECT` names the codebook item the draft fails.",
+    '  At the accept round the "Story is estimated" box is judged as Estimable, because pointing follows acceptance, '
+    "and the blocker box is judged on what the draft records, so a recorded blocker that is not yet done keeps the "
+    "story out of `profile.tracker.states.ready` without failing the draft.",
+    "  For a Bug, an Investigation or a Spike, which carries no estimate, Estimable does not apply, and Small is "
+    "judged on the draft's `Scope signal:` reading, which the oversize split or the Spike re-file acts on after the "
+    "accept round.",
+]
+
+
+@pytest.mark.parametrize("line", INVEST_LINES + CODEBOOK_RULES)
+def test_shared_linear_lists_the_codebook_under_triage_and_definition_of_ready(line: str) -> None:
+    assert line in section(SHARED_LINEAR.read_text(), "Triage and Definition of Ready").splitlines()
+
+
+def test_codebook_carries_exactly_the_six_invest_criteria() -> None:
+    body = section(SHARED_LINEAR.read_text(), "Triage and Definition of Ready")
+    names = re.findall(r"^  - (\w+): ", body, re.MULTILINE)
+    assert names == ["Independent", "Negotiable", "Valuable", "Estimable", "Small", "Testable"]
+
+
+# The discussion exchanges assumptions and evidence, the high and the low first, never point numbers.
+
+DISCUSSION_RULES = [
+    "In the Step 4 item 3 discussion the voters exchange assumptions and evidence, never point numbers.",
+    "The high and the low voters state their assumptions and the evidence they cite first, then the third voter.",
+    "The shared discussion content carries no voter's value and no other point number, so an assumption or a piece "
+    "of evidence that embeds one, a ledger price included, is passed on with that number elided.",
+    "Do not compare values, and do not single out a voter beyond that speaking order.",
+]
+
+
+@pytest.mark.parametrize("sentence", DISCUSSION_RULES)
+def test_deliberation_states_the_evidence_discussion(sentence: str) -> None:
+    assert sentence in deliberation("Evidence discussion")
+
+
+def test_discussion_exchanges_assumptions_and_evidence() -> None:
+    assert process_items(STEP_FOUR)[2].startswith(
+        "Hold one discussion round, when the consensus check calls for it, in which the voters exchange assumptions "
+        "and evidence, never point numbers, high and low first, as Evidence discussion in "
+        f"{DELIBERATION_LINK} states."
+    )
+
+
+def test_discussion_no_longer_shares_the_values() -> None:
+    assert "names only the high and the low" not in spaced(SKILL.read_text())
+    assert "names only the high and the low" not in spaced(RECORD.read_text())
+
+
+def test_still_one_discussion_and_one_re_vote() -> None:
+    items = process_items(STEP_FOUR)
+    assert items[2].startswith("Hold one discussion round,")
+    assert items[3].startswith("Run one re-vote, when the consensus check calls for it.")
+
+
+# A point is relative size and a split trigger, never a forecast or hours.
+
+POINTS_MEANING_SKILL = (
+    "A story point is relative size and a split trigger, calibrated on the team's own history through the anchor "
+    "table; it is not a forecast and not hours, as Estimation and slicing in "
+    "[references/linear.md](references/linear.md) states."
+)
+POINTS_MEANING_SHARED = [
+    "- A story point is relative size and a split trigger, calibrated on the team's own history: the estimated "
+    "stories story-refinement reads as its anchor table.",
+    "  It is not a forecast and not hours.",
+]
+
+
+def test_stage_two_states_what_a_point_means() -> None:
+    assert POINTS_MEANING_SKILL in spaced(section(SKILL.read_text(), "Stage 2: pointing"))
+
+
+@pytest.mark.parametrize("line", POINTS_MEANING_SHARED)
+def test_shared_estimation_states_what_a_point_means(line: str) -> None:
+    assert line in section(SHARED_LINEAR.read_text(), "Estimation and slicing").splitlines()
+
+
+# Each voter's first vote, assumptions, evidence and what moved it, with an informational conformity flag.
+
+def test_step_three_rationale_states_assumptions_and_evidence() -> None:
+    assert (
+        "The rationale states the assumptions the value rests on and the evidence it cites, such as a file, a "
+        "criterion, a relation or an anchor key the voter read." in process_item(STEP_THREE, "Each voter submits")
+    )
+
+
+def test_step_four_re_vote_names_what_moved_the_vote() -> None:
+    assert (
+        "The re-vote rationale also names what moved the voter's vote, and a vote that moved with no new fact cited is "
+        f"flagged `conformity`, an informational flag, as Vote movement in {DELIBERATION_LINK} states."
+        in process_item(STEP_FOUR, "Run one re-vote")
+    )
+
+
+VOTE_MOVEMENT = [
+    "Each re-vote prompt carries this rule: the re-vote rationale names what moved the voter's vote, when its re-vote "
+    "value differs from its first vote: the new fact it cites that its Step 3 rationale did not, or none.",
+    "A voter's first vote is the value it recorded in Step 3 before any discussion or basis challenge, the blind "
+    "re-run's value after a void; its re-vote value is the highest value of its accepted set, the lowest for a "
+    "slice, or its Step 3 value when it records no consensus.",
+    "A vote that moved with no new fact cited is flagged `conformity` in the pointing record.",
+    "The flag is informational and changes no consensus, no residual variance outcome, no estimate and no stop.",
+    "The votes-per-voter lines of the Pointing record in [refinement-record.md](refinement-record.md) record each "
+    "voter's first vote, assumptions, evidence cited and what moved its vote.",
+]
+
+
+@pytest.mark.parametrize("sentence", VOTE_MOVEMENT)
+def test_deliberation_states_the_vote_movement(sentence: str) -> None:
+    assert sentence in deliberation("Vote movement")
+
+
+@pytest.mark.parametrize(
+    ("heading", "pointer"),
+    [
+        (STEP_TWO, "Anonymised draft in "),
+        (STEP_TWO, "Codebook judgement in "),
+        (STEP_FOUR, "Evidence discussion in "),
+        (STEP_FOUR, "Vote movement in "),
+    ],
+)
+def test_each_deliberation_section_is_cited_from_its_step(heading: str, pointer: str) -> None:
+    assert pointer + DELIBERATION_LINK in spaced(operative_step(heading))
+    assert f"## {pointer.removesuffix(' in ')}" in DELIBERATION.read_text().splitlines()
+
+
+def vote_line(engineer: str) -> str:
+    return (
+        f"  - Engineer {engineer}: first vote <value, or not recorded>; assumptions: <the assumptions its value rests "
+        "on>; evidence cited: <each file, criterion, relation or anchor key, or none>; moved: <not moved | new fact: "
+        "<the fact cited> | retracted ground: <its kind> | conformity>"
+    )
+
+
+def test_pointing_template_records_each_voter_first_vote_and_what_moved_it() -> None:
+    lines = pointing_template()
+    head = next(index for index, line in enumerate(lines) if line.startswith("- Votes per voter,"))
+    assert lines[head] == (
+        "- Votes per voter, each first vote recorded in Step 3 before any discussion or basis challenge (after a void, "
+        "the blind re-run's), with what moved it:"
+    )
+    assert lines[head + 1 : head + 4] == [vote_line("one"), vote_line("two"), vote_line("three")]
+    assert lines[head - 1].startswith("- Re-vote:"), "the vote record follows the re-vote"
+
+
+@pytest.mark.parametrize(
+    "sentence",
+    [
+        "On the votes-per-voter lines, a vote moved when the value that stands for that voter, its re-vote value or "
+        "its basis-challenge replacement, differs from its first vote.",
+        "`new fact` names the fact the voter cited that its Step 3 rationale did not, `retracted ground` names the "
+        "kind of off-basis ground whose retraction produced a replacement value, and `conformity` flags a vote that "
+        "moved with no new fact cited.",
+        "The `conformity` flag is informational: it changes no consensus, no residual variance outcome, no estimate "
+        "and no stop.",
+    ],
+)
+def test_pointing_record_prose_defines_the_moved_values(sentence: str) -> None:
+    assert sentence in spaced(prose(section(RECORD.read_text(), "Pointing record")))
+
+
+def test_records_section_lists_the_vote_record() -> None:
+    assert (
+        "each voter's first vote, assumptions, evidence cited and what moved its vote with any `conformity` flag"
+        in spaced(section(SKILL.read_text(), "Records"))
+    )
+
+
+# The story Definition of Ready has three boxes.
+
+USER_STORY_DOR = [
+    "- [ ] Acceptance criteria are observable behaviour, and have been checked against the implementation this story "
+    "modifies (not only the design), with a refinement note on the story naming the files read and any AC the code "
+    "cannot support",
+    "- [ ] No blocking stories, no unresolved external dependencies, and no other story already owns this scope - with "
+    "the backlog search performed and any owning or overlapping story recorded on the story",
+    "- [ ] Story is estimated",
+]
+REMOVED_DOR_BOXES = [
+    "Where an AC says to copy an existing pattern",
+    "has the split stated",
+    "Team has necessary skills and access",
+    "Priority is clear",
+    "Business value understood",
+]
+
+
+def user_story_dor(text: str) -> list[str]:
+    body = section(text, "Template (the description)", keep_fences=True)
+    block = body[body.index("**📦 Definition of Ready**") :]
+    block = block[: block.index("\n---")]
+    return [line for line in block.splitlines() if line.startswith("- [ ]")]
+
+
+def test_user_story_definition_of_ready_has_exactly_the_three_boxes() -> None:
+    assert user_story_dor(USER_STORY.read_text()) == USER_STORY_DOR
+
+
+def test_user_story_dor_check_kills_a_restored_box() -> None:
+    """Mutation proof: a removed box put back into the template fails the exact-list check."""
+    text = USER_STORY.read_text()
+    mutant = text.replace("- [ ] Story is estimated\n", "- [ ] Story is estimated\n- [ ] Priority is clear\n", 1)
+    assert mutant != text
+    assert user_story_dor(mutant) != USER_STORY_DOR
+
+
+def removed_box_offenders(files: dict[str, str]) -> list[str]:
+    return [
+        f"{name}:{number}: {box}"
+        for name, text in files.items()
+        for number, line in enumerate(text.splitlines(), 1)
+        for box in REMOVED_DOR_BOXES
+        if box in line
+    ]
+
+
+def dor_sweep_files() -> dict[str, str]:
+    """Every Markdown file the skills, the shared sources and the repository root ship; historical QA evidence and
+    eval fixtures under docs/ and evals/ are records of past runs, not rules."""
+    paths = [*ROOT.glob("*.md"), *(ROOT / "skills").rglob("*.md"), *(ROOT / "shared").rglob("*.md")]
+    return {path.relative_to(ROOT).as_posix(): path.read_text() for path in sorted(paths)}
+
+
+def test_no_shipped_file_names_a_removed_definition_of_ready_box() -> None:
+    offenders = removed_box_offenders(dor_sweep_files())
+    assert not offenders, "\n".join(offenders)
+
+
+@pytest.mark.parametrize("box", REMOVED_DOR_BOXES)
+def test_removed_box_sweep_kills_each_restored_box(box: str) -> None:
+    """Mutation proof: each removed box, restored to the template or the shared source, is flagged by the sweep."""
+    for name in ("skills/linear-user-story/SKILL.md", "shared/linear.md"):
+        files = dor_sweep_files()
+        assert name in files
+        files[name] += f"\n- [ ] {box}\n"
+        assert removed_box_offenders(files), (name, box)
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "- A story's Definition of Ready has three boxes, as the `linear-user-story` template lists them: the story is "
+        "estimated, its acceptance criteria are testable, and no blocking stories or unresolved external dependencies "
+        "remain, with no other story owning its scope.",
+        "  Triage still sets priority, but priority is not a Definition of Ready box.",
+    ],
+)
+def test_shared_linear_states_the_three_box_definition_of_ready(line: str) -> None:
+    assert line in section(SHARED_LINEAR.read_text(), "Triage and Definition of Ready").splitlines()
