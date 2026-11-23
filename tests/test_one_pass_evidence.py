@@ -22,9 +22,9 @@ EXCLUDED_SKILLS = ("linear-investigation", "linear-epic")
 # AC1: the rule bullet, one pinned sentence per source line. The first line is
 # the bullet itself ("- "); the rest are its indented continuations ("  ").
 RULE_SENTENCES = (
-    "An acceptance criterion that needs behavioural evidence must name the one artifact that proves it "
-    "and the single command, run or record that produces that artifact, and that artifact must be "
-    "producible in one pass by one role.",
+    "An acceptance criterion that needs behavioural evidence has the one artifact that proves it, "
+    "and the single command, run or record that produces that artifact, named in the story's Verification "
+    "line and never inside the criterion, and that artifact must be producible in one pass by one role.",
     "One pass means one session of the one role the criterion names, with no fix round, no second session "
     "and no resumed session to finish it.",
     "A live multi-context ceremony is allowed only when the ceremony is the story's subject; then the story "

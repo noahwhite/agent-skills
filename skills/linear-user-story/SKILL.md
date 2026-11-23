@@ -52,6 +52,8 @@ After the story exists, triage and implementation follow the shared lifecycle in
 - **Assignee:** always `profile.tracker.assignee`, never a person's named seat the profile does not name.
 - **Estimate:** not set at creation; triage sets it.
 - **Acceptance Criteria:** an acceptance criterion that needs behavioural evidence must be one-pass producible, as [references/linear.md](references/linear.md) "Acceptance criteria and scope" states.
+  Write them lean as that section states: 3 to 5 per story, one rule and one observable outcome each, at most 25 words, with no command, step, window value or evidence instruction inside a criterion.
+  Name the runbook or test plan under Context and links, and the proving artifact under Verification.
 - **Definition of Ready:** the "observable behaviour" box is checked against the rule that behavioural evidence must be one-pass producible, as [references/linear.md](references/linear.md) "Acceptance criteria and scope" states.
 
 ## Template (the description)
@@ -65,16 +67,27 @@ As a [role], I want [feature/capability], so that [business value].
 
 **✅ Acceptance Criteria**
 
-- [ ] Clear, testable criteria
-- [ ] Use Given/When/Then format if applicable
+<!-- 3 to 5 criteria, one rule and one observable outcome each, at most 25 words, no commands, steps, window values or evidence instructions -->
+- [ ] [System or component] reaches [target state or metric] under [condition]
+- [ ] Given [precondition], when [event], then [one observable outcome]
+- [ ] On [failure condition], [system] [observable abort or recovery state]
 
 ---
 
 **📝 Additional Context**
 
+* Constraints: [Owner-imposed facts, such as an excluded host]
 * Design: [Design considerations or approach]
+* Runbook or test plan: [Link, where execution detail is needed]
 * Docs: [Documentation to update or reference]
 * Related Issues/PRs: [Links and dependencies]
+
+---
+
+**🔎 Verification**
+
+* [The one artifact that proves each criterion that needs behavioural evidence, and the single run or record that produces it]
+* Evidence follows the Definition of Done
 
 ---
 
