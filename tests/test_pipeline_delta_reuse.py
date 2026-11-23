@@ -340,6 +340,20 @@ def test_reuse_refuses_at_exit_13_when_the_producing_run_no_longer_accepts(gate)
     assert "reused sweep" not in listed, listed
     artifacts = gate.artifacts()
     assert not artifacts["sweep"].exists(), artifacts["sweep"]
+    run_dir = gate.run_dir()
+    assert not (run_dir / "sweep.binding").exists(), "a refused reuse left its binding"
+    assert not (run_dir / "sweep.primary").exists(), "a refused reuse left its primary marker"
+
+
+def test_a_hunt_miss_caused_by_the_local_sweep_says_no_accepted_run(gate):
+    """A matching donor this run cannot use yet is not an identity mismatch."""
+    write_spec(gate)
+    gate.accept_full_run("base")
+    commit_empty(gate.repo, gate.env)
+    assert gate.preflight().returncode == 0
+    result = gate.run_phase("hunt", report_agent(gate.scratch / "hunt.launched"))
+    assert result.returncode == 13, result.stdout + result.stderr
+    assert "reuse: miss reason=no accepted run" in result.stderr, result.stderr
 
 
 def test_reuse_covers_hunt_but_not_preflight_or_arbitrate(gate):
@@ -522,13 +536,18 @@ def test_a_fresh_run_reports_four_reuse_misses(gate):
     assert "reuse_misses 4" in listed, listed
 
 
-def test_a_conflicting_explicit_story_base_is_refused(gate):
+def test_an_explicit_story_base_wins_over_the_recorded_one(gate):
+    """--story-base is authoritative, so a conflicting record cannot lock a gate out of its run."""
     write_spec(gate)
     gate.accept_full_run("base")
     head_b = _git(gate.repo, gate.env, "rev-parse", "HEAD")
     result = gate.preflight(story_base=head_b)
-    assert result.returncode == 12, result.stdout + result.stderr
-    assert "already records story base" in result.stderr, result.stderr
+    assert result.returncode == 0, result.stdout + result.stderr
+    copy = gate.scratch / "explicit-story-base.md"
+    run = gate.run_phase("sweep", capturing_agent(gate.scratch / "sweep.launched", copy),
+                         extra=("--story-base", head_b))
+    assert run.returncode == 0, run.stdout + run.stderr
+    assert f"STORY-BASE: {head_b} {head_b}" in copy.read_text(), copy.read_text()
 
 
 def make_repo_with_mid(tmp_path, env, name="repo"):
@@ -930,20 +949,21 @@ def test_the_diffstat_keeps_gits_default_allocation_at_the_pinned_width(tmp_path
         f"dossier blueprint:\n{blueprint}\nplain git:\n{plain}")
 
 
-def test_a_spec_less_invocation_cannot_contradict_the_recorded_story_base(gate):
-    write_spec(gate)
-    assert gate.preflight().returncode == 0
-    base_sha = _git(gate.repo, gate.env, "rev-parse", "base^{commit}")
+def test_a_spec_less_gate_persists_its_explicit_story_base(gate):
+    """Without a spec, the single legacy record still carries an explicit --story-base."""
     _git(gate.repo, gate.env, "checkout", "-q", "base")
     _git(gate.repo, gate.env, "commit", "-q", "--allow-empty", "-m", "sibling")
     sibling = _git(gate.repo, gate.env, "rev-parse", "HEAD")
     _git(gate.repo, gate.env, "checkout", "-q", "-")
-    assert sibling != base_sha
     result = run_script("preflight", "--full-suite", "off", "--repo", str(gate.repo),
                         "--base", "base", "--story-base", sibling, "--scratch", str(gate.scratch),
                         env=gate.env)
-    assert result.returncode == 12, result.stdout + result.stderr
-    assert "already records story base" in result.stderr, result.stderr
+    assert result.returncode == 0, result.stdout + result.stderr
+    result = run_script("dossier", "sweep", "--repo", str(gate.repo), "--base", "base",
+                        "--scratch", str(gate.scratch), env=gate.env)
+    assert result.returncode == 0, result.stdout + result.stderr
+    dossier = Path(result.stdout.strip().splitlines()[-1]).read_text()
+    assert f"STORY-BASE: {sibling} {sibling}" in dossier, dossier
 
 
 def test_a_spec_edit_at_the_same_run_keeps_the_delta_header(gate):

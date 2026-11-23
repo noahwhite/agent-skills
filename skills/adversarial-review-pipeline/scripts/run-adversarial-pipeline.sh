@@ -708,7 +708,7 @@ deps_of_ns() {  # $1 = phase, $2 = the no_sweep value of the run -> its predeces
 # The binding and stamp of a named run, so a producing run's acceptance is recomputed in that run
 # rather than this invocation's. A reuse file adds the two reused= fields the run's own stamp has.
 binding_text_for() {  # $1 run dir, $2 run id, $3 spec sha, $4 no_sweep, $5 phase, [$6 shard K/N]
-  local rd="$1" runid="$2" spec="$3" ns="$4" ph="$5" shard="${6:-}" p dep ident prod
+  local rd="$1" runid="$2" spec="$3" ns="$4" ph="$5" shard="${6:-}" p dep ident prod n k
   printf 'run=%s\nphase=%s\n' "$runid" "$ph"
   if [ -n "$shard" ]; then printf 'shard=%s\n' "$shard"; fi
   if [ "$ph" != "preflight" ]; then
@@ -720,12 +720,29 @@ binding_text_for() {  # $1 run dir, $2 run id, $3 spec sha, $4 no_sweep, $5 phas
     fi
   fi
   for p in $(deps_of_ns "$ph" "$ns"); do
+    # A sharded run's hunt predecessor is its shard set: bind every shard's bytes by name.
+    if [ "$p" = "hunt" ] && [ -f "$rd/hunt.shards" ]; then
+      n="$(head -n 1 -- "$rd/hunt.shards" | sed -n 's/^n=\([1-9][0-9]*\)$/\1/p')"
+      if [ -n "$n" ]; then
+        for (( k=1; k <= n; k++ )); do
+          dep="$rd/phase2-hunt.$k.md"
+          if [ -f "$dep" ]; then printf 'dep.hunt.%s=%s\n' "$k" "$(sha_of "$dep")"
+          else printf 'dep.hunt.%s=missing\n' "$k"; fi
+        done
+        continue
+      fi
+    fi
     dep="$rd/$(artifact_name "$p")"
     if [ -f "$dep" ]; then printf 'dep.%s=%s\n' "$p" "$(sha_of "$dep")"; else printf 'dep.%s=missing\n' "$p"; fi
   done
 }
 stamp_text_for() {  # $1 run dir, $2 run id, $3 spec sha, $4 no_sweep, $5 phase, [$6 shard K/N]
-  printf 'sha256=%s\n' "$(sha_of "$1/$(artifact_name "$5")")"
+  local name
+  case "${6:-}" in
+    "") name="$(artifact_name "$5")" ;;
+    *) name="phase2-hunt.${6%%/*}.md" ;;
+  esac
+  printf 'sha256=%s\n' "$(sha_of "$1/$name")"
   binding_text_for "$@"
 }
 
@@ -1115,29 +1132,31 @@ case "$cmd" in
   preflight|run) GATE_START=1 ;;
   *) GATE_START=0 ;;
 esac
-if [ "$GATE_START" -eq 1 ] && story_records_disagree "$RUN_DIR"; then
+if [ "$GATE_START" -eq 1 ] && [ "$STORY_BASE_SET" -eq 0 ] && story_records_disagree "$RUN_DIR"; then
   die 12 "this run's story-base records disagree; pass --story-base to name the base this run reviewed."
 fi
-if rec_text="$(story_record_text "$RUN_DIR")"; then
+# An explicit --story-base is authoritative for this invocation; otherwise the run's record wins.
+if [ "$STORY_BASE_SET" -eq 0 ] && rec_text="$(story_record_text "$RUN_DIR")"; then
   recorded="$(printf '%s\n' "$rec_text" | sed -n 's/^sha=//p' | head -n 1)"
   recorded_ref="$(printf '%s\n' "$rec_text" | sed -n 's/^ref=//p' | head -n 1)"
   if [ -n "$recorded" ]; then
-    if [ "$STORY_BASE_SET" -eq 1 ] && [ "$recorded" != "$STORY_BASE_SHA" ]; then
-      die 12 "this run already records story base $recorded for spec $SPEC_SHA; it cannot be changed to $STORY_BASE_SHA."
-    fi
     STORY_BASE_SHA="$recorded"; STORY_BASE="$recorded_ref"
   fi
 fi
-if [ "$GATE_START" -eq 1 ] && [ "$SPEC_SHA" != "none" ] \
-  && [ ! -f "$RUN_DIR/story-base.$SPEC_SHA" ]; then
-  rec_tmp="$(mktemp -p "$RUN_DIR" "story-base.$SPEC_SHA.tmp.XXXXXX")" \
-    || die 2 "could not record the story base in $RUN_DIR."
-  if printf 'sha=%s\nref=%s\n' "$STORY_BASE_SHA" "$STORY_BASE" > "$rec_tmp" \
-    && mv -f -- "$rec_tmp" "$RUN_DIR/story-base.$SPEC_SHA"; then
-    :
-  else
-    rm -f -- "$rec_tmp"
-    die 2 "could not record the story base in $RUN_DIR."
+# A gate start records its provenance: per spec when a spec is given, else the single legacy record.
+if [ "$GATE_START" -eq 1 ] && [ -n "${STORY_BASE_SHA:-}" ]; then
+  if [ "$STORY_BASE_SET" -eq 1 ] || { [ "$SPEC_SHA" != "none" ] && [ ! -f "$RUN_DIR/story-base.$SPEC_SHA" ]; }; then
+    rec_name="story-base"
+    [ "$SPEC_SHA" = "none" ] || rec_name="story-base.$SPEC_SHA"
+    rec_tmp="$(mktemp -p "$RUN_DIR" "$rec_name.tmp.XXXXXX")" \
+      || die 2 "could not record the story base in $RUN_DIR."
+    if printf 'sha=%s\nref=%s\n' "$STORY_BASE_SHA" "$STORY_BASE" > "$rec_tmp" \
+      && mv -f -- "$rec_tmp" "$RUN_DIR/$rec_name"; then
+      :
+    else
+      rm -f -- "$rec_tmp"
+      die 2 "could not record the story base in $RUN_DIR."
+    fi
   fi
 fi
 if [ "$STORY_BASE_SHA" = "$BASE_SHA" ]; then DELTA_ACTIVE=0; else DELTA_ACTIVE=1; fi
@@ -1388,7 +1407,7 @@ record_reuse_line() {  # $1 = phase, $2 = the line
 # only verifies the sweep report it actually read.
 reuse_lookup() {  # $1 = phase
   local phase="$1" rundir name base head spec ns prefix cur_ident cur_prefix date
-  local saw_run=0 saw_tree=0 saw_identity=0 saw_accepted=0
+  local saw_run=0 saw_tree=0 saw_identity=0 saw_accepted=0 saw_local_blocked=0
   local best_hit="" best_date="" best_name="" best_lapsed="" lapsed_date="" lapsed_name=""
   REUSE_STATE=miss REUSE_IDENTITY="" REUSE_RUN="" REUSE_REASON="" REUSE_LAPSED=""
   cur_ident="$(reuse_identity "$BASE_SHA" "$HEAD_SHA" "$SPEC_SHA")" || { REUSE_REASON="identity mismatch"; return 0; }
@@ -1462,10 +1481,12 @@ reuse_lookup() {  # $1 = phase
     fi
     if [ "$phase" = "hunt" ] && [ "$NO_SWEEP" -eq 0 ]; then
       if [ -f "$rundir/$(artifact_name sweep)" ] && [ -f "$RUN_DIR/$(artifact_name sweep)" ]; then
-        [ "$(sha_of "$rundir/$(artifact_name sweep)")" = "$(sha_of "$RUN_DIR/$(artifact_name sweep)")" ] \
-          || eligible=0
+        if [ "$(sha_of "$rundir/$(artifact_name sweep)")" != "$(sha_of "$RUN_DIR/$(artifact_name sweep)")" ]; then
+          eligible=0; saw_local_blocked=1
+        fi
       else
-        eligible=0
+        # The donor matches but this run cannot use it yet: that is not a lapsed donor.
+        eligible=0; saw_local_blocked=1
       fi
     fi
     date="$(git show -s --format=%ct "$head" 2>/dev/null)" || continue
@@ -1485,6 +1506,8 @@ reuse_lookup() {  # $1 = phase
     REUSE_STATE=hit; REUSE_RUN="$best_hit"; REUSE_IDENTITY="$cur_ident"
   elif [ -n "$best_lapsed" ]; then
     REUSE_REASON="acceptance lapsed"; REUSE_LAPSED="$best_lapsed"
+  elif [ "$saw_local_blocked" -eq 1 ]; then
+    REUSE_REASON="no accepted run"
   elif [ "$saw_accepted" -eq 1 ]; then
     REUSE_REASON="identity mismatch"
   elif [ "$saw_identity" -eq 1 ]; then
@@ -1535,8 +1558,9 @@ reuse_accept() {  # $1 = phase, $2 = producing run dir, $3 = identity
 # Undo a reuse that did not end accepted: the copy, its stamp and its provenance, so `paths` never
 # reports a reuse that did not happen.
 rollback_reuse() {  # $1 = phase
-  local art; art="$(artifact_for "$1")"
-  rm -f -- "$art" "$art.stamp" "$RUN_DIR/$1.reuse" "$RUN_DIR/$1.dossier"
+  local art key; art="$(artifact_for "$1")"; key="$(state_key "$1")"
+  rm -f -- "$art" "$art.stamp" "$RUN_DIR/$key.reuse" "$RUN_DIR/$key.dossier" \
+    "$RUN_DIR/$key.binding" "$RUN_DIR/$key.primary"
   write_dossier_sizes
 }
 

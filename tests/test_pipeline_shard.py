@@ -658,6 +658,23 @@ def test_a_sharded_run_whose_arbitration_lapsed_does_not_block_the_hunt(tmp_path
     assert "acceptance lapsed" not in again.stderr, again.stderr
 
 
+def test_a_tampered_shard_artifact_is_refused(tmp_path):
+    """Each shard's stamp binds its own bytes, so editing a shard after acceptance refuses it."""
+    repo, scratch, env = new_gate(tmp_path)
+    assert run_sweep(repo, scratch, env).returncode == 0
+    for k in (1, 2):
+        hunt = run_hunt(repo, scratch, env, "--shard", f"{k}/2")
+        assert hunt.returncode == 0, hunt.stdout + hunt.stderr
+    run_dir = paths(repo, env)["run"]
+    stamp = (run_dir / "phase2-hunt.1.md.stamp").read_text()
+    assert not stamp.startswith("sha256=\n"), stamp
+    with (run_dir / "phase2-hunt.1.md").open("a") as handle:
+        handle.write("tampered\n")
+    arb = run_arbitrate(repo, scratch, env)
+    assert arb.returncode == 13, arb.stdout + arb.stderr
+    assert "1/2" in arb.stderr, arb.stderr
+
+
 def test_a_sharded_hunt_prints_one_reuse_miss_and_paths_counts_it(accepted_gate):
     repo, scratch, env = accepted_gate
     hunt = run_hunt(repo, scratch, env, "--shard", "1/2")
