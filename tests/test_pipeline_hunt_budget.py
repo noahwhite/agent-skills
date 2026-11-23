@@ -110,7 +110,16 @@ Candidate list for the hunt.
 """
 
 HUNT_REPORT = """REVIEW-RAN: yes
-No verified defects.
+No verified defects; every candidate checked.
+none
+"""
+
+# The zero-finding report an obedient hunt returns for an accepted empty candidate list: one minimal
+# checkout check, no findings, and the terminal unchecked-candidate list the budget mandates.
+EMPTY_HUNT_REPORT = """REVIEW-RAN: yes
+The checkout is at the reviewed head and the candidate list is empty.
+No findings.
+none
 """
 
 GIT_ISOLATION = {"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
@@ -400,6 +409,12 @@ def test_a_genuine_legacy_hunt_is_refused_before_any_note(tmp_path):
     assert "needs an accepted hunt artifact" in refused.stderr
 
 
+def test_the_skill_documentation_names_the_same_command_count():
+    # The prose copy in SKILL.md is a third statement of the count; pin it to the same constant.
+    skill = (ROOT / "skills" / "adversarial-review-pipeline" / "SKILL.md").read_text()
+    assert f"at most {COMMAND_COUNT} shell commands" in skill
+
+
 def test_the_script_keeps_the_predates_note_for_an_unevidenced_hunt():
     # The owner's strategy requires the fallback wording to exist; acceptance makes it unreachable,
     # so it is pinned against the script source rather than a fabricated run state.
@@ -485,7 +500,7 @@ def test_an_empty_candidate_list_still_carries_the_budget_and_the_rule_dispositi
     assert RULE_LINE in prompt
     assert "===== ACCEPTANCE RULES ARE BEHAVIOURAL PROBES =====" in dossier
     # And the zero-finding report an obedient hunt returns is accepted and reaches arbitration.
-    paths["hunt"].write_text(HUNT_REPORT)
+    paths["hunt"].write_text(EMPTY_HUNT_REPORT)
     checked(run_script(env, "record", "hunt", "--repo", str(repo), "--base", BASE_REF,
                        "--spec", str(common[common.index("--spec") + 1])), "record hunt")
     arbitrate = checked(run_script(env, "dossier", "arbitrate", *common), "dossier arbitrate")
