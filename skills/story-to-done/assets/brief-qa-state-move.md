@@ -1,0 +1,1 @@
+- Your closing state move is "Once every AC and DoD item is ticked and verified in the environment, move the issue to done." at `skills/qa-verification/references/linear.md:39`.

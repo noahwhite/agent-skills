@@ -316,7 +316,7 @@ def added_blocks() -> list[str]:
 # sentence of steps 2 to 12 (the `deployed` path text of steps 11 and 12 included) must stay byte for
 # byte as it was, and the blocks themselves are kept whole and in order by the pins in
 # `HANDOFF_PINS` and `test_handoff_blocks_appear_once_in_order`.
-STEPS_TWO_TO_TWELVE_SHA256 = "a36c006733b7b3bc23d65530faee575a02b5e59c1b8c68d48d7657fcf639f2c3"
+STEPS_TWO_TO_TWELVE_SHA256 = "cee26611557b072c8793290496ba3e03e33477d179e23ded2f04c511bc8a54cf"
 # SKL-270 makes the `deployed` step 12 note carry the exact `path: deployed` line that story-to-done
 # and qa-verification pass to `scripts/select-path.py` as `--recorded-path`. The digest above is kept:
 # that one line is pinned here and swapped back to its pre-SKL-270 text before hashing, so every other
@@ -358,6 +358,14 @@ def steps_two_to_twelve() -> str:
     start = text.index("\n## 2. Plan slices\n") + 1
     end = text.index("\n## Operational rules\n") + 1
     return text[start:end]
+
+
+# SKL-387 states the one-green-signal rule in step 3 item 5, step 5 item 1 and the step 9
+# "All required checks are green" bullet. Those lines are part of the digest below: the baseline was
+# re-baselined to the text that carries them, so the whole of steps 2 to 12 - the rule lines
+# included - still has to match byte for byte, and their wording and placement are pinned a second
+# time, per sentence, by `tests/test_one_green_signal.py`. Nothing here loads that module, so a
+# change to its constants can never break collection of this one.
 
 
 def test_handoff_blocks_appear_once_in_order() -> None:
