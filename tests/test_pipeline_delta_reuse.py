@@ -729,16 +729,21 @@ def test_a_committed_gitattributes_still_controls_the_embedded_diff(tmp_path):
     assert "Binary files" in diff and "def mean" not in diff, diff
 
 
-def test_a_host_diff_driver_cannot_turn_a_committed_text_path_binary(tmp_path):
+@pytest.mark.parametrize("channel", ["global", "count", "parameters"])
+def test_a_host_diff_driver_cannot_turn_a_committed_text_path_binary(tmp_path, channel):
     """A committed attribute may name a driver, but the host's definition of it must not decide."""
     env = fixed_env(tmp_path)
-    hostile = tmp_path / "host.gitconfig"
-    hostile.write_text("[diff \"evil\"]\n\tbinary = true\n")
-    env["GIT_CONFIG_GLOBAL"] = str(hostile)
-    # The command scope is the other channel a host can smuggle a driver definition through.
-    env["GIT_CONFIG_COUNT"] = "1"
-    env["GIT_CONFIG_KEY_0"] = "diff.evil.binary"
-    env["GIT_CONFIG_VALUE_0"] = "true"
+    if channel == "global":
+        hostile = tmp_path / "host.gitconfig"
+        hostile.write_text("[diff \"evil\"]\n\tbinary = true\n")
+        env["GIT_CONFIG_GLOBAL"] = str(hostile)
+    elif channel == "count":
+        # The command scope is the other channel a host can smuggle a definition through.
+        env["GIT_CONFIG_COUNT"] = "1"
+        env["GIT_CONFIG_KEY_0"] = "diff.evil.binary"
+        env["GIT_CONFIG_VALUE_0"] = "true"
+    else:
+        env["GIT_CONFIG_PARAMETERS"] = "'diff.evil.binary'='true'"
     repo = tmp_path / "repo"
     repo.mkdir()
     _git(repo, env, "init", "-q", "--initial-branch=main")
@@ -765,6 +770,65 @@ def test_a_host_diff_driver_cannot_turn_a_committed_text_path_binary(tmp_path):
     dossier = Path(result.stdout.strip().splitlines()[-1]).read_text()
     diff = dossier.split("===== DIFF (", 1)[1]
     assert "def mean" in diff and "Binary files" not in diff, diff
+
+
+def test_a_host_rename_limit_does_not_change_exclusions_or_the_embedded_diff(tmp_path):
+    """Renames are enumerated through the renderer's isolated context, so both sides stay excluded."""
+    default_env = fixed_env(tmp_path / "default")
+    hostile_env = fixed_env(tmp_path / "hostile")
+    config = tmp_path / "host.gitconfig"
+    config.write_text("[diff]\n\trenameLimit = 1\n")
+    hostile_env["GIT_CONFIG_GLOBAL"] = str(config)
+
+    def build(env: dict[str, str], root: Path) -> Path:
+        root.mkdir()
+        repo = root / "repo"
+        repo.mkdir()
+        _git(repo, env, "init", "-q", "--initial-branch=main")
+        _git(repo, env, "config", "core.autocrlf", "false")
+        _git(repo, env, "config", "commit.gpgsign", "false")
+        lines = "".join(f"line {i}\n" for i in range(1, 21))
+        for name in ("gen-a.txt", "gen-b.txt"):
+            (repo / name).write_text(lines)
+        _git(repo, env, "add", "-A")
+        _git(repo, env, "commit", "-q", "-m", "base")
+        _git(repo, env, "tag", "base")
+        changed = lines.replace("line 5\n", "line five changed\n")
+        for old, new in (("gen-a.txt", "dst-a.txt"), ("gen-b.txt", "dst-b.txt")):
+            (repo / old).rename(repo / new)
+            (repo / new).write_text(changed)
+        (repo / ".gitattributes").write_text("gen-a.txt linguist-generated\ngen-b.txt linguist-generated\n")
+        _git(repo, env, "add", "-A")
+        _git(repo, env, "commit", "-q", "-m", "renamed")
+        return repo
+
+    def dossier_bytes(env: dict[str, str], root: Path) -> bytes:
+        repo = build(env, root)
+        scratch = root / "scratch"
+        scratch.mkdir()
+        spec = root / "spec.txt"
+        spec.write_text(SPEC_TEXT)
+        pre = run_script("preflight", "--full-suite", "off", "--repo", str(repo), "--base", "base",
+                         "--test-cmd", "true", "--scratch", str(scratch), env=env)
+        assert pre.returncode == 0, pre.stdout + pre.stderr
+        result = run_script("dossier", "sweep", "--repo", str(repo), "--base", "base",
+                            "--spec", str(spec), "--scratch", str(scratch), env=env)
+        assert result.returncode == 0, result.stdout + result.stderr
+        path = Path(result.stdout.strip().splitlines()[-1])
+        checkout = next(line[len("CHECKOUT: "):] for line in result.stderr.splitlines()
+                        if line.startswith("CHECKOUT: "))
+        text = path.read_text().replace(checkout, "<CHECKOUT>").replace(str(scratch), "<SCRATCH>")
+        base_sha = _git(repo, env, "rev-parse", "base^{commit}")
+        head_sha = _git(repo, env, "rev-parse", "HEAD")
+        return text.replace(base_sha, "<BASE>").replace(head_sha, "<HEAD>").encode()
+
+    default_text = dossier_bytes(default_env, tmp_path / "default" / "run")
+    hostile_text = dossier_bytes(hostile_env, tmp_path / "hostile" / "run")
+    assert default_text == hostile_text
+    text = default_text.decode()
+    assert "===== EXCLUDED" in text and "dst-a.txt" in text and "dst-b.txt" in text, text
+    diff = text.split("===== DIFF (", 1)[1]
+    assert "line five changed" not in diff, diff
 
 
 def test_the_diffstat_keeps_gits_default_allocation_at_the_pinned_width(tmp_path):

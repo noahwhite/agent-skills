@@ -2435,7 +2435,7 @@ emit_context() {  # $1 = the phase's checkout, $2 = 1 to embed the unified diff,
   echo "HEAD: ${HEAD_SHA}"
   echo "CHECKOUT: $1"
   echo
-  local diffdir promisor
+  local diffdir promisor filter_cfg
   diffdir="$(mktemp -d -p "$SCRATCH" diff.XXXXXX)"
   DIFF_OBJECTS="$(git rev-parse --path-format=absolute --git-path objects)"
   DIFF_GIT="$diffdir/objects.git"
@@ -2445,8 +2445,10 @@ emit_context() {  # $1 = the phase's checkout, $2 = 1 to embed the unified diff,
   # dossier write here rather than as an unreadable object later.
   promisor="$(git config --bool --get-regexp '^remote\..*\.promisor$' 2>/dev/null \
     | awk '$2 == "true" { print "true"; exit }' || true)"
+  # A filtered remote may also be marked only by its filter, and git can still fetch from it.
+  filter_cfg="$(git config --get-regexp '^remote\..*\.partialclonefilter$' 2>/dev/null || true)"
   if [ -n "$(git config --get extensions.partialClone 2>/dev/null || true)" ] \
-    || [ "$promisor" = "true" ]; then
+    || [ "$promisor" = "true" ] || [ -n "$filter_cfg" ]; then
     git diff --numstat --no-ext-diff "$BASE_SHA"..."$HEAD_SHA" > /dev/null
   fi
   env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE -u GIT_OBJECT_DIRECTORY \
@@ -2533,7 +2535,10 @@ exact_pathspec() {  # $1 = path, $2 = variable to set
 classify_exclusions() {
   EXCL_PATHS=(); EXCL_REASONS=(); KEPT_OLD=(); KEPT_NEW=()
   local tmp; tmp="$(mktemp -d -p "$SCRATCH" exclusions.XXXXXX)"
-  git diff --find-renames --name-status -z "$BASE_SHA"..."$HEAD_SHA" > "$tmp/changes"
+  # Enumerated through the same isolated context and rename policy as the renderer, so a host's
+  # rename limit or ordering cannot exclude one side of a rename and embed the other.
+  pinned_diff diff --find-renames --name-status -z --no-ext-diff "$BASE_SHA"..."$HEAD_SHA" \
+    > "$tmp/changes"
   local -a old=() new=() paths=() globs=()
   local status path other name value line
   while IFS= read -r -d '' status && IFS= read -r -d '' path; do
