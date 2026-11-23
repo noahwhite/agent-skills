@@ -4172,13 +4172,16 @@ WORKTREE_LATER_PR = (
 )
 WORKTREE_EXISTING = (
     "A story with an existing unmerged story worktree or an open PR reuses that worktree or its branch and "
-    "names it in the `worktree:` line, per the existing PR or branch rule in `references/github.md`: name an "
-    "existing story worktree whose branch has not merged and create nothing, and when only the open PR's head "
-    "branch exists, fetch it with `git fetch origin +refs/heads/<branch>:refs/remotes/origin/<branch>` and run "
-    "`git worktree add --no-track -b <branch> <absolute path> origin/<branch>`, or, when a local branch of that "
-    "name exists, `git worktree add <absolute path> <branch>` and then `git -C <absolute path> merge --ff-only "
-    "origin/<branch>` so it starts at the fetched PR head, stopping to report when it does not fast-forward, to "
-    "create the story worktree on that branch; a branch whose PR merged is never reused, so a later PR gets the "
+    "names it in the `worktree:` line, per the existing PR or branch rule in `references/github.md`: with an "
+    "open PR, the branch reused is that PR's head branch, and an existing story worktree is named only when it "
+    "holds that branch; with no open PR, name an existing story worktree whose branch has not merged and create "
+    "nothing; when no worktree holds the open PR's head branch, fetch it with `git fetch origin "
+    "+refs/heads/<branch>:refs/remotes/origin/<branch>` and run `git worktree add --no-track -b <branch> "
+    "<absolute path> origin/<branch>`, or `git worktree add <absolute path> <branch>` when a local branch of "
+    "that name exists, to create the story worktree on that branch; with an open PR, before every spawn or "
+    "resume, fetch its head branch the same way, run `git -C <absolute path> merge --ff-only origin/<branch>`, "
+    "and confirm that `git -C <absolute path> rev-parse HEAD` equals the PR's `headRefOid` from `gh pr view`, "
+    "stopping to report when it does not; a branch whose PR merged is never reused, so a later PR gets the "
     "fresh worktree above."
 )
 WORKTREE_BRIEF_LINE = (

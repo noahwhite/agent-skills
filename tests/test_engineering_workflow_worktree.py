@@ -11,7 +11,9 @@ CUT_SENTENCE = (
     "branch is `profile.git.integration_branch`) after a fetch."
 )
 WORKTREE_CLAUSE = (
-    "When the brief names a `worktree:` path, work in that worktree and cut no other story worktree, after "
+    "When the brief, or a later message resuming you, names a `worktree:` path, work in that worktree from then "
+    "on and leave any earlier one, run every repository command (git, tests, builds, scripts and `gh`) with "
+    "that worktree as the working directory or the repository argument, and cut no other story worktree, after "
     "confirming that its branch is based on the base the branch rule in `references/github.md` selects "
     "(`origin/<profile.git.integration_branch>` by default) and recutting it per the worktree rule in "
     "`references/github.md` if it is not; without a `worktree:` line, cut the branch and worktree as the "
