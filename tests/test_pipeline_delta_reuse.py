@@ -884,7 +884,11 @@ def test_rename_pairing_stays_exhaustive_above_a_bounded_host_limit(tmp_path):
     rows = [line for line in excluded.splitlines() if line.startswith('"')]
     assert len(rows) == 2 * count, f"{len(rows)} excluded rows, expected {2 * count}"
     diff = text.split("===== DIFF (", 1)[1]
-    assert "line five changed" not in diff, "a generated destination's content reached the diff"
+    assert "line 5 changed" not in diff, "a generated destination's content reached the diff"
+    # The blueprint keeps the story-base rendering policy: above the rename ceiling it shows the
+    # changes as additions and deletions, not as renames.
+    blueprint = text.split("===== BLUEPRINT", 1)[1].split("===== EXCLUDED", 1)[0]
+    assert "=>" not in blueprint, "the blueprint's rename policy changed"
 
 
 def test_the_diffstat_keeps_gits_default_allocation_at_the_pinned_width(tmp_path):
