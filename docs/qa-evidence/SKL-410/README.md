@@ -54,3 +54,29 @@ DoD1 remains pending for the same reason.
 
 Engineering owns the missing DoD2 CI evidence.
 The pre-existing engineer intro says “the deploy” even on `no-deployment`; this does not change the quoted path-specific handoff and is not a completion blocker.
+
+## Round 3
+
+- Path: `no-deployment`.
+- Target: [`ddda852e4c73ff2051694810d577f8fa30cd8d4c`](https://github.com/noahwhite/agent-skills/commit/ddda852e4c73ff2051694810d577f8fa30cd8d4c), confirmed on `origin/main`; only evidence changed after the target.
+- Implementation: [PR #403](https://github.com/noahwhite/agent-skills/pull/403), reviewed at `1261d47023976fd0b76aefc37a187399629e32fb`.
+- Acceptance basis: unchanged criteria and the product owner's 2026-11-22 AC3 reading 2, which requires the permission quotations in the unedited briefs.
+- Raw commands and output: `SKL-410-qa-round-3-source.txt` and `SKL-410-qa-round-3-render.txt`, attached to the story.
+
+| Item | Verdict | Evidence |
+| --- | --- | --- |
+| AC1 - Scope and source | Verified | [`SKILL.md:114-118,134`](https://github.com/noahwhite/agent-skills/blob/ddda852e4c73ff2051694810d577f8fa30cd8d4c/skills/story-to-done/SKILL.md#L114-L134) scopes rules to the recipient and requires exact `path:line` citations, not coordinator-persona rules. |
+| AC2 - Prohibitions | Verified | Lines 119-121 bind the AC prohibition to its actor and source and reject a blanket DoD edit ban. |
+| AC3 - Permissions | Verified under reading 2 | Seven unedited role/path briefs carried 44 source-exact citations covering verified ticks, assigned state moves, the role's PR, and the review of record. |
+| AC4 - Ownership | Verified | Lines 129-130 delegate the completion tick without changing product-owner authority. |
+| AC5 - Conflict | Verified | Lines 131-132 require reporting, stopping, and escalation without silent resolution. |
+| AC6 - Test pins | Verified | `tests/test_brief_authoring.py` pins AC1-AC5 wording and the QA tick, and 128 focused authoring and renderer tests passed. |
+| AC7 - Guards | Verified | Ruff, vendoring and both CI-pinned skill validators passed locally, and [CI on the landed tree](https://github.com/noahwhite/agent-skills/actions/runs/45093106615) passed 4,002 tests, private leak scanning and forced OpenCode discovery. |
+| DoD1 - Acceptance criteria | Verified | All seven ACs are met, including AC3 under reading 2. |
+| DoD2 - Tests written and passing | Verified | [PR #403](https://github.com/noahwhite/agent-skills/pull/403) changed `tests/test_render_brief.py`, triggering both signals, and records 3,960 local passes at its reviewed head. [Repository tests](https://github.com/noahwhite/agent-skills/actions/runs/45099813253/job/137447806037) passed 3,978 tests after checkout of `bd851eeb71b16c71deee2bc8468cd3880f9c61c2`. The GitHub commits API and local `git rev-parse` agree that both SHAs have tree `eae7a6c9e991d380daae03cad397519d6799c917`, and `git diff --exit-code` found no differences. |
+| DoD3 - Independent review | Verified | The final reviews of record for [PR #400](https://github.com/noahwhite/agent-skills/pull/400#pullrequestreview-6014412030) and [PR #403](https://github.com/noahwhite/agent-skills/pull/403#pullrequestreview-6015692087) are comment reviews with both SHA fields matching their respective heads. |
+| DoD4 - Docs updated | Verified | The merged `story-to-done` skill contains the Brief authoring section. |
+| DoD5 - Deployed verification | Correct by design | No deployment is needed on `no-deployment`. |
+| DoD6 - No critical bugs or regressions | Verified in scope | No critical issue surfaced in the raw renders, focused tests, CI, or reviews of record. |
+
+The nonblocking, pre-existing engineer intro still says “the deploy” on `no-deployment` and `spike`.
