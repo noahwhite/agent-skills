@@ -22,9 +22,11 @@ EXCLUDED_SKILLS = ("linear-investigation", "linear-epic")
 # AC1: the rule bullet, one pinned sentence per source line. The first line is
 # the bullet itself ("- "); the rest are its indented continuations ("  ").
 RULE_SENTENCES = (
-    "An acceptance criterion that needs behavioural evidence must name the one artifact that proves it "
-    "and the single command, run or record that produces that artifact, and that artifact must be "
-    "producible in one pass by one role.",
+    "An acceptance criterion that needs behavioural evidence has one artifact that proves it and one command, "
+    "run or record that produces that artifact, and that artifact must be producible in one pass by one role.",
+    "A user story names that artifact and that command, run or record in its Verification section, never "
+    "inside the criterion; a Bug or a Spike, whose template has no Verification section, names both inside the "
+    "criterion.",
     "One pass means one session of the one role the criterion names, with no fix round, no second session "
     "and no resumed session to finish it.",
     "A live multi-context ceremony is allowed only when the ceremony is the story's subject; then the story "
@@ -116,10 +118,11 @@ def template_block(text: str) -> str:
 
 RULE_CASES = (
     pytest.param(RULE_SENTENCES[0], "- ", id="rule-names-artifact-and-single-command"),
-    pytest.param(RULE_SENTENCES[1], "  ", id="rule-one-pass-one-session"),
-    pytest.param(RULE_SENTENCES[2], "  ", id="rule-ceremony-exception"),
-    pytest.param(RULE_SENTENCES[3], "  ", id="rule-fixture-is-own-story"),
-    pytest.param(RULE_SENTENCES[4], "  ", id="rule-not-one-pass-fails"),
+    pytest.param(RULE_SENTENCES[1], "  ", id="rule-names-where-per-issue-type"),
+    pytest.param(RULE_SENTENCES[2], "  ", id="rule-one-pass-one-session"),
+    pytest.param(RULE_SENTENCES[3], "  ", id="rule-ceremony-exception"),
+    pytest.param(RULE_SENTENCES[4], "  ", id="rule-fixture-is-own-story"),
+    pytest.param(RULE_SENTENCES[5], "  ", id="rule-not-one-pass-fails"),
 )
 
 PRESERVED_CASES = (
@@ -138,6 +141,17 @@ def test_shared_linear_scope_section_pins(sentence: str, prefix: str) -> None:
     assert matches[0].startswith(prefix), (
         f"expected line prefix {prefix!r} for: {sentence[:60]}"
     )
+
+
+RETIRED_FRAGMENTS = (
+    pytest.param("must name the one artifact that proves it", id="retired-inline-proof-mandate"),
+    pytest.param("named in the story's Verification line", id="retired-verification-for-every-type"),
+)
+
+
+@pytest.mark.parametrize("fragment", RETIRED_FRAGMENTS)
+def test_superseded_one_pass_wording_is_gone(fragment: str) -> None:
+    assert not any(fragment in normalized for _, normalized in scope_entries())
 
 
 @pytest.mark.parametrize("path,sentence", CITATIONS)
