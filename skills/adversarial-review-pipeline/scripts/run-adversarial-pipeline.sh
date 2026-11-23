@@ -1137,14 +1137,18 @@ if [ "$GATE_START" -eq 1 ] && [ "$STORY_BASE_SET" -eq 0 ] && story_records_disag
   die 12 "this run's story-base records disagree; pass --story-base to name the base this run reviewed."
 fi
 # An explicit --story-base is authoritative at a gate start; otherwise the run's record wins, and an
-# inspection may not contradict a recorded value.
+# inspection may not contradict any recorded value, even while the run's records still disagree.
+if [ "$GATE_START" -eq 0 ] && [ "$STORY_BASE_SET" -eq 1 ]; then
+  if rec_shas="$(story_record_shas "$RUN_DIR")" \
+    && ! printf '%s\n' "$rec_shas" | grep -qxF "$STORY_BASE_SHA"; then
+    die 12 "this run already records story base $(printf '%s ' $rec_shas); an inspection cannot override it, and only a gate start may name another."
+  fi
+fi
 if rec_text="$(story_record_text "$RUN_DIR")"; then
   recorded="$(printf '%s\n' "$rec_text" | sed -n 's/^sha=//p' | head -n 1)"
   recorded_ref="$(printf '%s\n' "$rec_text" | sed -n 's/^ref=//p' | head -n 1)"
   if [ -n "$recorded" ] && [ "$STORY_BASE_SET" -eq 0 ]; then
     STORY_BASE_SHA="$recorded"; STORY_BASE="$recorded_ref"
-  elif [ -n "$recorded" ] && [ "$GATE_START" -eq 0 ] && [ "$recorded" != "$STORY_BASE_SHA" ]; then
-    die 12 "this run already records story base $recorded; an inspection cannot override it, and only a gate start may name another."
   fi
 fi
 # A gate start records its provenance: per spec when a spec is given, else the single legacy record.
@@ -1561,8 +1565,8 @@ reuse_accept() {  # $1 = phase, $2 = producing run dir, $3 = identity
 
 # Undo a reuse that did not end accepted: the copy, its stamp, its provenance and its state files, so
 # `paths` never reports a reuse that did not happen. Reached only when the producer changes between
-# the lookup and the post-copy acceptance check (a race), so no deterministic test reaches it; the
-# branch is exercised by mutating the producer during the copy.
+# the lookup and the post-copy acceptance check (a race), so no deterministic test reaches it; to
+# exercise it, mutate the producer during the copy.
 rollback_reuse() {  # $1 = phase
   local art key; art="$(artifact_for "$1")"; key="$(state_key "$1")"
   rm -f -- "$art" "$art.stamp" "$RUN_DIR/$key.reuse" "$RUN_DIR/$key.dossier" \

@@ -335,11 +335,10 @@ def test_reuse_refuses_at_exit_13_when_the_producing_run_no_longer_accepts(gate)
     assert result.returncode == 13, result.stdout + result.stderr
     assert "reuse: miss reason=acceptance lapsed" in result.stderr, result.stderr
     assert "sweep" in result.stderr and producing.name in result.stderr, result.stderr
-    # A refused reuse leaves no copied artifact and no provenance that `paths` could report as a hit.
+    # A refused reuse leaves no provenance that `paths` could report as a hit, and no hit line.
     listed = gate.paths().stdout
     assert "reused sweep" not in listed, listed
-    artifacts = gate.artifacts()
-    assert not artifacts["sweep"].exists(), artifacts["sweep"]
+    assert "reuse_hits 0" in listed, listed
 
 
 def test_a_hunt_miss_caused_by_the_local_sweep_says_no_accepted_run(gate):
@@ -976,6 +975,34 @@ def test_an_inspection_cannot_override_a_recorded_story_base(gate):
     assert result.returncode == 12, result.stdout + result.stderr
     assert "an inspection cannot override it" in result.stderr, result.stderr
     assert base_sha != head_b
+
+
+def test_an_inspection_cannot_smuggle_a_base_past_disagreeing_records(gate):
+    """The inspection guard holds even when the run's own records disagree."""
+    write_spec(gate)
+    assert gate.preflight().returncode == 0
+    base_sha = _git(gate.repo, gate.env, "rev-parse", "base^{commit}")
+    _git(gate.repo, gate.env, "checkout", "-q", "base")
+    _git(gate.repo, gate.env, "commit", "-q", "--allow-empty", "-m", "sibling one")
+    sibling = _git(gate.repo, gate.env, "rev-parse", "HEAD")
+    _git(gate.repo, gate.env, "checkout", "-q", "-")
+    other_spec = gate.scratch / "other-spec.txt"
+    other_spec.write_text("another spec\n")
+    # A gate start for another spec, naming a base that contradicts the first spec's record.
+    other = run_script("preflight", "--full-suite", "off", "--repo", str(gate.repo),
+                       "--base", "base", "--spec", str(other_spec), "--story-base", sibling,
+                       "--scratch", str(gate.scratch), env=gate.env)
+    assert other.returncode == 0, other.stdout + other.stderr
+    _git(gate.repo, gate.env, "checkout", "-q", "base")
+    _git(gate.repo, gate.env, "commit", "-q", "--allow-empty", "-m", "sibling two")
+    third = _git(gate.repo, gate.env, "rev-parse", "HEAD")
+    _git(gate.repo, gate.env, "checkout", "-q", "-")
+    assert third not in (base_sha, sibling)
+    result = run_script("dossier", "sweep", "--repo", str(gate.repo), "--base", "base",
+                        "--spec", str(gate.spec), "--story-base", third,
+                        "--scratch", str(gate.scratch), env=gate.env)
+    assert result.returncode == 12, result.stdout + result.stderr
+    assert "an inspection cannot override it" in result.stderr, result.stderr
 
 
 def test_a_spec_edit_at_the_same_run_keeps_the_delta_header(gate):
