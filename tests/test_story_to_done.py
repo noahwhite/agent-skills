@@ -4179,10 +4179,11 @@ WORKTREE_EXISTING = (
     "+refs/heads/<branch>:refs/remotes/origin/<branch>` and run `git worktree add --no-track -b <branch> "
     "<absolute path> origin/<branch>`, or `git worktree add <absolute path> <branch>` when a local branch of "
     "that name exists, to create the story worktree on that branch; with an open PR, before every spawn or "
-    "resume, fetch its head branch the same way, run `git -C <absolute path> merge --ff-only origin/<branch>`, "
-    "and confirm that `git -C <absolute path> rev-parse HEAD` equals the PR's `headRefOid` from `gh pr view`, "
-    "stopping to report when it does not; a branch whose PR merged is never reused, so a later PR gets the "
-    "fresh worktree above."
+    "resume, fetch its head branch the same way, confirm that `git rev-parse origin/<branch>` equals the PR's "
+    "`headRefOid` from `gh pr view`, and only then run `git -C <absolute path> merge --ff-only "
+    "origin/<branch>`, which leaves the worktree at that head or at local commits on top of it, stopping to "
+    "report when either step fails; a branch whose PR merged is never reused, so a later PR gets the fresh "
+    "worktree above."
 )
 WORKTREE_BRIEF_LINE = (
     "- The line `worktree: <absolute path>`, whose whole text is exactly that, `<absolute path>` being the story "
