@@ -747,6 +747,9 @@ binding_text() {  # $1 = phase
   local p dep
   printf 'run=%s\nphase=%s\n' "$RUN_ID" "$1"
   if [ "$1" = "hunt" ] && [ "$SHARDED" -eq 1 ]; then printf 'shard=%s/%s\n' "$SHARD_K" "$SHARD_N"; fi
+  # SKL-406: the hunt's binding also carries the identity of the prompt its dossier emitted, so a
+  # change to that prompt un-accepts a recorded hunt through the existing inputs-changed path.
+  if [ "$1" = "hunt" ]; then printf 'prompt=%s\n' "$(hunt_prompt_id "$(( 1 - NO_SWEEP ))")"; fi
   if [ "$1" != "preflight" ]; then printf 'spec=%s\nno_sweep=%s\n' "$SPEC_SHA" "$NO_SWEEP"; fi
   for p in $(deps_of "$1"); do
     dep="$(artifact_for "$p")"
@@ -1926,6 +1929,123 @@ emit_prior() {  # $1 = phase, $2 = text when that phase is intentionally absent 
   if accepted "$1"; then cat -- "$(artifact_for "$1")"; else echo "$2"; fi
 }
 
+# The hunt's exploration budget (SKL-406): the hunt is bounded by what it explores, not by its input
+# payload. The mode, and only the mode, decides the candidate source: the script's --no-sweep flag.
+# Exactly one candidate-source sentence is emitted per mode, so a dossier never carries both. The
+# command count is a number, and tests/test_pipeline_hunt_budget.py pins every sentence in the
+# dossiers these functions write. $1 = 1 when a sweep report is embedded, 0 when --no-sweep ran no
+# sweep.
+HUNT_BUDGET_COMMANDS=40
+hunt_budget_lines() {  # $1 = 1 when the dossier embeds an accepted sweep report
+  local has_sweep="${1:-0}"
+  echo "EXPLORATION BUDGET - this hunt is bounded by its exploration, not by its input payload:"
+  if [ "$has_sweep" -eq 1 ]; then
+    echo "- Verify only the candidates listed in the sweep report, plus defects those candidates directly point at."
+  else
+    echo "- With no sweep report in this hunt-only run, derive the candidate list from the diff yourself, then verify only those candidates, plus defects they directly point at."
+  fi
+  echo "- Never run a repository-wide grep, find or rg; any search must be path-scoped to a path named in the diffstat or by a candidate."
+  echo "- At most ${HUNT_BUDGET_COMMANDS} shell commands in total."
+  echo "- Read only paths named in the diffstat unless a candidate names another path."
+  echo "- stop and report once the candidate list is exhausted rather than continuing to explore."
+  echo "- Report VERIFIED or REFUTED only for a candidate you actually checked; a candidate you did not check is NOT-REACHED (budget spent)."
+  echo "- End your report with the list of candidates you did not check, or 'none'."
+}
+
+# The hunt prompt, one emission per mode. $2 is the per-run scratch directory the prompt names; it is
+# passed in so the prompt's identity never depends on where this invocation's scratch happens to be.
+hunt_prompt_text() {  # $1 = 1 when a sweep report is embedded, $2 = the scratch directory to name
+  local has_sweep="${1:-0}" scratch="$2"
+  echo "You are an empirical adversarial reviewer working in a THROWAWAY checkout of the unfixed head: the"
+  echo "one on the CHECKOUT: line below. You may edit files in that checkout to run experiments; never"
+  echo "commit, push, or touch any other tree."
+  echo "Never write secrets to files or command arguments."
+  printf "The session's scratch directory is %s; keep any artifact you create there.\n" "$scratch"
+  echo
+  if [ "$has_sweep" -eq 1 ]; then
+    echo "Job 1 - VERIFY. For each candidate in the sweep report below:"
+  else
+    echo "Job 1 - VERIFY. For each candidate you derive from the diff (see the exploration budget below):"
+  fi
+  echo "write and run a minimal adversarial check (mutate the code, run the relevant tests, revert) and"
+  echo "report VERIFIED with the exact command and observed result, or REFUTED with the observation that disproves it."
+  if [ "$has_sweep" -eq 1 ]; then
+    echo "Job 2 - HUNT only for defects those candidates directly point at, inside the exploration budget below: a"
+  else
+    echo "Job 2 - HUNT only for defects the candidates you derived directly point at, inside the exploration budget below: a"
+  fi
+  echo "change that applies wrongly, a gate that acts in the wrong environment, a test that passes"
+  echo "vacuously, a regression to shipped behaviour. Mutate and run to prove each one."
+  echo
+  hunt_budget_lines "$has_sweep"
+  echo
+  echo "Execute, do not just reason. Report each finding with file:line, severity, the command run and"
+  echo "the observed result. If your sandbox prevents reading or running anything, say so in the first"
+  echo "line of your report; never report a clean result for a review that could not run."
+  echo "The FIRST line of your report must be exactly 'REVIEW-RAN: yes' when you read the diff below and ran your checks in the checkout; otherwise"
+  echo "make it 'REVIEW-RAN: no - <reason>'. A report without that line is treated as a review that did not run."
+  echo
+  emit_rule_probes
+  echo "Mutate and revert inside your throwaway checkout as needed to exercise each rule, and put the"
+  echo "probe lines after your findings, one rule per line:"
+  echo "RULE <n> | PASSED or FAILED | the rule in one line | the command you ran | what you observed"
+}
+
+# The candidate-list header the hunt dossier emits, one per mode, so "(Phase 1 sweep)" never heads
+# the hunt-only placeholder.
+hunt_candidates_header() {  # $1 = 1 when a sweep report is embedded
+  if [ "${1:-0}" -eq 1 ]; then
+    echo "===== CANDIDATES (Phase 1 sweep) ====="
+  else
+    echo "===== CANDIDATES (sweep not configured - hunt only) ====="
+  fi
+}
+
+# The identity of the hunt prompt this script would emit for a mode. It covers the whole fixed prompt
+# text, the candidate-list header included, and not the run's scratch path, so it changes exactly
+# when the prompt changes.
+hunt_prompt_id() {  # $1 = 1 when a sweep report is embedded
+  { hunt_prompt_text "${1:-0}" "@scratch@"; hunt_candidates_header "${1:-0}"; } \
+    | sha256sum | cut -d' ' -f1
+}
+
+# The prompt identity recorded in the accepted hunt's binding. A sharded run keeps one binding per
+# shard; every shard is written from the same prompt, so the first binding found is enough.
+recorded_hunt_prompt_id() {
+  local f
+  for f in "$RUN_DIR/hunt.binding" "$RUN_DIR"/hunt.[0-9]*.binding; do
+    if [ -f "$f" ]; then sed -n 's/^prompt=//p' -- "$f" | head -n 1; return 0; fi
+  done
+  return 0
+}
+
+# A hunt carries the budget only when its recorded prompt is this script's hunt prompt. With the
+# prompt identity in the binding, a prompt change un-accepts the recorded hunt before this runs, so
+# the fallback is the honest wording for a hunt whose binding cannot evidence the budget.
+hunt_has_budget() {
+  local recorded expected
+  recorded="$(recorded_hunt_prompt_id)"
+  [ -n "$recorded" ] || return 1
+  expected="$(hunt_prompt_id "$(( 1 - NO_SWEEP ))")"
+  [ "$recorded" = "$expected" ]
+}
+
+# The arbitrate dossier's one budget note (AC5). It claims the budget only when the recorded hunt
+# evidences it; otherwise it says the hunt predates the budget and that its silence is unbounded.
+hunt_budget_arbitrate_note() {
+  local source
+  if [ "$NO_SWEEP" -eq 0 ]; then
+    source="the candidates in the sweep report"
+  else
+    source="the candidates it derived from the diff"
+  fi
+  if hunt_has_budget; then
+    echo "Note: the recorded hunt ran under an exploration budget - at most ${HUNT_BUDGET_COMMANDS} shell commands, verifying only ${source} plus defects those candidates directly point at, searching only path-scoped and reading only the diffstat's paths unless a candidate names another. A candidate it reports as NOT-REACHED (budget spent) is omitted work, never coverage: credit only the checks the hunt report evidences, and read its silence as the bounded exploration this budget allows, not as full coverage."
+  else
+    echo "Note: the recorded hunt predates this exploration budget, so its prompt carried no command cap and no candidate-source rule. Its silence is not bounded exploration: treat an area it did not report on as unexplored, never as covered, and weigh that when reading its silence as coverage."
+  fi
+}
+
 # The acceptance-rule probe block every sweep and hunt dossier carries (see "Acceptance-rule probes" in
 # the header). Its first sentence points at the criteria, so it is emitted before the embedded context;
 # each phase adds its own sentence about where it may run the rules' commands and where the answers go.
@@ -1990,32 +2110,14 @@ write_dossier() {  # $1 = phase, $2 = dossier path, $3 = the phase's checkout (e
       ;;
     hunt)
       {
-        echo "You are an empirical adversarial reviewer working in a THROWAWAY checkout of the unfixed head: the"
-        echo "one on the CHECKOUT: line below. You may edit files in that checkout to run experiments; never"
-        echo "commit, push, or touch any other tree."
-        echo "Never write secrets to files or command arguments."
-        echo "The session's scratch directory is ${SESSION_SCRATCH:-$SCRATCH}; keep any artifact you create there."
+        hunt_prompt_text "$(( 1 - NO_SWEEP ))" "${SESSION_SCRATCH:-$SCRATCH}"
         echo
-        echo "Job 1 - VERIFY. For each candidate below, write and run a minimal adversarial check (mutate the"
-        echo "code, run the relevant tests, revert) and report VERIFIED with the exact command and observed"
-        echo "result, or REFUTED with the observation that disproves it."
-        echo "Job 2 - HUNT open-ended for defects the candidate list missed: a change that applies wrongly, a"
-        echo "gate that acts in the wrong environment, a test that passes vacuously, a regression to shipped"
-        echo "behaviour. Mutate and run to prove each one."
-        echo
-        echo "Execute, do not just reason. Report each finding with file:line, severity, the command run and"
-        echo "the observed result. If your sandbox prevents reading or running anything, say so in the first"
-        echo "line of your report; never report a clean result for a review that could not run."
-        echo "The FIRST line of your report must be exactly 'REVIEW-RAN: yes' when you read the diff below and ran your checks in the checkout; otherwise"
-        echo "make it 'REVIEW-RAN: no - <reason>'. A report without that line is treated as a review that did not run."
-        echo
-        emit_rule_probes
-        echo "Mutate and revert inside your throwaway checkout as needed to exercise each rule, and put the"
-        echo "probe lines after your findings, one rule per line:"
-        echo "RULE <n> | PASSED or FAILED | the rule in one line | the command you ran | what you observed"
-        echo
-        echo "===== CANDIDATES (Phase 1 sweep) ====="
-        emit_prior sweep "(sweep not configured - hunt only)"
+        hunt_candidates_header "$(( 1 - NO_SWEEP ))"
+        if [ "$NO_SWEEP" -eq 0 ]; then
+          emit_prior sweep "(sweep not configured - hunt only)"
+        else
+          echo "(derive the candidate list from the diff, per the exploration budget above)"
+        fi
         echo
         emit_context "$co" 1
       } > "$out"
@@ -2026,6 +2128,7 @@ write_dossier() {  # $1 = phase, $2 = dossier path, $3 = the phase's checkout (e
         echo "candidate list from a cheap sweep (Phase 1), empirical execution results (Phase 2), and a"
         echo "read-only checkout of the head under review on the CHECKOUT: line below: read the diff there with"
         echo "'git diff ${BASE_SHA}...HEAD', and any file you need. Do not edit, commit or push in it."
+        hunt_budget_arbitrate_note
         echo "1. Filter hallucinations, false positives and unexploitable edge cases. Weigh the EMPIRICAL"
         echo "   Phase-2 results over Phase-1 theory."
         echo "2. Surface cross-module logic inconsistencies, security bypasses and architectural regressions"
@@ -2054,7 +2157,11 @@ write_dossier() {  # $1 = phase, $2 = dossier path, $3 = the phase's checkout (e
         emit_context "$co" 0
         echo
         echo "===== PHASE 1 (sweep candidates) ====="
-        emit_prior sweep "(sweep not configured)"
+        if [ "$NO_SWEEP" -eq 0 ]; then
+          emit_prior sweep "(sweep not configured)"
+        else
+          echo "(sweep not configured)"
+        fi
         echo
         echo "===== PHASE 2 (empirical results) ====="
         emit_prior hunt "(no Phase-2 results)"

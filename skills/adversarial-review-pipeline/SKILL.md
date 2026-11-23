@@ -32,7 +32,7 @@ If a configured agent cannot run on this runtime, stop and say so (see `referenc
 |---|---|---|---|
 | 0 Preflight | none (deterministic) | Clean tree, every intended file committed, and, when the full-suite option is `on`, suite green in a detached worktree at HEAD | Free, seconds, catches a class no reviewer should spend tokens on |
 | 1 Sweep | `profile.review.pre_pr.sweeper` | Read the diffstat and the diff its dossier embeds (its read-only checkout holds anything not embedded), emit a raw candidate list with `file:line` and a concrete failure scenario, and probe each acceptance rule as its dossier asks | Large context at the lowest price; volume over precision |
-| 2 Verify and hunt | `profile.review.pre_pr.hunter` | For each candidate: mutate, run, report VERIFIED or REFUTED with the command and result; then hunt open-ended for new defects; and probe each acceptance rule as its dossier asks | The only phase that proves rather than asserts |
+| 2 Verify and hunt | `profile.review.pre_pr.hunter` | For each candidate: mutate, run, report VERIFIED or REFUTED with the command and result, and report NOT-REACHED (budget spent) for any it did not check; hunt only defects those candidates directly point at, inside the dossier's exploration budget; and probe each acceptance rule as its dossier asks | The only phase that proves rather than asserts |
 | 3 Arbitrate | `profile.review.pre_pr.arbiter` | From the diffstat, both phase reports and its own read-only checkout (its dossier embeds no diff): filter false positives, weigh empirical evidence over theory, catch cross-module regressions, name accepted risks, decide converged or not | Strongest reasoning, spent once on a pre-filtered bundle |
 | 4 Fix and re-verify | the implementing agent | Fix in-scope findings, re-run each proving mutant (it must now fail), one bounded re-verify | Closes the loop without unbounded ping-pong |
 
@@ -240,11 +240,15 @@ The driver stops at the first non-zero exit and launches no later shard and no `
 Re-running the preflight, or the sweep when the run uses one, removes the plan and every shard artifact and state file.
 
 The hunter works in a throwaway detached worktree of the **unfixed** head, never the working tree.
-Its dossier asks for both jobs and demands execution rather than reasoning:
+Its dossier carries an exploration budget and asks for both jobs, demanding execution rather than reasoning:
 
-1. **Verify**: for each Phase-1 candidate, write and run a minimal adversarial check (mutate, run the suite, revert) and report VERIFIED with the exact command and observed result, or REFUTED with the observation that disproves it.
-2. **Hunt** open-ended for defects the sweep missed: a change that applies wrongly, a gate that acts in the wrong environment, a test that passes vacuously, a regression to shipped behaviour.
+1. **Verify**: for each candidate the dossier hands it - the sweep report's candidates, or the list it derives from the diff when the run is hunt-only - write and run a minimal adversarial check (mutate, run the suite, revert) and report VERIFIED with the exact command and observed result, or REFUTED with the observation that disproves it.
+   An unchecked candidate is NOT-REACHED (budget spent): a candidate may be VERIFIED or REFUTED only if it was actually checked, and the report ends with the candidates it did not check, or `none`.
+2. **Hunt** only for defects the candidate list directly points at: a change that applies wrongly, a gate that acts in the wrong environment, a test that passes vacuously, a regression to shipped behaviour.
    Mutate to prove each.
+
+The budget is part of the dossier: verify only the listed candidates plus the defects they directly point at, never run a repository-wide `grep`, `find` or `rg` (path-scoped searches only), run at most 40 shell commands in total, read only paths named in the diffstat unless a candidate names another, and stop once the candidate list is exhausted rather than continuing to explore.
+The mode, set by `--no-sweep` and nothing else, decides the candidate source: a sweep run verifies the sweep report's candidates, and a hunt-only run derives the list from the diff itself.
 
 - A hunter whose sandbox could not start reads nothing yet may exit 0.
   A sandbox or permission error on the agent's stderr, or a report whose first line is not `REVIEW-RAN: yes`, is a failed phase, never a clean one (the script exits 17).
