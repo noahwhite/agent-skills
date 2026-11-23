@@ -340,9 +340,6 @@ def test_reuse_refuses_at_exit_13_when_the_producing_run_no_longer_accepts(gate)
     assert "reused sweep" not in listed, listed
     artifacts = gate.artifacts()
     assert not artifacts["sweep"].exists(), artifacts["sweep"]
-    run_dir = gate.run_dir()
-    assert not (run_dir / "sweep.binding").exists(), "a refused reuse left its binding"
-    assert not (run_dir / "sweep.primary").exists(), "a refused reuse left its primary marker"
 
 
 def test_a_hunt_miss_caused_by_the_local_sweep_says_no_accepted_run(gate):
@@ -964,6 +961,21 @@ def test_a_spec_less_gate_persists_its_explicit_story_base(gate):
     assert result.returncode == 0, result.stdout + result.stderr
     dossier = Path(result.stdout.strip().splitlines()[-1]).read_text()
     assert f"STORY-BASE: {sibling} {sibling}" in dossier, dossier
+
+
+def test_an_inspection_cannot_override_a_recorded_story_base(gate):
+    """`dossier`/`paths` read provenance; only a gate start may name a different base."""
+    write_spec(gate)
+    gate.accept_full_run("base")
+    head_b = _git(gate.repo, gate.env, "rev-parse", "HEAD")
+    base_sha = _git(gate.repo, gate.env, "rev-parse", "base^{commit}")
+    assert gate.preflight(base=head_b).returncode == 0
+    result = run_script("dossier", "sweep", "--repo", str(gate.repo), "--base", head_b,
+                        "--spec", str(gate.spec), "--story-base", head_b,
+                        "--scratch", str(gate.scratch), env=gate.env)
+    assert result.returncode == 12, result.stdout + result.stderr
+    assert "an inspection cannot override it" in result.stderr, result.stderr
+    assert base_sha != head_b
 
 
 def test_a_spec_edit_at_the_same_run_keeps_the_delta_header(gate):

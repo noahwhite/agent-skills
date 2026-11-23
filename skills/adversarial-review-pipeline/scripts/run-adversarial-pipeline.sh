@@ -1123,9 +1123,10 @@ if [ -z "${STORY_BASE_SHA:-}" ]; then STORY_BASE_SHA="$BASE_SHA"; STORY_BASE="$B
 RUN_ID="${BASE_SHA}-${HEAD_SHA}"
 RUN_DIR="$OUT_BASE/runs/$RUN_ID"
 mkdir -p "$RUN_DIR"
-# Provenance is recorded once per spec at a gate start (the preflight or a phase run) and never
-# rewritten; a conflicting explicit value is refused. An inspection command only reads it, so a
-# later `paths --spec <other>` can neither create it nor overwrite what a gate wrote. A run directory
+# Provenance is recorded per spec at a gate start (the preflight or a phase run). An explicit
+# --story-base is authoritative there and (re)writes that spec's record; without it, a recorded value
+# is used and never rewritten. Opposite records refuse a flagless gate start (exit 12). An inspection
+# command only reads: it neither creates the record nor overrides a recorded value. A run directory
 # pins one base and one head, so a spec edit at the same pair inherits the story base that run
 # already recorded instead of losing the delta header.
 case "$cmd" in
@@ -1135,12 +1136,15 @@ esac
 if [ "$GATE_START" -eq 1 ] && [ "$STORY_BASE_SET" -eq 0 ] && story_records_disagree "$RUN_DIR"; then
   die 12 "this run's story-base records disagree; pass --story-base to name the base this run reviewed."
 fi
-# An explicit --story-base is authoritative for this invocation; otherwise the run's record wins.
-if [ "$STORY_BASE_SET" -eq 0 ] && rec_text="$(story_record_text "$RUN_DIR")"; then
+# An explicit --story-base is authoritative at a gate start; otherwise the run's record wins, and an
+# inspection may not contradict a recorded value.
+if rec_text="$(story_record_text "$RUN_DIR")"; then
   recorded="$(printf '%s\n' "$rec_text" | sed -n 's/^sha=//p' | head -n 1)"
   recorded_ref="$(printf '%s\n' "$rec_text" | sed -n 's/^ref=//p' | head -n 1)"
-  if [ -n "$recorded" ]; then
+  if [ -n "$recorded" ] && [ "$STORY_BASE_SET" -eq 0 ]; then
     STORY_BASE_SHA="$recorded"; STORY_BASE="$recorded_ref"
+  elif [ -n "$recorded" ] && [ "$GATE_START" -eq 0 ] && [ "$recorded" != "$STORY_BASE_SHA" ]; then
+    die 12 "this run already records story base $recorded; an inspection cannot override it, and only a gate start may name another."
   fi
 fi
 # A gate start records its provenance: per spec when a spec is given, else the single legacy record.
@@ -1555,8 +1559,10 @@ reuse_accept() {  # $1 = phase, $2 = producing run dir, $3 = identity
   echo "Phase $phase reused -> $art" >&2
 }
 
-# Undo a reuse that did not end accepted: the copy, its stamp and its provenance, so `paths` never
-# reports a reuse that did not happen.
+# Undo a reuse that did not end accepted: the copy, its stamp, its provenance and its state files, so
+# `paths` never reports a reuse that did not happen. Reached only when the producer changes between
+# the lookup and the post-copy acceptance check (a race), so no deterministic test reaches it; the
+# branch is exercised by mutating the producer during the copy.
 rollback_reuse() {  # $1 = phase
   local art key; art="$(artifact_for "$1")"; key="$(state_key "$1")"
   rm -f -- "$art" "$art.stamp" "$RUN_DIR/$key.reuse" "$RUN_DIR/$key.dossier" \
