@@ -46,7 +46,9 @@
 # Sharded hunt: `run hunt`, `dossier hunt` and `record hunt` accept `--shard K/N`. K and N are
 # decimal integers with 1 <= K <= N and no leading zero; N = 1 is accepted only as `--shard 1/1`.
 # Every other value is a usage error (exit 2) with one stderr line naming it, and so is `--shard`
-# given more than once. `--shard` on sweep or arbitrate, or on any command other than run, dossier
+# given more than once. A value the grammar accepts whose per-shard file name would exceed the
+# filesystem's NAME_MAX is refused the same way, naming the value and the limit, because no shard
+# artifact could be created for it. `--shard` on sweep or arbitrate, or on any command other than run, dossier
 # or record, is a usage error (exit 2) naming the command and the flag; the ADVERSARIAL_SHARD
 # default applies only to those hunt commands, so a leftover value never refuses another command.
 # `record hunt` must be passed the same `--shard` as `dossier hunt`, exactly as for `--spec` and
@@ -64,19 +66,25 @@
 # acceptance standing; a failed shard leaves no stamp and no accepted artifact for itself and is
 # diagnosed with its shard=<k>/<n> on the progress, completion and diagnosis stderr lines.
 # The first sharded hunt invocation of a run records the run's hunt plan in <run dir>/hunt.shards:
-# a first line `n=<n>` followed by each shard's artifact path, one per line in shard order. It is
+# a first line `n=<n>` and then one artifact path per shard, in shard order, for every count up to
+# PLAN_MAX_PATHS (1024); a count above it, which no file could hold a line per shard for, records
+# `n=<n>` alone, and each shard's artifact path then follows from the artifact naming rule. It is
 # written only when the invocation is sharded, so an unsharded plan is the file's absence. An
 # omitted `--shard` and `--shard 1/1` both select the unsharded plan. A run whose hunt already ran
 # unsharded rejects a later `--shard K/N` with N >= 2; a run whose plan is sharded requires an
 # explicit `--shard K/N` carrying that recorded N. Any conflict is a usage error (exit 2) that
 # changes neither the plan nor any acceptance. Re-running the preflight, or the sweep when the run
-# uses one, removes the plan and every shard artifact and state file exactly as it discards an
-# unsharded hunt today. When the plan is sharded, `paths` prints one `hunt.<k> <path>` line per
-# recorded shard in shard order in place of the single `hunt` line, `dossier hunt`'s save-path
-# line names the shard's artifact, and `dossier-sizes.md` lists one `hunt.<k>: <bytes> bytes` line
-# per shard in shard order in place of the single `hunt` line. A plan that exists is the run's
-# authority: a first line that is not n=<count> of at least two, or a path line that is not that
-# shard's phase2-hunt.<k>.md, is refused with exit 13 naming the plan, never read as an absent plan.
+# uses one, removes the plan, any plan temporary file, and every shard artifact and state file
+# exactly as it discards an unsharded hunt today. When the plan is sharded, `paths` prints one
+# `hunt.<k> <path>` line per shard the plan names, in shard order, in place of the single `hunt`
+# line, `dossier hunt`'s save-path line names the shard's artifact, and `dossier-sizes.md` lists one
+# `hunt.<k>: <bytes> bytes` line per such shard, in shard order, under the same rule; a plan names
+# every shard up to the cap and, above it, the shards the run holds a file for. A plan that exists
+# is the run's authority: a first line that is not n=<count> of at least two, a count at or below
+# the cap with no artifact path (or one path that is not that shard's), a path list that is not one
+# path per shard in shard order, or a path line whose shard index runs past the count, is refused
+# with exit 13 naming the plan, never read as an absent plan. A path list is accepted at any count,
+# so a plan written by the release that listed paths for a count above the cap still reads.
 # With no `--shard`, or with
 # `--shard 1/1`, the artifact path, the stamp, the binding, the phase's file set and the `paths`
 # output are exactly today's, and the dossier is identical to today's once each occurrence of its
@@ -143,9 +151,13 @@
 # and each phase's report answers it: every explicitly stated behavioural rule in the story's acceptance
 # criteria is enumerated and exercised against the reviewed head by running the command or sequence the
 # rule names, and each is reported PASSED or FAILED with the command and the observation, never passed
-# from the diff or the documentation alone. A rule the code asserts, documents or claims but does not
-# enforce is an enforcement finding at blocking severity (High or Critical), never a low-severity
-# documentation finding. The sweep keeps its own checkout read-only and runs a rule whose command
+# from the diff or the documentation alone. Answers come one result per rule, never several rules under
+# one result: a 'RULES: <count>' line first, then one RULE line per rule in the order the criteria state
+# them, so a report that groups rules or reports a rule only inside another rule's line is a failed
+# report. A rule the code asserts, documents or claims but does not enforce is an enforcement finding at
+# blocking severity (High or Critical), never a low-severity documentation finding and never a Medium
+# one: both probe phases grade it at the same blocking severity. The sweep keeps its own checkout
+# read-only and runs a rule whose command
 # writes against a copy of that checkout it makes in the session scratch directory; a rule it cannot
 # exercise at all is named separately and repeated as a candidate for the hunt. The
 # arbitrate dossier carries no such block: the correction is the sweep's and the hunt's only.
@@ -381,6 +393,20 @@ dec_le() {  # $1 $2 -> 0 when $1 <= $2
   [ "${#1}" -gt "${#2}" ] && return 1
   [ "$1" = "$2" ] || [[ "$1" < "$2" ]]
 }
+# One more, digit by digit, so a count no shell integer can hold still walks correctly.
+dec_inc() {  # $1 canonical decimal -> $1 + 1
+  local i carry=1 out="" c
+  for (( i=${#1}-1; i >= 0; i-- )); do
+    c="${1:i:1}"
+    if [ "$carry" -eq 1 ]; then
+      if [ "$c" = "9" ]; then out="0$out"; else out="$(( c + 1 ))$out"; carry=0; fi
+    else
+      out="$c$out"
+    fi
+  done
+  [ "$carry" -eq 0 ] || out="1$out"
+  printf '%s' "$out"
+}
 
 cmd="${1:-}"; [ -n "$cmd" ] || usage; shift
 phase=""; target=""
@@ -614,7 +640,26 @@ PHASE1="$RUN_DIR/phase1-sweep.md"
 PHASE2="$RUN_DIR/phase2-hunt.md"
 PHASE3="$RUN_DIR/phase3-arbitration.md"
 HUNT_PLAN="$RUN_DIR/hunt.shards"
+# The most artifact paths a plan lists. AC1's grammar sets no maximum on the count, and no file can
+# hold a line per shard for every count it accepts, so a plan over this cap records the count alone
+# and each shard's path follows from the artifact naming rule; at or below it the plan lists one
+# artifact path per shard exactly as AC1 describes. The cap is far above any run (shards are chosen
+# by candidate count), so every real plan carries the full list.
+PLAN_MAX_PATHS=1024
 SHARD_LABEL=""
+
+# A shard's artifact and run-state names carry its index, and no filesystem can hold a name longer
+# than its NAME_MAX. A grammar-valid selection whose longest per-shard name does not fit is refused
+# here, with the same one-line usage error an invalid value gets, instead of failing later inside a
+# file operation with a raw filesystem error.
+if [ "$SHARD_SET" -eq 1 ]; then
+  shard_name_max="$(getconf NAME_MAX "$RUN_DIR" 2>/dev/null)" || shard_name_max=""
+  case "$shard_name_max" in ''|*[!0-9]*) shard_name_max=255 ;; esac
+  # The longest per-shard name is the size sidecar's temporary file, `hunt.<k>.dossier.tmp.XXXXXX`.
+  longest_shard_name="hunt.$SHARD_K.dossier.tmp.XXXXXX"
+  [ "${#longest_shard_name}" -le "$shard_name_max" ] \
+    || die 2 "--shard value '$SHARD_SHOWN' is invalid: its shard file name '$longest_shard_name' is ${#longest_shard_name} bytes, longer than the $shard_name_max-byte file name this filesystem allows"
+fi
 
 # The run-state prefix of an invocation: hunt is per shard when the invocation is sharded.
 state_key() {  # $1 phase -> the file-name prefix for this invocation's run-state files
@@ -625,25 +670,44 @@ state_key() {  # $1 phase -> the file-name prefix for this invocation's run-stat
 }
 
 plan_exists() { [ -e "$HUNT_PLAN" ]; }
-plan_paths() { tail -n +2 -- "$HUNT_PLAN"; }
+# The artifact path shard $1 owns, the same rule artifact_for applies to a shard invocation.
+plan_shard_path() { printf '%s/phase2-hunt.%s.md\n' "$RUN_DIR" "$1"; }
 
-# Reads and validates the run's hunt plan, setting PLAN_N. A plan that exists is the run's
-# authority, so a plan that is not the recorded shape is a state error rather than an absent plan:
-# it never silently waives the shard prerequisites.
+# Reads and validates the run's hunt plan, setting PLAN_N and PLAN_EXPLICIT (1 when the plan lists
+# an artifact path per shard). A plan that exists is the run's authority, so a plan that is not one
+# of the two recorded shapes is a state error rather than an absent plan: it never silently waives
+# the shard prerequisites.
+#   n=<n>                       a count over PLAN_MAX_PATHS, whose paths follow from the naming rule
+#   n=<n> + one path per shard  the list itself, in shard order, accepted at any count
 plan_read() {
-  local line count=0
+  local lines j k line
+  local -a plan_lines=()
   PLAN_N="$(head -n 1 -- "$HUNT_PLAN" | sed -n 's/^n=\([1-9][0-9]*\)$/\1/p')"
   [ -n "$PLAN_N" ] \
     || die 13 "the run's hunt plan $HUNT_PLAN is corrupt: its first line is not n=<count>; re-run the preflight (or the sweep) to discard it"
   [ "$PLAN_N" != "1" ] \
     || die 13 "the run's hunt plan $HUNT_PLAN records n=1, but a sharded plan records at least two shards; re-run the preflight (or the sweep) to discard it"
-  while IFS= read -r line; do
-    count=$(( count + 1 ))
-    [ "$line" = "$RUN_DIR/phase2-hunt.$count.md" ] \
-      || die 13 "the run's hunt plan $HUNT_PLAN is corrupt: the artifact path on line $(( count + 1 )) is not shard $count's $RUN_DIR/phase2-hunt.$count.md; re-run the preflight (or the sweep) to discard it"
-  done < <(plan_paths)
-  [ "$count" = "$PLAN_N" ] \
-    || die 13 "the run's hunt plan $HUNT_PLAN is corrupt: it records n=$PLAN_N but carries $count artifact paths; re-run the preflight (or the sweep) to discard it"
+  # Read whole, so a path list is checked without one process per path; a count-only plan is one line.
+  mapfile -t plan_lines < "$HUNT_PLAN"
+  lines="${#plan_lines[@]}"
+  if [ "$lines" -eq 1 ]; then
+    # Only a count above the cap may omit its paths: at or below it every shard has a path line.
+    dec_le "$(dec_inc "$PLAN_MAX_PATHS")" "$PLAN_N" \
+      || die 13 "the run's hunt plan $HUNT_PLAN is corrupt: it records n=$PLAN_N but carries no artifact path; re-run the preflight (or the sweep) to discard it"
+    PLAN_EXPLICIT=0
+    return 0
+  fi
+  [ "$lines" = "$(dec_inc "$PLAN_N")" ] \
+    || die 13 "the run's hunt plan $HUNT_PLAN is corrupt: it records n=$PLAN_N but carries $(( lines - 1 )) artifact paths; re-run the preflight (or the sweep) to discard it"
+  j=1
+  k=1
+  while [ "$j" -lt "$lines" ]; do
+    [ "${plan_lines[$j]}" = "$(plan_shard_path "$k")" ] \
+      || die 13 "the run's hunt plan $HUNT_PLAN is corrupt: the artifact path on line $(( j + 1 )) is not shard $k's $(plan_shard_path "$k"); re-run the preflight (or the sweep) to discard it"
+    j=$(( j + 1 ))
+    k="$(dec_inc "$k")"
+  done
+  PLAN_EXPLICIT=1
 }
 
 # Has this run already hunted unsharded? Its artifact, every state file its launch, dossier and
@@ -680,19 +744,20 @@ shard_plan_validate() {
 }
 
 # Records the run's hunt plan on the first sharded invocation; never rewrites an existing plan.
-# The plan is published only when it holds one artifact path per shard, so a count the shell cannot
-# enumerate is refused instead of leaving a plan no invocation can satisfy.
+# At or below PLAN_MAX_PATHS it lists one artifact path per shard, exactly AC1's plan; above it the
+# plan records the count alone, because no file can hold a line per shard for a count no filesystem
+# could enumerate, and every shard's path follows from the artifact naming rule.
 shard_plan_write() {
-  local k tmp written
+  local k tmp
   [ "$SHARDED" -eq 1 ] || return 0
   plan_exists && return 0
   tmp="$(mktemp -p "$RUN_DIR" hunt.shards.XXXXXX)" || return 1
   {
     printf 'n=%s\n' "$SHARD_N"
-    for (( k=1; k <= SHARD_N; k++ )); do printf '%s\n' "$RUN_DIR/phase2-hunt.$k.md"; done
+    if dec_le "$SHARD_N" "$PLAN_MAX_PATHS"; then
+      for (( k=1; k <= SHARD_N; k++ )); do plan_shard_path "$k"; done
+    fi
   } > "$tmp" || { rm -f -- "$tmp"; return 1; }
-  written="$(tail -n +2 -- "$tmp" | wc -l)"
-  if [ "$written" != "$SHARD_N" ]; then rm -f -- "$tmp"; return 1; fi
   mv -fT -- "$tmp" "$HUNT_PLAN" || { rm -f -- "$tmp"; return 1; }
 }
 
@@ -705,7 +770,7 @@ remove_all_hunt() {
     "$RUN_DIR"/hunt.[0-9]*.launch "$RUN_DIR"/hunt.[0-9]*.binding \
     "$RUN_DIR"/hunt.[0-9]*.primary "$RUN_DIR"/hunt.[0-9]*.dossier \
     "$RUN_DIR"/hunt.[0-9]*.model "$RUN_DIR"/hunt.[0-9]*-agent.err "$RUN_DIR"/hunt.[0-9]*-agent.log \
-    "$RUN_DIR"/hunt-probe.log "$RUN_DIR"/hunt.[0-9]*-probe.log
+    "$RUN_DIR"/hunt-probe.log "$RUN_DIR"/hunt.[0-9]*-probe.log "$RUN_DIR"/hunt.shards.*
 }
 
 artifact_for() {
@@ -786,14 +851,18 @@ accepted() {  # $1 = phase -> 0 when its artifact is non-empty, stamped for this
 }
 
 require_predecessors() {  # $1 = phase
-  local p k n
+  local p k
   for p in $(deps_of "$1"); do
     if [ "$p" = "hunt" ] && plan_exists; then
-      plan_read; n="$PLAN_N"
-      for (( k=1; k <= n; k++ )); do
-        SHARDED=1; SHARD_K="$k"; SHARD_N="$n"
+      plan_read
+      k=1
+      # Shard order, from 1, so the first unaccepted shard is named; the walk is decimal, so a plan
+      # count beyond any shell integer still compares correctly, and it stops at that shard.
+      while dec_le "$k" "$PLAN_N"; do
+        SHARDED=1; SHARD_K="$k"; SHARD_N="$PLAN_N"
         accepted hunt \
-          || die 13 "the $1 phase needs an accepted hunt shard $k/$n from this run (base ${BASE_SHA:0:12}, head ${HEAD_SHA:0:12}, this spec, same --no-sweep); run hunt --shard $k/$n at this head first."
+          || die 13 "the $1 phase needs an accepted hunt shard $k/$PLAN_N from this run (base ${BASE_SHA:0:12}, head ${HEAD_SHA:0:12}, this spec, same --no-sweep); run hunt --shard $k/$PLAN_N at this head first."
+        k="$(dec_inc "$k")"
       done
       SHARDED=0
       continue
@@ -899,10 +968,10 @@ accept_phase() {  # $1 = phase, $2 = stderr log or "": validate a freshly writte
   # exact selection the dossier was written for: a record must repeat it exactly. The marker is the
   # one selection line the launcher writes, with or without its trailing newline; anything else - a
   # second line, a NUL, a K > N, an unreadable or oversized file - is unusable state, never a
-  # selection and never a changed input. Both reads are byte-bounded by a marker-reader limit (a
-  # 96-byte read, so the whole marker is at most 95 bytes and a selection line at most 94 bytes plus
-  # its newline, far above any selection this launcher writes), and the comparison is exact in hex,
-  # so the check never reads a whole file and can never forge a diagnosis line.
+  # selection and never a changed input. The marker is read whole under a size bound no selection the
+  # launcher could name can reach (an artifact name is at most 255 bytes, so about 120 digits), so no
+  # fixed marker-length limit can refuse a selection AC1's grammar accepts, and the comparison is
+  # exact in hex.
   #
   # The marker's usability is settled before the binding comparison, so exit 13 is reached only with
   # a launch that records a selection; an empty, unreadable or malformed marker is exit 15 even when
@@ -921,18 +990,26 @@ accept_phase() {  # $1 = phase, $2 = stderr log or "": validate a freshly writte
       die 15 "the hunt launch marker $RUN_DIR/$key.launch is missing or empty, so the dossier's selection was never recorded; start the hunt phase again with '$dossier_hint'."
     fi
     # A reader or encoder failure is unusable state, never an empty marker: two empty encodings must
-    # never compare equal and let a malformed marker through.
-    if ! marker_hex="$(head -c 96 -- "$RUN_DIR/$key.launch" 2>/dev/null | od -An -v -tx1 | tr -d ' \n')" \
+    # never compare equal and let a malformed marker through. The marker is machine-written and holds
+    # exactly one selection line, so it is read whole; the bound on its size is one no selection the
+    # launcher could name can reach (an artifact name is at most 255 bytes, so about 120 digits), and
+    # a longer file is unusable state. No fixed marker-length cap may refuse a selection the grammar
+    # accepts.
+    launch_bytes="$(wc -c < "$RUN_DIR/$key.launch" 2>/dev/null | tr -d '[:space:]')" || launch_bytes=""
+    if [ -z "$launch_bytes" ] || [ "$launch_bytes" -gt 4096 ]; then
+      die 15 "the hunt launch marker $RUN_DIR/$key.launch is not the one selection line the launcher writes (it could not be measured, or is longer than any selection); start the hunt phase again with '$dossier_hint'."
+    fi
+    if ! marker_hex="$(od -An -v -tx1 -- "$RUN_DIR/$key.launch" 2>/dev/null | tr -d ' \n')" \
       || [ -z "$marker_hex" ]; then
       die 15 "the hunt launch marker $RUN_DIR/$key.launch cannot be read (marker reader failed); start the hunt phase again with '$dossier_hint'."
     fi
-    launched="$(head -c 95 -- "$RUN_DIR/$key.launch" 2>/dev/null | head -n 1)" || launched=""
+    launched="$(head -n 1 -- "$RUN_DIR/$key.launch" 2>/dev/null)" || launched=""
     if [ -n "$launched" ]; then
       line_hex="$(printf '%s\n' "$launched" | od -An -v -tx1 | tr -d ' \n')" || line_hex=""
       plain_hex="$(printf '%s' "$launched" | od -An -v -tx1 | tr -d ' \n')" || plain_hex=""
     fi
-    # 96 bytes or more is over the reader's limit: overflow is refused before it is classified.
-    if [ -n "$line_hex" ] && [ -n "$plain_hex" ] && [ "${#marker_hex}" -lt 192 ] \
+    # The file must be exactly that one line, with or without its trailing newline.
+    if [ -n "$line_hex" ] && [ -n "$plain_hex" ] \
       && { [ "$marker_hex" = "$line_hex" ] || [ "$marker_hex" = "$plain_hex" ]; }; then
       case "$launched" in
         shard=none) marker_ok=1 ;;
@@ -1667,8 +1744,40 @@ sidecar_read() {  # $1 = a size sidecar path -> sets SIDE_BYTES and SIDE_EXCLUDE
   fi
 }
 
+# The shard indices the plan names, in shard order: every shard of a plan that lists its paths, and
+# for a plan over PLAN_MAX_PATHS (which names none) the shards the run holds a file for. Bounded by
+# what exists, never by a count no shell integer can hold.
+plan_shard_indices() {
+  if [ "${PLAN_EXPLICIT:-1}" -eq 1 ]; then
+    local k=1
+    while dec_le "$k" "$PLAN_N"; do printf '%s\n' "$k"; k="$(dec_inc "$k")"; done
+  else
+    existing_shard_indices "$PLAN_N"
+  fi
+}
+
+# The shard indices the run holds any file for, in shard order, never one past the plan's count $1:
+# a report, a stamp, a size sidecar, or any of the shard's run-state files.
+existing_shard_indices() {
+  local f idx
+  {
+    for f in "$RUN_DIR"/phase2-hunt.*.md "$RUN_DIR"/phase2-hunt.*.md.stamp \
+             "$RUN_DIR"/hunt.*.launch "$RUN_DIR"/hunt.*.binding "$RUN_DIR"/hunt.*.primary \
+             "$RUN_DIR"/hunt.*.dossier "$RUN_DIR"/hunt.*.model \
+             "$RUN_DIR"/hunt.*-agent.err "$RUN_DIR"/hunt.*-agent.log; do
+      [ -e "$f" ] || continue
+      idx="${f##*/}"
+      idx="${idx#phase2-hunt.}"; idx="${idx#hunt.}"
+      idx="${idx%%.*}"; idx="${idx%%-*}"
+      case "$idx" in ''|0*|*[!0-9]*) continue ;; esac
+      if [ -n "${1:-}" ] && ! dec_le "$idx" "$1"; then continue; fi
+      printf '%s %s\n' "${#idx}" "$idx"
+    done
+  } | LC_ALL=C sort -u | cut -d' ' -f2
+}
+
 dossier_sizes_text() {
-  local p side bytes line total=0 complete=1 text="" k n
+  local p side bytes line total=0 complete=1 text="" k n seen=0
   for p in sweep hunt arbitrate; do
     if [ "$p" = "sweep" ] && [ "$NO_SWEEP" -eq 1 ]; then
       text+="sweep: absent (--no-sweep)"$'\n'
@@ -1676,9 +1785,10 @@ dossier_sizes_text() {
     fi
     if [ "$p" = "hunt" ] && plan_exists; then
       plan_read; n="$PLAN_N"
-      for (( k=1; k <= n; k++ )); do
+      for k in $(plan_shard_indices); do
         side="$RUN_DIR/hunt.$k.dossier"
         sidecar_read "$side"; bytes="$SIDE_BYTES"
+        seen=$(( seen + 1 ))
         if ! [[ "$bytes" =~ ^[0-9]{1,18}$ ]]; then
           text+="hunt.$k: not run"$'\n'
           complete=0
@@ -1688,6 +1798,8 @@ dossier_sizes_text() {
         for line in "${SIDE_EXCLUDED[@]}"; do text+="$line"$'\n'; done
         total=$(( total + 10#$bytes ))
       done
+      # A plan is complete only when every shard it records has run.
+      [ "$seen" = "$n" ] || complete=0
       continue
     fi
     side="$RUN_DIR/$p.dossier"
@@ -1936,9 +2048,15 @@ emit_rule_probes() {
   echo "never a claim you judge: exercise each one against the reviewed head by running the command or"
   echo "sequence the rule names, and report it PASSED or FAILED with the command you ran and what you"
   echo "observed. Never pass a rule from reading the diff or the documentation alone."
+  echo "Report ONE result per rule, never several rules under one result: first a line 'RULES: <count>'"
+  echo "carrying how many explicitly stated behavioural rules the criteria hold, then exactly that many"
+  echo "lines, 'RULE 1', 'RULE 2' and so on in the order the criteria state them. A line that reports two"
+  echo "or more rules is a failed report, and a rule reported only inside another rule's line is not"
+  echo "reported at all."
   echo "A rule the code asserts, documents or claims but does not enforce is an ENFORCEMENT finding at"
   echo "blocking severity (High or Critical), naming the documented rule and the command that contradicts"
-  echo "it - never a low-severity documentation finding."
+  echo "it - never a low-severity documentation finding, and never a Medium one: the sweep and the hunt"
+  echo "grade every enforcement finding at the same blocking severity."
 }
 
 write_dossier() {  # $1 = phase, $2 = dossier path, $3 = the phase's checkout (exists already)
@@ -1951,7 +2069,8 @@ write_dossier() {  # $1 = phase, $2 = dossier path, $3 = the phase's checkout (e
         echo "Output the structured candidate list, then the acceptance-rule probe table, and nothing else -"
         echo "no prose, no fixes, no plan. One candidate entry per line:"
         echo "- file:line | severity (Critical/High/Medium/Low) | one-line claim | the concrete failure scenario"
-        echo "One probe line per acceptance rule, in the order the criteria state them:"
+        echo "First a line 'RULES: <count>' with how many acceptance rules the criteria state, then one"
+        echo "probe line per acceptance rule, in the order the criteria state them:"
         echo "RULE <n> | PASSED or FAILED | the rule in one line | the command you ran | what you observed"
         echo "Cover: vulnerability vectors, logic flaws, breaking changes, API/contract mismatches, test gaps, code smells."
         echo "Be exhaustive; volume over precision, and mark speculation as such."
@@ -2011,7 +2130,8 @@ write_dossier() {  # $1 = phase, $2 = dossier path, $3 = the phase's checkout (e
         echo
         emit_rule_probes
         echo "Mutate and revert inside your throwaway checkout as needed to exercise each rule, and put the"
-        echo "probe lines after your findings, one rule per line:"
+        echo "probe lines after your findings: first 'RULES: <count>' with how many acceptance rules the"
+        echo "criteria state, then one line per rule, in the order the criteria state them:"
         echo "RULE <n> | PASSED or FAILED | the rule in one line | the command you ran | what you observed"
         echo
         echo "===== CANDIDATES (Phase 1 sweep) ====="
@@ -2435,11 +2555,9 @@ case "$cmd" in
       "$RUN_DIR" "$PHASE0" "$SUITE_LOG" "$PHASE1"
     if plan_exists; then
       plan_read
-      plan_k=1
-      while IFS= read -r plan_path; do
-        printf 'hunt.%s %s\n' "$plan_k" "$plan_path"
-        plan_k=$(( plan_k + 1 ))
-      done < <(plan_paths)
+      for plan_k in $(plan_shard_indices); do
+        printf 'hunt.%s %s\n' "$plan_k" "$(plan_shard_path "$plan_k")"
+      done
     else
       printf 'hunt %s\n' "$PHASE2"
     fi

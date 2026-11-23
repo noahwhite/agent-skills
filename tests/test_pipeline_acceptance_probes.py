@@ -169,7 +169,14 @@ def test_the_phase_dossier_makes_every_acceptance_rule_a_probe(gate, phase):
         in block, block
     assert "report it PASSED or FAILED with the command you ran and what you observed" in block, block
     assert "Never pass a rule from reading the diff or the documentation alone" in block, block
+    # one result per rule: a report that groups rules is a failed report, in both phases
+    assert "Report ONE result per rule, never several rules under one result" in block, block
+    assert "first a line 'RULES: <count>'" in block, block
+    assert "then exactly that many" in block and "'RULE 1', 'RULE 2'" in block, block
+    assert "A line that reports two or more rules is a failed report" in block, block
+    assert "a rule reported only inside another rule's line is not" in block, block
     # the report's probe line format is part of the requirement, in both phases
+    assert "RULES: <count>" in " ".join(dossier.split()), f"the {phase} dossier lost its probe-count line"
     assert "RULE <n> | PASSED or FAILED | the rule in one line | the command you ran | what you observed" \
         in " ".join(dossier.split()), f"the {phase} dossier lost its probe-line format"
 
@@ -181,6 +188,10 @@ def test_a_documented_but_unenforced_rule_is_escalated_not_filed_as_documentatio
     assert "A rule the code asserts, documents or claims but does not enforce is an ENFORCEMENT finding" \
         in block, block
     assert "at blocking severity (High or Critical)" in block, block
+    # one severity for both probe phases: a Medium grade is as wrong as a Low one
+    assert "never a Medium one" in block, block
+    assert "the sweep and the hunt" in block and "grade every enforcement finding at the same blocking severity" \
+        in block, block
     # the documentation route exists only as a prohibition
     mentioning = [s for s in sentences(block) if "documentation finding" in s or "documentation" in s]
     assert mentioning, f"the {phase} block says nothing about the documentation route: {block}"
@@ -200,9 +211,14 @@ def test_the_sweep_exercises_a_write_producing_rule_on_a_copy(gate):
 
 def test_the_hunt_exercises_every_rule_in_its_throwaway_checkout(gate):
     advance(gate, "hunt")
-    block = probe_block(run_dossier(gate, "hunt"))
+    dossier = run_dossier(gate, "hunt")
+    block = probe_block(dossier)
     assert "Mutate and revert inside your throwaway checkout as needed to exercise each rule" in block, block
     assert "RULE <n> | PASSED or FAILED" in block, block
+    # the hunt's own instruction repeats the count line and the one-result-per-rule rule
+    flattened = " ".join(dossier.split())
+    assert "first 'RULES: <count>' with how many acceptance rules the criteria state, then one line per rule" \
+        in flattened, flattened
 
 
 # --- the `dossier` flow writes the same prompt text ----------------------------------------------
@@ -248,14 +264,22 @@ def test_the_skill_states_the_probe_rule_for_both_phases(phase):
     if phase == "sweep":
         assert "is enumerated and exercised against the reviewed head by running the command or" in section, section
         assert "reported PASSED or FAILED with the command and the observation" in section, section
+        assert "The report answers one result per rule, never several rules under one result" in section, section
+        assert "a `RULES: <count>` line first, then exactly that many `RULE <n>` lines" in section, section
+        assert "a line that reports two or more rules, or a rule reported only inside another rule's line, is a failed report" \
+            in section, section
     else:
         assert "exercises each one in its throwaway checkout with the command or sequence the rule names" \
             in section, section
-        assert "reports each PASSED or FAILED with the command and the observation after its findings" \
+        assert "reports one result per rule" in section, section
+        assert "one `RULE <n>` line per rule - PASSED or FAILED with the command and the observation" \
             in section, section
+        assert "under the enforcement rule and the one-result-per-rule rule" in section, section
 
 
 def test_the_skill_states_the_enforcement_escalation():
     section = " ".join(skill_sections()["sweep"].split())
     assert "enforcement finding at blocking severity" in section, section
     assert "never a low-severity documentation finding" in section, section
+    assert "never a `Medium` one" in section, section
+    assert "grade every enforcement finding at the same blocking severity" in section, section

@@ -231,6 +231,11 @@ def test_a_sharded_hunt_writes_its_own_artifact_state_and_plan(gate):
         str(run_dir / "phase2-hunt.1.md"),
         str(run_dir / "phase2-hunt.2.md"),
     ]
+    # A plan that lists its paths names every shard, so `paths` shows the pending shard too.
+    listed = run_script("paths", "--repo", str(repo), "--base", "HEAD", env=env)
+    assert [line.split(" ", 1)[0] for line in listed.stdout.splitlines()] == [
+        "run", "preflight", "suite_log", "sweep", "hunt.1", "hunt.2", "arbitrate", "dossier_sizes",
+    ], listed.stdout
     binding = (run_dir / "hunt.1.binding").read_text()
     assert "shard=1/2" in binding.splitlines()
     stamp = Path(f"{files['hunt.1']}.stamp").read_text()
@@ -933,16 +938,78 @@ def test_a_value_beyond_the_integer_range_is_judged_by_its_digits(gate):
     assert "integer expression" not in equal.stderr, equal.stderr
 
 
-def test_a_shard_count_the_shell_cannot_enumerate_never_leaves_a_plan(accepted_gate):
+def test_a_valid_count_beyond_the_shell_integer_range_is_accepted(accepted_gate):
+    """AC1 sets no maximum: a count no file can list still writes its plan and runs its shard."""
+    repo, scratch, env = accepted_gate
+    huge = "10000000000000000000"
+    result = run_hunt(repo, scratch, env, "--shard", f"{huge}/{huge}")
+    assert result.returncode == 0, result.stdout + result.stderr
+    run_dir = paths(repo, env)["run"]
+    plan = plan_file(run_dir)
+    assert plan.is_file()
+    # No file can hold a line per shard for this count, so the plan records the count alone and each
+    # shard's path follows from the artifact naming rule.
+    assert plan.read_text().splitlines() == ["n=" + huge]
+    assert (run_dir / f"phase2-hunt.{huge}.md").exists()
+    assert (run_dir / f"hunt.{huge}.launch").read_text() == f"shard={huge}/{huge}\n"
+
+
+def test_a_count_at_the_cap_lists_its_paths_and_one_above_it_does_not(accepted_gate):
     repo, scratch, env = accepted_gate
     run_dir = paths(repo, env)["run"]
-    result = run_hunt(repo, scratch, env, "--shard", "1/18446744073709551616")
-    assert result.returncode == 2, result.stdout + result.stderr
-    assert "could not write the hunt plan" in result.stderr.splitlines()[0], result.stderr
-    assert not plan_file(run_dir).exists()
-    assert not (run_dir / "hunt.1.launch").exists()
-    plain = run_hunt(repo, scratch, env)
-    assert plain.returncode == 0, plain.stdout + plain.stderr
+    at_cap = run_script(
+        "dossier", "hunt", "--repo", str(repo), "--base", "HEAD", "--scratch", str(scratch),
+        "--shard", "1/1024", env=env,
+    )
+    checkout, _ = dossier_of(at_cap)
+    plan_lines = plan_file(run_dir).read_text().splitlines()
+    assert plan_lines[0] == "n=1024"
+    assert plan_lines[1:] == [str(run_dir / f"phase2-hunt.{k}.md") for k in range(1, 1025)]
+    listed = run_script("paths", "--repo", str(repo), "--base", "HEAD", env=env)
+    assert sum(1 for line in listed.stdout.splitlines() if line.startswith("hunt.")) == 1024
+    assert run_script("cleanup", str(checkout), "--repo", str(repo), env=env).returncode == 0
+
+    over_cap = run_script(
+        "dossier", "hunt", "--repo", str(repo), "--base", "HEAD", "--scratch", str(scratch),
+        "--shard", "1/1025", env=env,
+    )
+    assert over_cap.returncode == 2, over_cap.stdout + over_cap.stderr
+    assert "conflicts with this run's recorded hunt plan n=1024" in over_cap.stderr, over_cap.stderr
+    # A fresh run one shard over the cap writes the count alone.
+    assert run_sweep(repo, scratch, env).returncode == 0
+    over_cap = run_script(
+        "dossier", "hunt", "--repo", str(repo), "--base", "HEAD", "--scratch", str(scratch),
+        "--shard", "1/1025", env=env,
+    )
+    checkout, _ = dossier_of(over_cap)
+    assert plan_file(run_dir).read_text().splitlines() == ["n=1025"]
+    assert run_script("cleanup", str(checkout), "--repo", str(repo), env=env).returncode == 0
+
+
+def test_a_valid_count_beyond_the_shell_integer_range_writes_its_dossier_and_records(accepted_gate):
+    repo, scratch, env = accepted_gate
+    huge = "10000000000000000000"
+    run_dir = paths(repo, env)["run"]
+    dossier = run_script(
+        "dossier", "hunt", "--repo", str(repo), "--base", "HEAD", "--scratch", str(scratch),
+        "--shard", f"{huge}/{huge}", env=env,
+    )
+    checkout, dossier_path = dossier_of(dossier)
+    assert os.path.basename(dossier_path) == f"hunt.{huge}-dossier.md", dossier.stderr
+    assert f"phase2-hunt.{huge}.md" in dossier.stderr, dossier.stderr
+    report = run_dir / f"phase2-hunt.{huge}.md"
+    report.write_text("REVIEW-RAN: yes\nhuge shard\n")
+    recorded = run_script(
+        "record", "hunt", "--repo", str(repo), "--base", "HEAD", "--shard", f"{huge}/{huge}", env=env,
+    )
+    assert recorded.returncode == 0, recorded.stdout + recorded.stderr
+    assert Path(f"{report}.stamp").exists()
+    assert f"shard={huge}/{huge}" in Path(f"{report}.stamp").read_text().splitlines()
+    # Arbitration still refuses at exit 13, naming shard 1 of the plan, without walking 10^19 shards.
+    arbitrate = run_arbitrate(repo, scratch, env)
+    assert arbitrate.returncode == 13, arbitrate.stdout + arbitrate.stderr
+    assert f"1/{huge}" in arbitrate.stderr, arbitrate.stderr
+    assert run_script("cleanup", str(checkout), "--repo", str(repo), env=env).returncode == 0
 
 
 def test_a_shard_rerun_refused_by_its_predecessor_discards_its_own_acceptance(accepted_gate):
@@ -1015,6 +1082,94 @@ def test_a_plan_with_a_missing_artifact_path_is_refused(accepted_gate):
     assert "hunt plan" in arbitrate.stderr, arbitrate.stderr
 
 
+def test_a_plan_over_the_cap_carries_no_artifact_path_is_accepted(accepted_gate):
+    """A count no file can list records the count alone; a path line there is corrupt."""
+    repo, scratch, env = accepted_gate
+    run_dir = paths(repo, env)["run"]
+    plan_file(run_dir).write_text("n=1025\n")
+    listed = run_script("paths", "--repo", str(repo), "--base", "HEAD", env=env)
+    assert listed.returncode == 0, listed.stdout + listed.stderr
+    # A complete path list is accepted at any count, so a plan from the release that listed paths
+    # above the cap still reads.
+    plan_file(run_dir).write_text(
+        "n=1025\n" + "".join(f"{run_dir}/phase2-hunt.{k}.md\n" for k in range(1, 1026))
+    )
+    listed = run_script("paths", "--repo", str(repo), "--base", "HEAD", env=env)
+    assert listed.returncode == 0, listed.stdout + listed.stderr
+    assert sum(1 for line in listed.stdout.splitlines() if line.startswith("hunt.")) == 1025
+    # A partial list is corrupt.
+    plan_file(run_dir).write_text(f"n=1025\n{run_dir}/phase2-hunt.1.md\n")
+    listed = run_script("paths", "--repo", str(repo), "--base", "HEAD", env=env)
+    assert listed.returncode == 13, listed.stdout + listed.stderr
+    assert "hunt plan" in listed.stderr, listed.stderr
+    # A stray shard file past the plan's count is not a shard of this run.
+    plan_file(run_dir).write_text("n=1025\n")
+    (run_dir / "hunt.5000.binding").write_text("run=x\n")
+    listed = run_script("paths", "--repo", str(repo), "--base", "HEAD", env=env)
+    assert listed.returncode == 0, listed.stdout + listed.stderr
+    assert not any(line.startswith("hunt.") for line in listed.stdout.splitlines()), listed.stdout
+
+
+def test_a_plan_at_the_cap_must_carry_its_paths(accepted_gate):
+    """Only a count above the cap may omit its paths; a pathless plan at the cap is corrupt."""
+    repo, scratch, env = accepted_gate
+    run_dir = paths(repo, env)["run"]
+    plan_file(run_dir).write_text("n=1024\n")
+    listed = run_script("paths", "--repo", str(repo), "--base", "HEAD", env=env)
+    assert listed.returncode == 13, listed.stdout + listed.stderr
+    assert "hunt plan" in listed.stderr, listed.stderr
+    plan_file(run_dir).write_text("n=1025\n")
+    listed = run_script("paths", "--repo", str(repo), "--base", "HEAD", env=env)
+    assert listed.returncode == 0, listed.stdout + listed.stderr
+
+
+def test_a_selection_whose_file_name_cannot_fit_is_refused_cleanly(accepted_gate):
+    """No filesystem can name the artifact of an over-long index, so the value is refused, not crashed."""
+    repo, scratch, env = accepted_gate
+    huge_k = "1" * 300
+    result = run_hunt(repo, scratch, env, "--shard", f"{huge_k}/{huge_k}")
+    assert result.returncode == 2, result.stdout + result.stderr
+    lines = [line for line in result.stderr.splitlines() if line.strip()]
+    assert len(lines) == 1, result.stderr
+    assert "longer than the" in lines[0] and "file name" in lines[0], result.stderr
+    assert "File name too long" not in result.stderr, result.stderr
+    run_dir = paths(repo, env)["run"]
+    assert not plan_file(run_dir).exists()
+
+
+def test_a_selection_a_long_marker_can_carry_is_still_recorded(accepted_gate):
+    """AC1 sets no maximum, so a selection longer than any old marker cap must record."""
+    repo, scratch, env = accepted_gate
+    long_k = "1" + "0" * 43
+    ran = run_hunt(repo, scratch, env, "--shard", f"{long_k}/{long_k}")
+    assert ran.returncode == 0, ran.stdout + ran.stderr
+    run_dir = paths(repo, env)["run"]
+    assert (run_dir / f"hunt.{long_k}.launch").read_text() == f"shard={long_k}/{long_k}\n"
+    recorded = run_script(
+        "record", "hunt", "--repo", str(repo), "--base", "HEAD", "--shard", f"{long_k}/{long_k}",
+        env=env,
+    )
+    assert recorded.returncode == 0, recorded.stdout + recorded.stderr
+    assert Path(f"{run_dir}/phase2-hunt.{long_k}.md.stamp").exists()
+
+
+def test_a_launch_marker_other_than_one_selection_line_is_unusable_state(accepted_gate):
+    repo, scratch, env = accepted_gate
+    ran = run_hunt(repo, scratch, env, "--shard", "1/2")
+    assert ran.returncode == 0, ran.stdout + ran.stderr
+    run_dir = paths(repo, env)["run"]
+    marker = run_dir / "hunt.1.launch"
+    stamp = Path(f"{run_dir}/phase2-hunt.1.md.stamp")
+    stamp_before = stamp.read_bytes()
+    for bad in ("shard=1/2\nshard=1/2\n", "shard=1/2 \n", "shard=01/2\n", "shard=2/1\n"):
+        marker.write_text(bad)
+        result = run_script(
+            "record", "hunt", "--repo", str(repo), "--base", "HEAD", "--shard", "1/2", env=env,
+        )
+        assert result.returncode == 15, (bad, result.stdout + result.stderr)
+        assert stamp.read_bytes() == stamp_before, bad
+
+
 def test_a_run_refused_by_a_missing_predecessor_leaves_no_launch_and_no_plan(gate):
     repo, scratch, env = gate
     run_dir = paths(repo, env)["run"]
@@ -1048,6 +1203,20 @@ def test_a_preflight_rerun_discards_probe_logs_too(accepted_gate):
     assert again.returncode == 0, again.stdout + again.stderr
     assert not (run_dir / "hunt-probe.log").exists()
     assert not (run_dir / "hunt.1-probe.log").exists()
+
+
+def test_a_preflight_rerun_removes_a_leftover_plan_temporary_file(accepted_gate):
+    """An interrupted plan write leaves `hunt.shards.*`; the reset removes it with the plan."""
+    repo, scratch, env = accepted_gate
+    for k in (1, 2):
+        assert run_hunt(repo, scratch, env, "--shard", f"{k}/2").returncode == 0
+    run_dir = paths(repo, env)["run"]
+    leftover = run_dir / "hunt.shards.ABC123"
+    leftover.write_text("n=2\n")
+    again = run_preflight(repo, scratch, env)
+    assert again.returncode == 0, again.stdout + again.stderr
+    assert not leftover.exists()
+    assert not plan_file(run_dir).exists()
 
 
 def test_every_phase_status_and_diagnosis_line_carries_the_shard(accepted_gate, tmp_path):

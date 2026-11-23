@@ -205,7 +205,8 @@ Expect false positives; Phase 2 exists to remove them.
 
 Every sweep and hunt dossier carries an `===== ACCEPTANCE RULES ARE BEHAVIOURAL PROBES` block instructing that phase to answer it; `tests/test_pipeline_acceptance_probes.py` asserts that both dossiers carry the requirement and its escalation rule.
 Each explicitly stated behavioural rule in the story's acceptance criteria - every command, flag, argument, sequence, exit code, file name and state change a criterion names - is enumerated and exercised against the reviewed head by running the command or sequence the rule names, and reported PASSED or FAILED with the command and the observation; a rule is never passed from the diff or the documentation alone, and the report states separately any rule that could not be exercised at all.
-A rule the code asserts, documents or claims but does not enforce is an enforcement finding at blocking severity (`High` or `Critical`), naming the documented rule and the command that contradicts it - never a low-severity documentation finding.
+The report answers one result per rule, never several rules under one result: a `RULES: <count>` line first, then exactly that many `RULE <n>` lines in the order the criteria state them, so a line that reports two or more rules, or a rule reported only inside another rule's line, is a failed report.
+A rule the code asserts, documents or claims but does not enforce is an enforcement finding at blocking severity (`High` or `Critical`), naming the documented rule and the command that contradicts it - never a low-severity documentation finding, and never a `Medium` one: the sweep and the hunt grade every enforcement finding at the same blocking severity.
 The sweep keeps the checkout it reviews read-only: a rule whose command writes a file is exercised against a copy of that checkout the sweep makes under the session scratch directory, and a rule it still cannot exercise is repeated as a candidate for the hunt, which mutates and reverts its own throwaway checkout.
 
 The sweep dossier ends with a `Review checklist` section: each item of `.agent-skills/review-checklist.txt`, read from the base, whose glob matches a changed path (`*` crosses `/`); `checklist --base "$BASE"` prints them.
@@ -218,11 +219,12 @@ The file holds one `<bash glob> | <review item>` per line; `#` comments and blan
 "$PIPELINE" run hunt --base "$BASE" --model "<profile.review.pre_pr.hunter model>" --spec "$SPEC" --scratch "$scratch" --agent-cmd "<template>"
 ```
 
-The hunt answers the same `ACCEPTANCE RULES ARE BEHAVIOURAL PROBES` block as the sweep: it enumerates every explicitly stated behavioural rule in the acceptance criteria, exercises each one in its throwaway checkout with the command or sequence the rule names (mutating and reverting as needed), and reports each PASSED or FAILED with the command and the observation after its findings, under the enforcement rule in "Acceptance rules are behavioural probes" above.
+The hunt answers the same `ACCEPTANCE RULES ARE BEHAVIOURAL PROBES` block as the sweep: it enumerates every explicitly stated behavioural rule in the acceptance criteria, exercises each one in its throwaway checkout with the command or sequence the rule names (mutating and reverting as needed), and reports one result per rule - the `RULES: <count>` line, then one `RULE <n>` line per rule - PASSED or FAILED with the command and the observation after its findings, under the enforcement rule and the one-result-per-rule rule in "Acceptance rules are behavioural probes" above.
 
 ### Sharded hunt
 
 `run hunt`, `dossier hunt` and `record hunt` accept `--shard K/N`, a decimal `1 <= K <= N` with no leading zero; `N = 1` is accepted only as `--shard 1/1`, and any other value is a usage error (exit 2).
+A value the grammar accepts whose per-shard file name would exceed the filesystem's name limit is refused the same way, with one line naming the value and the limit, because no shard artifact could be created for it.
 `--shard` on sweep or arbitrate, or on any command other than run, dossier or record, is a usage error too.
 Pass `record hunt` the same `--shard` as `dossier hunt`, exactly as for `--spec` and `--no-sweep`: an omitted flag and `--shard 1/1` both select the unsharded plan, but they must still be repeated exactly at record time, because the launch records which one wrote the dossier (`shard=<k>/<n>`, or `shard=none` for an omitted flag; `ADVERSARIAL_SHARD` supplies the same selection, so unset it for an unsharded record).
 A record reaches exit 13 when it finds a usable launch and either the `--shard` selection differs from the one the launch recorded or another bound input changed since the dossier was written (spec, `--no-sweep` or a predecessor artifact); a plan-count conflict exits 2 first, and a record for a shard index with no launch of its own exits 15.
@@ -230,8 +232,9 @@ A differing selection is refused at exit 13 without stamping the report, and a m
 
 One `run` invocation is one shard.
 With `N >= 2` the shard's artifact is `<run dir>/phase2-hunt.<k>.md` (never `phase2-hunt.md` for that run), and its run-state files are `hunt.<k>.launch`, `hunt.<k>.binding`, `hunt.<k>.primary`, `hunt.<k>.dossier`, `hunt.<k>-agent.err` and `hunt.<k>-agent.log`.
-The first sharded invocation records the run's plan in `<run dir>/hunt.shards`: `n=<n>` then each shard's artifact path, one per line.
-`paths` prints one `hunt.<k> <path>` line per shard, and `dossier-sizes.md` one `hunt.<k>: <bytes> bytes` line per shard.
+The first sharded invocation records the run's plan in `<run dir>/hunt.shards`: `n=<n>` then one artifact path per shard, in shard order, for every count up to 1024; a count above that, which no file could list, records `n=<n>` alone and each shard's path follows from the `phase2-hunt.<k>.md` naming rule.
+`paths` prints one `hunt.<k> <path>` line per shard the plan names, in shard order, and `dossier-sizes.md` one `hunt.<k>: <bytes> bytes` line per such shard.
+A plan names every shard up to the cap and, above it, the shards the run holds a file for.
 `--shard 1/1` and an unsharded run are identical to today's names and dossier.
 A hunt dossier written by an earlier version of this script left `hunt.launch` (or `hunt.<k>.launch`) empty, so it has no recorded selection and its hunt phase must be written again before it can be recorded.
 
