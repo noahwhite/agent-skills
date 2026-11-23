@@ -139,6 +139,18 @@ If `profile.qa.evidence_dir` is unset, the project does not keep in-repo evidenc
 
 - The evidence directory holds only a short `README.md` (metadata, fixtures, per-item verdict table, one sentence per line) and the screenshots it cites.
   No probe scripts, scratch files, or bulk captures.
+- **Generate the skeleton, do not author it.** When `profile.qa.evidence_dir` is set and the story's `README.md` is absent there, create it with `python3 '<skill dir>/scripts/qa-evidence.py' --key <story key> --item='<label>' [--item='<label>' ...] --path '<path>' --evidence-dir '<dir>'`, where `<skill dir>` is the absolute directory your runtime loaded this skill from, `<path>` is the path selected above and `<dir>` is the configured `profile.qa.evidence_dir`.
+  Run the command from the target story's worktree, the checkout that owns the configured directory, so a relative `<dir>` resolves there and the evidence lands in the repository that receives it.
+  Pass the selected path once with `--path`, and pass one `--item` per acceptance criterion and Definition of Done label in its story order, each as one quoted argument, and write each `'` inside a label, a directory or the skill path as `'\''` so the shell expands nothing.
+  The generator resolves a relative `<dir>` against the checkout root, and writes a label as one table cell of literal text: its line breaks folded to spaces, its whitespace collapsed, and the Markdown punctuation that could open a column, a row, a heading or inline markup backslash-escaped.
+  It refuses with exit 1 and one line naming the problem an empty `--evidence-dir`, an empty label, a label holding a control character, an invisible format character or more than one sentence, and a label or story key whose visible text carries U+2014, a stray term, a verdict word, a runtime-specific term or, when a checkout owns the destination, the British spelling of artifact outside the evidence tree.
+  When the destination's checkout has a `profile/schema.json`, it also refuses a label carrying a `profile.` reference that schema does not resolve.
+  A refused label writes no README: keep the story's own wording in the tracker, rerun the same command with the full ordered item list substituting the criterion's AC or DoD identifier and a lint-safe description for the refused label, and fill the generated table only after the command succeeds.
+  A regular existing `README.md` is refused before any label is checked, so the file its refusal names is the one to edit; when the refusal instead names a symlink or another unsafe path, stop and report that path instead of following, clearing or editing it.
+  Inspect that file first: a skeleton write that failed partway leaves a partial README, which you delete and regenerate rather than edit.
+  Before editing an existing `README.md`, re-check that it is a regular file reached without a symlink component, because a prior diagnostic does not keep the path safe.
+  Then fill in the generated `README.md`'s `Date:`, `Fixtures:` and path metadata lines, verdict cells and evidence cells rather than authoring its headings.
+  With no evidence directory configured, or a regular `README.md` already present, generate nothing and run the rest of this step unchanged; stop instead when a symlink occupies the README path.
 - Ship it through the normal branch and PR flow in `references/github.md`, signed when `profile.git.signed_commits` is true, and verify the signature after pushing.
 - **Never merge the evidence PR before its review of record is complete at the current head.**
   The review of record is `profile.review.reviewer`, then a separate clean, neutral `profile.review.adjudicator`, as `references/code-review.md` defines.
