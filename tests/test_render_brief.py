@@ -657,11 +657,12 @@ SPIKE_QA_SHA256 = "6da5abdbedd48c85e929e54de532557459cbaebd69297f2efa5d88db079d6
 # Fixed inputs: story ABC-123, round 1, commit SHA above.
 NO_DEPLOYMENT_QA_SHA256 = "cb1e875107f7823661515ab7d71329c4329a8d9a8bde381a932ac84248242a10"
 # Fixed inputs: story ABC-123, one engineer render per path. SKL-346 pinned them for the ledger; SKL-410 re-pinned
-# all three for the role permission lines and their per-path state move.
+# all three for the role permission lines and their per-path state move. SKL-70 re-pinned all three because it moves
+# the engineering-workflow lines that the engineer brief assets cite.
 ENGINEER_SHA256 = {
-    "deployed": "d98e35ea8a7967087188db4082368c94b46dc201328b7f313cf47b1cf3d16e24",
-    "no-deployment": "799469c767290b5ab09a98a3deb04f9524fe1638b6ab74b6aa685a5a09b47225",
-    "spike": "0b919ac154f88849c1bca114bc3d062f77c8ce089058a5b1b06d2a91a1121868",
+    "deployed": "be02b61ee2a1f17b5bbc03c6d9c95acb5d639975bdc43dedbc8b69a19ebac397",
+    "no-deployment": "8d3cd5de22d49c00ad3c4ce19652ea2113883fd3a6e27575367339381466c7a3",
+    "spike": "eed08d625b3ecb30f9d62a13ec7546b0a2b2c405bdde80455d2a6e56326b2330",
 }
 
 
