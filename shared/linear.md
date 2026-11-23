@@ -151,7 +151,7 @@ The `linear` CLI (schpet/linear-cli) is the primary tool; the Linear MCP server 
   A fixture the story would have to build is its own story.
   A criterion that expects a re-run, a second fixture, a fix round or a resumed session after the first run is not one-pass and fails this rule.
 - Write each acceptance criterion as one rule with one observable outcome: one sentence that states the state or behaviour reached, never how to reach it.
-  Use at most 25 words per criterion, not counting the proving artifact and command a Bug or a Spike names in it; no source sets a word limit, so this is house style.
+  Use at most 25 words per criterion, counting the proving artifact and command a Bug or a Spike names in it; no source sets a word limit, so this is house style.
   A criterion never joins two outcomes with "and".
   Aim for 3 to 5 criteria per story, a common practitioner rule of thumb and not a standard; more criteria, or two independently deliverable outcomes, means rewrite the criteria or split the story.
 - Keep these out of the criteria: commands and flags, script and file names, polling intervals and window sizes, execution order, who merges, and how evidence is posted.

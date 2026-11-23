@@ -143,6 +143,17 @@ def test_shared_linear_scope_section_pins(sentence: str, prefix: str) -> None:
     )
 
 
+RETIRED_FRAGMENTS = (
+    pytest.param("must name the one artifact that proves it", id="retired-inline-proof-mandate"),
+    pytest.param("named in the story's Verification line", id="retired-verification-for-every-type"),
+)
+
+
+@pytest.mark.parametrize("fragment", RETIRED_FRAGMENTS)
+def test_superseded_one_pass_wording_is_gone(fragment: str) -> None:
+    assert not any(fragment in normalized for _, normalized in scope_entries())
+
+
 @pytest.mark.parametrize("path,sentence", CITATIONS)
 def test_filing_skill_cites_the_rule_in_rules_prose(path: Path, sentence: str) -> None:
     text = path.read_text()
