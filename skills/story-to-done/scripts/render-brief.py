@@ -12,10 +12,10 @@ The brief is assembled from the templates in the skill's assets directory: the r
 shared rules fragment, the role's permissions fragment, the role's state-move fragment for the selected
 path, then the role's per-path fragment. The tokens {{story}}, {{path}}, {{scratch}}, {{round}} and
 {{target}} are replaced by exact string matching in one pass, so a value is never expanded again, and
-each backticked mention of a file in the skill's references directory on a line that is not a cited
-quotation (a line carrying a quote followed by " at " and a backticked file and line number) becomes
-its absolute path, so a quoted source sentence stays verbatim while every navigational mention still
-resolves. Nothing else in the template is syntax.
+each backticked mention of a file in the skill's references directory becomes its absolute path, except
+inside a cited quotation span (a quoted sentence followed by " at " and a backticked file and line
+number), so a quoted source sentence stays verbatim while every navigational mention, before or after
+it, still resolves and is still checked. Nothing else in the template is syntax.
 
 The output file is <scratch>/senior-engineer/senior-engineer-brief.md or
 <scratch>/qa-agent-round-<n>/qa-agent-round-<n>-brief.md. The role subdirectory must already exist. The file
@@ -52,8 +52,9 @@ LINK = re.compile(r"https://\S+")
 SCRATCH = re.compile(r"/[A-Za-z0-9._/-]+")
 REFERENCE_NAME = re.compile(r"[a-z0-9-]+\.md")
 REFERENCE_OPEN = "`references/"
-# A line that quotes a source file and cites it; nothing on such a line is rewritten.
-QUOTATION = re.compile(r" at `[^`]+\.md:\d+`")
+# A cited quotation span: a quoted sentence followed by the file and line it comes from. Only the span
+# is exempt from reference resolution; a navigational mention elsewhere on the same line still resolves.
+QUOTATION = re.compile(r'"[^"]*" at `[^`]+\.md:\d+`')
 
 
 class Refusal(Exception):
@@ -135,12 +136,12 @@ def plan(ns: argparse.Namespace) -> tuple[str, str, list[str], dict]:
         refuse("invalid --path: expected spike, no-deployment or deployed")
     check(ns.story, STORY, "--story")
     values = {"story": ns.story, "path": ns.path, "scratch": ns.scratch, "round": None, "target": None}
-    # The engineer's deployment-review rule differs by path; the QA closing rule is the same on every path.
-    state_move = "deployed" if ns.path == "deployed" else "handoff"
 
     if ns.role == "engineer":
         not_taken(ns, ("--round", "--environment", "--commit", "--link"), "an engineer render")
         sub = "senior-engineer"
+        # Only the engineer's deployment-review rule differs by path; QA's closing rule is shared.
+        state_move = "deployed" if ns.path == "deployed" else "handoff"
         templates = [
             "brief-engineer.md",
             "brief-rules.md",
@@ -204,13 +205,13 @@ def load(skill_dir: Path, names: list[str]) -> str:
 def substitute(text: str, values: dict, skill_dir: str) -> str:
     """One left-to-right pass of exact matches: a replaced value is never scanned again.
 
-    A backticked `references/` mention is rewritten on every line except a cited quotation, so an
-    unrelated literal quote can never suppress a navigational reference and a quoted sentence is
-    never rewritten. Line structure decides, not a quote counter, which an unbalanced quote breaks.
+    A backticked `references/` mention is rewritten everywhere except inside a cited quotation span,
+    so an unrelated literal quote never suppresses a navigational reference and a quoted sentence is
+    never rewritten. The span, not a quote counter or the whole line, decides.
     """
     out = []
     for line in text.splitlines(keepends=True):
-        quotation = QUOTATION.search(line) is not None
+        quoted = [match.span() for match in QUOTATION.finditer(line)]
         i = 0
         while i < len(line):
             if line.startswith("{{", i):
@@ -222,7 +223,7 @@ def substitute(text: str, values: dict, skill_dir: str) -> str:
                 out.append(values[token])
                 i += len(token) + 4
                 continue
-            if not quotation and line.startswith(REFERENCE_OPEN, i):
+            if not any(start <= i < end for start, end in quoted) and line.startswith(REFERENCE_OPEN, i):
                 end = line.find("`", i + 1)
                 name = line[i + len(REFERENCE_OPEN):end] if end != -1 else ""
                 if REFERENCE_NAME.fullmatch(name):

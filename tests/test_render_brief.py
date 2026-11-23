@@ -405,6 +405,18 @@ STATE_MOVES = {
     ),
 }
 
+# On no-deployment and spike, the closing move's "in the environment" is read as the path's target; the
+# interpretation is quoted beside the permission on those two paths only.
+INTERPRETATION = (
+    "skills/qa-verification/references/linear.md",
+    "every condition in this file on a deploy or a deployed environment reads as verification against the "
+    "merged commit, or, for a spike with no tracked-file change, against the deliverables the step 12 note links.",
+)
+PATH_QUOTES = {
+    ("qa", "no-deployment"): INTERPRETATION,
+    ("qa", "spike"): INTERPRETATION,
+}
+
 RENDER_PATH = {
     "engineer-deployed": "deployed",
     "engineer-no-deployment": "no-deployment",
@@ -471,8 +483,13 @@ def test_every_rendered_brief_carries_the_required_permissions(role, renders):
 def test_each_brief_moves_only_the_states_its_path_assigns(role, renders):
     """The engineer's rule is selected by path; QA's closing move is required on every path."""
     for name, text in renders_for(role, renders).items():
-        expected_path, quote = STATE_MOVES[(role, RENDER_PATH[name])]
+        key = (role, RENDER_PATH[name])
+        expected_path, quote = STATE_MOVES[key]
         assert_cited(name, text, expected_path, quote)
+        if key in PATH_QUOTES:
+            assert_cited(name, text, *PATH_QUOTES[key])
+        else:
+            assert INTERPRETATION[1] not in text, name
         for (other_role, other_path), (_, other_quote) in STATE_MOVES.items():
             if other_role == role and other_path != RENDER_PATH[name] and other_quote != quote:
                 assert other_quote not in text, (name, other_quote)
@@ -515,6 +532,50 @@ def test_a_stray_quote_cannot_suppress_a_navigational_reference(skill_copy, tmp_
     text = Path(base, "senior-engineer", "senior-engineer-brief.md").read_text(encoding="utf-8")
     assert "`references/" not in text
     assert str(skill_copy.resolve()) + "/references/code-review.md" in text
+
+
+MIXED_CITATION = '"Tick the boxes you verified." at `skills/qa-verification/SKILL.md:170`'
+
+
+def append_mixed_line(skill_copy: Path, reference: str) -> None:
+    template = skill_copy / "assets" / "brief-engineer.md"
+    template.write_text(
+        template.read_text(encoding="utf-8") + f"- Review {MIXED_CITATION} in `references/{reference}`.\n",
+        encoding="utf-8",
+    )
+
+
+def mixed_scratch(tmp_path_factory) -> Path:
+    base = Path(os.path.realpath(tempfile.mkdtemp(prefix="mixed", dir=tmp_path_factory.getbasetemp())))
+    (base / "senior-engineer").mkdir()
+    return base
+
+
+def test_a_navigation_beside_a_cited_quotation_still_resolves(skill_copy, tmp_path_factory):
+    """Only the cited span is exempt: a reference after it on the same line becomes absolute."""
+    append_mixed_line(skill_copy, "code-review.md")
+    base = mixed_scratch(tmp_path_factory)
+    result = run("--role", "engineer", "--story", "ABC-123", "--path", "deployed", "--scratch", str(base),
+                 script=skill_copy / "scripts" / "render-brief.py")
+    assert result.returncode == 0, result.stderr
+    text = Path(base, "senior-engineer", "senior-engineer-brief.md").read_text(encoding="utf-8")
+    assert MIXED_CITATION in text
+    assert str(skill_copy.resolve()) + "/references/code-review.md" in text
+    assert "`references/" not in text
+
+
+def test_a_missing_reference_beside_a_cited_quotation_still_fails(skill_copy, tmp_path_factory):
+    """A missing navigational reference after a cited span is still refused, with no brief created."""
+    append_mixed_line(skill_copy, "no-such-file.md")
+    base = mixed_scratch(tmp_path_factory)
+    result = run("--role", "engineer", "--story", "ABC-123", "--path", "deployed", "--scratch", str(base),
+                 script=skill_copy / "scripts" / "render-brief.py")
+    assert result.returncode != 0
+    assert result.stdout == b""
+    err = result.stderr.decode()
+    assert err.endswith("\n") and err.count("\n") == 1, err
+    assert "no-such-file.md" in err
+    assert not (base / "senior-engineer" / "senior-engineer-brief.md").exists()
 
 
 # AC3 One source
@@ -573,9 +634,9 @@ def pin(text: str, scratch: str) -> str:
 # lines and their per-path state move.
 DEPLOYED_QA_SHA256 = "5ee2a2331e38e2887d38361864c9e6587c7dbcced8f93f1f6915a1fba9c2cf9c"
 # Fixed inputs: story ABC-123, round 1, the two LINKS above.
-SPIKE_QA_SHA256 = "90c06701dbca287444b624dc96a758d5807fa003881b358f8cc89e8ea3f96808"
+SPIKE_QA_SHA256 = "6da5abdbedd48c85e929e54de532557459cbaebd69297f2efa5d88db079d6ef2"
 # Fixed inputs: story ABC-123, round 1, commit SHA above.
-NO_DEPLOYMENT_QA_SHA256 = "f6c0b6dc22f7b83d11844354ba5c334a56bb0e86e0271a4d6ddbb9e45b9a2406"
+NO_DEPLOYMENT_QA_SHA256 = "cb1e875107f7823661515ab7d71329c4329a8d9a8bde381a932ac84248242a10"
 # Fixed inputs: story ABC-123, one engineer render per path. SKL-346 pinned them for the ledger; SKL-410 re-pinned
 # all three for the role permission lines and their per-path state move.
 ENGINEER_SHA256 = {
