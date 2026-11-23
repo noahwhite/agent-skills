@@ -38,6 +38,12 @@ NO_SWEEP_SOURCE_SENTENCE = ("- With no sweep report in this hunt-only run, deriv
 # AC1's literal stop rule.
 STOP_SENTENCE = ("- stop and report once the candidate list is exhausted rather than continuing to "
                  "explore.")
+# The acceptance-rule probes the same dossier carries share the budget and the stop point, and a rule
+# the budget did not reach is reported honestly instead of attested.
+RULE_BUDGET_SENTENCE = ("- Acceptance-rule probes share this command budget and this stop point; a "
+                        "rule you could not execute inside them is listed as 'NOT-REACHED - <n>: "
+                        "<reason>' with the rules, never PASSED or FAILED, before your final "
+                        "unchecked-candidate list.")
 # The third honest outcome: an unchecked candidate is never reported VERIFIED or REFUTED, and the
 # report ends with the list of what it did not check.
 NOT_REACHED_SENTENCE = ("- Report VERIFIED or REFUTED only for a candidate you actually checked; a "
@@ -47,7 +53,8 @@ GREP_SENTENCE = ("- Never run a repository-wide grep, find or rg; any search mus
                  "a path named in the diffstat or by a candidate.")
 READ_SENTENCE = "- Read only paths named in the diffstat unless a candidate names another path."
 SHARED_SENTENCES = (GREP_SENTENCE, COUNT_SENTENCE, READ_SENTENCE, STOP_SENTENCE,
-                    NOT_REACHED_SENTENCE, UNCHECKED_SENTENCE)
+                    RULE_BUDGET_SENTENCE, NOT_REACHED_SENTENCE, UNCHECKED_SENTENCE)
+RULE_LINE = "RULE <n> | PASSED or FAILED | the rule in one line | the command you ran | what you observed"
 BUDGET_SENTENCES = (SWEEP_SOURCE_SENTENCE, *SHARED_SENTENCES)
 NO_SWEEP_BUDGET_SENTENCES = (NO_SWEEP_SOURCE_SENTENCE, *SHARED_SENTENCES)
 
@@ -70,8 +77,9 @@ JOB_2_NO_SWEEP = ("Job 2 - HUNT only for defects the candidates you derived dire
 # The arbitrate note, one wording per direction: the recorded hunt carried the budget, or it
 # predates it and its silence is therefore not bounded exploration.
 ARBITRATE_NOTE = (
-    "Note: the recorded hunt ran under an exploration budget - at most {count} shell commands, "
-    "verifying only {source} plus defects those candidates directly point at, searching only "
+    "Note: the recorded hunt ran under an exploration budget - at most {count} shell commands "
+    "per hunt invocation, verifying only {source} plus defects those candidates directly point "
+    "at, searching only "
     "path-scoped and reading only the diffstat's paths unless a candidate names another. A "
     "candidate it reports as NOT-REACHED (budget spent) is omitted work, never coverage: credit "
     "only the checks the hunt report evidences, and read its silence as the bounded exploration "
@@ -167,12 +175,12 @@ def start_run(tmp_path: Path) -> tuple[dict[str, str], Path, Path, list[str]]:
     return env, repo, scratch, common
 
 
-def build_dossiers(tmp_path: Path, no_sweep: bool, predate: bool = False) -> dict[str, str]:
+def build_dossiers(tmp_path: Path, no_sweep: bool,
+                   missing_binding: bool = False) -> dict[str, str]:
     """Writes the sweep (only when one runs), hunt and arbitrate dossiers on a throwaway repository.
 
-    With `predate`, the recorded hunt's binding is replaced by an old-format one that carries no
-    hunt-prompt identity before the arbitrate dossier is written, which is what a hunt recorded by a
-    script from before this budget looks like to the note.
+    With `missing_binding`, the accepted hunt's binding file is removed before the arbitrate dossier
+    is written: the note must read the stamp acceptance compared, not that mutable file.
     """
     env, repo, _, common = start_run(tmp_path)
     paths = artifact_paths(repo, env)
@@ -185,9 +193,8 @@ def build_dossiers(tmp_path: Path, no_sweep: bool, predate: bool = False) -> dic
         paths[phase].write_text(report)
         checked(run_script(env, "record", phase, "--repo", str(repo), "--base", BASE_REF,
                            "--spec", str(common[common.index("--spec") + 1]), *extra), f"record {phase}")
-    if predate:
-        (paths["run"] / "hunt.binding").write_text(
-            "run=old\nphase=hunt\nspec=none\nno_sweep=0\n")
+    if missing_binding:
+        (paths["run"] / "hunt.binding").unlink()
     extra = ["--no-sweep"] if no_sweep else []
     written = checked(run_script(env, "dossier", "arbitrate", *common, *extra), "dossier arbitrate")
     out["arbitrate"] = Path(written.stdout.strip().splitlines()[-1]).read_text()
@@ -206,8 +213,9 @@ def no_sweep_dossiers(tmp_path_factory):
 
 
 @pytest.fixture(scope="module")
-def predating_dossiers(tmp_path_factory):
-    return build_dossiers(tmp_path_factory.mktemp("hunt-budget-predate"), no_sweep=False, predate=True)
+def missing_binding_dossiers(tmp_path_factory):
+    return build_dossiers(tmp_path_factory.mktemp("hunt-budget-missing-binding"),
+                          no_sweep=False, missing_binding=True)
 
 
 def hunt_prompt(text: str) -> str:
@@ -322,7 +330,7 @@ def test_the_no_sweep_hunt_dossier_binds_both_jobs_to_the_budget(no_sweep_dossie
 def test_the_sweep_mode_budget_is_ordered_source_limits_stop(dossiers):
     prompt = hunt_prompt(dossiers["hunt"])
     ordered = (SWEEP_SOURCE_SENTENCE, GREP_SENTENCE, COUNT_SENTENCE, READ_SENTENCE,
-               STOP_SENTENCE, NOT_REACHED_SENTENCE, UNCHECKED_SENTENCE)
+               STOP_SENTENCE, RULE_BUDGET_SENTENCE, NOT_REACHED_SENTENCE, UNCHECKED_SENTENCE)
     positions = [prompt.index(sentence) for sentence in ordered]
     assert positions == sorted(positions)
 
@@ -330,9 +338,16 @@ def test_the_sweep_mode_budget_is_ordered_source_limits_stop(dossiers):
 def test_the_no_sweep_mode_budget_is_ordered_source_limits_stop(no_sweep_dossiers):
     prompt = hunt_prompt(no_sweep_dossiers["hunt"])
     ordered = (NO_SWEEP_SOURCE_SENTENCE, GREP_SENTENCE, COUNT_SENTENCE, READ_SENTENCE,
-               STOP_SENTENCE, NOT_REACHED_SENTENCE, UNCHECKED_SENTENCE)
+               STOP_SENTENCE, RULE_BUDGET_SENTENCE, NOT_REACHED_SENTENCE, UNCHECKED_SENTENCE)
     positions = [prompt.index(sentence) for sentence in ordered]
     assert positions == sorted(positions)
+
+
+def test_the_hunt_rule_probes_share_the_budget_and_have_a_not_reached_disposition(dossiers, no_sweep_dossiers):
+    for out in (dossiers, no_sweep_dossiers):
+        prompt = hunt_prompt(out["hunt"])
+        assert RULE_LINE in prompt
+        assert RULE_BUDGET_SENTENCE in prompt
 
 
 def test_the_arbitrate_dossier_notes_the_budgeted_sweep_hunt(dossiers):
@@ -347,11 +362,34 @@ def test_the_arbitrate_dossier_notes_the_budgeted_hunt_only_run(no_sweep_dossier
     assert PREDATES_NOTE not in prompt
 
 
-def test_a_hunt_that_predates_the_budget_gets_the_predates_note(predating_dossiers):
-    prompt = arbitrate_prompt(predating_dossiers["arbitrate"])
-    assert PREDATES_NOTE in prompt
-    assert "ran under an exploration budget" not in prompt
-    assert "NOT-REACHED (budget spent)" not in prompt
+def test_a_missing_hunt_binding_cannot_flip_the_note_to_predates(missing_binding_dossiers):
+    # The note reads the stamp acceptance compared, never the mutable binding file beside it.
+    prompt = arbitrate_prompt(missing_binding_dossiers["arbitrate"])
+    assert ARBITRATE_NOTE_SWEEP in prompt
+    assert PREDATES_NOTE not in prompt
+
+
+def test_a_genuine_legacy_hunt_is_refused_before_any_note(tmp_path):
+    # A hunt whose stamp carries no prompt identity is not accepted; arbitration refuses it (13)
+    # rather than emitting a note about a hunt it never verified.
+    env, repo, _, common = start_run(tmp_path)
+    paths = artifact_paths(repo, env)
+    for phase, report in (("sweep", SWEEP_REPORT), ("hunt", HUNT_REPORT)):
+        checked(run_script(env, "dossier", phase, *common), f"dossier {phase}")
+        paths[phase].write_text(report)
+        checked(run_script(env, "record", phase, "--repo", str(repo), "--base", BASE_REF,
+                           "--spec", str(common[common.index("--spec") + 1])), f"record {phase}")
+    Path(f"{paths['hunt']}.stamp").write_text(
+        "sha256=deadbeef\nrun=old\nphase=hunt\nspec=none\nno_sweep=0\n")
+    refused = run_script(env, "dossier", "arbitrate", *common)
+    assert refused.returncode == 13, refused.stdout + refused.stderr
+    assert "needs an accepted hunt artifact" in refused.stderr
+
+
+def test_the_script_keeps_the_predates_note_for_an_unevidenced_hunt():
+    # The owner's strategy requires the fallback wording to exist; acceptance makes it unreachable,
+    # so it is pinned against the script source rather than a fabricated run state.
+    assert PREDATES_NOTE in SCRIPT.read_text()
 
 
 def test_a_changed_hunt_prompt_unaccepts_the_recorded_hunt(tmp_path):
@@ -376,6 +414,75 @@ def test_a_changed_hunt_prompt_unaccepts_the_recorded_hunt(tmp_path):
     assert "the hunt prompt" in refused.stderr
 
 
+def record_hunt_after_edit(tmp_path: Path, no_sweep: bool, old: str, new: str) -> subprocess.CompletedProcess:
+    """Dossiers a hunt with a pristine script copy, edits one prompt string, then records it."""
+    env, repo, _, common = start_run(tmp_path)
+    paths = artifact_paths(repo, env)
+    extra = ["--no-sweep"] if no_sweep else []
+    if not no_sweep:
+        checked(run_script(env, "dossier", "sweep", *common, *extra), "dossier sweep")
+        paths["sweep"].write_text(SWEEP_REPORT)
+        checked(run_script(env, "record", "sweep", "--repo", str(repo), "--base", BASE_REF,
+                           "--spec", str(common[common.index("--spec") + 1]), *extra), "record sweep")
+    edited = tmp_path / "pipeline.sh"
+    shutil.copy(SCRIPT, edited)
+    checked(run_pipeline(edited, env, "dossier", "hunt", *common, *extra), "dossier hunt")
+    paths["hunt"].write_text(HUNT_REPORT)
+    text = edited.read_text()
+    assert old in text
+    edited.write_text(text.replace(old, new))
+    return run_pipeline(edited, env, "record", "hunt", "--repo", str(repo), "--base", BASE_REF,
+                        "--spec", str(common[common.index("--spec") + 1]), *extra)
+
+
+def test_an_invisible_sweep_fallback_edit_keeps_the_hunt_accepted(tmp_path):
+    # In sweep mode the agent reads the accepted sweep report, so the fallback text is not part of
+    # the emitted prompt and editing it must not invalidate the paid hunt.
+    recorded = record_hunt_after_edit(tmp_path, no_sweep=False,
+                                      old="(sweep not configured - hunt only)",
+                                      new="(sweep absent)")
+    assert recorded.returncode == 0, recorded.stdout + recorded.stderr
+
+
+def test_an_emitted_hunt_only_body_edit_unaccepts_the_hunt(tmp_path):
+    # In hunt-only mode that body line is what the agent reads, so it is part of the identity.
+    recorded = record_hunt_after_edit(tmp_path, no_sweep=True, old=HUNT_ONLY_BODY,
+                                      new="(derive the candidate list from the diff)")
+    assert recorded.returncode == 13, recorded.stdout + recorded.stderr
+    assert "inputs changed since its dossier was written" in recorded.stderr
+
+
+def test_an_empty_candidate_list_still_carries_the_budget_and_the_rule_disposition(tmp_path):
+    # The arbiter's empty-list case: the budget, its stop point and the rule-probe disposition are
+    # present even when the sweep hands the hunt nothing to verify.
+    env, repo, _, common = start_run(tmp_path)
+    paths = artifact_paths(repo, env)
+    checked(run_script(env, "dossier", "sweep", *common), "dossier sweep")
+    paths["sweep"].write_text("REVIEW-RAN: yes\nNo candidates found.\n")
+    checked(run_script(env, "record", "sweep", "--repo", str(repo), "--base", BASE_REF,
+                       "--spec", str(common[common.index("--spec") + 1])), "record sweep")
+    written = checked(run_script(env, "dossier", "hunt", *common), "dossier hunt")
+    dossier = Path(written.stdout.strip().splitlines()[-1]).read_text()
+    prompt = hunt_prompt(dossier)
+    assert BUDGET_HEADER in prompt
+    assert STOP_SENTENCE in prompt
+    assert RULE_BUDGET_SENTENCE in prompt
+    assert RULE_LINE in prompt
+    assert "===== ACCEPTANCE RULES ARE BEHAVIOURAL PROBES =====" in dossier
+
+
+def test_the_sweep_dossier_carries_no_hunt_budget(dossiers):
+    # Scope the negative assertions to the generated instructions: an embedded diff may legitimately
+    # quote a budget bullet as payload.
+    instructions, marker, _ = dossiers["sweep"].partition("===== RUN")
+    assert marker, "the sweep dossier has no embedded RUN section"
+    absent = (BUDGET_HEADER, *BUDGET_SENTENCES, *NO_SWEEP_BUDGET_SENTENCES, JOB_1_SWEEP,
+              JOB_1_NO_SWEEP, JOB_2_SWEEP, JOB_2_NO_SWEEP, "NOT-REACHED",
+              CANDIDATES_SWEEP_HEADER, CANDIDATES_HUNT_ONLY_HEADER)
+    for text in absent:
+        assert text not in instructions
+
+
 def test_only_the_hunt_binding_carries_the_prompt_identity(dossiers):
     # AC4 permits exactly one binding addition: the hunt's. No other phase's binding changes.
     run_dir = Path(dossiers["_run"])
@@ -396,11 +503,3 @@ def test_the_hunt_binding_carries_the_prompt_identity(tmp_path):
     assert re.fullmatch(r"prompt=[0-9a-f]{64}", prompt[0]), binding
     assert "no_sweep=1" in binding
     assert "run=" in "\n".join(binding) and "phase=hunt" in binding
-
-
-def test_the_sweep_dossier_carries_no_hunt_budget(dossiers):
-    absent = (BUDGET_HEADER, *BUDGET_SENTENCES, *NO_SWEEP_BUDGET_SENTENCES, JOB_1_SWEEP,
-              JOB_1_NO_SWEEP, JOB_2_SWEEP, JOB_2_NO_SWEEP, "NOT-REACHED",
-              CANDIDATES_SWEEP_HEADER, CANDIDATES_HUNT_ONLY_HEADER)
-    for text in absent:
-        assert text not in dossiers["sweep"]

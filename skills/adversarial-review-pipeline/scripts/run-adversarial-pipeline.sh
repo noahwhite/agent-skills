@@ -1953,6 +1953,7 @@ hunt_budget_lines() {  # $1 = 1 when the dossier embeds an accepted sweep report
   echo "- At most ${HUNT_BUDGET_COMMANDS} shell commands in total."
   echo "- Read only paths named in the diffstat unless a candidate names another path."
   echo "- stop and report once the candidate list is exhausted rather than continuing to explore."
+  echo "- Acceptance-rule probes share this command budget and this stop point; a rule you could not execute inside them is listed as 'NOT-REACHED - <n>: <reason>' with the rules, never PASSED or FAILED, before your final unchecked-candidate list."
   echo "- Report VERIFIED or REFUTED only for a candidate you actually checked; a candidate you did not check is NOT-REACHED (budget spent)."
   echo "- End your report with the list of candidates you did not check, or 'none'."
 }
@@ -2018,15 +2019,18 @@ hunt_candidates_body() {  # $1 = 1 when a sweep report is embedded
 # text, the candidate-list header and body included, and not the run's scratch path, so it changes
 # exactly when the prompt changes.
 hunt_prompt_id() {  # $1 = 1 when a sweep report is embedded
+  # The sweep-mode body is the accepted sweep report, already bound as a predecessor, so the
+  # fallback body text is part of the identity only in hunt-only mode, where the agent reads it.
   { hunt_prompt_text "${1:-0}" "@scratch@"; hunt_candidates_header "${1:-0}";
-    hunt_candidates_body "${1:-0}"; } | sha256sum | cut -d' ' -f1
+    if [ "${1:-0}" -eq 0 ]; then hunt_candidates_body 0; fi; } | sha256sum | cut -d' ' -f1
 }
 
-# The prompt identity recorded in the accepted hunt's binding. A sharded run keeps one binding per
-# shard; every shard is written from the same prompt, so the first binding found is enough.
+# The prompt identity recorded in the accepted hunt's stamp - the stamp acceptance actually compared,
+# never a separate mutable binding file. A sharded run keeps one stamp per shard; every shard is
+# written from the same prompt, so the first stamp found is enough.
 recorded_hunt_prompt_id() {
   local f
-  for f in "$RUN_DIR/hunt.binding" "$RUN_DIR"/hunt.[0-9]*.binding; do
+  for f in "$(artifact_for hunt).stamp" "$RUN_DIR"/phase2-hunt.[0-9]*.md.stamp; do
     if [ -f "$f" ]; then sed -n 's/^prompt=//p' -- "$f" | head -n 1; return 0; fi
   done
   return 0
@@ -2053,7 +2057,7 @@ hunt_budget_arbitrate_note() {
     source="the candidates it derived from the diff"
   fi
   if hunt_has_budget; then
-    echo "Note: the recorded hunt ran under an exploration budget - at most ${HUNT_BUDGET_COMMANDS} shell commands, verifying only ${source} plus defects those candidates directly point at, searching only path-scoped and reading only the diffstat's paths unless a candidate names another. A candidate it reports as NOT-REACHED (budget spent) is omitted work, never coverage: credit only the checks the hunt report evidences, and read its silence as the bounded exploration this budget allows, not as full coverage."
+    echo "Note: the recorded hunt ran under an exploration budget - at most ${HUNT_BUDGET_COMMANDS} shell commands per hunt invocation, verifying only ${source} plus defects those candidates directly point at, searching only path-scoped and reading only the diffstat's paths unless a candidate names another. A candidate it reports as NOT-REACHED (budget spent) is omitted work, never coverage: credit only the checks the hunt report evidences, and read its silence as the bounded exploration this budget allows, not as full coverage."
   else
     echo "Note: the recorded hunt predates this exploration budget, so its prompt carried no command cap and no candidate-source rule. Its silence is not bounded exploration: treat an area it did not report on as unexplored, never as covered, and weigh that when reading its silence as coverage."
   fi
