@@ -1953,6 +1953,7 @@ hunt_budget_lines() {  # $1 = 1 when the dossier embeds an accepted sweep report
   echo "- At most ${HUNT_BUDGET_COMMANDS} shell commands in total."
   echo "- Read only paths named in the diffstat unless a candidate names another path."
   echo "- stop and report once the candidate list is exhausted rather than continuing to explore."
+  echo "- If the candidate list is empty, run one minimal check that the checkout is at the reviewed head and that the list is empty, report no findings with 'REVIEW-RAN: yes', and do not start further exploration."
   echo "- Acceptance-rule probes share this command budget and this stop point; a rule you could not execute inside them is listed as 'NOT-REACHED - <n>: <reason>' with the rules, never PASSED or FAILED, before your final unchecked-candidate list."
   echo "- Report VERIFIED or REFUTED only for a candidate you actually checked; a candidate you did not check is NOT-REACHED (budget spent)."
   echo "- End your report with the list of candidates you did not check, or 'none'."
@@ -1993,7 +1994,7 @@ hunt_prompt_text() {  # $1 = 1 when a sweep report is embedded, $2 = the scratch
   echo
   emit_rule_probes
   echo "Mutate and revert inside your throwaway checkout as needed to exercise each rule, and put the"
-  echo "probe lines after your findings, one rule per line:"
+  echo "probe lines after your findings, one rule per line, and list a rule the budget did not reach as 'NOT-REACHED - <n>: <reason>' beside them:"
   echo "RULE <n> | PASSED or FAILED | the rule in one line | the command you ran | what you observed"
 }
 
@@ -2057,7 +2058,7 @@ hunt_budget_arbitrate_note() {
     source="the candidates it derived from the diff"
   fi
   if hunt_has_budget; then
-    echo "Note: the recorded hunt ran under an exploration budget - at most ${HUNT_BUDGET_COMMANDS} shell commands per hunt invocation, verifying only ${source} plus defects those candidates directly point at, searching only path-scoped and reading only the diffstat's paths unless a candidate names another. A candidate it reports as NOT-REACHED (budget spent) is omitted work, never coverage: credit only the checks the hunt report evidences, and read its silence as the bounded exploration this budget allows, not as full coverage."
+    echo "Note: the recorded hunt ran under an exploration budget - at most ${HUNT_BUDGET_COMMANDS} shell commands per hunt invocation, verifying only ${source} plus defects those candidates directly point at, searching only path-scoped and reading only the diffstat's paths unless a candidate names another. A candidate it reports as NOT-REACHED (budget spent), or a rule it reports as NOT-REACHED, is omitted work, never coverage: credit only the checks the hunt report evidences, and read its silence as the bounded exploration this budget allows, not as full coverage."
   else
     echo "Note: the recorded hunt predates this exploration budget, so its prompt carried no command cap and no candidate-source rule. Its silence is not bounded exploration: treat an area it did not report on as unexplored, never as covered, and weigh that when reading its silence as coverage."
   fi
