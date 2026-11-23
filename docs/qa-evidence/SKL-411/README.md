@@ -3,7 +3,7 @@
 Round 1, 2026-11-23, path `no-deployment`.
 Verified the squash commit `8eb5f0bf3b5ea7da6592d7645c4e91b7df42365e` on `main`, whose tree matches [implementation PR #408](https://github.com/noahwhite/agent-skills/pull/408) head `f95c4b3ac2e89e8fa73d35c0b121464b7b2af7a1`.
 Fixtures: disposable repository, stand-in phase agents, default and hostile Git configs, and the SKL-389 commit series listed in the implementation PR.
-The [Linear story](https://linear.app/officina-pub/issue/SKL-411/user-story-re-gate-on-the-delta-and-reuse-an-identical-diff) holds the structured assertion output.
+The SKL-411 tracker attachments hold the structured assertion output.
 
 | Item | Verdict | Evidence |
 | --- | --- | --- |
