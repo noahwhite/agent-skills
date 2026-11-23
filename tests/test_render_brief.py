@@ -175,8 +175,8 @@ def all_renders(scratch: str) -> dict[str, tuple[Path, str]]:
     }
 
 
-# A line that quotes a source file and cites it; its backticked references stay as the source states them.
-QUOTATION_LINE = re.compile(r" at `[^`]+\.md:\d+`")
+# A cited quotation span: only the quoted sentence and its citation are exempt from reference resolution.
+QUOTATION = re.compile(r'"[^"]*" at `[^`]+\.md:\d+`')
 
 
 @pytest.fixture(scope="module")
@@ -299,7 +299,7 @@ def test_reference_mentions_are_absolute_and_exist(renders):
     """
     skill_dir = str(SKILL_DIR.resolve())
     for name, text in renders.items():
-        navigational = "\n".join(line for line in text.splitlines() if not QUOTATION_LINE.search(line))
+        navigational = QUOTATION.sub("", text)
         mentions = re.findall(r"`([^`\s]*references/[a-z0-9-]+\.md)`", navigational)
         assert mentions, name
         for mention in mentions:
@@ -535,13 +535,25 @@ def test_a_stray_quote_cannot_suppress_a_navigational_reference(skill_copy, tmp_
 
 
 MIXED_CITATION = '"Tick the boxes you verified." at `skills/qa-verification/SKILL.md:170`'
+SECOND_CITATION = (
+    '"First confirm the only unticked boxes are the items you verified; otherwise patch each verified line '
+    'individually." at `skills/engineering-workflow/references/linear.md:49`'
+)
 
 
-def append_mixed_line(skill_copy: Path, reference: str) -> None:
+def mixed_line(position: str, reference: str) -> str:
+    link = f"`references/{reference}`"
+    if position == "before":
+        return f"- Review {link} then {MIXED_CITATION}."
+    if position == "between":
+        return f"- Review {MIXED_CITATION} then {link} then {SECOND_CITATION}."
+    return f"- Review {MIXED_CITATION} then {link}."
+
+
+def append_mixed_line(skill_copy: Path, position: str, reference: str) -> None:
     template = skill_copy / "assets" / "brief-engineer.md"
     template.write_text(
-        template.read_text(encoding="utf-8") + f"- Review {MIXED_CITATION} in `references/{reference}`.\n",
-        encoding="utf-8",
+        template.read_text(encoding="utf-8") + mixed_line(position, reference) + "\n", encoding="utf-8"
     )
 
 
@@ -551,9 +563,10 @@ def mixed_scratch(tmp_path_factory) -> Path:
     return base
 
 
-def test_a_navigation_beside_a_cited_quotation_still_resolves(skill_copy, tmp_path_factory):
-    """Only the cited span is exempt: a reference after it on the same line becomes absolute."""
-    append_mixed_line(skill_copy, "code-review.md")
+@pytest.mark.parametrize("position", ["before", "between", "after"])
+def test_a_navigation_beside_a_cited_quotation_still_resolves(position, skill_copy, tmp_path_factory):
+    """Only the cited span is exempt: a reference before, between or after a citation becomes absolute."""
+    append_mixed_line(skill_copy, position, "code-review.md")
     base = mixed_scratch(tmp_path_factory)
     result = run("--role", "engineer", "--story", "ABC-123", "--path", "deployed", "--scratch", str(base),
                  script=skill_copy / "scripts" / "render-brief.py")
@@ -564,9 +577,10 @@ def test_a_navigation_beside_a_cited_quotation_still_resolves(skill_copy, tmp_pa
     assert "`references/" not in text
 
 
-def test_a_missing_reference_beside_a_cited_quotation_still_fails(skill_copy, tmp_path_factory):
-    """A missing navigational reference after a cited span is still refused, with no brief created."""
-    append_mixed_line(skill_copy, "no-such-file.md")
+@pytest.mark.parametrize("position", ["before", "between", "after"])
+def test_a_missing_reference_beside_a_cited_quotation_still_fails(position, skill_copy, tmp_path_factory):
+    """A missing navigational reference before, between or after a citation is still refused."""
+    append_mixed_line(skill_copy, position, "no-such-file.md")
     base = mixed_scratch(tmp_path_factory)
     result = run("--role", "engineer", "--story", "ABC-123", "--path", "deployed", "--scratch", str(base),
                  script=skill_copy / "scripts" / "render-brief.py")

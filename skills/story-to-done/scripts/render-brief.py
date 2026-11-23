@@ -206,7 +206,7 @@ def substitute(text: str, values: dict, skill_dir: str) -> str:
     """One left-to-right pass of exact matches: a replaced value is never scanned again.
 
     A backticked `references/` mention is rewritten everywhere except inside a cited quotation span,
-    so an unrelated literal quote never suppresses a navigational reference and a quoted sentence is
+    so an unrelated literal quote never suppresses a navigational reference and a cited quotation is
     never rewritten. The span, not a quote counter or the whole line, decides.
     """
     out = []
