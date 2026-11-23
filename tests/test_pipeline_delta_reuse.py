@@ -735,6 +735,10 @@ def test_a_host_diff_driver_cannot_turn_a_committed_text_path_binary(tmp_path):
     hostile = tmp_path / "host.gitconfig"
     hostile.write_text("[diff \"evil\"]\n\tbinary = true\n")
     env["GIT_CONFIG_GLOBAL"] = str(hostile)
+    # The command scope is the other channel a host can smuggle a driver definition through.
+    env["GIT_CONFIG_COUNT"] = "1"
+    env["GIT_CONFIG_KEY_0"] = "diff.evil.binary"
+    env["GIT_CONFIG_VALUE_0"] = "true"
     repo = tmp_path / "repo"
     repo.mkdir()
     _git(repo, env, "init", "-q", "--initial-branch=main")

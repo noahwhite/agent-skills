@@ -218,8 +218,8 @@
 # a user's stat-width config can change it and an ordinary non-delta diffstat stays what it was.
 # These pins are for determinism, never for the reuse identity: the identity is content-addressed by
 # tree OIDs and stays the same without them.
-# The splitter needs python3, which the preflight checks, and the isolated rendering needs git 2.43
-# or newer for --attr-source.
+# The splitter needs python3, which the preflight checks, and the isolated rendering needs
+# --attr-source, which git has had since 2.41 (the container's 2.43 is the tested version).
 #
 # Size sidecars: every completed dossier write, on `run` or `dossier`, leaves `<phase>.dossier` in the
 # run directory: a `path=<absolute dossier path>` line, a `bytes=<n>` line (`LC_ALL=C wc -c` of that
@@ -2407,10 +2407,11 @@ write_dossier_sizes() {
 DIFF_GIT=""
 DIFF_OBJECTS=""
 pinned_diff() {  # the arguments of one git diff invocation
-  # The host's global and system config is dropped as well, so a diff driver a committed attribute
-  # names cannot be defined as binary or given a textconv on one machine and not another: the
-  # rendering depends on the reviewed content and the explicit pins only.
+  # The host's global, system and command-scope config is dropped as well, so a diff driver a
+  # committed attribute names cannot be defined as binary or given a textconv on one machine and not
+  # another: the rendering depends on the reviewed content and the explicit pins only.
   env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
+    -u GIT_CONFIG_PARAMETERS -u GIT_CONFIG_COUNT \
     GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_NOSYSTEM=1 \
     GIT_OBJECT_DIRECTORY="$DIFF_OBJECTS" GIT_ATTR_NOSYSTEM=1 \
     git --git-dir="$DIFF_GIT" --attr-source="$HEAD_SHA" -c core.attributesFile=/dev/null \
@@ -2434,7 +2435,7 @@ emit_context() {  # $1 = the phase's checkout, $2 = 1 to embed the unified diff,
   echo "HEAD: ${HEAD_SHA}"
   echo "CHECKOUT: $1"
   echo
-  local diffdir
+  local diffdir promisor
   diffdir="$(mktemp -d -p "$SCRATCH" diff.XXXXXX)"
   DIFF_OBJECTS="$(git rev-parse --path-format=absolute --git-path objects)"
   DIFF_GIT="$diffdir/objects.git"
@@ -2442,8 +2443,10 @@ emit_context() {  # $1 = the phase's checkout, $2 = 1 to embed the unified diff,
   # own, so materialize the range's objects through this repository first. A filtered clone may mark
   # only its remote as a promisor, so both forms count, and a materialization failure fails the
   # dossier write here rather than as an unreadable object later.
+  promisor="$(git config --bool --get-regexp '^remote\..*\.promisor$' 2>/dev/null \
+    | awk '$2 == "true" { print "true"; exit }' || true)"
   if [ -n "$(git config --get extensions.partialClone 2>/dev/null || true)" ] \
-    || [ -n "$(git config --get-regexp '^remote\..*\.promisor$' 2>/dev/null || true)" ]; then
+    || [ "$promisor" = "true" ]; then
     git diff --numstat --no-ext-diff "$BASE_SHA"..."$HEAD_SHA" > /dev/null
   fi
   env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE -u GIT_OBJECT_DIRECTORY \
