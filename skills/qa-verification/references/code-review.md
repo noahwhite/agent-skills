@@ -70,7 +70,7 @@ If the runtime cannot run a configured model, stop and say so; never substitute 
 - Later rounds review the delta since the last reviewed head, plus any regressions that delta introduced.
   A delta round's reviewer brief carries every earlier `Review of record <sha>` PR review on the PR, their findings and per-finding verdicts, labelled as historical context that does not decide the current verdict.
   The reviewer raises a finding already adjudicated there only when the delta changes the code it concerns or newly calls, imports or exercises that code.
-  A delta round's valid findings fall under the severity gate (Handling findings), so only a Critical, High, blocking or acceptance-criterion finding starts another round.
+  The severity gate (Handling findings) decides which of a delta round's valid findings are fixed and so start another round.
 - The adjudicator brief, and any shadow-adjudicator brief, never carry the prior review of record; both stay clean, neutral.
 
 ### Different pairs
@@ -139,7 +139,7 @@ Green CI, a docs-only diff, a base-only merge commit, or a sibling waiting to me
 
 - Fix or resolve every finding with a stated reason; none is left untouched, a confirmed `pre-existing` finding is resolved by filing it, and a delta-round finding below the severity gate by recording it (below).
 - Verify each finding against the real code before acting (confirm SHAs, check that referenced APIs exist); never copy a suggested fix blindly.
-- A finding that names more locations of the same defect is fixed at every location.
+- A finding that is fixed and names more locations of the same defect is fixed at every location.
 - Valid findings are fixed in the PR, never filed as follow-ups, except a confirmed `pre-existing` finding and a delta-round finding below the severity gate.
 - Severity gate: in round 1 every valid finding is fixed.
   In a delta round (round 2 onward), a valid finding forces a fix and a new head only when the adjudicator rules it Critical or High, rules that it blocks merge, or rules that it changes an acceptance criterion's outcome.

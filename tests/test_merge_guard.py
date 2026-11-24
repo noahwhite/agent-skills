@@ -223,6 +223,7 @@ def test_the_pre_existing_tag_is_defined_once_under_handling_findings() -> None:
 
 
 SEVERITY_GATE = (
+    "- A finding that is fixed and names more locations of the same defect is fixed at every location.",
     "- Valid findings are fixed in the PR, never filed as follow-ups, except a confirmed `pre-existing` finding "
     "and a delta-round finding below the severity gate.",
     "- Severity gate: in round 1 every valid finding is fixed.",
@@ -255,8 +256,22 @@ def test_handling_findings_defines_the_severity_gate_once() -> None:
     positions = [body.find(line) for line in SEVERITY_GATE]
     assert -1 not in positions, f"severity gate line missing: {SEVERITY_GATE[positions.index(-1)]}"
     assert positions == sorted(positions), "severity gate lines out of order"
-    assert "whether it blocks merge, and whether it changes an acceptance criterion's outcome" in section(
-        text, "Review of record"
+    review_of_record = section(text, "Review of record")
+    # The adjudicator gets the criteria it rules on, and rules on all three triggers.
+    assert "plus the story's acceptance criteria when there is a story, and ask it to verify" in review_of_record
+    assert "whether it blocks merge, and whether it changes an acceptance criterion's outcome" in review_of_record
+    # Every other statement of the rule defers to Handling findings instead of restating the threshold.
+    assert (
+        "The only valid findings left unfixed are a confirmed `pre-existing` one, which is filed, and a delta-round "
+        "one below the severity gate, which is recorded (Handling findings)."
+    ) in section(text, "The gate")
+    assert (
+        "The severity gate (Handling findings) decides which of a delta round's valid findings are fixed and so start "
+        "another round."
+    ) in section(text, "Rounds", "###")
+    assert "with every valid finding handled as its Handling findings section states." in skill("persona-architect")
+    assert "to remediate the valid findings as `references/code-review.md` (Handling findings) states," in skill(
+        "persona-staff-devops"
     )
 
 
