@@ -118,7 +118,7 @@ Each constraint and permission in it is scoped to the role it is written for and
   Any boundary carried into a brief is quoted from its source with `path:line` rather than paraphrased.
 - A prohibition is admissible only when it names the actor it binds and the skill text it comes from.
   "Never reword an acceptance criterion" labels the admissible case, because its source names the actor it binds and the text it forbids; "never edit the DoD text" is not admissible, because ticking a box edits DoD text.
-  The actor is "An implementing engineer" at `skills/engineering-workflow/references/linear.md:174`, and the text it forbids is "never rewords an AC" at `skills/engineering-workflow/references/linear.md:174`.
+  The actor is "An implementing engineer" at `skills/engineering-workflow/references/linear.md:189`, and the text it forbids is "never rewords an AC" at `skills/engineering-workflow/references/linear.md:189`.
 - Every role brief names what the role may do as well as what it may not: it ticks the boxes it verified, moves the states its skill assigns, opens its own PR, and posts the review of record.
   Each permission is quoted from the skill of the role the brief is written for, with its `path:line`.
   The tick wording is "Tick the boxes you verified." at `skills/qa-verification/SKILL.md:170`, and the record a tick writes is "Ticking the Acceptance Criteria and Definition of Done checkboxes in the description is the completion record." at `skills/qa-verification/references/linear.md:45`.

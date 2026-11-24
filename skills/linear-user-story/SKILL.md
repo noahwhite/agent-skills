@@ -94,13 +94,8 @@ As a [role], I want [feature/capability], so that [business value].
 **📦 Definition of Ready**
 
 - [ ] Acceptance criteria are observable behaviour, and have been checked against the implementation this story modifies (not only the design), with a refinement note on the story naming the files read and any AC the code cannot support
-- [ ] Where an AC says to copy an existing pattern, the ways this case differs from that pattern are enumerated
-- [ ] Any artifact or method this story changes that another story also changes has the split stated
 - [ ] No blocking stories, no unresolved external dependencies, and no other story already owns this scope - with the backlog search performed and any owning or overlapping story recorded on the story
 - [ ] Story is estimated
-- [ ] Team has necessary skills and access
-- [ ] Priority is clear
-- [ ] Business value understood
 
 ---
 

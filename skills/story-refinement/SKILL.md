@@ -57,11 +57,11 @@ After reading `references/todo-tracking.md`, expand the list to the story-refine
 - [references/profile.md](references/profile.md) - find the profile and this skill's overlay right after the todo list is created, before any other file.
 - [references/todo-tracking.md](references/todo-tracking.md) - required: the list rules and the story-refinement seed list, with one item per voter input, accept round, point value, consensus check, basis-challenge round, discussion and re-vote when the check calls for them, split, and triage write.
   For a Bug, an Investigation or a Spike the list omits every Stage 2 item, as that seed line states.
-- [references/linear.md](references/linear.md) - the rule set for the story lifecycle, Definition of Ready, estimation, splitting, relations, and tooling gotchas.
-  Cite it for split mechanics; do not restate them here.
+- [references/linear.md](references/linear.md) - the rule set for the story lifecycle, Definition of Ready, estimation, splitting, relations, and tooling gotchas; cite it for split mechanics, and do not restate them here.
 - [references/engineering-practice.md](references/engineering-practice.md) - diagnose before changing, write meaningful tests, and keep changes minimal.
 - [references/runtimes.md](references/runtimes.md) - maps the capabilities named here (todo list, load a skill, spawn a subagent, run a shell command) to your runtime.
 - [references/refinement-record.md](references/refinement-record.md) - the hand-written refinement-comment and pointing-record templates, the record vocabulary, the comment headings, and the permitted and forbidden phrasing table.
+- [references/deliberation.md](references/deliberation.md) - the hand-written anonymised draft, codebook judgement, evidence discussion and vote movement rules of Step 2 and Step 4.
 - [references/exemplars-and-anchors.md](references/exemplars-and-anchors.md) - the hand-written exemplar lookup and anchor table rules of Step 1 item 4.
 - [references/repository-guards.md](references/repository-guards.md) - the hand-written repository guard check of Step 1 item 6.
 
@@ -112,7 +112,7 @@ Never retry a denied write through a different tool or server.
 
 A refine request on a story that is already refined, pointed and unblocked moves it to ready without a ceremony.
 The facilitator evaluates the short path immediately after Step 1 item 1 (story read), applying the Step 1 item 3 type check within that evaluation, before Step 1 item 2 (roster check) and before any voter launch, preflight comment or tracker write.
-It applies only when every condition holds, each read from the tracker: (a) the story is an estimated type (`type: estimated`); (b) refined: it carries a Refinement record comment and its latest Accept round result comment has outcome `accepted`; (c) pointed: its tracker estimate, read with `linear api` and never from `linear issue view`, is set to a value on the `profile.tracker.estimate_scale` sequence; (d) unblocked: `linear issue relation list <ID>` shows every blocking relation in both directions with the blocker in `profile.tracker.states.done`, where a canceled or duplicate blocker is not done; (e) ready-eligible: the story is in `profile.tracker.states.backlog`, its priority is set and its assignee is `profile.tracker.assignee`, the blocker Definition of Ready box exists, and every other Definition of Ready box is already ticked.
+It applies only when every condition holds, each read from the tracker: (a) the story is an estimated type (`type: estimated`); (b) refined: it carries a Refinement record comment and its latest Accept round result comment has outcome `accepted`; (c) pointed: its tracker estimate, read with `linear api` and never from `linear issue view`, is set to a value on the `profile.tracker.estimate_scale` sequence; (d) unblocked: `linear issue relation list <ID>` shows every blocking relation in both directions with the blocker in `profile.tracker.states.done`, where a canceled or duplicate blocker is not done; (e) ready-eligible: the story is in `profile.tracker.states.backlog`, its priority is set and its assignee is `profile.tracker.assignee`, the blocker Definition of Ready box exists, and every other Definition of Ready box on the issue is already ticked, a box an earlier template put there included.
 On the path the facilitator skips the roster check, the exemplar lookup and anchor table, the tracker-write preflight, the repository guard check, the voter launches and Steps 2 to 4, runs no pointing round, and does not ask the owner to confirm the path.
 Each todo item of a skipped step is left open and named as not done on a line with its `#<id>` and the reason `short path` (for example `#3 not done: short path`).
 The product owner verifies every clause of the "No blocking stories, no unresolved external dependencies, and no other story already owns this scope" Definition of Ready box from what the story records, the relation-list evidence for the blockers and the story's recorded backlog search for ownership, ticks the box with that evidence, moves the story to `profile.tracker.states.ready`, reads back both the box and the state, and posts the Triage record from [references/refinement-record.md](references/refinement-record.md) with the priority as read back.
@@ -181,16 +181,16 @@ The three engineer voters decide whether an SM/EM concern is a blocking amendmen
 
 ### Step 2: Reconciliation and the accept round
 
-- **Inputs:** the three voter refinement inputs and the separate SM/EM contribution.
+- **Inputs:** the three voter refinement inputs and the separate SM/EM contribution; the codebook in Triage and Definition of Ready in [references/linear.md](references/linear.md).
 - **Process:**
-  1. The facilitator reconciles the inputs into one refined story: story text, refined acceptance criteria where the filing template has them, scope and split, Definition of Ready changes, and open risks.
+  1. The facilitator reconciles the inputs into one refined story: story text, refined acceptance criteria where the filing template has them, scope and split, Definition of Ready changes, and open risks; it, and each amended one in item 6, is one anonymised merged draft, as Anonymised draft in [Deliberation](references/deliberation.md) states.
      For a Bug, an Investigation or a Spike, the reconciled story also carries the `Scope signal:` category that two or more voters gave, as the Scope signal bullet in [Unestimated issue types](#unestimated-issue-types) defines a category; for a category that takes a reason, the reconciled reading is that category followed by `(<reason>)` holding each of those voters' reasons, joined with `; `.
      A voter whose line carries neither of its type's readings counts toward no category; when no category has two or more voters, the reconciled reading is `missing`, which the Scope signal bullet treats as a missing line.
   2. The PO authors the refinement comment and the refined description and applies both; otherwise, under the denied tracker writes fallback, the facilitator applies both verbatim.
      The refinement comment includes the complete refined story and ACs where the filing template has them, or an immutable snapshot reference; its id identifies the refined version for every later step.
      For a Bug, an Investigation or a Spike, the refinement comment carries the reconciled reading verbatim on its `Scope signal:` line.
   3. Run the accept round on that exact refinement comment id.
-     Each of the three voters returns `ACCEPT` or `OBJECT` against the same refined version.
+     Each of the three voters judges the same anonymised draft against the codebook and returns `ACCEPT` or `OBJECT`, under Codebook judgement in [Deliberation](references/deliberation.md).
   4. After each accept round, the PO authors and posts a separate Accept round result comment that names the refinement comment id it covers, the round number, each voter's `ACCEPT` or `OBJECT`, and the outcome: accepted, another round, or unpointed.
      For a Bug, an Investigation or a Spike the outcome is accepted, another round, or not accepted, never unpointed.
      The refinement comment itself is not edited, so its id keeps identifying one immutable refined version.
@@ -215,6 +215,7 @@ Only the three engineer voters count toward the agreement.
 ## Stage 2: pointing
 
 A Bug, an Investigation or a Spike skips this stage, as [Unestimated issue types](#unestimated-issue-types) states.
+A story point is relative size and a split trigger, calibrated on the team's own history through the anchor table; it is not a forecast and not hours, as Estimation and slicing in [references/linear.md](references/linear.md) states.
 
 ### Step 3: Secret pointing
 
@@ -226,6 +227,7 @@ A Bug, an Investigation or a Spike skips this stage, as [Unestimated issue types
   3. The sentence above is the pointing basis.
      Every pointing prompt or prompt file carries it verbatim, and carries the item 4 rationale rule, including each slice estimate under the Split rule.
   4. Each voter submits one point value valid for `profile.tracker.estimate_scale` and present in the fixed step sequence Step 4 item 1 states for that scale, plus a short rationale under the pointing basis in item 2.
+     The rationale states the assumptions the value rests on and the evidence it cites, such as a file, a criterion, a relation or an anchor key the voter read.
      A value outside that sequence is re-recorded before the reveal, in a launch that starts a new voter context, so every value and every accepted set has a step position; a second off-sequence value from the same voter stops the round with a missing-valid-value stop reason.
      The rationale names drivers the pointing basis admits and nothing else, so verification strength, testability, coverage, the shape of the tests, a duration, effort or run-cost measure are out of basis.
      Verification strength is how well a behaviour is checked and the risk of breaking existing behaviour is what can silently change, so the first is out of basis while the second is a driver the basis admits, distinct from an interacting constraint the change carries.
@@ -260,7 +262,7 @@ A Bug, an Investigation or a Spike skips this stage, as [Unestimated issue types
      A value outside that sequence for the profile's scale has no step position, so two different values that involve one are more than one step apart; three identical values are identical, and Step 3 already re-records an off-sequence value before the reveal.
      When the three values are identical, or the highest and the lowest are one step apart (5 and 8 on `fibonacci`, for example), the highest of the three values is the estimate, the discussion in item 3 and the re-vote in item 4 are skipped, and the split rule in item 9 still applies to it.
      The basis review in item 2 still runs on this branch, and nothing is written to the tracker and no pointing record is posted until it has run.
-     When the highest and the lowest are more than one step apart (1 and 5, for example), or they differ and either of them is outside the sequence, the discussion in item 3 and the re-vote in item 4 run, naming the high and the low.
+     When the highest and the lowest are more than one step apart (1 and 5, for example), or they differ and either of them is outside the sequence, the discussion in item 3 and the re-vote in item 4 run, with the high and the low voters speaking first.
      Record the outcome in the pointing record as `Consensus check: <identical | one step | more than one step>`, so a skipped discussion and re-vote read as skipped and never as not run; the record's values block keeps the values recorded before the discussion, and a replacement value appears on its Challenges line and in the voter's file.
   2. Review every rationale recorded in Step 3 against the pointing basis, after the consensus check and before the estimate is written to the tracker and before the pointing record is posted, so a void never leaves a written estimate to unwind.
      This review is not the discussion: it runs on both branches, and the discussion in item 3 only carries the challenges it raises.
@@ -274,17 +276,17 @@ A Bug, an Investigation or a Spike skips this stage, as [Unestimated issue types
      The SM/EM withdraws or restates its own sizing comment on the same terms, except a point value named before the reveal, a prescription of this story's value, treating another voter's revealed value as the answer, or a statement of elapsed time, effort or run cost, each of which is an anchoring event as soon as the facilitator sees it.
      A ground that is neither restated as a basis driver nor retracted is an anchoring event under the Anchoring guardrail.
      The basis-challenge round applies this same review to every rationale its launches record: an off-basis replacement rationale is restated or retracted, and an unresolved one voids the round.
-     When the consensus check skips the discussion and the re-vote, this review runs as a basis-challenge round of its own: the facilitator launches each challenged voter once per round in a newly created voter context whose prompt lists every ground challenged for that voter and carries the story, the refinement comment id, that voter's own recorded value and rationale, the Step 3 pointing basis and the Step 3 item 4 rationale rule; an off-sequence replacement value is re-recorded in a second launch of that voter. That launch records a replacement value for that voter only when the voter's basis does not support its recorded value, and otherwise the value that stands holds. An unresolved ground voids the round under the Anchoring guardrail, so no estimate and no split action survives an unresolved challenge.
+     When the consensus check skips the discussion and the re-vote, this review runs as a basis-challenge round of its own: the facilitator launches each challenged voter once per round in a newly created voter context whose prompt lists every ground challenged for that voter and carries the story, the refinement comment id, that voter's own recorded value and rationale, the Step 3 pointing basis, the Step 3 item 4 rationale rule and the movement rule of Vote movement in [Deliberation](references/deliberation.md); an off-sequence replacement value is re-recorded in a second launch of that voter. That launch records a replacement value for that voter only when the voter's basis does not support its recorded value, and otherwise the value that stands holds. An unresolved ground voids the round under the Anchoring guardrail, so no estimate and no split action survives an unresolved challenge.
      Each basis-challenge prompt also carries the anchor table under Anchor carry in [Exemplars and anchors](references/exemplars-and-anchors.md) when one was built.
      The review also challenges the ledger grounds that Estimation and slicing in [references/linear.md](references/linear.md) makes off-basis: a rationale whose prices plus remainder differ from its value (in a re-vote, the highest value of the voter's accepted set), and a slice rationale that omits an unknown its slice owns, re-prices an unknown, prices one the ledger does not carry, or names one the ledger assigns elsewhere; that vote is re-run once on the terms of this item, and a second miss is recorded on the pointing record's Challenges line.
-  3. Hold one discussion round that names only the high and the low, when the consensus check calls for it.
-     Do not compare the other values or single out a voter.
+  3. Hold one discussion round, when the consensus check calls for it, in which the voters exchange assumptions and evidence, never point numbers, high and low first, as Evidence discussion in [Deliberation](references/deliberation.md) states.
      The round carries the challenges item 2 raised, and the facilitator challenges, on the terms item 2 sets and within that same round, any ground heard for the first time there; such a ground is restated or retracted and its voter records a replacement value in the re-vote when the basis does not support the value, and no estimate is recorded while any ground it raised is unresolved.
   4. Run one re-vote, when the consensus check calls for it.
      The re-vote prompt carries the pointing basis from Step 3.
      It also carries the Step 3 item 4 rationale rule and the fixed step sequence from item 1, since an accepted set is drawn from that sequence.
      It also carries the anchor table under Anchor carry in [Exemplars and anchors](references/exemplars-and-anchors.md) when one was built.
      Each voter records the set of values it accepts for this story (one or more, each valid for `profile.tracker.estimate_scale` and present in the item 1 sequence) or records no consensus, with a short complexity rationale under the Step 3 rationale rule.
+     The re-vote rationale also names what moved the voter's vote, and a vote that moved with no new fact cited is flagged `conformity`, an informational flag, as Vote movement in [Deliberation](references/deliberation.md) states.
      An accepted-set value outside that sequence is re-recorded once under the Step 3 re-record rule, and a second off-sequence re-vote value from the same voter stops the round like a Step 3 off-sequence stop.
      Recording an accepted set is not treating another voter's revealed value as the answer: the rationale for the set is about the basis, never about which value another voter recorded.
      A re-vote rationale outside the pointing basis is challenged before the consensus is recorded, under the same restate-or-retract rule as item 2, and a voter that retracts its re-vote rationale records a replacement accepted set within that same re-vote, with a basis-driver rationale, or records no consensus.
@@ -433,10 +435,8 @@ When `metrics` is on, the metrics summary is the one comment the SM/EM posts out
   The PO chooses the priority by comparing the story with at least one comparable story already prioritised in the team of `STORY_ID`.
   The PO applies the priority and reads it back as a PO-authored tracker write.
   "No priority" counts as unset and is never a decided value.
-  When the PO cannot decide, including when the team has no comparable prioritised story, the ceremony stops with the priority unset and "Priority is clear" unticked, and reports `needs input` to the owner naming the story; the closing message names that stop as its stop reason.
+  When the PO cannot decide, including when the team has no comparable prioritised story, the ceremony stops with the priority unset, and reports `needs input` to the owner naming the story; the closing message names that stop as its stop reason.
   The PO never guesses a priority.
-  The PO ticks "Priority is clear" only after the priority is read back and equals the decided value.
-  Both "Priority is clear" rules apply only where the filing template has that Definition of Ready box; a Bug, an Investigation or a Spike template has none, so for those types no box is ticked or left unticked.
   The PO posts the Triage record from [references/refinement-record.md](references/refinement-record.md) as a triage write on every outcome, the priority stop included.
 
 ## Records
@@ -446,7 +446,7 @@ Use the Triage record template in the same file for the triage write that record
 Use the Split comment template in the same file for the oversize split of a Bug or an Investigation.
 Keep the raw voter files in the session's scratch directory and cite each file by its base name only (never a directory path) in the record.
 Quote or attach any file content a reader needs in the record.
-Record the refinement comment id, every accept round, all three point values, the SM/EM sizing context, the `Consensus check:` outcome, the discussion result, every challenge with its outcome, the consensus or the residual variance outcome with the derived values, the gap between the highest and the lowest in scale steps and the rule applied, the recorded estimate or the unpointed variance stop, and any split.
+Record the refinement comment id, every accept round, all three point values, the SM/EM sizing context, the `Consensus check:` outcome, the discussion result, each voter's first vote, assumptions, evidence cited and what moved its vote with any `conformity` flag, every challenge with its outcome, the consensus or the residual variance outcome with the derived values, the gap between the highest and the lowest in scale steps and the rule applied, the recorded estimate or the unpointed variance stop, and any split.
 Record the priced shared-unknown ledger of a whole-story round in the pointing record, carry it and the rest of the prior-round context into every slice brief, and record each slice brief verbatim in that slice's pointing record, as the Slice brief section of [references/refinement-record.md](references/refinement-record.md) shows.
 For a Bug, an Investigation or a Spike, no pointing record is posted: the refinement comment carries the `Pointing skipped` line, a "not accepted" round 2 Accept round result comment is the stop record with the objecting voters' blocking amendments, and the Triage record carries the `State:` line, as [Unestimated issue types](#unestimated-issue-types) states.
 Every refinement comment carries the `Exemplars:` line and its skip lines, and every pointing record the `Anchors:` line and its skip lines, naming keys only, never an anchor's point value; for a Bug, an Investigation or a Spike the refinement comment carries `Anchors: not pointed` instead.

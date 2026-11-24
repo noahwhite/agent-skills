@@ -24,7 +24,7 @@ Both lines use the phrases in [Record vocabulary](#record-vocabulary).
 - Scope signal: <reading>
 - Tracker-write preflight: comment <id>
 - Refined story identifier: <this comment id>
-- Refined story snapshot: <the complete refined story and ACs where the filing template has them, or an immutable link/commit>
+- Refined story snapshot: <the complete refined story and ACs where the filing template has them, or an immutable link/commit; the anonymised merged draft, with no authorship and every list in random order>
 - Refined story identifier after blocking amendments: <the new comment id, or none>
 - Exemplars: <outcome>
 - Exemplar skipped: <key> <reason>
@@ -60,9 +60,9 @@ Never edit the refinement comment to add the result; its id keeps identifying on
 
 - Refinement comment covered: <refinement comment id>
 - Round: <1 or 2>
-- Engineer one (<family or model>): <ACCEPT or OBJECT>
-- Engineer two (<family or model>): <ACCEPT or OBJECT>
-- Engineer three (<family or model>): <ACCEPT or OBJECT>
+- Engineer one (<family or model>): <ACCEPT, or OBJECT naming the codebook item the draft fails>
+- Engineer two (<family or model>): <ACCEPT, or OBJECT naming the codebook item the draft fails>
+- Engineer three (<family or model>): <ACCEPT, or OBJECT naming the codebook item the draft fails>
 - Outcome: <accepted, another round, or unpointed for a User Story; accepted, another round, or not accepted for a Bug, an Investigation or a Spike>
 - Blocking amendments: <each objecting voter's blocking amendments when any voter returned OBJECT; otherwise none>
 ```
@@ -75,6 +75,9 @@ The three values, and in a slice round the three values of every slice of the ro
 Outside the recorded numeric values, the Ledger line's prices, the Slice brief line's prior-round context of standing values recorded in earlier rounds and the superseded-values line, no line of the posted record carries a point value named before the reveal or a prescription of this story's value: the Challenges and Anchoring events lines record a ground by its kind, its author (a voter, or the SM/EM for a sizing comment) and its outcome or recovery, and every field that could quote a participant elides those two classes permanently, because the posted record stays on the story surface that later voters read; the verbatim quote lives in the session's raw record, cited by its base name.
 A sizing comment that names a point value before the reveal, prescribes this story's value, or states elapsed time, effort or run cost voids the round under the Anchoring guardrail recovery as soon as the facilitator sees it, as does any ground that is neither restated nor retracted, and the void records the voided consensus under Superseded values after a void, so the Consensus field carries the vote that stands, or n/a when the consensus check or the residual variance rule recorded the estimate.
 The `Anchors:` line and its `Anchor skipped:` lines use the phrases in [Record vocabulary](#record-vocabulary) and name anchor keys only, never an anchor's point value.
+On the votes-per-voter lines, a vote moved when the value that stands for that voter, its re-vote value or its basis-challenge replacement, differs from its first vote.
+`new fact` names the fact the voter cited that its Step 3 rationale did not, `retracted ground` names the kind of off-basis ground whose retraction produced a replacement value, a vote that moved with both carries both, and `no new fact` marks a vote that moved with neither; `conformity: flagged` marks exactly the votes that moved with no `new fact`, a move carrying only `retracted ground` included, and every other vote is `not flagged`.
+The `conformity` flag is informational: it changes no consensus, no residual variance outcome, no estimate and no stop.
 
 ```markdown
 ## Pointing record
@@ -92,8 +95,12 @@ The `Anchors:` line and its `Anchor skipped:` lines use the phrases in [Record v
 - Ledger: <for a whole-story round, each unknown with its unrounded price and, once the split is drafted, its owner slice or blocker story (no owner for an unsplit story), each merge of differently named unknowns, the ledger total beside the whole-story value (or beside the unpointed outcome, with no saturation note) and not reconciled to slice values, and the saturation note when the whole-story value is the highest value of the step sequence; n/a for a slice round, whose slice brief carries the ledger>
 - Slice brief: <n/a for a whole-story round; for a slice round, the slice brief its voters received, verbatim>
 - SM/EM sizing context, after all three values (in a slice round, after every slice of the round has its three values): <file base name> or verbatim, eliding a pre-reveal value or a prescription, or none
-- Discussion: <high <value>, low <value>; or none when the discussion ran and recorded nothing; or skipped, when the consensus check recorded the estimate; the shared content names only the high and the low, while a voter's own recorded value and rationale are carried privately in that voter's prompt>
+- Discussion: <high <value>, low <value>, and the assumptions and evidence exchanged, the high and the low voters first, then the third; or none when the discussion ran and recorded nothing; or skipped, when the consensus check recorded the estimate; the shared content carried no point value, while a voter's own recorded value and rationale are carried privately in that voter's prompt>
 - Re-vote: <accepted set per voter, with complexity rationale; or no consensus, with its complexity rationale, for a voter that records none; or none when it ran and recorded nothing; or skipped, when the consensus check recorded the estimate>
+- Votes per voter, each first vote recorded in Step 3 before any discussion or basis challenge (after a void, the blind re-run's), with what moved it:
+  - Engineer one: first vote <value, or not recorded>; assumptions: <the assumptions its value rests on>; evidence cited: <each file, criterion, relation or anchor key, or none>; moved: <not moved | one or both of new fact: <the fact cited> and retracted ground: <its kind> | no new fact>; conformity: <flagged | not flagged>
+  - Engineer two: first vote <value, or not recorded>; assumptions: <the assumptions its value rests on>; evidence cited: <each file, criterion, relation or anchor key, or none>; moved: <not moved | one or both of new fact: <the fact cited> and retracted ground: <its kind> | no new fact>; conformity: <flagged | not flagged>
+  - Engineer three: first vote <value, or not recorded>; assumptions: <the assumptions its value rests on>; evidence cited: <each file, criterion, relation or anchor key, or none>; moved: <not moved | one or both of new fact: <the fact cited> and retracted ground: <its kind> | no new fact>; conformity: <flagged | not flagged>
 - Consensus: <the highest value in the intersection of the vote that stands (the lowest for a slice), or n/a when the consensus check or the residual variance rule recorded the estimate, or none when the round stopped unpointed>
 - Residual variance: <each voter's derived value, the gap between the highest and the lowest in scale steps, the rule applied and the resulting value, or the unpointed variance stop; n/a only when all three voters recorded an accepted set and the intersection is not empty, or when the consensus check, or the re-run of it that supersedes that outcome, recorded the estimate>
 - Recorded estimate: <the value recorded, or unpointed with the gap between the highest and the lowest in scale steps when the round stopped there>
