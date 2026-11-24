@@ -36,7 +36,7 @@ NO_END_WHILE_OUTSTANDING = (
 )
 CONSUME = (
     "  Once every gate command has exited, the run reads each report and carries on to the bullets "
-    "below - fixing what the adjudicator rules valid, posting the review of record, the merge guard "
+    "below - acting on what the adjudicator rules valid, posting the review of record, the merge guard "
     "and the merge - and then to the closing decision in step 6."
 )
 INCOMPLETE_STOP = (

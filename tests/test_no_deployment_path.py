@@ -316,7 +316,9 @@ def added_blocks() -> list[str]:
 # sentence of steps 2 to 12 (the `deployed` path text of steps 11 and 12 included) must stay byte for
 # byte as it was, and the blocks themselves are kept whole and in order by the pins in
 # `HANDOFF_PINS` and `test_handoff_blocks_appear_once_in_order`.
-STEPS_TWO_TO_TWELVE_SHA256 = "cee26611557b072c8793290496ba3e03e33477d179e23ded2f04c511bc8a54cf"
+# The severity gate re-baselined it for three lines of steps 8 and 9 (the Remediate intro, the review-of-record
+# line and the review-of-record merge-readiness bullet); tests/test_merge_guard.py pins the last two.
+STEPS_TWO_TO_TWELVE_SHA256 = "d0155b7d60778ae01adb1f16eba7140474c8c127531b159d31b4f8dd26a90eb3"
 # SKL-270 makes the `deployed` step 12 note carry the exact `path: deployed` line that story-to-done
 # and qa-verification pass to `scripts/select-path.py` as `--recorded-path`. The digest above is kept:
 # that one line is pinned here and swapped back to its pre-SKL-270 text before hashing, so every other
@@ -664,7 +666,9 @@ def test_qa_added_blocks_appear_once_in_order() -> None:
 # SKL-182 re-baselined it for its changes outside the blocks: the "Await the gate" bullet in section 5,
 # the incomplete line in the completion summary and the todo-tracking index line; tests/test_qa_await_gate.py
 # pins the first two, and the index line is pinned only by this hash.
-QA_BASE_SHA256 = "d0a5d1c8a13f99e21cc8ef762aae246f1493bdbfbb073fae98af4caf9263f83a"
+# The severity gate re-baselined it for the two section 5 lines on acting on the adjudication, which
+# tests/test_qa_await_gate.py and tests/test_merge_guard.py pin.
+QA_BASE_SHA256 = "787650c222c786d549ed9220b0c5d3ac4496647e2f6e024122d4a253e962e8f5"
 
 
 def test_qa_text_outside_the_added_blocks_is_unchanged() -> None:

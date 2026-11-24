@@ -49,9 +49,10 @@ SKILL_LINES = {
     "engineering-workflow": (
         "Post the review of record on the PR as one PR review with the comment event "
         "(`gh pr review <n> --comment --body-file <file>`; first line `Review of record <full head SHA>`, "
-        "then findings, verdict per finding, fix commit per valid finding, the models used), "
+        "then findings, verdict per finding, fix commit, issue link or `recorded` per valid finding, the models used), "
         "never as an issue comment, **before** attempting the merge.",
-        "- The review of record completed at the current head, every valid finding is fixed, "
+        "- The review of record completed at the current head, every valid finding is fixed, filed or recorded as "
+        "`references/code-review.md` (Handling findings) states, "
         "and its " + COMMENT_REVIEW + " is posted and visible.",
         "- If it is `human`: tell the user the PR is merge-ready "
         "(link, head SHA, review-of-record " + COMMENT_REVIEW + " link, its `html_url`) and wait; resume at step 11 once it is merged.",
@@ -59,7 +60,8 @@ SKILL_LINES = {
         "PR reviews (including the `--comment` review of record) and issue comments.",
     ),
     "qa-verification": (
-        "- Fix what the adjudicator rules valid, and post the review of record on the PR as a "
+        "- Fix what the adjudicator rules valid, except what `references/code-review.md` (Handling findings) "
+        "files or records, and post the review of record on the PR as a "
         + COMMENT_REVIEW + " before the merge, never after.",
     ),
     "persona-release-manager": (
@@ -153,7 +155,7 @@ def test_review_of_record_is_posted_as_a_comment_pr_review() -> None:
         "on GitHub, `gh pr review <n> --comment --body-file <file>`, with the body file in the scratch directory, never in the checkout.",
         "The body's first line is `Review of record <full 40-character head SHA>`, followed by the reviewer and adjudicator names and models, "
         "the reviewer's findings, the verdict per finding, and the fix commit for each valid one, "
-        "or the tracker issue link for a confirmed `pre-existing` one.",
+        "the tracker issue link for a confirmed `pre-existing` one, or `recorded` for one below the severity gate.",
         "Each delta round posts a new review; never edit an earlier one.",
         "If the host denies the post, do not fall back to an issue comment: report the exact command and the denial, and stop.",
         "Post it, confirm it landed, and only then move to merging.",
@@ -164,11 +166,12 @@ def test_review_of_record_is_posted_as_a_comment_pr_review() -> None:
     assert "Post the review of record as one PR comment" not in body
 
 
-def test_review_of_record_step_4_carves_out_only_a_confirmed_pre_existing_finding() -> None:
+def test_review_of_record_step_4_carves_out_only_pre_existing_and_below_gate_findings() -> None:
     body = section(CODE_REVIEW.read_text(), "Review of record")
     assert (
         "Fix every finding ruled valid in the same PR, except a confirmed `pre-existing` finding, "
-        "which is filed instead (Handling findings)."
+        "which is filed instead, and a delta-round finding below the severity gate, which is recorded instead "
+        "(Handling findings)."
     ) in body
 
 
@@ -210,13 +213,63 @@ def test_the_pre_existing_tag_is_defined_once_under_handling_findings() -> None:
         "The adjudicator confirms the tag against the base SHA; an unconfirmed tag is handled as any other finding.",
         "A confirmed `pre-existing` finding is listed in the review of record and does not block the merge; "
         "before merge, the engineer files it as a tracker issue and links that issue in the review-of-record thread.",
-        "It is the only finding filed rather than fixed in the PR.",
+        "It is the only finding the engineer files rather than fixes in the PR.",
         "A Medium or Low finding accepted with a reason in the pre-PR arbiter report does not thereby gain "
         "`pre-existing` status.",
     )
     positions = [body.find(line) for line in lines]
     assert -1 not in positions, f"pre-existing rule line missing: {lines[positions.index(-1)]}"
     assert positions == sorted(positions), "pre-existing rule lines out of order"
+
+
+SEVERITY_GATE = (
+    "- Valid findings are fixed in the PR, never filed as follow-ups, except a confirmed `pre-existing` finding "
+    "and a delta-round finding below the severity gate.",
+    "- Severity gate: in round 1 every valid finding is fixed.",
+    "In a delta round (round 2 onward), a valid finding forces a fix and a new head only when the adjudicator rules "
+    "it Critical or High, rules that it blocks merge, or rules that it changes an acceptance criterion's outcome.",
+    "Every other valid delta-round finding (Medium, Low, nit) is below the severity gate: it is not fixed, and the "
+    "engineer records its full text in the PR body and in a story comment when there is a story.",
+    "When no finding forces a fix, the reviewed head merges as is; the merge guard still requires a review of record "
+    "on that exact head.",
+    "The recorded text is the owner's hand-off for filing, so it must be complete enough to file: the finding's "
+    "`file:line`, severity, rationale, failure scenario and the adjudicator's verdict.",
+)
+# Unconditional "fix every valid finding" wordings the severity gate retired; none may survive anywhere.
+RETIRED_FIX_ALL = (
+    "The only finding filed rather than fixed in the PR is a confirmed `pre-existing` one",
+    "every valid finding is fixed, and its",
+    "with every valid finding fixed.",
+    "For every finding the adjudicator ruled valid:\n",
+    "fix commit per valid finding",
+    "the adjudicator ruled valid without overturning those rulings",
+    "- Fix what the adjudicator rules valid, and post",
+)
+
+
+def test_handling_findings_defines_the_severity_gate_once() -> None:
+    # Delta rounds fix only Critical, High, blocking or AC-changing findings; the rest are recorded.
+    text = CODE_REVIEW.read_text()
+    assert text.count("- Severity gate:") == 1
+    body = section(text, "Handling findings")
+    positions = [body.find(line) for line in SEVERITY_GATE]
+    assert -1 not in positions, f"severity gate line missing: {SEVERITY_GATE[positions.index(-1)]}"
+    assert positions == sorted(positions), "severity gate lines out of order"
+    assert "whether it blocks merge, and whether it changes an acceptance criterion's outcome" in section(
+        text, "Review of record"
+    )
+
+
+def test_no_skill_keeps_an_unconditional_fix_every_valid_finding_rule() -> None:
+    sources = [*SHARED.glob("*.md"), *SKILLS.glob("*/SKILL.md"), *SKILLS.glob("*/assets/*.md"),
+               *SKILLS.glob("*/references/*.md")]
+    offenders = sorted(
+        f"{path.relative_to(ROOT)}: {retired!r}"
+        for path in sources
+        for retired in RETIRED_FIX_ALL
+        if retired in path.read_text()
+    )
+    assert not offenders, f"retired fix-every-valid-finding wording: {offenders}"
 
 
 def test_gate_requires_the_review_of_record_as_a_pr_review() -> None:
