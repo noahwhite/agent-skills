@@ -86,7 +86,7 @@ The architect acts only after those are recorded, and does not edit `linear-spik
 ## Decision records ship through a PR
 
 - A created or superseding record commits through the delivering story's or spike's PR.
-- That PR requires the review of record in [references/code-review.md](references/code-review.md) at its current head, with every valid finding fixed.
+- That PR requires the review of record in [references/code-review.md](references/code-review.md) at its current head, with every valid finding handled as its Handling findings section states.
 - The architect never commits a record directly to the integration branch, and never merges a record's PR without that review.
 
 ## Epic boundary

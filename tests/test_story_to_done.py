@@ -768,7 +768,8 @@ ARBITRATION_RULE = (
     "The engineer never does pre-PR arbitration (`adversarial-review-pipeline` Phase 3, "
     "`engineering-workflow` step 4 Verify stage) or rules a finding valid, invalid or accepted risk or the gate "
     "converged (applying the gate's scope guard is not arbitration), and fixes what QA ruled not met or the "
-    "adjudicator ruled valid without overturning those rulings; a separate clean, neutral arbiter on "
+    "adjudicator ruled valid, except what `references/code-review.md` (Handling findings) files or records, "
+    "without overturning those rulings; a separate clean, neutral arbiter on "
     "`profile.review.pre_pr.arbiter`, independent of engineer and coordinator, arbitrates every head."
 )
 STEP_2 = "2. Senior engineer: implement to deployment review"
@@ -798,7 +799,8 @@ def test_the_arbitration_rule_names_both_stages_and_the_profile_arbiter() -> Non
             "`engineering-workflow` step 4 Verify stage",
             "valid, invalid or accepted risk or the gate converged",
             "applying the gate's scope guard is not arbitration",
-            "fixes what QA ruled not met or the adjudicator ruled valid without overturning those rulings",
+            "fixes what QA ruled not met or the adjudicator ruled valid, except what `references/code-review.md` "
+            "(Handling findings) files or records, without overturning those rulings",
             "a separate clean, neutral arbiter on `profile.review.pre_pr.arbiter`",
             "independent of engineer and coordinator",
             "arbitrates every head",

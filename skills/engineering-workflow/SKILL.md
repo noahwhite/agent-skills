@@ -221,7 +221,7 @@ Monitor the PR for required checks, other protection checks, and human review th
 
 ## 8. Remediate
 
-For every finding the adjudicator ruled valid:
+For every finding the adjudicator ruled valid, except one that `references/code-review.md` (Handling findings) files as `pre-existing` or records as below the severity gate:
 
 1. Confirm it against the code.
 2. Fix it in this PR, never in a follow-up.
@@ -231,7 +231,7 @@ For every finding the adjudicator ruled valid:
 6. Review the new head before merging: any change to the PR head after the review of record, fixes included, needs a review at the new head.
    A round-2 or later delta review of the change since the last reviewed head, plus any regressions it introduced, is enough (see `references/code-review.md`, Rounds).
 
-Post the review of record on the PR as one PR review with the comment event (`gh pr review <n> --comment --body-file <file>`; first line `Review of record <full head SHA>`, then findings, verdict per finding, fix commit per valid finding, the models used), never as an issue comment, **before** attempting the merge.
+Post the review of record on the PR as one PR review with the comment event (`gh pr review <n> --comment --body-file <file>`; first line `Review of record <full head SHA>`, then findings, verdict per finding, fix commit, issue link or `recorded` per valid finding, the models used), never as an issue comment, **before** attempting the merge.
 Resolve a human review thread only after its issue is fixed or explicitly ruled a false positive or out of scope.
 
 ## 9. Merge readiness
@@ -242,7 +242,7 @@ The PR is merge-ready only when all are true:
 - The pre-PR gate converged, or its residual findings were explicitly justified.
 - Any completed optional review has no unresolved Critical or High finding.
 - Every legitimate Medium finding is handled or justified.
-- The review of record completed at the current head, every valid finding is fixed, and its `--comment` PR review is posted and visible.
+- The review of record completed at the current head, every valid finding is fixed, filed or recorded as `references/code-review.md` (Handling findings) states, and its `--comment` PR review is posted and visible.
 - All required checks are green.
   Full-suite evidence is satisfied once per PR head, by the local `uv run --locked pytest -q` run or by that head's passing CI "Repository tests" step, never both.
   Credit the CI step only when it ran on the current PR head or on a verified identical tree: record the head and either the local result or the CI run link with the tested SHA, and run the local suite when equivalence cannot be verified.

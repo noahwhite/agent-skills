@@ -65,7 +65,8 @@ ENGINEER_LINES = [
     "The pre-PR gate and the review of record that `engineering-workflow` defines stay allowed.",
     "- The engineer never does pre-PR arbitration (`adversarial-review-pipeline` Phase 3, `engineering-workflow` step 4 "
     "Verify stage) or rules a finding valid, invalid or accepted risk or the gate converged (applying the gate's scope "
-    "guard is not arbitration), and fixes what QA ruled not met or the adjudicator ruled valid without overturning those "
+    "guard is not arbitration), and fixes what QA ruled not met or the adjudicator ruled valid, except what "
+    "`references/code-review.md` (Handling findings) files or records, without overturning those "
     "rulings; a separate clean, neutral arbiter on `profile.review.pre_pr.arbiter`, independent of engineer and "
     "coordinator, arbitrates every head.",
     "- The scope rule: the engineer never changes an acceptance criterion on any story (`references/linear.md` "
@@ -348,7 +349,8 @@ PERMISSIONS = {
             "skills/engineering-workflow/SKILL.md",
             "Post the review of record on the PR as one PR review with the comment event (`gh pr review <n> --comment "
             "--body-file <file>`; first line `Review of record <full head SHA>`, then findings, verdict per finding, "
-            "fix commit per valid finding, the models used), never as an issue comment, **before** attempting the "
+            "fix commit, issue link or `recorded` per valid finding, the models used), never as an issue comment, "
+            "**before** attempting the "
             "merge.",
         ),
     ),
@@ -658,11 +660,12 @@ SPIKE_QA_SHA256 = "6da5abdbedd48c85e929e54de532557459cbaebd69297f2efa5d88db079d6
 NO_DEPLOYMENT_QA_SHA256 = "cb1e875107f7823661515ab7d71329c4329a8d9a8bde381a932ac84248242a10"
 # Fixed inputs: story ABC-123, one engineer render per path. SKL-346 pinned them for the ledger; SKL-410 re-pinned
 # all three for the role permission lines and their per-path state move. SKL-70 re-pinned all three because it moves
-# the engineering-workflow lines that the engineer brief assets cite.
+# the engineering-workflow lines that the engineer brief assets cite. The severity gate re-pinned all three for the
+# arbitration rule and the review-of-record line the engineer brief assets carry.
 ENGINEER_SHA256 = {
-    "deployed": "be02b61ee2a1f17b5bbc03c6d9c95acb5d639975bdc43dedbc8b69a19ebac397",
-    "no-deployment": "8d3cd5de22d49c00ad3c4ce19652ea2113883fd3a6e27575367339381466c7a3",
-    "spike": "eed08d625b3ecb30f9d62a13ec7546b0a2b2c405bdde80455d2a6e56326b2330",
+    "deployed": "1ac4346cac36097eaca6c7e814a5f9c46364a6c6f972cde5e8eeba4772bcef40",
+    "no-deployment": "a0eafa209af8b028fd9c8f4e36bfd0400b6f819d7cfdbde21447c317bf62238d",
+    "spike": "2c27811591472d879e7a9ce4713bf8ccaf482888fcb21366d2c188074b17c988",
 }
 
 
