@@ -147,10 +147,12 @@
       "select-path.py"
     ],
     "story-refinement": [
+      "launch-cli-voter.py",
       "todo-enforce.py"
     ],
     "story-to-done": [
       "check-signing-key.sh",
+      "launch-cli-voter.py",
       "select-path.py",
       "todo-enforce.py"
     ]
