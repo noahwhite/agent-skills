@@ -93,7 +93,7 @@ Where this file and a capability file disagree, the capability file is authorita
 
 Check each non-facilitator role's `enabled` before launching it, where omitted means enabled and a disabled role is not launched at all.
 Launch each non-facilitator role in a separate context with the runtime, model, optional `agent`, optional `command` and optional `family` from its profile entry.
-A `command` runtime gets its prompt in a file and writes its result to an output file.
+A `command` or `codex` voter gets its prompt in a file, writes its result to an output file, and is launched with `scripts/launch-cli-voter.py` as the only command of its own `run_in_background` Bash call, as the "Launching shell-launched agents" rule in [references/runtimes.md](references/runtimes.md) states.
 When the command carries a `{session_title}` placeholder, the facilitator replaces it on every launch with a title unique to that launch: the story key, the word `launch`, the launch's number in this invocation, a UTC timestamp to the nanosecond taken with `date -u +%Y%m%dT%H%M%S%NZ`, and 16 random hexadecimal characters taken with `od -An -N8 -tx1 /dev/urandom | tr -d ' \n'`, joined by `-`, which carries no secret and no path.
 Every launch counts toward that number, a re-launch or retry included, so no two launches of one invocation share a title, and the random part keeps launches of concurrent invocations of one story apart even when their clocks give the same timestamp.
 

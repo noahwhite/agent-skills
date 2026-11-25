@@ -4,7 +4,7 @@ This directory is the single source for the capability files that skills compose
 A skill links a capability through its vendored `references/<name>.md` copy.
 `scripts/vendor_shared.py` writes those copies from the files below, using the capability list in `skills.json` plus every capability a vendored file cites as `references/<name>.md`.
 A capability listed here may wait for a later slice to compose it.
-Four of the directory's non-Markdown files are `resolve-model-role.py`, the model-role resolver (`profile.md`, Resolve a model role), `select-path.py`, the run-path selector (`engineering-workflow` step 1, Select the path), `resolve-full-suite.py`, the full-suite option resolver (`adversarial-review-pipeline`, Phase 0), and `todo-enforce.py`, the Claude Code todo enforcer hook (the repository README, Todo enforcer hook); each is vendored into a skill's `scripts/` when `skills.json` lists it under `executables`.
+Five of the directory's non-Markdown files are `resolve-model-role.py`, the model-role resolver (`profile.md`, Resolve a model role), `select-path.py`, the run-path selector (`engineering-workflow` step 1, Select the path), `resolve-full-suite.py`, the full-suite option resolver (`adversarial-review-pipeline`, Phase 0), `todo-enforce.py`, the Claude Code todo enforcer hook (the repository README, Todo enforcer hook), and `launch-cli-voter.py`, the background launcher for CLI voters (`runtimes.md`, Launching shell-launched agents); each is vendored into a skill's `scripts/` when `skills.json` lists it under `executables`.
 
 ## Files
 
@@ -16,6 +16,7 @@ Four of the directory's non-Markdown files are `resolve-model-role.py`, the mode
 | `infra-deploy.md` | Infrastructure as code, CI/CD, deploys, host operations, and incidents. |
 | `linear.md` | Story and epic lifecycle, triage, estimation, and scope. |
 | `merge-approval.md` | The delegated merge-approval handshake: approvals file, request ID, records, wake capability, waiting, and re-request. |
+| `launch-cli-voter.py` | The launcher that runs one `runtime: command` or `codex` agent as its own background call and writes a status line. |
 | `metrics.md` | Run metrics: what a run collects, the summary template, and the independence and posting rules. |
 | `profile.md` | Finding and applying the consumer profile and its overlays, and resolving a model role. |
 | `resolve-full-suite.py` | The full-suite option resolver (`on` or `off`) that the `adversarial-review-pipeline` preflight calls. |
